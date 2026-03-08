@@ -1,0 +1,222 @@
+import { supabase } from './supabase';
+
+export interface ClientRecord {
+  id: string;
+  first_name: string;
+  last_name: string;
+  company: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface ClientsQuery {
+  q?: string;
+  status?: string;
+  sort?: 'recent' | 'oldest' | 'name_asc' | 'name_desc';
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ClientsResult {
+  items: ClientRecord[];
+  total: number;
+}
+
+export interface SoftDeleteClientResult {
+  client: number;
+  jobs: number;
+  leads: number;
+  pipeline_deals?: number;
+  other_rows?: number;
+}
+
+export interface HardDeleteClientResult {
+  client: number;
+  jobs: number;
+  leads: number;
+  pipeline_deals: number;
+  invoices: number;
+  invoice_items: number;
+  payments: number;
+  schedule_events: number;
+  job_line_items: number;
+}
+
+function buildSearchFilter(search: string): string {
+  const safe = search.replace(/,/g, ' ').trim().replace(/%/g, '\\%').replace(/_/g, '\\_');
+  return [
+    `first_name.ilike.%${safe}%`,
+    `last_name.ilike.%${safe}%`,
+    `company.ilike.%${safe}%`,
+    `email.ilike.%${safe}%`,
+    `phone.ilike.%${safe}%`,
+    `address.ilike.%${safe}%`,
+  ].join(',');
+}
+
+export async function listClients(query: ClientsQuery = {}): Promise<ClientsResult> {
+  const page = query.page || 1;
+  const pageSize = query.pageSize || 20;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let request = supabase
+    .from('clients_active')
+    .select('*', { count: 'exact' })
+    .range(from, to);
+
+  if (query.q?.trim()) request = request.or(buildSearchFilter(query.q));
+  if (query.status && query.status !== 'All') request = request.eq('status', query.status);
+
+  if (query.sort === 'oldest') request = request.order('created_at', { ascending: true });
+  else if (query.sort === 'name_asc') request = request.order('last_name', { ascending: true }).order('first_name', { ascending: true });
+  else if (query.sort === 'name_desc') request = request.order('last_name', { ascending: false }).order('first_name', { ascending: false });
+  else request = request.order('created_at', { ascending: false });
+
+  const { data, error, count } = await request;
+  if (error) throw error;
+
+  return {
+    items: (data || []) as ClientRecord[],
+    total: count || 0,
+  };
+}
+
+export interface ClientPayload {
+  first_name: string;
+  last_name: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  status?: string;
+}
+
+async function getCurrentOrgIdOrThrow(): Promise<string> {
+  const { data: orgId, error: orgError } = await supabase.rpc('current_org_id');
+  if (orgError) throw orgError;
+  if (!orgId) throw new Error('No organization context found.');
+  return String(orgId);
+}
+
+export async function findClientsByEmail(email: string): Promise<ClientRecord[]> {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized) return [];
+  const { data, error } = await supabase
+    .from('clients_active')
+    .select('*')
+    .ilike('email', normalized)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data || []) as ClientRecord[];
+}
+
+export async function createClientWithDuplicateHandling(
+  payload: ClientPayload,
+  mode: 'add' | 'replace'
+): Promise<ClientRecord> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase.rpc('create_client_with_duplicate_handling', {
+    p_org_id: orgId,
+    p_mode: mode,
+    p_payload: {
+      first_name: payload.first_name?.trim() || '',
+      last_name: payload.last_name?.trim() || '',
+      company: payload.company?.trim() || null,
+      email: payload.email?.trim() || null,
+      phone: payload.phone?.trim() || null,
+      address: payload.address?.trim() || null,
+      status: payload.status || 'active',
+    },
+    p_merge_duplicates: true,
+  });
+  if (error) throw error;
+  return data as unknown as ClientRecord;
+}
+
+export async function createClient(payload: ClientPayload): Promise<ClientRecord> {
+  return createClientWithDuplicateHandling(payload, 'add');
+}
+
+export async function updateClient(id: string, payload: Partial<{
+  first_name: string;
+  last_name: string;
+  company: string;
+  email: string;
+  phone: string;
+  address: string;
+  status: string;
+}>): Promise<ClientRecord> {
+  const updatePayload: Record<string, any> = {};
+  if (payload.first_name !== undefined) updatePayload.first_name = payload.first_name.trim();
+  if (payload.last_name !== undefined) updatePayload.last_name = payload.last_name.trim();
+  if (payload.company !== undefined) updatePayload.company = payload.company?.trim() || null;
+  if (payload.email !== undefined) updatePayload.email = payload.email?.trim() || null;
+  if (payload.phone !== undefined) updatePayload.phone = payload.phone?.trim() || null;
+  if (payload.address !== undefined) updatePayload.address = payload.address?.trim() || null;
+  if (payload.status !== undefined) updatePayload.status = payload.status;
+
+  const { data, error } = await supabase.from('clients').update(updatePayload).eq('id', id).select('*').single();
+  if (error) throw error;
+  return data as ClientRecord;
+}
+
+export async function softDeleteClient(id: string): Promise<SoftDeleteClientResult> {
+  const orgId = await getCurrentOrgIdOrThrow();
+
+  const { data, error } = await supabase.rpc('soft_delete_client', {
+    p_org_id: orgId,
+    p_client_id: id,
+  });
+  if (error) throw error;
+
+  return {
+    client: Number((data as any)?.client || 0),
+    jobs: Number((data as any)?.jobs || 0),
+    leads: Number((data as any)?.leads || 0),
+    pipeline_deals: Number((data as any)?.pipeline_deals || 0),
+    other_rows: Number((data as any)?.other_rows || 0),
+  };
+}
+
+export async function hardDeleteClient(id: string): Promise<HardDeleteClientResult> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase.rpc('delete_client_cascade', {
+    p_org_id: orgId,
+    p_client_id: id,
+    p_deleted_by: null,
+  });
+  if (error) throw error;
+  return {
+    client: Number((data as any)?.client || 0),
+    jobs: Number((data as any)?.jobs || 0),
+    leads: Number((data as any)?.leads || 0),
+    pipeline_deals: Number((data as any)?.pipeline_deals || 0),
+    invoices: Number((data as any)?.invoices || 0),
+    invoice_items: Number((data as any)?.invoice_items || 0),
+    payments: Number((data as any)?.payments || 0),
+    schedule_events: Number((data as any)?.schedule_events || 0),
+    job_line_items: Number((data as any)?.job_line_items || 0),
+  };
+}
+
+export async function listClientJobs(clientId: string) {
+  const { data, error } = await supabase
+    .from('jobs_active')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('scheduled_at', { ascending: true, nullsFirst: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getClientById(clientId: string): Promise<ClientRecord | null> {
+  const { data, error } = await supabase.from('clients_active').select('*').eq('id', clientId).maybeSingle();
+  if (error) throw error;
+  return (data as ClientRecord | null) || null;
+}

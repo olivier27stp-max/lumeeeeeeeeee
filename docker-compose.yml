@@ -1,0 +1,74 @@
+version: "3.9"
+
+services:
+  # ── PostgreSQL (Supabase-compatible) ──────────────────────────
+  postgres:
+    image: supabase/postgres:15.6.1.143
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-lume}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d/migrations
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Redis (caching / queues) ──────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Supabase Studio (optional, for DB admin) ──────────────────
+  supabase-studio:
+    image: supabase/studio:20240422-5cf8f30
+    restart: unless-stopped
+    ports:
+      - "${STUDIO_PORT:-3100}:3000"
+    environment:
+      STUDIO_PG_META_URL: http://pg-meta:8080
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_REST_URL: http://kong:8000/rest/v1/
+      SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+    profiles:
+      - studio
+
+  # ── Lume CRM App ─────────────────────────────────────────────
+  lume-crm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-3001}:3001"
+      - "${FRONTEND_PORT:-5173}:5173"
+    env_file:
+      - .env.local
+    environment:
+      API_PORT: 3001
+      FRONTEND_URL: http://localhost:${FRONTEND_PORT:-5173}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-lume}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
