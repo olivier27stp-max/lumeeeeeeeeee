@@ -1,6 +1,7 @@
 
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 
 // Import config (initializes dotenv, validates env vars)
 import { supabaseUrl, supabaseServiceRoleKey, twilioClient, twilioPhoneNumber, resendApiKey } from './lib/config';
@@ -65,8 +66,7 @@ app.use((_req, res, next) => {
 // ── CORS — strict in prod, permissive in dev ──
 const allowedOrigin = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? undefined : 'http://localhost:5173');
 if (process.env.NODE_ENV === 'production' && !allowedOrigin) {
-  console.error('FATAL: FRONTEND_URL is required in production');
-  process.exit(1);
+  console.warn('WARN: FRONTEND_URL not set — CORS will allow same-origin only');
 }
 app.use(cors({
   origin: allowedOrigin,
@@ -161,9 +161,19 @@ const surveyLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP
 app.use('/api/survey', surveyLimiter);
 app.use('/api', surveysRouter);
 
+// ── Serve frontend static files in production ──
+const distPath = path.resolve(__dirname, '..', 'dist');
+app.use(express.static(distPath));
+
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+// SPA fallback — serve index.html for all non-API routes
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 // Global error handler
