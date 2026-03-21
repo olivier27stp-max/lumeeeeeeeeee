@@ -68,10 +68,8 @@ app.use((_req, res, next) => {
 });
 
 // ── CORS — strict in prod, permissive in dev ──
-const allowedOrigin = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? undefined : 'http://localhost:5173');
-if (process.env.NODE_ENV === 'production' && !allowedOrigin) {
-  console.warn('WARN: FRONTEND_URL not set — CORS will allow same-origin only');
-}
+const rawOrigin = (process.env.FRONTEND_URL || '').trim();
+const allowedOrigin = rawOrigin || (process.env.NODE_ENV === 'production' ? true : 'http://localhost:5173');
 app.use(cors({
   origin: allowedOrigin,
   credentials: true,
