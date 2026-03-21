@@ -274,6 +274,151 @@ export const INVOICE_REMINDER_30 = invoiceReminderPreset(
   ],
 );
 
+// ── 11. Pipeline: New Lead Welcome ──────────────────────────
+
+export const PIPELINE_NEW_LEAD_WELCOME: AutomationPreset = {
+  key: 'pipeline_new_lead_welcome',
+  name_en: 'New Lead Welcome SMS',
+  name_fr: 'SMS de bienvenue nouveau lead',
+  description_en: 'Send a welcome SMS when a new lead is created.',
+  description_fr: 'Envoie un SMS de bienvenue quand un nouveau lead est cree.',
+  trigger_event: 'lead.created',
+  conditions: {},
+  delay_seconds: 0,
+  actions: [
+    {
+      type: 'send_sms',
+      config: {
+        message: 'Hi {client_name}! Thank you for reaching out to {company_name}. We will get back to you shortly with a quote.',
+      },
+    },
+    {
+      type: 'create_notification',
+      config: {
+        title: 'New lead: {client_name}',
+        body: 'A new lead was created. Follow up to convert.',
+      },
+    },
+  ],
+};
+
+// ── 12. Pipeline: Deal moved to Follow-up — create task ─────
+
+export const PIPELINE_FOLLOWUP_TASK: AutomationPreset = {
+  key: 'pipeline_followup_task',
+  name_en: 'Follow-up Reminder Task',
+  name_fr: 'Tache rappel de suivi',
+  description_en: 'Create a follow-up task when a deal moves to Follow-up 1 stage.',
+  description_fr: 'Cree une tache de rappel quand un deal passe en etape Suivi 1.',
+  trigger_event: 'pipeline_deal.stage_changed',
+  conditions: { new_stage: 'follow_up_1' },
+  delay_seconds: 0,
+  actions: [
+    {
+      type: 'create_task',
+      config: {
+        title: 'Follow up with {client_name}',
+        description: 'Deal moved to Follow-up 1. Contact the lead to discuss next steps.',
+        due_days: 2,
+      },
+    },
+  ],
+};
+
+// ── 13. Pipeline: Quote sent — move deal to Follow-up 2 ─────
+
+export const PIPELINE_QUOTE_SENT_STAGE: AutomationPreset = {
+  key: 'pipeline_quote_sent_stage',
+  name_en: 'Move to Follow-up 2 on Quote Sent',
+  name_fr: 'Passer en Suivi 2 apres envoi de devis',
+  description_en: 'Automatically move the pipeline deal to Follow-up 2 when a quote is sent.',
+  description_fr: 'Deplace automatiquement le deal en Suivi 2 quand un devis est envoye.',
+  trigger_event: 'quote.sent',
+  conditions: {},
+  delay_seconds: 0,
+  actions: [
+    {
+      type: 'update_status',
+      config: {
+        table: 'pipeline_deals',
+        field: 'stage',
+        value: 'follow_up_2',
+        match_field: 'lead_id',
+        match_source: 'lead_id',
+      },
+    },
+    {
+      type: 'create_notification',
+      config: {
+        title: 'Quote sent',
+        body: 'Quote sent to {client_name}. Deal moved to Follow-up 2.',
+      },
+    },
+  ],
+};
+
+// ── 14. Pipeline: Quote approved — move to Closed + create job ──
+
+export const PIPELINE_QUOTE_APPROVED: AutomationPreset = {
+  key: 'pipeline_quote_approved',
+  name_en: 'Auto-close Deal on Quote Approved',
+  name_fr: 'Fermer le deal automatiquement quand devis approuve',
+  description_en: 'Move the deal to Closed and notify the team when a quote is approved.',
+  description_fr: 'Deplace le deal en Ferme et notifie l equipe quand un devis est approuve.',
+  trigger_event: 'quote.approved',
+  conditions: {},
+  delay_seconds: 0,
+  actions: [
+    {
+      type: 'update_status',
+      config: {
+        table: 'pipeline_deals',
+        field: 'stage',
+        value: 'closed',
+        match_field: 'lead_id',
+        match_source: 'lead_id',
+      },
+    },
+    {
+      type: 'create_notification',
+      config: {
+        title: 'Quote approved!',
+        body: '{client_name} approved the quote. Deal moved to Closed.',
+      },
+    },
+  ],
+};
+
+// ── 15. Pipeline: Stale lead follow-up (3 days no action) ───
+
+export const PIPELINE_STALE_LEAD: AutomationPreset = {
+  key: 'pipeline_stale_lead',
+  name_en: 'Stale Lead Reminder (3 days)',
+  name_fr: 'Rappel lead inactif (3 jours)',
+  description_en: 'Send a reminder if a new lead has not been followed up within 3 days.',
+  description_fr: 'Envoie un rappel si un nouveau lead n a pas ete suivi dans les 3 jours.',
+  trigger_event: 'lead.created',
+  conditions: {},
+  delay_seconds: 3 * 24 * 60 * 60, // 3 days
+  actions: [
+    {
+      type: 'create_notification',
+      config: {
+        title: 'Stale lead: {client_name}',
+        body: 'This lead was created 3 days ago and has not moved from New. Follow up now!',
+      },
+    },
+    {
+      type: 'create_task',
+      config: {
+        title: 'Follow up with {client_name} — stale lead',
+        description: 'Lead has been in New stage for 3 days without action.',
+        due_days: 1,
+      },
+    },
+  ],
+};
+
 // ── All presets ─────────────────────────────────────────────
 
 export const ALL_PRESETS: AutomationPreset[] = [
@@ -287,4 +432,9 @@ export const ALL_PRESETS: AutomationPreset[] = [
   INVOICE_REMINDER_5,
   INVOICE_REMINDER_15,
   INVOICE_REMINDER_30,
+  PIPELINE_NEW_LEAD_WELCOME,
+  PIPELINE_FOLLOWUP_TASK,
+  PIPELINE_QUOTE_SENT_STAGE,
+  PIPELINE_QUOTE_APPROVED,
+  PIPELINE_STALE_LEAD,
 ];

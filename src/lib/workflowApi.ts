@@ -3,8 +3,10 @@ import type { WorkflowPreset } from './workflowPresets';
 
 // ─── Types ──────────────────────────────────────────────────────
 export type TriggerType =
-  | 'lead_created' | 'lead_updated'
+  | 'lead_created' | 'lead_updated' | 'lead_status_changed' | 'lead_converted'
+  | 'pipeline_deal_stage_changed'
   | 'estimate_sent' | 'estimate_approved'
+  | 'quote_created' | 'quote_sent' | 'quote_approved' | 'quote_declined' | 'quote_converted'
   | 'invoice_created' | 'invoice_overdue'
   | 'payment_received'
   | 'job_scheduled' | 'job_started' | 'job_completed'
@@ -103,8 +105,16 @@ async function getOrgId(): Promise<string> {
 export const TRIGGER_DEFS: Record<TriggerType, { label: string; labelFr: string; icon: string; category: string }> = {
   lead_created:         { label: 'Lead Created',          labelFr: 'Prospect créé',           icon: 'UserPlus',    category: 'CRM' },
   lead_updated:         { label: 'Lead Updated',          labelFr: 'Prospect modifié',        icon: 'UserCog',     category: 'CRM' },
+  lead_status_changed:  { label: 'Lead Status Changed',   labelFr: 'Statut prospect changé',  icon: 'RefreshCw',   category: 'CRM' },
+  lead_converted:       { label: 'Lead Converted',        labelFr: 'Prospect converti',       icon: 'UserCheck',   category: 'CRM' },
+  pipeline_deal_stage_changed: { label: 'Deal Stage Changed', labelFr: 'Étape deal changée', icon: 'GitBranch',   category: 'Pipeline' },
   estimate_sent:        { label: 'Estimate Sent',         labelFr: 'Devis envoyé',            icon: 'Send',        category: 'Sales' },
   estimate_approved:    { label: 'Estimate Approved',     labelFr: 'Devis approuvé',          icon: 'CheckCircle', category: 'Sales' },
+  quote_created:        { label: 'Quote Created',         labelFr: 'Soumission créée',        icon: 'FilePlus',    category: 'Sales' },
+  quote_sent:           { label: 'Quote Sent',            labelFr: 'Soumission envoyée',      icon: 'Send',        category: 'Sales' },
+  quote_approved:       { label: 'Quote Approved',        labelFr: 'Soumission approuvée',    icon: 'CheckCircle2', category: 'Sales' },
+  quote_declined:       { label: 'Quote Declined',        labelFr: 'Soumission refusée',      icon: 'XCircle',     category: 'Sales' },
+  quote_converted:      { label: 'Quote Converted to Job', labelFr: 'Soumission convertie',   icon: 'ArrowRight',  category: 'Sales' },
   invoice_created:      { label: 'Invoice Created',       labelFr: 'Facture créée',           icon: 'FileText',    category: 'Finance' },
   invoice_overdue:      { label: 'Invoice Overdue',       labelFr: 'Facture en retard',       icon: 'AlertCircle', category: 'Finance' },
   payment_received:     { label: 'Payment Received',      labelFr: 'Paiement reçu',           icon: 'CreditCard',  category: 'Finance' },
@@ -481,9 +491,26 @@ async function executeAction(node: WorkflowNode, data: Record<string, any>): Pro
     case 'add_tag':
     case 'create_note':
     case 'schedule_reminder':
-    case 'request_review':
-      console.log(`[Workflow] Execute ${node.action_type}`, config, data);
+    case 'request_review': {
+      // Route to server-side automation engine for real execution
+      const { data: session } = await supabase.auth.getSession();
+      const token = session.session?.access_token;
+      if (!token) throw new Error('Not authenticated — cannot execute workflow action');
+      const resp = await fetch('/api/workflows/execute-action', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action_type: node.action_type,
+          config,
+          context: data,
+        }),
+      });
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({}));
+        throw new Error(errBody?.error || `Action ${node.action_type} failed (${resp.status})`);
+      }
       break;
+    }
 
     default:
       throw new Error(`Unknown action type: ${node.action_type}`);

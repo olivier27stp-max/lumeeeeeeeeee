@@ -59,3 +59,31 @@ export function emitJobCompleted(params: {
 }) {
   fireEvent('job-completed', params);
 }
+
+/** Notify engine that a pipeline deal changed stage */
+export function emitDealStageChanged(params: {
+  dealId: string;
+  leadId?: string;
+  jobId?: string;
+  oldStage: string;
+  newStage: string;
+}) {
+  fireEvent('deal-stage-changed', params);
+}
+
+/** Notify engine that a quote was sent */
+export function emitQuoteSent(params: {
+  quoteId: string;
+  leadId?: string;
+  channel: 'email' | 'sms';
+}) {
+  fireEvent('quote-sent', params);
+}
+
+/** Notify engine that a quote was approved */
+export function emitQuoteApproved(params: {
+  quoteId: string;
+  leadId?: string;
+}) {
+  fireEvent('quote-approved', params);
+}

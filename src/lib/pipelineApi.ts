@@ -1,5 +1,6 @@
 ﻿import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
+import { emitDealStageChanged } from './automationEventsApi';
 
 /** Convert a display-label stage to its DB slug */
 export function stageToDbSlug(stage: string): string {
@@ -311,12 +312,29 @@ export async function updatePipelineDeal(
     if (updateError) throw updateError;
   }
 
+  let oldStage: string | null = null;
   if (stage !== undefined) {
+    // Capture old stage for event emission
+    const { data: currentDeal } = await supabase.from('pipeline_deals').select('stage,lead_id,job_id').eq('id', id).maybeSingle();
+    oldStage = currentDeal?.stage || null;
+
     const { error: stageError } = await supabase.rpc('set_deal_stage', {
       p_deal_id: id,
       p_stage: stageToDbSlug(stage),
     });
     if (stageError) throw stageError;
+
+    // Emit pipeline stage change event (non-blocking)
+    const newSlug = stageToDbSlug(stage);
+    if (oldStage !== newSlug) {
+      emitDealStageChanged({
+        dealId: id,
+        leadId: currentDeal?.lead_id || undefined,
+        jobId: currentDeal?.job_id || undefined,
+        oldStage: oldStage || '',
+        newStage: newSlug,
+      });
+    }
   }
 
   const data = await getPipelineDealById(id);
@@ -348,11 +366,27 @@ export async function serverDeleteDeal(dealId: string, alsoDeleteLead = false): 
 }
 
 export async function setPipelineDealStage(id: string, stage: PipelineStageName): Promise<PipelineDeal> {
+  // Capture old stage
+  const { data: currentDeal } = await supabase.from('pipeline_deals').select('stage,lead_id,job_id').eq('id', id).maybeSingle();
+  const oldStage = currentDeal?.stage || null;
+
   const { error } = await supabase.rpc('set_deal_stage', {
     p_deal_id: id,
     p_stage: stageToDbSlug(stage),
   });
   if (error) throw error;
+
+  const newSlug = stageToDbSlug(stage);
+  if (oldStage !== newSlug) {
+    emitDealStageChanged({
+      dealId: id,
+      leadId: currentDeal?.lead_id || undefined,
+      jobId: currentDeal?.job_id || undefined,
+      oldStage: oldStage || '',
+      newStage: newSlug,
+    });
+  }
+
   const deal = await getPipelineDealById(id);
   if (!deal) throw new Error('Deal updated but could not be loaded.');
   return deal;

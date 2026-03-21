@@ -171,4 +171,106 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
   }
 });
 
+// ── POST /automations/events/deal-stage-changed ──
+router.post('/automations/events/deal-stage-changed', validate(automationEventSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const { dealId, leadId, jobId, oldStage, newStage } = req.body;
+    if (!dealId) return res.status(400).json({ error: 'dealId is required' });
+
+    const admin = getServiceClient();
+    let clientName = '';
+    let clientEmail = '';
+    let clientPhone = '';
+    let leadName = '';
+
+    if (leadId) {
+      const { data: lead } = await admin
+        .from('leads').select('first_name, last_name, email, phone, client_id')
+        .eq('id', leadId).maybeSingle();
+      if (lead) {
+        leadName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
+        clientEmail = lead.email || '';
+        clientPhone = lead.phone || '';
+        if (lead.client_id) {
+          const { data: client } = await admin
+            .from('clients').select('first_name, last_name, email, phone')
+            .eq('id', lead.client_id).maybeSingle();
+          if (client) {
+            clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim();
+            clientEmail = client.email || clientEmail;
+            clientPhone = client.phone || clientPhone;
+          }
+        }
+      }
+    }
+
+    await eventBus.emit('pipeline_deal.stage_changed', {
+      orgId: auth.orgId,
+      entityType: 'pipeline_deal',
+      entityId: dealId,
+      actorId: auth.user.id,
+      relatedEntityType: leadId ? 'lead' : undefined,
+      relatedEntityId: leadId || undefined,
+      metadata: {
+        old_stage: oldStage || null,
+        new_stage: newStage || null,
+        lead_id: leadId || null,
+        job_id: jobId || null,
+        lead_name: leadName || clientName,
+        client_name: clientName,
+        client_email: clientEmail,
+        client_phone: clientPhone,
+      },
+    });
+
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[automation-events] deal.stage_changed error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /automations/events/quote-sent ──
+router.post('/automations/events/quote-sent', validate(automationEventSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const { quoteId, leadId, channel } = req.body;
+
+    await eventBus.emit('quote.sent', {
+      orgId: auth.orgId,
+      entityType: 'quote',
+      entityId: quoteId || '',
+      actorId: auth.user.id,
+      metadata: { lead_id: leadId || null, channel: channel || 'email' },
+    });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /automations/events/quote-approved ──
+router.post('/automations/events/quote-approved', validate(automationEventSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const { quoteId, leadId } = req.body;
+
+    await eventBus.emit('quote.approved', {
+      orgId: auth.orgId,
+      entityType: 'quote',
+      entityId: quoteId || '',
+      actorId: auth.user.id,
+      metadata: { lead_id: leadId || null },
+    });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

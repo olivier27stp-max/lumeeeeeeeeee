@@ -13,11 +13,17 @@ export type CRMEventType =
   | 'lead.updated'
   | 'lead.status_changed'
   | 'lead.converted'
+  | 'pipeline_deal.stage_changed'
   | 'client.archived'
   | 'client.deleted'
   | 'estimate.sent'
   | 'estimate.accepted'
   | 'estimate.rejected'
+  | 'quote.created'
+  | 'quote.sent'
+  | 'quote.approved'
+  | 'quote.declined'
+  | 'quote.converted'
   | 'appointment.created'
   | 'appointment.updated'
   | 'appointment.cancelled'
@@ -45,11 +51,17 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'lead.updated': 'lead_updated',
   'lead.status_changed': 'status_changed',
   'lead.converted': 'lead_converted',
+  'pipeline_deal.stage_changed': 'deal_stage_changed',
   'client.archived': 'client_archived',
   'client.deleted': 'client_deleted',
   'estimate.sent': 'estimate_sent',
   'estimate.accepted': 'estimate_accepted',
   'estimate.rejected': 'estimate_rejected',
+  'quote.created': 'quote_created',
+  'quote.sent': 'quote_sent',
+  'quote.approved': 'quote_approved',
+  'quote.declined': 'quote_declined',
+  'quote.converted': 'quote_converted',
   'appointment.created': 'appointment_created',
   'appointment.updated': 'appointment_updated',
   'appointment.cancelled': 'appointment_cancelled',
