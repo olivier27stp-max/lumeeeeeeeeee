@@ -167,6 +167,58 @@ app.use('/api', surveysRouter);
 const distPath = path.resolve(__dirname, '..', 'dist');
 app.use(express.static(distPath));
 
+// ── Workflow action bridge — routes visual workflow actions to the real engine ──
+app.post('/api/workflows/execute-action', async (req, res) => {
+  try {
+    const { requireAuthedClient, getServiceClient } = await import('./lib/supabase.js');
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const { action_type, config, context } = req.body;
+    if (!action_type) return res.status(400).json({ error: 'action_type is required' });
+
+    const { executeAction, resolveEntityVariables } = await import('./lib/actions/index.js');
+    const admin = getServiceClient();
+
+    const actionCtx = {
+      supabase: admin,
+      orgId: auth.orgId,
+      entityType: context?.entityType || 'workflow',
+      entityId: context?.entityId || '',
+      twilio: null as any,
+      resendApiKey: process.env.RESEND_API_KEY || '',
+      baseUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+    };
+
+    // Try to init twilio if available
+    try {
+      const { twilioClient: tc, twilioPhoneNumber: tp } = await import('./lib/config.js');
+      if (tc && tp) actionCtx.twilio = { client: tc, phoneNumber: tp };
+    } catch {}
+
+    // Resolve template variables from entity context
+    let vars: Record<string, string> = {};
+    if (context?.entityType && context?.entityId) {
+      try {
+        vars = await resolveEntityVariables(admin, auth.orgId, context.entityType, context.entityId);
+      } catch {}
+    }
+    // Merge any extra context vars
+    if (context) {
+      for (const [k, v] of Object.entries(context)) {
+        if (typeof v === 'string' && !vars[k]) vars[k] = v;
+      }
+    }
+
+    const result = await executeAction(action_type, config || {}, vars, actionCtx);
+
+    return res.json({ ok: true, result });
+  } catch (error: any) {
+    console.error('[workflows/execute-action]', error.message);
+    return res.status(500).json({ error: error?.message || 'Action execution failed' });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
