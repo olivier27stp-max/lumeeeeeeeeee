@@ -27,7 +27,10 @@ import { useTranslation } from '../i18n';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import QuickActions from '../components/QuickActions';
 import BulkActionBar, { type BulkAction } from '../components/BulkActionBar';
-import { Trash2 as TrashBulk, Send as SendBulk, Archive } from 'lucide-react';
+import { Trash2 as TrashBulk, Send as SendBulk, Archive, FileText } from 'lucide-react';
+import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
+import QuoteDetailsModal from '../components/quotes/QuoteDetailsModal';
+import type { QuoteDetail } from '../lib/quotesApi';
 
 type SortBy = 'recent' | 'oldest';
 
@@ -71,6 +74,11 @@ export default function Leads() {
   const [isResolvingConflict, setIsResolvingConflict] = useState(false);
 
   const [isAutoConverting, setIsAutoConverting] = useState(false);
+
+  // Quote state
+  const [isQuoteCreateOpen, setIsQuoteCreateOpen] = useState(false);
+  const [quoteDetail, setQuoteDetail] = useState<QuoteDetail | null>(null);
+  const [isQuoteDetailsOpen, setIsQuoteDetailsOpen] = useState(false);
 
   // Escape key closes drawer/modal
   useEscapeKey(() => {
@@ -806,6 +814,13 @@ export default function Leads() {
                   >
                     {isAutoConverting ? t.leads.converting : t.leads.autoDealJob}
                   </button>
+                  <button
+                    onClick={() => setIsQuoteCreateOpen(true)}
+                    className="glass-button inline-flex items-center gap-1.5 text-green-700 border-green-200 hover:bg-green-50"
+                  >
+                    <FileText size={13} />
+                    Send Quote
+                  </button>
                 </div>
 
                 {!isEditingLead && (
@@ -923,6 +938,41 @@ export default function Leads() {
             }}
             onClear={() => setSelectedLeads([])}
             language={language}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Quote Create Modal */}
+      <AnimatePresence>
+        {isQuoteCreateOpen && (
+          <QuoteCreateModal
+            isOpen={isQuoteCreateOpen}
+            onClose={() => setIsQuoteCreateOpen(false)}
+            lead={selectedLead}
+            onCreated={(detail) => {
+              setQuoteDetail(detail);
+              setIsQuoteDetailsOpen(true);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Quote Details Modal */}
+      <AnimatePresence>
+        {isQuoteDetailsOpen && quoteDetail && (
+          <QuoteDetailsModal
+            isOpen={isQuoteDetailsOpen}
+            onClose={() => { setIsQuoteDetailsOpen(false); setQuoteDetail(null); }}
+            detail={quoteDetail}
+            onRefresh={async () => {
+              if (quoteDetail?.quote.id) {
+                const { getQuoteById } = await import('../lib/quotesApi');
+                const refreshed = await getQuoteById(quoteDetail.quote.id);
+                if (refreshed) setQuoteDetail(refreshed);
+              }
+            }}
+            onConvertedToJob={(jobId) => navigate(`/jobs/${jobId}`)}
+            onDuplicated={(dup) => { setQuoteDetail(dup); }}
           />
         )}
       </AnimatePresence>
