@@ -257,6 +257,83 @@ export async function rescheduleEvent(payload: {
   };
 }
 
+/** Fetch all scheduled events where the job has no team assigned (team_id IS NULL on both event and job). */
+export async function listUnassignedScheduledEvents(params: {
+  startAt: string;
+  endAt: string;
+}): Promise<ScheduleEventRecord[]> {
+  const startAt = toIsoOrThrow(params.startAt);
+  const endAt = toIsoOrThrow(params.endAt);
+
+  const { data, error } = await supabase
+    .from('schedule_events')
+    .select(
+      `
+      id,job_id,team_id,start_at,end_at,timezone,status,notes,deleted_at,
+      job:jobs!schedule_events_job_id_fkey(
+        id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,deleted_at
+      )
+      `
+    )
+    .is('deleted_at', null)
+    .is('team_id', null)
+    .lt('start_at', endAt)
+    .gt('end_at', startAt)
+    .order('start_at', { ascending: true });
+
+  if (error) throw error;
+
+  return (data || [])
+    .filter((row: any) => {
+      if (row.job && row.job.deleted_at) return false;
+      // Only truly unassigned: event has no team AND job has no team
+      if (row.job?.team_id) return false;
+      return true;
+    })
+    .map(mapScheduleRow);
+}
+
+/** Fetch all unscheduled jobs that have no team assigned. */
+export async function listUnassignedUnscheduledJobs(): Promise<UnscheduledJobRecord[]> {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('id,title,status,team_id,client_name,property_address,lead_id,scheduled_at,total_cents')
+    .is('deleted_at', null)
+    .is('scheduled_at', null)
+    .is('team_id', null)
+    .in('status', ['draft', 'Draft'])
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    title: row.title,
+    status: row.status,
+    team_id: null,
+    client_name: row.client_name ?? null,
+    property_address: row.property_address ?? null,
+    lead_id: row.lead_id ?? null,
+    total_cents: row.total_cents == null ? null : Number(row.total_cents),
+  }));
+}
+
+/** Assign a job to a team via the server route (bypasses RLS). */
+export async function assignJobToTeam(jobId: string, teamId: string): Promise<void> {
+  const { data: session } = await supabase.auth.getSession();
+  const token = session.session?.access_token;
+  if (!token) throw new Error('Not authenticated.');
+
+  const res = await fetch('/api/jobs/assign-team', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jobId, teamId }),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload?.error || 'Failed to assign job to team.');
+
+  invalidateScheduleCache();
+}
+
 export async function unscheduleJob(payload: { jobId: string; eventId?: string | null }): Promise<void> {
   const { error } = await supabase.rpc('rpc_unschedule_job', {
     p_job_id: payload.jobId,

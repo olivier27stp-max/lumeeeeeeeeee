@@ -530,9 +530,9 @@ export default function JobDetails() {
                 <JobDetailRow label="Job type" value={job.job_type || 'One-off job'} />
                 <JobDetailRow label="Starts on" value={job.scheduled_at ? formatDate(job.scheduled_at) : '—'} />
                 <JobDetailRow label="Ends on" value={job.end_at ? formatDate(job.end_at) : (job.scheduled_at ? formatDate(job.scheduled_at) : '—')} />
-                <JobDetailRow label="Billing frequency" value="Upon job completion" />
-                <JobDetailRow label="Automatic payments" value="No" />
-                <JobDetailRow label="Salesperson" value="—" isLast />
+                <JobDetailRow label="Billing frequency" value={(job as any).requires_invoicing === false ? 'No invoicing' : 'Upon job completion'} />
+                <JobDetailRow label="Deposit" value={(job as any).deposit_required ? `${(job as any).deposit_type === 'percentage' ? `${(job as any).deposit_value}%` : `$${(job as any).deposit_value}`}` : 'None'} />
+                <JobDetailRow label="Salesperson" value={(job as any).salesperson_id || '—'} isLast />
               </div>
             </div>
           </div>
@@ -695,7 +695,7 @@ export default function JobDetails() {
             {visits.length === 0 && job.scheduled_at ? (
               <div className="rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <input type="checkbox" className="rounded border-outline" readOnly />
+                  <span className="w-4 h-4 rounded border border-outline bg-surface-secondary inline-block shrink-0" />
                   <span className="text-[13px] font-semibold text-text-primary">
                     {formatDate(job.scheduled_at)}
                   </span>
@@ -707,7 +707,7 @@ export default function JobDetails() {
                 {visits.map((visit) => (
                   <div key={visit.id} className="rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <input type="checkbox" className="rounded border-outline" readOnly />
+                      <span className="w-4 h-4 rounded border border-outline bg-surface-secondary inline-block shrink-0" />
                       <span className="text-[13px] font-semibold text-text-primary">
                         {visit.start_at ? formatDate(visit.start_at) : 'Unscheduled'}
                       </span>
@@ -759,10 +759,12 @@ export default function JobDetails() {
             {invoiceTab === 'billing' && (
               <>
                 {job.billing_split !== undefined && (
-                  <label className="flex items-center gap-2 text-[13px] text-text-secondary mb-4 cursor-pointer">
-                    <input type="checkbox" className="rounded border-outline" checked={job.billing_split ?? false} readOnly />
+                  <div className="flex items-center gap-2 text-[13px] text-text-secondary mb-4">
+                    <span className={cn('w-4 h-4 rounded border inline-flex items-center justify-center', job.billing_split ? 'bg-primary border-primary text-white' : 'border-outline bg-surface-secondary')}>
+                      {job.billing_split && <span className="text-[9px]">✓</span>}
+                    </span>
                     Split into multiple invoices with a payment schedule
-                  </label>
+                  </div>
                 )}
 
                 <div className="overflow-x-auto">

@@ -55,7 +55,7 @@ function QuickActions({ phone, email, className, size = 'md', onSms, onEmail }: 
         <a
           href={onEmail ? undefined : `mailto:${email}`}
           onClick={onEmail ? (e) => { e.preventDefault(); e.stopPropagation(); onEmail(); } : undefined}
-          className={cn(btnClass, 'text-text-tertiary hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors')}
+          className={cn(btnClass, 'text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary dark:hover:bg-neutral-800/20 transition-colors')}
           title={`Email ${email}`}
         >
           <Mail size={iconSize} />

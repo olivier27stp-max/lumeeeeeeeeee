@@ -722,7 +722,7 @@ router.post('/director-panel/training/start', async (req: Request, res: Response
       status: 'training',
       fal_request_id: data.request_id || null,
       metadata_json: { images: images.map((img: any) => ({ url: img.url, caption: img.caption })) },
-    }).catch(() => {}); // Non-blocking
+    }); // Non-blocking insert
 
     return res.json({ training_id: trainingId, status: 'training' });
   } catch (err: any) {
@@ -775,14 +775,14 @@ router.get('/director-panel/training/status/:trainingId', async (req: Request, r
           modelId = resultData.diffusers_lora_file?.url || resultData.config_file?.url || null;
           // Update DB
           const admin = getServiceClient();
-          await admin.from('director_training_jobs').update({ status: 'completed', model_id: modelId, completed_at: new Date().toISOString() }).eq('id', trainingId).catch(() => {});
+          await admin.from('director_training_jobs').update({ status: 'completed', model_id: modelId, completed_at: new Date().toISOString() }).eq('id', trainingId);
         }
       } catch { /* non-blocking */ }
     } else if (data.status === 'FAILED') {
       status = 'failed';
       error = data.error || 'Training failed';
       const admin = getServiceClient();
-      await admin.from('director_training_jobs').update({ status: 'failed', error_json: { error } }).eq('id', trainingId).catch(() => {});
+      await admin.from('director_training_jobs').update({ status: 'failed', error_json: { error } }).eq('id', trainingId);
     } else if (data.status === 'IN_PROGRESS') {
       progress = data.logs?.length ? Math.min(90, 30 + data.logs.length * 5) : 50;
     } else if (data.status === 'IN_QUEUE') {

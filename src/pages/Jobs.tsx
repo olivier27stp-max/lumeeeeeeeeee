@@ -385,7 +385,9 @@ export default function Jobs() {
   const loadKpis = async () => {
     setKpiLoading(true);
     try {
-      const result = await getJobsKpis({ status: statusFilter, jobType: jobTypeFilter, q: debouncedQuery });
+      // KPIs should always count ALL jobs (not filtered by active status tab)
+      // so each badge shows the true count regardless of which tab is selected
+      const result = await getJobsKpis({ jobType: jobTypeFilter, q: debouncedQuery });
       setKpis(result);
     } catch { setKpis(null); }
     finally { setKpiLoading(false); }
@@ -393,7 +395,7 @@ export default function Jobs() {
 
   useEffect(() => { getJobTypes().then(setJobTypes).catch(() => setJobTypes([])); }, []);
   useEffect(() => { void loadJobs(); }, [statusFilter, jobTypeFilter, debouncedQuery, sortBy, sortDirection, page, pageSize]);
-  useEffect(() => { void loadKpis(); }, [statusFilter, jobTypeFilter, debouncedQuery]);
+  useEffect(() => { void loadKpis(); }, [jobTypeFilter, debouncedQuery]);
 
   // Listen for command palette create event
   useEffect(() => {
@@ -703,19 +705,18 @@ export default function Jobs() {
 
             {/* List view */}
             {!loading && !error && jobs.length > 0 && viewMode === 'list' && (
-              <div>
-                {jobs.map((job, i) => (
+              <div className="space-y-2">
+                {jobs.map((job) => (
                   <button
                     key={job.id}
                     onClick={() => handleJobClick(job)}
                     className={cn(
-                      'w-full flex items-center gap-4 px-5 py-3 text-left hover:bg-surface-secondary/50 transition-colors',
-                      i > 0 && 'border-t border-outline-subtle/30',
-                      selectedJob?.id === job.id && 'bg-surface-secondary/70'
+                      'w-full flex items-center gap-4 px-5 py-3.5 text-left rounded-xl bg-surface border border-outline-subtle/60 hover:border-primary/30 hover:shadow-md transition-all group relative',
+                      selectedJob?.id === job.id && 'border-primary/40 shadow-sm'
                     )}
                   >
-                    <div className={cn('w-2 h-2 rounded-full shrink-0', statusColor(job.status))} />
-                    <div className="flex-1 min-w-0">
+                    <div className={cn('absolute left-0 top-3 bottom-3 w-[3px] rounded-full', statusColor(job.status))} />
+                    <div className="flex-1 min-w-0 pl-2">
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] font-bold text-text-tertiary tabular-nums">#{job.job_number}</span>
                         <span className="text-[13px] font-semibold text-text-primary truncate">{job.title}</span>
@@ -740,7 +741,7 @@ export default function Jobs() {
                     <StatusBadge status={job.status} />
                     <button
                       onClick={(e) => { e.stopPropagation(); setJobToDelete(job); }}
-                      className="p-1 rounded text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 hover:opacity-100 transition-all"
+                      className="p-1 rounded-md text-text-tertiary hover:text-danger hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-all"
                     >
                       <Trash2 size={12} />
                     </button>

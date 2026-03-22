@@ -12,6 +12,7 @@ import { scheduleTools } from './schedule';
 import { dashboardTools } from './dashboard';
 import { leadTools } from './leads';
 import { directorTools } from './director';
+import { searchTools } from './search';
 
 /**
  * Register all CRM tools. Call this once at app startup.
@@ -25,4 +26,5 @@ export function registerAllTools(): void {
   toolRegistry.registerAll(dashboardTools);
   toolRegistry.registerAll(leadTools);
   toolRegistry.registerAll(directorTools);
+  toolRegistry.registerAll(searchTools);
 }

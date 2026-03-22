@@ -243,7 +243,7 @@ export default function InvoiceDetails() {
                 <button
                   type="button"
                   onClick={() => setIsRequestPaymentOpen(true)}
-                  className="glass-button inline-flex items-center gap-1.5 text-[12px] bg-blue-600 text-white hover:bg-blue-700"
+                  className="glass-button inline-flex items-center gap-1.5 text-[12px] bg-neutral-900 text-white hover:bg-neutral-800"
                 >
                   <Send size={12} />
                   {language === 'fr' ? 'Demander paiement' : 'Request Payment'}

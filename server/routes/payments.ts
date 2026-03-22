@@ -150,6 +150,28 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
               .eq('id', metadata.invoiceId);
           }
         }
+
+        // ── Handle quote deposit payments ──
+        const entityType = String((intent.metadata as any)?.entity_type || '').trim();
+        const quoteId = String((intent.metadata as any)?.quote_id || '').trim();
+        if (entityType === 'quote_deposit' && quoteId) {
+          const admin = getServiceClient();
+          // Mark quote deposit as paid
+          await admin.from('quotes').update({
+            deposit_status: 'paid',
+            updated_at: new Date().toISOString(),
+          }).eq('id', quoteId);
+
+          // Mark payment_requirement as paid
+          const payReqId = String((intent.metadata as any)?.payment_requirement_id || '').trim();
+          if (payReqId) {
+            await admin.from('payment_requirements').update({
+              status: 'paid',
+              payment_id: null,
+              updated_at: new Date().toISOString(),
+            }).eq('id', payReqId);
+          }
+        }
       }
 
       // ── Handle payment_intent.payment_failed ──

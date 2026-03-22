@@ -35,6 +35,10 @@ import { StatusBadge, Skeleton } from '../components/ui';
 import { useTranslation } from '../i18n';
 import ActivityTimeline from '../components/ActivityTimeline';
 import { useDropZone } from '../hooks/useDropZone';
+import { useJobModalController } from '../contexts/JobModalController';
+import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
+import QuoteDetailsModal from '../components/quotes/QuoteDetailsModal';
+import { getQuoteById, formatQuoteMoney, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, type QuoteDetail, type Quote } from '../lib/quotesApi';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface JobRecord {
@@ -213,6 +217,17 @@ export default function ClientDetails() {
   const [activeTab, setActiveTab] = useState<OverviewTab>('active');
   const [showActionMenu, setShowActionMenu] = useState(false);
 
+  // Real quotes (from quotes table, not invoices)
+  const [realQuotes, setRealQuotes] = useState<Quote[]>([]);
+
+  // Quote modals
+  const [isQuoteCreateOpen, setIsQuoteCreateOpen] = useState(false);
+  const [quoteDetail, setQuoteDetail] = useState<QuoteDetail | null>(null);
+  const [isQuoteDetailsOpen, setIsQuoteDetailsOpen] = useState(false);
+
+  // Job modal controller
+  const { openJobModal } = useJobModalController();
+
   // ─── Data Loading ────────────────────────────────────────────────
   useEffect(() => {
     if (!id) return;
@@ -274,6 +289,15 @@ export default function ClientDetails() {
         .eq('client_id', clientId)
         .order('created_at', { ascending: false });
       setLeads((leadData || []) as any[]);
+
+      // Fetch real quotes (from quotes table)
+      const { data: quotesData } = await supabase
+        .from('quotes')
+        .select('id, quote_number, title, status, total_cents, currency, created_at')
+        .eq('client_id', clientId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+      setRealQuotes((quotesData || []) as Quote[]);
 
       // Tags
       try {
@@ -417,18 +441,17 @@ export default function ClientDetails() {
     { key: 'completed', label: 'Completed', count: completedJobs.length },
     { key: 'jobs', label: t.clients.jobs, count: jobs.length },
     { key: 'invoices', label: t.nav.invoices, count: invoices.length },
-    { key: 'quotes', label: 'Quotes', count: quoteInvoices.length },
+    { key: 'quotes', label: 'Quotes', count: realQuotes.length },
     { key: 'leads', label: t.nav.leads, count: leads.length },
   ];
 
   // ─── Job row renderer (reused across tabs) ─────────────────────
   const renderJobRow = (job: JobRecord) => (
-    <button
-      key={job.id}
-      onClick={() => navigate(`/jobs/${job.id}`)}
-      className="w-full rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between text-left hover:border-primary/30 transition-colors group"
-    >
-      <div className="flex items-center gap-3">
+    <div key={job.id} className="w-full rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between text-left hover:border-primary/30 transition-colors group">
+      <button
+        onClick={() => navigate(`/jobs/${job.id}`)}
+        className="flex items-center gap-3 flex-1 text-left"
+      >
         <div className="icon-tile icon-tile-sm icon-tile-blue">
           <Briefcase size={13} strokeWidth={2} />
         </div>
@@ -456,11 +479,22 @@ export default function ClientDetails() {
             )}
           </div>
         </div>
+      </button>
+      <div className="flex items-center gap-2 shrink-0">
+        <span className="text-[13px] font-semibold text-text-primary tabular-nums">
+          {formatCurrency(Math.round(getJobAmount(job)))}
+        </span>
+        {job.scheduled_at && (
+          <button
+            onClick={() => navigate(`/calendar?date=${new Date(job.scheduled_at!).toISOString().slice(0, 10)}&view=day`)}
+            className="p-1.5 rounded-md text-text-tertiary hover:text-primary hover:bg-primary/10 transition-colors"
+            title="View in calendar"
+          >
+            <Calendar size={14} />
+          </button>
+        )}
       </div>
-      <span className="text-[13px] font-semibold text-text-primary tabular-nums">
-        {formatCurrency(Math.round(getJobAmount(job)))}
-      </span>
-    </button>
+    </div>
   );
 
   return (
@@ -502,6 +536,25 @@ export default function ClientDetails() {
               <Send size={14} /> SMS
             </a>
           )}
+
+          <button
+            onClick={() => setIsQuoteCreateOpen(true)}
+            className="glass-button inline-flex items-center gap-1.5"
+          >
+            <FileText size={14} /> New Quote
+          </button>
+          <button
+            onClick={() => openJobModal({
+              initialValues: {
+                client_id: client.id,
+                property_address: fullAddress || null,
+              },
+              onCreated: () => { if (id) loadAllData(id); },
+            })}
+            className="glass-button-primary inline-flex items-center gap-1.5"
+          >
+            <Plus size={14} /> New Job
+          </button>
 
           {/* More dropdown */}
           <div className="relative">
@@ -762,29 +815,44 @@ export default function ClientDetails() {
               {/* Quotes Tab */}
               {activeTab === 'quotes' && (
                 <div className="space-y-2.5">
-                  {quoteInvoices.length === 0 ? (
-                    <p className="text-[13px] text-text-tertiary py-4 text-center">No quotes for this client.</p>
-                  ) : quoteInvoices.map((inv) => (
+                  <div className="flex justify-end mb-2">
                     <button
-                      key={inv.id}
-                      onClick={() => navigate(`/invoices/${inv.id}`)}
+                      onClick={() => setIsQuoteCreateOpen(true)}
+                      className="glass-button-primary text-[12px] inline-flex items-center gap-1 px-2.5 py-1"
+                    >
+                      <Plus size={12} /> New Quote
+                    </button>
+                  </div>
+                  {realQuotes.length === 0 ? (
+                    <p className="text-[13px] text-text-tertiary py-4 text-center">No quotes for this client.</p>
+                  ) : realQuotes.map((q) => (
+                    <button
+                      key={q.id}
+                      onClick={async () => {
+                        try {
+                          const detail = await getQuoteById(q.id);
+                          if (detail) { setQuoteDetail(detail); setIsQuoteDetailsOpen(true); }
+                        } catch { toast.error('Failed to load quote'); }
+                      }}
                       className="w-full rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between text-left hover:border-primary/30 transition-colors group"
                     >
                       <div className="flex items-center gap-3">
                         <div className="icon-tile icon-tile-sm icon-tile-blue"><FileText size={13} strokeWidth={2} /></div>
                         <div>
                           <div className="flex items-center gap-2">
-                            {inv.invoice_number && <span className="text-[11px] font-bold text-text-tertiary">#{inv.invoice_number}</span>}
+                            <span className="text-[11px] font-bold text-text-tertiary">#{q.quote_number}</span>
                             <p className="text-[13px] font-semibold text-text-primary group-hover:text-primary transition-colors">
-                              {inv.subject || 'Quote'}
+                              {q.title || 'Quote'}
                             </p>
-                            <StatusBadge status={inv.status} />
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${QUOTE_STATUS_COLORS[q.status] || 'bg-neutral-100 text-neutral-600'}`}>
+                              {QUOTE_STATUS_LABELS[q.status] || q.status}
+                            </span>
                           </div>
-                          <span className="text-[12px] text-text-tertiary">{formatDate(inv.created_at)}</span>
+                          <span className="text-[12px] text-text-tertiary">{formatDate(q.created_at)}</span>
                         </div>
                       </div>
                       <p className="text-[13px] font-semibold text-text-primary tabular-nums">
-                        {formatCurrency(Math.round((inv.total_cents || 0) / 100))}
+                        {formatQuoteMoney(q.total_cents, q.currency)}
                       </p>
                     </button>
                   ))}
@@ -1133,6 +1201,38 @@ export default function ClientDetails() {
       </div>
 
       <ActivityTimeline entityType="client" entityId={id!} />
+
+      {/* Quote Create Modal */}
+      {isQuoteCreateOpen && client && (
+        <QuoteCreateModal
+          isOpen={isQuoteCreateOpen}
+          onClose={() => setIsQuoteCreateOpen(false)}
+          lead={{ id: '', first_name: client.first_name, last_name: client.last_name, email: client.email, phone: client.phone, company: client.company, client_id: client.id } as any}
+          onCreated={(detail) => {
+            setIsQuoteCreateOpen(false);
+            setQuoteDetail(detail);
+            setIsQuoteDetailsOpen(true);
+            if (id) loadAllData(id);
+          }}
+        />
+      )}
+
+      {/* Quote Details Modal */}
+      {isQuoteDetailsOpen && quoteDetail && (
+        <QuoteDetailsModal
+          isOpen={isQuoteDetailsOpen}
+          onClose={() => { setIsQuoteDetailsOpen(false); setQuoteDetail(null); }}
+          detail={quoteDetail}
+          onRefresh={async () => {
+            if (quoteDetail?.quote.id) {
+              const refreshed = await getQuoteById(quoteDetail.quote.id);
+              if (refreshed) setQuoteDetail(refreshed);
+            }
+          }}
+          onConvertedToJob={(jobId) => navigate(`/jobs/${jobId}`)}
+          onDuplicated={(dup) => setQuoteDetail(dup)}
+        />
+      )}
     </div>
   );
 }

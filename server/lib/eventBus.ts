@@ -82,6 +82,7 @@ class CRMEventBus extends EventEmitter {
     this.supabase = supabase;
   }
 
+  // @ts-expect-error — intentional override of EventEmitter.emit with async CRM-typed version
   async emit(event: CRMEventType, data: Omit<CRMEvent, 'type'>): Promise<boolean> {
     const fullEvent: CRMEvent = { type: event, ...data };
 

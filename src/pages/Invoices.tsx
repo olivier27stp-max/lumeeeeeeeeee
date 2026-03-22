@@ -66,7 +66,7 @@ type TabDef = { key: InvoiceStatusFilter; label: string; labelFr: string; dot: s
 const TABS: TabDef[] = [
   { key: 'all',         label: 'All Invoices',    labelFr: 'Toutes',       dot: '' },
   { key: 'draft',       label: 'Draft',           labelFr: 'Brouillons',   dot: 'bg-gray-400' },
-  { key: 'sent_not_due',label: 'Open',            labelFr: 'Ouvertes',     dot: 'bg-blue-500' },
+  { key: 'sent_not_due',label: 'Open',            labelFr: 'Ouvertes',     dot: 'bg-neutral-500' },
   { key: 'past_due',    label: 'Past Due',        labelFr: 'En retard',    dot: 'bg-red-500' },
   { key: 'paid',        label: 'Paid',            labelFr: 'Payées',       dot: 'bg-green-500' },
 ];
@@ -168,13 +168,28 @@ export default function Invoices() {
   // ─── KPI counts per tab ────────────────────────────────────
 
   const kpis = kpisQuery.data;
+  // Fetch paid count separately since the KPI RPC doesn't include it
+  const paidCountQuery = useQuery({
+    queryKey: ['invoices-paid-count'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('invoices')
+        .select('id', { count: 'exact', head: true })
+        .is('deleted_at', null)
+        .eq('status', 'paid');
+      if (error) return 0;
+      return count || 0;
+    },
+    staleTime: 30_000,
+  });
+
   const tabCounts: Record<InvoiceStatusFilter, number> = useMemo(() => ({
-    all: (kpis?.draft_count || 0) + (kpis?.sent_not_due_count || 0) + (kpis?.past_due_count || 0) + (kpis?.issued_30d_count || 0),
+    all: (kpis?.draft_count || 0) + (kpis?.sent_not_due_count || 0) + (kpis?.past_due_count || 0) + (paidCountQuery.data || 0),
     draft: kpis?.draft_count || 0,
     sent_not_due: kpis?.sent_not_due_count || 0,
     past_due: kpis?.past_due_count || 0,
-    paid: status === 'paid' ? (invoicesQuery.data?.total || 0) : 0, // paid count from query when viewing paid tab
-  }), [kpis, status, invoicesQuery.data?.total]);
+    paid: paidCountQuery.data || 0,
+  }), [kpis, paidCountQuery.data]);
 
   // ─── URL state helpers ─────────────────────────────────────
 
@@ -319,8 +334,8 @@ export default function Invoices() {
   const sortIcon = (col: string) => {
     if (!sort.startsWith(`${col}_`)) return <ArrowUpDown size={11} className="text-text-tertiary/50" />;
     return sort.endsWith('_asc')
-      ? <ArrowUpDown size={11} className="text-blue-500" />
-      : <ArrowUpDown size={11} className="text-blue-500 rotate-180" />;
+      ? <ArrowUpDown size={11} className="text-text-secondary" />
+      : <ArrowUpDown size={11} className="text-text-secondary rotate-180" />;
   };
 
   // ─── Pagination range ──────────────────────────────────────
@@ -531,7 +546,7 @@ export default function Invoices() {
                   >
                     {/* Number */}
                     <td className="px-4 py-3">
-                      <span className="text-[13px] font-semibold text-blue-600 dark:text-blue-400">
+                      <span className="text-[13px] font-semibold text-text-primary dark:text-neutral-400">
                         {row.invoice_number}
                       </span>
                     </td>
@@ -796,11 +811,11 @@ function KpiCard({ label, count, amount, color }: {
 }) {
   const colorMap = {
     red:   'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20',
-    blue:  'border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20',
+    blue:  'border-neutral-200 dark:border-neutral-700 bg-neutral-50/50 dark:bg-neutral-900/20',
     gray:  'border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-950/20',
     green: 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20',
   };
-  const dotColor = { red: 'bg-red-500', blue: 'bg-blue-500', gray: 'bg-gray-400', green: 'bg-green-500' };
+  const dotColor = { red: 'bg-red-500', blue: 'bg-neutral-500', gray: 'bg-gray-400', green: 'bg-green-500' };
 
   return (
     <div className={cn('rounded-xl border p-4 transition-colors', colorMap[color])}>

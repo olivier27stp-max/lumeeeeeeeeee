@@ -1,5 +1,5 @@
 /* Command Palette — Ctrl+K global search & quick actions
-   Inspired by Linear/Notion command bars.
+   Uses the shared global search API (single source of truth).
 */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -7,11 +7,14 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, Plus, Users, Contact, Briefcase, FileText,
   Calendar, Kanban, Settings, MessageSquare, ArrowRight,
-  CreditCard, TrendingUp, StickyNote, Zap,
+  CreditCard, TrendingUp, StickyNote, Zap, Receipt, UsersRound, CalendarDays,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
-import { supabase } from '../lib/supabase';
+import {
+  SearchEntityItem, SearchEntityType, fetchSearchSuggestions,
+} from '../lib/globalSearchApi';
+import { getSearchItemHref } from '../lib/searchHelpers';
 
 interface CommandItem {
   id: string;
@@ -29,6 +32,21 @@ interface CommandPaletteProps {
   language: string;
 }
 
+const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
+  client: Users, job: Briefcase, lead: Contact, invoice: Receipt,
+  quote: FileText, team: UsersRound, event: CalendarDays,
+};
+
+const ENTITY_SECTION_LABELS: Record<SearchEntityType, { en: string; fr: string }> = {
+  client: { en: 'Clients', fr: 'Clients' },
+  job: { en: 'Jobs', fr: 'Jobs' },
+  lead: { en: 'Leads', fr: 'Leads' },
+  invoice: { en: 'Invoices', fr: 'Factures' },
+  quote: { en: 'Quotes', fr: 'Devis' },
+  team: { en: 'Teams', fr: 'Equipes' },
+  event: { en: 'Calendar', fr: 'Calendrier' },
+};
+
 export default function CommandPalette({ open, onClose, language }: CommandPaletteProps) {
   const fr = language === 'fr';
   const navigate = useNavigate();
@@ -38,7 +56,7 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Navigation commands (always available)
+  // Navigation commands
   const navCommands = useMemo((): CommandItem[] => [
     { id: 'nav-dashboard', label: fr ? 'Accueil' : 'Dashboard', icon: Search, action: () => navigate('/dashboard'), section: fr ? 'Navigation' : 'Navigation', keywords: 'home accueil' },
     { id: 'nav-leads', label: 'Leads', icon: Contact, action: () => navigate('/leads'), section: fr ? 'Navigation' : 'Navigation', keywords: 'prospects' },
@@ -47,6 +65,7 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
     { id: 'nav-jobs', label: 'Jobs', icon: Briefcase, action: () => navigate('/jobs'), section: fr ? 'Navigation' : 'Navigation', keywords: 'travaux' },
     { id: 'nav-calendar', label: fr ? 'Calendrier' : 'Calendar', icon: Calendar, action: () => navigate('/calendar'), section: fr ? 'Navigation' : 'Navigation', keywords: 'schedule horaire' },
     { id: 'nav-invoices', label: fr ? 'Factures' : 'Invoices', icon: FileText, action: () => navigate('/invoices'), section: fr ? 'Navigation' : 'Navigation', keywords: 'bills' },
+    { id: 'nav-quotes', label: fr ? 'Devis' : 'Quotes', icon: FileText, action: () => navigate('/quotes'), section: fr ? 'Navigation' : 'Navigation', keywords: 'estimates' },
     { id: 'nav-payments', label: fr ? 'Paiements' : 'Payments', icon: CreditCard, action: () => navigate('/payments'), section: fr ? 'Navigation' : 'Navigation' },
     { id: 'nav-messages', label: 'Messages', icon: MessageSquare, action: () => navigate('/messages'), section: fr ? 'Navigation' : 'Navigation', keywords: 'sms text' },
     { id: 'nav-insights', label: 'Insights', icon: TrendingUp, action: () => navigate('/insights'), section: fr ? 'Navigation' : 'Navigation', keywords: 'analytics stats' },
@@ -60,72 +79,40 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
     { id: 'act-new-client', label: fr ? 'Creer un client' : 'Create client', icon: Plus, action: () => { navigate('/clients'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-client')), 300); }, section: fr ? 'Actions' : 'Actions', keywords: 'add new customer' },
     { id: 'act-new-job', label: fr ? 'Creer une job' : 'Create job', icon: Plus, action: () => { navigate('/jobs'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-job')), 300); }, section: fr ? 'Actions' : 'Actions', keywords: 'add new travail' },
     { id: 'act-new-invoice', label: fr ? 'Creer une facture' : 'Create invoice', icon: Plus, action: () => { navigate('/invoices'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-invoice')), 300); }, section: fr ? 'Actions' : 'Actions', keywords: 'add new bill' },
+    { id: 'act-new-quote', label: fr ? 'Creer un devis' : 'Create quote', icon: Plus, action: () => { navigate('/quotes'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-quote')), 300); }, section: fr ? 'Actions' : 'Actions', keywords: 'add new estimate' },
     { id: 'act-new-deal', label: fr ? 'Creer un deal' : 'Create deal', icon: Plus, action: () => { navigate('/pipeline'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-deal')), 300); }, section: fr ? 'Actions' : 'Actions', keywords: 'add new' },
   ], [fr, navigate]);
 
-  // Search clients/leads/jobs in DB
+  // Global search via shared API
   useEffect(() => {
     if (!query.trim() || query.length < 2) {
       setSearchResults([]);
       return;
     }
     const timer = setTimeout(async () => {
-      const q = query.trim();
-      const results: CommandItem[] = [];
       try {
-        // Search clients
-        const { data: clients } = await supabase
-          .from('clients_active')
-          .select('id, first_name, last_name, company, email')
-          .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,company.ilike.%${q}%,email.ilike.%${q}%`)
-          .limit(5);
-        for (const c of clients || []) {
+        const payload = await fetchSearchSuggestions(query.trim(), 10);
+        const results: CommandItem[] = [];
+
+        for (const item of payload.items) {
+          const sectionLabel = ENTITY_SECTION_LABELS[item.type];
           results.push({
-            id: `client-${c.id}`,
-            label: `${c.first_name} ${c.last_name}`.trim(),
-            sublabel: c.company || c.email || undefined,
-            icon: Users,
-            action: () => navigate(`/clients/${c.id}`),
-            section: 'Clients',
+            id: `${item.type}-${item.id}`,
+            label: item.title,
+            sublabel: item.subtitle || item.clientName || undefined,
+            icon: ENTITY_ICONS[item.type] || Search,
+            action: () => navigate(getSearchItemHref(item.type, item.id)),
+            section: fr ? sectionLabel.fr : sectionLabel.en,
           });
         }
-        // Search leads
-        const { data: leads } = await supabase
-          .from('leads_active')
-          .select('id, first_name, last_name, company, email')
-          .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,company.ilike.%${q}%,email.ilike.%${q}%`)
-          .limit(5);
-        for (const l of leads || []) {
-          results.push({
-            id: `lead-${l.id}`,
-            label: `${l.first_name} ${l.last_name}`.trim(),
-            sublabel: l.company || l.email || undefined,
-            icon: Contact,
-            action: () => navigate('/leads'),
-            section: 'Leads',
-          });
-        }
-        // Search jobs
-        const { data: jobs } = await supabase
-          .from('jobs_active')
-          .select('id, title, client_name, job_number')
-          .or(`title.ilike.%${q}%,client_name.ilike.%${q}%,job_number.ilike.%${q}%`)
-          .limit(5);
-        for (const j of jobs || []) {
-          results.push({
-            id: `job-${j.id}`,
-            label: j.title || `Job #${j.job_number}`,
-            sublabel: j.client_name || undefined,
-            icon: Briefcase,
-            action: () => navigate(`/jobs/${j.id}`),
-            section: 'Jobs',
-          });
-        }
-      } catch { /* search failed silently */ }
-      setSearchResults(results);
+
+        setSearchResults(results);
+      } catch {
+        setSearchResults([]);
+      }
     }, 200);
     return () => clearTimeout(timer);
-  }, [query, navigate]);
+  }, [query, navigate, fr]);
 
   // Filter commands by query
   const filtered = useMemo(() => {
@@ -156,12 +143,8 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
     return Array.from(map.entries());
   }, [filtered]);
 
-  // Reset selection on query change
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
+  useEffect(() => { setSelectedIndex(0); }, [query]);
 
-  // Focus input on open
   useEffect(() => {
     if (open) {
       setQuery('');
@@ -171,7 +154,6 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
     }
   }, [open]);
 
-  // Keyboard navigation
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -182,16 +164,12 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const item = filtered[selectedIndex];
-      if (item) {
-        item.action();
-        onClose();
-      }
+      if (item) { item.action(); onClose(); }
     } else if (e.key === 'Escape') {
       onClose();
     }
   }, [filtered, selectedIndex, onClose]);
 
-  // Scroll selected into view
   useEffect(() => {
     const el = listRef.current?.querySelector(`[data-index="${selectedIndex}"]`);
     el?.scrollIntoView({ block: 'nearest' });
@@ -203,7 +181,6 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
 
   return (
     <>
-      {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -211,7 +188,6 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
         className="fixed inset-0 z-[300] bg-black/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      {/* Palette */}
       <div className="fixed inset-0 z-[301] flex items-start justify-center pt-[15vh] px-4 pointer-events-none">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: -10 }}
@@ -220,7 +196,6 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
           transition={{ duration: 0.12 }}
           className="w-full max-w-lg bg-surface border border-outline rounded-xl shadow-2xl overflow-hidden pointer-events-auto"
         >
-          {/* Search input */}
           <div className="flex items-center gap-3 px-4 py-3 border-b border-outline">
             <Search size={16} className="text-text-tertiary shrink-0" />
             <input
@@ -236,7 +211,6 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
             </kbd>
           </div>
 
-          {/* Results */}
           <div ref={listRef} className="max-h-[50vh] overflow-y-auto py-1">
             {filtered.length === 0 && (
               <p className="text-center text-[13px] text-text-tertiary py-8">
@@ -278,7 +252,6 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
             ))}
           </div>
 
-          {/* Footer hints */}
           <div className="flex items-center gap-4 px-4 py-2 border-t border-outline text-[10px] text-text-tertiary">
             <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded border border-outline font-mono">↑↓</kbd> {fr ? 'naviguer' : 'navigate'}</span>
             <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded border border-outline font-mono">↵</kbd> {fr ? 'ouvrir' : 'open'}</span>

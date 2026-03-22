@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { BriefcaseBusiness, Calendar, ChevronDown, Clock3, Package, Plus, Trash2, X } from 'lucide-react';
+import { BriefcaseBusiness, Calendar, ChevronDown, Clock3, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn, formatCurrency } from '../lib/utils';
 import { listClients } from '../lib/clientsApi';
 import { getSuggestedJobNumber, listSalespeople } from '../lib/jobsApi';
 import { resolveClientIdForLead } from '../lib/leadsApi';
 import { listTeams } from '../lib/teamsApi';
+import TeamSuggestions from './TeamSuggestions';
 import { Job } from '../types';
 import ServicePicker from './ServicePicker';
 import type { PredefinedService } from '../lib/servicesApi';
 import { supabase } from '../lib/supabase';
+import AddressAutocomplete, { type StructuredAddress } from './AddressAutocomplete';
 
 interface LineItemForm {
   id: string;
@@ -18,6 +20,7 @@ interface LineItemForm {
   qtyInput: string;
   unitPriceInput: string;
   included: boolean;
+  source_service_id?: string | null;
 }
 
 export interface JobDraftLineItem {
@@ -37,6 +40,12 @@ export interface JobDraftInitialValues {
   salesperson_id?: string | null;
   job_type?: 'one_off' | 'recurring';
   property_address?: string | null;
+  address_line1?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  province?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
   description?: string | null;
   status?: string;
   scheduled_at?: string | null;
@@ -69,6 +78,13 @@ interface NewJobModalProps {
     description?: string | null;
     job_type?: string | null;
     property_address?: string | null;
+    address_line1?: string | null;
+    address_line2?: string | null;
+    city?: string | null;
+    province?: string | null;
+    postal_code?: string | null;
+    country?: string | null;
+    place_id?: string | null;
     scheduled_at?: string | null;
     end_at?: string | null;
     status: string;
@@ -77,6 +93,10 @@ interface NewJobModalProps {
     requires_invoicing: boolean;
     billing_split: boolean;
     line_items: Array<{ name: string; qty: number; unit_price_cents: number; included?: boolean }>;
+    deposit_required?: boolean;
+    deposit_type?: 'percentage' | 'fixed' | null;
+    deposit_value?: number;
+    require_payment_method?: boolean;
     subtotal?: number;
     tax_total?: number;
     total?: number;
@@ -191,7 +211,7 @@ export default function NewJobModal({
   const [clientId, setClientId] = useState('');
   const [leadId, setLeadId] = useState<string | null>(null);
   const [teamSelection, setTeamSelection] = useState('');
-  const [clients, setClients] = useState<Array<{ id: string; label: string; address: string | null }>>([]);
+  const [clients, setClients] = useState<Array<{ id: string; label: string; address: string | null; street_number: string | null; street_name: string | null; city: string | null; province: string | null; postal_code: string | null; country: string | null; latitude: number | null; longitude: number | null }>>([]);
   const [jobNumber, setJobNumber] = useState('');
   const [salespersonId, setSalespersonId] = useState('');
   const [salespeople, setSalespeople] = useState<Array<{ id: string; label: string }>>([]);
@@ -203,6 +223,14 @@ export default function NewJobModal({
   const [billingSplit, setBillingSplit] = useState(false);
   const [description, setDescription] = useState<string | null>(null);
   const [prefilledAddress, setPrefilledAddress] = useState<string | null>(null);
+  const [addressLine1, setAddressLine1] = useState('');
+  const [addressLine2, setAddressLine2] = useState('');
+  const [addressCity, setAddressCity] = useState('');
+  const [addressProvince, setAddressProvince] = useState('');
+  const [addressPostalCode, setAddressPostalCode] = useState('');
+  const [addressCountry, setAddressCountry] = useState('Canada');
+  const [addressPlaceId, setAddressPlaceId] = useState<string | null>(null);
+  const [addressSearch, setAddressSearch] = useState('');
   const [status, setStatus] = useState('Draft');
   const [lineItems, setLineItems] = useState<LineItemForm[]>([
     { id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true },
@@ -221,6 +249,10 @@ export default function NewJobModal({
   const [customTaxLabel, setCustomTaxLabel] = useState('Custom tax');
   const [customTaxRate, setCustomTaxRate] = useState(0);
   const [totalInput, setTotalInput] = useState('');
+  const [jobDepositRequired, setJobDepositRequired] = useState(false);
+  const [jobDepositType, setJobDepositType] = useState<'percentage' | 'fixed'>('percentage');
+  const [jobDepositValue, setJobDepositValue] = useState('');
+  const [jobRequirePaymentMethod, setJobRequirePaymentMethod] = useState(false);
   const teamsQuery = useQuery({
     queryKey: ['teams'],
     queryFn: listTeams,
@@ -269,6 +301,14 @@ export default function NewJobModal({
     setBillingSplit(initialValues?.billing_split ?? false);
     setDescription(initialValues?.description || null);
     setPrefilledAddress(initialValues?.property_address || null);
+    setAddressLine1(initialValues?.address_line1 || '');
+    setAddressLine2(initialValues?.address_line2 || '');
+    setAddressCity(initialValues?.city || '');
+    setAddressProvince(initialValues?.province || '');
+    setAddressPostalCode(initialValues?.postal_code || '');
+    setAddressCountry(initialValues?.country || 'Canada');
+    setAddressSearch(initialValues?.property_address || initialValues?.address_line1 || '');
+    setAddressPlaceId(null);
     if (initialValues?.line_items?.length) {
       setLineItems(
         initialValues.line_items.map((item) => ({
@@ -305,6 +345,14 @@ export default function NewJobModal({
             client.company ||
             `Client ${client.id.slice(0, 6)}`,
           address: client.address,
+          street_number: client.street_number ?? null,
+          street_name: client.street_name ?? null,
+          city: client.city ?? null,
+          province: client.province ?? null,
+          postal_code: client.postal_code ?? null,
+          country: client.country ?? null,
+          latitude: client.latitude != null ? Number(client.latitude) : null,
+          longitude: client.longitude != null ? Number(client.longitude) : null,
         }));
         setClients(options);
 
@@ -351,6 +399,23 @@ export default function NewJobModal({
     () => clients.find((client) => client.id === clientId) || null,
     [clients, clientId]
   );
+
+  // Auto-fill address from client when client changes (only if address is currently empty)
+  useEffect(() => {
+    if (!selectedClient) return;
+    // Don't overwrite if user already has address filled (edit mode)
+    if (addressLine1.trim()) return;
+
+    const clientAddr = [selectedClient.street_number, selectedClient.street_name].filter(Boolean).join(' ').trim();
+    if (clientAddr || selectedClient.address) {
+      setAddressLine1(clientAddr || selectedClient.address || '');
+      setAddressCity(selectedClient.city || '');
+      setAddressProvince(selectedClient.province || '');
+      setAddressPostalCode(selectedClient.postal_code || '');
+      setAddressCountry(selectedClient.country || 'Canada');
+      setAddressSearch(selectedClient.address || clientAddr || '');
+    }
+  }, [selectedClient?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalCents = useMemo(() => {
     return lineItems.reduce((sum, item) => {
@@ -435,7 +500,13 @@ export default function NewJobModal({
   };
 
   const removeLineItem = (id: string) => {
-    setLineItems((prev) => (prev.length > 1 ? prev.filter((item) => item.id !== id) : prev));
+    setLineItems((prev) => {
+      const item = prev.find((i) => i.id === id);
+      if (item?.source_service_id) {
+        setAddedServiceIds((s) => { const n = new Set(s); n.delete(item.source_service_id!); return n; });
+      }
+      return prev.length > 1 ? prev.filter((i) => i.id !== id) : prev;
+    });
   };
 
   const handleServiceSelected = (service: PredefinedService) => {
@@ -448,6 +519,7 @@ export default function NewJobModal({
         qtyInput: '1',
         unitPriceInput: String(service.default_price_cents / 100),
         included: true,
+        source_service_id: service.id,
       };
       if (emptyIdx !== -1) {
         const updated = [...prev];
@@ -457,6 +529,14 @@ export default function NewJobModal({
       return [...prev, newItem];
     });
     setAddedServiceIds((prev) => new Set([...prev, service.id]));
+  };
+
+  const handleServiceRemoved = (serviceId: string) => {
+    setLineItems((prev) => {
+      const filtered = prev.filter((item) => item.source_service_id !== serviceId);
+      return filtered.length > 0 ? filtered : [{ id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }];
+    });
+    setAddedServiceIds((prev) => { const n = new Set(prev); n.delete(serviceId); return n; });
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -475,6 +555,19 @@ export default function NewJobModal({
 
     if (!teamSelection) {
       setInlineError('Please assign a team or choose Unassigned.');
+      return;
+    }
+
+    if (!addressLine1.trim()) {
+      setInlineError('Address is required. Please enter a job site address.');
+      return;
+    }
+    if (!addressCity.trim()) {
+      setInlineError('City is required for the job site address.');
+      return;
+    }
+    if (!addressProvince.trim()) {
+      setInlineError('Province is required for the job site address.');
       return;
     }
 
@@ -515,7 +608,14 @@ export default function NewJobModal({
         salesperson_id: salespersonId || null,
         description,
         job_type: jobType,
-        property_address: selectedClient?.address || prefilledAddress || null,
+        property_address: [addressLine1, addressCity, addressProvince, addressPostalCode].filter(Boolean).join(', ') || null,
+        address_line1: addressLine1.trim() || null,
+        address_line2: addressLine2.trim() || null,
+        city: addressCity.trim() || null,
+        province: addressProvince.trim() || null,
+        postal_code: addressPostalCode.trim() || null,
+        country: addressCountry.trim() || 'Canada',
+        place_id: addressPlaceId,
         scheduled_at: scheduledAt,
         end_at: endAt,
         status: scheduledAt ? status : 'Draft',
@@ -524,6 +624,10 @@ export default function NewJobModal({
         requires_invoicing: requiresInvoicing,
         billing_split: billingSplit,
         line_items: filteredItems,
+        deposit_required: jobDepositRequired,
+        deposit_type: jobDepositRequired ? jobDepositType : null,
+        deposit_value: jobDepositRequired ? (parseFloat(jobDepositValue) || 0) : 0,
+        require_payment_method: jobRequirePaymentMethod,
         subtotal: effectiveSubtotalValue,
         tax_total: taxTotalCents / 100,
         total: grandTotalCents / 100,
@@ -618,6 +722,16 @@ export default function NewJobModal({
                   {teamsQuery.isError ? (
                     <p className="text-[11px] text-danger">Could not load teams.</p>
                   ) : null}
+                  {/* Team suggestions */}
+                  <TeamSuggestions
+                    date={startDate}
+                    startTime={startTime}
+                    endTime={endTime}
+                    address={addressLine1 || selectedClient?.address || prefilledAddress || undefined}
+                    onSelectTeam={(id) => setTeamSelection(id)}
+                    selectedTeamId={teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection || null}
+                    compact
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -646,6 +760,104 @@ export default function NewJobModal({
                       ))}
                     </select>
                     <Plus size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
+                  </div>
+                </div>
+              </section>
+
+              {/* Job site address */}
+              <section className="space-y-4 pt-6 border-t border-white/15">
+                <div className="flex items-center gap-2">
+                  <MapPin size={18} className="text-text-secondary" />
+                  <h3 className="text-3xl font-semibold tracking-tight">Job site address</h3>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <label className="text-xs uppercase tracking-widest text-black font-semibold">Search address</label>
+                    <AddressAutocomplete
+                      value={addressSearch}
+                      onChange={setAddressSearch}
+                      onSelect={(addr: StructuredAddress) => {
+                        const line1 = [addr.street_number, addr.street_name].filter(Boolean).join(' ').trim();
+                        setAddressLine1(line1 || addr.formatted_address);
+                        setAddressCity(addr.city);
+                        setAddressProvince(addr.province);
+                        setAddressPostalCode(addr.postal_code);
+                        setAddressCountry(addr.country || 'Canada');
+                        setAddressPlaceId(addr.place_id || null);
+                        setAddressSearch(addr.formatted_address);
+                      }}
+                      placeholder="Start typing an address..."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <label className="text-xs uppercase tracking-widest text-black font-semibold">
+                        Address line 1 <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        value={addressLine1}
+                        onChange={(e) => setAddressLine1(e.target.value)}
+                        className="glass-input w-full"
+                        placeholder="123 Main St"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs uppercase tracking-widest text-black font-semibold">Address line 2</label>
+                      <input
+                        value={addressLine2}
+                        onChange={(e) => setAddressLine2(e.target.value)}
+                        className="glass-input w-full"
+                        placeholder="Apt, suite, unit..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="space-y-2">
+                      <label className="text-xs uppercase tracking-widest text-black font-semibold">
+                        City <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        value={addressCity}
+                        onChange={(e) => setAddressCity(e.target.value)}
+                        className="glass-input w-full"
+                        placeholder="Montreal"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs uppercase tracking-widest text-black font-semibold">
+                        Province <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        value={addressProvince}
+                        onChange={(e) => setAddressProvince(e.target.value)}
+                        className="glass-input w-full"
+                        placeholder="QC"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs uppercase tracking-widest text-black font-semibold">Postal code</label>
+                      <input
+                        value={addressPostalCode}
+                        onChange={(e) => setAddressPostalCode(e.target.value)}
+                        className="glass-input w-full"
+                        placeholder="H1A 1A1"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs uppercase tracking-widest text-black font-semibold">Country</label>
+                      <input
+                        value={addressCountry}
+                        onChange={(e) => setAddressCountry(e.target.value)}
+                        className="glass-input w-full"
+                        placeholder="Canada"
+                      />
+                    </div>
                   </div>
                 </div>
               </section>
@@ -680,17 +892,16 @@ export default function NewJobModal({
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-3xl font-semibold tracking-tight">Schedule</h3>
-                    <button
-                      type="button"
-                      onClick={() => setCalendarHint('Calendar picker coming soon')}
-                      title="Coming soon"
-                      className="text-sm text-black uppercase tracking-widest hover:text-black inline-flex items-center gap-1"
+                    <a
+                      href="/calendar"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm text-text-secondary uppercase tracking-widest hover:text-text-primary inline-flex items-center gap-1"
                     >
                       <Calendar size={12} />
-                      Show calendar
-                    </button>
+                      View calendar
+                    </a>
                   </div>
-                  {calendarHint && <p className="text-xs text-black">{calendarHint}</p>}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="space-y-2">
                       <label className="text-xs uppercase tracking-widest text-black font-semibold">Start date</label>
@@ -922,6 +1133,43 @@ export default function NewJobModal({
                 </div>
               </section>
 
+              {/* ── Deposit & Payment Settings ── */}
+              <section className="rounded-xl border border-outline bg-surface p-5 space-y-3">
+                <h3 className="text-sm font-semibold text-text-primary">Deposit & Payment Settings</h3>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={jobDepositRequired} onChange={e => setJobDepositRequired(e.target.checked)} className="h-4 w-4 rounded" />
+                  <span className="text-[13px] text-text-primary">Require deposit for this job</span>
+                </label>
+                {jobDepositRequired && (
+                  <div className="ml-7 space-y-3 border-l-2 border-outline pl-4">
+                    <div className="flex items-center gap-3">
+                      <select value={jobDepositType} onChange={e => setJobDepositType(e.target.value as any)}
+                        className="text-xs border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary">
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="fixed">Fixed Amount ($)</option>
+                      </select>
+                      <input value={jobDepositValue} onChange={e => setJobDepositValue(e.target.value.replace(/[^\d.]/g, ''))}
+                        className="w-24 text-right text-sm border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary"
+                        placeholder={jobDepositType === 'percentage' ? '25' : '100'} />
+                      {jobDepositType === 'percentage' && (
+                        <span className="text-xs text-text-tertiary">
+                          = {formatCurrency(grandTotalCents / 100 * (parseFloat(jobDepositValue) || 0) / 100)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[12px] text-text-tertiary">
+                      {jobDepositType === 'percentage'
+                        ? `Client must pay ${jobDepositValue || 0}% deposit`
+                        : `Client must pay $${jobDepositValue || 0} deposit`}
+                    </p>
+                  </div>
+                )}
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={jobRequirePaymentMethod} onChange={e => setJobRequirePaymentMethod(e.target.checked)} className="h-4 w-4 rounded" />
+                  <span className="text-[13px] text-text-primary">Require payment method on file</span>
+                </label>
+              </section>
+
               {(inlineError || errorMessage) && (
                 <div className="rounded-xl border border-danger bg-danger-light text-danger px-4 py-3 text-sm">
                   {inlineError || errorMessage}
@@ -1008,6 +1256,7 @@ export default function NewJobModal({
           isOpen={servicePickerOpen}
           onClose={() => setServicePickerOpen(false)}
           onSelect={handleServiceSelected}
+          onRemove={handleServiceRemoved}
           addedIds={addedServiceIds}
         />
       )}

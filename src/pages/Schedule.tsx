@@ -26,8 +26,11 @@ import {
   RefreshCw,
   Users,
   UserPlus,
+  UserCheck,
   Clock,
   X as XIcon,
+  AlertCircle,
+  MapPin,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
@@ -42,8 +45,11 @@ import {
   DEFAULT_TIMEZONE,
   ScheduleEventRecord,
   UnscheduledJobRecord,
+  assignJobToTeam,
   invalidateScheduleCache,
   listScheduleEventsRange,
+  listUnassignedScheduledEvents,
+  listUnassignedUnscheduledJobs,
   listUnscheduledJobs,
   rescheduleEvent,
   scheduleUnscheduledJob,
@@ -52,6 +58,7 @@ import { findFreeSlots, type FreeSlot } from '../lib/availabilityApi';
 import { listTeams, TeamRecord } from '../lib/teamsApi';
 import { supabase } from '../lib/supabase';
 import { cn, formatCurrency } from '../lib/utils';
+import { useNavigate } from 'react-router-dom';
 
 type FullCalendarView = 'timeGridDay' | 'timeGridWeek' | 'dayGridMonth';
 
@@ -185,6 +192,7 @@ function needsAttention(event: ScheduleEventRecord) {
 
 function ScheduleContent() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const calendarRef = useRef<FullCalendar | null>(null);
   const unscheduledRef = useRef<HTMLDivElement | null>(null);
@@ -207,6 +215,8 @@ function ScheduleContent() {
   const { openJobModal } = useJobModalController();
 
   const [isOpeningJob, setIsOpeningJob] = useState(false);
+  const [unassignedMode, setUnassignedMode] = useState(false);
+  const [assignModalJob, setAssignModalJob] = useState<UnscheduledJobRecord | ScheduleEventRecord | null>(null);
   const [activeFilter, setActiveFilter] = useState<ScheduleQuickFilter>('all');
   const [teamPickerDrop, setTeamPickerDrop] = useState<{
     jobId: string;
@@ -264,25 +274,54 @@ function ScheduleContent() {
   const miniCalendarDays = useMemo(() => buildMiniCalendarDays(selectedDate), [selectedDate]);
 
   const eventsQuery = useQuery({
-    queryKey: ['calendarEvents', orgId || 'none', view, currentDateKey, teamsKey],
-    enabled: !!orgId && !noTeamsSelected,
+    queryKey: ['calendarEvents', orgId || 'none', view, currentDateKey, teamsKey, unassignedMode ? 'unassigned' : 'teams'],
+    enabled: !!orgId && (!noTeamsSelected || unassignedMode),
     queryFn: () =>
-      listScheduleEventsRange({
-        startAt: range.start.toISOString(),
-        endAt: range.end.toISOString(),
-        teamIds: effectiveTeamIds,
-        bypassCache: true,
-      }),
+      unassignedMode
+        ? listUnassignedScheduledEvents({
+            startAt: range.start.toISOString(),
+            endAt: range.end.toISOString(),
+          })
+        : listScheduleEventsRange({
+            startAt: range.start.toISOString(),
+            endAt: range.end.toISOString(),
+            teamIds: effectiveTeamIds,
+            bypassCache: true,
+          }),
   });
 
   const unscheduledQuery = useQuery({
-    queryKey: ['calendarUnscheduledJobs', orgId || 'none', teamsKey],
+    queryKey: ['calendarUnscheduledJobs', orgId || 'none', teamsKey, unassignedMode ? 'unassigned' : 'teams'],
     enabled: !!orgId,
-    queryFn: () => listUnscheduledJobs(noTeamsSelected ? [] : effectiveTeamIds),
+    queryFn: () =>
+      unassignedMode
+        ? listUnassignedUnscheduledJobs()
+        : listUnscheduledJobs(noTeamsSelected ? [] : effectiveTeamIds),
   });
 
   const events = eventsQuery.data || [];
   const unscheduledJobs = unscheduledQuery.data || [];
+
+  // Count of all unassigned unscheduled jobs (for badge)
+  const unassignedCount = unassignedMode ? unscheduledJobs.length : unscheduledJobs.filter((j) => !j.team_id).length;
+
+  // Assignment mutation
+  const assignMutation = useMutation({
+    mutationFn: ({ jobId, teamId }: { jobId: string; teamId: string }) => assignJobToTeam(jobId, teamId),
+    onSuccess: async () => {
+      invalidateScheduleCache();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['calendarEvents'] }),
+        queryClient.invalidateQueries({ queryKey: ['calendarUnscheduledJobs'] }),
+      ]);
+      setAssignModalJob(null);
+      toast.success(t.schedule.jobAssigned);
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || t.schedule.couldNotAssign);
+    },
+  });
+
 
   const endingWithin30Count = useMemo(() => {
     const anchor = new Date();
@@ -324,11 +363,16 @@ function ScheduleContent() {
       const teamColor = teamId ? teamColorMap[teamId] || FALLBACK_TEAM_COLOR : FALLBACK_TEAM_COLOR;
       const overlapCount = overlapMap[event.id] || 0;
 
+      // Convert UTC ISO strings to local Date objects so FullCalendar renders them
+      // (FullCalendar without moment-timezone plugin can't handle named timezones)
+      const startDate = new Date(event.start_at);
+      const endDate = new Date(event.end_at);
+
       return {
         id: event.id,
         title: event.job?.title || t.pipeline.untitledJob,
-        start: event.start_at,
-        end: event.end_at,
+        start: startDate,
+        end: endDate,
         backgroundColor: toRgba(teamColor, 0.16),
         borderColor: teamColor,
         textColor: '#0f172a',
@@ -416,9 +460,11 @@ function ScheduleContent() {
     const channel = supabase
       .channel('calendar-live-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_events' }, () => {
+        invalidateScheduleCache();
         void queryClient.invalidateQueries({ queryKey: ['calendarEvents'] });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, () => {
+        invalidateScheduleCache();
         void queryClient.invalidateQueries({ queryKey: ['calendarEvents'] });
         void queryClient.invalidateQueries({ queryKey: ['calendarUnscheduledJobs'] });
       })
@@ -681,11 +727,11 @@ function ScheduleContent() {
               <span className="text-xs text-text-secondary">{selectedTeamIds.length}/{teams.length}</span>
             </div>
 
-            <div className="mb-2 flex items-center gap-2">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 className="glass-button !px-2 !py-1 text-xs"
-                onClick={() => setSelectedTeamIds(allTeamIds)}
+                onClick={() => { setUnassignedMode(false); setSelectedTeamIds(allTeamIds); }}
                 disabled={teams.length === 0}
               >
                 {t.schedule.allTeams}
@@ -693,10 +739,36 @@ function ScheduleContent() {
               <button
                 type="button"
                 className="glass-button !px-2 !py-1 text-xs"
-                onClick={() => setSelectedTeamIds([])}
+                onClick={() => { setUnassignedMode(false); setSelectedTeamIds([]); }}
                 disabled={teams.length === 0}
               >
                 {t.schedule.clear}
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  '!px-2 !py-1 text-xs font-medium rounded-lg border transition-colors inline-flex items-center gap-1',
+                  unassignedMode
+                    ? 'border-amber-400 bg-amber-100 text-amber-800'
+                    : 'glass-button'
+                )}
+                onClick={() => {
+                  if (unassignedMode) {
+                    setUnassignedMode(false);
+                    setSelectedTeamIds(allTeamIds);
+                  } else {
+                    setUnassignedMode(true);
+                    setSelectedTeamIds([]);
+                  }
+                }}
+              >
+                <AlertCircle size={11} />
+                {t.schedule.unassigned}
+                {unassignedCount > 0 && (
+                  <span className="ml-0.5 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold text-white leading-none">
+                    {unassignedCount}
+                  </span>
+                )}
               </button>
             </div>
 
@@ -717,7 +789,11 @@ function ScheduleContent() {
               {teams.length === 0 ? <p className="px-2 text-xs text-text-secondary">{t.schedule.noTeamsAvailable}</p> : null}
             </div>
 
-            {noTeamsSelected ? (
+            {unassignedMode ? (
+              <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+                {t.schedule.unassignedJobsMsg}
+              </p>
+            ) : noTeamsSelected ? (
               <p className="mt-2 rounded-lg border border-warning-light bg-warning-light px-2 py-1 text-xs text-warning">
                 {t.schedule.noTeamsSelected}
               </p>
@@ -759,10 +835,26 @@ function ScheduleContent() {
                         )}
                       </div>
                       <p className="truncate text-xs text-text-secondary">{job.client_name || job.property_address || t.schedule.noDetails}</p>
+                      {job.property_address && job.client_name && (
+                        <p className="truncate text-[10px] text-text-tertiary flex items-center gap-1 mt-0.5">
+                          <MapPin size={9} />
+                          {job.property_address}
+                        </p>
+                      )}
                       <p className="mt-1 text-xs font-semibold text-text-primary">
                         {formatCurrency((job.total_cents || 0) / 100)}
                       </p>
                     </button>
+                    {isUnassigned && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setAssignModalJob(job); }}
+                        className="mt-1.5 w-full flex items-center justify-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] font-medium text-amber-700 hover:bg-amber-100 transition-colors"
+                      >
+                        <UserPlus size={11} />
+                        {t.schedule.assignToTeam}
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -811,6 +903,18 @@ function ScheduleContent() {
 
               <button
                 type="button"
+                onClick={() => {
+                  const dateParam = format(selectedDate, 'yyyy-MM-dd');
+                  const mapView = view === 'day' ? 'today' : view === 'week' ? 'this_week' : view === 'month' ? 'all' : 'today';
+                  navigate(`/dispatch-map?view=${mapView}&date=${dateParam}`);
+                }}
+                className="glass-button inline-flex items-center gap-2"
+              >
+                <MapPin size={14} />
+                {t.schedule.map}
+              </button>
+              <button
+                type="button"
                 onClick={() => openCreateJobModalWithDefaults()}
                 className="glass-button-primary inline-flex items-center gap-2"
               >
@@ -845,7 +949,7 @@ function ScheduleContent() {
           </div>
 
           {isOpeningJob ? (
-            <div className="mb-2 flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+            <div className="mb-2 flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-700">
               <RefreshCw size={12} className="animate-spin" />
               {t.schedule.openingJob}
             </div>
@@ -853,7 +957,7 @@ function ScheduleContent() {
 
           {isLoading ? (
             <div className="h-[760px] rounded-xl bg-black/5" />
-          ) : noTeamsSelected ? (
+          ) : noTeamsSelected && !unassignedMode ? (
             <div className="grid h-[760px] place-items-center rounded-xl border border-dashed border-border text-center">
               <div>
                 <CalendarDays className="mx-auto mb-2 text-text-secondary" size={26} />
@@ -871,11 +975,13 @@ function ScheduleContent() {
           ) : (
             <div className="lune-calendar rounded-xl border border-outline-subtle bg-white/70 p-2">
               <FullCalendar
+                key={`${currentDateKey}-${fullCalendarView}`}
                 ref={calendarRef}
                 plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
                 initialView={fullCalendarView}
                 initialDate={selectedDate}
                 headerToolbar={false}
+                firstDay={1}
                 height={760}
                 editable
                 droppable
@@ -885,7 +991,7 @@ function ScheduleContent() {
                 dayMaxEvents={3}
                 navLinks={false}
                 nowIndicator
-                timeZone={DEFAULT_TIMEZONE}
+                timeZone="local"
                 slotMinTime="06:00:00"
                 slotMaxTime="22:00:00"
                 events={calendarEvents}
@@ -1035,6 +1141,170 @@ function ScheduleContent() {
           </div>
         </div>
       )}
+
+      {/* Assignment modal — assign an unassigned job to a team */}
+      {assignModalJob && (
+        <AssignJobModal
+          job={assignModalJob}
+          teams={teams}
+          onAssign={(teamId) => {
+            const jobId = 'job_id' in assignModalJob ? assignModalJob.job_id : assignModalJob.id;
+            void assignMutation.mutateAsync({ jobId, teamId });
+          }}
+          onClose={() => setAssignModalJob(null)}
+          isPending={assignMutation.isPending}
+        />
+      )}
+    </div>
+  );
+}
+
+function AssignJobModal({
+  job,
+  teams,
+  onAssign,
+  onClose,
+  isPending,
+}: {
+  job: UnscheduledJobRecord | ScheduleEventRecord;
+  teams: TeamRecord[];
+  onAssign: (teamId: string) => void;
+  onClose: () => void;
+  isPending: boolean;
+}) {
+  const { t } = useTranslation();
+  const [assignSlots, setAssignSlots] = useState<Map<string, FreeSlot[]>>(new Map());
+  const [loadingAssignSlots, setLoadingAssignSlots] = useState(false);
+  const [teamEventCounts, setTeamEventCounts] = useState<Map<string, number>>(new Map());
+
+  const jobTitle = 'title' in job ? (job as UnscheduledJobRecord).title : (job as ScheduleEventRecord).job?.title || '';
+  const clientName = 'client_name' in job ? (job as UnscheduledJobRecord).client_name : (job as ScheduleEventRecord).job?.client_name || null;
+  const address = 'property_address' in job ? (job as UnscheduledJobRecord).property_address : (job as ScheduleEventRecord).job?.property_address || null;
+  const totalCents = 'total_cents' in job ? (job as UnscheduledJobRecord).total_cents : (job as ScheduleEventRecord).job?.total_cents || 0;
+
+  // Fetch free slots and workload per team
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingAssignSlots(true);
+
+    Promise.all([
+      findFreeSlots({ days: 1, slotDuration: 60 }),
+      // Count today's events per team
+      (async () => {
+        const todayStart = startOfDay(new Date()).toISOString();
+        const todayEnd = addDays(startOfDay(new Date()), 1).toISOString();
+        const { data } = await supabase
+          .from('schedule_events')
+          .select('team_id')
+          .is('deleted_at', null)
+          .gte('start_at', todayStart)
+          .lt('end_at', todayEnd);
+        const counts = new Map<string, number>();
+        for (const row of data || []) {
+          if (row.team_id) counts.set(row.team_id, (counts.get(row.team_id) || 0) + 1);
+        }
+        return counts;
+      })(),
+    ])
+      .then(([slots, counts]) => {
+        if (cancelled) return;
+        const grouped = new Map<string, FreeSlot[]>();
+        for (const slot of slots) {
+          const existing = grouped.get(slot.team_id) || [];
+          if (existing.length < 3) existing.push(slot);
+          grouped.set(slot.team_id, existing);
+        }
+        setAssignSlots(grouped);
+        setTeamEventCounts(counts);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingAssignSlots(false); });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl border border-outline-subtle bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <UserCheck size={16} className="text-amber-600" />
+            <h3 className="text-sm font-bold text-text-primary">{t.schedule.assignJob}</h3>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 rounded-lg hover:bg-black/5">
+            <XIcon size={14} />
+          </button>
+        </div>
+
+        {/* Job info */}
+        <div className="mb-4 rounded-xl border border-outline-subtle bg-surface-secondary/30 p-3">
+          <p className="text-sm font-bold text-text-primary">{jobTitle}</p>
+          {clientName && <p className="text-xs text-text-secondary mt-0.5">{clientName}</p>}
+          {address && (
+            <p className="text-[10px] text-text-tertiary mt-0.5 flex items-center gap-1">
+              <MapPin size={9} />
+              {address}
+            </p>
+          )}
+          {(totalCents || 0) > 0 && (
+            <p className="text-xs font-semibold text-text-primary mt-1">{formatCurrency((totalCents || 0) / 100)}</p>
+          )}
+        </div>
+
+        <p className="mb-3 text-xs text-text-secondary">{t.schedule.selectTeamToAssign}</p>
+
+        <div className="space-y-1.5 max-h-72 overflow-y-auto">
+          {teams.map((team) => {
+            const color = isHexColor(team.color_hex) ? team.color_hex : FALLBACK_TEAM_COLOR;
+            const slots = assignSlots.get(team.id) || [];
+            const eventCount = teamEventCounts.get(team.id) || 0;
+            return (
+              <div key={team.id} className="rounded-xl border border-outline-subtle overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => onAssign(team.id)}
+                  disabled={isPending}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-black/5 disabled:opacity-50"
+                >
+                  <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-text-primary">{team.name}</span>
+                    {eventCount > 0 && (
+                      <span className="ml-2 text-[10px] text-text-tertiary">
+                        {eventCount} {t.schedule.teamWorkload}
+                      </span>
+                    )}
+                  </div>
+                  {slots.length > 0 && (
+                    <span className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
+                      {slots.length}+ {t.schedule.freeSlots}
+                    </span>
+                  )}
+                  {!loadingAssignSlots && slots.length === 0 && assignSlots.size > 0 && (
+                    <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">
+                      {t.schedule.noSlotsToday}
+                    </span>
+                  )}
+                </button>
+                {slots.length > 0 && (
+                  <div className="border-t border-outline-subtle/50 bg-surface-secondary/30 px-3 py-1.5 flex flex-wrap gap-1">
+                    {slots.map((slot, i) => {
+                      const startTime = new Date(slot.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      const endTime = new Date(slot.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      return (
+                        <span key={i} className="inline-flex items-center gap-1 rounded-md bg-white px-1.5 py-0.5 text-[10px] font-medium text-text-secondary border border-outline-subtle/50">
+                          <Clock size={9} className="text-emerald-500" />
+                          {startTime}–{endTime}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

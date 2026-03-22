@@ -38,6 +38,8 @@ export interface Quote {
   deposit_required: boolean;
   deposit_type: 'percentage' | 'fixed' | null;
   deposit_value: number;
+  deposit_cents: number;
+  deposit_status: 'not_required' | 'pending' | 'paid' | 'waived';
   require_payment_method: boolean;
   deleted_at: string | null;
   created_at: string;
@@ -66,14 +68,14 @@ export const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
 };
 
 export const QUOTE_STATUS_COLORS: Record<QuoteStatus, string> = {
-  draft: 'bg-gray-100 text-gray-700 border-gray-300',
-  action_required: 'bg-amber-50 text-amber-700 border-amber-300',
-  sent: 'bg-blue-50 text-blue-700 border-blue-300',
-  awaiting_response: 'bg-purple-50 text-purple-700 border-purple-300',
-  approved: 'bg-emerald-50 text-emerald-700 border-emerald-300',
-  declined: 'bg-red-50 text-red-700 border-red-300',
-  expired: 'bg-gray-50 text-gray-500 border-gray-300',
-  converted: 'bg-green-50 text-green-700 border-green-300',
+  draft: 'bg-surface-tertiary text-text-secondary border-outline',
+  action_required: 'bg-warning-light text-warning border-warning/30',
+  sent: 'bg-info-light text-info border-info/30',
+  awaiting_response: 'bg-info-light text-info border-info/30',
+  approved: 'bg-success-light text-success border-success/30',
+  declined: 'bg-danger-light text-danger border-danger/30',
+  expired: 'bg-surface-tertiary text-text-tertiary border-outline',
+  converted: 'bg-success-light text-success border-success/30',
 };
 
 export interface QuoteLineItem {
@@ -166,6 +168,8 @@ export async function createQuote(payload: {
   notes?: string | null;
   contract_disclaimer?: string | null;
   deposit_required?: boolean;
+  deposit_type?: 'percentage' | 'fixed' | null;
+  deposit_value?: number;
   require_payment_method?: boolean;
   tax_rate?: number;
   tax_rate_label?: string;
@@ -193,14 +197,19 @@ export async function createQuote(payload: {
   const quoteId = String((rpcResult as any)?.quote_id || '');
   if (!quoteId) throw new Error('Quote created but quote_id is missing.');
 
-  // 2. Update tax/discount settings
-  if (payload.tax_rate !== undefined || payload.discount_type) {
-    await supabase.from('quotes').update({
-      tax_rate: payload.tax_rate ?? 14.975,
-      tax_rate_label: payload.tax_rate_label || 'TPS+TVQ (14.975%)',
-      discount_type: payload.discount_type || null,
-      discount_value: payload.discount_value || 0,
-    }).eq('id', quoteId);
+  // 2. Update tax/discount/deposit settings
+  {
+    const updatePayload: Record<string, any> = {};
+    if (payload.tax_rate !== undefined) updatePayload.tax_rate = payload.tax_rate;
+    if (payload.tax_rate_label) updatePayload.tax_rate_label = payload.tax_rate_label;
+    if (payload.discount_type !== undefined) updatePayload.discount_type = payload.discount_type || null;
+    if (payload.discount_value !== undefined) updatePayload.discount_value = payload.discount_value || 0;
+    if (payload.deposit_type !== undefined) updatePayload.deposit_type = payload.deposit_type || null;
+    if (payload.deposit_value !== undefined) updatePayload.deposit_value = payload.deposit_value || 0;
+    if (Object.keys(updatePayload).length > 0) {
+      const { error: updErr } = await supabase.from('quotes').update(updatePayload).eq('id', quoteId);
+      if (updErr) console.error('[createQuote] settings update failed:', updErr.message);
+    }
   }
 
   // 3. Insert line items
@@ -236,7 +245,8 @@ export async function createQuote(payload: {
       sort_order: s.sort_order,
       enabled: s.enabled,
     }));
-    await supabase.from('quote_sections').insert(sectionRows);
+    const { error: secErr } = await supabase.from('quote_sections').insert(sectionRows);
+    if (secErr) console.error('[createQuote] sections insert failed:', secErr.message);
   }
 
   // 5. Recalculate totals
@@ -490,6 +500,201 @@ export async function convertQuoteToJob(quoteId: string): Promise<{ jobId: strin
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(payload?.error || 'Failed to convert quote.');
   return { jobId: payload.jobId };
+}
+
+export async function convertQuoteToInvoice(quoteId: string): Promise<{ invoiceId: string }> {
+  const { data: session } = await supabase.auth.getSession();
+  const token = session.session?.access_token;
+  if (!token) throw new Error('Not authenticated.');
+
+  const res = await fetch('/api/quotes/convert-to-invoice', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quoteId }),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload?.error || 'Failed to convert quote to invoice.');
+  return { invoiceId: payload.invoiceId };
+}
+
+export async function listAllQuotes(opts?: {
+  status?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<{ data: Quote[]; total: number }> {
+  const page = opts?.page || 1;
+  const pageSize = opts?.pageSize || 20;
+  const offset = (page - 1) * pageSize;
+
+  let query = supabase
+    .from('quotes')
+    .select('*, clients(first_name, last_name, company), leads(first_name, last_name, company)', { count: 'exact' })
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + pageSize - 1);
+
+  if (opts?.status && opts.status !== 'all') {
+    query = query.eq('status', opts.status);
+  }
+
+  if (opts?.search) {
+    query = query.or(`quote_number.ilike.%${opts.search}%,title.ilike.%${opts.search}%`);
+  }
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+  return { data: (data || []) as Quote[], total: count || 0 };
+}
+
+export const PENDING_QUOTE_STATUSES: QuoteStatus[] = ['sent', 'awaiting_response', 'action_required'];
+
+export async function fetchQuoteKpis(): Promise<{
+  total_count: number;
+  pending_count: number;
+  approved_count: number;
+  total_value_cents: number;
+  pending_value_cents: number;
+  approved_value_cents: number;
+}> {
+  const [allRes, pendingRes, approvedRes] = await Promise.all([
+    supabase.from('quotes').select('total_cents', { count: 'exact' }).is('deleted_at', null),
+    supabase.from('quotes').select('total_cents, lead_id, client_id').is('deleted_at', null).in('status', PENDING_QUOTE_STATUSES),
+    supabase.from('quotes').select('total_cents', { count: 'exact' }).is('deleted_at', null).eq('status', 'approved'),
+  ]);
+
+  const sumCents = (rows: any[]) => rows.reduce((s, r) => s + Number(r.total_cents || 0), 0);
+
+  // Filter pending quotes: exclude those whose linked lead or client has been soft-deleted
+  const pendingQuotes = pendingRes.data || [];
+  let pendingRows = pendingQuotes;
+
+  if (pendingQuotes.length > 0) {
+    const leadIds = [...new Set(pendingQuotes.filter((q: any) => q.lead_id).map((q: any) => q.lead_id))];
+    const clientIds = [...new Set(pendingQuotes.filter((q: any) => q.client_id).map((q: any) => q.client_id))];
+
+    const [leadsRes, clientsRes] = await Promise.all([
+      leadIds.length > 0
+        ? supabase.from('leads').select('id, deleted_at').in('id', leadIds)
+        : Promise.resolve({ data: [] }),
+      clientIds.length > 0
+        ? supabase.from('clients').select('id, deleted_at').in('id', clientIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const deletedLeadIds = new Set((leadsRes.data || []).filter((l: any) => l.deleted_at).map((l: any) => l.id));
+    const deletedClientIds = new Set((clientsRes.data || []).filter((c: any) => c.deleted_at).map((c: any) => c.id));
+
+    pendingRows = pendingQuotes.filter((q: any) => {
+      if (q.lead_id && deletedLeadIds.has(q.lead_id)) return false;
+      if (q.client_id && deletedClientIds.has(q.client_id)) return false;
+      return true;
+    });
+  }
+
+  return {
+    total_count: allRes.count || 0,
+    pending_count: pendingRows.length,
+    approved_count: approvedRes.count || 0,
+    total_value_cents: sumCents(allRes.data || []),
+    pending_value_cents: sumCents(pendingRows),
+    approved_value_cents: sumCents(approvedRes.data || []),
+  };
+}
+
+/** Fetch all pending quotes with full context for the Leads page pending quotes view. */
+export async function fetchPendingQuotes(): Promise<Array<Quote & { lead_name?: string; client_name?: string }>> {
+  const { data: quotes, error } = await supabase
+    .from('quotes')
+    .select('*')
+    .is('deleted_at', null)
+    .in('status', PENDING_QUOTE_STATUSES)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  if (!quotes || quotes.length === 0) return [];
+
+  // Collect unique lead_ids and client_ids to look up names and deletion status
+  const leadIds = [...new Set(quotes.filter((q: any) => q.lead_id).map((q: any) => q.lead_id))];
+  const clientIds = [...new Set(quotes.filter((q: any) => q.client_id).map((q: any) => q.client_id))];
+
+  // Fetch leads and clients in parallel
+  const [leadsRes, clientsRes] = await Promise.all([
+    leadIds.length > 0
+      ? supabase.from('leads').select('id, first_name, last_name, deleted_at').in('id', leadIds)
+      : Promise.resolve({ data: [] }),
+    clientIds.length > 0
+      ? supabase.from('clients').select('id, company, first_name, last_name, deleted_at').in('id', clientIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const leadsMap = new Map((leadsRes.data || []).map((l: any) => [l.id, l]));
+  const clientsMap = new Map((clientsRes.data || []).map((c: any) => [c.id, c]));
+
+  return quotes
+    .filter((q: any) => {
+      // Exclude quotes whose linked lead or client has been soft-deleted
+      if (q.lead_id) {
+        const lead = leadsMap.get(q.lead_id);
+        if (lead?.deleted_at) return false;
+      }
+      if (q.client_id) {
+        const client = clientsMap.get(q.client_id);
+        if (client?.deleted_at) return false;
+      }
+      return true;
+    })
+    .map((q: any) => {
+      const lead = q.lead_id ? leadsMap.get(q.lead_id) : null;
+      const client = q.client_id ? clientsMap.get(q.client_id) : null;
+      const leadName = lead ? `${lead.first_name || ''} ${lead.last_name || ''}`.trim() : undefined;
+      const clientName = client
+        ? client.company || `${client.first_name || ''} ${client.last_name || ''}`.trim()
+        : undefined;
+      return { ...q, lead_name: leadName, client_name: clientName } as Quote & { lead_name?: string; client_name?: string };
+    });
+}
+
+/** Fetch job line items linked to a lead (for importing into quote) */
+export async function fetchLeadJobLineItems(leadId: string): Promise<Array<{
+  name: string;
+  description: string | null;
+  quantity: number;
+  unit_price_cents: number;
+  total_cents: number;
+  job_id: string;
+  job_title: string;
+}>> {
+  // Find jobs linked to this lead
+  const { data: jobs } = await supabase
+    .from('jobs')
+    .select('id, title')
+    .eq('lead_id', leadId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  if (!jobs || jobs.length === 0) return [];
+
+  const jobIds = jobs.map(j => j.id);
+  const jobMap = Object.fromEntries(jobs.map(j => [j.id, j.title || 'Job']));
+
+  const { data: items } = await supabase
+    .from('job_line_items')
+    .select('name, qty, unit_price_cents, total_cents, job_id')
+    .in('job_id', jobIds);
+
+  if (!items) return [];
+
+  return items.map((i: any) => ({
+    name: i.name || '',
+    description: null,
+    quantity: Number(i.qty || 1),
+    unit_price_cents: Number(i.unit_price_cents || 0),
+    total_cents: Number(i.total_cents || 0),
+    job_id: i.job_id,
+    job_title: jobMap[i.job_id] || 'Job',
+  }));
 }
 
 export function formatQuoteMoney(cents: number, currency = 'CAD'): string {

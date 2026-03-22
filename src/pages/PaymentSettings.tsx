@@ -40,7 +40,7 @@ export default function PaymentSettings() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-[11px] font-bold text-blue-600 dark:text-blue-400">1</span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 text-[11px] font-bold text-text-primary dark:text-neutral-400">1</span>
                 <span className="text-[13px] font-medium text-text-primary">
                   {language === 'fr' ? 'Activez les paiements' : 'Activate payments'}
                 </span>
@@ -53,7 +53,7 @@ export default function PaymentSettings() {
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-[11px] font-bold text-blue-600 dark:text-blue-400">2</span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 text-[11px] font-bold text-text-primary dark:text-neutral-400">2</span>
                 <span className="text-[13px] font-medium text-text-primary">
                   {language === 'fr' ? 'Envoyez des demandes' : 'Send payment requests'}
                 </span>
@@ -66,7 +66,7 @@ export default function PaymentSettings() {
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-[11px] font-bold text-blue-600 dark:text-blue-400">3</span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 text-[11px] font-bold text-text-primary dark:text-neutral-400">3</span>
                 <span className="text-[13px] font-medium text-text-primary">
                   {language === 'fr' ? 'Recevez vos fonds' : 'Get paid'}
                 </span>

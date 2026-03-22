@@ -385,7 +385,7 @@ export async function listGenerations(
   return { data: (data || []) as DirectorGeneration[], total: count || 0 };
 }
 
-export async function createGeneration(gen: Omit<DirectorGeneration, 'id' | 'created_at' | 'updated_at' | 'deleted_at' | 'flow'>): Promise<DirectorGeneration> {
+export async function createGeneration(gen: Omit<DirectorGeneration, 'id' | 'created_at' | 'updated_at' | 'deleted_at' | 'flow' | 'is_favorite'> & { is_favorite?: boolean }): Promise<DirectorGeneration> {
   const { data, error } = await supabase
     .from('director_generations')
     .insert(gen)

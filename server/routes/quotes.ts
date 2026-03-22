@@ -4,6 +4,7 @@ import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { resendApiKey, emailFrom, twilioClient, twilioPhoneNumber } from '../lib/config';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
 import { eventBus } from '../lib/eventBus';
+import { getConnectedAccount, createDestinationPaymentIntent, getPlatformStripe } from '../lib/stripe-connect';
 
 const router = Router();
 
@@ -181,7 +182,7 @@ router.post('/quotes/send-email', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
 
-    const { quoteId } = req.body;
+    const { quoteId, emailSubject, emailBody } = req.body;
     if (!quoteId) return res.status(400).json({ error: 'quoteId is required.' });
 
     const admin = getServiceClient();
@@ -205,38 +206,63 @@ router.post('/quotes/send-email', async (req, res) => {
     if (!resendApiKey) return res.status(503).json({ error: 'Email provider not configured.' });
     const resend = new Resend(resendApiKey);
 
-    // Get company info
+    // Get company info with branding
     const { data: company } = await admin
       .from('company_settings')
-      .select('company_name, phone, email')
+      .select('company_name, phone, email, logo_url')
       .eq('org_id', quote.org_id)
       .maybeSingle();
 
     const companyName = company?.company_name || 'Our Company';
+    const companyLogo = company?.logo_url || null;
+    const companyPhone = company?.phone || null;
+    const companyEmail = company?.email || null;
     const baseUrl = resolvePublicBaseUrl(req);
     const quoteUrl = `${baseUrl}/quote/${quote.view_token}`;
     const totalFormatted = new Intl.NumberFormat('en-CA', { style: 'currency', currency: quote.currency || 'CAD' }).format(quote.total_cents / 100);
 
+    // Use custom email body/subject or default template
+    const finalSubject = emailSubject
+      ? emailSubject.replace(/\{\{quote_number\}\}/g, quote.quote_number).replace(/\{\{total\}\}/g, totalFormatted).replace(/\{\{company\}\}/g, companyName)
+      : `Quote #${quote.quote_number} from ${companyName} — ${totalFormatted}`;
+
+    const customBody = emailBody
+      ? emailBody.replace(/\{\{client_name\}\}/g, recipientName).replace(/\{\{quote_number\}\}/g, quote.quote_number).replace(/\{\{total\}\}/g, totalFormatted).replace(/\{\{company\}\}/g, companyName).replace(/\{\{valid_until\}\}/g, quote.valid_until || 'N/A').replace(/\n/g, '<br/>')
+      : null;
+
+    const logoBlock = companyLogo
+      ? `<div style="margin-bottom:24px;"><img src="${companyLogo}" alt="${companyName}" style="max-height:48px;max-width:180px;object-fit:contain;" /></div>`
+      : `<div style="margin-bottom:24px;"><img src="${baseUrl}/lume-logo.png" alt="Lume" style="max-height:40px;object-fit:contain;" /></div>`;
+
+    const depositBlock = quote.deposit_required && quote.deposit_value > 0
+      ? `<tr><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#888;font-size:13px;">Deposit Required</td><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#111;text-align:right;font-weight:600;font-size:13px;">${quote.deposit_type === 'percentage' ? `${quote.deposit_value}%` : new Intl.NumberFormat('en-CA', { style: 'currency', currency: quote.currency || 'CAD' }).format(quote.deposit_value)}</td></tr>`
+      : '';
+
     const emailHtml = `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-        <h2>Hello ${recipientName},</h2>
-        <p>${companyName} has sent you a quote.</p>
-        <table style="width:100%;border-collapse:collapse;margin:20px 0;">
-          <tr><td style="padding:8px;border:1px solid #ddd;font-weight:600;">Quote #</td><td style="padding:8px;border:1px solid #ddd;">${quote.quote_number}</td></tr>
-          <tr><td style="padding:8px;border:1px solid #ddd;font-weight:600;">Amount</td><td style="padding:8px;border:1px solid #ddd;">${totalFormatted}</td></tr>
-          ${quote.valid_until ? `<tr><td style="padding:8px;border:1px solid #ddd;font-weight:600;">Valid Until</td><td style="padding:8px;border:1px solid #ddd;">${quote.valid_until}</td></tr>` : ''}
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:32px 20px;">
+        ${logoBlock}
+        ${customBody ? `<div style="color:#333;font-size:14px;line-height:1.6;">${customBody}</div>` : `
+        <h2 style="color:#111;font-size:18px;font-weight:600;margin:0 0 8px;">Hello ${recipientName},</h2>
+        <p style="color:#666;font-size:14px;margin:0 0 24px;">${companyName} has prepared a quote for you.</p>
+        <table style="width:100%;border-collapse:collapse;margin:0 0 24px;">
+          <tr><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#888;font-size:13px;">Quote #</td><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#111;text-align:right;font-weight:600;font-size:13px;">${quote.quote_number}</td></tr>
+          <tr><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#888;font-size:13px;">Amount</td><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#111;text-align:right;font-weight:700;font-size:15px;">${totalFormatted}</td></tr>
+          ${quote.valid_until ? `<tr><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#888;font-size:13px;">Valid Until</td><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#333;text-align:right;font-size:13px;">${new Date(quote.valid_until).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td></tr>` : ''}
+          ${depositBlock}
         </table>
-        <p style="text-align:center;margin:30px 0;">
-          <a href="${quoteUrl}" style="background:#2563eb;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">View Quote</a>
+        `}
+        <p style="text-align:center;margin:28px 0;">
+          <a href="${quoteUrl}" style="display:inline-block;background:#111;color:#fff;padding:14px 40px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;letter-spacing:0.01em;">View Quote</a>
         </p>
-        <p>Thank you,<br/>${companyName}</p>
+        <p style="color:#888;font-size:13px;margin:24px 0 4px;">Thank you,<br/><strong style="color:#333;">${companyName}</strong></p>
+        ${companyPhone || companyEmail ? `<p style="color:#aaa;font-size:12px;margin:0;">${[companyPhone, companyEmail].filter(Boolean).join(' | ')}</p>` : ''}
       </div>
     `;
 
     await resend.emails.send({
       from: emailFrom || `${companyName} <onboarding@resend.dev>`,
       to: recipientEmail,
-      subject: `Quote #${quote.quote_number} from ${companyName} — ${totalFormatted}`,
+      subject: finalSubject,
       html: emailHtml,
     });
 
@@ -301,6 +327,14 @@ router.post('/quotes/send-sms', async (req, res) => {
 
     if (!recipientPhone) return res.status(400).json({ error: 'No phone number available.' });
 
+    // Format phone to E.164 for Twilio
+    let formattedPhone = recipientPhone.replace(/[\s\-\(\)\.]/g, '');
+    if (!formattedPhone.startsWith('+')) {
+      if (formattedPhone.length === 10) formattedPhone = '+1' + formattedPhone;
+      else if (formattedPhone.length === 11 && formattedPhone.startsWith('1')) formattedPhone = '+' + formattedPhone;
+      else formattedPhone = '+1' + formattedPhone;
+    }
+
     const { data: company } = await admin
       .from('company_settings')
       .select('company_name')
@@ -317,7 +351,7 @@ router.post('/quotes/send-sms', async (req, res) => {
     const twilioMsg = await twilioClient.messages.create({
       body: smsBody,
       from: twilioPhoneNumber,
-      to: recipientPhone,
+      to: formattedPhone,
     });
 
     await admin.from('quotes').update({
@@ -435,6 +469,569 @@ router.post('/quotes/convert-to-job', async (req, res) => {
   } catch (error: any) {
     console.error('quote_convert_failed', error);
     return res.status(500).json({ error: error?.message || 'Failed to convert quote.' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// PUBLIC: Accept / Decline quote (no auth — uses view_token)
+// ══════════════════════════════════════════════════════════════
+
+router.post('/quotes/public/accept', async (req, res) => {
+  try {
+    const { view_token, signer_name, signature_data } = req.body;
+    if (!view_token) return res.status(400).json({ error: 'view_token is required.' });
+    if (!signer_name || !signature_data) return res.status(400).json({ error: 'Signature and name are required.' });
+
+    const admin = getServiceClient();
+    const { data: quote, error: qErr } = await admin
+      .from('quotes')
+      .select('id, org_id, quote_number, status, valid_until, client_id, lead_id, deposit_required, deposit_type, deposit_value, total_cents, currency, require_payment_method')
+      .eq('view_token', view_token)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
+
+    // Check if already responded or expired
+    if (['approved', 'declined', 'converted', 'expired'].includes(quote.status)) {
+      return res.status(400).json({ error: `Quote is already ${quote.status}.` });
+    }
+    if (quote.valid_until && new Date(quote.valid_until) < new Date()) {
+      return res.status(400).json({ error: 'Quote has expired.' });
+    }
+
+    const now = new Date().toISOString();
+
+    // Update quote status
+    const depositStatus = quote.deposit_required ? 'pending' : 'not_required';
+    await admin.from('quotes').update({
+      status: 'approved',
+      approved_at: now,
+      updated_at: now,
+      deposit_status: depositStatus,
+    }).eq('id', quote.id);
+
+    // Create payment requirement if deposit is required
+    if (quote.deposit_required && quote.deposit_value > 0) {
+      const depositCents = quote.deposit_type === 'percentage'
+        ? Math.round(quote.total_cents * Number(quote.deposit_value) / 100)
+        : Math.round(Number(quote.deposit_value) * 100);
+
+      await admin.from('payment_requirements').insert({
+        org_id: quote.org_id,
+        entity_type: 'quote',
+        entity_id: quote.id,
+        requirement_type: 'deposit',
+        amount_cents: depositCents,
+        currency: quote.currency || 'CAD',
+        status: 'pending',
+        payment_method_required: quote.require_payment_method || false,
+        notes: `Deposit for Quote #${quote.quote_number}`,
+      });
+
+      // Update deposit_cents on the quote
+      await admin.from('quotes').update({ deposit_cents: depositCents }).eq('id', quote.id);
+    }
+
+    // Create payment method requirement if needed
+    if (quote.require_payment_method && !quote.deposit_required) {
+      await admin.from('payment_requirements').insert({
+        org_id: quote.org_id,
+        entity_type: 'quote',
+        entity_id: quote.id,
+        requirement_type: 'payment_method_on_file',
+        amount_cents: 0,
+        currency: quote.currency || 'CAD',
+        status: 'pending',
+        payment_method_required: true,
+        notes: `Payment method required for Quote #${quote.quote_number}`,
+      });
+    }
+
+    // Log status change
+    await admin.from('quote_status_history').insert({
+      quote_id: quote.id,
+      old_status: quote.status,
+      new_status: 'approved',
+      changed_by: null,
+      reason: `Accepted by ${signer_name} (electronic signature)`,
+    });
+
+    // Store signature in quote_attachments
+    await admin.from('quote_attachments').insert({
+      quote_id: quote.id,
+      file_url: signature_data,
+      file_name: `signature_${signer_name.replace(/\s+/g, '_')}.png`,
+      file_type: 'image/png',
+      uploaded_by: null,
+      source_type: 'signature',
+    });
+
+    // Resolve client name
+    let clientName = signer_name;
+    if (quote.client_id) {
+      const { data: client } = await admin
+        .from('clients').select('first_name, last_name')
+        .eq('id', quote.client_id).maybeSingle();
+      if (client) clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim() || signer_name;
+    }
+
+    // Create notification
+    await admin.from('notifications').insert({
+      org_id: quote.org_id,
+      type: 'quote_accepted',
+      title: `${clientName} accepted quote #${quote.quote_number}`,
+      body: `Quote #${quote.quote_number} has been accepted and signed by ${signer_name}.`,
+      icon: 'check-circle',
+      reference_id: quote.id,
+    });
+
+    // Emit event
+    eventBus.emit('quote.approved', {
+      orgId: quote.org_id,
+      entityType: 'quote',
+      entityId: quote.id,
+      metadata: { quote_number: quote.quote_number, signer_name, accepted_via: 'electronic_signature' },
+    });
+
+    return res.json({ ok: true, status: 'approved' });
+  } catch (error: any) {
+    console.error('quote_accept_failed', error);
+    return res.status(500).json({ error: error?.message || 'Failed to accept quote.' });
+  }
+});
+
+// ── Public: Get signature for accepted quote ──
+router.get('/quotes/public/signature', async (req, res) => {
+  try {
+    const view_token = String(req.query.view_token || '').trim();
+    if (!view_token) return res.status(400).json({ error: 'view_token is required.' });
+
+    const admin = getServiceClient();
+    const { data: quote } = await admin
+      .from('quotes')
+      .select('id, status, approved_at')
+      .eq('view_token', view_token)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (!quote) return res.status(404).json({ error: 'Quote not found.' });
+    if (!['approved', 'converted'].includes(quote.status)) {
+      return res.json({ signature_url: null });
+    }
+
+    const { data: sig } = await admin
+      .from('quote_attachments')
+      .select('file_url, file_name, uploaded_at')
+      .eq('quote_id', quote.id)
+      .eq('source_type', 'signature')
+      .order('uploaded_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!sig) return res.json({ signature_url: null });
+
+    const signerName = sig.file_name
+      ?.replace(/^signature_/, '')
+      .replace(/\.png$/, '')
+      .replace(/_/g, ' ') || '';
+
+    return res.json({
+      signature_url: sig.file_url,
+      signer_name: signerName,
+      signed_at: sig.uploaded_at || quote.approved_at,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error?.message || 'Failed to load signature.' });
+  }
+});
+
+// ── Public: Create Stripe payment intent for quote deposit ──
+router.post('/quotes/public/deposit-intent', async (req, res) => {
+  try {
+    const { view_token } = req.body;
+    if (!view_token) return res.status(400).json({ error: 'view_token is required.' });
+
+    const admin = getServiceClient();
+    const { data: quote, error: qErr } = await admin
+      .from('quotes')
+      .select('id, org_id, quote_number, status, deposit_required, deposit_type, deposit_value, deposit_cents, deposit_status, total_cents, currency, client_id')
+      .eq('view_token', view_token)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
+    if (quote.status !== 'approved') return res.status(400).json({ error: 'Quote must be approved first.' });
+    if (!quote.deposit_required || quote.deposit_status === 'paid') {
+      return res.status(400).json({ error: 'No deposit payment required.' });
+    }
+
+    // Calculate deposit amount (server-side, never trust client)
+    let depositCents = Number(quote.deposit_cents || 0);
+    if (depositCents <= 0) {
+      depositCents = quote.deposit_type === 'percentage'
+        ? Math.round(quote.total_cents * Number(quote.deposit_value) / 100)
+        : Math.round(Number(quote.deposit_value) * 100);
+    }
+    if (depositCents <= 0) return res.status(400).json({ error: 'Invalid deposit amount.' });
+
+    const currency = (quote.currency || 'CAD').toLowerCase();
+
+    // Find or verify existing payment requirement
+    const { data: existingReq } = await admin
+      .from('payment_requirements')
+      .select('id, status, notes')
+      .eq('entity_type', 'quote')
+      .eq('entity_id', quote.id)
+      .eq('requirement_type', 'deposit')
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    const paymentMetadata: Record<string, string> = {
+      org_id: quote.org_id,
+      quote_id: quote.id,
+      entity_type: 'quote_deposit',
+      quote_number: quote.quote_number,
+      client_id: quote.client_id || '',
+      payment_requirement_id: existingReq?.id || '',
+    };
+
+    // ── Try 3 payment paths in order of preference ──
+
+    // PATH 1: Stripe Connect (destination charge)
+    let connectedAccount;
+    try {
+      connectedAccount = await getConnectedAccount(quote.org_id);
+    } catch {
+      connectedAccount = null;
+    }
+
+    if (connectedAccount && connectedAccount.charges_enabled) {
+      const result = await createDestinationPaymentIntent({
+        amountCents: depositCents,
+        currency,
+        connectedAccountId: connectedAccount.stripe_account_id,
+        metadata: paymentMetadata,
+      });
+
+      return res.json({
+        client_secret: result.clientSecret,
+        payment_intent_id: result.paymentIntentId,
+        amount_cents: depositCents,
+        currency: currency.toUpperCase(),
+        publishable_key: process.env.STRIPE_PUBLISHABLE_KEY || '',
+      });
+    }
+
+    // PATH 2: Org's own Stripe keys (direct charge, only if key is not encrypted)
+    const { data: orgSecrets } = await admin
+      .from('payment_provider_secrets')
+      .select('stripe_publishable_key, stripe_secret_key_enc')
+      .eq('org_id', quote.org_id)
+      .maybeSingle();
+
+    if (orgSecrets?.stripe_secret_key_enc?.startsWith('sk_') && orgSecrets?.stripe_publishable_key) {
+      const Stripe = (await import('stripe')).default;
+      const orgStripe = new Stripe(orgSecrets.stripe_secret_key_enc);
+      const intent = await orgStripe.paymentIntents.create({
+        amount: depositCents,
+        currency,
+        payment_method_types: ['card'],
+        metadata: paymentMetadata,
+      });
+
+      return res.json({
+        client_secret: intent.client_secret,
+        payment_intent_id: intent.id,
+        amount_cents: depositCents,
+        currency: currency.toUpperCase(),
+        publishable_key: orgSecrets.stripe_publishable_key,
+      });
+    }
+
+    // PATH 3: Platform Stripe keys (direct charge, simplest fallback)
+    const platformSecretKey = process.env.STRIPE_SECRET_KEY;
+    const platformPublishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
+
+    if (platformSecretKey && platformPublishableKey) {
+      const Stripe = (await import('stripe')).default;
+      const stripe = new Stripe(platformSecretKey);
+      const intent = await stripe.paymentIntents.create({
+        amount: depositCents,
+        currency,
+        payment_method_types: ['card'],
+        metadata: paymentMetadata,
+      });
+
+      return res.json({
+        client_secret: intent.client_secret,
+        payment_intent_id: intent.id,
+        amount_cents: depositCents,
+        currency: currency.toUpperCase(),
+        publishable_key: platformPublishableKey,
+      });
+    }
+
+    return res.status(503).json({ error: 'No payment provider is configured.' });
+  } catch (error: any) {
+    console.error('quote_deposit_intent_failed', error);
+    return res.status(500).json({ error: error?.message || 'Failed to create deposit payment.' });
+  }
+});
+
+// ── Public: Confirm deposit payment (called after Stripe confirmPayment succeeds) ──
+router.post('/quotes/public/deposit-confirm', async (req, res) => {
+  try {
+    const { view_token, payment_intent_id } = req.body;
+    if (!view_token || !payment_intent_id) {
+      return res.status(400).json({ error: 'view_token and payment_intent_id are required.' });
+    }
+
+    const admin = getServiceClient();
+    const { data: quote, error: qErr } = await admin
+      .from('quotes')
+      .select('id, org_id, quote_number, deposit_status, deposit_required')
+      .eq('view_token', view_token)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
+
+    // Already paid? Return success idempotently
+    if (quote.deposit_status === 'paid') {
+      return res.json({ ok: true, status: 'paid' });
+    }
+
+    // Verify with Stripe that the payment actually succeeded
+    const Stripe = (await import('stripe')).default;
+    const platformKey = process.env.STRIPE_SECRET_KEY;
+    let intent;
+    try {
+      const stripe = new Stripe(platformKey!);
+      intent = await stripe.paymentIntents.retrieve(payment_intent_id);
+    } catch {
+      // Try with org keys if platform key doesn't own this intent
+      const { data: orgSecrets } = await admin
+        .from('payment_provider_secrets')
+        .select('stripe_secret_key_enc')
+        .eq('org_id', quote.org_id)
+        .maybeSingle();
+      if (orgSecrets?.stripe_secret_key_enc) {
+        const Stripe = (await import('stripe')).default;
+        const orgStripe = new Stripe(orgSecrets.stripe_secret_key_enc);
+        intent = await orgStripe.paymentIntents.retrieve(payment_intent_id);
+      }
+    }
+
+    if (!intent || intent.status !== 'succeeded') {
+      const status = intent?.status || 'unknown';
+      if (status === 'requires_action' || status === 'requires_payment_method') {
+        return res.status(402).json({ error: 'Payment requires additional action.', status });
+      }
+      return res.status(400).json({ error: `Payment not confirmed. Status: ${status}` });
+    }
+
+    // Verify the metadata matches this quote
+    const intentQuoteId = intent.metadata?.quote_id;
+    if (intentQuoteId && intentQuoteId !== quote.id) {
+      return res.status(400).json({ error: 'Payment does not match this quote.' });
+    }
+
+    // Update quote deposit status
+    await admin.from('quotes').update({
+      deposit_status: 'paid',
+      updated_at: new Date().toISOString(),
+    }).eq('id', quote.id);
+
+    // Update payment requirement
+    const { data: payReq } = await admin
+      .from('payment_requirements')
+      .select('id')
+      .eq('entity_type', 'quote')
+      .eq('entity_id', quote.id)
+      .eq('requirement_type', 'deposit')
+      .in('status', ['pending', 'authorized'])
+      .maybeSingle();
+
+    if (payReq) {
+      await admin.from('payment_requirements').update({
+        status: 'paid',
+        updated_at: new Date().toISOString(),
+      }).eq('id', payReq.id);
+    }
+
+    // Log status change
+    await admin.from('quote_status_history').insert({
+      quote_id: quote.id,
+      old_status: 'pending',
+      new_status: 'paid',
+      changed_by: null,
+      reason: `Deposit paid via Stripe (${payment_intent_id})`,
+    });
+
+    return res.json({ ok: true, status: 'paid' });
+  } catch (error: any) {
+    console.error('quote_deposit_confirm_failed', error);
+    return res.status(500).json({ error: error?.message || 'Failed to confirm deposit payment.' });
+  }
+});
+
+router.post('/quotes/public/decline', async (req, res) => {
+  try {
+    const { view_token, reason } = req.body;
+    if (!view_token) return res.status(400).json({ error: 'view_token is required.' });
+
+    const admin = getServiceClient();
+    const { data: quote, error: qErr } = await admin
+      .from('quotes')
+      .select('id, org_id, quote_number, status, client_id, lead_id')
+      .eq('view_token', view_token)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
+
+    if (['approved', 'declined', 'converted'].includes(quote.status)) {
+      return res.status(400).json({ error: `Quote is already ${quote.status}.` });
+    }
+
+    const now = new Date().toISOString();
+
+    await admin.from('quotes').update({
+      status: 'declined',
+      declined_at: now,
+      updated_at: now,
+    }).eq('id', quote.id);
+
+    await admin.from('quote_status_history').insert({
+      quote_id: quote.id,
+      old_status: quote.status,
+      new_status: 'declined',
+      changed_by: null,
+      reason: reason || 'Declined by client',
+    });
+
+    // Resolve client name
+    let clientName = 'Client';
+    if (quote.client_id) {
+      const { data: client } = await admin
+        .from('clients').select('first_name, last_name')
+        .eq('id', quote.client_id).maybeSingle();
+      if (client) clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client';
+    } else if (quote.lead_id) {
+      const { data: lead } = await admin
+        .from('leads').select('first_name, last_name')
+        .eq('id', quote.lead_id).maybeSingle();
+      if (lead) clientName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Client';
+    }
+
+    await admin.from('notifications').insert({
+      org_id: quote.org_id,
+      type: 'quote_declined',
+      title: `${clientName} declined quote #${quote.quote_number}`,
+      body: reason ? `Reason: ${reason}` : `Quote #${quote.quote_number} was declined.`,
+      icon: 'x-circle',
+      reference_id: quote.id,
+    });
+
+    eventBus.emit('quote.declined', {
+      orgId: quote.org_id,
+      entityType: 'quote',
+      entityId: quote.id,
+      metadata: { quote_number: quote.quote_number, reason },
+    });
+
+    return res.json({ ok: true, status: 'declined' });
+  } catch (error: any) {
+    console.error('quote_decline_failed', error);
+    return res.status(500).json({ error: error?.message || 'Failed to decline quote.' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// Convert approved quote to invoice (Feature 13)
+// ══════════════════════════════════════════════════════════════
+
+router.post('/quotes/convert-to-invoice', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const { quoteId } = req.body;
+    if (!quoteId) return res.status(400).json({ error: 'quoteId is required.' });
+
+    const admin = getServiceClient();
+    const { data: quote, error: qErr } = await admin
+      .from('quotes').select('*').eq('id', quoteId).single();
+    if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
+
+    if (!['approved', 'sent', 'awaiting_response', 'action_required'].includes(quote.status)) {
+      return res.status(400).json({ error: `Cannot convert quote with status "${quote.status}".` });
+    }
+
+    // Create invoice via RPC
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 30);
+    const dueDateStr = dueDate.toISOString().slice(0, 10);
+
+    const { data: rpcResult, error: rpcError } = await auth.client.rpc('rpc_create_invoice_draft', {
+      p_client_id: quote.client_id || null,
+      p_subject: quote.title || `From Quote #${quote.quote_number}`,
+      p_due_date: dueDateStr,
+    });
+    if (rpcError) throw rpcError;
+    const invoiceRow = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
+    const invoiceId = String(invoiceRow?.id || '');
+    if (!invoiceId) throw new Error('Invoice created but id is missing.');
+
+    // Copy quote line items to invoice items
+    const { data: quoteItems } = await admin
+      .from('quote_line_items').select('*').eq('quote_id', quoteId)
+      .eq('item_type', 'service').order('sort_order');
+
+    if (quoteItems && quoteItems.length > 0) {
+      const invoiceItems = quoteItems
+        .filter((item: any) => !item.is_optional)
+        .map((item: any) => ({
+          invoice_id: invoiceId,
+          description: item.name + (item.description ? ` — ${item.description}` : ''),
+          qty: Number(item.quantity) || 1,
+          unit_price_cents: item.unit_price_cents,
+          line_total_cents: item.total_cents,
+        }));
+      if (invoiceItems.length > 0) {
+        await admin.from('invoice_items').insert(invoiceItems);
+      }
+    }
+
+    // Update invoice totals
+    await admin.from('invoices').update({
+      subtotal_cents: quote.subtotal_cents,
+      tax_cents: quote.tax_cents,
+      total_cents: quote.total_cents,
+      balance_cents: quote.total_cents,
+      notes: quote.notes,
+    }).eq('id', invoiceId);
+
+    // Mark quote as converted
+    await admin.from('quotes').update({
+      status: 'converted',
+      converted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', quoteId);
+
+    await admin.from('quote_status_history').insert({
+      quote_id: quoteId,
+      old_status: quote.status,
+      new_status: 'converted',
+      changed_by: auth.user.id,
+      reason: `Converted to invoice ${invoiceId}`,
+    });
+
+    return res.json({ ok: true, invoiceId, quoteId });
+  } catch (error: any) {
+    console.error('quote_to_invoice_failed', error);
+    return res.status(500).json({ error: error?.message || 'Failed to convert quote to invoice.' });
   }
 });
 

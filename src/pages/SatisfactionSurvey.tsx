@@ -78,7 +78,7 @@ export default function SatisfactionSurvey() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900" />
       </div>
     );
   }
@@ -120,7 +120,7 @@ export default function SatisfactionSurvey() {
                 href={result.google_review_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-neutral-900 text-white font-semibold rounded-xl hover:bg-neutral-800 transition-colors"
               >
                 <Star size={18} className="fill-white" />
                 Leave a Google Review
@@ -204,7 +204,7 @@ export default function SatisfactionSurvey() {
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
             placeholder="Any comments? (optional)"
-            className="w-full rounded-xl border border-gray-200 p-3 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 resize-none"
+            className="w-full rounded-xl border border-gray-200 p-3 text-sm text-gray-900 placeholder-gray-400 focus:border-neutral-400 focus:ring-1 focus:ring-neutral-400 resize-none"
             rows={3}
           />
         </div>
@@ -214,7 +214,7 @@ export default function SatisfactionSurvey() {
           type="button"
           onClick={handleSubmit}
           disabled={rating === 0 || submitting}
-          className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-3 bg-neutral-900 text-white font-semibold rounded-xl hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting ? 'Submitting...' : 'Submit Feedback'}
         </button>

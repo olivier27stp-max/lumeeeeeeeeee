@@ -104,7 +104,12 @@ const DB_TO_UI_STATUS: Record<string, string> = {
 function toDbStatus(value?: string): string {
   const raw = String(value || '').trim();
   if (!raw) return 'new';
-  return LEAD_STATUS_MAP[raw] || raw.toLowerCase();
+  // Check map first, then try lowercase with underscore normalization
+  if (LEAD_STATUS_MAP[raw]) return LEAD_STATUS_MAP[raw];
+  const normalized = raw.toLowerCase().replace(/[\s-]+/g, '_');
+  // Verify it's a valid DB status before returning
+  const validStatuses: Set<string> = new Set(LEAD_STATUSES);
+  return validStatuses.has(normalized) ? normalized : 'new';
 }
 
 function toUiStatus(value?: string): string {
@@ -289,26 +294,27 @@ export async function updateLeadScoped(id: string, input: UpdateLeadInput): Prom
   const { data, error } = await supabase.from('leads').update(payload).eq('id', id).select('*').single();
   if (error) throw error;
 
-  // Sync lead status → pipeline deal stage (non-blocking)
+  // Sync lead status → pipeline deal stage (blocking with error handling)
   if (input.status !== undefined) {
     const dbStatus = toDbStatus(input.status);
-    supabase
-      .from('pipeline_deals')
-      .select('id')
-      .eq('lead_id', id)
-      .is('deleted_at', null)
-      .limit(1)
-      .maybeSingle()
-      .then(({ data: deal }) => {
-        if (deal?.id) {
-          supabase.rpc('set_deal_stage', { p_deal_id: deal.id, p_stage: dbStatus }).then(({ error: stageErr }) => {
-            if (stageErr) console.warn('Lead→Deal stage sync failed:', stageErr.message);
-          });
-        }
-      });
+    try {
+      const { data: deal } = await supabase
+        .from('pipeline_deals')
+        .select('id')
+        .eq('lead_id', id)
+        .is('deleted_at', null)
+        .limit(1)
+        .maybeSingle();
+      if (deal?.id) {
+        const { error: stageErr } = await supabase.rpc('set_deal_stage', { p_deal_id: deal.id, p_stage: dbStatus });
+        if (stageErr) console.error('Lead→Deal stage sync failed:', stageErr.message);
+      }
+    } catch (syncErr) {
+      console.error('Lead→Deal sync error:', syncErr);
+    }
   }
 
-  // Sync contact fields to the linked client record (non-blocking)
+  // Sync contact fields to the linked client record (blocking with error handling)
   const clientId = data.client_id || data.converted_to_client_id;
   if (clientId) {
     const clientUpdate: Record<string, any> = {};
@@ -320,9 +326,8 @@ export async function updateLeadScoped(id: string, input: UpdateLeadInput): Prom
     if (input.company !== undefined) clientUpdate.company = input.company?.trim() || null;
     if (Object.keys(clientUpdate).length > 0) {
       clientUpdate.updated_at = new Date().toISOString();
-      supabase.from('clients').update(clientUpdate).eq('id', clientId).then(({ error: syncErr }) => {
-        if (syncErr) console.warn('Lead→Client sync failed:', syncErr.message);
-      });
+      const { error: syncErr } = await supabase.from('clients').update(clientUpdate).eq('id', clientId);
+      if (syncErr) console.error('Lead→Client sync failed:', syncErr.message);
     }
   }
 
@@ -494,7 +499,7 @@ export async function exportAllLeadsCsv(): Promise<string> {
     const to = from + pageSize - 1;
     const { data, error } = await supabase
       .from('leads_active')
-      .select('id,first_name,last_name,phone,email,source,status,created_at')
+      .select('id,first_name,last_name,phone,email,company,address,source,status,value,assigned_to,notes,tags,created_at')
       .order('created_at', { ascending: true })
       .range(from, to);
 
@@ -504,11 +509,19 @@ export async function exportAllLeadsCsv(): Promise<string> {
     for (const lead of batch) {
       rows.push({
         id: lead.id,
+        first_name: lead.first_name || '',
+        last_name: lead.last_name || '',
         full_name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
         phone: lead.phone || '',
         email: lead.email || '',
+        company: (lead as any).company || '',
+        address: (lead as any).address || '',
         source: lead.source || '',
         status: toUiStatus(lead.status),
+        value: (lead as any).value || 0,
+        assigned_to: (lead as any).assigned_to || '',
+        notes: (lead as any).notes || '',
+        tags: Array.isArray((lead as any).tags) ? (lead as any).tags.join(', ') : '',
         created_at: lead.created_at,
       });
     }

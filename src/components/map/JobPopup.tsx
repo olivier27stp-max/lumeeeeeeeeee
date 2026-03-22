@@ -98,18 +98,18 @@ export default function JobPopup({ pin, onClose, onOpenJob }: JobPopupProps) {
           )}
         </div>
 
-        {/* Action */}
-        {onOpenJob && (
-          <div className="px-3.5 pb-3">
+        {/* Actions */}
+        <div className="px-3.5 pb-3 flex items-center gap-2">
+          {onOpenJob && (
             <button
               type="button"
               onClick={() => onOpenJob(pin.jobId)}
-              className="glass-button w-full inline-flex items-center justify-center gap-1.5 text-xs"
+              className="glass-button flex-1 inline-flex items-center justify-center gap-1.5 text-xs"
             >
               Open Job <ArrowUpRight size={12} />
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </Popup>
   );

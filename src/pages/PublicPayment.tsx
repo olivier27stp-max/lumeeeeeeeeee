@@ -65,7 +65,7 @@ export default function PublicPayment() {
     return (
       <PublicPageShell>
         <div className="flex items-center justify-center py-20">
-          <Loader2 size={28} className="animate-spin text-blue-500" />
+          <Loader2 size={28} className="animate-spin text-neutral-500" />
         </div>
       </PublicPageShell>
     );
@@ -263,8 +263,8 @@ function CheckoutForm({ amountCents, currency, publicToken }: {
       <button
         type="submit"
         disabled={!stripe || processing}
-        className="w-full rounded-lg bg-blue-600 text-white py-3 px-4 font-semibold text-sm
-                   hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed
+        className="w-full rounded-lg bg-neutral-900 text-white py-3 px-4 font-semibold text-sm
+                   hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed
                    inline-flex items-center justify-center gap-2 transition-colors"
       >
         {processing ? (
@@ -302,8 +302,8 @@ function PublicPageShell({ children, business }: {
           {business?.logo_url ? (
             <img src={business.logo_url} alt={business.name || ''} className="h-8 w-8 rounded-lg object-cover" />
           ) : (
-            <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-              <CreditCard size={16} className="text-blue-600 dark:text-blue-400" />
+            <div className="h-8 w-8 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+              <CreditCard size={16} className="text-text-primary dark:text-neutral-400" />
             </div>
           )}
           <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">

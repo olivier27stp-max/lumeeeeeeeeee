@@ -216,6 +216,14 @@ router.post('/leads/soft-delete', validate(softDeleteLeadSchema), async (req, re
       .eq('org_id', leadOrgId)
       .is('deleted_at', null);
 
+    // Soft-delete associated quotes linked to this lead
+    await admin
+      .from('quotes')
+      .update({ deleted_at: now, updated_at: now })
+      .eq('lead_id', leadId)
+      .eq('org_id', leadOrgId)
+      .is('deleted_at', null);
+
     return res.status(200).json({ ok: true });
   } catch (error: any) {
     // eslint-disable-next-line no-console

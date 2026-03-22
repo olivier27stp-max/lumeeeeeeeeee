@@ -18,6 +18,9 @@ export interface ClientRecord {
   longitude: number | null;
   place_id: string | null;
   status: string;
+  notes: string | null;
+  portal_token: string | null;
+  org_id: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -212,10 +215,14 @@ export async function softDeleteClient(id: string): Promise<SoftDeleteClientResu
       .is('deleted_at', null);
     if (updateError) throw updateError;
 
-    // Also soft-delete related jobs, leads, pipeline_deals
+    // Also soft-delete related entities (complete cascade)
     await supabase.from('jobs').update({ deleted_at: now }).eq('client_id', id).is('deleted_at', null);
     await supabase.from('leads').update({ deleted_at: now }).eq('client_id', id).is('deleted_at', null);
     await supabase.from('pipeline_deals').update({ deleted_at: now }).eq('client_id', id).is('deleted_at', null);
+    await supabase.from('invoices').update({ deleted_at: now }).eq('client_id', id).is('deleted_at', null);
+    await supabase.from('quotes').update({ deleted_at: now }).eq('client_id', id).is('deleted_at', null);
+    // Clean up tags (hard delete since they're relational)
+    await supabase.from('client_tags').delete().eq('client_id', id);
 
     return { client: 1, jobs: 0, leads: 0, pipeline_deals: 0, other_rows: 0 };
   }

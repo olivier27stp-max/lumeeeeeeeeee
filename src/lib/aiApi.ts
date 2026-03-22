@@ -1,5 +1,24 @@
 import { supabase } from './supabase';
 
+// In production (Railway), Ollama runs server-side — calls go through the backend proxy.
+// In dev, can use direct Ollama or the proxy.
+const OLLAMA_CHAT_URL = import.meta.env.PROD
+  ? '/api/ai/chat'
+  : (import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434') + '/api/chat';
+
+const IS_PROXIED = import.meta.env.PROD || OLLAMA_CHAT_URL.startsWith('/');
+
+async function getOllamaHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (IS_PROXIED) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+  }
+  return headers;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    AI Conversations — Types
    ═══════════════════════════════════════════════════════════════ */
@@ -193,9 +212,10 @@ export async function sendMessageToAI(opts: {
 
   // 3. Call Ollama (non-streaming)
   const startTime = Date.now();
-  const res = await fetch('http://localhost:11434/api/chat', {
+  const ollamaHeaders = await getOllamaHeaders();
+  const res = await fetch(OLLAMA_CHAT_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: ollamaHeaders,
     body: JSON.stringify({ model, messages, stream: false }),
   });
 
@@ -263,9 +283,10 @@ export async function streamMessageToAI(opts: {
   ];
 
   const startTime = Date.now();
-  const res = await fetch('http://localhost:11434/api/chat', {
+  const streamHeaders = await getOllamaHeaders();
+  const res = await fetch(IS_PROXIED ? OLLAMA_CHAT_URL + '/stream' : OLLAMA_CHAT_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: streamHeaders,
     body: JSON.stringify({ model, messages, stream: true }),
     signal: opts.signal,
   });
@@ -287,19 +308,32 @@ export async function streamMessageToAI(opts: {
     if (done) break;
 
     const text = decoder.decode(value, { stream: true });
-    // Ollama streams one JSON object per line
     for (const line of text.split('\n')) {
-      if (!line.trim()) continue;
+      const trimmed = line.trim();
+      if (!trimmed) continue;
       try {
-        const chunk = JSON.parse(line);
-        if (chunk.message?.content) {
-          fullContent += chunk.message.content;
-          opts.onToken(chunk.message.content);
-        }
-        // Last chunk has done: true and token counts
-        if (chunk.done) {
-          inputTokens = chunk.prompt_eval_count || null;
-          outputTokens = chunk.eval_count || null;
+        if (IS_PROXIED && trimmed.startsWith('data: ')) {
+          // SSE format from backend proxy
+          const json = trimmed.slice(6);
+          const event = JSON.parse(json);
+          if (event.type === 'token' && event.content) {
+            fullContent += event.content;
+            opts.onToken(event.content);
+          } else if (event.type === 'done') {
+            inputTokens = event.inputTokens || null;
+            outputTokens = event.outputTokens || null;
+          }
+        } else {
+          // NDJSON format from direct Ollama
+          const chunk = JSON.parse(trimmed);
+          if (chunk.message?.content) {
+            fullContent += chunk.message.content;
+            opts.onToken(chunk.message.content);
+          }
+          if (chunk.done) {
+            inputTokens = chunk.prompt_eval_count || null;
+            outputTokens = chunk.eval_count || null;
+          }
         }
       } catch {
         // skip malformed line
@@ -351,9 +385,10 @@ export async function analyzeImageWithVision(opts: {
     return 'Could not fetch image for analysis.';
   }
 
-  const res = await fetch('http://localhost:11434/api/chat', {
+  const visionHeaders = await getOllamaHeaders();
+  const res = await fetch(OLLAMA_CHAT_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: visionHeaders,
     body: JSON.stringify({
       model: 'llava',
       messages: [

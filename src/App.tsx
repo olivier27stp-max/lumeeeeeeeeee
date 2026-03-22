@@ -66,6 +66,8 @@ import SearchResultsPage from './pages/SearchResults';
 import Availability from './pages/Availability';
 import Timesheets from './pages/Timesheets';
 import QuoteView from './pages/QuoteView';
+import Quotes from './pages/Quotes';
+import QuoteDetails from './pages/QuoteDetails';
 import type { TileColor } from './components/ui';
 import HelpChat from './components/HelpChat';
 import ActivityCenter from './components/ActivityCenter';
@@ -75,11 +77,14 @@ import AppMarketplace from './pages/AppMarketplace';
 import OAuthCallback from './pages/OAuthCallback';
 import DispatchMap from './pages/DispatchMap';
 import BillingCheckout from './pages/BillingCheckout';
-import AIHelper from './pages/AIHelper';
+import MrLumePage from './features/agent/components/MrLumeChat';
 import Messages from './pages/Messages';
 import NoteBoards from './pages/NoteBoards';
 import NoteCanvas from './pages/NoteCanvas';
-import OllamaIcon from './components/icons/OllamaIcon';
+// Mr Lume panda icon for sidebar
+const MrLumeIcon = ({ size = 20, className = '' }: { size?: number; className?: string }) => (
+  <img src="/lume-logo.png" alt="Mr Lume" style={{ width: size, height: size }} className={`object-contain ${className}`} />
+);
 import SatisfactionSurvey from './pages/SatisfactionSurvey';
 import ClientPortal from './pages/ClientPortal';
 import PublicPayment from './pages/PublicPayment';
@@ -319,7 +324,7 @@ export default function App() {
     {
       label: null,
       items: [
-        { id: 'ai-helper', label: t.nav.home, icon: OllamaIcon as any, path: '/dashboard', tileColor: 'blue' },
+        { id: 'ai-helper', label: 'Mr Lume', icon: MrLumeIcon as any, path: '/dashboard', tileColor: 'blue' },
         { id: 'day', label: language === 'fr' ? 'Journée' : 'Day', icon: LayoutDashboard, path: '/day', tileColor: 'blue' },
       ],
     },
@@ -639,7 +644,7 @@ export default function App() {
                   <ErrorBoundary labels={t.errorBoundary}>
                     <Routes>
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                      <Route path="/dashboard" element={<AIHelper />} />
+                      <Route path="/dashboard" element={<MrLumePage />} />
                       <Route path="/day" element={<Dashboard />} />
                       <Route path="/messages" element={<Messages />} />
                       <Route path="/leads" element={<Leads />} />
@@ -651,6 +656,8 @@ export default function App() {
                       <Route path="/calendar" element={<Schedule />} />
                       <Route path="/availability" element={<Availability />} />
                       <Route path="/search" element={<SearchResultsPage />} />
+                      <Route path="/quotes" element={<Quotes />} />
+                      <Route path="/quotes/:id" element={<QuoteDetails />} />
                       <Route path="/invoices" element={<Invoices />} />
                       <Route path="/invoices/new" element={<InvoiceEdit />} />
                       <Route path="/invoices/:id" element={<InvoiceDetails />} />

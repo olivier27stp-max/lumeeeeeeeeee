@@ -452,6 +452,57 @@ async function detectOverdueInvoices(supabase: SupabaseClient) {
 }
 
 // ---------------------------------------------------------------------------
+// Auto-expire quotes past valid_until
+// ---------------------------------------------------------------------------
+
+async function expireOverdueQuotes(supabase: SupabaseClient) {
+  const today = todayDateString();
+
+  const { data: quotes, error } = await supabase
+    .from('quotes')
+    .select('id, org_id, quote_number, valid_until, status')
+    .in('status', ['sent', 'awaiting_response', 'action_required'])
+    .not('valid_until', 'is', null)
+    .lt('valid_until', today)
+    .is('deleted_at', null);
+
+  if (error || !quotes) return;
+
+  for (const q of quotes as any[]) {
+    const dedupKey = `quote-expire:${q.id}`;
+    if (hasFired('quote-expiry', dedupKey)) continue;
+    markFired('quote-expiry', dedupKey);
+
+    await supabase
+      .from('quotes')
+      .update({
+        status: 'expired',
+        expired_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', q.id);
+
+    await supabase.from('quote_status_history').insert({
+      quote_id: q.id,
+      old_status: q.status,
+      new_status: 'expired',
+      changed_by: null,
+      reason: 'Auto-expired: past valid_until date',
+    });
+
+    await createNotification(
+      supabase,
+      q.org_id,
+      'Quote Expired',
+      `Quote #${q.quote_number} has automatically expired (valid until ${q.valid_until}).`,
+      q.id,
+    );
+
+    console.log(`[scheduler] auto-expired quote ${q.quote_number}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main tick
 // ---------------------------------------------------------------------------
 
@@ -473,6 +524,13 @@ async function tick(supabase: SupabaseClient, twilio: TwilioConfig | null) {
       await detectOverdueInvoices(supabase);
     } catch (err: any) {
       console.error('[scheduler] overdue invoice detection failed:', err.message);
+    }
+
+    // Auto-expire quotes past valid_until
+    try {
+      await expireOverdueQuotes(supabase);
+    } catch (err: any) {
+      console.error('[scheduler] quote expiry check failed:', err.message);
     }
 
     const { data: automations, error } = await supabase

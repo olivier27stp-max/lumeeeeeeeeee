@@ -103,8 +103,8 @@ export default function RequestPaymentModal({
                   onClick={() => setSendVia('link_only')}
                   className={`rounded-lg border p-3 text-left text-[12px] transition-colors ${
                     sendVia === 'link_only'
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300'
-                      : 'border-border-primary hover:border-blue-300'
+                      ? 'border-text-primary bg-surface-tertiary dark:bg-neutral-800/30 text-text-primary'
+                      : 'border-border-primary hover:border-text-tertiary'
                   }`}
                 >
                   <Link2 size={14} className="mb-1" />
@@ -117,10 +117,10 @@ export default function RequestPaymentModal({
                   disabled={!clientEmail}
                   className={`rounded-lg border p-3 text-left text-[12px] transition-colors ${
                     sendVia === 'email'
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300'
+                      ? 'border-text-primary bg-surface-tertiary dark:bg-neutral-800/30 text-text-primary'
                       : !clientEmail
                         ? 'border-border-primary opacity-40 cursor-not-allowed'
-                        : 'border-border-primary hover:border-blue-300'
+                        : 'border-border-primary hover:border-text-tertiary'
                   }`}
                 >
                   <Mail size={14} className="mb-1" />
@@ -133,10 +133,10 @@ export default function RequestPaymentModal({
                   disabled={!clientPhone}
                   className={`rounded-lg border p-3 text-left text-[12px] transition-colors ${
                     sendVia === 'sms'
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300'
+                      ? 'border-text-primary bg-surface-tertiary dark:bg-neutral-800/30 text-text-primary'
                       : !clientPhone
                         ? 'border-border-primary opacity-40 cursor-not-allowed'
-                        : 'border-border-primary hover:border-blue-300'
+                        : 'border-border-primary hover:border-text-tertiary'
                   }`}
                 >
                   <MessageSquare size={14} className="mb-1" />
@@ -149,10 +149,10 @@ export default function RequestPaymentModal({
                   disabled={!clientEmail || !clientPhone}
                   className={`rounded-lg border p-3 text-left text-[12px] transition-colors ${
                     sendVia === 'both'
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300'
+                      ? 'border-text-primary bg-surface-tertiary dark:bg-neutral-800/30 text-text-primary'
                       : !clientEmail || !clientPhone
                         ? 'border-border-primary opacity-40 cursor-not-allowed'
-                        : 'border-border-primary hover:border-blue-300'
+                        : 'border-border-primary hover:border-text-tertiary'
                   }`}
                 >
                   <Send size={14} className="mb-1" />
@@ -166,7 +166,7 @@ export default function RequestPaymentModal({
               <button type="button" className="glass-button" onClick={handleClose}>Cancel</button>
               <button
                 type="button"
-                className="glass-button bg-blue-600 text-white hover:bg-blue-700 inline-flex items-center gap-2"
+                className="glass-button bg-text-primary text-surface hover:bg-neutral-800 inline-flex items-center gap-2"
                 onClick={handleCreateRequest}
                 disabled={loading}
               >

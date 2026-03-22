@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Search, X, Plus, Package, Check, Loader2 } from 'lucide-react';
+import { Search, X, Plus, Package, Check, Loader2, Minus } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import { listPredefinedServices, createPredefinedService, PredefinedService } from '../lib/servicesApi';
 
@@ -8,11 +8,13 @@ interface ServicePickerProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (service: PredefinedService) => void;
+  /** Called when user toggles off an already-added service */
+  onRemove?: (serviceId: string) => void;
   /** IDs of services already added (to show check marks) */
   addedIds?: Set<string>;
 }
 
-export default function ServicePicker({ isOpen, onClose, onSelect, addedIds = new Set() }: ServicePickerProps) {
+export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, addedIds = new Set() }: ServicePickerProps) {
   const [services, setServices] = useState<PredefinedService[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -91,6 +93,14 @@ export default function ServicePicker({ isOpen, onClose, onSelect, addedIds = ne
       // silently fail
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleToggle = (service: PredefinedService) => {
+    if (addedIds.has(service.id)) {
+      onRemove?.(service.id);
+    } else {
+      onSelect(service);
     }
   };
 
@@ -235,7 +245,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, addedIds = ne
                         key={service.id}
                         service={service}
                         isAdded={addedIds.has(service.id)}
-                        onSelect={() => onSelect(service)}
+                        onToggle={() => handleToggle(service)}
                       />
                     ))}
                   </div>
@@ -247,7 +257,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, addedIds = ne
                     key={service.id}
                     service={service}
                     isAdded={addedIds.has(service.id)}
-                    onSelect={() => onSelect(service)}
+                    onToggle={() => handleToggle(service)}
                   />
                 ))
               )}
@@ -258,7 +268,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, addedIds = ne
         {/* Footer hint */}
         <div className="px-5 py-2.5 border-t border-outline-subtle/60 bg-surface-secondary/30">
           <p className="text-[11px] text-text-tertiary text-center">
-            Click a service to add it to the job. You can edit qty & price after.
+            Click to add or remove a service. You can edit qty & price after.
           </p>
         </div>
       </motion.div>
@@ -270,22 +280,38 @@ export default function ServicePicker({ isOpen, onClose, onSelect, addedIds = ne
 interface ServiceRowProps {
   service: PredefinedService;
   isAdded: boolean;
-  onSelect: () => void;
+  onToggle: () => void;
 }
 
-const ServiceRow: React.FC<ServiceRowProps> = ({ service, isAdded, onSelect }) => {
+const ServiceRow: React.FC<ServiceRowProps> = ({ service, isAdded, onToggle }) => {
   return (
     <button
-      onClick={onSelect}
+      onClick={onToggle}
       className={cn(
-        'w-full flex items-center gap-3 px-5 py-3.5 text-left border-b border-outline-subtle/30 transition-colors',
+        'w-full flex items-center gap-3 px-5 py-3.5 text-left border-b border-outline-subtle/30 transition-colors group',
         isAdded
-          ? 'bg-primary/5 hover:bg-primary/10'
+          ? 'bg-surface-tertiary/50 hover:bg-surface-tertiary'
           : 'hover:bg-surface-secondary/50'
       )}
     >
+      {/* Toggle checkbox */}
+      <div
+        className={cn(
+          'w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all',
+          isAdded
+            ? 'bg-text-primary border-text-primary'
+            : 'border-outline bg-surface group-hover:border-text-tertiary'
+        )}
+      >
+        {isAdded ? (
+          <Check size={11} className="text-surface" />
+        ) : null}
+      </div>
+
       <div className="flex-1 min-w-0">
-        <p className="text-[14px] font-semibold text-text-primary leading-snug">{service.name}</p>
+        <p className={cn('text-[14px] font-semibold leading-snug', isAdded ? 'text-text-primary' : 'text-text-primary')}>
+          {service.name}
+        </p>
         {service.description && (
           <p className="text-[12px] text-text-tertiary mt-0.5 line-clamp-1">{service.description}</p>
         )}
@@ -295,11 +321,13 @@ const ServiceRow: React.FC<ServiceRowProps> = ({ service, isAdded, onSelect }) =
           {formatCurrency(service.default_price_cents / 100)}
         </span>
         {isAdded && (
-          <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-            <Check size={11} className="text-white" />
-          </div>
+          <span className="text-[10px] font-medium text-text-tertiary group-hover:text-danger transition-colors">
+            {/* Show "remove" hint on hover */}
+            <Minus size={12} className="hidden group-hover:block" />
+            <span className="block group-hover:hidden text-[10px] uppercase tracking-wide">Added</span>
+          </span>
         )}
       </div>
     </button>
   );
-}
+};

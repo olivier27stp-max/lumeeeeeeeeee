@@ -97,7 +97,7 @@ const DealCard: React.FC<{ deal: PipelineDeal; onClick: () => void; onDelete: ()
       <div className="flex items-center justify-between gap-1 mb-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
           {isHot && <span className="shrink-0 w-2 h-2 rounded-full bg-red-500" title="Hot lead" />}
-          {isCold && <span className="shrink-0 w-2 h-2 rounded-full bg-blue-400" title="Cold lead" />}
+          {isCold && <span className="shrink-0 w-2 h-2 rounded-full bg-neutral-400" title="Cold lead" />}
           <p className="text-xs font-semibold text-text-primary truncate">{leadName}</p>
         </div>
         {canDelete && (

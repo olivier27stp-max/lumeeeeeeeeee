@@ -5,7 +5,7 @@
 import type { PermissionsMap } from '../permissions';
 
 // ── Chat Mode ─────────────────────────────────────────────────
-export type AIChatMode = 'crm' | 'web';
+export type AIChatMode = 'crm' | 'web' | 'agent';
 
 // ── Tool Definitions ──────────────────────────────────────────
 export type ToolCategory = 'read' | 'write' | 'action';

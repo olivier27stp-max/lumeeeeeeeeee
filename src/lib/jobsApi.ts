@@ -231,8 +231,29 @@ function applyTableFilters(request: any, query: JobsQuery) {
   let builder = request;
   const { status, jobType, clientId, q } = query;
   if (status && status !== 'All') {
-    if (status.toLowerCase() === 'unscheduled') builder = builder.is('scheduled_at', null);
-    else builder = builder.eq('status', normalizeStatusValue(status));
+    const normalized = status.trim().toLowerCase().replace(/\s+/g, '_');
+    if (normalized === 'unscheduled') {
+      // Jobs without a scheduled date or in draft status
+      builder = builder.or('scheduled_at.is.null,status.eq.draft');
+    } else if (normalized === 'late') {
+      // Scheduled jobs whose scheduled_at is in the past
+      builder = builder.eq('status', 'scheduled').lt('scheduled_at', new Date().toISOString());
+    } else if (normalized === 'requires_invoicing' || normalized === 'requires invoicing') {
+      // Completed jobs that need invoicing
+      builder = builder.eq('status', 'completed').eq('requires_invoicing', true);
+    } else if (normalized === 'action_required' || normalized === 'action required') {
+      // Scheduled jobs whose scheduled_at is more than 30 days in the past
+      const minus30 = new Date(Date.now() - 30 * 86400000).toISOString();
+      builder = builder.eq('status', 'scheduled').lt('scheduled_at', minus30);
+    } else if (normalized === 'ending_within_30' || normalized === 'ending within 30 days' || normalized === 'ending_within_30_days') {
+      // Jobs scheduled within the next 30 days
+      const now = new Date().toISOString();
+      const plus30 = new Date(Date.now() + 30 * 86400000).toISOString();
+      builder = builder.gte('scheduled_at', now).lte('scheduled_at', plus30);
+    } else {
+      // Direct DB status match
+      builder = builder.eq('status', normalizeStatusValue(status));
+    }
   }
   if (jobType && jobType !== 'All') builder = builder.eq('job_type', jobType);
   if (clientId && clientId !== 'All') builder = builder.eq('client_id', clientId);
@@ -351,6 +372,12 @@ export async function getJobModalDraftById(id: string): Promise<JobModalDraft | 
     salesperson_id: jobRow.salesperson_id ?? null,
     job_type: (jobRow.job_type as 'one_off' | 'recurring' | null) ?? 'one_off',
     property_address: jobRow.property_address ?? null,
+    address_line1: jobRow.address_line1 ?? null,
+    address_line2: jobRow.address_line2 ?? null,
+    city: jobRow.city ?? null,
+    province: jobRow.province ?? null,
+    postal_code: jobRow.postal_code ?? null,
+    country: jobRow.country ?? 'Canada',
     description: jobRow.notes || jobRow.description || null,
     status: formatStatusLabel(jobRow.status),
     requires_invoicing: !!jobRow.requires_invoicing,
@@ -381,6 +408,13 @@ export async function createJob(payload: {
   description?: string | null;
   job_type?: string | null;
   property_address?: string | null;
+  address_line1?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  province?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+  place_id?: string | null;
   scheduled_at?: string | null;
   end_at?: string | null;
   status: string;
@@ -390,6 +424,10 @@ export async function createJob(payload: {
   requires_invoicing?: boolean;
   billing_split?: boolean;
   line_items?: JobLineItemInput[];
+  deposit_required?: boolean;
+  deposit_type?: 'percentage' | 'fixed' | null;
+  deposit_value?: number;
+  require_payment_method?: boolean;
   subtotal?: number;
   tax_total?: number;
   total?: number;
@@ -478,6 +516,15 @@ export async function createJob(payload: {
       updated_at: new Date().toISOString(),
     };
 
+    // Include structured address fields if provided
+    if (payload.address_line1 !== undefined) updatePayload.address_line1 = payload.address_line1 || null;
+    if (payload.address_line2 !== undefined) updatePayload.address_line2 = payload.address_line2 || null;
+    if (payload.city !== undefined) updatePayload.city = payload.city || null;
+    if (payload.province !== undefined) updatePayload.province = payload.province || null;
+    if (payload.postal_code !== undefined) updatePayload.postal_code = payload.postal_code || null;
+    if (payload.country !== undefined) updatePayload.country = payload.country || 'Canada';
+    if (payload.place_id !== undefined) updatePayload.place_id = payload.place_id || null;
+
     if (shouldQueueGeocode) {
       updatePayload.geocode_status = 'pending';
       updatePayload.geocoded_at = null;
@@ -539,6 +586,19 @@ export async function createJob(payload: {
     if (!created?.id) throw new Error('Job save failed: created row is missing id.');
     data = created;
     shouldQueueGeocode = normalizeAddressValue(data?.property_address) !== '';
+
+    // Update structured address fields (RPC only stores property_address)
+    if (payload.address_line1 || payload.city || payload.province) {
+      await supabase.from('jobs').update({
+        address_line1: payload.address_line1 || null,
+        address_line2: payload.address_line2 || null,
+        city: payload.city || null,
+        province: payload.province || null,
+        postal_code: payload.postal_code || null,
+        country: payload.country || 'Canada',
+        place_id: payload.place_id || null,
+      }).eq('id', data.id);
+    }
 
     if (shouldQueueGeocode) {
       const { error: pendingError, status: pendingStatus } = await supabase
@@ -644,6 +704,21 @@ export async function createJob(payload: {
       total: financials.total,
     });
     if (finErr) throw finErr;
+
+    // Persist deposit settings if provided
+    if (payload.deposit_required !== undefined) {
+      const depositCents = payload.deposit_type === 'percentage'
+        ? Math.round(financials.total_cents * (payload.deposit_value || 0) / 100)
+        : Math.round((payload.deposit_value || 0) * 100);
+      await supabase.from('jobs').update({
+        deposit_required: payload.deposit_required || false,
+        deposit_type: payload.deposit_required ? (payload.deposit_type || null) : null,
+        deposit_value: payload.deposit_required ? (payload.deposit_value || 0) : 0,
+        deposit_cents: payload.deposit_required ? depositCents : 0,
+        require_payment_method: payload.require_payment_method || false,
+        deposit_status: payload.deposit_required ? 'pending' : 'not_required',
+      }).eq('id', data.id);
+    }
 
     // Refresh data so returned job has correct values
     const { data: refreshedFin, error: refreshedFinErr } = await supabase

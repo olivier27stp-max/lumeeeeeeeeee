@@ -184,7 +184,7 @@ export default function RecordTable<T extends { id: string }>({
                       'border-b border-border transition-colors',
                       onRowClick && 'cursor-pointer',
                       isSelected
-                        ? 'bg-blue-50/40'
+                        ? 'bg-surface-tertiary/40'
                         : 'hover:bg-surface-secondary/60'
                     )}
                   >

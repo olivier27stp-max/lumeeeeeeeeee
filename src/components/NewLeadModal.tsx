@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Plus, Trash2, Calendar, Clock, Briefcase, ChevronDown } from 'lucide-react';
+import { X, Plus, Trash2, Calendar, Clock, Briefcase, ChevronDown, User, Mail, MapPin, Phone, DollarSign, Tag } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import { useTranslation } from '../i18n';
 
@@ -39,23 +39,22 @@ export default function NewLeadModal({
   mode = 'job',
 }: NewLeadModalProps) {
   const formRef = useRef<HTMLFormElement | null>(null);
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [leadFirstName, setLeadFirstName] = useState('');
   const [leadLastName, setLeadLastName] = useState('');
   const [leadEmail, setLeadEmail] = useState('');
+  const [leadPhone, setLeadPhone] = useState('');
   const [leadAddress, setLeadAddress] = useState('');
+  const [leadCompany, setLeadCompany] = useState('');
   const [leadStatus, setLeadStatus] = useState('Lead');
   const [leadValue, setLeadValue] = useState('0');
+  const [leadSource, setLeadSource] = useState('');
+  const [leadNotes, setLeadNotes] = useState('');
   const [title, setTitle] = useState('');
   const [client, setClient] = useState(initialClient || '');
   const [jobNumber, setJobNumber] = useState(Math.floor(Math.random() * 1000).toString());
 
-  useEffect(() => {
-    if (initialClient) {
-      setClient(initialClient);
-    }
-  }, [initialClient]);
-
+  useEffect(() => { if (initialClient) setClient(initialClient); }, [initialClient]);
   useEffect(() => {
     if (initialSchedule) {
       setStartDate(initialSchedule.start_date);
@@ -77,52 +76,43 @@ export default function NewLeadModal({
   const [inlineError, setInlineError] = useState<string | null>(null);
 
   const addLineItem = () => {
-    setLineItems([...lineItems, { 
-      id: Math.random().toString(36).substr(2, 9), 
-      name: '', 
-      quantity: 1, 
-      unitCost: 0, 
-      unitPrice: 0, 
-      description: '' 
+    setLineItems([...lineItems, {
+      id: Math.random().toString(36).substr(2, 9),
+      name: '', quantity: 1, unitCost: 0, unitPrice: 0, description: ''
     }]);
   };
 
   const removeLineItem = (id: string) => {
-    if (lineItems.length > 1) {
-      setLineItems(lineItems.filter(item => item.id !== id));
-    }
+    if (lineItems.length > 1) setLineItems(lineItems.filter(item => item.id !== id));
   };
 
   const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
-    setLineItems(lineItems.map(item => 
-      item.id === id ? { ...item, [field]: value } : item
-    ));
+    setLineItems(lineItems.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
 
-  const calculateTotal = () => {
-    return lineItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-  };
+  const calculateTotal = () => lineItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setInlineError(null);
-    const totalValue = calculateTotal();
 
     if (mode === 'lead') {
-      if (!leadFirstName.trim() || !leadLastName.trim() || !title.trim()) {
-        setInlineError(t.leads.requiredFields);
+      if (!leadFirstName.trim() || !leadLastName.trim()) {
+        setInlineError(language === 'fr' ? 'Le prenom et le nom sont requis.' : 'First and last name are required.');
         return;
       }
-
       try {
         await onSave({
           first_name: leadFirstName.trim(),
           last_name: leadLastName.trim(),
           email: leadEmail.trim(),
+          phone: leadPhone.trim(),
           address: leadAddress.trim(),
-          company: title.trim(),
+          company: leadCompany.trim(),
           value: Number(leadValue || 0),
           status: leadStatus,
+          source: leadSource.trim(),
+          notes: leadNotes.trim(),
         });
         resetForm();
       } catch (error: any) {
@@ -130,35 +120,20 @@ export default function NewLeadModal({
       }
       return;
     }
-    
-    // Basic validation
+
     if (!title || !client) {
       setInlineError(t.modals.fillTitleClient);
       return;
     }
 
-    const leadData = {
-      title,
-      client,
-      job_number: jobNumber,
-      salesperson,
-      job_type: jobType,
-      schedule: {
-        start_date: startDate,
-        start_time: startTime,
-        end_time: endTime
-      },
-      line_items: lineItems,
-      billing: {
-        remind: billingRemind,
-        split: billingSplit
-      },
-      value: totalValue,
-      status: 'Lead'
-    };
-
     try {
-      await onSave(leadData);
+      await onSave({
+        title, client, job_number: jobNumber, salesperson, job_type: jobType,
+        schedule: { start_date: startDate, start_time: startTime, end_time: endTime },
+        line_items: lineItems,
+        billing: { remind: billingRemind, split: billingSplit },
+        value: calculateTotal(), status: 'Lead',
+      });
       resetForm();
     } catch (error: any) {
       setInlineError(error?.message || t.modals.failedSave);
@@ -166,407 +141,312 @@ export default function NewLeadModal({
   };
 
   const resetForm = () => {
-    setLeadFirstName('');
-    setLeadLastName('');
-    setLeadEmail('');
-    setLeadAddress('');
-    setLeadStatus('Lead');
-    setLeadValue('0');
-    setTitle('');
-    setClient('');
+    setLeadFirstName(''); setLeadLastName(''); setLeadEmail(''); setLeadPhone('');
+    setLeadAddress(''); setLeadCompany(''); setLeadStatus('Lead'); setLeadValue('0');
+    setLeadSource(''); setLeadNotes('');
+    setTitle(''); setClient('');
     setJobNumber(Math.floor(Math.random() * 1000).toString());
-    setSalesperson('');
-    setJobType('one-off');
+    setSalesperson(''); setJobType('one-off');
     setLineItems([{ id: '1', name: '', quantity: 1, unitCost: 0, unitPrice: 0, description: '' }]);
   };
+
+  const inputCls = 'w-full px-3 py-2.5 bg-surface border border-outline rounded-lg text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all';
+  const labelCls = 'text-xs text-text-secondary font-medium mb-1 block';
 
   return (
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 bg-black/40 backdrop-blur-md overflow-hidden">
           <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="bg-surface w-full max-w-5xl max-h-full flex flex-col shadow-2xl border border-border rounded-2xl overflow-hidden"
+            exit={{ opacity: 0, y: 16, scale: 0.98 }}
+            className="w-full max-w-5xl max-h-[94vh] bg-surface rounded-2xl border border-outline shadow-2xl flex flex-col overflow-hidden"
           >
             {/* Header */}
-            <div className="p-6 border-b border-border flex justify-between items-center bg-surface-secondary/50">
+            <div className="px-6 py-5 border-b border-outline flex items-center justify-between bg-surface-secondary">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-black flex items-center justify-center">
-                  <Briefcase size={20} className="text-white" />
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  {mode === 'lead' ? <User size={18} className="text-primary" /> : <Briefcase size={18} className="text-primary" />}
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold tracking-tight text-text-primary">{mode === 'lead' ? t.modals.newLead : t.modals.newJob}</h2>
-                  <p className="text-[10px] uppercase tracking-widest text-text-tertiary font-medium">{t.modals.createNewLeadOrJob}</p>
+                  <h2 className="text-xl font-semibold text-text-primary">
+                    {mode === 'lead' ? (language === 'fr' ? 'Nouveau Lead' : 'New Lead') : (language === 'fr' ? 'Nouvelle Job' : 'New Job')}
+                  </h2>
+                  <p className="text-xs text-text-tertiary">
+                    {mode === 'lead'
+                      ? (language === 'fr' ? 'Remplissez les informations du prospect' : 'Fill in the prospect information')
+                      : (language === 'fr' ? 'Creer une nouvelle job' : 'Create a new job')}
+                  </p>
                 </div>
               </div>
-              <button 
-                onClick={onClose}
-                className="p-2 hover:bg-surface-tertiary rounded-full transition-colors text-text-tertiary hover:text-black"
-              >
-                <X size={20} />
+              <button onClick={onClose} className="p-2 rounded-full hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors">
+                <X size={18} />
               </button>
             </div>
 
-            {/* Scrollable Content */}
-            <form ref={formRef} onSubmit={handleSave} className="flex-1 overflow-y-auto p-8 space-y-12 custom-scrollbar bg-surface">
+            {/* Body */}
+            <form ref={formRef} onSubmit={handleSave} className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
               {mode === 'lead' ? (
-                <section className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.common.firstName}</label>
-                      <input
-                        autoFocus
-                        value={leadFirstName}
-                        onChange={(e) => setLeadFirstName(e.target.value)}
-                        className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all text-text-primary"
-                        placeholder="John"
-                      />
+                <>
+                  {/* Contact info */}
+                  <div className="section-card p-5 space-y-4">
+                    <h3 className="text-[14px] font-semibold text-text-primary flex items-center gap-2">
+                      <User size={15} className="text-text-tertiary" />
+                      {language === 'fr' ? 'Informations de contact' : 'Contact Information'}
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelCls}>{t.common.firstName} *</label>
+                        <input autoFocus value={leadFirstName} onChange={(e) => setLeadFirstName(e.target.value)}
+                          className={inputCls} placeholder="John" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>{t.common.lastName} *</label>
+                        <input value={leadLastName} onChange={(e) => setLeadLastName(e.target.value)}
+                          className={inputCls} placeholder="Doe" />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.common.lastName}</label>
-                      <input
-                        value={leadLastName}
-                        onChange={(e) => setLeadLastName(e.target.value)}
-                        className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all text-text-primary"
-                        placeholder="Doe"
-                      />
+                    <div>
+                      <label className={labelCls}>{language === 'fr' ? 'Entreprise' : 'Company'}</label>
+                      <input value={leadCompany} onChange={(e) => setLeadCompany(e.target.value)}
+                        className={inputCls} placeholder={language === 'fr' ? 'Nom de l\'entreprise' : 'Company name'} />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.modals.leadTitle}</label>
-                    <input
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      className="w-full text-lg px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all text-text-primary"
-                      placeholder="Spring maintenance contract"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.common.email}</label>
-                    <input
-                      type="email"
-                      value={leadEmail}
-                      onChange={(e) => setLeadEmail(e.target.value)}
-                      className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all text-text-primary"
-                      placeholder="john@company.com"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.common.address}</label>
-                    <input
-                      value={leadAddress}
-                      onChange={(e) => setLeadAddress(e.target.value)}
-                      className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all text-text-primary"
-                      placeholder="123 Main St, Toronto"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.common.status}</label>
-                      <select
-                        value={leadStatus}
-                        onChange={(e) => setLeadStatus(e.target.value)}
-                        className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all text-text-primary"
-                      >
-                        <option value="Lead">Lead</option>
-                        <option value="Qualified">Qualified</option>
-                        <option value="Proposal">Proposal</option>
-                        <option value="Negotiation">Negotiation</option>
-                        <option value="Closed">Closed</option>
-                      </select>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className={cn(labelCls, 'flex items-center gap-1')}>
+                          <Mail size={11} className="text-text-tertiary" /> {t.common.email}
+                        </label>
+                        <input type="email" value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)}
+                          className={inputCls} placeholder="john@company.com" />
+                      </div>
+                      <div>
+                        <label className={cn(labelCls, 'flex items-center gap-1')}>
+                          <Phone size={11} className="text-text-tertiary" /> {language === 'fr' ? 'Telephone' : 'Phone'}
+                        </label>
+                        <input type="tel" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)}
+                          className={inputCls} placeholder="(514) 555-1234" />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.common.value}</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={leadValue}
-                        onChange={(e) => setLeadValue(e.target.value)}
-                        className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all text-text-primary"
-                      />
+                    <div>
+                      <label className={cn(labelCls, 'flex items-center gap-1')}>
+                        <MapPin size={11} className="text-text-tertiary" /> {t.common.address}
+                      </label>
+                      <input value={leadAddress} onChange={(e) => setLeadAddress(e.target.value)}
+                        className={inputCls} placeholder="123 Main St, Montreal, QC" />
                     </div>
                   </div>
-                </section>
-              ) : (
-              <section className="space-y-6">
-                <div className="grid grid-cols-1 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.modals.jobTitle}</label>
-                    <input 
-                      autoFocus
-                      placeholder="e.g. Residential Cleaning - Smith Residence"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      className="w-full text-lg px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all placeholder:text-text-tertiary text-text-primary"
-                    />
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.modals.clientName}</label>
-                    <input
-                        type="text"
-                        value={client}
-                        onChange={(e) => setClient(e.target.value)}
-                        className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all text-text-primary"
-                        placeholder="e.g. John Doe"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.jobs.jobNumber}</label>
-                      <input 
-                        value={jobNumber}
-                        onChange={(e) => setJobNumber(e.target.value)}
-                        className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all text-text-primary"
-                      />
+                  {/* Lead details */}
+                  <div className="section-card p-5 space-y-4">
+                    <h3 className="text-[14px] font-semibold text-text-primary flex items-center gap-2">
+                      <Tag size={15} className="text-text-tertiary" />
+                      {language === 'fr' ? 'Details du lead' : 'Lead Details'}
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className={labelCls}>{t.common.status}</label>
+                        <select value={leadStatus} onChange={(e) => setLeadStatus(e.target.value)} className={inputCls}>
+                          <option value="Lead">Lead</option>
+                          <option value="Qualified">Qualified</option>
+                          <option value="Proposal">Proposal</option>
+                          <option value="Negotiation">Negotiation</option>
+                          <option value="Closed">Closed</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={cn(labelCls, 'flex items-center gap-1')}>
+                          <DollarSign size={11} className="text-text-tertiary" /> {t.common.value}
+                        </label>
+                        <input type="number" min="0" value={leadValue} onChange={(e) => setLeadValue(e.target.value)}
+                          className={inputCls} placeholder="0" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Source</label>
+                        <select value={leadSource} onChange={(e) => setLeadSource(e.target.value)} className={inputCls}>
+                          <option value="">{language === 'fr' ? 'Selectionner...' : 'Select...'}</option>
+                          <option value="website">Website</option>
+                          <option value="referral">{language === 'fr' ? 'Reference' : 'Referral'}</option>
+                          <option value="google">Google</option>
+                          <option value="facebook">Facebook</option>
+                          <option value="instagram">Instagram</option>
+                          <option value="phone">{language === 'fr' ? 'Appel' : 'Phone Call'}</option>
+                          <option value="walk_in">Walk-in</option>
+                          <option value="other">{language === 'fr' ? 'Autre' : 'Other'}</option>
+                        </select>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.modals.salesperson}</label>
-                      <div className="relative">
-                        <select 
-                          value={salesperson}
-                          onChange={(e) => setSalesperson(e.target.value)}
-                          className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all appearance-none pr-10 text-text-primary"
-                        >
+                  </div>
+
+                  {/* Notes */}
+                  <div className="section-card border-dashed p-5">
+                    <h4 className="text-[13px] font-semibold text-text-primary mb-2">Notes</h4>
+                    <textarea value={leadNotes} onChange={(e) => setLeadNotes(e.target.value)}
+                      className="w-full px-3 py-2 border-0 text-sm min-h-[60px] resize-none outline-none bg-transparent text-text-primary placeholder:text-text-tertiary"
+                      placeholder={language === 'fr' ? 'Ajouter des notes internes...' : 'Add internal notes...'} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Job details */}
+                  <div className="section-card p-5 space-y-4">
+                    <h3 className="text-[14px] font-semibold text-text-primary">{language === 'fr' ? 'Details de la job' : 'Job Details'}</h3>
+                    <div>
+                      <label className={labelCls}>{t.modals.jobTitle}</label>
+                      <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
+                        className={cn(inputCls, 'text-lg')} placeholder="e.g. Residential Cleaning - Smith Residence" />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div>
+                        <label className={labelCls}>{t.modals.clientName}</label>
+                        <input value={client} onChange={(e) => setClient(e.target.value)} className={inputCls} placeholder="e.g. John Doe" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>{t.jobs.jobNumber}</label>
+                        <input value={jobNumber} onChange={(e) => setJobNumber(e.target.value)} className={inputCls} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>{t.modals.salesperson}</label>
+                        <select value={salesperson} onChange={(e) => setSalesperson(e.target.value)} className={inputCls}>
                           <option value="">{t.modals.assign}</option>
                           <option value="Me">Me</option>
                           <option value="Sarah">Sarah</option>
                         </select>
-                        <Plus size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
                       </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-              )}
-
-              {(inlineError || errorMessage) && (
-                <div className="p-3 rounded-xl border border-danger bg-danger-light text-danger text-sm">
-                  {inlineError || errorMessage}
-                </div>
-              )}
-
-              {mode !== 'lead' && (
-              <>
-              {/* Job Type & Schedule */}
-              <section className="grid grid-cols-1 lg:grid-cols-3 gap-12 pt-8 border-t border-border">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold tracking-tight text-text-primary">{t.modals.jobType}</h3>
-                    <div className="w-4 h-4 rounded-full bg-surface-tertiary flex items-center justify-center text-[8px] text-text-tertiary font-bold cursor-help border border-border">?</div>
-                  </div>
-                  <div className="flex p-1 bg-surface-tertiary rounded-xl w-fit border border-border">
-                    <button 
-                      type="button"
-                      onClick={() => setJobType('one-off')}
-                      className={cn(
-                        "px-4 py-2 rounded-lg text-xs font-bold transition-all",
-                        jobType === 'one-off' ? "bg-surface shadow-sm text-black" : "text-text-tertiary hover:text-text-secondary"
-                      )}
-                    >
-                      {t.modals.oneOff}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setJobType('recurring')}
-                      className={cn(
-                        "px-4 py-2 rounded-lg text-xs font-bold transition-all",
-                        jobType === 'recurring' ? "bg-surface shadow-sm text-black" : "text-text-tertiary hover:text-text-secondary"
-                      )}
-                    >
-                      {t.modals.recurring}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="lg:col-span-2 space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold tracking-tight text-text-primary">{t.modals.schedule}</h3>
-                    <button type="button" className="text-[10px] uppercase tracking-widest text-text-tertiary hover:text-black font-bold flex items-center gap-1">
-                      <Calendar size={12} /> {t.modals.showCalendar}
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.modals.startDate}</label>
-                      <div className="relative">
-                        <input 
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all pl-10 text-text-primary"
-                        />
-                        <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.modals.startTime}</label>
-                      <div className="relative">
-                        <input 
-                          type="time"
-                          value={startTime}
-                          onChange={(e) => setStartTime(e.target.value)}
-                          className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all pl-10 text-text-primary"
-                        />
-                        <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.modals.endTime}</label>
-                      <div className="relative">
-                        <input 
-                          type="time"
-                          value={endTime}
-                          onChange={(e) => setEndTime(e.target.value)}
-                          className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all pl-10 text-text-primary"
-                        />
-                        <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* Billing */}
-              <section className="space-y-4 pt-8 border-t border-border">
-                <h3 className="text-sm font-bold tracking-tight text-text-primary">{t.modals.billing}</h3>
-                <div className="space-y-3">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <div className={cn(
-                      "w-5 h-5 rounded border transition-all flex items-center justify-center",
-                      billingRemind ? "bg-black border-black text-white" : "border-border group-hover:border-border bg-surface"
-                    )} onClick={() => setBillingRemind(!billingRemind)}>
-                      {billingRemind && <Plus size={14} className="rotate-45" />}
-                    </div>
-                    <span className="text-sm font-medium text-text-secondary">{t.modals.remindInvoice}</span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <div className={cn(
-                      "w-5 h-5 rounded border transition-all flex items-center justify-center",
-                      billingSplit ? "bg-black border-black text-white" : "border-border group-hover:border-border bg-surface"
-                    )} onClick={() => setBillingSplit(!billingSplit)}>
-                      {billingSplit && <Plus size={14} className="rotate-45" />}
-                    </div>
-                    <span className="text-sm font-medium text-text-secondary">{t.modals.splitInvoices}</span>
-                  </label>
-                </div>
-              </section>
-
-              {/* Product / Service */}
-              <section className="space-y-6 pt-8 border-t border-border pb-12">
-                <h3 className="text-sm font-bold tracking-tight text-text-primary">{t.modals.productService}</h3>
-                <div className="space-y-6">
-                  {lineItems.map((item, index) => (
-                    <div key={item.id} className="p-6 rounded-2xl border border-border bg-surface-secondary/50 space-y-4 relative group">
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                        <div className="md:col-span-4 space-y-2">
-                          <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.common.name}</label>
-                          <input
-                            placeholder={t.modals.serviceName}
-                            value={item.name}
-                            onChange={(e) => updateLineItem(item.id, 'name', e.target.value)}
-                            className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all text-text-primary"
-                          />
-                        </div>
-                        <div className="md:col-span-1 space-y-2">
-                          <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.invoiceDetails.qty}</label>
-                          <input 
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => updateLineItem(item.id, 'quantity', Number(e.target.value))}
-                            className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all text-text-primary"
-                          />
-                        </div>
-                        <div className="md:col-span-2 space-y-2">
-                          <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.modals.unitCost}</label>
-                          <input 
-                            type="number"
-                            value={item.unitCost}
-                            onChange={(e) => updateLineItem(item.id, 'unitCost', Number(e.target.value))}
-                            className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all text-text-primary"
-                          />
-                        </div>
-                        <div className="md:col-span-2 space-y-2">
-                          <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.modals.unitPrice}</label>
-                          <input 
-                            type="number"
-                            value={item.unitPrice}
-                            onChange={(e) => updateLineItem(item.id, 'unitPrice', Number(e.target.value))}
-                            className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all text-text-primary"
-                          />
-                        </div>
-                        <div className="md:col-span-2 space-y-2">
-                          <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.common.total}</label>
-                          <div className="w-full px-4 py-3 bg-surface-tertiary border border-border rounded-xl flex items-center font-bold text-text-primary">
-                            {formatCurrency(item.quantity * item.unitPrice)}
-                          </div>
-                        </div>
-                        <div className="md:col-span-1 flex items-end justify-center">
-                          <button 
-                            type="button"
-                            onClick={() => removeLineItem(item.id)}
-                            className="p-2 text-text-tertiary hover:text-danger transition-colors"
-                          >
-                            <Trash2 size={16} />
+                      <div>
+                        <label className={labelCls}>{t.modals.jobType}</label>
+                        <div className="flex p-0.5 bg-surface-tertiary rounded-lg border border-outline">
+                          <button type="button" onClick={() => setJobType('one-off')}
+                            className={cn("flex-1 px-3 py-2 rounded-md text-xs font-semibold transition-all",
+                              jobType === 'one-off' ? "bg-surface shadow-sm text-text-primary" : "text-text-tertiary")}>
+                            {t.modals.oneOff}
+                          </button>
+                          <button type="button" onClick={() => setJobType('recurring')}
+                            className={cn("flex-1 px-3 py-2 rounded-md text-xs font-semibold transition-all",
+                              jobType === 'recurring' ? "bg-surface shadow-sm text-text-primary" : "text-text-tertiary")}>
+                            {t.modals.recurring}
                           </button>
                         </div>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] uppercase tracking-widest text-text-secondary font-bold">{t.invoiceDetails.description}</label>
-                        <textarea
-                          placeholder={t.modals.addDescription}
-                          value={item.description}
-                          onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
-                          className="w-full px-4 py-3 bg-surface border border-border rounded-xl focus:ring-2 focus:ring-black/5 focus:border-black outline-none transition-all min-h-[80px] text-text-primary"
-                        />
+                    </div>
+                  </div>
+
+                  {/* Schedule */}
+                  <div className="section-card p-5 space-y-4">
+                    <h3 className="text-[14px] font-semibold text-text-primary flex items-center gap-2">
+                      <Calendar size={15} className="text-text-tertiary" /> {t.modals.schedule}
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className={labelCls}>{t.modals.startDate}</label>
+                        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>{t.modals.startTime}</label>
+                        <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>{t.modals.endTime}</label>
+                        <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
                       </div>
                     </div>
-                  ))}
-                </div>
-                <button 
-                  type="button"
-                  onClick={addLineItem}
-                  className="bg-surface-tertiary hover:bg-surface-tertiary border border-border text-text-primary font-bold flex items-center gap-2 text-xs py-3 px-6 rounded-xl transition-all"
-                >
-                  <Plus size={14} /> {t.modals.addLineItem}
-                </button>
-              </section>
-              </>
-              )}
-              {/* Footer Action Bar */}
-              <div className="p-6 border-t border-border flex justify-between items-center bg-surface-secondary">
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <p className="text-[10px] uppercase tracking-widest text-text-tertiary font-bold">{t.modals.totalValue}</p>
-                    <p className="text-2xl font-bold tracking-tight text-text-primary">
-                      {mode === 'lead' ? formatCurrency(Number(leadValue || 0)) : formatCurrency(calculateTotal())}
-                    </p>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button 
-                    type="button"
-                    onClick={onClose}
-                    className="px-8 py-3 text-sm font-bold text-text-secondary hover:bg-surface-tertiary rounded-xl transition-all"
-                  >
-                    {t.common.cancel}
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => formRef.current?.requestSubmit()}
-                    disabled={isSaving}
-                    className="bg-black text-white hover:bg-text-primary px-10 py-3 text-sm font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg"
-                  >
-                    {isSaving ? t.common.saving : mode === 'lead' ? t.modals.saveLead : t.modals.saveJob}
-                    <ChevronDown size={16} className="opacity-50" />
-                  </button>
-                </div>
-              </div>
+
+                  {/* Line items */}
+                  <div className="section-card p-5 space-y-4">
+                    <h3 className="text-[14px] font-semibold text-text-primary">{t.modals.productService}</h3>
+                    {lineItems.map((item) => (
+                      <div key={item.id} className="grid grid-cols-12 gap-3 items-start p-3 rounded-lg border border-outline bg-surface">
+                        <div className="col-span-5 space-y-1">
+                          <input value={item.name} onChange={(e) => updateLineItem(item.id, 'name', e.target.value)}
+                            className={cn(inputCls, 'py-2')} placeholder={t.modals.serviceName || 'Name'} />
+                          <textarea value={item.description} onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
+                            className={cn(inputCls, 'py-1.5 text-xs min-h-[40px] resize-none')} placeholder={t.modals.addDescription || 'Description'} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-[10px] text-text-tertiary font-medium">{t.invoiceDetails.qty}</label>
+                          <input type="number" value={item.quantity} onChange={(e) => updateLineItem(item.id, 'quantity', Number(e.target.value))}
+                            className={cn(inputCls, 'py-2 text-center')} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-[10px] text-text-tertiary font-medium">{t.modals.unitPrice}</label>
+                          <input type="number" value={item.unitPrice} onChange={(e) => updateLineItem(item.id, 'unitPrice', Number(e.target.value))}
+                            className={cn(inputCls, 'py-2 text-right')} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-[10px] text-text-tertiary font-medium">{t.common.total}</label>
+                          <p className="px-2.5 py-2 text-sm font-medium text-right text-text-primary">{formatCurrency(item.quantity * item.unitPrice)}</p>
+                        </div>
+                        <div className="col-span-1 flex items-center justify-center pt-5">
+                          <button type="button" onClick={() => removeLineItem(item.id)} disabled={lineItems.length === 1}
+                            className="p-1 text-text-tertiary hover:text-danger disabled:opacity-30"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                    ))}
+                    <button type="button" onClick={addLineItem}
+                      className="glass-button-primary text-xs flex items-center gap-1.5 px-3 py-2">
+                      <Plus size={12} /> {t.modals.addLineItem}
+                    </button>
+                  </div>
+
+                  {/* Totals */}
+                  <div className="section-card p-5 space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-text-secondary">Subtotal</span>
+                      <span className="font-semibold text-text-primary">{formatCurrency(calculateTotal())}</span>
+                    </div>
+                    <div className="flex justify-between text-base font-bold border-t border-outline pt-3">
+                      <span className="text-text-primary">{t.common.total}</span>
+                      <span className="text-text-primary">{formatCurrency(calculateTotal())}</span>
+                    </div>
+                  </div>
+
+                  {/* Billing */}
+                  <div className="section-card p-5 space-y-3">
+                    <h3 className="text-[13px] font-semibold text-text-primary">{t.modals.billing}</h3>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={billingRemind} onChange={() => setBillingRemind(!billingRemind)} className="h-4 w-4 rounded" />
+                      <span className="text-sm text-text-secondary">{t.modals.remindInvoice}</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={billingSplit} onChange={() => setBillingSplit(!billingSplit)} className="h-4 w-4 rounded" />
+                      <span className="text-sm text-text-secondary">{t.modals.splitInvoices}</span>
+                    </label>
+                  </div>
+                </>
+              )}
+
+              {(inlineError || errorMessage) && (
+                <div className="rounded-xl border border-danger bg-danger-light text-danger px-4 py-3 text-sm">{inlineError || errorMessage}</div>
+              )}
             </form>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-outline bg-surface-secondary flex items-center justify-between">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-text-tertiary font-semibold">
+                  {mode === 'lead' ? (language === 'fr' ? 'Valeur' : 'Value') : (language === 'fr' ? 'Total' : 'Total')}
+                </p>
+                <p className="text-lg font-bold text-text-primary">
+                  {mode === 'lead' ? formatCurrency(Number(leadValue || 0)) : formatCurrency(calculateTotal())}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={onClose}
+                  className="glass-button px-5 py-2.5 text-sm font-medium">
+                  {t.common.cancel}
+                </button>
+                <button type="button" onClick={() => formRef.current?.requestSubmit()} disabled={isSaving}
+                  className="glass-button-primary px-6 py-2.5 text-sm font-semibold disabled:opacity-50 flex items-center gap-2">
+                  {isSaving
+                    ? (language === 'fr' ? 'Sauvegarde...' : 'Saving...')
+                    : mode === 'lead'
+                      ? (language === 'fr' ? 'Sauvegarder Lead' : 'Save Lead')
+                      : (language === 'fr' ? 'Sauvegarder Job' : 'Save Job')}
+                  <ChevronDown size={14} className="opacity-70" />
+                </button>
+              </div>
+            </div>
           </motion.div>
         </div>
       )}

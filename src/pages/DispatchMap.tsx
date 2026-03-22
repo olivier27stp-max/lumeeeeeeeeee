@@ -14,6 +14,12 @@ import {
   getLatestLocations, getActiveProvider, syncProviderLocations,
   updateSyncStatus, getGeofences,
 } from '../lib/locationApi';
+import { type LiveLocation, getActiveLiveLocations } from '../lib/trackingApi';
+import { fetchMapJobs, type MapJobPin, type MapDateRange } from '../lib/mapApi';
+import { useSearchParams } from 'react-router-dom';
+import JobPopup from '../components/map/JobPopup';
+import { supabase } from '../lib/supabase';
+import { Briefcase, Calendar as CalendarIcon } from 'lucide-react';
 
 const DEFAULT_CENTER: L.LatLngTuple = [45.5017, -73.5673];
 const DEFAULT_ZOOM = 11;
@@ -72,9 +78,28 @@ function ZoomControl() {
   return null;
 }
 
+// Job pin marker factory
+function createJobPinIcon(color: string): L.DivIcon {
+  const svg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" fill="${color}" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="white" opacity="0.9"/></svg>`;
+  return L.divIcon({ html: svg, className: 'job-pin-marker', iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] });
+}
+
+// Browser tracking marker factory
+function createLiveTrackingIcon(color: string, initials: string, isMoving: boolean): L.DivIcon {
+  const ring = isMoving ? `<circle cx="20" cy="20" r="18" fill="none" stroke="${color}" stroke-width="2" opacity="0.3"><animate attributeName="r" from="16" to="20" dur="1.5s" repeatCount="indefinite"/><animate attributeName="opacity" from="0.4" to="0" dur="1.5s" repeatCount="indefinite"/></circle>` : '';
+  const svg = `<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">${ring}<circle cx="20" cy="20" r="14" fill="${color}" stroke="#fff" stroke-width="2.5"/><text x="20" y="24" text-anchor="middle" fill="white" font-size="10" font-weight="700" font-family="system-ui">${initials}</text></svg>`;
+  return L.divIcon({ html: svg, className: 'live-tracking-marker', iconSize: [40, 40], iconAnchor: [20, 20], popupAnchor: [0, -20] });
+}
+
+type MapLayer = 'jobs' | 'teams' | 'geofences';
+type MapDateFilter = 'today' | 'tomorrow' | 'this_week' | 'all';
+
 export default function DispatchMap() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Existing provider data
   const [locations, setLocations] = useState<TechnicianLocation[]>([]);
   const [geofences, setGeofences] = useState<Geofence[]>([]);
   const [provider, setProvider] = useState<GpsProviderConfig | null>(null);
@@ -84,31 +109,65 @@ export default function DispatchMap() {
   const [showGeofences, setShowGeofences] = useState(true);
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // NEW: Browser tracking live locations
+  const [liveLocations, setLiveLocations] = useState<LiveLocation[]>([]);
+
+  // NEW: Job pins
+  const [jobPins, setJobPins] = useState<MapJobPin[]>([]);
+  const [selectedJobPin, setSelectedJobPin] = useState<MapJobPin | null>(null);
+  const [showJobs, setShowJobs] = useState(true);
+
+  // NEW: Date filter from URL or default
+  const urlDate = searchParams.get('date');
+  const urlView = searchParams.get('view') as MapDateFilter | null;
+  const urlJobId = searchParams.get('jobId');
+  const [dateFilter, setDateFilter] = useState<MapDateFilter>(urlView || 'today');
+
   const loadData = useCallback(async () => {
     try {
-      const [locs, fences, prov] = await Promise.all([
+      const [locs, fences, prov, liveLocs, jobResult] = await Promise.all([
         getLatestLocations(),
         getGeofences(),
         getActiveProvider(),
+        getActiveLiveLocations().catch(() => [] as LiveLocation[]),
+        fetchMapJobs(dateFilter as MapDateRange).catch(() => ({ pins: [], totalEvents: 0, missingLocationCount: 0 })),
       ]);
       setLocations(locs);
       setGeofences(fences);
       setProvider(prov);
+      setLiveLocations(liveLocs);
+      setJobPins(jobResult.pins);
+
+      // If URL has jobId, auto-select that pin
+      if (urlJobId && jobResult.pins.length > 0) {
+        const target = jobResult.pins.find((p) => p.jobId === urlJobId);
+        if (target) setSelectedJobPin(target);
+      }
     } catch (e) {
       console.error('Failed to load dispatch data', e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [dateFilter, urlJobId]);
 
   useEffect(() => {
     loadData();
-    // Auto-refresh every 30 seconds
     autoRefreshRef.current = setInterval(loadData, 30_000);
     return () => {
       if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
     };
   }, [loadData]);
+
+  // Realtime subscription for browser-based live locations
+  useEffect(() => {
+    const channel = supabase
+      .channel('dispatch-live-locations')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tracking_live_locations' }, () => {
+        getActiveLiveLocations().then(setLiveLocations).catch(() => {});
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, []);
 
   const handleSync = async () => {
     if (!provider || syncing) return;
@@ -159,7 +218,8 @@ export default function DispatchMap() {
               Dispatch Map
             </h1>
             <p className="text-[12px] text-text-tertiary">
-              {locations.length} technician{locations.length !== 1 ? 's' : ''} on the map
+              {locations.length + liveLocations.length} technician{(locations.length + liveLocations.length) !== 1 ? 's' : ''}
+              {showJobs && jobPins.length > 0 ? ` · ${jobPins.length} jobs` : ''}
             </p>
           </div>
         </div>
@@ -177,6 +237,18 @@ export default function DispatchMap() {
               No provider
             </div>
           )}
+
+          {/* Jobs layer toggle */}
+          <button
+            onClick={() => setShowJobs(!showJobs)}
+            className={cn(
+              'text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors flex items-center gap-1',
+              showJobs ? 'bg-primary/15 text-primary' : 'bg-surface-tertiary text-text-tertiary'
+            )}
+          >
+            <Briefcase size={11} />
+            Jobs ({jobPins.length})
+          </button>
 
           {/* Geofence toggle */}
           <button
@@ -202,8 +274,31 @@ export default function DispatchMap() {
         </div>
       </div>
 
+      {/* Date filter bar */}
+      <div className="flex items-center gap-2">
+        {(['today', 'tomorrow', 'this_week', 'all'] as MapDateFilter[]).map((range) => (
+          <button
+            key={range}
+            onClick={() => setDateFilter(range)}
+            className={cn(
+              'text-[11px] px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1',
+              dateFilter === range ? 'bg-black text-white' : 'bg-surface-tertiary text-text-secondary hover:bg-surface-secondary'
+            )}
+          >
+            <CalendarIcon size={10} />
+            {range === 'today' ? 'Today' : range === 'tomorrow' ? 'Tomorrow' : range === 'this_week' ? 'This Week' : 'All Scheduled'}
+          </button>
+        ))}
+        {liveLocations.length > 0 && (
+          <span className="ml-auto text-[11px] text-emerald-600 font-medium bg-emerald-50 px-2.5 py-1 rounded-full flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            {liveLocations.length} live
+          </span>
+        )}
+      </div>
+
       {/* Map */}
-      <div className="relative overflow-hidden rounded-2xl border border-outline bg-surface-tertiary h-[calc(100vh-220px)]">
+      <div className="relative overflow-hidden rounded-2xl border border-outline bg-surface-tertiary h-[calc(100vh-270px)]">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 size={24} className="animate-spin text-text-tertiary" />
@@ -243,12 +338,12 @@ export default function DispatchMap() {
               </LeafletCircle>
             ))}
 
-            {/* Technician markers */}
+            {/* Technician markers (external providers) */}
             {locations.map((loc, i) => {
               const iconSet = icons[i];
               return (
                 <Marker
-                  key={loc.user_id}
+                  key={`ext-${loc.user_id}`}
                   position={[loc.latitude, loc.longitude]}
                   icon={iconSet.icon}
                   eventHandlers={{
@@ -279,6 +374,70 @@ export default function DispatchMap() {
                 </Marker>
               );
             })}
+
+            {/* Browser-based live tracking markers */}
+            {liveLocations.map((loc) => {
+              const color = loc.team_color || '#7c3aed';
+              const initials = getInitials(loc.user_name);
+              const icon = createLiveTrackingIcon(color, initials, loc.is_moving);
+              const staleMs = Date.now() - new Date(loc.recorded_at).getTime();
+              const isStale = staleMs > 180_000;
+              return (
+                <Marker
+                  key={`live-${loc.user_id}`}
+                  position={[loc.latitude, loc.longitude]}
+                  icon={icon}
+                  opacity={isStale ? 0.5 : 1}
+                >
+                  <Popup>
+                    <div className="text-[12px] min-w-[180px]">
+                      <p className="font-semibold text-[13px]">{loc.user_name || 'Unknown'}</p>
+                      {loc.team_name && <p className="text-gray-500">{loc.team_name}</p>}
+                      <div className="mt-2 space-y-1 text-gray-600">
+                        <p className="flex items-center gap-1">
+                          <Navigation size={10} />
+                          {loc.is_moving ? `${((loc.speed_mps || 0) * 3.6).toFixed(0)} km/h` : 'Stationary'}
+                        </p>
+                        {loc.accuracy_m != null && (
+                          <p className="flex items-center gap-1">
+                            <Wifi size={10} /> {Math.round(loc.accuracy_m)}m accuracy
+                          </p>
+                        )}
+                        <p className="flex items-center gap-1">
+                          <Clock size={10} /> {formatAge(loc.recorded_at)}
+                          {isStale && <span className="text-amber-600 font-semibold ml-1">Stale</span>}
+                        </p>
+                      </div>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
+
+            {/* Job pin markers */}
+            {showJobs && jobPins.map((pin) => {
+              const color = pin.teamColor || '#2563eb';
+              const icon = createJobPinIcon(color);
+              return (
+                <Marker
+                  key={`job-${pin.id}`}
+                  position={[pin.latitude, pin.longitude]}
+                  icon={icon}
+                  eventHandlers={{
+                    click: () => setSelectedJobPin(selectedJobPin?.id === pin.id ? null : pin),
+                  }}
+                />
+              );
+            })}
+
+            {/* Job popup */}
+            {selectedJobPin && (
+              <JobPopup
+                pin={selectedJobPin}
+                onClose={() => setSelectedJobPin(null)}
+                onOpenJob={(jobId) => navigate(`/jobs/${jobId}`)}
+              />
+            )}
           </MapContainer>
         )}
 
@@ -331,16 +490,34 @@ export default function DispatchMap() {
         </div>
 
         {/* Legend */}
-        {showGeofences && geofences.length > 0 && (
-          <div className="absolute bottom-3 right-3 z-[1000] bg-surface rounded-xl border border-outline shadow-md px-3 py-2">
-            <div className="flex items-center gap-3 text-[11px]">
+        <div className="absolute bottom-3 right-3 z-[1000] bg-surface rounded-xl border border-outline shadow-md px-3 py-2">
+          <div className="flex items-center gap-3 text-[11px]">
+            {locations.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-blue-500 border border-white" />
+                <span className="text-text-secondary">External GPS</span>
+              </div>
+            )}
+            {liveLocations.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <div className="w-3.5 h-3.5 rounded-full bg-violet-500 border-2 border-white" />
+                <span className="text-text-secondary">Live Tracking</span>
+              </div>
+            )}
+            {showJobs && jobPins.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-blue-500 border border-white" />
+                <span className="text-text-secondary">Jobs ({jobPins.length})</span>
+              </div>
+            )}
+            {showGeofences && geofences.length > 0 && (
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-full border-2 border-dashed border-warning bg-warning/10" />
-                <span className="text-text-secondary">Geofence (100m)</span>
+                <span className="text-text-secondary">Geofences</span>
               </div>
-            </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

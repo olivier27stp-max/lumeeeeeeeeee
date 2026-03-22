@@ -4,8 +4,8 @@ import { mapboxGeocodingToken } from './config';
 
 // ── Types ──
 
-export type SearchEntityType = 'client' | 'job' | 'lead';
-export type SearchTab = 'all' | 'clients' | 'jobs' | 'leads';
+export type SearchEntityType = 'client' | 'job' | 'lead' | 'invoice' | 'quote' | 'team' | 'event';
+export type SearchTab = 'all' | 'clients' | 'jobs' | 'leads' | 'invoices' | 'quotes' | 'teams' | 'events';
 export type PaymentStatus = 'succeeded' | 'pending' | 'failed' | 'refunded';
 
 export type GeocodeResult = { latitude: number; longitude: number; provider: 'mapbox' | 'nominatim' };
@@ -15,6 +15,12 @@ export interface SearchRow {
   entity_id: string;
   title: string;
   subtitle: string | null;
+  extra_status: string | null;
+  extra_amount_cents: number | null;
+  extra_currency: string | null;
+  extra_date: string | null;
+  extra_client_id: string | null;
+  extra_client_name: string | null;
   created_at: string;
   rank: number;
 }
@@ -69,7 +75,7 @@ export function clampInt(raw: unknown, fallback: number, min: number, max: numbe
 
 export function parseTab(raw: unknown): SearchTab {
   const value = String(raw || '').toLowerCase();
-  if (value === 'clients' || value === 'jobs' || value === 'leads') return value;
+  if (value === 'clients' || value === 'jobs' || value === 'leads' || value === 'invoices' || value === 'quotes' || value === 'teams' || value === 'events') return value;
   return 'all';
 }
 
@@ -116,29 +122,47 @@ export function mapSearchRows(rows: SearchRow[] | null | undefined) {
       id: row.entity_id,
       title: row.title,
       subtitle: row.subtitle,
+      status: row.extra_status || null,
+      amountCents: row.extra_amount_cents ?? null,
+      currency: row.extra_currency || null,
+      date: row.extra_date || null,
+      clientId: row.extra_client_id || null,
+      clientName: row.extra_client_name || null,
       createdAt: row.created_at,
       rank: Number(row.rank || 0),
     }));
 }
 
 export function parseCountRows(rows: Array<{ entity_type: SearchEntityType; total: number }> | null | undefined) {
-  const base = { clients: 0, jobs: 0, leads: 0 };
+  const base = { clients: 0, jobs: 0, leads: 0, invoices: 0, quotes: 0, teams: 0, events: 0 };
   for (const row of rows || []) {
     const total = Number(row.total || 0);
     if (row.entity_type === 'client') base.clients = total;
     if (row.entity_type === 'job') base.jobs = total;
     if (row.entity_type === 'lead') base.leads = total;
+    if (row.entity_type === 'invoice') base.invoices = total;
+    if (row.entity_type === 'quote') base.quotes = total;
+    if (row.entity_type === 'team') base.teams = total;
+    if (row.entity_type === 'event') base.events = total;
   }
   return {
     ...base,
-    all: base.clients + base.jobs + base.leads,
+    all: base.clients + base.jobs + base.leads + base.invoices + base.quotes + base.teams + base.events,
   };
 }
 
+const TAB_TO_ENTITY: Record<Exclude<SearchTab, 'all'>, SearchEntityType> = {
+  clients: 'client',
+  jobs: 'job',
+  leads: 'lead',
+  invoices: 'invoice',
+  quotes: 'quote',
+  teams: 'team',
+  events: 'event',
+};
+
 export function toEntityType(tab: Exclude<SearchTab, 'all'>): SearchEntityType {
-  if (tab === 'clients') return 'client';
-  if (tab === 'jobs') return 'job';
-  return 'lead';
+  return TAB_TO_ENTITY[tab] || 'client';
 }
 
 export function emptyPage(pageSize: number, total = 0, page = 1) {

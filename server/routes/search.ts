@@ -11,16 +11,34 @@ import {
   searchByType,
   SearchRow,
   SearchEntityType,
+  SearchTab,
 } from '../lib/helpers';
 
 const router = Router();
 
+const ALL_ENTITY_KEYS = ['clients', 'jobs', 'leads', 'invoices', 'quotes', 'teams', 'events'] as const;
+type EntityGroupKey = typeof ALL_ENTITY_KEYS[number];
+
+const ENTITY_KEY_TO_TYPE: Record<EntityGroupKey, SearchEntityType> = {
+  clients: 'client',
+  jobs: 'job',
+  leads: 'lead',
+  invoices: 'invoice',
+  quotes: 'quote',
+  teams: 'team',
+  events: 'event',
+};
+
 async function handleSuggestions(req: import('express').Request, res: import('express').Response) {
   const q = sanitizeQuery(String(req.query.q || ''));
-  const limit = clampInt(req.query.limit, 8, 1, 8);
+  const limit = clampInt(req.query.limit, 8, 1, 12);
+
+  const emptyGrouped: Record<EntityGroupKey, ReturnType<typeof mapSearchRows>> = {
+    clients: [], jobs: [], leads: [], invoices: [], quotes: [], teams: [], events: [],
+  };
 
   if (!q) {
-    return res.json({ query: q, items: [], grouped: { clients: [], jobs: [], leads: [] } });
+    return res.json({ query: q, items: [], grouped: emptyGrouped });
   }
 
   try {
@@ -31,20 +49,19 @@ async function handleSuggestions(req: import('express').Request, res: import('ex
     const { data, error } = await client.rpc('search_global', {
       p_org: orgId,
       p_q: q,
-      p_limit: Math.max(24, limit),
+      p_limit: Math.max(48, limit * 4),
       p_offset: 0,
     });
 
     if (error) throw error;
 
     const mapped = mapSearchRows((data || []) as SearchRow[]);
-    const grouped = {
-      clients: mapped.filter((item) => item.type === 'client').slice(0, limit),
-      jobs: mapped.filter((item) => item.type === 'job').slice(0, limit),
-      leads: mapped.filter((item) => item.type === 'lead').slice(0, limit),
-    };
+    const grouped = { ...emptyGrouped };
+    for (const key of ALL_ENTITY_KEYS) {
+      grouped[key] = mapped.filter((item) => item.type === ENTITY_KEY_TO_TYPE[key]).slice(0, limit);
+    }
 
-    const items = [...grouped.clients, ...grouped.jobs, ...grouped.leads]
+    const items = mapped
       .sort((a, b) => b.rank - a.rank)
       .slice(0, limit);
 
@@ -62,17 +79,14 @@ router.get('/search/results', async (req, res) => {
   const tab = parseTab(req.query.tab);
   const pageSize = clampInt(req.query.pageSize, 20, 1, 20);
 
+  const emptyCounts = { clients: 0, jobs: 0, leads: 0, invoices: 0, quotes: 0, teams: 0, events: 0, all: 0 };
+
   if (!q) {
-    return res.json({
-      query: q,
-      tab,
-      counts: { clients: 0, jobs: 0, leads: 0, all: 0 },
-      groups: {
-        clients: emptyPage(pageSize),
-        jobs: emptyPage(pageSize),
-        leads: emptyPage(pageSize),
-      },
-    });
+    const emptyGroups: Record<EntityGroupKey, ReturnType<typeof emptyPage>> = {} as any;
+    for (const key of ALL_ENTITY_KEYS) {
+      emptyGroups[key] = emptyPage(pageSize);
+    }
+    return res.json({ query: q, tab, counts: emptyCounts, groups: emptyGroups });
   }
 
   try {
@@ -90,39 +104,39 @@ router.get('/search/results', async (req, res) => {
     const counts = parseCountRows((countRows || []) as Array<{ entity_type: SearchEntityType; total: number }>);
 
     if (tab === 'all') {
-      const clientsPage = clampInt(req.query.clientsPage, 1, 1, 10_000);
-      const jobsPage = clampInt(req.query.jobsPage, 1, 1, 10_000);
-      const leadsPage = clampInt(req.query.leadsPage, 1, 1, 10_000);
+      const pages: Record<EntityGroupKey, number> = {} as any;
+      for (const key of ALL_ENTITY_KEYS) {
+        pages[key] = clampInt(req.query[`${key}Page`], 1, 1, 10_000);
+      }
 
-      const [clients, jobs, leads] = await Promise.all([
-        searchByType(client, orgId, q, 'client', pageSize, clientsPage, counts.clients),
-        searchByType(client, orgId, q, 'job', pageSize, jobsPage, counts.jobs),
-        searchByType(client, orgId, q, 'lead', pageSize, leadsPage, counts.leads),
-      ]);
+      const groupEntries = await Promise.all(
+        ALL_ENTITY_KEYS.map(async (key) => {
+          const entityType = ENTITY_KEY_TO_TYPE[key];
+          const total = counts[key];
+          const result = await searchByType(client, orgId, q, entityType, pageSize, pages[key], total);
+          return [key, result] as const;
+        })
+      );
 
-      return res.json({
-        query: q,
-        tab,
-        counts,
-        groups: { clients, jobs, leads },
-      });
+      const groups: Record<string, ReturnType<typeof emptyPage>> = {};
+      for (const [key, result] of groupEntries) {
+        groups[key] = result;
+      }
+
+      return res.json({ query: q, tab, counts, groups });
     }
 
     const page = clampInt(req.query.page, 1, 1, 10_000);
-    const targetType = toEntityType(tab);
-    const selectedTotal = tab === 'clients' ? counts.clients : tab === 'jobs' ? counts.jobs : counts.leads;
+    const targetType = toEntityType(tab as Exclude<SearchTab, 'all'>);
+    const selectedTotal = counts[tab as EntityGroupKey] || 0;
     const selectedGroup = await searchByType(client, orgId, q, targetType, pageSize, page, selectedTotal);
 
-    return res.json({
-      query: q,
-      tab,
-      counts,
-      groups: {
-        clients: tab === 'clients' ? selectedGroup : emptyPage(pageSize, counts.clients),
-        jobs: tab === 'jobs' ? selectedGroup : emptyPage(pageSize, counts.jobs),
-        leads: tab === 'leads' ? selectedGroup : emptyPage(pageSize, counts.leads),
-      },
-    });
+    const groups: Record<string, ReturnType<typeof emptyPage>> = {};
+    for (const key of ALL_ENTITY_KEYS) {
+      groups[key] = key === tab ? selectedGroup : emptyPage(pageSize, counts[key]);
+    }
+
+    return res.json({ query: q, tab, counts, groups });
   } catch (error: any) {
     return res.status(500).json({ error: error?.message || 'Search results request failed.' });
   }

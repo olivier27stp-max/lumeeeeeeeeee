@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Send,
@@ -23,6 +23,11 @@ import {
 import { useTranslation } from '../i18n';
 import { useLocation } from 'react-router-dom';
 import OllamaIcon from '../components/icons/OllamaIcon';
+import { useFeatureFlags } from '../features/agent/hooks/useFeatureFlags';
+import AgentErrorBoundary from '../features/agent/components/AgentErrorBoundary';
+
+const mrLumeChatImport = () => import('../features/agent/components/MrLumeChat');
+const MrLumeChat = React.lazy(mrLumeChatImport);
 import {
   getRecentConversations,
   getConversationMessages,
@@ -230,6 +235,19 @@ export default function AIHelper() {
   const { language } = useTranslation();
   const location = useLocation();
   const { permissions, role } = usePermissions();
+  const { isEnabled: isFeatureEnabled } = useFeatureFlags();
+  const agentEnabled = isFeatureEnabled('agent');
+
+  // Preload MrLumeChat when agent feature is enabled (avoids spinner on first click)
+  // Reset to CRM mode if agent feature gets disabled while in agent mode
+  useEffect(() => {
+    if (agentEnabled) {
+      mrLumeChatImport();
+    } else {
+      setChatMode((prev) => prev === 'agent' ? 'crm' : prev);
+    }
+  }, [agentEnabled]);
+
   const [status, setStatus] = useState<ConnectionStatus>('checking');
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<UIMessage[]>([]);
@@ -257,7 +275,15 @@ export default function AIHelper() {
   async function checkConnection() {
     setStatus('checking');
     try {
-      const res = await fetch('http://localhost:11434/api/tags', { signal: AbortSignal.timeout(3000) });
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+      const res = await fetch('/api/ai/health', {
+        headers,
+        signal: AbortSignal.timeout(5000),
+      });
       setStatus(res.ok ? 'connected' : 'disconnected');
     } catch {
       setStatus('disconnected');
@@ -509,6 +535,17 @@ export default function AIHelper() {
     );
   }
 
+  /* ── Agent mode — delegate to MrLumeChat (empty state too) ── */
+  if (chatMode === 'agent' && agentEnabled) {
+    return (
+      <AgentErrorBoundary language={language as 'en' | 'fr'} onReset={() => setChatMode('crm')}>
+        <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><Loader2 size={24} className="text-text-tertiary animate-spin" /></div>}>
+          <MrLumeChat />
+        </Suspense>
+      </AgentErrorBoundary>
+    );
+  }
+
   /* ── Empty state (hero + scene blocks) ── */
   if (!isInConversation && !showHistory) {
     return (
@@ -540,14 +577,25 @@ export default function AIHelper() {
             </span>
           </div>
 
-          {/* New chat button */}
-          <button
-            onClick={startNewChat}
-            className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-text-primary text-surface text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <Plus size={16} />
-            {language === 'fr' ? 'Nouveau chat' : 'New chat'}
-          </button>
+          {/* Action buttons */}
+          <div className="flex items-center gap-3 mt-5">
+            <button
+              onClick={startNewChat}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-text-primary text-surface text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              <Plus size={16} />
+              {language === 'fr' ? 'Nouveau chat' : 'New chat'}
+            </button>
+            {agentEnabled && (
+              <button
+                onClick={() => setChatMode('agent')}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-outline-subtle bg-surface text-sm font-medium text-text-secondary hover:border-outline hover:text-text-primary transition-all"
+              >
+                <img src="/lume-logo.png" alt="" className="w-4 h-4 object-contain" />
+                Mr Lume
+              </button>
+            )}
+          </div>
         </motion.div>
 
         {/* Chat input */}
@@ -690,6 +738,17 @@ export default function AIHelper() {
     );
   }
 
+  /* ── Agent mode — delegate to MrLumeChat ── */
+  if (chatMode === 'agent' && agentEnabled) {
+    return (
+      <AgentErrorBoundary language={language as 'en' | 'fr'} onReset={() => setChatMode('crm')}>
+        <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><Loader2 size={24} className="text-text-tertiary animate-spin" /></div>}>
+          <MrLumeChat />
+        </Suspense>
+      </AgentErrorBoundary>
+    );
+  }
+
   /* ── Conversation view ── */
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] max-w-2xl mx-auto">
@@ -726,6 +785,19 @@ export default function AIHelper() {
               <Globe size={12} />
               Web
             </button>
+            {agentEnabled && (
+              <button
+                onClick={() => setChatMode('agent')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                  chatMode === 'agent'
+                    ? 'bg-surface shadow-sm text-text-primary'
+                    : 'text-text-tertiary hover:text-text-secondary'
+                }`}
+              >
+                <img src="/lume-logo.png" alt="" className="w-3 h-3 object-contain" />
+                Mr Lume
+              </button>
+            )}
           </div>
         </div>
         <button

@@ -55,6 +55,15 @@ export async function createAvailability(input: AvailabilityInput): Promise<Avai
   if (orgError) throw orgError;
   if (!orgId) throw new Error('No organization context found.');
 
+  // Remove existing entry for same team+weekday+start_minute (soft delete)
+  await supabase
+    .from('team_availability')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('team_id', input.team_id)
+    .eq('weekday', input.weekday)
+    .eq('start_minute', input.start_minute)
+    .is('deleted_at', null);
+
   const { data, error } = await supabase
     .from('team_availability')
     .insert({
@@ -84,6 +93,13 @@ export async function setDefaultAvailability(teamId: string): Promise<Availabili
   const { data: orgId, error: orgError } = await supabase.rpc('current_org_id');
   if (orgError) throw orgError;
   if (!orgId) throw new Error('No organization context found.');
+
+  // Clear existing weekly availability for this team first
+  await supabase
+    .from('team_availability')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('team_id', teamId)
+    .is('deleted_at', null);
 
   // Default: Mon-Fri 8:00 - 17:00
   const rows = [1, 2, 3, 4, 5].map((weekday) => ({

@@ -1,13 +1,22 @@
-﻿import { supabase } from './supabase';
+import { supabase } from './supabase';
 
-export type SearchEntityType = 'client' | 'job' | 'lead';
-export type SearchTab = 'all' | 'clients' | 'jobs' | 'leads';
+export type SearchEntityType = 'client' | 'job' | 'lead' | 'invoice' | 'quote' | 'team' | 'event';
+export type SearchTab = 'all' | 'clients' | 'jobs' | 'leads' | 'invoices' | 'quotes' | 'teams' | 'events';
+
+export const ALL_ENTITY_GROUP_KEYS = ['clients', 'jobs', 'leads', 'invoices', 'quotes', 'teams', 'events'] as const;
+export type EntityGroupKey = typeof ALL_ENTITY_GROUP_KEYS[number];
 
 export interface SearchEntityItem {
   type: SearchEntityType;
   id: string;
   title: string;
   subtitle: string | null;
+  status: string | null;
+  amountCents: number | null;
+  currency: string | null;
+  date: string | null;
+  clientId: string | null;
+  clientName: string | null;
   createdAt: string;
   rank: number;
 }
@@ -23,27 +32,14 @@ export interface PaginatedSearchGroup {
 export interface SearchResultsPayload {
   query: string;
   tab: SearchTab;
-  counts: {
-    clients: number;
-    jobs: number;
-    leads: number;
-    all: number;
-  };
-  groups: {
-    clients: PaginatedSearchGroup;
-    jobs: PaginatedSearchGroup;
-    leads: PaginatedSearchGroup;
-  };
+  counts: Record<EntityGroupKey | 'all', number>;
+  groups: Record<EntityGroupKey, PaginatedSearchGroup>;
 }
 
 export interface SearchSuggestionsPayload {
   query: string;
   items: SearchEntityItem[];
-  grouped: {
-    clients: SearchEntityItem[];
-    jobs: SearchEntityItem[];
-    leads: SearchEntityItem[];
-  };
+  grouped: Record<EntityGroupKey, SearchEntityItem[]>;
 }
 
 async function getAuthHeader() {
@@ -75,14 +71,13 @@ async function fetchJson<T>(url: string): Promise<T> {
 export async function fetchSearchSuggestions(query: string, limit = 8) {
   const safeQuery = query.trim();
   if (!safeQuery) {
+    const emptyGrouped: Record<EntityGroupKey, SearchEntityItem[]> = {
+      clients: [], jobs: [], leads: [], invoices: [], quotes: [], teams: [], events: [],
+    };
     return {
       query: '',
       items: [],
-      grouped: {
-        clients: [],
-        jobs: [],
-        leads: [],
-      },
+      grouped: emptyGrouped,
     } satisfies SearchSuggestionsPayload;
   }
 
@@ -102,6 +97,10 @@ interface FetchSearchResultsOptions {
   clientsPage?: number;
   jobsPage?: number;
   leadsPage?: number;
+  invoicesPage?: number;
+  quotesPage?: number;
+  teamsPage?: number;
+  eventsPage?: number;
 }
 
 export async function fetchSearchResults(options: FetchSearchResultsOptions) {
@@ -112,9 +111,10 @@ export async function fetchSearchResults(options: FetchSearchResultsOptions) {
   });
 
   if (options.tab === 'all') {
-    params.set('clientsPage', String(options.clientsPage ?? 1));
-    params.set('jobsPage', String(options.jobsPage ?? 1));
-    params.set('leadsPage', String(options.leadsPage ?? 1));
+    for (const key of ALL_ENTITY_GROUP_KEYS) {
+      const pageKey = `${key}Page` as keyof FetchSearchResultsOptions;
+      params.set(pageKey, String((options[pageKey] as number) ?? 1));
+    }
   } else {
     params.set('page', String(options.page ?? 1));
   }

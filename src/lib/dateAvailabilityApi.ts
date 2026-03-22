@@ -43,12 +43,21 @@ export async function listDateSlots(
   return (data || []) as DateSlotRecord[];
 }
 
-/** Create a new date slot. */
+/** Create a new date slot. Replaces existing duplicate if present. */
 export async function createDateSlot(input: DateSlotInput): Promise<DateSlotRecord> {
   // Resolve org_id
   const { data: orgId, error: orgError } = await supabase.rpc('current_org_id');
   if (orgError) throw orgError;
   if (!orgId) throw new Error('No organization context found.');
+
+  // Remove existing duplicate to avoid unique constraint violation
+  await supabase
+    .from('team_date_slots')
+    .delete()
+    .eq('team_id', input.team_id)
+    .eq('slot_date', input.slot_date)
+    .eq('start_time', input.start_time)
+    .eq('end_time', input.end_time);
 
   const { data, error } = await supabase
     .from('team_date_slots')
@@ -100,7 +109,7 @@ export async function deleteDateSlot(id: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Bulk-create slots for multiple dates at once (e.g. Mon-Fri of a week). */
+/** Bulk-create slots for multiple dates at once (e.g. Mon-Fri of a week). Skips duplicates. */
 export async function bulkCreateDateSlots(
   teamId: string,
   dates: string[],
@@ -111,6 +120,17 @@ export async function bulkCreateDateSlots(
   const { data: orgId, error: orgError } = await supabase.rpc('current_org_id');
   if (orgError) throw orgError;
   if (!orgId) throw new Error('No organization context found.');
+
+  // Delete existing slots for these dates first to avoid duplicates
+  for (const d of dates) {
+    await supabase
+      .from('team_date_slots')
+      .delete()
+      .eq('team_id', teamId)
+      .eq('slot_date', d)
+      .eq('start_time', startTime)
+      .eq('end_time', endTime);
+  }
 
   const rows = dates.map((d) => ({
     org_id: orgId,

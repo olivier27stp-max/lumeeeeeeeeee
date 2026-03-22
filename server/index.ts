@@ -35,6 +35,12 @@ import connectRouter from './routes/connect';
 import paymentRequestsRouter from './routes/payment-requests';
 import publicPayRouter from './routes/public-pay';
 import directorPanelRouter from './routes/director-panel';
+import teamSuggestionsRouter from './routes/team-suggestions';
+import jobsRouter from './routes/jobs';
+import trackingRouter from './routes/tracking';
+import featureFlagsRouter from './routes/feature-flags';
+import aiProxyRouter from './routes/ai-proxy';
+import agentRouter from './routes/agent';
 
 const app = express();
 
@@ -154,6 +160,11 @@ app.use('/api', publicPayRouter);
 const directorProviderLimiter = rateLimit({ windowMs: 60_000, max: 20, keyFn: (req) => `director:${req.headers.authorization?.slice(-20) || req.ip}` });
 app.use('/api/director-panel/providers', directorProviderLimiter);
 app.use('/api', directorPanelRouter);
+app.use('/api', featureFlagsRouter);
+app.use('/api', aiProxyRouter);
+const agentLimiter = rateLimit({ windowMs: 60_000, max: 20, keyFn: (req) => `agent:${req.headers.authorization?.slice(-20) || req.ip}` });
+app.use('/api/agent', agentLimiter);
+app.use('/api', agentRouter);
 
 // Quote redirect at root level (/q/:token), API routes under /api — rate limited
 app.use('/q', quoteLimiter);
@@ -162,6 +173,9 @@ app.use('/api', quotesRouter);
 const surveyLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP
 app.use('/api/survey', surveyLimiter);
 app.use('/api', surveysRouter);
+app.use('/api', teamSuggestionsRouter);
+app.use('/api', jobsRouter);
+app.use('/api', trackingRouter);
 
 // ── Serve frontend static files in production ──
 const distPath = path.resolve(__dirname, '..', 'dist');

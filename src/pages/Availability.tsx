@@ -13,6 +13,11 @@ import {
   listDateSlots, createDateSlot, updateDateSlot, deleteDateSlot, bulkCreateDateSlots,
   type DateSlotRecord, type DateSlotInput,
 } from '../lib/dateAvailabilityApi';
+import {
+  listAvailability, createAvailability, deleteAvailability, setDefaultAvailability,
+  minutesToTime, timeToMinutes, weekdayLabel,
+  type AvailabilityRecord,
+} from '../lib/availabilityApi';
 import { cn } from '../lib/utils';
 import { PageHeader, EmptyState } from '../components/ui';
 import { useTranslation } from '../i18n';
@@ -79,6 +84,12 @@ export default function Availability() {
   // Delete confirmation
   const [confirmDeleteTeam, setConfirmDeleteTeam] = useState<string | null>(null);
 
+  // Weekly schedule
+  const [weeklyModalOpen, setWeeklyModalOpen] = useState(false);
+  const [weeklyDay, setWeeklyDay] = useState(1); // Monday
+  const [weeklyStart, setWeeklyStart] = useState('08:00');
+  const [weeklyEnd, setWeeklyEnd] = useState('17:00');
+
   // ── Queries ──
   const teamsQuery = useQuery({ queryKey: ['teams'], queryFn: listTeams });
   const teams = teamsQuery.data || [];
@@ -87,6 +98,14 @@ export default function Availability() {
   if (!selectedTeamId && teams.length > 0) {
     setSelectedTeamId(teams[0].id);
   }
+
+  // Weekly recurring availability
+  const weeklyQuery = useQuery({
+    queryKey: ['weeklyAvailability', selectedTeamId],
+    queryFn: () => listAvailability(selectedTeamId),
+    enabled: !!selectedTeamId,
+  });
+  const weeklySlots = weeklyQuery.data || [];
 
   const weekEnd = addDays(weekStart, 6);
   const slotsQuery = useQuery({
@@ -187,6 +206,48 @@ export default function Availability() {
     },
     onError: (e: any) => toast.error(e?.message || t.availability.failedBulk),
   });
+
+  // ── Weekly mutations ──
+  const addWeeklyMut = useMutation({
+    mutationFn: (input: { team_id: string; weekday: number; start_minute: number; end_minute: number }) =>
+      createAvailability(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['weeklyAvailability'] });
+      toast.success('Default schedule updated');
+      setWeeklyModalOpen(false);
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to add schedule'),
+  });
+
+  const deleteWeeklyMut = useMutation({
+    mutationFn: deleteAvailability,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['weeklyAvailability'] });
+      toast.success('Schedule removed');
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to remove'),
+  });
+
+  const setDefaultMut = useMutation({
+    mutationFn: () => setDefaultAvailability(selectedTeamId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['weeklyAvailability'] });
+      toast.success('Default Mon-Fri 8:00-17:00 set');
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to set defaults'),
+  });
+
+  // Group weekly by day
+  const weeklyByDay = useMemo(() => {
+    const map = new Map<number, AvailabilityRecord[]>();
+    for (let d = 0; d < 7; d++) map.set(d, []);
+    for (const s of weeklySlots) {
+      const arr = map.get(s.weekday) || [];
+      arr.push(s);
+      map.set(s.weekday, arr);
+    }
+    return map;
+  }, [weeklySlots]);
 
   // ── Handlers ──
   function openCreateTeam() {
@@ -367,6 +428,81 @@ export default function Availability() {
                   )}
                 </div>
               )}
+
+              {/* ═══ Default Weekly Schedule ═══ */}
+              <div className="border border-outline rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
+                    <RefreshCw size={14} /> Default Weekly Schedule
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    {weeklySlots.length === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setDefaultMut.mutate()}
+                        disabled={setDefaultMut.isPending}
+                        className="glass-button-ghost text-[11px]"
+                      >
+                        Set Mon-Fri 8-17
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWeeklyDay(1);
+                        setWeeklyStart('08:00');
+                        setWeeklyEnd('17:00');
+                        setWeeklyModalOpen(true);
+                      }}
+                      className="glass-button-primary text-[11px] inline-flex items-center gap-1 px-2 py-1"
+                    >
+                      <Plus size={12} /> Add
+                    </button>
+                  </div>
+                </div>
+
+                {weeklySlots.length === 0 ? (
+                  <p className="text-[11px] text-text-tertiary italic">No default schedule set. Team will only be available on specifically added dates below.</p>
+                ) : (
+                  <div className="grid grid-cols-7 gap-1.5">
+                    {[1, 2, 3, 4, 5, 6, 0].map((day) => {
+                      const daySlots = weeklyByDay.get(day) || [];
+                      return (
+                        <div key={day} className="text-center">
+                          <p className="text-[10px] font-semibold text-text-tertiary uppercase mb-1">
+                            {weekdayLabel(day).slice(0, 3)}
+                          </p>
+                          {daySlots.length === 0 ? (
+                            <p className="text-[10px] text-text-tertiary italic">Off</p>
+                          ) : (
+                            daySlots.map((s) => (
+                              <div key={s.id} className="group relative bg-green-500/10 rounded px-1 py-0.5 mb-0.5">
+                                <span className="text-[10px] font-medium text-green-700">
+                                  {minutesToTime(s.start_minute)}-{minutesToTime(s.end_minute)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteWeeklyMut.mutate(s.id)}
+                                  className="absolute -top-1 -right-1 p-0.5 rounded-full bg-white border border-outline text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <X size={8} />
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* ═══ Date-Specific Overrides (Exceptions) ═══ */}
+              <div className="flex items-center gap-2 px-1">
+                <Calendar size={14} className="text-text-tertiary" />
+                <span className="text-[13px] font-semibold text-text-primary">Date Overrides & Exceptions</span>
+                <span className="text-[11px] text-text-tertiary">— Override default schedule for specific days</span>
+              </div>
 
               {/* Week grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
@@ -632,6 +768,57 @@ export default function Availability() {
                 disabled={deleteTeamMut.isPending}
               >
                 {deleteTeamMut.isPending ? t.common.deleting : t.common.delete}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ═══ Weekly Schedule Modal ═══ */}
+      {weeklyModalOpen && (
+        <div className="modal-overlay" onClick={() => setWeeklyModalOpen(false)}>
+          <div className="modal-content max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 pt-5">
+              <h3 className="text-[15px] font-semibold text-text-primary">Add Default Schedule</h3>
+              <p className="text-[12px] text-text-tertiary mt-1">This will repeat every week automatically.</p>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Day</label>
+                <select
+                  value={weeklyDay}
+                  onChange={(e) => setWeeklyDay(Number(e.target.value))}
+                  className="glass-input mt-1 w-full"
+                >
+                  {[1, 2, 3, 4, 5, 6, 0].map((d) => (
+                    <option key={d} value={d}>{weekdayLabel(d)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Start</label>
+                  <input type="time" value={weeklyStart} onChange={(e) => setWeeklyStart(e.target.value)} className="glass-input mt-1 w-full" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">End</label>
+                  <input type="time" value={weeklyEnd} onChange={(e) => setWeeklyEnd(e.target.value)} className="glass-input mt-1 w-full" />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 pb-5">
+              <button type="button" className="glass-button" onClick={() => setWeeklyModalOpen(false)}>Cancel</button>
+              <button
+                type="button"
+                className="glass-button-primary"
+                disabled={addWeeklyMut.isPending}
+                onClick={() => addWeeklyMut.mutate({
+                  team_id: selectedTeamId,
+                  weekday: weeklyDay,
+                  start_minute: timeToMinutes(weeklyStart),
+                  end_minute: timeToMinutes(weeklyEnd),
+                })}
+              >
+                {addWeeklyMut.isPending ? 'Saving...' : 'Add'}
               </button>
             </div>
           </div>

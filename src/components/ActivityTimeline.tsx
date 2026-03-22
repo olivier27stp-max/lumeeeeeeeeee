@@ -39,10 +39,10 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 };
 
 const EVENT_COLORS: Record<string, string> = {
-  lead_created: 'bg-blue-100 text-blue-600',
+  lead_created: 'bg-neutral-100 text-neutral-600',
   lead_converted: 'bg-green-100 text-green-600',
   status_changed: 'bg-purple-100 text-purple-600',
-  job_created: 'bg-blue-100 text-blue-600',
+  job_created: 'bg-neutral-100 text-neutral-600',
   job_completed: 'bg-green-100 text-green-600',
   invoice_paid: 'bg-green-100 text-green-600',
   invoice_overdue: 'bg-red-100 text-red-600',

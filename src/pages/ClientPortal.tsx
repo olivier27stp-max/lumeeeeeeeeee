@@ -20,6 +20,16 @@ interface PortalData {
     subject: string | null;
     view_token: string | null;
   }>;
+  quotes: Array<{
+    id: string;
+    quote_number: string;
+    title: string;
+    status: string;
+    total_cents: number;
+    currency: string;
+    valid_until: string | null;
+    view_token: string | null;
+  }>;
   jobs: Array<{
     id: string;
     title: string;
@@ -39,13 +49,19 @@ function formatDate(d: string | null): string {
 
 const statusColors: Record<string, string> = {
   paid: 'bg-green-100 text-green-700',
-  sent: 'bg-blue-100 text-blue-700',
+  sent: 'bg-neutral-100 text-neutral-700',
   draft: 'bg-gray-100 text-gray-600',
   past_due: 'bg-red-100 text-red-700',
   completed: 'bg-green-100 text-green-700',
   pending: 'bg-amber-100 text-amber-700',
-  in_progress: 'bg-blue-100 text-blue-700',
+  in_progress: 'bg-neutral-100 text-neutral-700',
   scheduled: 'bg-purple-100 text-purple-700',
+  approved: 'bg-emerald-100 text-emerald-700',
+  declined: 'bg-red-100 text-red-700',
+  expired: 'bg-gray-100 text-gray-500',
+  action_required: 'bg-amber-100 text-amber-700',
+  awaiting_response: 'bg-purple-100 text-purple-700',
+  converted: 'bg-green-100 text-green-700',
 };
 
 export default function ClientPortal() {
@@ -189,6 +205,46 @@ export default function ClientPortal() {
             </div>
           )}
         </div>
+
+        {/* Quotes */}
+        {data.quotes && data.quotes.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900">Quotes</h2>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {data.quotes.map((q) => (
+                <div key={q.id} className="flex items-center justify-between px-5 py-3.5">
+                  <div className="flex items-center gap-3">
+                    <FileText size={16} className="text-gray-400" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        #{q.quote_number} — {q.title || 'Quote'}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {q.valid_until ? `Valid until ${formatDate(q.valid_until)}` : 'No expiry'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[q.status] || 'bg-gray-100 text-gray-600'}`}>
+                      {q.status.replace('_', ' ')}
+                    </span>
+                    <span className="text-sm font-bold text-gray-900 tabular-nums">{formatMoney(q.total_cents)}</span>
+                    {q.view_token && ['sent', 'awaiting_response', 'action_required'].includes(q.status) && (
+                      <a
+                        href={`/quote/${q.view_token}`}
+                        className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                      >
+                        View <ExternalLink size={11} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Active jobs */}
         {data.jobs.length > 0 && (

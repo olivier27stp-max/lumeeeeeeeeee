@@ -158,16 +158,16 @@ export default function Payments() {
 
       {/* Not connected banner */}
       {!isConnected && !connectQuery.isLoading && (
-        <div className="section-card border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-4 flex items-center justify-between">
+        <div className="section-card border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900/30 p-4 flex items-center justify-between">
           <div>
-            <p className="text-[14px] font-medium text-blue-800 dark:text-blue-200">
+            <p className="text-[14px] font-medium text-neutral-800 dark:text-neutral-200">
               {language === 'fr' ? 'Activez Lume Payments pour accepter les paiements en ligne' : 'Activate Lume Payments to accept online payments'}
             </p>
-            <p className="text-[12px] text-blue-600 dark:text-blue-400 mt-0.5">
+            <p className="text-[12px] text-text-primary dark:text-neutral-400 mt-0.5">
               {language === 'fr' ? 'Vos clients pourront payer leurs factures par carte de credit.' : 'Your clients will be able to pay invoices by credit card.'}
             </p>
           </div>
-          <button className="glass-button bg-blue-600 text-white hover:bg-blue-700 shrink-0" onClick={() => navigate('/settings/payments')}>
+          <button className="glass-button bg-neutral-900 text-white hover:bg-neutral-800 shrink-0" onClick={() => navigate('/settings/payments')}>
             {language === 'fr' ? 'Activer' : 'Activate'}
           </button>
         </div>

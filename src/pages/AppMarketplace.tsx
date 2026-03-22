@@ -99,7 +99,7 @@ function StatusBadge({ status }: { status: ResolvedStatus }) {
       );
     case 'pending':
       return (
-        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-100 dark:bg-blue-900/30 rounded-full px-2 py-0.5">
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-text-primary bg-neutral-100 dark:bg-neutral-800/30 rounded-full px-2 py-0.5">
           <Loader2 size={9} className="animate-spin" /> Pending
         </span>
       );
@@ -536,9 +536,9 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
     if (status === 'pending') {
       return (
         <div className="space-y-4">
-          <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/30 rounded-xl">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
-              <Loader2 size={16} className="text-blue-600 animate-spin" />
+          <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/10 border border-neutral-200 dark:border-neutral-700/30 rounded-xl">
+            <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-neutral-800/20 flex items-center justify-center">
+              <Loader2 size={16} className="text-text-primary animate-spin" />
             </div>
             <div className="flex-1">
               <p className="text-[13px] font-semibold text-text-primary">Autorisation en attente</p>

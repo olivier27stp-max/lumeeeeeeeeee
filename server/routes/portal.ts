@@ -43,6 +43,15 @@ router.get('/portal/:token', async (req, res) => {
       .order('created_at', { ascending: false })
       .limit(50);
 
+    // Fetch quotes for this client
+    const { data: quotes } = await serviceClient
+      .from('quotes')
+      .select('id, quote_number, title, status, total_cents, currency, valid_until, view_token')
+      .eq('client_id', client.id)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
     // Fetch active jobs for this client
     const { data: jobs } = await serviceClient
       .from('jobs')
@@ -75,6 +84,16 @@ router.get('/portal/:token', async (req, res) => {
         due_date: inv.due_date,
         subject: inv.subject,
         view_token: inv.view_token,
+      })),
+      quotes: (quotes || []).map((q: any) => ({
+        id: q.id,
+        quote_number: q.quote_number || '',
+        title: q.title || '',
+        status: q.status || 'draft',
+        total_cents: Number(q.total_cents || 0),
+        currency: q.currency || 'CAD',
+        valid_until: q.valid_until,
+        view_token: q.view_token,
       })),
       jobs: (jobs || []).map((j: any) => ({
         id: j.id,

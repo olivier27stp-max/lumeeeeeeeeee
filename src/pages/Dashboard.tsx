@@ -24,6 +24,8 @@ import { supabase } from '../lib/supabase';
 import { StatCard, IconTile } from '../components/ui';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import { useOfflineCache } from '../hooks/useOfflineCache';
+import { useQuery } from '@tanstack/react-query';
+import { fetchQuoteKpis, formatQuoteMoney } from '../lib/quotesApi';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -74,6 +76,12 @@ export default function Dashboard() {
 
   const greeting = useMemo(() => getGreeting(now), [now, t]);
   const longDate = useMemo(() => formatLongDate(now), [now, language]);
+
+  const { data: quoteKpis } = useQuery({
+    queryKey: ['dashboard-quote-kpis'],
+    queryFn: fetchQuoteKpis,
+    staleTime: 30_000,
+  });
 
   function handleOpenJob(jobId: string) {
     navigate(`/jobs/${jobId}`);
@@ -298,17 +306,37 @@ export default function Dashboard() {
             {(data.performance?.newLeadsToday ?? 0) > 0 && (
               <button
                 onClick={() => navigate('/leads')}
-                className="w-full flex items-center gap-3 p-3 rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800/30 text-left hover:border-blue-300 transition-colors"
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-neutral-200 bg-neutral-50 dark:bg-neutral-800/10 dark:border-neutral-700/30 text-left hover:border-neutral-300 transition-colors"
               >
-                <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 shrink-0">
+                <div className="p-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800/30 text-text-primary shrink-0">
                   <UserPlus size={14} />
                 </div>
                 <div className="flex-1">
-                  <p className="text-[12px] font-semibold text-blue-700 dark:text-blue-400">
+                  <p className="text-[12px] font-semibold text-text-primary dark:text-neutral-400">
                     {data.performance?.newLeadsToday} {language === 'fr' ? 'nouveaux leads' : 'new leads today'}
                   </p>
                 </div>
-                <ArrowUpRight size={13} className="text-blue-400 shrink-0" />
+                <ArrowUpRight size={13} className="text-neutral-400 shrink-0" />
+              </button>
+            )}
+
+            {(quoteKpis?.pending_count ?? 0) > 0 && (
+              <button
+                onClick={() => navigate('/leads?tab=pending_quotes')}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-neutral-200 bg-neutral-50 dark:bg-neutral-800/10 dark:border-neutral-700/30 text-left hover:border-neutral-300 transition-colors"
+              >
+                <div className="p-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800/30 text-text-secondary shrink-0">
+                  <FileText size={14} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[12px] font-semibold text-text-primary dark:text-neutral-400">
+                    {quoteKpis.pending_count} {language === 'fr' ? 'devis en attente' : 'pending quotes'}
+                  </p>
+                  <p className="text-[11px] text-text-secondary dark:text-neutral-400/70">
+                    {formatQuoteMoney(quoteKpis.pending_value_cents)} {language === 'fr' ? 'en valeur' : 'total value'}
+                  </p>
+                </div>
+                <ArrowUpRight size={13} className="text-neutral-400 shrink-0" />
               </button>
             )}
 

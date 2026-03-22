@@ -6,6 +6,7 @@ import NewJobModal, { JobDraftInitialValues, JobModalSourceContext } from '../co
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
 import { createJob, getJobModalDraftById, updateJob, softDeleteJob } from '../lib/jobsApi';
 import { geocodeJob } from '../lib/geocodeApi';
+import { invalidateScheduleCache } from '../lib/scheduleApi';
 import { finishJobAndPrepareInvoice } from '../lib/invoicesApi';
 import { Job } from '../types';
 
@@ -91,7 +92,8 @@ export function JobModalControllerProvider({ children }: { children: React.React
         throw new Error('Job save failed: missing persisted id.');
       }
       void geocodeJob(created.id).catch(() => undefined);
-      // Invalidate schedule/jobs queries so calendar and job lists stay in sync
+      // Clear internal schedule cache + invalidate React Query cache
+      invalidateScheduleCache();
       void Promise.all([
         queryClient.invalidateQueries({ queryKey: ['calendarEvents'] }),
         queryClient.invalidateQueries({ queryKey: ['calendarUnscheduledJobs'] }),
@@ -149,6 +151,7 @@ export function JobModalControllerProvider({ children }: { children: React.React
           throw new Error('Invoice id missing after finishing job.');
         }
         // Invalidate schedule queries after status change
+        invalidateScheduleCache();
         void queryClient.invalidateQueries({ queryKey: ['calendarEvents'] });
         setPreviewInvoiceId(result.invoice_id);
         setIsInvoicePreviewOpen(true);
@@ -168,6 +171,7 @@ export function JobModalControllerProvider({ children }: { children: React.React
       try {
         await softDeleteJob(jobId);
         // Invalidate schedule/jobs queries after deletion
+        invalidateScheduleCache();
         void Promise.all([
           queryClient.invalidateQueries({ queryKey: ['calendarEvents'] }),
           queryClient.invalidateQueries({ queryKey: ['calendarUnscheduledJobs'] }),
@@ -223,10 +227,23 @@ export function JobModalControllerProvider({ children }: { children: React.React
   );
 }
 
+const FALLBACK_VALUE: JobModalControllerValue = {
+  isOpen: false,
+  initialValues: null,
+  sourceContext: null,
+  openJobModal: () => {
+    console.warn('[JobModalController] openJobModal called outside provider — ignored.');
+  },
+  closeJobModal: () => {},
+};
+
 export function useJobModalController() {
   const context = useContext(JobModalControllerContext);
   if (!context) {
-    throw new Error('useJobModalController must be used within JobModalControllerProvider');
+    // Return a safe no-op fallback instead of throwing.
+    // This prevents crashes during hot-reload or when a component
+    // is briefly rendered outside the provider tree.
+    return FALLBACK_VALUE;
   }
   return context;
 }

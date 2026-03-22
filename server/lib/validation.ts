@@ -63,6 +63,13 @@ export const convertLeadToJobSchema = z.object({
   orgId: optionalOrgId,
 });
 
+// ─── Jobs ─────────────────────────────────────────────────────────────────────
+
+export const assignJobToTeamSchema = z.object({
+  jobId: z.string().trim().min(1, 'jobId is required.'),
+  teamId: z.string().trim().min(1, 'teamId is required.'),
+});
+
 // ─── Invoices ─────────────────────────────────────────────────────────────────
 
 export const invoiceFromJobSchema = z.object({
