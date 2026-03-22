@@ -8,6 +8,7 @@
     "api:dev": "tsx server/index.ts",
     "api:start": "tsx server/index.ts",
     "build": "vite build",
+    "start": "tsx server/index.ts",
     "preview": "vite preview",
     "preview:5173": "vite preview --host 0.0.0.0 --port 5173",
     "build:preview:5173": "vite build && vite preview --host 0.0.0.0 --port 5173",
