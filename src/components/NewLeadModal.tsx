@@ -98,7 +98,7 @@ export default function NewLeadModal({
 
     if (mode === 'lead') {
       if (!leadFirstName.trim() || !leadLastName.trim()) {
-        setInlineError(language === 'fr' ? 'Le prenom et le nom sont requis.' : 'First and last name are required.');
+        setInlineError(t.modals.firstAndLastNameAreRequired);
         return;
       }
       try {
@@ -171,12 +171,12 @@ export default function NewLeadModal({
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold text-text-primary">
-                    {mode === 'lead' ? (language === 'fr' ? 'Nouveau Lead' : 'New Lead') : (language === 'fr' ? 'Nouvelle Job' : 'New Job')}
+                    {mode === 'lead' ? (t.modals.newLead) : (t.modals.newJob)}
                   </h2>
                   <p className="text-xs text-text-tertiary">
                     {mode === 'lead'
-                      ? (language === 'fr' ? 'Remplissez les informations du prospect' : 'Fill in the prospect information')
-                      : (language === 'fr' ? 'Creer une nouvelle job' : 'Create a new job')}
+                      ? (t.modals.fillInTheProspectInformation)
+                      : (t.modals.createANewJob)}
                   </p>
                 </div>
               </div>
@@ -193,7 +193,7 @@ export default function NewLeadModal({
                   <div className="section-card p-5 space-y-4">
                     <h3 className="text-[14px] font-semibold text-text-primary flex items-center gap-2">
                       <User size={15} className="text-text-tertiary" />
-                      {language === 'fr' ? 'Informations de contact' : 'Contact Information'}
+                      {t.modals.contactInformation}
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -208,7 +208,7 @@ export default function NewLeadModal({
                       </div>
                     </div>
                     <div>
-                      <label className={labelCls}>{language === 'fr' ? 'Entreprise' : 'Company'}</label>
+                      <label className={labelCls}>{t.modals.company}</label>
                       <input value={leadCompany} onChange={(e) => setLeadCompany(e.target.value)}
                         className={inputCls} placeholder={language === 'fr' ? 'Nom de l\'entreprise' : 'Company name'} />
                     </div>
@@ -222,7 +222,7 @@ export default function NewLeadModal({
                       </div>
                       <div>
                         <label className={cn(labelCls, 'flex items-center gap-1')}>
-                          <Phone size={11} className="text-text-tertiary" /> {language === 'fr' ? 'Telephone' : 'Phone'}
+                          <Phone size={11} className="text-text-tertiary" /> {t.modals.phone}
                         </label>
                         <input type="tel" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)}
                           className={inputCls} placeholder="(514) 555-1234" />
@@ -241,7 +241,7 @@ export default function NewLeadModal({
                   <div className="section-card p-5 space-y-4">
                     <h3 className="text-[14px] font-semibold text-text-primary flex items-center gap-2">
                       <Tag size={15} className="text-text-tertiary" />
-                      {language === 'fr' ? 'Details du lead' : 'Lead Details'}
+                      {t.modals.leadDetails}
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
@@ -264,15 +264,15 @@ export default function NewLeadModal({
                       <div>
                         <label className={labelCls}>Source</label>
                         <select value={leadSource} onChange={(e) => setLeadSource(e.target.value)} className={inputCls}>
-                          <option value="">{language === 'fr' ? 'Selectionner...' : 'Select...'}</option>
+                          <option value="">{t.modals.select}</option>
                           <option value="website">Website</option>
-                          <option value="referral">{language === 'fr' ? 'Reference' : 'Referral'}</option>
+                          <option value="referral">{t.modals.referral}</option>
                           <option value="google">Google</option>
                           <option value="facebook">Facebook</option>
                           <option value="instagram">Instagram</option>
-                          <option value="phone">{language === 'fr' ? 'Appel' : 'Phone Call'}</option>
+                          <option value="phone">{t.modals.phoneCall}</option>
                           <option value="walk_in">Walk-in</option>
-                          <option value="other">{language === 'fr' ? 'Autre' : 'Other'}</option>
+                          <option value="other">{t.billing.other}</option>
                         </select>
                       </div>
                     </div>
@@ -283,14 +283,14 @@ export default function NewLeadModal({
                     <h4 className="text-[13px] font-semibold text-text-primary mb-2">Notes</h4>
                     <textarea value={leadNotes} onChange={(e) => setLeadNotes(e.target.value)}
                       className="w-full px-3 py-2 border-0 text-sm min-h-[60px] resize-none outline-none bg-transparent text-text-primary placeholder:text-text-tertiary"
-                      placeholder={language === 'fr' ? 'Ajouter des notes internes...' : 'Add internal notes...'} />
+                      placeholder={t.modals.addInternalNotes} />
                   </div>
                 </>
               ) : (
                 <>
                   {/* Job details */}
                   <div className="section-card p-5 space-y-4">
-                    <h3 className="text-[14px] font-semibold text-text-primary">{language === 'fr' ? 'Details de la job' : 'Job Details'}</h3>
+                    <h3 className="text-[14px] font-semibold text-text-primary">{t.modals.jobDetails}</h3>
                     <div>
                       <label className={labelCls}>{t.modals.jobTitle}</label>
                       <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
@@ -425,7 +425,7 @@ export default function NewLeadModal({
             <div className="px-6 py-4 border-t border-outline bg-surface-secondary flex items-center justify-between">
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-text-tertiary font-semibold">
-                  {mode === 'lead' ? (language === 'fr' ? 'Valeur' : 'Value') : (language === 'fr' ? 'Total' : 'Total')}
+                  {mode === 'lead' ? (t.modals.value) : (t.billing.total)}
                 </p>
                 <p className="text-lg font-bold text-text-primary">
                   {mode === 'lead' ? formatCurrency(Number(leadValue || 0)) : formatCurrency(calculateTotal())}
@@ -439,10 +439,10 @@ export default function NewLeadModal({
                 <button type="button" onClick={() => formRef.current?.requestSubmit()} disabled={isSaving}
                   className="glass-button-primary px-6 py-2.5 text-sm font-semibold disabled:opacity-50 flex items-center gap-2">
                   {isSaving
-                    ? (language === 'fr' ? 'Sauvegarde...' : 'Saving...')
+                    ? (t.invoiceEdit.saving)
                     : mode === 'lead'
-                      ? (language === 'fr' ? 'Sauvegarder Lead' : 'Save Lead')
-                      : (language === 'fr' ? 'Sauvegarder Job' : 'Save Job')}
+                      ? (t.modals.saveLead)
+                      : (t.modals.saveJob)}
                   <ChevronDown size={14} className="opacity-70" />
                 </button>
               </div>

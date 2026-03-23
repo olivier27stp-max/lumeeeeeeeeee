@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle, XCircle, PenLine, Download, Phone, Mail, Globe, MapPin, Calendar, Hash, User, FileText, CreditCard, Loader2, AlertCircle } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 import { formatQuoteMoney } from '../lib/quotesApi';
 import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -173,135 +172,26 @@ export default function QuoteView() {
 
   async function loadQuote() {
     try {
-      const { data: quote, error: qErr } = await supabase
-        .from('quotes')
-        .select('id, quote_number, title, status, valid_until, created_at, subtotal_cents, discount_cents, tax_rate_label, tax_cents, total_cents, currency, notes, contract_disclaimer, deposit_required, deposit_type, deposit_value, deposit_cents, deposit_status, require_payment_method, approved_at, declined_at, org_id, view_token, client_id, lead_id')
-        .eq('view_token', token)
-        .is('deleted_at', null)
-        .maybeSingle();
+      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3002';
 
-      if (qErr || !quote) {
+      // Fetch all quote data from public server endpoint (bypasses RLS)
+      const res = await fetch(`${API_BASE}/api/quotes/public/${token}`);
+      if (!res.ok) {
         setError('Quote not found');
         setViewState('error');
         return;
       }
+      const result: QuoteData = await res.json();
+      const quote = result.quote;
 
-      // Track view
-      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+      // Track view (fire-and-forget)
       fetch(`${API_BASE}/api/quotes/${quote.id}/track-view`, { method: 'POST' }).catch(() => {});
 
-      // Get company branding (full details)
-      const { data: companyData } = await supabase
-        .from('company_settings')
-        .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code, country')
-        .eq('org_id', quote.org_id)
-        .maybeSingle();
-
-      // Get line items
-      const { data: items } = await supabase
-        .from('quote_line_items')
-        .select('id, name, description, quantity, unit_price_cents, total_cents, is_optional, item_type')
-        .eq('quote_id', quote.id)
-        .order('sort_order', { ascending: true });
-
-      // Get client or lead (with phone)
-      let client = null;
-      let lead = null;
-      if (quote.client_id) {
-        const { data: c } = await supabase
-          .from('clients')
-          .select('first_name, last_name, company, email, phone')
-          .eq('id', quote.client_id)
-          .maybeSingle();
-        client = c;
-      }
-      if (quote.lead_id) {
-        const { data: l } = await supabase
-          .from('leads')
-          .select('first_name, last_name, company, email, phone')
-          .eq('id', quote.lead_id)
-          .maybeSingle();
-        lead = l;
-      }
-
-      // Load signature if quote was accepted (via backend to bypass RLS)
-      let signature = null;
-      if (['approved', 'converted'].includes(quote.status)) {
-        try {
-          const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3002';
-          const sigRes = await fetch(`${API_BASE}/api/quotes/public/signature?view_token=${token}`);
-          if (sigRes.ok) {
-            const sigData = await sigRes.json();
-            if (sigData?.signature_url) {
-              signature = {
-                signer_name: sigData.signer_name || '',
-                signature_url: sigData.signature_url,
-                signed_at: sigData.signed_at || quote.approved_at,
-              };
-            }
-          }
-        } catch {
-          // Signature display is non-critical
-        }
-      }
-
-      setData({
-        quote: {
-          id: quote.id,
-          quote_number: quote.quote_number,
-          title: quote.title,
-          status: quote.status,
-          valid_until: quote.valid_until,
-          created_at: quote.created_at,
-          subtotal_cents: Number(quote.subtotal_cents || 0),
-          discount_cents: Number(quote.discount_cents || 0),
-          tax_rate_label: quote.tax_rate_label || 'Tax',
-          tax_cents: Number(quote.tax_cents || 0),
-          total_cents: Number(quote.total_cents || 0),
-          currency: quote.currency || 'CAD',
-          notes: quote.notes,
-          contract_disclaimer: quote.contract_disclaimer,
-          deposit_required: quote.deposit_required,
-          deposit_type: quote.deposit_type,
-          deposit_value: Number(quote.deposit_value || 0),
-          deposit_cents: Number(quote.deposit_cents || 0),
-          deposit_status: quote.deposit_status || null,
-          require_payment_method: quote.require_payment_method || false,
-          approved_at: quote.approved_at,
-          declined_at: quote.declined_at,
-          org_id: quote.org_id,
-          view_token: quote.view_token,
-        },
-        company: {
-          company_name: companyData?.company_name || 'Business',
-          logo_url: companyData?.logo_url || null,
-          phone: companyData?.phone || null,
-          email: companyData?.email || null,
-          website: companyData?.website || null,
-          street1: companyData?.street1 || null,
-          city: companyData?.city || null,
-          province: companyData?.province || null,
-          postal_code: companyData?.postal_code || null,
-          country: companyData?.country || null,
-        },
-        client,
-        lead,
-        items: (items || []).map((i: any) => ({
-          id: i.id,
-          name: i.name,
-          description: i.description,
-          quantity: Number(i.quantity || 0),
-          unit_price_cents: Number(i.unit_price_cents || 0),
-          total_cents: Number(i.total_cents || 0),
-          is_optional: i.is_optional,
-          item_type: i.item_type,
-        })),
-        signature,
-      });
+      setData(result);
 
       if (quote.status === 'approved') {
         // Check if deposit is pending - auto-load payment
-        if (quote.deposit_required && (quote.deposit_status === 'pending' || quote.deposit_status === 'not_required') && Number(quote.deposit_value || 0) > 0 && quote.deposit_status !== 'paid') {
+        if (quote.deposit_required && (quote.deposit_status === 'pending' || quote.deposit_status === 'not_required') && Number(quote.deposit_value || 0) > 0) {
           setViewState('deposit_payment');
           // Auto-load deposit intent after setting data
           setTimeout(() => loadDepositIntent(), 100);

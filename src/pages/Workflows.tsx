@@ -156,7 +156,7 @@ export default function Workflows() {
         setEdges([]);
         setSelectedNode(null);
       }
-      toast.success(fr ? 'Workflow supprimé' : 'Workflow deleted');
+      toast.success(t.workflows.workflowDeleted);
     } catch (e: any) {
       toast.error(e.message);
     }
@@ -242,9 +242,9 @@ export default function Workflows() {
     setShowAddNode(false);
 
     const label = type === 'condition'
-      ? (fr ? 'Condition' : 'Condition')
+      ? (t.workflows.condition)
       : type === 'delay'
-        ? (fr ? 'Délai' : 'Delay')
+        ? (t.workflows.delay)
         : actionType
           ? (fr ? ACTION_DEFS[actionType].labelFr : ACTION_DEFS[actionType].label)
           : 'Action';
@@ -280,7 +280,7 @@ export default function Workflows() {
   const onNodesDelete = useCallback(async (deleted: Node[]) => {
     for (const node of deleted) {
       if (node.type === 'trigger') {
-        toast.error(fr ? 'Le déclencheur ne peut pas être supprimé' : 'Cannot delete the trigger node');
+        toast.error(t.workflows.cannotDeleteTheTriggerNode);
         if (selectedWf) loadWorkflowGraph(selectedWf);
         return;
       }
@@ -295,7 +295,7 @@ export default function Workflows() {
     try {
       const run = await executeWorkflow(selectedWf.id, { manual: true, triggered_at: new Date().toISOString() });
       setRuns((prev) => [run, ...prev]);
-      toast.success(fr ? 'Workflow exécuté' : 'Workflow executed');
+      toast.success(t.workflows.workflowExecuted);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -319,9 +319,9 @@ export default function Workflows() {
   );
 
   const statusLabel = (s: WorkflowStatus) => {
-    if (s === 'published') return fr ? 'Publié' : 'Published';
-    if (s === 'paused') return fr ? 'En pause' : 'Paused';
-    return fr ? 'Brouillon' : 'Draft';
+    if (s === 'published') return t.workflows.published;
+    if (s === 'paused') return t.workflows.paused;
+    return t.workflows.draft;
   };
 
   const statusStyle = (s: WorkflowStatus) => {
@@ -340,7 +340,7 @@ export default function Workflows() {
         <div className="px-4 py-3 border-b border-outline flex items-center justify-between">
           <h2 className="text-[14px] font-bold text-text-primary flex items-center gap-1.5">
             <Zap size={14} className="text-text-secondary" />
-            {fr ? 'Workflows' : 'Workflows'}
+            {t.workflows.workflows}
           </h2>
           <span className="text-[10px] font-medium text-text-tertiary bg-surface-tertiary px-1.5 py-0.5 rounded">
             {workflows.length}
@@ -353,7 +353,7 @@ export default function Workflows() {
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
             <input
               type="text"
-              placeholder={fr ? 'Rechercher...' : 'Search...'}
+              placeholder={t.automations.search}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="glass-input w-full pl-8 text-[12px] py-1.5"
@@ -371,13 +371,13 @@ export default function Workflows() {
             <div className="text-center py-8 px-4">
               <Sparkles size={20} className="mx-auto text-text-tertiary mb-2 opacity-30" />
               <p className="text-[11px] text-text-tertiary mb-3">
-                {fr ? 'Aucun workflow' : 'No workflows yet'}
+                {t.workflows.noWorkflowsYet}
               </p>
               <button
                 onClick={() => setShowPresets(true)}
                 className="glass-button-primary text-[11px] py-1.5 px-3 mx-auto"
               >
-                {fr ? 'Commencer avec un preset' : 'Start with a preset'}
+                {t.workflows.startWithAPreset}
               </button>
             </div>
           ) : (
@@ -421,7 +421,7 @@ export default function Workflows() {
             className="w-full text-[12px] py-2 rounded-lg font-semibold flex items-center justify-center gap-1.5 bg-primary text-white hover:bg-primary/90 transition-colors"
           >
             <Sparkles size={13} />
-            {fr ? 'Nouveau depuis un preset' : 'New from Preset'}
+            {t.workflows.newFromPreset}
           </button>
         </div>
       </div>
@@ -435,7 +435,7 @@ export default function Workflows() {
                 <Zap size={28} className="text-text-tertiary opacity-30" />
               </div>
               <h3 className="text-[15px] font-bold text-text-primary mb-1.5">
-                {fr ? 'Automatisez votre entreprise' : 'Automate your business'}
+                {t.workflows.automateYourBusiness}
               </h3>
               <p className="text-[12px] text-text-tertiary max-w-[260px] mx-auto mb-5">
                 {fr
@@ -448,7 +448,7 @@ export default function Workflows() {
                 className="glass-button-primary text-[12px] py-2 px-5 flex items-center gap-2 mx-auto"
               >
                 <Sparkles size={14} />
-                {fr ? 'Parcourir les presets' : 'Browse Presets'}
+                {t.workflows.browsePresets}
               </button>
             </div>
           </div>
@@ -473,7 +473,7 @@ export default function Workflows() {
                     className="bg-surface/90 backdrop-blur-sm border border-outline shadow-sm rounded-lg px-3 py-1.5 text-[12px] font-medium text-text-primary hover:border-text-tertiary transition-colors flex items-center gap-1.5"
                   >
                     <Plus size={13} />
-                    {fr ? 'Ajouter' : 'Add'}
+                    {t.workflows.add}
                   </button>
 
                   <AnimatePresence>
@@ -487,7 +487,7 @@ export default function Workflows() {
                         {/* Logic */}
                         <div className="px-3 pt-3 pb-1">
                           <p className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary mb-1.5">
-                            {fr ? 'Logique' : 'Logic'}
+                            {t.workflows.logic}
                           </p>
                           <button
                             onClick={() => addNodeToCanvas('condition')}
@@ -497,7 +497,7 @@ export default function Workflows() {
                               <GitBranch size={11} className="text-text-secondary" />
                             </div>
                             <span className="text-[12px] font-medium text-text-primary">
-                              {fr ? 'Condition' : 'Condition'}
+                              {t.workflows.condition}
                             </span>
                           </button>
                           <button
@@ -508,7 +508,7 @@ export default function Workflows() {
                               <Timer size={11} className="text-text-secondary" />
                             </div>
                             <span className="text-[12px] font-medium text-text-primary">
-                              {fr ? 'Délai' : 'Delay'}
+                              {t.workflows.delay}
                             </span>
                           </button>
                         </div>
@@ -516,7 +516,7 @@ export default function Workflows() {
                         {/* Actions */}
                         <div className="px-3 pt-2 pb-3">
                           <p className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary mb-1.5">
-                            {fr ? 'Actions' : 'Actions'}
+                            {t.automations.actions}
                           </p>
                           <div className="space-y-0.5">
                             {(Object.entries(ACTION_DEFS) as [ActionType, typeof ACTION_DEFS[ActionType]][]).map(([key, def]) => (
@@ -550,7 +550,7 @@ export default function Workflows() {
                   className="bg-surface/90 backdrop-blur-sm border border-outline shadow-sm rounded-lg px-3 py-1.5 text-[12px] font-medium text-text-primary hover:border-text-tertiary transition-colors flex items-center gap-1.5 disabled:opacity-50"
                 >
                   {executing ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-                  {fr ? 'Tester' : 'Test'}
+                  {t.workflows.test}
                 </button>
 
                 {/* Status toggle */}
@@ -560,7 +560,7 @@ export default function Workflows() {
                     className="bg-text-primary hover:bg-text-primary/90 text-surface shadow-sm rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-colors flex items-center gap-1.5"
                   >
                     <Zap size={12} />
-                    {fr ? 'Publier' : 'Publish'}
+                    {t.workflows.publish}
                   </button>
                 )}
                 {selectedWf.status === 'published' && (
@@ -568,7 +568,7 @@ export default function Workflows() {
                     onClick={() => setStatus(selectedWf, 'paused')}
                     className="bg-text-secondary hover:bg-text-secondary/90 text-surface shadow-sm rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-colors flex items-center gap-1.5"
                   >
-                    {fr ? 'Pause' : 'Pause'}
+                    {t.workflows.pause}
                   </button>
                 )}
                 {selectedWf.status === 'paused' && (
@@ -577,7 +577,7 @@ export default function Workflows() {
                     className="bg-text-primary hover:bg-text-primary/90 text-surface shadow-sm rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-colors flex items-center gap-1.5"
                   >
                     <Play size={12} />
-                    {fr ? 'Reprendre' : 'Resume'}
+                    {t.workflows.resume}
                   </button>
                 )}
               </div>
@@ -640,7 +640,7 @@ export default function Workflows() {
           <div className="px-4 py-3 border-b border-outline flex items-center justify-between">
             <h3 className="text-[13px] font-bold text-text-primary flex items-center gap-1.5">
               <Clock size={13} className="text-text-secondary" />
-              {fr ? 'Exécutions' : 'Run History'}
+              {t.workflows.runHistory}
             </h3>
             {runs.length > 0 && (
               <span className="text-[10px] font-medium text-text-tertiary bg-surface-tertiary px-1.5 py-0.5 rounded">
@@ -651,7 +651,7 @@ export default function Workflows() {
 
           {!selectedWf ? (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-[11px] text-text-tertiary">{fr ? 'Sélectionnez un workflow' : 'Select a workflow'}</p>
+              <p className="text-[11px] text-text-tertiary">{t.workflows.selectAWorkflow}</p>
             </div>
           ) : selectedRun ? (
             <div className="flex-1 overflow-y-auto">
@@ -660,7 +660,7 @@ export default function Workflows() {
                 className="px-4 py-2 text-[11px] text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors"
               >
                 <ChevronRight size={11} className="rotate-180" />
-                {fr ? 'Retour' : 'Back'}
+                {t.companySettings.back}
               </button>
               <div className="px-4 pb-2">
                 <div className="flex items-center gap-2 mb-2">
@@ -681,7 +681,7 @@ export default function Workflows() {
 
               <div className="px-4 py-2 border-t border-outline">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary mb-2">
-                  {fr ? 'Journal' : 'Logs'}
+                  {t.workflows.logs}
                 </p>
                 <div className="space-y-1.5">
                   {runLogs.map((log) => (
@@ -699,7 +699,7 @@ export default function Workflows() {
                     </div>
                   ))}
                   {runLogs.length === 0 && (
-                    <p className="text-[11px] text-text-tertiary">{fr ? 'Aucun log' : 'No logs'}</p>
+                    <p className="text-[11px] text-text-tertiary">{t.workflows.noLogs}</p>
                   )}
                 </div>
               </div>
@@ -710,10 +710,10 @@ export default function Workflows() {
                 <div className="flex flex-col items-center justify-center h-full px-4">
                   <Clock size={20} className="text-text-tertiary mb-2 opacity-30" />
                   <p className="text-[11px] text-text-tertiary text-center">
-                    {fr ? 'Aucune exécution encore' : 'No runs yet'}
+                    {t.workflows.noRunsYet}
                   </p>
                   <p className="text-[10px] text-text-tertiary text-center mt-1 opacity-60">
-                    {fr ? 'Testez votre workflow pour voir les résultats ici.' : 'Test your workflow to see results here.'}
+                    {t.workflows.testYourWorkflowToSeeResultsHere}
                   </p>
                 </div>
               ) : (
@@ -736,7 +736,7 @@ export default function Workflows() {
                             <Clock size={9} /> {run.duration_ms}ms
                           </span>
                         )}
-                        <span>{run.nodes_executed} {fr ? 'nœuds' : 'nodes'}</span>
+                        <span>{run.nodes_executed} {t.workflows.nodes}</span>
                         <span className="ml-auto">{formatTimeAgo(run.started_at)}</span>
                       </div>
                     </button>
@@ -750,20 +750,20 @@ export default function Workflows() {
           {selectedWf && !selectedRun && runs.length > 0 && (
             <div className="px-4 py-3 border-t border-outline">
               <p className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary mb-2">
-                {fr ? 'Aperçu' : 'Overview'}
+                {t.workflows.overview}
               </p>
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <p className="text-[16px] font-bold text-text-primary tabular-nums">{runs.length}</p>
-                  <p className="text-[9px] text-text-tertiary">{fr ? 'Total' : 'Total'}</p>
+                  <p className="text-[9px] text-text-tertiary">{t.billing.total}</p>
                 </div>
                 <div>
                   <p className="text-[16px] font-bold text-text-primary tabular-nums">{runs.filter((r) => r.status === 'completed').length}</p>
-                  <p className="text-[9px] text-text-tertiary">{fr ? 'OK' : 'OK'}</p>
+                  <p className="text-[9px] text-text-tertiary">{t.workflows.ok}</p>
                 </div>
                 <div>
                   <p className="text-[16px] font-bold text-danger tabular-nums">{runs.filter((r) => r.status === 'failed').length}</p>
-                  <p className="text-[9px] text-text-tertiary">{fr ? 'Erreurs' : 'Failed'}</p>
+                  <p className="text-[9px] text-text-tertiary">{t.workflows.failed}</p>
                 </div>
               </div>
             </div>

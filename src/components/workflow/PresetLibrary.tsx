@@ -7,6 +7,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { WORKFLOW_PRESETS, PRESET_CATEGORIES, type WorkflowPreset } from '../../lib/workflowPresets';
+import { useTranslation } from '../i18n';
 
 const ICON_MAP: Record<string, typeof Zap> = {
   UserPlus, FileText, Star, MapPin, CreditCard, AlertCircle, Zap,
@@ -82,7 +83,7 @@ export default function PresetLibrary({ open, onClose, onSelect, fr }: PresetLib
                 </div>
                 <div>
                   <h2 className="text-[15px] font-bold text-text-primary">
-                    {fr ? 'Bibliothèque de presets' : 'Preset Library'}
+                    {t.workflows.presetLibrary}
                   </h2>
                   <p className="text-[11px] text-text-tertiary">
                     {fr ? 'Workflows prêts à l\'emploi pour votre entreprise' : 'Ready-to-use workflows for your business'}
@@ -100,7 +101,7 @@ export default function PresetLibrary({ open, onClose, onSelect, fr }: PresetLib
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                 <input
                   type="text"
-                  placeholder={fr ? 'Rechercher un preset...' : 'Search presets...'}
+                  placeholder={t.workflows.searchPresets}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="glass-input w-full pl-9 text-[12px] py-2"
@@ -114,7 +115,7 @@ export default function PresetLibrary({ open, onClose, onSelect, fr }: PresetLib
                     !activeCategory ? 'bg-text-primary text-surface' : 'text-text-tertiary hover:bg-surface-secondary'
                   )}
                 >
-                  {fr ? 'Tous' : 'All'}
+                  {t.automations.all}
                 </button>
                 {PRESET_CATEGORIES.map((cat) => {
                   const CatIcon = getIcon(cat.icon);
@@ -145,7 +146,7 @@ export default function PresetLibrary({ open, onClose, onSelect, fr }: PresetLib
                     className="text-[11px] text-text-tertiary hover:text-text-primary flex items-center gap-1 mb-3 transition-colors"
                   >
                     <ChevronRight size={11} className="rotate-180" />
-                    {fr ? 'Retour' : 'Back to list'}
+                    {t.workflows.backToList}
                   </button>
 
                   <div className="flex items-start gap-3 mb-4">
@@ -161,7 +162,7 @@ export default function PresetLibrary({ open, onClose, onSelect, fr }: PresetLib
                   {/* Node breakdown */}
                   <div className="bg-surface-secondary rounded-xl p-4 mb-4">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary mb-3">
-                      {fr ? 'Étapes du workflow' : 'Workflow steps'}
+                      {t.workflows.workflowSteps}
                     </p>
                     <div className="space-y-2">
                       {selectedPreset.nodes.map((node, idx) => {
@@ -202,7 +203,7 @@ export default function PresetLibrary({ open, onClose, onSelect, fr }: PresetLib
                     className="glass-button-primary w-full py-2.5 text-[13px] font-semibold flex items-center justify-center gap-2"
                   >
                     <Play size={14} />
-                    {fr ? 'Utiliser ce preset' : 'Use this preset'}
+                    {t.workflows.useThisPreset}
                   </button>
                 </div>
               ) : (
@@ -239,7 +240,7 @@ export default function PresetLibrary({ open, onClose, onSelect, fr }: PresetLib
                           {counts.conditions > 0 && <span className="flex items-center gap-0.5"><GitBranch size={8} />{counts.conditions}</span>}
                           {counts.delays > 0 && <span className="flex items-center gap-0.5"><Timer size={8} />{counts.delays}</span>}
                           <span className="flex items-center gap-0.5"><Play size={8} />{counts.actions}</span>
-                          <span className="ml-auto">{preset.nodes.length} {fr ? 'étapes' : 'steps'}</span>
+                          <span className="ml-auto">{preset.nodes.length} {t.workflows.steps}</span>
                         </div>
                       </button>
                     );
@@ -249,7 +250,7 @@ export default function PresetLibrary({ open, onClose, onSelect, fr }: PresetLib
                     <div className="col-span-2 text-center py-10">
                       <Search size={20} className="mx-auto text-text-tertiary mb-2 opacity-30" />
                       <p className="text-[12px] text-text-tertiary">
-                        {fr ? 'Aucun preset trouvé' : 'No presets found'}
+                        {t.workflows.noPresetsFound}
                       </p>
                     </div>
                   )}

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, Archive, ChevronLeft, ChevronRight, Download, MoreHorizontal, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Archive, ChevronLeft, ChevronRight, Upload, MoreHorizontal, Plus, Trash2, X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
@@ -19,7 +19,6 @@ import {
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import type { StructuredAddress } from '../components/AddressAutocomplete';
 import { supabase } from '../lib/supabase';
-import { exportToCsv } from '../lib/exportCsv';
 import { PageHeader, StatusBadge, StatCard } from '../components/ui';
 import FilterBar, { FilterSelect } from '../components/ui/FilterBar';
 import { useTranslation } from '../i18n';
@@ -369,32 +368,48 @@ export default function Clients() {
     return { active, leads, total: items.length };
   }, [items]);
 
-  const handleExportCsv = async () => {
-    try {
-      const { data: orgId } = await supabase.rpc('current_org_id');
-      const { data, error: fetchErr } = await supabase
-        .from('clients')
-        .select('first_name, last_name, email, phone, address, company, created_at')
-        .eq('org_id', orgId)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
-      if (fetchErr) throw fetchErr;
-      const rows = (data || []).map((c: any) => [
-        `${c.first_name || ''} ${c.last_name || ''}`.trim(),
-        c.email || '',
-        c.phone || '',
-        c.address || '',
-        c.company || '',
-        c.created_at ? new Date(c.created_at).toLocaleDateString() : '',
-      ]);
-      exportToCsv(
-        `clients-${new Date().toISOString().slice(0, 10)}.csv`,
-        ['Name', 'Email', 'Phone', 'Address', 'Company', 'Created'],
-        rows,
-      );
-    } catch (err: any) {
-      toast.error(err?.message || 'Export failed');
-    }
+  const handleImportCsv = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.length < 2) { toast.error(t.clients.importCsvEmpty); return; }
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+        const fnIdx = headers.indexOf('first_name');
+        const lnIdx = headers.indexOf('last_name');
+        if (fnIdx === -1 || lnIdx === -1) { toast.error(t.clients.importCsvMissingColumns); return; }
+        const emailIdx = headers.indexOf('email');
+        const phoneIdx = headers.indexOf('phone');
+        const addressIdx = headers.indexOf('address');
+        const companyIdx = headers.indexOf('company');
+        let imported = 0;
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+          const firstName = cols[fnIdx] || '';
+          const lastName = cols[lnIdx] || '';
+          if (!firstName && !lastName) continue;
+          await createClient({
+            first_name: firstName,
+            last_name: lastName,
+            email: emailIdx >= 0 ? cols[emailIdx] || undefined : undefined,
+            phone: phoneIdx >= 0 ? cols[phoneIdx] || undefined : undefined,
+            address: addressIdx >= 0 ? cols[addressIdx] || undefined : undefined,
+            company: companyIdx >= 0 ? cols[companyIdx] || undefined : undefined,
+          });
+          imported++;
+        }
+        toast.success(t.clients.importCsvSuccess.replace('{count}', String(imported)));
+        await loadClients();
+      } catch (err: any) {
+        toast.error(err?.message || t.clients.importCsvError);
+      }
+    };
+    input.click();
   };
 
   function getInitials(first: string, last: string) {
@@ -411,11 +426,11 @@ export default function Clients() {
       <PageHeader title={t.clients.title} subtitle={`${total} ${t.common.total}`}>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => void handleExportCsv()}
+            onClick={handleImportCsv}
             className="glass-button inline-flex items-center gap-1.5"
           >
-            <Download size={14} />
-            {t.exportCsv.exportCsv}
+            <Upload size={14} />
+            {t.clients.importCsv}
           </button>
           <button
             onClick={() => {

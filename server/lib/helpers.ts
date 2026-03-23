@@ -4,8 +4,8 @@ import { mapboxGeocodingToken } from './config';
 
 // ── Types ──
 
-export type SearchEntityType = 'client' | 'job' | 'lead' | 'invoice' | 'quote' | 'team' | 'event';
-export type SearchTab = 'all' | 'clients' | 'jobs' | 'leads' | 'invoices' | 'quotes' | 'teams' | 'events';
+export type SearchEntityType = 'client' | 'job' | 'lead' | 'invoice' | 'quote' | 'request' | 'team' | 'event';
+export type SearchTab = 'all' | 'clients' | 'jobs' | 'leads' | 'invoices' | 'quotes' | 'requests' | 'teams' | 'events';
 export type PaymentStatus = 'succeeded' | 'pending' | 'failed' | 'refunded';
 
 export type GeocodeResult = { latitude: number; longitude: number; provider: 'mapbox' | 'nominatim' };
@@ -75,7 +75,7 @@ export function clampInt(raw: unknown, fallback: number, min: number, max: numbe
 
 export function parseTab(raw: unknown): SearchTab {
   const value = String(raw || '').toLowerCase();
-  if (value === 'clients' || value === 'jobs' || value === 'leads' || value === 'invoices' || value === 'quotes' || value === 'teams' || value === 'events') return value;
+  if (value === 'clients' || value === 'jobs' || value === 'leads' || value === 'invoices' || value === 'quotes' || value === 'requests' || value === 'teams' || value === 'events') return value;
   return 'all';
 }
 
@@ -134,7 +134,7 @@ export function mapSearchRows(rows: SearchRow[] | null | undefined) {
 }
 
 export function parseCountRows(rows: Array<{ entity_type: SearchEntityType; total: number }> | null | undefined) {
-  const base = { clients: 0, jobs: 0, leads: 0, invoices: 0, quotes: 0, teams: 0, events: 0 };
+  const base = { clients: 0, jobs: 0, leads: 0, invoices: 0, quotes: 0, requests: 0, teams: 0, events: 0 };
   for (const row of rows || []) {
     const total = Number(row.total || 0);
     if (row.entity_type === 'client') base.clients = total;
@@ -142,12 +142,13 @@ export function parseCountRows(rows: Array<{ entity_type: SearchEntityType; tota
     if (row.entity_type === 'lead') base.leads = total;
     if (row.entity_type === 'invoice') base.invoices = total;
     if (row.entity_type === 'quote') base.quotes = total;
+    if (row.entity_type === 'request') base.requests = total;
     if (row.entity_type === 'team') base.teams = total;
     if (row.entity_type === 'event') base.events = total;
   }
   return {
     ...base,
-    all: base.clients + base.jobs + base.leads + base.invoices + base.quotes + base.teams + base.events,
+    all: base.clients + base.jobs + base.leads + base.invoices + base.quotes + base.requests + base.teams + base.events,
   };
 }
 
@@ -157,6 +158,7 @@ const TAB_TO_ENTITY: Record<Exclude<SearchTab, 'all'>, SearchEntityType> = {
   leads: 'lead',
   invoices: 'invoice',
   quotes: 'quote',
+  requests: 'request',
   teams: 'team',
   events: 'event',
 };
@@ -230,14 +232,14 @@ export async function ensureLeadInPipeline(params: {
   if (existingDealError) throw existingDealError;
   if (existingDeal?.id) return String(existingDeal.id);
 
-  // Direct insert with new pipeline stages: new, follow_up_1, follow_up_2, follow_up_3, closed, lost.
+  // Direct insert with pipeline stages: new_prospect, no_response, quote_sent, closed_won, closed_lost.
   const { data: dealInsert, error: dealError } = await client
     .from('pipeline_deals')
     .insert({
       org_id: orgId,
       created_by: createdBy,
       lead_id: leadId,
-      stage: 'new',
+      stage: 'new_prospect',
       title: title || 'New deal',
       value: Number.isFinite(value) ? value : 0,
       notes: notes || null,
@@ -302,6 +304,16 @@ export function normalizeE164(phone: string): string {
   return `+${digits}`;
 }
 
+export function phoneVariants(normalized: string): string[] {
+  const digits = normalized.replace(/\D/g, '');
+  const variants = [normalized];
+  if (digits.startsWith('1') && digits.length === 11) {
+    variants.push(digits.slice(1)); // 10 digits without country code
+  }
+  variants.push(digits);
+  return [...new Set(variants)];
+}
+
 export async function findOrCreateConversation(
   serviceClient: SupabaseClient,
   orgId: string,
@@ -309,11 +321,13 @@ export async function findOrCreateConversation(
   clientId?: string | null,
   clientName?: string | null,
 ) {
-  // Try to find existing conversation
+  const variants = phoneVariants(phoneNumber);
+
+  // Try to find existing conversation (match any phone variant)
   const { data: existing } = await serviceClient
     .from('conversations')
     .select('*')
-    .eq('phone_number', phoneNumber)
+    .in('phone_number', variants)
     .limit(1)
     .maybeSingle();
 
@@ -321,10 +335,11 @@ export async function findOrCreateConversation(
 
   // If no client info provided, try to find client by phone
   if (!clientId) {
+    const phoneFilter = variants.map((p) => `phone.eq.${p}`).join(',');
     const { data: client } = await serviceClient
       .from('clients')
       .select('id, first_name, last_name')
-      .or(`phone.eq.${phoneNumber},phone.eq.${phoneNumber.replace('+1', '')}`)
+      .or(phoneFilter)
       .limit(1)
       .maybeSingle();
 

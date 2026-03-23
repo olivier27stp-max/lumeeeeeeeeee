@@ -18,7 +18,7 @@ export const paypalEnv = String(process.env.PAYPAL_ENV || 'sandbox').toLowerCase
 export const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID || '';
 export const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN || '';
 export const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER || ''; // E.164 format
-export const twilioClient = twilioAccountSid && twilioAuthToken
+export const twilioClient = twilioAccountSid && twilioAuthToken && twilioAccountSid.startsWith('AC')
   ? Twilio(twilioAccountSid, twilioAuthToken)
   : null;
 

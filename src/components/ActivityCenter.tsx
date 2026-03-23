@@ -96,7 +96,7 @@ function getLabel(type: string, name: string, lang: string): { title: string; su
     message_received: { fr: 'Message reçu', en: 'Message received' },
     task_completed: { fr: 'Tâche complétée', en: 'Task completed' },
     event_created: { fr: 'Événement créé', en: 'Event created' },
-    quote_opened: { fr: 'Soumission ouverte', en: 'Quote opened' },
+    quote_opened: { fr: 'Devis ouvert', en: 'Quote opened' },
   };
 
   const l = labels[type] || { fr: type, en: type };
@@ -136,7 +136,7 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
             subtitle: n.body || '',
             timestamp: n.created_at,
             link: n.link || undefined,
-            actionLabel: n.link ? (language === 'fr' ? 'Voir' : 'View') : undefined,
+            actionLabel: n.link ? (t.activityCenter.view) : undefined,
           };
           setActivities((prev) => [newItem, ...prev].slice(0, 50));
           // Mark as read immediately since panel is open
@@ -177,7 +177,7 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
           subtitle: label.subtitle,
           timestamp: isNew ? c.created_at : c.updated_at,
           link: `/clients/${c.id}`,
-          actionLabel: language === 'fr' ? 'Voir le client' : 'View client',
+          actionLabel: t.activityCenter.viewClient,
         });
       }
 
@@ -368,7 +368,7 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
                 </div>
               ) : activities.length === 0 ? (
                 <div className="p-8 text-center text-text-tertiary text-[13px]">
-                  {language === 'fr' ? 'Aucune activité récente' : 'No recent activity'}
+                  {t.activityCenter.noRecentActivity}
                 </div>
               ) : (
                 <div className="py-2">

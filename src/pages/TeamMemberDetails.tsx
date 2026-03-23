@@ -69,6 +69,7 @@ interface MemberData {
 const ROLE_CONFIG: Record<TeamRole, { label_en: string; label_fr: string; icon: typeof Crown; color: string; badge: string }> = {
   owner:      { label_en: 'Account Owner', label_fr: 'Propriétaire',     icon: Crown,       color: 'text-text-secondary',  badge: 'bg-surface-tertiary text-text-secondary border-outline-subtle' },
   admin:      { label_en: 'Admin',         label_fr: 'Administrateur',   icon: ShieldCheck, color: 'text-primary',    badge: 'bg-primary/10 text-primary border-primary/20' },
+  sales_rep:  { label_en: 'Sales Rep',     label_fr: 'Représentant',     icon: ShieldCheck, color: 'text-text-secondary',  badge: 'bg-blue-50 text-blue-600 border-blue-200' },
   technician: { label_en: 'Technician',    label_fr: 'Technicien',       icon: Wrench,      color: 'text-text-secondary',  badge: 'bg-surface-tertiary text-text-secondary border-outline-subtle' },
 };
 
@@ -161,7 +162,7 @@ export default function TeamMemberDetails() {
         if (demo) {
           setForm({ ...demo });
         } else {
-          toast.error(isFr ? 'Membre introuvable.' : 'Member not found.');
+          toast.error(t.teamMember.memberNotFound);
           navigate('/settings/team');
           return;
         }
@@ -253,7 +254,7 @@ export default function TeamMemberDetails() {
         redirectTo: `${window.location.origin}/settings`,
       });
       if (error) throw error;
-      toast.success(isFr ? `Courriel de réinitialisation envoyé à ${form.email}` : `Password reset email sent to ${form.email}`);
+      toast.success(t.teamMember.passwordResetEmailSentToFormemail);
     } catch {
       toast.error(isFr ? 'Erreur lors de l\'envoi du courriel de réinitialisation.' : 'Failed to send password reset email.');
     }
@@ -269,8 +270,8 @@ export default function TeamMemberDetails() {
     setShowDeactivateConfirm(false);
     toast.success(
       newStatus === 'inactive'
-        ? (isFr ? `${form.first_name} a été désactivé.` : `${form.first_name} has been deactivated.`)
-        : (isFr ? `${form.first_name} a été réactivé.` : `${form.first_name} has been reactivated.`)
+        ? (t.teamMember.formfirstnameHasBeenDeactivated)
+        : (t.teamMember.formfirstnameHasBeenReactivated)
     );
   };
 
@@ -310,11 +311,11 @@ export default function TeamMemberDetails() {
 
       if (error) {
         console.error('Save failed:', error);
-        toast.error(isFr ? `Erreur: ${error.message}` : `Error: ${error.message}`);
+        toast.error(t.teamMember.errorErrormessage);
         return;
       }
       setSaved(true);
-      toast.success(isFr ? 'Modifications enregistrées.' : 'Changes saved.');
+      toast.success(t.teamMember.changesSaved);
       setTimeout(() => setSaved(false), 2500);
     } catch (err: any) {
       console.error('Save exception:', err);
@@ -347,7 +348,7 @@ export default function TeamMemberDetails() {
         <div className="section-card p-5 space-y-5">
           <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
             <User size={12} />
-            {isFr ? 'Informations personnelles' : 'Personal Info'}
+            {t.teamMember.personalInfo}
           </h3>
 
           {/* Avatar */}
@@ -376,7 +377,7 @@ export default function TeamMemberDetails() {
                 </span>
                 {isInactive && (
                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-danger/10 text-danger border border-danger/20">
-                    {isFr ? 'Inactif' : 'Inactive'}
+                    {t.teamMember.inactive}
                   </span>
                 )}
               </div>
@@ -386,11 +387,11 @@ export default function TeamMemberDetails() {
           {/* Name fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Prénom' : 'First Name'}</label>
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.teamMember.firstName}</label>
               <input type="text" value={form.first_name} onChange={(e) => update('first_name', e.target.value)} className="glass-input w-full mt-1" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Nom' : 'Last Name'}</label>
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.teamMember.lastName}</label>
               <input type="text" value={form.last_name} onChange={(e) => update('last_name', e.target.value)} className="glass-input w-full mt-1" />
             </div>
           </div>
@@ -399,13 +400,13 @@ export default function TeamMemberDetails() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
-                <Mail size={10} /> {isFr ? 'Adresse courriel' : 'Email Address'}
+                <Mail size={10} /> {t.companySettings.emailAddress}
               </label>
               <input type="email" value={form.email} onChange={(e) => update('email', e.target.value)} className="glass-input w-full mt-1" />
             </div>
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
-                <Phone size={10} /> {isFr ? 'Téléphone mobile' : 'Mobile Phone'}
+                <Phone size={10} /> {t.teamMember.mobilePhone}
               </label>
               <input type="tel" value={form.phone} onChange={(e) => update('phone', e.target.value)} className="glass-input w-full mt-1" />
             </div>
@@ -414,33 +415,33 @@ export default function TeamMemberDetails() {
           {/* Address */}
           <div className="space-y-3 pt-2 border-t border-border">
             <h4 className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
-              <MapPin size={10} /> {isFr ? 'Adresse' : 'Address'}
+              <MapPin size={10} /> {t.billing.address}
             </h4>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Rue 1' : 'Street 1'}</label>
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.companySettings.street1}</label>
               <input type="text" value={form.street1} onChange={(e) => update('street1', e.target.value)} className="glass-input w-full mt-1" placeholder="123 Main St" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Rue 2' : 'Street 2'}</label>
-              <input type="text" value={form.street2} onChange={(e) => update('street2', e.target.value)} className="glass-input w-full mt-1" placeholder={isFr ? 'App., bureau' : 'Apt, suite'} />
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.companySettings.street2}</label>
+              <input type="text" value={form.street2} onChange={(e) => update('street2', e.target.value)} className="glass-input w-full mt-1" placeholder={t.teamMember.aptSuite} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Ville' : 'City'}</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.billing.city}</label>
                 <input type="text" value={form.city} onChange={(e) => update('city', e.target.value)} className="glass-input w-full mt-1" />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Province / État' : 'Province / State'}</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.companySettings.provinceState}</label>
                 <input type="text" value={form.province} onChange={(e) => update('province', e.target.value)} className="glass-input w-full mt-1" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Code postal' : 'Postal Code'}</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.billing.postalCode}</label>
                 <input type="text" value={form.postal_code} onChange={(e) => update('postal_code', e.target.value)} className="glass-input w-full mt-1" />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Pays' : 'Country'}</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.billing.country}</label>
                 <input type="text" value={form.country} onChange={(e) => update('country', e.target.value)} className="glass-input w-full mt-1" placeholder="Canada" />
               </div>
             </div>
@@ -450,7 +451,7 @@ export default function TeamMemberDetails() {
           <div className="pt-3 border-t border-border">
             <button onClick={handlePasswordReset} className="glass-button inline-flex items-center gap-1.5 text-[12px]">
               <KeyRound size={13} />
-              {isFr ? 'Envoyer un courriel de réinitialisation du mot de passe' : 'Send Password Reset Email'}
+              {t.teamMember.sendPasswordResetEmail}
             </button>
           </div>
         </div>
@@ -479,7 +480,7 @@ export default function TeamMemberDetails() {
                 className="glass-input w-full"
                 placeholder="0.00"
               />
-              <span className="text-[12px] text-text-tertiary whitespace-nowrap">/ {isFr ? 'heure' : 'hour'}</span>
+              <span className="text-[12px] text-text-tertiary whitespace-nowrap">/ {t.teamMember.hour}</span>
             </div>
             <p className="text-[11px] text-text-tertiary mt-1.5">
               {isFr ? 'Utilisé pour l\'estimation des coûts et les rapports de rentabilité.' : 'Used for job costing and profitability reports.'}
@@ -492,12 +493,12 @@ export default function TeamMemberDetails() {
         <div className="section-card p-5 space-y-5">
           <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
             <Shield size={12} />
-            {isFr ? 'Permissions' : 'Permissions'}
+            {t.teamMember.permissions}
           </h3>
 
           {/* Role selector */}
           <div>
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider mb-2 block">{isFr ? 'Rôle' : 'Role'}</label>
+            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider mb-2 block">{t.manageTeam.role}</label>
             <div className="flex gap-2">
               {(['owner', 'admin', 'technician'] as TeamRole[]).map((r) => {
                 const cfg = ROLE_CONFIG[r];
@@ -521,7 +522,7 @@ export default function TeamMemberDetails() {
             </div>
             {form.role === 'owner' && (
               <p className="text-[11px] text-warning mt-2">
-                {isFr ? 'Le propriétaire a un accès complet à tout. Les permissions ne peuvent pas être modifiées.' : 'Account owner has full access to everything. Permissions cannot be modified.'}
+                {t.teamMember.accountOwnerHasFullAccessToEverythingPer}
               </p>
             )}
           </div>
@@ -572,7 +573,7 @@ export default function TeamMemberDetails() {
                 className="text-[12px] text-warning hover:text-text-primary font-semibold inline-flex items-center gap-1.5 transition-colors"
               >
                 <Crown size={13} />
-                {isFr ? 'Transférer la propriété du compte à cet utilisateur' : 'Make this user the account owner'}
+                {t.teamMember.makeThisUserTheAccountOwner}
               </button>
             </div>
           )}
@@ -583,14 +584,14 @@ export default function TeamMemberDetails() {
         <div className="section-card p-5 space-y-3 border-danger/30">
           <h3 className="text-[11px] font-bold uppercase tracking-wider text-danger flex items-center gap-1.5">
             <AlertTriangle size={12} />
-            {isFr ? 'Zone dangereuse' : 'Danger Zone'}
+            {t.teamMember.dangerZone}
           </h3>
           <div className="flex items-center justify-between p-3 bg-danger/5 border border-danger/20 rounded-xl">
             <div>
               <p className="text-[13px] font-semibold text-text-primary">
                 {isInactive
-                  ? (isFr ? 'Réactiver cet utilisateur' : 'Reactivate this user')
-                  : (isFr ? 'Désactiver cet utilisateur' : 'Deactivate this user')}
+                  ? (t.teamMember.reactivateThisUser)
+                  : (t.teamMember.deactivateThisUser)}
               </p>
               <p className="text-[12px] text-text-tertiary">
                 {isInactive
@@ -608,9 +609,9 @@ export default function TeamMemberDetails() {
               )}
             >
               {isInactive ? (
-                <span className="inline-flex items-center gap-1.5"><UserCheck size={14} />{isFr ? 'Réactiver' : 'Reactivate'}</span>
+                <span className="inline-flex items-center gap-1.5"><UserCheck size={14} />{t.teamMember.reactivate}</span>
               ) : (
-                <span className="inline-flex items-center gap-1.5"><UserX size={14} />{isFr ? 'Désactiver' : 'Deactivate'}</span>
+                <span className="inline-flex items-center gap-1.5"><UserX size={14} />{t.teamMember.deactivate}</span>
               )}
             </button>
           </div>
@@ -619,7 +620,7 @@ export default function TeamMemberDetails() {
         {/* ─── Section 7: Save Changes ─────────────────────── */}
         <div className="flex items-center justify-end gap-3 pb-8">
           <button onClick={() => navigate('/settings/team')} className="glass-button">
-            {isFr ? 'Annuler' : 'Cancel'}
+            {t.advancedNotes.cancel}
           </button>
           <button
             onClick={handleSave}
@@ -630,7 +631,7 @@ export default function TeamMemberDetails() {
             )}
           >
             {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <Check size={13} /> : null}
-            {saving ? (isFr ? 'Enregistrement...' : 'Saving...') : saved ? (isFr ? 'Enregistré !' : 'Saved!') : (isFr ? 'Enregistrer les modifications' : 'Save Changes')}
+            {saving ? (t.billing.saving) : saved ? (t.teamMember.saved) : (t.teamMember.saveChanges)}
           </button>
         </div>
       </motion.div>
@@ -639,7 +640,7 @@ export default function TeamMemberDetails() {
       <Modal
         open={showDeactivateConfirm}
         onClose={() => setShowDeactivateConfirm(false)}
-        title={isFr ? 'Confirmer la désactivation' : 'Confirm Deactivation'}
+        title={t.teamMember.confirmDeactivation}
         size="sm"
       >
         <div className="space-y-4">
@@ -650,13 +651,13 @@ export default function TeamMemberDetails() {
           </p>
           <div className="flex items-center justify-end gap-2">
             <button className="glass-button" onClick={() => setShowDeactivateConfirm(false)}>
-              {isFr ? 'Annuler' : 'Cancel'}
+              {t.advancedNotes.cancel}
             </button>
             <button
               onClick={handleToggleStatus}
               className="px-4 py-2 rounded-xl text-[13px] font-semibold bg-danger text-white border border-danger hover:bg-danger/90 transition-colors"
             >
-              {isFr ? 'Désactiver' : 'Deactivate'}
+              {t.teamMember.deactivate}
             </button>
           </div>
         </div>
@@ -666,7 +667,7 @@ export default function TeamMemberDetails() {
       <Modal
         open={showOwnerTransfer}
         onClose={() => setShowOwnerTransfer(false)}
-        title={isFr ? 'Transférer la propriété' : 'Transfer Ownership'}
+        title={t.teamMember.transferOwnership}
         size="sm"
       >
         <div className="space-y-4">
@@ -679,18 +680,18 @@ export default function TeamMemberDetails() {
           </div>
           <div className="flex items-center justify-end gap-2">
             <button className="glass-button" onClick={() => setShowOwnerTransfer(false)}>
-              {isFr ? 'Annuler' : 'Cancel'}
+              {t.advancedNotes.cancel}
             </button>
             <button
               onClick={() => {
                 handleRoleChange('owner');
                 setShowOwnerTransfer(false);
-                toast.success(isFr ? `${fullName} est maintenant le propriétaire du compte.` : `${fullName} is now the account owner.`);
+                toast.success(t.teamMember.fullnameIsNowTheAccountOwner);
               }}
               className="px-4 py-2 rounded-xl text-[13px] font-semibold bg-warning text-white border border-warning hover:bg-warning/90 transition-colors"
             >
               <Crown size={13} className="inline mr-1 -mt-px" />
-              {isFr ? 'Confirmer le transfert' : 'Confirm Transfer'}
+              {t.teamMember.confirmTransfer}
             </button>
           </div>
         </div>

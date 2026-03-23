@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Briefcase, CalendarDays, ChevronLeft, ChevronRight, Contact, FileText,
+  Briefcase, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Contact, FileText,
   Receipt, Search as SearchIcon, Users, UsersRound,
 } from 'lucide-react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
@@ -17,17 +17,18 @@ const PAGE_SIZE = 20;
 
 const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
   client: Users, job: Briefcase, lead: Contact, invoice: Receipt,
-  quote: FileText, team: UsersRound, event: CalendarDays,
+  quote: FileText, request: ClipboardList, team: UsersRound, event: CalendarDays,
 };
 
 const ENTITY_COLORS: Record<SearchEntityType, string> = {
-  client: 'text-neutral-700 bg-neutral-100 dark:text-neutral-300 dark:bg-neutral-500/10',
-  job: 'text-neutral-700 bg-neutral-100 dark:text-neutral-300 dark:bg-neutral-500/10',
-  lead: 'text-neutral-700 bg-neutral-100 dark:text-neutral-300 dark:bg-neutral-500/10',
-  invoice: 'text-neutral-700 bg-neutral-100 dark:text-neutral-300 dark:bg-neutral-500/10',
-  quote: 'text-neutral-700 bg-neutral-100 dark:text-neutral-300 dark:bg-neutral-500/10',
+  client: 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-500/10',
+  job: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-500/10',
+  lead: 'text-purple-600 bg-purple-50 dark:text-purple-400 dark:bg-purple-500/10',
+  invoice: 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10',
+  quote: 'text-indigo-600 bg-indigo-50 dark:text-indigo-400 dark:bg-indigo-500/10',
+  request: 'text-cyan-600 bg-cyan-50 dark:text-cyan-400 dark:bg-cyan-500/10',
   team: 'text-neutral-700 bg-neutral-100 dark:text-neutral-300 dark:bg-neutral-500/10',
-  event: 'text-neutral-700 bg-neutral-100 dark:text-neutral-300 dark:bg-neutral-500/10',
+  event: 'text-rose-600 bg-rose-50 dark:text-rose-400 dark:bg-rose-500/10',
 };
 
 const STATUS_BADGE_COLORS: Record<string, string> = {
@@ -168,12 +169,18 @@ const TAB_ORDER: Array<{ key: SearchTab; labelKey: EntityGroupKey | 'all' }> = [
   { key: 'all', labelKey: 'all' },
   { key: 'clients', labelKey: 'clients' },
   { key: 'jobs', labelKey: 'jobs' },
-  { key: 'leads', labelKey: 'leads' },
-  { key: 'invoices', labelKey: 'invoices' },
   { key: 'quotes', labelKey: 'quotes' },
+  { key: 'requests', labelKey: 'requests' },
+  { key: 'invoices', labelKey: 'invoices' },
+  { key: 'leads', labelKey: 'leads' },
   { key: 'teams', labelKey: 'teams' },
   { key: 'events', labelKey: 'events' },
 ];
+
+const GROUP_KEY_TO_ENTITY_TYPE: Record<string, SearchEntityType> = {
+  clients: 'client', jobs: 'job', leads: 'lead', invoices: 'invoice',
+  quotes: 'quote', requests: 'request', teams: 'team', events: 'event',
+};
 
 export default function SearchResultsPage() {
   const { t } = useTranslation();
@@ -223,14 +230,14 @@ export default function SearchResultsPage() {
     return () => { cancelled = true; };
   }, [query, tab, page, ...ALL_ENTITY_GROUP_KEYS.map((k) => entityPages[k])]);
 
-  const counts = payload?.counts || { clients: 0, jobs: 0, leads: 0, invoices: 0, quotes: 0, teams: 0, events: 0, all: 0 };
+  const counts = payload?.counts || { clients: 0, jobs: 0, leads: 0, invoices: 0, quotes: 0, requests: 0, teams: 0, events: 0, all: 0 };
 
   const tabs = useMemo(
     () => TAB_ORDER.map((t) => ({
       key: t.key,
       label: t.labelKey === 'all'
         ? `All (${counts.all})`
-        : `${getSearchEntityLabel(t.key === 'clients' ? 'client' : t.key === 'jobs' ? 'job' : t.key === 'leads' ? 'lead' : t.key === 'invoices' ? 'invoice' : t.key === 'quotes' ? 'quote' : t.key === 'teams' ? 'team' : 'event')} (${counts[t.labelKey as EntityGroupKey] || 0})`,
+        : `${getSearchEntityLabel(GROUP_KEY_TO_ENTITY_TYPE[t.key] || 'client')} (${counts[t.labelKey as EntityGroupKey] || 0})`,
     })),
     [counts]
   );
@@ -316,7 +323,7 @@ export default function SearchResultsPage() {
               const group = groups[groupKey];
               if (!group || group.total === 0) return null;
 
-              const entityType = (groupKey === 'clients' ? 'client' : groupKey === 'jobs' ? 'job' : groupKey === 'leads' ? 'lead' : groupKey === 'invoices' ? 'invoice' : groupKey === 'quotes' ? 'quote' : groupKey === 'teams' ? 'team' : 'event') as SearchEntityType;
+              const entityType = (GROUP_KEY_TO_ENTITY_TYPE[groupKey] || 'client') as SearchEntityType;
 
               return (
                 <section key={groupKey} className="section-card p-4">

@@ -13,6 +13,7 @@ import {
 import { cn } from '../../lib/utils';
 import { STICKY_COLORS } from '../../types/noteBoard';
 import type { NoteItemType, ShapeType } from '../../types/noteBoard';
+import { useTranslation } from '../i18n';
 
 export type ToolType = 'select' | 'connector' | 'draw' | NoteItemType;
 
@@ -130,7 +131,7 @@ export default function CanvasToolbar({
           <button
             onClick={() => { setShowColors(!showColors); setShowShapes(false); }}
             className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-all"
-            title={language === 'fr' ? 'Couleur' : 'Color'}
+            title={t.advancedNotes.color}
           >
             <Palette size={16} />
           </button>
@@ -161,7 +162,7 @@ export default function CanvasToolbar({
             <button
               onClick={onDuplicate}
               className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-all"
-              title={language === 'fr' ? 'Dupliquer' : 'Duplicate'}
+              title={t.invoiceDetails.duplicate}
             >
               <Copy size={16} />
             </button>
@@ -176,7 +177,7 @@ export default function CanvasToolbar({
           <button
             onClick={onDelete}
             className="p-2 rounded-lg text-text-tertiary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
-            title={language === 'fr' ? 'Supprimer' : 'Delete'}
+            title={t.advancedNotes.delete}
           >
             <Trash2 size={16} />
           </button>

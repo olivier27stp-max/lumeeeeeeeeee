@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { emitQuoteDeclined } from './automationEventsApi';
 
 // ── Types ──
 
@@ -155,6 +156,34 @@ export interface QuoteSectionInput {
   enabled: boolean;
 }
 
+// ── Quote → Pipeline automation ──
+
+/** Move the pipeline deal associated with a quote's lead to the appropriate stage */
+async function moveLeadDealToStage(leadId: string | null, targetDbSlug: string): Promise<void> {
+  if (!leadId) return;
+  try {
+    // Find the active pipeline deal for this lead
+    const { data: deal } = await supabase
+      .from('pipeline_deals')
+      .select('id, stage')
+      .eq('lead_id', leadId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!deal) return;
+
+    // Move the deal via RPC
+    await supabase.rpc('set_deal_stage', {
+      p_deal_id: deal.id,
+      p_stage: targetDbSlug,
+    });
+  } catch (err) {
+    console.warn('[quotePipelineAutomation] Failed to move deal:', err);
+  }
+}
+
 // ── API Functions ──
 
 export async function createQuote(payload: {
@@ -252,7 +281,10 @@ export async function createQuote(payload: {
   // 5. Recalculate totals
   await supabase.rpc('rpc_recalculate_quote', { p_quote_id: quoteId });
 
-  // 6. Return full detail
+  // 6. Automation: new quote created → move deal to "New Prospect"
+  moveLeadDealToStage(payload.lead_id || null, 'new_prospect');
+
+  // 7. Return full detail
   return getQuoteById(quoteId) as Promise<QuoteDetail>;
 }
 
@@ -349,7 +381,22 @@ export async function updateQuoteStatus(
     reason: reason || null,
   });
 
-  return data as Quote;
+  // Automation: move pipeline deal based on quote status
+  const quoteData = data as Quote;
+  const stageMap: Partial<Record<QuoteStatus, string>> = {
+    sent: 'quote_sent',
+    approved: 'closed_won',
+    declined: 'closed_lost',
+  };
+  const targetStage = stageMap[newStatus];
+  if (targetStage) {
+    moveLeadDealToStage(quoteData.lead_id, targetStage);
+  }
+  if (newStatus === 'declined') {
+    emitQuoteDeclined({ quoteId, leadId: quoteData.lead_id || undefined });
+  }
+
+  return quoteData;
 }
 
 export async function updateQuote(
@@ -609,6 +656,55 @@ export async function fetchPendingQuotes(): Promise<Array<Quote & { lead_name?: 
     .select('*')
     .is('deleted_at', null)
     .in('status', PENDING_QUOTE_STATUSES)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  if (!quotes || quotes.length === 0) return [];
+
+  const leadIds = [...new Set(quotes.filter((q: any) => q.lead_id).map((q: any) => q.lead_id))];
+  const clientIds = [...new Set(quotes.filter((q: any) => q.client_id).map((q: any) => q.client_id))];
+
+  const [leadsRes, clientsRes] = await Promise.all([
+    leadIds.length > 0
+      ? supabase.from('leads').select('id, first_name, last_name, deleted_at').in('id', leadIds)
+      : Promise.resolve({ data: [] }),
+    clientIds.length > 0
+      ? supabase.from('clients').select('id, company, first_name, last_name, deleted_at').in('id', clientIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const leadsMap = new Map((leadsRes.data || []).map((l: any) => [l.id, l]));
+  const clientsMap = new Map((clientsRes.data || []).map((c: any) => [c.id, c]));
+
+  return quotes
+    .filter((q: any) => {
+      if (q.lead_id) {
+        const lead = leadsMap.get(q.lead_id);
+        if (lead?.deleted_at) return false;
+      }
+      if (q.client_id) {
+        const client = clientsMap.get(q.client_id);
+        if (client?.deleted_at) return false;
+      }
+      return true;
+    })
+    .map((q: any) => {
+      const lead = q.lead_id ? leadsMap.get(q.lead_id) : null;
+      const client = q.client_id ? clientsMap.get(q.client_id) : null;
+      const leadName = lead ? `${lead.first_name || ''} ${lead.last_name || ''}`.trim() : undefined;
+      const clientName = client
+        ? client.company || `${client.first_name || ''} ${client.last_name || ''}`.trim()
+        : undefined;
+      return { ...q, lead_name: leadName, client_name: clientName } as Quote & { lead_name?: string; client_name?: string };
+    });
+}
+
+/** Fetch ALL quotes (any status) with lead/client names for the unified Quotes page. */
+export async function fetchAllQuotesWithContext(): Promise<Array<Quote & { lead_name?: string; client_name?: string }>> {
+  const { data: quotes, error } = await supabase
+    .from('quotes')
+    .select('*')
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
   if (error) throw error;

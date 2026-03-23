@@ -21,7 +21,7 @@ export default function PaymentSettings() {
               {t.payments.backToPayments}
             </button>
             <h1 className="text-5xl font-semibold tracking-tight text-text-primary">
-              {language === 'fr' ? 'Paiements' : 'Payments'}
+              {t.commandPalette.payments}
             </h1>
             <p className="text-base text-text-secondary">
               {language === 'fr'
@@ -35,14 +35,14 @@ export default function PaymentSettings() {
 
         <section className="section-card p-5 space-y-3">
           <h3 className="text-[14px] font-semibold text-text-primary">
-            {language === 'fr' ? 'Comment ca fonctionne' : 'How it works'}
+            {t.paymentSettings.howItWorks}
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 text-[11px] font-bold text-text-primary dark:text-neutral-400">1</span>
                 <span className="text-[13px] font-medium text-text-primary">
-                  {language === 'fr' ? 'Activez les paiements' : 'Activate payments'}
+                  {t.paymentSettings.activatePayments}
                 </span>
               </div>
               <p className="text-[12px] text-text-tertiary pl-8">
@@ -55,7 +55,7 @@ export default function PaymentSettings() {
               <div className="flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 text-[11px] font-bold text-text-primary dark:text-neutral-400">2</span>
                 <span className="text-[13px] font-medium text-text-primary">
-                  {language === 'fr' ? 'Envoyez des demandes' : 'Send payment requests'}
+                  {t.paymentSettings.sendPaymentRequests}
                 </span>
               </div>
               <p className="text-[12px] text-text-tertiary pl-8">
@@ -68,7 +68,7 @@ export default function PaymentSettings() {
               <div className="flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 text-[11px] font-bold text-text-primary dark:text-neutral-400">3</span>
                 <span className="text-[13px] font-medium text-text-primary">
-                  {language === 'fr' ? 'Recevez vos fonds' : 'Get paid'}
+                  {t.paymentSettings.getPaid}
                 </span>
               </div>
               <p className="text-[12px] text-text-tertiary pl-8">
@@ -82,13 +82,13 @@ export default function PaymentSettings() {
 
         <section className="section-card p-5 space-y-2">
           <h3 className="text-[14px] font-semibold text-text-primary">
-            {language === 'fr' ? 'Frais' : 'Fees'}
+            {t.paymentSettings.fees}
           </h3>
           <div className="flex items-baseline gap-1">
             <span className="text-[24px] font-bold text-text-primary">2.9%</span>
             <span className="text-[13px] text-text-secondary">+ 30&cent;</span>
             <span className="text-[13px] text-text-tertiary ml-2">
-              {language === 'fr' ? 'par transaction reussie' : 'per successful transaction'}
+              {t.paymentSettings.perSuccessfulTransaction}
             </span>
           </div>
           <p className="text-[12px] text-text-tertiary">

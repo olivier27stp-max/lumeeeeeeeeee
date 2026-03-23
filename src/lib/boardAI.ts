@@ -4,6 +4,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import type { NoteItem } from '../types/noteBoard';
+import { useTranslation } from '../i18n';
 
 const OLLAMA_URL = 'http://localhost:11434/api/chat';
 const MODEL = 'llama3.2';
@@ -136,9 +137,9 @@ Keep it to 2-3 levels deep with 3-6 branches.`,
 
 export async function summarizeBoard(items: NoteItem[], language: string): Promise<string> {
   const boardText = extractBoardText(items);
-  if (!boardText.trim()) return language === 'fr' ? 'Le board est vide.' : 'The board is empty.';
+  if (!boardText.trim()) return t.agent.theBoardIsEmpty;
 
-  const lang = language === 'fr' ? 'French' : 'English';
+  const lang = t.agent.english;
 
   const response = await callOllama([
     {
@@ -152,16 +153,16 @@ Include: key topics, decisions, and open questions. Use bullet points. Keep it u
     },
   ]);
 
-  return response.trim() || (language === 'fr' ? 'Impossible de generer un resume.' : 'Unable to generate summary.');
+  return response.trim() || (t.agent.unableToGenerateSummary);
 }
 
 // ─── Extract Action Items ──────────────────────────────────────
 
 export async function extractActionItems(items: NoteItem[], language: string): Promise<string> {
   const boardText = extractBoardText(items);
-  if (!boardText.trim()) return language === 'fr' ? 'Aucun contenu a analyser.' : 'No content to analyze.';
+  if (!boardText.trim()) return t.agent.noContentToAnalyze;
 
-  const lang = language === 'fr' ? 'French' : 'English';
+  const lang = t.agent.english;
 
   const response = await callOllama([
     {
@@ -175,7 +176,7 @@ Respond in ${lang}. Format each as "- [ ] Action item description". Group by pri
     },
   ]);
 
-  return response.trim() || (language === 'fr' ? 'Aucune action trouvee.' : 'No action items found.');
+  return response.trim() || (t.agent.noActionItemsFound);
 }
 
 // ─── Expand Ideas ──────────────────────────────────────────────
@@ -190,7 +191,7 @@ export async function expandIdeas(items: NoteItem[], language: string): Promise<
   if (stickyNotes.length === 0) return [];
 
   const notesList = stickyNotes.map((n) => `- ${n.content.trim()}`).join('\n');
-  const lang = language === 'fr' ? 'French' : 'English';
+  const lang = t.agent.english;
 
   const response = await callOllama([
     {
@@ -212,7 +213,7 @@ Use diverse colors: #fef08a, #93c5fd, #86efac, #f9a8d4, #c4b5fd, #fdba74.`,
     if (!jsonMatch) throw new Error('No JSON array');
     return JSON.parse(jsonMatch[0]) as ExpandedIdea[];
   } catch {
-    return [{ text: language === 'fr' ? 'Nouvelle idee' : 'New idea', color: '#c4b5fd' }];
+    return [{ text: t.agent.newIdea, color: '#c4b5fd' }];
   }
 }
 
@@ -221,7 +222,7 @@ Use diverse colors: #fef08a, #93c5fd, #86efac, #f9a8d4, #c4b5fd, #fdba74.`,
 export async function improveText(text: string, language: string): Promise<string> {
   if (!text.trim()) return text;
 
-  const lang = language === 'fr' ? 'French' : 'English';
+  const lang = t.agent.english;
 
   const response = await callOllama([
     {

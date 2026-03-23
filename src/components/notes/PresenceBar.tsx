@@ -2,6 +2,7 @@
 
 import React, { memo } from 'react';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../i18n';
 
 export interface PresenceUser {
   userId: string;
@@ -21,7 +22,7 @@ function PresenceBar({ users, language }: PresenceBarProps) {
   return (
     <div className="flex items-center gap-1">
       <span className="text-[10px] text-text-tertiary mr-1">
-        {users.length} {language === 'fr' ? 'en ligne' : 'online'}
+        {users.length} {t.noteCanvas.online}
       </span>
       <div className="flex -space-x-1.5">
         {users.slice(0, 8).map((user) => (
@@ -32,7 +33,7 @@ function PresenceBar({ users, language }: PresenceBarProps) {
               user.isEditing && 'ring-2 ring-offset-1 ring-blue-400 animate-pulse',
             )}
             style={{ backgroundColor: user.color }}
-            title={`${user.userName}${user.isEditing ? (language === 'fr' ? ' (en cours de modification)' : ' (editing)') : ''}`}
+            title={`${user.userName}${user.isEditing ? (t.noteCanvas.editing) : ''}`}
           >
             {user.userName.charAt(0).toUpperCase()}
           </div>

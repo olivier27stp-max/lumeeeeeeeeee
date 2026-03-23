@@ -150,7 +150,7 @@ export default function ActivityTimeline({ entityType, entityId }: ActivityTimel
     return (
       <div className="section-card p-4 text-center">
         <p className="text-sm text-text-tertiary">
-          {language === 'fr' ? 'Aucune activité pour le moment.' : 'No activity yet.'}
+          {t.activityTimeline.noActivityYet}
         </p>
       </div>
     );

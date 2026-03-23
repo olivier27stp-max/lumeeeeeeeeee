@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { createNote, addTag, addChecklistItem, extractTags } from '../../lib/notesApi';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../i18n';
 
 interface QuickNoteProps {
   language: string;
@@ -53,7 +54,7 @@ export default function QuickNote({ language, onCreated }: QuickNoteProps) {
       setContent('');
       setExpanded(false);
       onCreated();
-      toast.success(language === 'fr' ? 'Note créée' : 'Note created');
+      toast.success(t.advancedNotes.noteCreated);
     } catch (err: any) {
       toast.error(err.message || 'Error');
     } finally {
@@ -94,7 +95,7 @@ export default function QuickNote({ language, onCreated }: QuickNoteProps) {
                 onClick={() => { setExpanded(false); setContent(''); }}
                 className="text-[11px] text-text-tertiary hover:text-text-secondary transition-colors"
               >
-                {language === 'fr' ? 'Annuler' : 'Cancel'}
+                {t.advancedNotes.cancel}
               </button>
               <button
                 onClick={handleSubmit}
@@ -102,7 +103,7 @@ export default function QuickNote({ language, onCreated }: QuickNoteProps) {
                 className="btn-primary text-[11px] px-3 py-1 flex items-center gap-1"
               >
                 <Send size={11} />
-                {saving ? '...' : (language === 'fr' ? 'Créer' : 'Create')}
+                {saving ? '...' : (t.advancedNotes.create)}
               </button>
             </div>
           </motion.div>
@@ -114,7 +115,7 @@ export default function QuickNote({ language, onCreated }: QuickNoteProps) {
             className="w-full flex items-center gap-2 px-4 py-2.5 bg-surface border border-outline rounded-xl text-[13px] text-text-tertiary hover:text-text-secondary hover:border-outline-subtle hover:shadow-sm transition-all"
           >
             <Plus size={14} />
-            {language === 'fr' ? 'Note rapide... (Ctrl+N)' : 'Quick note... (Ctrl+N)'}
+            {t.advancedNotes.quickNoteCtrln}
           </motion.button>
         )}
       </AnimatePresence>

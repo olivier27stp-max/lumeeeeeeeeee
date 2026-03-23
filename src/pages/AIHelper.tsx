@@ -91,9 +91,9 @@ function buildSceneBlocks(data: DashboardData | null, lang: string) {
       <div className="flex items-center gap-2 rounded-lg border border-outline-subtle p-2.5">
         <CheckCircle2 size={12} className="text-text-tertiary" />
         <span className="text-xs text-text-secondary">
-          {todayTotal} {fr ? 'rendez-vous' : 'appointments'} · {activeJobs} {fr ? 'jobs actifs' : 'active jobs'}
-          {overdueCount > 0 && <span className="text-amber-500"> · {overdueCount} {fr ? 'en retard' : 'overdue'}</span>}
-          {actionRequired > 0 && <span className="text-amber-500"> · {actionRequired} {fr ? 'action requise' : 'action required'}</span>}
+          {todayTotal} {t.aiHelper.appointments} · {activeJobs} {t.aiHelper.activeJobs}
+          {overdueCount > 0 && <span className="text-amber-500"> · {overdueCount} {t.aiHelper.overdue}</span>}
+          {actionRequired > 0 && <span className="text-amber-500"> · {actionRequired} {t.aiHelper.actionRequired}</span>}
         </span>
       </div>
     </div>
@@ -107,25 +107,25 @@ function buildSceneBlocks(data: DashboardData | null, lang: string) {
   const block2Scene = (
     <div className="rounded-lg border border-outline-subtle p-3 space-y-2">
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{fr ? 'Pipeline' : 'Pipeline'}</span>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{t.aiHelper.pipeline}</span>
       </div>
       {activeLeads > 0 ? (
         <p className="text-xs text-text-secondary leading-relaxed">
           {fr
-            ? `${activeLeads} lead${activeLeads > 1 ? 's' : ''} actif${activeLeads > 1 ? 's' : ''} dans le pipeline${quoteSent > 0 ? ` · ${quoteSent} soumission${quoteSent > 1 ? 's' : ''} envoyée${quoteSent > 1 ? 's' : ''}` : ''}${topClient ? `. Prochain RDV: ${topClient}` : ''}`
+            ? `${activeLeads} lead${activeLeads > 1 ? 's' : ''} actif${activeLeads > 1 ? 's' : ''} dans le pipeline${quoteSent > 0 ? ` · ${quoteSent} devis envoyé${quoteSent > 1 ? 's' : ''}` : ''}${topClient ? `. Prochain RDV: ${topClient}` : ''}`
             : `${activeLeads} active lead${activeLeads > 1 ? 's' : ''} in pipeline${quoteSent > 0 ? ` · ${quoteSent} quote${quoteSent > 1 ? 's' : ''} sent` : ''}${topClient ? `. Next appointment: ${topClient}` : ''}`}
         </p>
       ) : (
         <p className="text-xs text-text-secondary leading-relaxed">
-          {fr ? 'Aucun lead actif — bon moment pour prospecter!' : 'No active leads — good time to prospect!'}
+          {t.aiHelper.noActiveLeadsGoodTimeToProspect}
         </p>
       )}
       <div className="flex gap-1.5 pt-1">
         <a href="/pipeline" onClick={(e) => e.stopPropagation()} className="text-[10px] px-2 py-0.5 rounded-full bg-surface-secondary text-text-tertiary font-medium hover:text-text-secondary transition-colors">
-          {fr ? 'Voir pipeline' : 'View pipeline'}
+          {t.aiHelper.viewPipeline}
         </a>
         <a href="/leads" onClick={(e) => e.stopPropagation()} className="text-[10px] px-2 py-0.5 rounded-full bg-surface-secondary text-text-tertiary font-medium hover:text-text-secondary transition-colors">
-          {fr ? 'Voir leads' : 'View leads'}
+          {t.aiHelper.viewQuotes}
         </a>
       </div>
     </div>
@@ -149,14 +149,14 @@ function buildSceneBlocks(data: DashboardData | null, lang: string) {
         <div className="rounded-lg bg-surface-secondary p-2.5">
           <Users size={12} className="text-text-tertiary mb-1" />
           <p className="text-sm font-bold text-text-primary">{newLeads}</p>
-          <p className="text-[10px] text-text-tertiary">{fr ? 'Nouveaux leads' : 'New leads'}</p>
+          <p className="text-[10px] text-text-tertiary">{t.aiHelper.newLeads}</p>
         </div>
       </div>
       <div className="rounded-lg border border-outline-subtle p-2.5">
         <p className="text-xs text-text-secondary">
-          {fr ? `Taux de conversion: ${convRate}%` : `Conversion rate: ${convRate}%`}
+          {t.aiHelper.conversionRateConvrate}
           {data?.performance.receivables.clientsOwing
-            ? ` · ${data.performance.receivables.clientsOwing} ${fr ? 'clients avec solde dû' : 'clients owing'}`
+            ? ` · ${data.performance.receivables.clientsOwing} ${t.aiHelper.clientsOwing}`
             : ''}
         </p>
       </div>
@@ -178,14 +178,14 @@ function buildSceneBlocks(data: DashboardData | null, lang: string) {
       )) : (
         <div className="flex items-center gap-2 rounded-lg bg-surface-secondary p-2.5">
           <CheckCircle2 size={12} className="text-text-tertiary" />
-          <span className="text-xs text-text-secondary">{fr ? 'Aucun solde dû' : 'No outstanding balance'}</span>
+          <span className="text-xs text-text-secondary">{t.aiHelper.noOutstandingBalance}</span>
         </div>
       )}
       <div className="rounded-lg border border-outline-subtle p-2.5">
         <p className="text-xs text-text-secondary">
           {clientsOwing > 0
-            ? `${clientsOwing} ${fr ? 'clients' : 'clients'} · ${fr ? 'Total dû' : 'Total outstanding'}: ${fmtMoney(outstanding)}`
-            : fr ? 'Tout est à jour!' : 'All caught up!'}
+            ? `${clientsOwing} ${t.aiHelper.clients} · ${t.aiHelper.totalOutstanding}: ${fmtMoney(outstanding)}`
+            : t.aiHelper.allCaughtUp}
         </p>
       </div>
     </div>
@@ -194,7 +194,7 @@ function buildSceneBlocks(data: DashboardData | null, lang: string) {
   return [
     {
       id: '01',
-      prompt: fr ? 'Prépare-moi pour la journée' : 'Prepare me for the day',
+      prompt: t.aiHelper.prepareMeForTheDay,
       description: fr
         ? 'Briefing du matin: rendez-vous, jobs urgents et leads à suivre.'
         : 'Morning brief with your schedule, urgent tasks, and deals needing attention.',
@@ -203,7 +203,7 @@ function buildSceneBlocks(data: DashboardData | null, lang: string) {
     },
     {
       id: '02',
-      prompt: fr ? 'Écris un email de suivi' : 'Write a follow-up email',
+      prompt: t.aiHelper.writeAFollowupEmail,
       description: fr
         ? 'Rédige des suivis professionnels basés sur tes leads et jobs.'
         : 'Draft professional follow-ups from your pipeline and job context.',
@@ -212,7 +212,7 @@ function buildSceneBlocks(data: DashboardData | null, lang: string) {
     },
     {
       id: '03',
-      prompt: fr ? 'Résume la performance du mois' : 'Summarize this month\'s performance',
+      prompt: t.aiHelper.summarizeMonthPerformance,
       description: fr
         ? 'Aperçu instantané: revenus, taux de conversion et productivité.'
         : 'Instant insights on revenue, conversion rates, and team productivity.',
@@ -221,7 +221,7 @@ function buildSceneBlocks(data: DashboardData | null, lang: string) {
     },
     {
       id: '04',
-      prompt: fr ? 'Résumé des factures' : 'Generate an invoice summary',
+      prompt: t.aiHelper.generateAnInvoiceSummary,
       description: fr
         ? 'Soldes dus, clients en retard et prochaines étapes.'
         : 'Outstanding balances, overdue clients, and next steps.',
@@ -475,14 +475,14 @@ export default function AIHelper() {
           </p>
           <div className="rounded-xl bg-surface-secondary border border-outline-subtle p-4 mb-6 text-left">
             <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-2.5">
-              {language === 'fr' ? 'Démarrage rapide' : 'Quick start'}
+              {t.aiHelper.quickStart}
             </p>
             <div className="space-y-2">
               <div className="flex items-start gap-2.5">
                 <span className="text-[11px] font-bold text-text-tertiary mt-0.5">1</span>
                 <div>
                   <p className="text-xs font-medium text-text-secondary">
-                    {language === 'fr' ? 'Installer Ollama' : 'Install Ollama'}
+                    {t.aiHelper.installOllama}
                   </p>
                   <code className="text-[11px] text-text-tertiary font-mono">curl -fsSL https://ollama.com/install.sh | sh</code>
                 </div>
@@ -491,7 +491,7 @@ export default function AIHelper() {
                 <span className="text-[11px] font-bold text-text-tertiary mt-0.5">2</span>
                 <div>
                   <p className="text-xs font-medium text-text-secondary">
-                    {language === 'fr' ? 'Télécharger un modèle' : 'Pull a model'}
+                    {t.aiHelper.pullAModel}
                   </p>
                   <code className="text-[11px] text-text-tertiary font-mono">ollama pull llama3.2</code>
                 </div>
@@ -500,7 +500,7 @@ export default function AIHelper() {
                 <span className="text-[11px] font-bold text-text-tertiary mt-0.5">3</span>
                 <div>
                   <p className="text-xs font-medium text-text-secondary">
-                    {language === 'fr' ? 'Lancer le serveur' : 'Start the server'}
+                    {t.aiHelper.startTheServer}
                   </p>
                   <code className="text-[11px] text-text-tertiary font-mono">ollama serve</code>
                 </div>
@@ -511,7 +511,7 @@ export default function AIHelper() {
             onClick={checkConnection}
             className="px-5 py-2.5 rounded-lg bg-text-primary text-surface text-sm font-medium hover:opacity-90 transition-opacity"
           >
-            {language === 'fr' ? 'Réessayer la connexion' : 'Retry connection'}
+            {t.aiHelper.retryConnection}
           </button>
         </motion.div>
       </div>
@@ -529,7 +529,7 @@ export default function AIHelper() {
           <Loader2 size={24} className="text-text-tertiary" />
         </motion.div>
         <p className="text-sm text-text-tertiary mt-3 font-medium">
-          {language === 'fr' ? 'Connexion à Ollama...' : 'Connecting to Ollama...'}
+          {t.aiHelper.connectingToOllama}
         </p>
       </div>
     );
@@ -561,7 +561,7 @@ export default function AIHelper() {
             <OllamaIcon size={28} className="text-text-primary" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-text-primary mb-3">
-            {language === 'fr' ? 'Votre assistant CRM intelligent' : 'Your intelligent CRM assistant'}
+            {t.aiHelper.yourIntelligentCrmAssistant}
           </h1>
           <p className="text-sm text-text-tertiary leading-relaxed max-w-md mx-auto">
             {language === 'fr'
@@ -573,7 +573,7 @@ export default function AIHelper() {
           <div className="flex items-center justify-center gap-1.5 mt-4">
             <div className="w-1.5 h-1.5 rounded-full bg-text-tertiary" />
             <span className="text-[11px] font-medium text-text-tertiary">
-              Ollama · {language === 'fr' ? 'Connecté' : 'Connected'}
+              Ollama · {t.aiHelper.connected}
             </span>
           </div>
 
@@ -584,7 +584,7 @@ export default function AIHelper() {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-text-primary text-surface text-sm font-medium hover:opacity-90 transition-opacity"
             >
               <Plus size={16} />
-              {language === 'fr' ? 'Nouveau chat' : 'New chat'}
+              {t.aiHelper.newChat}
             </button>
             {agentEnabled && (
               <button
@@ -611,7 +611,7 @@ export default function AIHelper() {
               value={input}
               onChange={autoResize}
               onKeyDown={handleKeyDown}
-              placeholder={language === 'fr' ? 'Demandez quelque chose à Lume AI...' : 'Ask Lume AI anything...'}
+              placeholder={t.aiHelper.askLumeAiAnything}
               rows={1}
               className="w-full resize-none bg-transparent px-4 py-3.5 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none"
               style={{ maxHeight: 160 }}
@@ -698,14 +698,14 @@ export default function AIHelper() {
       <div className="max-w-2xl mx-auto pt-4">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-bold text-text-primary">
-            {language === 'fr' ? 'Conversations' : 'Past conversations'}
+            {t.aiHelper.pastConversations}
           </h1>
           <button
             onClick={startNewChat}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-text-primary text-surface text-xs font-medium hover:opacity-90 transition-opacity"
           >
             <Plus size={14} />
-            {language === 'fr' ? 'Nouveau chat' : 'New chat'}
+            {t.aiHelper.newChat}
           </button>
         </div>
         <div className="space-y-2">
@@ -805,7 +805,7 @@ export default function AIHelper() {
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-text-primary text-surface text-xs font-medium hover:opacity-90 transition-opacity"
         >
           <Plus size={14} />
-          {language === 'fr' ? 'Nouveau chat' : 'New chat'}
+          {t.aiHelper.newChat}
         </button>
       </div>
 
@@ -845,14 +845,14 @@ export default function AIHelper() {
                 <>
                   <Wrench size={14} className="text-text-tertiary animate-pulse" />
                   <span className="text-sm text-text-tertiary">
-                    {language === 'fr' ? `Outil: ${activeToolId}...` : `Tool: ${activeToolId}...`}
+                    {t.aiHelper.toolActivetoolid}
                   </span>
                 </>
               ) : (
                 <>
                   <Loader2 size={14} className="text-text-tertiary animate-spin" />
                   <span className="text-sm text-text-tertiary">
-                    {language === 'fr' ? 'Réflexion...' : 'Thinking...'}
+                    {t.aiHelper.thinking}
                   </span>
                 </>
               )}
@@ -869,7 +869,7 @@ export default function AIHelper() {
             value={input}
             onChange={autoResize}
             onKeyDown={handleKeyDown}
-            placeholder={language === 'fr' ? 'Votre message...' : 'Your message...'}
+            placeholder={t.agent.yourMessage}
             rows={1}
             className="w-full resize-none bg-transparent px-4 py-3.5 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none"
             style={{ maxHeight: 160 }}

@@ -258,13 +258,13 @@ export async function getDashboardData(): Promise<DashboardData> {
   const upcomingEvents = upcomingRows || [];
   const revenueJobs = revenueRows || [];
 
-  // Pipeline metrics using new stage names: new, follow_up_1, follow_up_2, follow_up_3, closed, lost
-  const draftCount = deals.filter((deal) => normalize(deal.stage) === 'new').length;
-  const approvedCount = deals.filter((deal) => normalize(deal.stage) === 'closed').length;
-  const changesRequestedCount = deals.filter((deal) => ['follow_up_2', 'follow_up_3'].includes(normalize(deal.stage))).length;
-  const activeLeadsCount = deals.filter((deal) => !['closed', 'lost'].includes(normalize(deal.stage))).length;
+  // Pipeline metrics using stages: new_prospect, no_response, quote_sent, closed_won, closed_lost
+  const draftCount = deals.filter((deal) => normalize(deal.stage) === 'new_prospect').length;
+  const approvedCount = deals.filter((deal) => normalize(deal.stage) === 'closed_won').length;
+  const changesRequestedCount = deals.filter((deal) => normalize(deal.stage) === 'quote_sent').length;
+  const activeLeadsCount = deals.filter((deal) => !['closed_won', 'closed_lost'].includes(normalize(deal.stage))).length;
   const approvedAmount = deals
-    .filter((deal) => normalize(deal.stage) === 'closed')
+    .filter((deal) => normalize(deal.stage) === 'closed_won')
     .reduce((sum, deal) => sum + Number(deal.value || 0), 0);
 
   const activeJobs = jobs.filter((job) => !['completed', 'done', 'canceled', 'cancelled'].includes(normalize(job.status)));
@@ -334,7 +334,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   // Conversion rate
   const allLeadsList = allLeads || [];
-  const closedLeads = allLeadsList.filter((l: any) => normalize(l.stage) === 'closed').length;
+  const closedLeads = allLeadsList.filter((l: any) => normalize(l.stage) === 'closed_won').length;
   const totalLeads = allLeadsList.length;
   const conversionRate = totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0;
 

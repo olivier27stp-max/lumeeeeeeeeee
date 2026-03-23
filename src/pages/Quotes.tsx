@@ -97,12 +97,12 @@ export default function Quotes() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm(language === 'fr' ? 'Supprimer ce devis ?' : 'Delete this quote?')) return;
+    if (!confirm(t.quotes.deleteThisQuote)) return;
     try {
       await deleteQuote(id);
       queryClient.invalidateQueries({ queryKey: ['quotes-list'] });
       queryClient.invalidateQueries({ queryKey: ['quote-kpis'] });
-      toast.success(language === 'fr' ? 'Devis supprim\u00e9' : 'Quote deleted');
+      toast.success(t.quotes.quoteDeleted);
     } catch { toast.error('Failed to delete'); }
   }
 
@@ -110,7 +110,7 @@ export default function Quotes() {
     try {
       await sendQuoteEmail(id);
       queryClient.invalidateQueries({ queryKey: ['quotes-list'] });
-      toast.success(language === 'fr' ? 'Email envoy\u00e9' : 'Quote email sent');
+      toast.success(t.quotes.quoteEmailSent);
     } catch (e: any) { toast.error(e?.message || 'Failed to send'); }
     setMenuOpen(null);
   }
@@ -120,7 +120,7 @@ export default function Quotes() {
       const dup = await duplicateQuote(id);
       queryClient.invalidateQueries({ queryKey: ['quotes-list'] });
       queryClient.invalidateQueries({ queryKey: ['quote-kpis'] });
-      toast.success(language === 'fr' ? 'Devis dupliqu\u00e9' : 'Quote duplicated');
+      toast.success(t.quotes.quoteDuplicated);
     } catch { toast.error('Failed to duplicate'); }
     setMenuOpen(null);
   }
@@ -130,7 +130,7 @@ export default function Quotes() {
       const { invoiceId } = await convertQuoteToInvoice(id);
       queryClient.invalidateQueries({ queryKey: ['quotes-list'] });
       queryClient.invalidateQueries({ queryKey: ['quote-kpis'] });
-      toast.success(language === 'fr' ? 'Facture cr\u00e9\u00e9e' : 'Invoice created');
+      toast.success(t.quotes.invoiceCreated);
       navigate(`/invoices/${invoiceId}`);
     } catch (e: any) { toast.error(e?.message || 'Failed to convert'); }
     setMenuOpen(null);
@@ -147,31 +147,31 @@ export default function Quotes() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title={language === 'fr' ? 'Devis' : 'Quotes'}
-        subtitle={language === 'fr' ? 'G\u00e9rez vos devis et propositions' : 'Manage your quotes and proposals'}
+        title={t.clientDetails.quotes}
+        subtitle={t.quotes.manageYourQuotesAndProposals}
       />
 
       {/* KPI Cards */}
       {kpis && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
-            label={language === 'fr' ? 'En attente' : 'Pending'}
+            label={t.manageTeam.pending}
             value={formatQuoteMoney(kpis.pending_value_cents)}
-            subtitle={`${kpis.pending_count} ${language === 'fr' ? 'devis' : 'quotes'}`}
+            subtitle={`${kpis.pending_count} ${t.quotes.quotes2}`}
             icon={FileText}
             iconColor="amber"
           />
           <StatCard
-            label={language === 'fr' ? 'Approuv\u00e9s' : 'Approved'}
+            label={t.quotes.approved}
             value={formatQuoteMoney(kpis.approved_value_cents)}
-            subtitle={`${kpis.approved_count} ${language === 'fr' ? 'devis' : 'quotes'}`}
+            subtitle={`${kpis.approved_count} ${t.quotes.quotes2}`}
             icon={CheckCircle2}
             iconColor="green"
           />
           <StatCard
-            label={language === 'fr' ? 'Total' : 'Total Value'}
+            label={t.quotes.totalValue}
             value={formatQuoteMoney(kpis.total_value_cents)}
-            subtitle={`${kpis.total_count} ${language === 'fr' ? 'devis' : 'quotes'}`}
+            subtitle={`${kpis.total_count} ${t.quotes.quotes2}`}
             icon={Receipt}
             iconColor="blue"
           />
@@ -204,7 +204,7 @@ export default function Quotes() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={language === 'fr' ? 'Rechercher...' : 'Search...'}
+              placeholder={t.automations.search}
               className="pl-8 pr-3 py-1.5 text-[13px] border border-outline rounded-lg bg-surface w-48 focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
@@ -220,20 +220,20 @@ export default function Quotes() {
         ) : quotes.length === 0 ? (
           <EmptyState
             icon={FileText}
-            title={language === 'fr' ? 'Aucun devis' : 'No quotes'}
-            description={language === 'fr' ? 'Cr\u00e9ez votre premier devis' : 'Create your first quote'}
+            title={t.quotes.noQuotes}
+            description={t.quotes.createYourFirstQuote}
           />
         ) : (
           <table className="w-full text-[13px]">
             <thead className="bg-surface-secondary border-b border-outline">
               <tr>
                 <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">#</th>
-                <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">{language === 'fr' ? 'Client' : 'Client'}</th>
-                <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">{language === 'fr' ? 'Titre' : 'Title'}</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">{t.invoices.client}</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">{t.quotes.title}</th>
                 <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">Status</th>
                 <th className="text-right px-4 py-2.5 font-semibold text-text-secondary">Total</th>
                 <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">{language === 'fr' ? 'Valide jusqu\'au' : 'Valid Until'}</th>
-                <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">{language === 'fr' ? 'Cr\u00e9\u00e9' : 'Created'}</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">{t.quotes.created}</th>
                 <th className="w-10"></th>
               </tr>
             </thead>
@@ -269,25 +269,25 @@ export default function Quotes() {
                         <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(null)} />
                         <div className="absolute right-4 top-full mt-1 z-40 bg-surface border border-outline rounded-lg shadow-lg py-1 w-48">
                           <button onClick={(e) => { e.stopPropagation(); handleSendEmail(q.id); }} className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-surface-secondary flex items-center gap-2">
-                            <Send size={13} /> {language === 'fr' ? 'Envoyer par email' : 'Send Email'}
+                            <Send size={13} /> {t.quotes.sendEmail}
                           </button>
                           <button onClick={(e) => { e.stopPropagation(); handleDuplicate(q.id); }} className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-surface-secondary flex items-center gap-2">
-                            <Copy size={13} /> {language === 'fr' ? 'Dupliquer' : 'Duplicate'}
+                            <Copy size={13} /> {t.invoiceDetails.duplicate}
                           </button>
                           {q.status === 'approved' && (
                             <button onClick={(e) => { e.stopPropagation(); handleConvertToInvoice(q.id); }} className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-surface-secondary flex items-center gap-2">
-                              <Receipt size={13} /> {language === 'fr' ? 'Convertir en facture' : 'Convert to Invoice'}
+                              <Receipt size={13} /> {t.quotes.convertToInvoice}
                             </button>
                           )}
                           <button onClick={(e) => { e.stopPropagation(); handleDownloadPdf(q.id); }} className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-surface-secondary flex items-center gap-2">
                             <Download size={13} /> PDF
                           </button>
                           <button onClick={(e) => { e.stopPropagation(); window.open(`/quote/${q.view_token}`, '_blank'); setMenuOpen(null); }} className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-surface-secondary flex items-center gap-2">
-                            <Eye size={13} /> {language === 'fr' ? 'Voir comme client' : 'Preview as Client'}
+                            <Eye size={13} /> {t.quotes.previewAsClient}
                           </button>
                           <div className="border-t border-outline my-1" />
                           <button onClick={(e) => { e.stopPropagation(); handleDelete(q.id); setMenuOpen(null); }} className="w-full text-left px-3 py-1.5 text-[13px] text-danger hover:bg-danger-light flex items-center gap-2">
-                            <Trash2 size={13} /> {language === 'fr' ? 'Supprimer' : 'Delete'}
+                            <Trash2 size={13} /> {t.advancedNotes.delete}
                           </button>
                         </div>
                       </>
@@ -303,7 +303,7 @@ export default function Quotes() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-[13px] text-text-secondary">
-          <span>{language === 'fr' ? `${total} devis` : `${total} quotes`}</span>
+          <span>{t.quotes.totalQuotes}</span>
           <div className="flex items-center gap-1">
             <button
               disabled={page <= 1}

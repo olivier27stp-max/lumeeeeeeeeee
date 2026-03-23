@@ -65,7 +65,7 @@ export default function Notes() {
       setNotes(notesData);
       setAllTags(tagsData);
     } catch (err) {
-      toast.error(language === 'fr' ? 'Erreur de chargement' : 'Failed to load notes');
+      toast.error(t.advancedNotes.failedToLoadNotes);
     } finally {
       setLoading(false);
     }
@@ -83,15 +83,15 @@ export default function Notes() {
   }, [load]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm(language === 'fr' ? 'Supprimer cette note ?' : 'Delete this note?')) return;
+    if (!confirm(t.advancedNotes.deleteThisNote)) return;
     try {
       // Optimistic update
       setNotes((prev) => prev.filter((n) => n.id !== id));
       await deleteNote(id);
-      toast.success(language === 'fr' ? 'Note supprimée' : 'Note deleted');
+      toast.success(t.advancedNotes.noteDeleted);
     } catch {
       load();
-      toast.error(language === 'fr' ? 'Erreur' : 'Error');
+      toast.error(t.advancedNotes.error);
     }
   };
 
@@ -171,8 +171,8 @@ export default function Notes() {
   return (
     <>
       <PageHeader
-        title={language === 'fr' ? 'Notes' : 'Notes'}
-        subtitle={language === 'fr' ? 'Système de notes collaboratif' : 'Collaborative notes system'}
+        title={t.advancedNotes.notes}
+        subtitle={t.advancedNotes.collaborativeNotesSystem}
         icon={StickyNote}
         iconColor="blue"
       >
@@ -182,7 +182,7 @@ export default function Notes() {
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
             <input
               type="text"
-              placeholder={`${language === 'fr' ? 'Rechercher' : 'Search'}...`}
+              placeholder={`${t.advancedNotes.search}...`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="input-field pl-8 w-48 text-[13px]"
@@ -227,7 +227,7 @@ export default function Notes() {
           {/* Create */}
           <button onClick={handleCreate} className="btn-primary text-[13px] flex items-center gap-1.5">
             <Plus size={14} />
-            {language === 'fr' ? 'Nouvelle note' : 'New Note'}
+            {t.advancedNotes.newNote}
           </button>
         </div>
       </PageHeader>
@@ -248,11 +248,11 @@ export default function Notes() {
               <div className="bg-surface border border-outline rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[12px] font-semibold text-text-primary">
-                    {language === 'fr' ? 'Filtres' : 'Filters'}
+                    {t.advancedNotes.filters}
                   </span>
                   {hasFilters && (
                     <button onClick={clearFilters} className="text-[11px] text-blue-600 hover:underline">
-                      {language === 'fr' ? 'Réinitialiser' : 'Clear all'}
+                      {t.advancedNotes.clearAll}
                     </button>
                   )}
                 </div>
@@ -260,7 +260,7 @@ export default function Notes() {
                 {/* Color filter */}
                 <div>
                   <label className="text-[11px] font-medium text-text-tertiary mb-1.5 block">
-                    {language === 'fr' ? 'Couleur' : 'Color'}
+                    {t.advancedNotes.color}
                   </label>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -269,7 +269,7 @@ export default function Notes() {
                         'w-5 h-5 rounded-full border-2 bg-surface transition-all',
                         !filterColor ? 'border-text-primary' : 'border-outline',
                       )}
-                      title={language === 'fr' ? 'Toutes' : 'All'}
+                      title={t.advancedNotes.all}
                     />
                     {NOTE_COLORS.map((c) => (
                       <button
@@ -345,7 +345,7 @@ export default function Notes() {
                   />
                   <span className="text-[11px] font-medium text-text-secondary flex items-center gap-1">
                     <Pin size={10} className="rotate-45" />
-                    {language === 'fr' ? 'Épinglées seulement' : 'Pinned only'}
+                    {t.advancedNotes.pinnedOnly}
                   </span>
                 </label>
               </div>
@@ -366,8 +366,8 @@ export default function Notes() {
               icon={StickyNote}
               iconColor="blue"
               title={hasFilters || search
-                ? (language === 'fr' ? 'Aucun résultat' : 'No notes found')
-                : (language === 'fr' ? 'Aucune note' : 'No notes yet')
+                ? (t.advancedNotes.noNotesFound)
+                : (t.advancedNotes.noNotesYet)
               }
               description={!hasFilters && !search
                 ? (language === 'fr'
@@ -378,7 +378,7 @@ export default function Notes() {
               action={!hasFilters && !search ? (
                 <button onClick={handleCreate} className="btn-primary text-[13px] flex items-center gap-1.5">
                   <Plus size={14} />
-                  {language === 'fr' ? 'Créer une note' : 'Create Note'}
+                  {t.advancedNotes.createNote}
                 </button>
               ) : undefined}
             />

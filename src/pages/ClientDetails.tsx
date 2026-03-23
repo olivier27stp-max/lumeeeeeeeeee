@@ -364,7 +364,7 @@ export default function ClientDetails() {
       await supabase.from('client_tags').delete().eq('client_id', client.id).eq('tag', tag);
     } catch {
       setTags(previous);
-      toast.error(language === 'fr' ? 'Impossible de supprimer le tag' : 'Failed to remove tag');
+      toast.error(t.clientDetails.failedToRemoveTag);
     }
   };
 
@@ -441,8 +441,8 @@ export default function ClientDetails() {
     { key: 'completed', label: 'Completed', count: completedJobs.length },
     { key: 'jobs', label: t.clients.jobs, count: jobs.length },
     { key: 'invoices', label: t.nav.invoices, count: invoices.length },
-    { key: 'quotes', label: 'Quotes', count: realQuotes.length },
-    { key: 'leads', label: t.nav.leads, count: leads.length },
+    { key: 'quotes', label: t.clientDetails.quotes, count: realQuotes.length },
+    { key: 'leads', label: t.clientDetails.quotes, count: leads.length },
   ];
 
   // ─── Job row renderer (reused across tabs) ─────────────────────
@@ -581,12 +581,12 @@ export default function ClientDetails() {
                     <button
                       onClick={() => {
                         const url = `${window.location.origin}/portal/${(client as any).portal_token}`;
-                        navigator.clipboard.writeText(url).then(() => toast.success(language === 'fr' ? 'Lien portal copie' : 'Portal link copied'));
+                        navigator.clipboard.writeText(url).then(() => toast.success(t.clientDetails.portalLinkCopied));
                         setShowActionMenu(false);
                       }}
                       className="w-full px-3 py-2 text-[13px] text-text-primary hover:bg-surface-secondary flex items-center gap-2 text-left"
                     >
-                      <ExternalLink size={13} /> {language === 'fr' ? 'Copier lien portal' : 'Copy portal link'}
+                      <ExternalLink size={13} /> {t.clientDetails.copyPortalLink}
                     </button>
                   )}
                 </div>
@@ -610,11 +610,11 @@ export default function ClientDetails() {
               <button
                 className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1"
                 onClick={() => {
-                  const addr = prompt(language === 'fr' ? 'Adresse de la propriete:' : 'Property address:');
+                  const addr = prompt(t.clientDetails.propertyAddress);
                   if (addr && client) {
                     updateClient(client.id, { address: addr }).then((updated) => {
                       setClient(updated);
-                      toast.success(language === 'fr' ? 'Propriete ajoutee' : 'Property added');
+                      toast.success(t.clientDetails.propertyAdded);
                     }).catch((err: any) => toast.error(err?.message || 'Failed'));
                   }
                 }}

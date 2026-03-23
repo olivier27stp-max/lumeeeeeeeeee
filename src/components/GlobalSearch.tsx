@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
-  Briefcase, CalendarDays, Command, Contact, CreditCard, FileText,
+  Briefcase, CalendarDays, ClipboardList, Command, Contact, CreditCard, FileText,
   Plus, Receipt, Search, Users, UsersRound, Zap,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -53,18 +53,20 @@ const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
   lead: Contact,
   invoice: Receipt,
   quote: FileText,
+  request: ClipboardList,
   team: UsersRound,
   event: CalendarDays,
 };
 
 const ENTITY_COLORS: Record<SearchEntityType, string> = {
-  client: 'text-neutral-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-500/10',
-  job: 'text-neutral-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-500/10',
-  lead: 'text-neutral-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-500/10',
-  invoice: 'text-neutral-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-500/10',
-  quote: 'text-neutral-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-500/10',
+  client: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10',
+  job: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10',
+  lead: 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-500/10',
+  invoice: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10',
+  quote: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10',
+  request: 'text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-500/10',
   team: 'text-neutral-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-500/10',
-  event: 'text-neutral-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-500/10',
+  event: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10',
 };
 
 const STATUS_BADGE_COLORS: Record<string, string> = {
@@ -81,6 +83,12 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
   new: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/15 dark:text-neutral-400',
   action_required: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
+  void: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-500/15 dark:text-neutral-500',
+  partial: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
+  awaiting_response: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400',
+  converted: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
+  expired: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-500/15 dark:text-neutral-500',
+  unscheduled: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400',
 };
 
 // ── Quick Actions ──
@@ -96,7 +104,7 @@ interface QuickAction {
 
 const QUICK_ACTIONS: QuickAction[] = [
   { id: 'qa-new-client', label: 'Create New Client', labelFr: 'Nouveau client', icon: Plus, destination: '/clients?action=new', keywords: 'create add new client customer nouveau' },
-  { id: 'qa-new-lead', label: 'Create New Lead', labelFr: 'Nouveau lead', icon: Plus, destination: '/leads?action=new', keywords: 'create add new lead prospect nouveau' },
+  { id: 'qa-new-lead', label: 'Create New Quote', labelFr: 'Nouveau devis', icon: Plus, destination: '/leads?action=new', keywords: 'create add new quote devis prospect nouveau' },
   { id: 'qa-new-job', label: 'Create New Job', labelFr: 'Nouvelle job', icon: Plus, destination: '/jobs?action=new', keywords: 'create add new job work travail nouveau' },
   { id: 'qa-new-quote', label: 'Create New Quote', labelFr: 'Nouveau devis', icon: Plus, destination: '/quotes?action=new', keywords: 'create add new quote estimate devis nouveau' },
   { id: 'qa-new-invoice', label: 'Create New Invoice', labelFr: 'Nouvelle facture', icon: Plus, destination: '/invoices?action=new', keywords: 'create add new invoice bill facture nouveau' },
@@ -159,11 +167,11 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Entity groups order ──
 
-const ENTITY_DISPLAY_ORDER: EntityGroupKey[] = ['clients', 'jobs', 'leads', 'invoices', 'quotes', 'teams', 'events'];
+const ENTITY_DISPLAY_ORDER: EntityGroupKey[] = ['clients', 'jobs', 'quotes', 'requests', 'invoices', 'leads', 'teams', 'events'];
 
 const ENTITY_KEY_TO_TYPE: Record<EntityGroupKey, SearchEntityType> = {
   clients: 'client', jobs: 'job', leads: 'lead', invoices: 'invoice',
-  quotes: 'quote', teams: 'team', events: 'event',
+  quotes: 'quote', requests: 'request', teams: 'team', events: 'event',
 };
 
 // ── Component ──
@@ -184,7 +192,7 @@ export default function GlobalSearch() {
   const [activeIndex, setActiveIndex] = useState(-1);
   const [entitySuggestions, setEntitySuggestions] = useState<SearchEntityItem[]>([]);
   const [groupedSuggestions, setGroupedSuggestions] = useState<Record<EntityGroupKey, SearchEntityItem[]>>({
-    clients: [], jobs: [], leads: [], invoices: [], quotes: [], teams: [], events: [],
+    clients: [], jobs: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [],
   });
 
   const normalizedQuery = useMemo(() => normalizeSearchQuery(query), [query]);
@@ -206,7 +214,7 @@ export default function GlobalSearch() {
     async function loadSuggestions() {
       if (debouncedQuery.length < MIN_QUERY_LENGTH) {
         setEntitySuggestions([]);
-        setGroupedSuggestions({ clients: [], jobs: [], leads: [], invoices: [], quotes: [], teams: [], events: [] });
+        setGroupedSuggestions({ clients: [], jobs: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
         setLoading(false);
         return;
       }
@@ -216,12 +224,12 @@ export default function GlobalSearch() {
         const payload = await fetchSearchSuggestions(debouncedQuery, MAX_SUGGESTIONS);
         if (!cancelled) {
           setEntitySuggestions(payload.items || []);
-          setGroupedSuggestions(payload.grouped || { clients: [], jobs: [], leads: [], invoices: [], quotes: [], teams: [], events: [] });
+          setGroupedSuggestions(payload.grouped || { clients: [], jobs: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
         }
       } catch {
         if (!cancelled) {
           setEntitySuggestions([]);
-          setGroupedSuggestions({ clients: [], jobs: [], leads: [], invoices: [], quotes: [], teams: [], events: [] });
+          setGroupedSuggestions({ clients: [], jobs: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -258,7 +266,7 @@ export default function GlobalSearch() {
           label: fr ? a.labelFr : a.label,
           destination: a.destination,
         }));
-        secs.push({ key: 'quick_actions', label: fr ? 'Actions rapides' : 'Quick Actions', items: actionItems });
+        secs.push({ key: 'quick_actions', label: t.globalSearch.quickActions, items: actionItems });
         all.push(...actionItems);
       }
     }
@@ -272,7 +280,7 @@ export default function GlobalSearch() {
         subtitle: parsedDate.source,
         destination: `/calendar?date=${encodeURIComponent(parsedDate.isoDate)}`,
       };
-      secs.push({ key: 'dates', label: fr ? 'Dates' : 'Dates', items: [dateItem] });
+      secs.push({ key: 'dates', label: t.globalSearch.dates, items: [dateItem] });
       all.push(dateItem);
     }
 
@@ -286,7 +294,7 @@ export default function GlobalSearch() {
         subtitle: c.aliases.join(' / '),
         destination: c.path,
       }));
-      secs.push({ key: 'commands', label: fr ? 'Navigation' : 'Navigation', items: cmdItems });
+      secs.push({ key: 'commands', label: t.commandPalette.navigation, items: cmdItems });
       all.push(...cmdItems);
     }
 
@@ -346,7 +354,7 @@ export default function GlobalSearch() {
     setQuery('');
     setDebouncedQuery('');
     setEntitySuggestions([]);
-    setGroupedSuggestions({ clients: [], jobs: [], leads: [], invoices: [], quotes: [], teams: [], events: [] });
+    setGroupedSuggestions({ clients: [], jobs: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
     closeDropdown();
   }
 
@@ -468,7 +476,7 @@ export default function GlobalSearch() {
         <div
           id={listboxId}
           role="listbox"
-          className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 max-h-[480px] overflow-y-auto rounded-xl border border-outline bg-surface shadow-2xl"
+          className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 max-h-[520px] overflow-y-auto rounded-xl border border-outline bg-surface shadow-2xl"
         >
           {/* Loading state */}
           {loading && flatItems.length === 0 ? (
@@ -538,15 +546,15 @@ export default function GlobalSearch() {
             <div className="flex items-center gap-4 border-t border-outline px-3 py-1.5 text-[10px] text-text-tertiary">
               <span className="flex items-center gap-1">
                 <kbd className="rounded border border-outline px-1 py-0.5 font-mono">↑↓</kbd>
-                {fr ? 'naviguer' : 'navigate'}
+                {t.commandPalette.navigate}
               </span>
               <span className="flex items-center gap-1">
                 <kbd className="rounded border border-outline px-1 py-0.5 font-mono">↵</kbd>
-                {fr ? 'ouvrir' : 'open'}
+                {t.commandPalette.open}
               </span>
               <span className="flex items-center gap-1">
                 <kbd className="rounded border border-outline px-1 py-0.5 font-mono">esc</kbd>
-                {fr ? 'fermer' : 'close'}
+                {t.commandPalette.close}
               </span>
             </div>
           ) : null}
@@ -566,6 +574,7 @@ function SearchResultRow({
   onMouseEnter,
   onClick,
 }: {
+  key?: React.Key;
   item: SuggestionAction;
   isActive: boolean;
   listboxId: string;
@@ -636,7 +645,7 @@ function SearchResultRow({
                   {item.kind === 'entity' ? highlightText(item.subtitle, query) : item.subtitle}
                 </span>
               ) : null}
-              {item.clientName && item.clientName !== item.subtitle ? (
+              {item.clientName && item.clientName !== item.subtitle && item.clientName !== item.label ? (
                 <>
                   {item.subtitle ? <span className="shrink-0">·</span> : null}
                   <span className="truncate">{item.clientName}</span>

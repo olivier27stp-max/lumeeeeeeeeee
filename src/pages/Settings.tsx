@@ -19,6 +19,9 @@ import {
   Wallet,
   Store,
   Archive,
+  Phone,
+  FileText,
+  Gift,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -32,9 +35,9 @@ import ArchivesPanel from '../components/ArchivesPanel';
 // ─── All settings tabs (unified) ─────────────────────────────────
 type SettingsTab =
   | 'account' | 'billing' | 'workspace' | 'language'
-  | 'company' | 'products' | 'payments' | 'expense-tracking' | 'automations'
+  | 'company' | 'products' | 'payments' | 'expense-tracking' | 'automations' | 'phone-number' | 'request-form'
   | 'team' | 'manage-team' | 'schedule' | 'location' | 'route-optimization'
-  | 'marketplace' | 'archives';
+  | 'marketplace' | 'archives' | 'referrals';
 
 interface NavItem {
   id: SettingsTab;
@@ -159,7 +162,7 @@ function WorkspaceTab() {
           className={cn('glass-button inline-flex items-center gap-1.5', saved && '!bg-success !text-white !border-success')}
         >
           {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <Check size={13} /> : null}
-          {saving ? (language === 'fr' ? 'Enregistrement...' : 'Saving...') : saved ? (language === 'fr' ? 'Enregistré' : 'Saved') : (language === 'fr' ? 'Enregistrer' : 'Save')}
+          {saving ? (t.billing.saving) : saved ? (t.companySettings.saved) : (t.customFields.save)}
         </button>
       </div>
       <div className="section-card p-5 space-y-4">
@@ -248,7 +251,7 @@ export default function Settings() {
   // ─── Navigation structure ────────────────────────────────────
   const navSections: NavGroup[] = [
     {
-      heading: isFr ? 'Général' : 'General',
+      heading: t.settings.general,
       items: [
         { id: 'account',   label: t.settings.account,   icon: User },
         { id: 'billing',   label: t.settings.billing,   icon: CreditCard },
@@ -257,35 +260,43 @@ export default function Settings() {
       ],
     },
     {
-      heading: isFr ? 'Entreprise' : 'Business',
+      heading: t.billing.business,
       items: [
-        { id: 'company',          label: isFr ? 'Paramètres entreprise' : 'Company Settings', icon: Building, link: '/settings/company' },
-        { id: 'products',         label: isFr ? 'Produits & Services' : 'Products & Services', icon: Package, link: '/settings/products' },
-        { id: 'payments',         label: isFr ? 'Paiements' : 'Payments',                        icon: Wallet, link: '/settings/payments' },
-        { id: 'expense-tracking', label: isFr ? 'Suivi des dépenses' : 'Expense Tracking',    icon: Receipt },
-        { id: 'automations',      label: isFr ? 'Automatisations' : 'Automations',            icon: Zap, link: '/settings/automations' },
+        { id: 'company',          label: t.settings.companySettings, icon: Building, link: '/settings/company' },
+        { id: 'products',         label: t.settings.productsServices, icon: Package, link: '/settings/products' },
+        { id: 'payments',         label: t.commandPalette.payments,                        icon: Wallet, link: '/settings/payments' },
+        { id: 'expense-tracking', label: t.settings.expenseTracking,    icon: Receipt },
+        { id: 'automations',      label: t.settings.automations,            icon: Zap, link: '/settings/automations' },
+        { id: 'phone-number',     label: t.settings.phoneNumber,      icon: Phone, link: '/settings/phone-number' },
+        { id: 'request-form',     label: (t.settings as any).requestForm || (t.requestForm.requestForm), icon: FileText, link: '/settings/request-form' },
       ],
     },
     {
-      heading: isFr ? 'Équipe' : 'Team',
+      heading: t.settings.team,
       items: [
-        { id: 'team',               label: isFr ? 'Organisation' : 'Organization',          icon: Users },
+        { id: 'team',               label: t.settings.organization,          icon: Users },
         { id: 'manage-team',        label: isFr ? 'Gérer l\'équipe' : 'Manage Team',       icon: Users, link: '/settings/team' },
-        { id: 'schedule',           label: isFr ? 'Horaire' : 'Schedule',                   icon: Users },
-        { id: 'location',           label: isFr ? 'Services de localisation' : 'Location Services', icon: MapPin },
-        { id: 'route-optimization', label: isFr ? 'Optimisation de routes' : 'Route Optimization', icon: Route },
+        { id: 'schedule',           label: t.settings.schedule,                   icon: Users },
+        { id: 'location',           label: t.settings.locationServices, icon: MapPin },
+        { id: 'route-optimization', label: t.settings.routeOptimization, icon: Route },
       ],
     },
     {
-      heading: isFr ? 'Applications connectées' : 'Connected Apps',
+      heading: t.settings.connectedApps,
       items: [
         { id: 'marketplace',    label: isFr ? 'Marketplace d\'apps' : 'App Marketplace', icon: Store, link: '/settings/marketplace' },
       ],
     },
     {
-      heading: isFr ? 'Données' : 'Data',
+      heading: t.settings.data,
       items: [
         { id: 'archives', label: (t.settings as any).archives || 'Archives', icon: Archive },
+      ],
+    },
+    {
+      heading: t.settings.referral,
+      items: [
+        { id: 'referrals' as SettingsTab, label: t.referFriend.referAFriend, icon: Gift, link: '/settings/referrals' },
       ],
     },
   ];
@@ -429,16 +440,16 @@ export default function Settings() {
                         <div className="h-full bg-white w-[85%] rounded-full" />
                       </div>
                     </div>
-                    <p className="text-[11px] text-white/50">$29 {t.settings.perMonth} &middot; {isFr ? 'Prochaine facturation le 1er avril 2026' : 'Next billing on April 1, 2026'}</p>
+                    <p className="text-[11px] text-white/50">$29 {t.settings.perMonth} &middot; {t.settings.nextBillingOnApril12026}</p>
                   </div>
                 </div>
                 <div className="section-card p-5 space-y-4">
                   <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.settings.subscriptionTiers}</h3>
                   <div className="space-y-2">
                     {([
-                      { key: 'Free', price: '$0', features: isFr ? '3 clients, 10 jobs/mois' : '3 clients, 10 jobs/mo' },
-                      { key: 'Pro', price: '$29', features: isFr ? 'Illimité, intégrations, support prioritaire' : 'Unlimited, integrations, priority support' },
-                      { key: 'Enterprise', price: isFr ? 'Sur mesure' : 'Custom', features: isFr ? 'SSO, API, gestionnaire dédié' : 'SSO, API, dedicated manager' },
+                      { key: 'Free', price: '$0', features: t.settings.threeClients10Jobsmo },
+                      { key: 'Pro', price: '$29', features: t.settings.unlimitedIntegrationsPrioritySupport },
+                      { key: 'Enterprise', price: t.settings.custom, features: t.settings.ssoApiDedicatedManager },
                     ]).map(({ key: plan, price, features }) => {
                       const isCurrent = plan === 'Pro';
                       return (
@@ -460,13 +471,13 @@ export default function Settings() {
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-[13px] font-bold text-text-primary tabular-nums">{price}<span className="text-[10px] font-normal text-text-tertiary">/{isFr ? 'mois' : 'mo'}</span></span>
+                            <span className="text-[13px] font-bold text-text-primary tabular-nums">{price}<span className="text-[10px] font-normal text-text-tertiary">/{t.billing.mo}</span></span>
                             {isCurrent ? (
                               <span className="badge-info text-[10px]">{t.settings.current}</span>
                             ) : plan === 'Enterprise' ? (
-                              <span className="badge-neutral text-[10px]">{isFr ? 'Contacter' : 'Contact'}</span>
+                              <span className="badge-neutral text-[10px]">{t.settings.contact}</span>
                             ) : (
-                              <span className="text-[11px] font-semibold text-primary">{isFr ? 'Choisir' : 'Choose'} &rarr;</span>
+                              <span className="text-[11px] font-semibold text-primary">{t.settings.choose} &rarr;</span>
                             )}
                           </div>
                         </button>
@@ -533,7 +544,7 @@ export default function Settings() {
               <div className="section-card p-8 text-center">
                 <Store size={28} className="text-text-tertiary mx-auto mb-3 opacity-30" />
                 <h3 className="text-[15px] font-semibold text-text-primary">
-                  {isFr ? 'Aucune application connectée' : 'No applications connected yet'}
+                  {t.settings.noApplicationsConnectedYet}
                 </h3>
                 <p className="text-[13px] text-text-tertiary mt-1 max-w-sm mx-auto">
                   {isFr
@@ -545,7 +556,7 @@ export default function Settings() {
                   className="glass-button-primary inline-flex items-center gap-1.5 mt-4 text-[12px]"
                 >
                   <Store size={13} />
-                  {isFr ? 'Explorer le marketplace' : 'Browse marketplace'}
+                  {t.settings.browseMarketplace}
                 </button>
               </div>
             )}

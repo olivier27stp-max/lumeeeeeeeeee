@@ -6,38 +6,49 @@ import { emitDealStageChanged } from './automationEventsApi';
 export function stageToDbSlug(stage: string): string {
   const raw = String(stage || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   const map: Record<string, string> = {
-    new: 'new',
-    'follow_up_1': 'follow_up_1',
-    'follow_up_2': 'follow_up_2',
-    'follow_up_3': 'follow_up_3',
-    closed: 'closed',
-    lost: 'lost',
+    new_prospect: 'new_prospect',
+    no_response: 'no_response',
+    quote_sent: 'quote_sent',
+    closed_won: 'closed_won',
+    closed_lost: 'closed_lost',
+    // Legacy mappings
+    new: 'new_prospect',
+    follow_up_1: 'no_response',
+    follow_up_2: 'quote_sent',
+    follow_up_3: 'quote_sent',
+    closed: 'closed_won',
+    lost: 'closed_lost',
   };
-  return map[raw] || 'new';
+  return map[raw] || 'new_prospect';
 }
 
-export const PIPELINE_STAGES = ['New', 'Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Closed', 'Lost'] as const;
+export const PIPELINE_STAGES = ['New Prospect', 'No Response', 'Quote Sent', 'Closed Won', 'Closed Lost'] as const;
 export type PipelineStageName = (typeof PIPELINE_STAGES)[number];
-export const TRIGGER_STAGE = 'closed' as const;
+export const TRIGGER_STAGE = 'closed_won' as const;
 
 /** DB slug → display label */
 export const STAGE_LABEL_MAP: Record<string, PipelineStageName> = {
-  new: 'New',
-  follow_up_1: 'Follow-up 1',
-  follow_up_2: 'Follow-up 2',
-  follow_up_3: 'Follow-up 3',
-  closed: 'Closed',
-  lost: 'Lost',
+  new_prospect: 'New Prospect',
+  no_response: 'No Response',
+  quote_sent: 'Quote Sent',
+  closed_won: 'Closed Won',
+  closed_lost: 'Closed Lost',
+  // Legacy mappings
+  new: 'New Prospect',
+  follow_up_1: 'No Response',
+  follow_up_2: 'Quote Sent',
+  follow_up_3: 'Quote Sent',
+  closed: 'Closed Won',
+  lost: 'Closed Lost',
 };
 
 /** Display label → DB slug */
 export const STAGE_DB_MAP: Record<string, string> = {
-  'New': 'new',
-  'Follow-up 1': 'follow_up_1',
-  'Follow-up 2': 'follow_up_2',
-  'Follow-up 3': 'follow_up_3',
-  'Closed': 'closed',
-  'Lost': 'lost',
+  'New Prospect': 'new_prospect',
+  'No Response': 'no_response',
+  'Quote Sent': 'quote_sent',
+  'Closed Won': 'closed_won',
+  'Closed Lost': 'closed_lost',
 };
 export const ALLOW_CREATE_ANOTHER_JOB = false;
 
@@ -136,23 +147,27 @@ export interface IntentLeadPrefill {
 function normalizeStage(value: string): PipelineStageName {
   const raw = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   const map: Record<string, PipelineStageName> = {
-    new: 'New',
-    follow_up_1: 'Follow-up 1',
-    follow_up_2: 'Follow-up 2',
-    follow_up_3: 'Follow-up 3',
-    closed: 'Closed',
-    lost: 'Lost',
+    new_prospect: 'New Prospect',
+    no_response: 'No Response',
+    quote_sent: 'Quote Sent',
+    closed_won: 'Closed Won',
+    closed_lost: 'Closed Lost',
     // Legacy → new mapping
-    contacted: 'Follow-up 1',
-    contact: 'Follow-up 1',
-    estimate_sent: 'Follow-up 2',
-    quote_sent: 'Follow-up 2',
-    follow_up: 'Follow-up 1',
-    won: 'Closed',
-    qualified: 'New',
-    archived: 'Lost',
+    new: 'New Prospect',
+    follow_up_1: 'No Response',
+    follow_up_2: 'Quote Sent',
+    follow_up_3: 'Quote Sent',
+    closed: 'Closed Won',
+    lost: 'Closed Lost',
+    contacted: 'No Response',
+    contact: 'No Response',
+    estimate_sent: 'Quote Sent',
+    follow_up: 'No Response',
+    won: 'Closed Won',
+    qualified: 'New Prospect',
+    archived: 'Closed Lost',
   };
-  return map[raw] || 'New';
+  return map[raw] || 'New Prospect';
 }
 
 function mapDeal(row: any): PipelineDeal {

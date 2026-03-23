@@ -146,13 +146,13 @@ export default function Payments() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title={language === 'fr' ? 'Paiements' : 'Payments'}
-        subtitle={language === 'fr' ? 'Suivi des paiements et versements' : 'Track payments and payouts'}
+        title={t.commandPalette.payments}
+        subtitle={t.payments.trackPaymentsAndPayouts}
         icon={CreditCard}
         iconColor="amber"
       >
         <button className="glass-button" onClick={() => navigate('/settings/payments')}>
-          {language === 'fr' ? 'Parametres' : 'Settings'}
+          {t.commandPalette.settings}
         </button>
       </PageHeader>
 
@@ -161,14 +161,14 @@ export default function Payments() {
         <div className="section-card border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900/30 p-4 flex items-center justify-between">
           <div>
             <p className="text-[14px] font-medium text-neutral-800 dark:text-neutral-200">
-              {language === 'fr' ? 'Activez Lume Payments pour accepter les paiements en ligne' : 'Activate Lume Payments to accept online payments'}
+              {t.payments.activateLumePaymentsToAcceptOnlinePaymen}
             </p>
             <p className="text-[12px] text-text-primary dark:text-neutral-400 mt-0.5">
-              {language === 'fr' ? 'Vos clients pourront payer leurs factures par carte de credit.' : 'Your clients will be able to pay invoices by credit card.'}
+              {t.payments.yourClientsWillBeAbleToPayInvoicesByCred}
             </p>
           </div>
           <button className="glass-button bg-neutral-900 text-white hover:bg-neutral-800 shrink-0" onClick={() => navigate('/settings/payments')}>
-            {language === 'fr' ? 'Activer' : 'Activate'}
+            {t.payments.activate}
           </button>
         </div>
       )}
@@ -176,19 +176,19 @@ export default function Payments() {
       {/* Tabs */}
       <div className="tab-nav">
         <button className={tab === 'overview' ? 'tab-item-active' : 'tab-item'} onClick={() => setQuery((n) => n.delete('tab'))}>
-          {language === 'fr' ? 'Apercu' : 'Overview'}
+          {t.payments.overview}
         </button>
         <button className={tab === 'payouts' ? 'tab-item-active' : 'tab-item'} onClick={() => setQuery((n) => n.set('tab', 'payouts'))}>
-          {language === 'fr' ? 'Versements' : 'Payouts'}
+          {t.payments.payouts}
         </button>
       </div>
 
       {tab === 'overview' ? (
         <>
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-            <StatCard label={language === 'fr' ? 'Fonds disponibles' : 'Available funds'} value={formatMoneyFromCents(overviewQuery.data?.available_funds_cents || 0)} iconColor="green" />
-            <StatCard label={language === 'fr' ? 'Delai de paiement (30j)' : 'Payment time (30d)'} value={`${(overviewQuery.data?.invoice_payment_time_days_30d || 0).toFixed(1)} ${language === 'fr' ? 'jours' : 'days'}`} iconColor="blue" />
-            <StatCard label={language === 'fr' ? 'Payees a temps' : 'Paid on time'} value={`${(overviewQuery.data?.paid_on_time_global_pct_60d || 0).toFixed(1)}%`} iconColor="purple" />
+            <StatCard label={t.payments.availableFunds} value={formatMoneyFromCents(overviewQuery.data?.available_funds_cents || 0)} iconColor="green" />
+            <StatCard label={t.payments.paymentTime30d} value={`${(overviewQuery.data?.invoice_payment_time_days_30d || 0).toFixed(1)} ${t.payments.days}`} iconColor="blue" />
+            <StatCard label={t.payments.paidOnTime} value={`${(overviewQuery.data?.paid_on_time_global_pct_60d || 0).toFixed(1)}%`} iconColor="purple" />
           </div>
 
           {/* Filters */}
@@ -197,22 +197,22 @@ export default function Payments() {
               value={status}
               onChange={(v) => setQuery((n) => { if (v === 'all') n.delete('status'); else n.set('status', v); n.set('page', '1'); })}
               options={[
-                { value: 'all', label: language === 'fr' ? 'Tous les statuts' : 'All statuses' },
-                { value: 'succeeded', label: language === 'fr' ? 'Reussi' : 'Succeeded' },
-                { value: 'pending', label: language === 'fr' ? 'En attente' : 'Pending' },
-                { value: 'failed', label: language === 'fr' ? 'Echoue' : 'Failed' },
-                { value: 'refunded', label: language === 'fr' ? 'Rembourse' : 'Refunded' },
+                { value: 'all', label: t.payments.allStatuses },
+                { value: 'succeeded', label: t.payments.succeeded },
+                { value: 'pending', label: t.manageTeam.pending },
+                { value: 'failed', label: t.payments.failed },
+                { value: 'refunded', label: t.payments.refunded },
               ]}
             />
             <FilterSelect
               value={method}
               onChange={(v) => setQuery((n) => { if (v === 'all') n.delete('method'); else n.set('method', v); n.set('page', '1'); })}
               options={[
-                { value: 'all', label: language === 'fr' ? 'Toutes methodes' : 'All methods' },
-                { value: 'card', label: language === 'fr' ? 'Carte' : 'Card' },
+                { value: 'all', label: t.payments.allMethods },
+                { value: 'card', label: t.payments.card },
                 { value: 'e-transfer', label: 'E-Transfer' },
-                { value: 'cash', label: language === 'fr' ? 'Comptant' : 'Cash' },
-                { value: 'check', label: language === 'fr' ? 'Cheque' : 'Check' },
+                { value: 'cash', label: t.payments.cash },
+                { value: 'check', label: t.payments.check },
               ]}
             />
           </div>
@@ -221,10 +221,10 @@ export default function Payments() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{language === 'fr' ? 'Client' : 'Client'}</th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{language === 'fr' ? 'Date' : 'Date'}</th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{language === 'fr' ? 'Statut' : 'Status'}</th>
-                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{language === 'fr' ? 'Montant' : 'Amount'}</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.invoices.client}</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.payments.date}</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.automations.status}</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.invoices.amount}</th>
                 </tr>
               </thead>
               <tbody>
@@ -233,14 +233,14 @@ export default function Payments() {
                     <td colSpan={4} className="px-4 py-10">
                       <EmptyState
                         icon={CreditCard}
-                        title={language === 'fr' ? 'Aucun paiement' : 'No payments yet'}
-                        description={language === 'fr' ? 'Les paiements apparaitront ici.' : 'Payments will appear here.'}
+                        title={t.payments.noPaymentsYet}
+                        description={t.payments.paymentsWillAppearHere}
                       />
                     </td>
                   </tr>
                 )}
                 {paymentsQuery.isLoading && (
-                  <tr><td colSpan={4} className="px-4 py-10 text-center text-[13px] text-text-tertiary">{language === 'fr' ? 'Chargement...' : 'Loading...'}</td></tr>
+                  <tr><td colSpan={4} className="px-4 py-10 text-center text-[13px] text-text-tertiary">{t.payments.loading}</td></tr>
                 )}
                 {rows.map((r) => (
                   <tr key={r.id} className="table-row-hover">
@@ -253,7 +253,7 @@ export default function Payments() {
               </tbody>
             </table>
             <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-              <p className="text-xs text-text-tertiary">{language === 'fr' ? 'Page' : 'Page'} {page} / {totalPages}</p>
+              <p className="text-xs text-text-tertiary">{t.payments.page} {page} / {totalPages}</p>
               <div className="flex gap-2">
                 <button className="glass-button !px-2" disabled={page <= 1} onClick={() => setQuery((n) => { const p = Math.max(1, page - 1); if (p === 1) n.delete('page'); else n.set('page', String(p)); })}><ChevronLeft size={14} /></button>
                 <button className="glass-button !px-2" disabled={page >= totalPages} onClick={() => setQuery((n) => n.set('page', String(page + 1)))}><ChevronRight size={14} /></button>
@@ -267,10 +267,10 @@ export default function Payments() {
           {!isConnected && (
             <div className="section-card border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-4">
               <p className="text-[13px] text-amber-800 dark:text-amber-200">
-                {language === 'fr' ? 'Activez Lume Payments pour voir vos versements.' : 'Activate Lume Payments to see your payouts.'}
+                {t.payments.activateLumePaymentsToSeeYourPayouts}
               </p>
               <button className="glass-button mt-2 text-xs" onClick={() => navigate('/settings/payments')}>
-                {language === 'fr' ? 'Ouvrir les parametres' : 'Open Settings'}
+                {t.payments.openSettings}
               </button>
             </div>
           )}
@@ -282,18 +282,18 @@ export default function Payments() {
           )}
 
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-            <StatCard label={language === 'fr' ? 'Disponible' : 'Available'} value={formatMoneyFromCents(payoutSummary.data?.available || 0, payoutSummary.data?.currency || 'CAD')} iconColor="green" />
-            <StatCard label={language === 'fr' ? 'En transit' : 'On the way'} value={formatMoneyFromCents(payoutSummary.data?.on_the_way || 0, payoutSummary.data?.currency || 'CAD')} iconColor="amber" />
+            <StatCard label={t.payments.available} value={formatMoneyFromCents(payoutSummary.data?.available || 0, payoutSummary.data?.currency || 'CAD')} iconColor="green" />
+            <StatCard label={t.payments.onTheWay} value={formatMoneyFromCents(payoutSummary.data?.on_the_way || 0, payoutSummary.data?.currency || 'CAD')} iconColor="amber" />
             <div className="section-card p-4">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-2">{language === 'fr' ? 'Depose' : 'Deposited'}</p>
-              <p className="text-[13px] text-text-secondary">{language === 'fr' ? 'Cette semaine' : 'This week'}: <span className="font-semibold text-text-primary tabular-nums">{formatMoneyFromCents(payoutSummary.data?.deposited_week || 0, payoutSummary.data?.currency || 'CAD')}</span></p>
-              <p className="text-[13px] text-text-secondary">{language === 'fr' ? 'Ce mois-ci' : 'This month'}: <span className="font-semibold text-text-primary tabular-nums">{formatMoneyFromCents(payoutSummary.data?.deposited_month || 0, payoutSummary.data?.currency || 'CAD')}</span></p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-2">{t.payments.deposited}</p>
+              <p className="text-[13px] text-text-secondary">{t.payments.thisWeek}: <span className="font-semibold text-text-primary tabular-nums">{formatMoneyFromCents(payoutSummary.data?.deposited_week || 0, payoutSummary.data?.currency || 'CAD')}</span></p>
+              <p className="text-[13px] text-text-secondary">{t.payments.thisMonth}: <span className="font-semibold text-text-primary tabular-nums">{formatMoneyFromCents(payoutSummary.data?.deposited_month || 0, payoutSummary.data?.currency || 'CAD')}</span></p>
             </div>
           </div>
 
           <div className="flex items-center justify-between">
             <h2 className="text-[15px] font-bold text-text-primary">
-              {language === 'fr' ? 'Tous les versements' : 'All payouts'} ({payoutList.data?.total_estimate ?? payoutRows.length})
+              {t.payments.allPayouts} ({payoutList.data?.total_estimate ?? payoutRows.length})
             </h2>
             <button className="glass-button inline-flex items-center gap-1.5" onClick={() => void onCsv()}>
               <Download size={13} /> CSV
@@ -305,7 +305,7 @@ export default function Payments() {
               value={payoutMethod}
               onChange={(v) => setQuery((n) => { if (v === 'all') n.delete('payout_method'); else n.set('payout_method', v); n.delete('payout_cursor'); })}
               options={[
-                { value: 'all', label: language === 'fr' ? 'Tous' : 'All' },
+                { value: 'all', label: t.automations.all },
                 { value: 'standard', label: 'Standard' },
                 { value: 'instant', label: 'Instant' },
               ]}
@@ -315,10 +315,10 @@ export default function Payments() {
               onChange={(v) => setQuery((n) => { if (v === 'all') n.delete('date'); else n.set('date', v); if (v !== 'custom') { n.delete('from'); n.delete('to'); } n.delete('payout_cursor'); })}
               icon={<Calendar size={13} />}
               options={[
-                { value: 'all', label: language === 'fr' ? 'Tout' : 'All time' },
-                { value: '30d', label: language === 'fr' ? '30 derniers jours' : 'Last 30 days' },
-                { value: 'this_month', label: language === 'fr' ? 'Ce mois-ci' : 'This month' },
-                { value: 'custom', label: language === 'fr' ? 'Personnalise' : 'Custom range' },
+                { value: 'all', label: t.payments.allTime },
+                { value: '30d', label: t.payments.last30Days },
+                { value: 'this_month', label: t.payments.thisMonth },
+                { value: 'custom', label: t.payments.customRange },
               ]}
             />
           </div>
@@ -329,7 +329,7 @@ export default function Payments() {
                 <tr className="border-b border-border">
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Date</th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Type</th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{language === 'fr' ? 'Statut' : 'Status'}</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.automations.status}</th>
                   <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Net</th>
                 </tr>
               </thead>
@@ -339,14 +339,14 @@ export default function Payments() {
                     <td colSpan={4} className="px-4 py-10">
                       <EmptyState
                         icon={CreditCard}
-                        title={language === 'fr' ? 'Aucun versement' : 'No payouts yet'}
-                        description={language === 'fr' ? 'Les versements apparaitront ici une fois les paiements traites.' : 'Payouts will appear here once payments are processed.'}
+                        title={t.payments.noPayoutsYet}
+                        description={t.payments.payoutsWillAppearHereOncePaymentsAreProc}
                       />
                     </td>
                   </tr>
                 )}
                 {payoutList.isLoading && (
-                  <tr><td colSpan={4} className="px-4 py-10 text-center text-[13px] text-text-tertiary">{language === 'fr' ? 'Chargement...' : 'Loading...'}</td></tr>
+                  <tr><td colSpan={4} className="px-4 py-10 text-center text-[13px] text-text-tertiary">{t.payments.loading}</td></tr>
                 )}
                 {payoutRows.map((i) => (
                   <tr key={i.id} className="table-row-hover cursor-pointer" onClick={() => setSelectedPayout(i)}>
@@ -359,7 +359,7 @@ export default function Payments() {
               </tbody>
             </table>
             <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-              <p className="text-xs text-text-tertiary">{language === 'fr' ? 'Page' : 'Page'} {cursorHistory.length + 1}</p>
+              <p className="text-xs text-text-tertiary">{t.payments.page} {cursorHistory.length + 1}</p>
               <div className="flex gap-2">
                 <button className="glass-button !px-2" disabled={cursorHistory.length === 0} onClick={() => setQuery((n) => { const h = [...cursorHistory]; h.pop(); setCursorHistory(h); const prev = h[h.length - 1]; if (!prev) n.delete('payout_cursor'); else n.set('payout_cursor', prev); })}><ChevronLeft size={14} /></button>
                 <button className="glass-button !px-2" disabled={!payoutList.data?.has_more || !payoutList.data?.next_cursor} onClick={() => setQuery((n) => { const next = payoutList.data?.next_cursor; if (!next) return; setCursorHistory((h) => [...h, next]); n.set('payout_cursor', next); })}><ChevronRight size={14} /></button>
@@ -375,7 +375,7 @@ export default function Payments() {
           <div className="fixed inset-0 z-[80] bg-black/20 backdrop-blur-[2px]" onClick={() => setSelectedPayout(null)} />
           <aside className="fixed right-0 top-0 z-[90] h-screen w-full max-w-md bg-surface border-l border-outline p-5 overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[15px] font-bold text-text-primary">{language === 'fr' ? 'Details du versement' : 'Payout details'}</h3>
+              <h3 className="text-[15px] font-bold text-text-primary">{t.payments.payoutDetails}</h3>
               <button className="p-1.5 rounded hover:bg-surface-secondary text-text-tertiary" onClick={() => setSelectedPayout(null)}><X size={14} /></button>
             </div>
             {payoutDetail.isLoading && <div className="skeleton h-40 mt-4" />}
@@ -385,15 +385,15 @@ export default function Payments() {
               return (
               <div className="mt-4 space-y-3">
                 <div className="flex justify-between text-[13px]">
-                  <span className="text-text-secondary">{language === 'fr' ? 'Montant' : 'Amount'}</span>
+                  <span className="text-text-secondary">{t.invoices.amount}</span>
                   <span className="font-semibold text-text-primary">{formatMoneyFromCents(d.amount, d.currency)}</span>
                 </div>
                 <div className="flex justify-between text-[13px]">
-                  <span className="text-text-secondary">{language === 'fr' ? 'Statut' : 'Status'}</span>
+                  <span className="text-text-secondary">{t.automations.status}</span>
                   <StatusBadge status={d.status} />
                 </div>
                 <div className="flex justify-between text-[13px]">
-                  <span className="text-text-secondary">{language === 'fr' ? 'Date de creation' : 'Created'}</span>
+                  <span className="text-text-secondary">{t.payments.created}</span>
                   <span className="text-text-primary">{formatDate(d.created)}</span>
                 </div>
                 <div className="flex justify-between text-[13px]">
@@ -402,7 +402,7 @@ export default function Payments() {
                 </div>
                 {d.fee_total > 0 && (
                   <div className="flex justify-between text-[13px]">
-                    <span className="text-text-secondary">{language === 'fr' ? 'Frais' : 'Fees'}</span>
+                    <span className="text-text-secondary">{t.paymentSettings.fees}</span>
                     <span className="text-text-primary">{formatMoneyFromCents(d.fee_total, d.currency)}</span>
                   </div>
                 )}

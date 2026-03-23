@@ -105,7 +105,7 @@ function NewConversationModal({
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-outline">
           <h3 className="text-[15px] font-bold text-text-primary">
-            {language === 'fr' ? 'Nouveau message' : 'New Message'}
+            {t.messaging.newMessage}
           </h3>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-surface-tertiary text-text-tertiary">
             <X size={16} />
@@ -116,13 +116,13 @@ function NewConversationModal({
           {/* Client search */}
           <div>
             <label className="block text-[12px] font-semibold text-text-secondary mb-1.5">
-              {language === 'fr' ? 'Chercher un client' : 'Search client'}
+              {t.messaging.searchClient}
             </label>
             <input
               type="text"
               value={clientSearch}
               onChange={(e) => { setClientSearch(e.target.value); setSelectedClient(null); }}
-              placeholder={language === 'fr' ? 'Nom ou téléphone...' : 'Name or phone...'}
+              placeholder={t.messaging.nameOrPhone}
               className="input-field"
             />
             {clients.length > 0 && !selectedClient && (
@@ -158,7 +158,7 @@ function NewConversationModal({
           {!selectedClient && (
             <div>
               <label className="block text-[12px] font-semibold text-text-secondary mb-1.5">
-                {language === 'fr' ? 'Numéro de téléphone' : 'Phone number'}
+                {t.messaging.phoneNumber}
               </label>
               <input
                 type="tel"
@@ -177,7 +177,7 @@ function NewConversationModal({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={3}
-              placeholder={language === 'fr' ? 'Tapez votre message...' : 'Type your message...'}
+              placeholder={t.messaging.typeYourMessage}
               className="input-field resize-none"
             />
           </div>
@@ -185,7 +185,7 @@ function NewConversationModal({
 
         <div className="px-5 py-4 border-t border-outline flex justify-end gap-2">
           <button onClick={onClose} className="btn-secondary text-[13px] px-4 py-2">
-            {language === 'fr' ? 'Annuler' : 'Cancel'}
+            {t.advancedNotes.cancel}
           </button>
           <button
             onClick={handleSend}
@@ -193,7 +193,7 @@ function NewConversationModal({
             className="btn-primary text-[13px] px-4 py-2 flex items-center gap-2 disabled:opacity-50"
           >
             <Send size={13} />
-            {sending ? (language === 'fr' ? 'Envoi...' : 'Sending...') : (language === 'fr' ? 'Envoyer' : 'Send')}
+            {sending ? (t.invoiceDetails.sending) : (t.invoices.send)}
           </button>
         </div>
       </motion.div>
@@ -322,7 +322,7 @@ export default function Messages() {
           loadConversations();
         }
       } catch (err: any) {
-        if (!cancelled) toast.error(language === 'fr' ? 'Erreur de chargement' : 'Failed to load messages');
+        if (!cancelled) toast.error(t.messaging.failedToLoadMessages);
       } finally {
         if (!cancelled) setLoadingMessages(false);
       }
@@ -416,13 +416,13 @@ export default function Messages() {
     <>
       <PageHeader
         icon={MessageSquare}
-        title={language === 'fr' ? 'Messages' : 'Messages'}
-        subtitle={language === 'fr' ? 'Messagerie SMS bidirectionnelle' : 'Two-way SMS messaging'}
+        title={t.messaging.messages}
+        subtitle={t.messaging.twowaySmsMessaging}
         iconColor="cyan"
       >
         <button onClick={() => setShowNewModal(true)} className="btn-primary text-[13px] px-4 py-2 flex items-center gap-2">
           <Plus size={14} />
-          {language === 'fr' ? 'Nouveau message' : 'New Message'}
+          {t.messaging.newMessage}
         </button>
       </PageHeader>
 
@@ -441,7 +441,7 @@ export default function Messages() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={language === 'fr' ? 'Rechercher...' : 'Search conversations...'}
+                placeholder={t.messaging.searchConversations}
                 className="input-field pl-9 text-[13px]"
               />
             </div>
@@ -456,14 +456,14 @@ export default function Messages() {
             ) : filteredConvos.length === 0 ? (
               <div className="p-6 text-center text-text-tertiary text-[13px]">
                 {searchQuery
-                  ? (language === 'fr' ? 'Aucun résultat' : 'No results found')
-                  : (language === 'fr' ? 'Aucune conversation' : 'No conversations yet')}
+                  ? (t.messaging.noResultsFound)
+                  : (t.messaging.noConversationsYet)}
                 {!searchQuery && (
                   <button
                     onClick={() => setShowNewModal(true)}
                     className="mt-3 text-primary font-semibold hover:underline block mx-auto"
                   >
-                    {language === 'fr' ? 'Envoyer un premier message' : 'Send your first message'}
+                    {t.messaging.sendYourFirstMessage}
                   </button>
                 )}
               </div>
@@ -524,7 +524,7 @@ export default function Messages() {
           {/* Unread count footer */}
           {totalUnread > 0 && (
             <div className="px-4 py-2 border-t border-outline bg-primary/5 text-[12px] font-semibold text-primary">
-              {totalUnread} {language === 'fr' ? 'non lu(s)' : 'unread'}
+              {totalUnread} {t.messaging.unread}
             </div>
           )}
         </div>
@@ -542,7 +542,7 @@ export default function Messages() {
                   <MessageSquare size={28} className="text-text-tertiary" />
                 </div>
                 <h3 className="text-[15px] font-bold text-text-primary mb-1">
-                  {language === 'fr' ? 'Sélectionnez une conversation' : 'Select a conversation'}
+                  {t.messaging.selectAConversation}
                 </h3>
                 <p className="text-[13px] text-text-tertiary max-w-xs">
                   {language === 'fr'
@@ -583,7 +583,7 @@ export default function Messages() {
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="text-center py-12 text-text-tertiary text-[13px]">
-                    {language === 'fr' ? 'Aucun message encore' : 'No messages yet'}
+                    {t.messaging.noMessagesYet}
                   </div>
                 ) : (
                   groupedMessages.map((group, gIdx) => (
@@ -646,7 +646,7 @@ export default function Messages() {
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyDown={handleKeyDown}
                     rows={1}
-                    placeholder={language === 'fr' ? 'Tapez un message...' : 'Type a message...'}
+                    placeholder={t.messaging.typeAMessage}
                     className="input-field flex-1 resize-none text-[13px] min-h-[40px] max-h-[120px]"
                     style={{ height: 'auto', overflow: 'auto' }}
                     onInput={(e) => {
@@ -669,7 +669,7 @@ export default function Messages() {
                   </button>
                 </div>
                 <p className="text-[10px] text-text-tertiary mt-1.5">
-                  {language === 'fr' ? 'Entrée pour envoyer · Shift+Entrée pour saut de ligne' : 'Enter to send · Shift+Enter for new line'}
+                  {t.messaging.enterToSendShiftenterForNewLine}
                 </p>
               </div>
             </>

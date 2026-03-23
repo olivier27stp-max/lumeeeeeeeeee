@@ -7,6 +7,7 @@ import {
   Scissors, ClipboardPaste, MoveRight,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../i18n';
 
 export interface ContextMenuAction {
   id: string;
@@ -56,26 +57,26 @@ export default function CanvasContextMenu({
   const adjustedY = Math.min(y, window.innerHeight - 400);
 
   const nodeActions: ContextMenuAction[] = [
-    { id: 'duplicate', label: fr ? 'Dupliquer' : 'Duplicate', icon: Copy, shortcut: 'Ctrl+D' },
-    { id: 'cut', label: fr ? 'Couper' : 'Cut', icon: Scissors, shortcut: 'Ctrl+X' },
-    { id: 'copy', label: fr ? 'Copier' : 'Copy', icon: Copy, shortcut: 'Ctrl+C' },
-    { id: 'lock', label: isLocked ? (fr ? 'Deverrouiller' : 'Unlock') : (fr ? 'Verrouiller' : 'Lock'), icon: isLocked ? Unlock : Lock, dividerBefore: true },
-    { id: 'bring-front', label: fr ? 'Premier plan' : 'Bring to front', icon: ArrowUp, dividerBefore: true },
-    { id: 'send-back', label: fr ? 'Arriere-plan' : 'Send to back', icon: ArrowDown },
-    { id: 'connect', label: fr ? 'Connecter' : 'Connect', icon: MoveRight, dividerBefore: true },
-    { id: 'delete', label: fr ? 'Supprimer' : 'Delete', icon: Trash2, shortcut: 'Del', danger: true, dividerBefore: true },
+    { id: 'duplicate', label: t.invoiceDetails.duplicate, icon: Copy, shortcut: 'Ctrl+D' },
+    { id: 'cut', label: t.noteCanvas.cut, icon: Scissors, shortcut: 'Ctrl+X' },
+    { id: 'copy', label: t.noteCanvas.copy, icon: Copy, shortcut: 'Ctrl+C' },
+    { id: 'lock', label: isLocked ? (t.noteCanvas.unlock) : (t.noteCanvas.lock), icon: isLocked ? Unlock : Lock, dividerBefore: true },
+    { id: 'bring-front', label: t.noteCanvas.bringToFront, icon: ArrowUp, dividerBefore: true },
+    { id: 'send-back', label: t.noteCanvas.sendToBack, icon: ArrowDown },
+    { id: 'connect', label: t.noteCanvas.connect, icon: MoveRight, dividerBefore: true },
+    { id: 'delete', label: t.advancedNotes.delete, icon: Trash2, shortcut: 'Del', danger: true, dividerBefore: true },
   ];
 
   const canvasActions: ContextMenuAction[] = [
-    { id: 'paste', label: fr ? 'Coller' : 'Paste', icon: ClipboardPaste, shortcut: 'Ctrl+V' },
-    { id: 'add-sticky', label: fr ? 'Post-it' : 'Sticky note', icon: StickyNote, dividerBefore: true },
-    { id: 'add-text', label: fr ? 'Texte' : 'Text', icon: Type },
+    { id: 'paste', label: t.noteCanvas.paste, icon: ClipboardPaste, shortcut: 'Ctrl+V' },
+    { id: 'add-sticky', label: t.noteCanvas.stickyNote, icon: StickyNote, dividerBefore: true },
+    { id: 'add-text', label: t.noteCanvas.text, icon: Type },
     { id: 'add-checklist', label: 'Checklist', icon: CheckSquare },
-    { id: 'add-shape', label: fr ? 'Forme' : 'Shape', icon: Square },
+    { id: 'add-shape', label: t.noteCanvas.shape, icon: Square },
     { id: 'add-frame', label: 'Frame', icon: Frame },
     { id: 'add-image', label: 'Image', icon: Image },
-    { id: 'add-link', label: fr ? 'Lien' : 'Link', icon: Link2 },
-    { id: 'select-all', label: fr ? 'Tout selectionner' : 'Select all', icon: Layers, shortcut: 'Ctrl+A', dividerBefore: true },
+    { id: 'add-link', label: t.invoiceDetails.link, icon: Link2 },
+    { id: 'select-all', label: t.noteCanvas.selectAll, icon: Layers, shortcut: 'Ctrl+A', dividerBefore: true },
   ];
 
   const actions = isNodeMenu ? nodeActions : canvasActions;

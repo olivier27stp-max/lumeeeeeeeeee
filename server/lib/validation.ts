@@ -53,7 +53,7 @@ export const softDeleteDealSchema = z.object({
 
 export const updateLeadStatusSchema = z.object({
   leadId: z.string().trim().min(1, 'leadId is required.'),
-  status: z.enum(['new', 'follow_up_1', 'follow_up_2', 'follow_up_3', 'closed', 'lost']),
+  status: z.enum(['new_prospect', 'no_response', 'quote_sent', 'closed_won', 'closed_lost', 'new', 'follow_up_1', 'follow_up_2', 'follow_up_3', 'closed', 'lost']),
   orgId: optionalOrgId,
 });
 
@@ -262,3 +262,40 @@ export const submitSurveySchema = z.object({
   rating: z.number().min(1).max(5).optional(),
   comment: z.string().trim().optional(),
 }).passthrough();
+
+// ─── Request Forms ──────────────────────────────────────────────────────────
+
+const formFieldSchema = z.object({
+  id: z.string().trim().min(1),
+  label: z.string().trim().min(1),
+  type: z.enum(['text', 'dropdown', 'multiselect', 'checkbox', 'number', 'paragraph']),
+  required: z.boolean(),
+  options: z.array(z.string()).optional(),
+  section: z.enum(['service_details', 'final_notes']),
+});
+
+export const upsertRequestFormSchema = z.object({
+  title: z.string().trim().min(1, 'title is required.'),
+  description: optionalString,
+  success_message: z.string().trim().min(1, 'success_message is required.'),
+  enabled: z.boolean().optional(),
+  custom_fields: z.array(formFieldSchema).optional().default([]),
+  notify_email: z.boolean().optional(),
+  notify_in_app: z.boolean().optional(),
+});
+
+export const publicFormSubmissionSchema = z.object({
+  first_name: z.string().trim().min(1, 'First name is required.'),
+  last_name: z.string().trim().min(1, 'Last name is required.'),
+  company: optionalString,
+  email: z.string().trim().email('Valid email is required.'),
+  phone: z.string().trim().min(1, 'Phone is required.'),
+  street_address: optionalString,
+  unit: optionalString,
+  city: optionalString,
+  country: optionalString,
+  region: optionalString,
+  postal_code: optionalString,
+  custom_responses: z.record(z.string(), z.any()).optional().default({}),
+  notes: optionalString,
+});

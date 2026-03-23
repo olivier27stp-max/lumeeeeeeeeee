@@ -99,7 +99,7 @@ export default function InvoiceDetails() {
     try {
       await sendInvoice({ invoiceId: invoice.id, channels: ['email'], toEmail: client.email });
       invalidateAll();
-      toast.success(language === 'fr' ? 'Facture envoyée!' : 'Invoice sent!');
+      toast.success(t.invoiceDetails.invoiceSent);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to send');
     } finally {
@@ -108,11 +108,11 @@ export default function InvoiceDetails() {
   }
 
   async function handleVoid() {
-    if (!window.confirm(language === 'fr' ? 'Annuler cette facture ?' : 'Void this invoice?')) return;
+    if (!window.confirm(t.invoiceDetails.voidThisInvoice)) return;
     try {
       await voidInvoice(invoice.id);
       invalidateAll();
-      toast.success(language === 'fr' ? 'Facture annulée' : 'Invoice voided');
+      toast.success(t.invoiceDetails.invoiceVoided);
     } catch (err: any) {
       toast.error(err?.message || 'Failed');
     }
@@ -123,7 +123,7 @@ export default function InvoiceDetails() {
     try {
       const newId = await duplicateInvoice(invoice.id);
       queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
-      toast.success(language === 'fr' ? 'Facture dupliquée' : 'Invoice duplicated');
+      toast.success(t.invoiceDetails.invoiceDuplicated);
       navigate(`/invoices/${newId}/edit`);
     } catch (err: any) {
       toast.error(err?.message || 'Failed');
@@ -132,12 +132,12 @@ export default function InvoiceDetails() {
   }
 
   async function handleMarkPaid() {
-    if (!window.confirm(language === 'fr' ? 'Marquer comme payée ?' : 'Mark as paid?')) return;
+    if (!window.confirm(t.invoiceDetails.markAsPaid)) return;
     try {
       await markInvoicePaidManually(invoice.id);
       invalidateAll();
       queryClient.invalidateQueries({ queryKey: ['paymentsOverview'] });
-      toast.success(language === 'fr' ? 'Facture marquée payée' : 'Invoice marked as paid');
+      toast.success(t.invoiceDetails.invoiceMarkedAsPaid);
     } catch (err: any) {
       toast.error(err?.message || 'Failed');
     }
@@ -167,7 +167,7 @@ export default function InvoiceDetails() {
                 className="glass-button inline-flex items-center gap-1.5 text-[12px]"
               >
                 <Pencil size={12} />
-                {language === 'fr' ? 'Modifier' : 'Edit'}
+                {t.advancedNotes.edit}
               </button>
             )}
 
@@ -181,10 +181,10 @@ export default function InvoiceDetails() {
               >
                 <Send size={12} />
                 {sendLoading
-                  ? (language === 'fr' ? 'Envoi...' : 'Sending...')
+                  ? (t.invoiceDetails.sending)
                   : isDraft
-                    ? (language === 'fr' ? 'Envoyer' : 'Send Invoice')
-                    : (language === 'fr' ? 'Renvoyer' : 'Resend')}
+                    ? (t.invoiceDetails.sendInvoice)
+                    : (t.invoiceDetails.resend)}
               </button>
             )}
 
@@ -195,9 +195,9 @@ export default function InvoiceDetails() {
               onClick={() => {
                 try {
                   downloadInvoicePdf(detailsQuery.data!, companyQuery.data);
-                  toast.success(language === 'fr' ? 'PDF téléchargé' : 'PDF downloaded');
+                  toast.success(t.invoiceDetails.pdfDownloaded);
                 } catch {
-                  toast.error(language === 'fr' ? 'Erreur PDF' : 'Failed to generate PDF');
+                  toast.error(t.invoiceDetails.failedToGeneratePdf);
                 }
               }}
             >
@@ -215,7 +215,7 @@ export default function InvoiceDetails() {
               )}
             >
               <Eye size={12} />
-              {language === 'fr' ? 'Aperçu' : 'Preview'}
+              {t.invoiceDetails.preview}
             </button>
 
             {/* Copy Link */}
@@ -228,12 +228,12 @@ export default function InvoiceDetails() {
                   const link = `${API_BASE}/q/${invoice.view_token}`;
                   navigator.clipboard.writeText(link);
                   setLinkCopied(true);
-                  toast.success(language === 'fr' ? 'Lien copié !' : 'Link copied!');
+                  toast.success(t.invoiceDetails.linkCopied);
                   setTimeout(() => setLinkCopied(false), 2000);
                 }}
               >
                 {linkCopied ? <Check size={12} /> : <Link2 size={12} />}
-                {linkCopied ? (language === 'fr' ? 'Copié' : 'Copied') : (language === 'fr' ? 'Lien' : 'Link')}
+                {linkCopied ? (t.invoiceDetails.copied) : (t.invoiceDetails.link)}
               </button>
             )}
 
@@ -246,7 +246,7 @@ export default function InvoiceDetails() {
                   className="glass-button inline-flex items-center gap-1.5 text-[12px] bg-neutral-900 text-white hover:bg-neutral-800"
                 >
                   <Send size={12} />
-                  {language === 'fr' ? 'Demander paiement' : 'Request Payment'}
+                  {t.invoiceDetails.requestPayment}
                 </button>
                 <button type="button" onClick={() => setIsPaymentModalOpen(true)} className="glass-button-primary">
                   {t.invoiceDetails.payNow}
@@ -279,7 +279,7 @@ export default function InvoiceDetails() {
                         className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-surface-secondary"
                       >
                         <CopyPlus size={12} />
-                        {language === 'fr' ? 'Dupliquer' : 'Duplicate'}
+                        {t.invoiceDetails.duplicate}
                       </button>
                       {!isPaid && !isVoid && invoice.balance_cents > 0 && (
                         <button
@@ -288,7 +288,7 @@ export default function InvoiceDetails() {
                           className="flex w-full items-center gap-2 px-3 py-2 text-xs text-green-600 hover:bg-surface-secondary"
                         >
                           <CheckCircle2 size={12} />
-                          {language === 'fr' ? 'Marquer payée' : 'Mark as Paid'}
+                          {t.invoiceDetails.markAsPaid2}
                         </button>
                       )}
                       {!isPaid && !isVoid && (
@@ -298,7 +298,7 @@ export default function InvoiceDetails() {
                           className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger hover:bg-surface-secondary"
                         >
                           <Ban size={12} />
-                          {language === 'fr' ? 'Annuler' : 'Void Invoice'}
+                          {t.invoiceDetails.voidInvoice}
                         </button>
                       )}
                     </motion.div>
@@ -353,17 +353,17 @@ export default function InvoiceDetails() {
                 invoice.is_viewed ? "text-success" : "text-text-tertiary"
               )}>
                 {invoice.is_viewed
-                  ? (language === 'fr' ? 'Ouvert par le client' : 'Opened by client')
-                  : (language === 'fr' ? 'Pas encore ouvert' : 'Not opened yet')}
+                  ? (t.invoiceDetails.openedByClient)
+                  : (t.invoiceDetails.notOpenedYet)}
               </p>
               {invoice.is_viewed && (
                 <p className="text-[11px] text-text-tertiary">
-                  {language === 'fr' ? 'Première ouverture' : 'First opened'}: {formatDate(invoice.viewed_at || '')}
+                  {t.invoiceDetails.firstOpened}: {formatDate(invoice.viewed_at || '')}
                   {(invoice.view_count || 0) > 1 && (
-                    <> · {invoice.view_count} {language === 'fr' ? 'vues' : 'views'}</>
+                    <> · {invoice.view_count} {t.invoiceDetails.views}</>
                   )}
                   {invoice.last_viewed_at && invoice.last_viewed_at !== invoice.viewed_at && (
-                    <> · {language === 'fr' ? 'Dernière' : 'Last'}: {formatDate(invoice.last_viewed_at)}</>
+                    <> · {t.invoiceDetails.last}: {formatDate(invoice.last_viewed_at)}</>
                   )}
                 </p>
               )}
@@ -382,7 +382,7 @@ export default function InvoiceDetails() {
           <div className="flex-1">
             <div className="flex items-center justify-between">
               <p className="text-[13px] font-semibold text-text-primary">
-                {language === 'fr' ? 'Facturation récurrente' : 'Recurring Invoice'}
+                {t.invoiceDetails.recurringInvoice}
               </p>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -411,8 +411,8 @@ export default function InvoiceDetails() {
                       if (error) throw error;
                       queryClient.invalidateQueries({ queryKey: ['invoiceDetails', invoiceId] });
                       toast.success(checked
-                        ? (language === 'fr' ? 'Récurrence activée' : 'Recurring enabled')
-                        : (language === 'fr' ? 'Récurrence désactivée' : 'Recurring disabled'));
+                        ? (t.invoiceDetails.recurringEnabled)
+                        : (t.invoiceDetails.recurringDisabled));
                     } catch (err: any) {
                       toast.error(err.message || 'Failed to update');
                     } finally {
@@ -452,7 +452,7 @@ export default function InvoiceDetails() {
                         .eq('id', invoice.id);
                       if (error) throw error;
                       queryClient.invalidateQueries({ queryKey: ['invoiceDetails', invoiceId] });
-                      toast.success(language === 'fr' ? 'Intervalle mis à jour' : 'Interval updated');
+                      toast.success(t.invoiceDetails.intervalUpdated);
                     } catch (err: any) {
                       toast.error(err.message || 'Failed to update');
                     } finally {
@@ -461,15 +461,15 @@ export default function InvoiceDetails() {
                   }}
                   className="glass-input !py-1 text-xs"
                 >
-                  <option value="weekly">{language === 'fr' ? 'Hebdomadaire' : 'Weekly'}</option>
-                  <option value="biweekly">{language === 'fr' ? 'Aux 2 semaines' : 'Biweekly'}</option>
-                  <option value="monthly">{language === 'fr' ? 'Mensuel' : 'Monthly'}</option>
-                  <option value="quarterly">{language === 'fr' ? 'Trimestriel' : 'Quarterly'}</option>
-                  <option value="yearly">{language === 'fr' ? 'Annuel' : 'Yearly'}</option>
+                  <option value="weekly">{t.invoiceDetails.weekly}</option>
+                  <option value="biweekly">{t.invoiceDetails.biweekly}</option>
+                  <option value="monthly">{t.billing.monthly}</option>
+                  <option value="quarterly">{t.invoiceDetails.quarterly}</option>
+                  <option value="yearly">{t.billing.yearly}</option>
                 </select>
                 {(invoice as any).next_recurrence_date && (
                   <span className="text-[11px] text-text-tertiary">
-                    {language === 'fr' ? 'Prochaine :' : 'Next:'} {formatDate((invoice as any).next_recurrence_date)}
+                    {t.invoiceDetails.next} {formatDate((invoice as any).next_recurrence_date)}
                   </span>
                 )}
               </div>
@@ -477,7 +477,7 @@ export default function InvoiceDetails() {
 
             {(invoice as any).parent_invoice_id && (
               <p className="mt-1 text-[11px] text-text-tertiary">
-                {language === 'fr' ? 'Générée depuis une facture récurrente' : 'Generated from a recurring invoice'}
+                {t.invoiceDetails.generatedFromARecurringInvoice}
               </p>
             )}
           </div>

@@ -77,45 +77,78 @@
     min-height: 100vh;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     letter-spacing: -0.011em;
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
   }
 
   .dark body,
   body.dark {
-    --color-outline: #2e2e2e;
-    --color-outline-subtle: #252525;
-    --color-surface: #161616;
-    --color-surface-secondary: #1a1a1a;
-    --color-surface-tertiary: #202020;
-    --color-sidebar: #161616;
-    --color-sidebar-hover: #1e1e1e;
-    --color-sidebar-active: #222222;
-    --color-sidebar-text: #737373;
-    --color-sidebar-text-active: #e5e5e5;
-    --color-border: #2e2e2e;
-    --color-border-light: #222222;
-    --color-text-primary: #e5e5e5;
-    --color-text-secondary: #a3a3a3;
-    --color-text-tertiary: #525252;
-    --color-primary-light: #2a2a2a;
-    --color-primary-lighter: #222222;
-    --color-success-light: #0f2912;
-    --color-warning-light: #2a1f08;
-    --color-danger-light: #2d1111;
-    --color-info-light: #0c1f2d;
-    --color-tile-pink: #252525;
-    --color-tile-pink-fg: #a3a3a3;
-    --color-tile-amber: #252525;
-    --color-tile-amber-fg: #a3a3a3;
-    --color-tile-green: #252525;
-    --color-tile-green-fg: #a3a3a3;
-    --color-tile-blue: #252525;
-    --color-tile-blue-fg: #a3a3a3;
-    --color-tile-purple: #252525;
-    --color-tile-purple-fg: #a3a3a3;
-    --color-tile-rose: #252525;
-    --color-tile-rose-fg: #a3a3a3;
-    --color-tile-cyan: #252525;
-    --color-tile-cyan-fg: #a3a3a3;
+    background: linear-gradient(180deg, #0F172A 0%, #020617 100%);
+    background-attachment: fixed;
+  }
+
+  .dark body,
+  body.dark {
+    /* Surfaces — blue-gray depth */
+    --color-surface: #0F172A;
+    --color-surface-secondary: #111827;
+    --color-surface-tertiary: #1E293B;
+
+    /* Outline & borders */
+    --color-outline: #334155;
+    --color-outline-subtle: #1F2937;
+    --color-border: #334155;
+    --color-border-light: #1F2937;
+
+    /* Sidebar — deepest layer for contrast */
+    --color-sidebar: #020617;
+    --color-sidebar-hover: #172033;
+    --color-sidebar-active: #1E293B;
+    --color-sidebar-text: #9CA3AF;
+    --color-sidebar-text-active: #F1F5F9;
+
+    /* Text hierarchy */
+    --color-text-primary: #E5E7EB;
+    --color-text-secondary: #9CA3AF;
+    --color-text-tertiary: #6B7280;
+
+    /* Primary accent — modern blue */
+    --color-primary: #3B82F6;
+    --color-primary-hover: #2563EB;
+    --color-primary-light: #1E293B;
+    --color-primary-lighter: #172033;
+
+    /* Semantic — richer dark variants */
+    --color-success: #34D399;
+    --color-success-light: #064E3B;
+    --color-warning: #FBBF24;
+    --color-warning-light: #78350F;
+    --color-danger: #F87171;
+    --color-danger-light: #7F1D1D;
+    --color-info: #60A5FA;
+    --color-info-light: #1E3A5F;
+
+    /* Icon tiles — blue-gray tinted */
+    --color-tile-pink: #1E293B;
+    --color-tile-pink-fg: #F9A8D4;
+    --color-tile-amber: #1E293B;
+    --color-tile-amber-fg: #FCD34D;
+    --color-tile-green: #1E293B;
+    --color-tile-green-fg: #6EE7B7;
+    --color-tile-blue: #1E293B;
+    --color-tile-blue-fg: #93C5FD;
+    --color-tile-purple: #1E293B;
+    --color-tile-purple-fg: #C4B5FD;
+    --color-tile-rose: #1E293B;
+    --color-tile-rose-fg: #FDA4AF;
+    --color-tile-cyan: #1E293B;
+    --color-tile-cyan-fg: #67E8F9;
+
+    /* Shadows — soft depth */
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.35);
+    --shadow-dropdown: 0 4px 24px rgba(0, 0, 0, 0.4);
   }
 }
 
@@ -273,8 +306,8 @@
 
 .dark .dot-grid,
 body.dark .dot-grid {
-  background-color: #141414;
-  background-image: radial-gradient(circle, #292929 0.75px, transparent 0.75px);
+  background-color: #0F172A;
+  background-image: radial-gradient(circle, #334155 0.75px, transparent 0.75px);
 }
 
 /* ================================================================
@@ -660,8 +693,8 @@ body.dark .dot-grid {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
   padding: 1rem;
 }
 

@@ -40,9 +40,9 @@ export const GOOGLE_REVIEW_PRESET: AutomationPreset = {
 export const ESTIMATE_FOLLOWUP_PRESET: AutomationPreset = {
   key: 'estimate_followup',
   name_en: 'Estimate Follow-Up (3 days)',
-  name_fr: 'Relance soumission (3 jours)',
+  name_fr: 'Relance devis (3 jours)',
   description_en: 'Send a follow-up email 3 days after an estimate is sent, if not yet accepted or rejected.',
-  description_fr: 'Envoie un email de relance 3 jours après l\'envoi d\'une soumission, si pas encore acceptée ou refusée.',
+  description_fr: 'Envoie un courriel de relance 3 jours après l\'envoi d\'un devis, si pas encore accepté ou refusé.',
   trigger_event: 'estimate.sent',
   conditions: {},
   delay_seconds: 3 * 24 * 60 * 60, // 3 days
@@ -311,7 +311,7 @@ export const PIPELINE_FOLLOWUP_TASK: AutomationPreset = {
   description_en: 'Create a follow-up task when a deal moves to Follow-up 1 stage.',
   description_fr: 'Cree une tache de rappel quand un deal passe en etape Suivi 1.',
   trigger_event: 'pipeline_deal.stage_changed',
-  conditions: { new_stage: 'follow_up_1' },
+  conditions: { new_stage: 'no_response' },
   delay_seconds: 0,
   actions: [
     {
@@ -342,7 +342,7 @@ export const PIPELINE_QUOTE_SENT_STAGE: AutomationPreset = {
       config: {
         table: 'pipeline_deals',
         field: 'stage',
-        value: 'follow_up_2',
+        value: 'quote_sent',
         match_field: 'lead_id',
         match_source: 'lead_id',
       },

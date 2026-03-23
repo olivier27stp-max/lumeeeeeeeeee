@@ -63,9 +63,9 @@ export default function QuoteDetails() {
   );
   if (!detail) return (
     <div className="text-center py-20">
-      <p className="text-text-tertiary">{language === 'fr' ? 'Devis introuvable' : 'Quote not found'}</p>
+      <p className="text-text-tertiary">{t.quoteDetails.quoteNotFound}</p>
       <button onClick={() => navigate('/quotes')} className="glass-button mt-4 inline-flex items-center gap-1.5">
-        <ArrowLeft size={14} /> {language === 'fr' ? 'Retour' : 'Back'}
+        <ArrowLeft size={14} /> {t.companySettings.back}
       </button>
     </div>
   );
@@ -143,7 +143,7 @@ export default function QuoteDetails() {
           }));
         await saveQuoteLineItems(quote.id, items);
       }
-      toast.success(language === 'fr' ? 'Sauvegarde' : 'Saved');
+      toast.success(t.quoteDetails.saved);
       setEditing(null);
       await loadQuote();
     } catch (e: any) {

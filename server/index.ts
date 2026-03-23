@@ -38,9 +38,14 @@ import directorPanelRouter from './routes/director-panel';
 import teamSuggestionsRouter from './routes/team-suggestions';
 import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
+import requestFormsRouter from './routes/request-forms';
+import quoteTemplatesRouter from './routes/quote-templates';
 import featureFlagsRouter from './routes/feature-flags';
 import aiProxyRouter from './routes/ai-proxy';
 import agentRouter from './routes/agent';
+import invitationsRouter from './routes/invitations';
+import billingRouter from './routes/billing';
+import referralsRouter from './routes/referrals';
 
 const app = express();
 
@@ -73,11 +78,10 @@ app.use((_req, res, next) => {
   next();
 });
 
-// ── CORS — strict in prod, permissive in dev ──
-const rawOrigin = (process.env.FRONTEND_URL || '').trim();
-const allowedOrigin = rawOrigin || (process.env.NODE_ENV === 'production' ? true : 'http://localhost:5173');
+// ── CORS ──
+const frontendUrl = (process.env.FRONTEND_URL || '').trim();
 app.use(cors({
-  origin: allowedOrigin,
+  origin: frontendUrl || true,
   credentials: true,
 }));
 
@@ -107,7 +111,7 @@ setInterval(() => {
   }
 }, 300_000);
 
-const port = Number(process.env.API_PORT || 3002);
+const port = Number(process.env.PORT || process.env.API_PORT || 3002);
 
 // ── Stripe webhook must be mounted BEFORE express.json() ──
 // Stripe requires the raw body for signature verification, so this route
@@ -176,6 +180,13 @@ app.use('/api', surveysRouter);
 app.use('/api', teamSuggestionsRouter);
 app.use('/api', jobsRouter);
 app.use('/api', trackingRouter);
+const formSubmitLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — public form submissions
+app.use('/api/public/form', formSubmitLimiter);
+app.use('/api', requestFormsRouter);
+app.use('/api', quoteTemplatesRouter);
+app.use('/api', invitationsRouter);
+app.use('/api', billingRouter);
+app.use('/api', referralsRouter);
 
 // ── Serve frontend static files in production ──
 const distPath = path.resolve(__dirname, '..', 'dist');
@@ -265,8 +276,8 @@ if (encKeyRaw) {
   }
 }
 
-app.listen(port, () => {
-  console.log(`API listening on http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`API listening on 0.0.0.0:${port}`);
 
   // Start automation scheduler
   startScheduler(supabaseUrl, supabaseServiceRoleKey, {

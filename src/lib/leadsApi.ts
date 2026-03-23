@@ -48,73 +48,90 @@ export interface EmailConflictRecord {
 }
 
 export const LEAD_STATUSES = [
+  'new_prospect', 'no_response', 'quote_sent', 'closed_won', 'closed_lost',
+  // Legacy values kept for backward compat
   'new', 'follow_up_1', 'follow_up_2', 'follow_up_3', 'closed', 'lost',
 ] as const;
 
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
 export const LEAD_STATUS_LABELS: Record<string, string> = {
-  new: 'New',
-  follow_up_1: 'Follow-up 1',
-  follow_up_2: 'Follow-up 2',
-  follow_up_3: 'Follow-up 3',
-  closed: 'Closed',
-  lost: 'Lost',
+  new_prospect: 'New Prospect',
+  no_response: 'No Response',
+  quote_sent: 'Quote Sent',
+  closed_won: 'Closed Won',
+  closed_lost: 'Closed Lost',
+  // Legacy
+  new: 'New Prospect',
+  follow_up_1: 'No Response',
+  follow_up_2: 'Quote Sent',
+  follow_up_3: 'Quote Sent',
+  closed: 'Closed Won',
+  lost: 'Closed Lost',
 };
 
 const LEAD_STATUS_MAP: Record<string, string> = {
-  New: 'new',
-  'Follow-up 1': 'follow_up_1',
-  'Follow-up 2': 'follow_up_2',
-  'Follow-up 3': 'follow_up_3',
-  Closed: 'closed',
-  Lost: 'lost',
-  // Legacy mappings → new stages
-  Contacted: 'follow_up_1',
-  'Estimate Sent': 'follow_up_2',
-  'Follow-Up': 'follow_up_1',
-  Won: 'closed',
-  Archived: 'lost',
-  Lead: 'new',
-  Qualified: 'new',
-  Proposal: 'follow_up_1',
-  Negotiation: 'follow_up_2',
+  'New Prospect': 'new_prospect',
+  'No Response': 'no_response',
+  'Quote Sent': 'quote_sent',
+  'Closed Won': 'closed_won',
+  'Closed Lost': 'closed_lost',
+  // Legacy mappings
+  New: 'new_prospect',
+  'Follow-up 1': 'no_response',
+  'Follow-up 2': 'quote_sent',
+  'Follow-up 3': 'quote_sent',
+  Closed: 'closed_won',
+  Lost: 'closed_lost',
+  Contacted: 'no_response',
+  'Estimate Sent': 'quote_sent',
+  'Follow-Up': 'no_response',
+  Won: 'closed_won',
+  Archived: 'closed_lost',
+  Lead: 'new_prospect',
+  Qualified: 'new_prospect',
+  Proposal: 'no_response',
+  Negotiation: 'quote_sent',
 };
 
 const DB_TO_UI_STATUS: Record<string, string> = {
-  new: 'New',
-  follow_up_1: 'Follow-up 1',
-  follow_up_2: 'Follow-up 2',
-  follow_up_3: 'Follow-up 3',
-  closed: 'Closed',
-  lost: 'Lost',
+  new_prospect: 'New Prospect',
+  no_response: 'No Response',
+  quote_sent: 'Quote Sent',
+  closed_won: 'Closed Won',
+  closed_lost: 'Closed Lost',
   // Legacy → new display
-  contacted: 'Follow-up 1',
-  estimate_sent: 'Follow-up 2',
-  follow_up: 'Follow-up 1',
-  won: 'Closed',
-  archived: 'Lost',
-  qualified: 'New',
-  quote_sent: 'Follow-up 2',
-  lead: 'New',
-  proposal: 'Follow-up 1',
-  negotiation: 'Follow-up 2',
+  new: 'New Prospect',
+  follow_up_1: 'No Response',
+  follow_up_2: 'Quote Sent',
+  follow_up_3: 'Quote Sent',
+  closed: 'Closed Won',
+  lost: 'Closed Lost',
+  contacted: 'No Response',
+  estimate_sent: 'Quote Sent',
+  follow_up: 'No Response',
+  won: 'Closed Won',
+  archived: 'Closed Lost',
+  qualified: 'New Prospect',
+  lead: 'New Prospect',
+  proposal: 'No Response',
+  negotiation: 'Quote Sent',
 };
 
 function toDbStatus(value?: string): string {
   const raw = String(value || '').trim();
-  if (!raw) return 'new';
+  if (!raw) return 'new_prospect';
   // Check map first, then try lowercase with underscore normalization
   if (LEAD_STATUS_MAP[raw]) return LEAD_STATUS_MAP[raw];
   const normalized = raw.toLowerCase().replace(/[\s-]+/g, '_');
   // Verify it's a valid DB status before returning
   const validStatuses: Set<string> = new Set(LEAD_STATUSES);
-  return validStatuses.has(normalized) ? normalized : 'new';
+  return validStatuses.has(normalized) ? normalized : 'new_prospect';
 }
 
 function toUiStatus(value?: string): string {
   const raw = String(value || '').trim().toLowerCase();
-  return DB_TO_UI_STATUS[raw] || value || 'New';
+  return DB_TO_UI_STATUS[raw] || value || 'New Prospect';
 }
 
 function normalizeLead(raw: any): Lead {

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { BriefcaseBusiness, Calendar, ChevronDown, Clock3, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn, formatCurrency } from '../lib/utils';
-import { listClients } from '../lib/clientsApi';
+import { listClients, createClient } from '../lib/clientsApi';
 import { getSuggestedJobNumber, listSalespeople } from '../lib/jobsApi';
 import { resolveClientIdForLead } from '../lib/leadsApi';
 import { listTeams } from '../lib/teamsApi';
@@ -13,6 +13,7 @@ import ServicePicker from './ServicePicker';
 import type { PredefinedService } from '../lib/servicesApi';
 import { supabase } from '../lib/supabase';
 import AddressAutocomplete, { type StructuredAddress } from './AddressAutocomplete';
+import { useTranslation } from '../i18n';
 
 interface LineItemForm {
   id: string;
@@ -206,11 +207,20 @@ export default function NewJobModal({
   onDelete,
   isDeleting = false,
 }: NewJobModalProps) {
+  const { t } = useTranslation();
   const isEditMode = Boolean(initialValues?.id);
   const [title, setTitle] = useState('');
   const [clientId, setClientId] = useState('');
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
+  const [isCreatingNewClient, setIsCreatingNewClient] = useState(false);
+  const [newClientFirst, setNewClientFirst] = useState('');
+  const [newClientLast, setNewClientLast] = useState('');
+  const [newClientEmail, setNewClientEmail] = useState('');
+  const [newClientPhone, setNewClientPhone] = useState('');
   const [leadId, setLeadId] = useState<string | null>(null);
   const [teamSelection, setTeamSelection] = useState('');
+  const [showTeamSuggestions, setShowTeamSuggestions] = useState(false);
   const [clients, setClients] = useState<Array<{ id: string; label: string; address: string | null; street_number: string | null; street_name: string | null; city: string | null; province: string | null; postal_code: string | null; country: string | null; latitude: number | null; longitude: number | null }>>([]);
   const [jobNumber, setJobNumber] = useState('');
   const [salespersonId, setSalespersonId] = useState('');
@@ -464,7 +474,15 @@ export default function NewJobModal({
     setTitle('');
     setLeadId(null);
     setClientId('');
+    setClientSearch('');
+    setClientDropdownOpen(false);
+    setIsCreatingNewClient(false);
+    setNewClientFirst('');
+    setNewClientLast('');
+    setNewClientEmail('');
+    setNewClientPhone('');
     setTeamSelection('');
+    setShowTeamSuggestions(false);
     setJobNumber('');
     setSalespersonId('');
     setJobType('one_off');
@@ -544,30 +562,47 @@ export default function NewJobModal({
     setInlineError(null);
 
     if (!title.trim()) {
-      setInlineError('Job title is required.');
+      setInlineError(t.modals.titleRequired);
       return;
     }
 
-    if (!clientId) {
-      setInlineError('Please select a client.');
+    let resolvedClientId = clientId;
+    if (isCreatingNewClient) {
+      if (!newClientFirst.trim()) { setInlineError(t.modals.newClientFirstNameRequired); return; }
+      if (!newClientLast.trim()) { setInlineError(t.modals.newClientLastNameRequired); return; }
+      try {
+        const created = await createClient({
+          first_name: newClientFirst.trim(),
+          last_name: newClientLast.trim(),
+          email: newClientEmail.trim() || undefined,
+          phone: newClientPhone.trim() || undefined,
+        });
+        resolvedClientId = created.id;
+      } catch (err: any) {
+        setInlineError(err?.message || t.clients.failedCreate);
+        return;
+      }
+    }
+    if (!resolvedClientId) {
+      setInlineError(t.modals.clientRequired);
       return;
     }
 
     if (!teamSelection) {
-      setInlineError('Please assign a team or choose Unassigned.');
+      setInlineError(t.modals.teamRequired);
       return;
     }
 
     if (!addressLine1.trim()) {
-      setInlineError('Address is required. Please enter a job site address.');
+      setInlineError(t.modals.addressRequired);
       return;
     }
     if (!addressCity.trim()) {
-      setInlineError('City is required for the job site address.');
+      setInlineError(t.modals.cityRequired);
       return;
     }
     if (!addressProvince.trim()) {
-      setInlineError('Province is required for the job site address.');
+      setInlineError(t.modals.provinceRequired);
       return;
     }
 
@@ -576,15 +611,15 @@ export default function NewJobModal({
     const scheduledAt = startDate && startTime ? buildDateTime(startDate, startTime) : null;
     const endAt = startDate && endTime ? buildDateTime(startDate, endTime) : null;
     if (!scheduledAt || !endAt) {
-      setInlineError('Start and end date/time are required.');
+      setInlineError(t.modals.datesRequired);
       return;
     }
     if (endAt && !scheduledAt) {
-      setInlineError('Start time is required when end time is provided.');
+      setInlineError(t.modals.startTimeRequired);
       return;
     }
     if (scheduledAt && endAt && new Date(endAt) <= new Date(scheduledAt)) {
-      setInlineError('End time must be after start time.');
+      setInlineError(t.modals.endTimeAfterStart);
       return;
     }
 
@@ -602,7 +637,7 @@ export default function NewJobModal({
         id: initialValues?.id,
         title: title.trim(),
         lead_id: leadId || null,
-        client_id: clientId || null,
+        client_id: resolvedClientId || null,
         team_id: teamIdPayload,
         job_number: jobNumber.trim() || null,
         salesperson_id: salespersonId || null,
@@ -650,17 +685,17 @@ export default function NewJobModal({
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
-            className="w-full max-w-6xl max-h-[92vh] glass rounded-2xl border border-border shadow-2xl flex flex-col overflow-hidden text-black"
+            className="w-full max-w-6xl max-h-[92vh] glass rounded-2xl border border-border shadow-2xl flex flex-col overflow-hidden text-text-primary"
           >
-            <div className="px-6 py-5 border-b border-white/15 flex items-center justify-between">
+            <div className="px-6 py-5 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-black text-white flex items-center justify-center">
+                <div className="h-10 w-10 rounded-xl bg-primary text-white flex items-center justify-center">
                   <BriefcaseBusiness size={18} />
                 </div>
                 <div>
-                  <h2 className="text-3xl font-semibold tracking-tight">{isEditMode ? 'Edit Job' : 'New Job'}</h2>
-                  <p className="text-sm text-black uppercase tracking-wide font-bold">
-                    {isEditMode ? 'Update scheduled job details' : 'Create a new lead or service request'}
+                  <h2 className="text-3xl font-semibold tracking-tight">{isEditMode ? t.modals.editJobHeading : t.modals.newJobHeading}</h2>
+                  <p className="text-sm text-text-secondary uppercase tracking-wide font-bold">
+                    {isEditMode ? t.modals.editJobSubtitle : t.modals.newJobSubtitle}
                   </p>
                 </div>
               </div>
@@ -671,7 +706,7 @@ export default function NewJobModal({
 
             <form id="new-job-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
               <section className="space-y-2">
-                <label className="text-xs uppercase tracking-widest text-black font-semibold">Job title</label>
+                <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.jobTitle}</label>
                 <input
                   autoFocus
                   value={title}
@@ -683,33 +718,96 @@ export default function NewJobModal({
               </section>
 
               <section className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest text-black font-semibold">Client</label>
-                  <select
-                    value={clientId}
-                    onChange={(event) => setClientId(event.target.value)}
-                    className="glass-input w-full"
-                    required
-                  >
-                    <option value="">Select a client</option>
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {isCreatingNewClient ? (
+                  <div className="lg:col-span-4 space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.createNewClient}</label>
+                      <button
+                        type="button"
+                        onClick={() => { setIsCreatingNewClient(false); setNewClientFirst(''); setNewClientLast(''); setNewClientEmail(''); setNewClientPhone(''); }}
+                        className="text-xs text-text-secondary hover:text-text-primary transition-colors"
+                      >
+                        {t.modals.cancelNewClient}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.newClientFirstName} <span className="text-danger">*</span></label>
+                        <input value={newClientFirst} onChange={(e) => setNewClientFirst(e.target.value)} className="glass-input w-full" autoFocus />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.newClientLastName} <span className="text-danger">*</span></label>
+                        <input value={newClientLast} onChange={(e) => setNewClientLast(e.target.value)} className="glass-input w-full" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.newClientEmail}</label>
+                        <input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} className="glass-input w-full" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.newClientPhone}</label>
+                        <input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} className="glass-input w-full" />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2 relative">
+                    <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.clientName}</label>
+                    <input
+                      type="text"
+                      value={clientSearch || (clientId ? clients.find(c => c.id === clientId)?.label || '' : '')}
+                      onChange={(e) => { setClientSearch(e.target.value); setClientDropdownOpen(true); if (!e.target.value) setClientId(''); }}
+                      onFocus={() => setClientDropdownOpen(true)}
+                      className="glass-input w-full"
+                      placeholder={t.modals.searchClientPlaceholder}
+                      autoComplete="off"
+                    />
+                    {clientDropdownOpen && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl border border-outline bg-surface shadow-lg">
+                        <button
+                          type="button"
+                          onClick={() => { setClientDropdownOpen(false); setIsCreatingNewClient(true); setClientId(''); setClientSearch(''); }}
+                          className="w-full text-left px-3 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors border-b border-outline"
+                        >
+                          {t.modals.createNewClient}
+                        </button>
+                        {clients
+                          .filter(c => !clientSearch || c.label.toLowerCase().includes(clientSearch.toLowerCase()))
+                          .map((client) => (
+                            <button
+                              key={client.id}
+                              type="button"
+                              onClick={() => { setClientId(client.id); setClientSearch(client.label); setClientDropdownOpen(false); }}
+                              className={cn(
+                                'w-full text-left px-3 py-2 text-sm hover:bg-surface-secondary transition-colors',
+                                client.id === clientId && 'bg-surface-tertiary font-medium'
+                              )}
+                            >
+                              {client.label}
+                            </button>
+                          ))
+                        }
+                        {clients.filter(c => !clientSearch || c.label.toLowerCase().includes(clientSearch.toLowerCase())).length === 0 && (
+                          <p className="px-3 py-2 text-sm text-text-tertiary">{t.clients.noClientsFound}</p>
+                        )}
+                      </div>
+                    )}
+                    {clientDropdownOpen && (
+                      <div className="fixed inset-0 z-40" onClick={() => setClientDropdownOpen(false)} />
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest text-black font-semibold">Assign team</label>
+                  <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.assignTeam}</label>
                   <select
                     value={teamSelection}
-                    onChange={(event) => setTeamSelection(event.target.value)}
+                    onChange={(event) => { setTeamSelection(event.target.value); setShowTeamSuggestions(true); }}
+                    onFocus={() => setShowTeamSuggestions(true)}
                     className="glass-input w-full"
                     required
                   >
-                    <option value="">Select a team</option>
-                    <option value={UNASSIGNED_TEAM_VALUE}>Unassigned</option>
+                    <option value="">{t.modals.selectTeam}</option>
+                    <option value={UNASSIGNED_TEAM_VALUE}>{t.modals.unassignedOption}</option>
                     {teams.map((team) => (
                       <option key={team.id} value={team.id}>
                         {team.name}
@@ -717,25 +815,27 @@ export default function NewJobModal({
                     ))}
                   </select>
                   {teamsQuery.isFetching ? (
-                    <p className="text-[11px] text-text-tertiary">Loading teams...</p>
+                    <p className="text-[11px] text-text-tertiary">{t.modals.loadingTeamsMsg}</p>
                   ) : null}
                   {teamsQuery.isError ? (
-                    <p className="text-[11px] text-danger">Could not load teams.</p>
+                    <p className="text-[11px] text-danger">{t.modals.couldNotLoadTeamsMsg}</p>
                   ) : null}
-                  {/* Team suggestions */}
-                  <TeamSuggestions
-                    date={startDate}
-                    startTime={startTime}
-                    endTime={endTime}
-                    address={addressLine1 || selectedClient?.address || prefilledAddress || undefined}
-                    onSelectTeam={(id) => setTeamSelection(id)}
-                    selectedTeamId={teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection || null}
-                    compact
-                  />
+                  {/* Team suggestions — only shown after user interacts with team select */}
+                  {showTeamSuggestions && (
+                    <TeamSuggestions
+                      date={startDate}
+                      startTime={startTime}
+                      endTime={endTime}
+                      address={addressLine1 || selectedClient?.address || prefilledAddress || undefined}
+                      onSelectTeam={(id) => setTeamSelection(id)}
+                      selectedTeamId={teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection || null}
+                      compact
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest text-black font-semibold">Job #</label>
+                  <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.jobs.jobNumber}</label>
                   <input
                     value={jobNumber}
                     onChange={(event) => setJobNumber(event.target.value)}
@@ -745,14 +845,14 @@ export default function NewJobModal({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest text-black font-semibold">Salesperson</label>
+                  <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.salesperson}</label>
                   <div className="relative">
                     <select
                       value={salespersonId}
                       onChange={(event) => setSalespersonId(event.target.value)}
                       className="glass-input w-full pr-10"
                     >
-                      <option value="">Assign</option>
+                      <option value="">{t.modals.assign}</option>
                       {salespeople.map((person) => (
                         <option key={person.id} value={person.id}>
                           {person.label}
@@ -765,15 +865,15 @@ export default function NewJobModal({
               </section>
 
               {/* Job site address */}
-              <section className="space-y-4 pt-6 border-t border-white/15">
+              <section className="space-y-4 pt-6 border-t border-border">
                 <div className="flex items-center gap-2">
                   <MapPin size={18} className="text-text-secondary" />
-                  <h3 className="text-3xl font-semibold tracking-tight">Job site address</h3>
+                  <h3 className="text-3xl font-semibold tracking-tight">{t.modals.jobSiteAddress}</h3>
                 </div>
 
                 <div className="space-y-3">
                   <div className="space-y-2">
-                    <label className="text-xs uppercase tracking-widest text-black font-semibold">Search address</label>
+                    <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.searchAddress}</label>
                     <AddressAutocomplete
                       value={addressSearch}
                       onChange={setAddressSearch}
@@ -793,105 +893,105 @@ export default function NewJobModal({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-black font-semibold">
-                        Address line 1 <span className="text-danger">*</span>
+                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">
+                        {t.modals.addressLine1} <span className="text-danger">*</span>
                       </label>
                       <input
                         value={addressLine1}
                         onChange={(e) => setAddressLine1(e.target.value)}
                         className="glass-input w-full"
-                        placeholder="123 Main St"
+                        placeholder={t.modals.addressLine1Placeholder}
                         required
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-black font-semibold">Address line 2</label>
+                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.addressLine2}</label>
                       <input
                         value={addressLine2}
                         onChange={(e) => setAddressLine2(e.target.value)}
                         className="glass-input w-full"
-                        placeholder="Apt, suite, unit..."
+                        placeholder={t.modals.addressLine2Placeholder}
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-black font-semibold">
-                        City <span className="text-danger">*</span>
+                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">
+                        {t.modals.cityLabel} <span className="text-danger">*</span>
                       </label>
                       <input
                         value={addressCity}
                         onChange={(e) => setAddressCity(e.target.value)}
                         className="glass-input w-full"
-                        placeholder="Montreal"
+                        placeholder={t.modals.cityPlaceholder}
                         required
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-black font-semibold">
-                        Province <span className="text-danger">*</span>
+                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">
+                        {t.modals.provinceLabel} <span className="text-danger">*</span>
                       </label>
                       <input
                         value={addressProvince}
                         onChange={(e) => setAddressProvince(e.target.value)}
                         className="glass-input w-full"
-                        placeholder="QC"
+                        placeholder={t.modals.provincePlaceholder}
                         required
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-black font-semibold">Postal code</label>
+                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.postalCodeLabel}</label>
                       <input
                         value={addressPostalCode}
                         onChange={(e) => setAddressPostalCode(e.target.value)}
                         className="glass-input w-full"
-                        placeholder="H1A 1A1"
+                        placeholder={t.modals.postalCodePlaceholder}
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-black font-semibold">Country</label>
+                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.countryLabel}</label>
                       <input
                         value={addressCountry}
                         onChange={(e) => setAddressCountry(e.target.value)}
                         className="glass-input w-full"
-                        placeholder="Canada"
+                        placeholder={t.modals.countryPlaceholder}
                       />
                     </div>
                   </div>
                 </div>
               </section>
 
-              <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-6 border-t border-white/15">
+              <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-6 border-t border-border">
                 <div className="space-y-4">
-                  <h3 className="text-3xl font-semibold tracking-tight">Job type</h3>
+                  <h3 className="text-3xl font-semibold tracking-tight">{t.modals.jobType}</h3>
                   <div className="inline-flex rounded-xl bg-surface-secondary border border-border p-1">
                     <button
                       type="button"
                       onClick={() => setJobType('one_off')}
                       className={cn(
                         'px-4 py-2 rounded-lg text-lg font-medium transition-colors',
-                        jobType === 'one_off' ? 'bg-surface shadow-sm text-black' : 'text-text-tertiary'
+                        jobType === 'one_off' ? 'bg-surface shadow-sm text-text-primary' : 'text-text-tertiary'
                       )}
                     >
-                      One-off
+                      {t.modals.oneOff}
                     </button>
                     <button
                       type="button"
                       onClick={() => setJobType('recurring')}
                       className={cn(
                         'px-4 py-2 rounded-lg text-lg font-medium transition-colors',
-                        jobType === 'recurring' ? 'bg-surface shadow-sm text-black' : 'text-text-tertiary'
+                        jobType === 'recurring' ? 'bg-surface shadow-sm text-text-primary' : 'text-text-tertiary'
                       )}
                     >
-                      Recurring
+                      {t.modals.recurring}
                     </button>
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-3xl font-semibold tracking-tight">Schedule</h3>
+                    <h3 className="text-3xl font-semibold tracking-tight">{t.modals.schedule}</h3>
                     <a
                       href="/calendar"
                       target="_blank"
@@ -899,12 +999,12 @@ export default function NewJobModal({
                       className="text-sm text-text-secondary uppercase tracking-widest hover:text-text-primary inline-flex items-center gap-1"
                     >
                       <Calendar size={12} />
-                      View calendar
+                      {t.modals.viewCalendar}
                     </a>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-black font-semibold">Start date</label>
+                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.startDate}</label>
                       <div className="relative">
                         <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                         <input
@@ -916,7 +1016,7 @@ export default function NewJobModal({
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-black font-semibold">Start time</label>
+                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.startTime}</label>
                       <div className="relative">
                         <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                         <input
@@ -928,7 +1028,7 @@ export default function NewJobModal({
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-black font-semibold">End time</label>
+                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.endTime}</label>
                       <div className="relative">
                         <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                         <input
@@ -943,8 +1043,8 @@ export default function NewJobModal({
                 </div>
               </section>
 
-              <section className="pt-6 border-t border-white/15 space-y-4">
-                <h3 className="text-3xl font-semibold tracking-tight">Billing</h3>
+              <section className="pt-6 border-t border-border space-y-4">
+                <h3 className="text-3xl font-semibold tracking-tight">{t.modals.billing}</h3>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -952,7 +1052,7 @@ export default function NewJobModal({
                     onChange={(event) => setRequiresInvoicing(event.target.checked)}
                     className="h-4 w-4"
                   />
-                  <span className="text-xl">Remind me to invoice when I close the job</span>
+                  <span className="text-xl">{t.modals.remindInvoice}</span>
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
@@ -961,20 +1061,20 @@ export default function NewJobModal({
                     onChange={(event) => setBillingSplit(event.target.checked)}
                     className="h-4 w-4"
                   />
-                  <span className="text-xl">Split into multiple invoices with a payment schedule</span>
+                  <span className="text-xl">{t.modals.splitInvoices}</span>
                 </label>
               </section>
 
-              <section className="pt-6 border-t border-white/15 space-y-4">
+              <section className="pt-6 border-t border-border space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-3xl font-semibold tracking-tight">Line Items</h3>
+                  <h3 className="text-3xl font-semibold tracking-tight">{t.modals.lineItems}</h3>
                   <button
                     type="button"
                     onClick={() => setServicePickerOpen(true)}
                     className="glass-button !py-2 !px-4 inline-flex items-center gap-2"
                   >
                     <Package size={14} />
-                    Add from catalog
+                    {t.modals.addFromCatalog}
                   </button>
                 </div>
 
@@ -982,14 +1082,14 @@ export default function NewJobModal({
                 {lineItems.length === 1 && !lineItems[0].name.trim() ? (
                   <div className="rounded-xl border border-dashed border-outline-subtle bg-surface-secondary/30 p-6 text-center">
                     <Package size={24} className="text-text-tertiary mx-auto mb-2 opacity-40" />
-                    <p className="text-sm text-text-secondary">No line items added yet</p>
-                    <p className="text-xs text-text-tertiary mt-1">Click "Add from catalog" to add predefined services</p>
+                    <p className="text-sm text-text-secondary">{t.modals.noLineItemsYet}</p>
+                    <p className="text-xs text-text-tertiary mt-1">{t.modals.addFromCatalogHint}</p>
                     <button
                       type="button"
                       onClick={() => setServicePickerOpen(true)}
                       className="mt-3 text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
                     >
-                      <Plus size={11} /> Browse services
+                      <Plus size={11} /> {t.modals.browseServices}
                     </button>
                   </div>
                 ) : (
@@ -1005,7 +1105,7 @@ export default function NewJobModal({
                         )}
                       >
                         <div className="md:col-span-5 space-y-1">
-                          <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">Name</label>
+                          <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.nameCol}</label>
                           <div className="flex items-center gap-2">
                             <input
                               type="checkbox"
@@ -1018,12 +1118,12 @@ export default function NewJobModal({
                               value={item.name}
                               onChange={(event) => updateLineItem(item.id, { name: event.target.value })}
                               className={cn('glass-input w-full', !item.included && 'line-through')}
-                              placeholder="Service name"
+                              placeholder={t.modals.serviceNamePlaceholder}
                             />
                           </div>
                         </div>
                         <div className="md:col-span-2 space-y-1">
-                          <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">Qty</label>
+                          <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.qtyCol}</label>
                           <input
                             type="text"
                             inputMode="numeric"
@@ -1037,7 +1137,7 @@ export default function NewJobModal({
                           />
                         </div>
                         <div className="md:col-span-3 space-y-1">
-                          <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">Unit price</label>
+                          <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.unitPriceCol}</label>
                           <input
                             type="text"
                             inputMode="decimal"
@@ -1079,43 +1179,43 @@ export default function NewJobModal({
                     className="glass-button !py-2 !px-4 inline-flex items-center gap-2 text-sm"
                   >
                     <Plus size={14} />
-                    Custom line item
+                    {t.modals.customLineItem}
                   </button>
                 </div>
               </section>
 
-              <section className="pt-6 border-t border-white/15 space-y-4">
-                <h3 className="text-3xl font-semibold tracking-tight">Taxes</h3>
+              <section className="pt-6 border-t border-border space-y-4">
+                <h3 className="text-3xl font-semibold tracking-tight">{t.modals.taxes}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <label className="space-y-2">
-                    <span className="text-xs uppercase tracking-widest text-black font-semibold">TPS</span>
+                    <span className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.tpsLabel}</span>
                     <div className="flex items-center gap-2">
                       <input type="checkbox" checked={tpsEnabled} onChange={(event) => setTpsEnabled(event.target.checked)} className="h-4 w-4" />
                       <input type="number" min={0} step={0.001} value={tpsRate} onChange={(event) => setTpsRate(Number(event.target.value) || 0)} className="glass-input w-full" />
                     </div>
                   </label>
                   <label className="space-y-2">
-                    <span className="text-xs uppercase tracking-widest text-black font-semibold">TVQ</span>
+                    <span className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.tvqLabel}</span>
                     <div className="flex items-center gap-2">
                       <input type="checkbox" checked={tvqEnabled} onChange={(event) => setTvqEnabled(event.target.checked)} className="h-4 w-4" />
                       <input type="number" min={0} step={0.001} value={tvqRate} onChange={(event) => setTvqRate(Number(event.target.value) || 0)} className="glass-input w-full" />
                     </div>
                   </label>
                   <div className="space-y-2">
-                    <span className="text-xs uppercase tracking-widest text-black font-semibold">Custom tax</span>
+                    <span className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.customTax}</span>
                     <div className="space-y-2">
                       <label className="flex items-center gap-2 text-sm">
                         <input type="checkbox" checked={customTaxEnabled} onChange={(event) => setCustomTaxEnabled(event.target.checked)} className="h-4 w-4" />
-                        Enabled
+                        {t.modals.enabledLabel}
                       </label>
-                      <input value={customTaxLabel} onChange={(event) => setCustomTaxLabel(event.target.value)} className="glass-input w-full" placeholder="Tax label" />
+                      <input value={customTaxLabel} onChange={(event) => setCustomTaxLabel(event.target.value)} className="glass-input w-full" placeholder={t.modals.taxLabelPlaceholder} />
                       <input type="number" min={0} step={0.001} value={customTaxRate} onChange={(event) => setCustomTaxRate(Number(event.target.value) || 0)} className="glass-input w-full" />
                     </div>
                   </div>
                 </div>
                 <div className="rounded-xl border border-border bg-surface/70 p-4 text-sm">
                   <label className="mb-2 block space-y-1">
-                    <span className="text-[11px] uppercase tracking-widest text-text-secondary">Total before taxes</span>
+                    <span className="text-[11px] uppercase tracking-widest text-text-secondary">{t.modals.totalBeforeTaxes}</span>
                     <input
                       value={totalInput}
                       onChange={(event) => setTotalInput(sanitizeMoneyInput(event.target.value))}
@@ -1125,28 +1225,28 @@ export default function NewJobModal({
                       placeholder={lineItemsSubtotalValue.toFixed(2)}
                     />
                   </label>
-                  <p className="flex items-center justify-between"><span>Subtotal</span><span>{formatCurrency(effectiveSubtotalValue)}</span></p>
-                  <p className="mt-1 flex items-center justify-between"><span>Taxes</span><span>{formatCurrency(taxTotalCents / 100)}</span></p>
-                  <p className="mt-2 border-t border-black/10 pt-2 flex items-center justify-between font-semibold text-base">
-                    <span>Total</span><span>{formatCurrency(grandTotalCents / 100)}</span>
+                  <p className="flex items-center justify-between"><span>{t.modals.subtotalLabel}</span><span>{formatCurrency(effectiveSubtotalValue)}</span></p>
+                  <p className="mt-1 flex items-center justify-between"><span>{t.modals.taxesLabel}</span><span>{formatCurrency(taxTotalCents / 100)}</span></p>
+                  <p className="mt-2 border-t border-border pt-2 flex items-center justify-between font-semibold text-base">
+                    <span>{t.modals.totalLabel}</span><span>{formatCurrency(grandTotalCents / 100)}</span>
                   </p>
                 </div>
               </section>
 
               {/* ── Deposit & Payment Settings ── */}
               <section className="rounded-xl border border-outline bg-surface p-5 space-y-3">
-                <h3 className="text-sm font-semibold text-text-primary">Deposit & Payment Settings</h3>
+                <h3 className="text-sm font-semibold text-text-primary">{t.modals.depositSettings}</h3>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" checked={jobDepositRequired} onChange={e => setJobDepositRequired(e.target.checked)} className="h-4 w-4 rounded" />
-                  <span className="text-[13px] text-text-primary">Require deposit for this job</span>
+                  <span className="text-[13px] text-text-primary">{t.modals.requireDeposit}</span>
                 </label>
                 {jobDepositRequired && (
                   <div className="ml-7 space-y-3 border-l-2 border-outline pl-4">
                     <div className="flex items-center gap-3">
                       <select value={jobDepositType} onChange={e => setJobDepositType(e.target.value as any)}
                         className="text-xs border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary">
-                        <option value="percentage">Percentage (%)</option>
-                        <option value="fixed">Fixed Amount ($)</option>
+                        <option value="percentage">{t.modals.percentageOption}</option>
+                        <option value="fixed">{t.modals.fixedAmountOption}</option>
                       </select>
                       <input value={jobDepositValue} onChange={e => setJobDepositValue(e.target.value.replace(/[^\d.]/g, ''))}
                         className="w-24 text-right text-sm border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary"
@@ -1177,23 +1277,23 @@ export default function NewJobModal({
               )}
             </form>
 
-            <div className="px-6 py-4 border-t border-white/15 bg-surface/70 backdrop-blur sticky bottom-0 flex items-center justify-between">
+            <div className="px-6 py-4 border-t border-border bg-surface/70 backdrop-blur sticky bottom-0 flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div>
-                  <p className="text-xs uppercase tracking-widest text-black font-semibold">Total value</p>
+                  <p className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.totalValue}</p>
                   <p className="text-4xl font-semibold tracking-tight">{formatCurrency(grandTotalCents / 100)}</p>
                 </div>
                 {isEditMode && initialValues?.id && onDelete && (
                   confirmDelete ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-danger font-medium">Delete this job?</span>
+                      <span className="text-xs text-danger font-medium">{t.modals.deleteJobQuestion}</span>
                       <button
                         type="button"
                         onClick={() => void onDelete(initialValues.id as string)}
                         disabled={isDeleting}
                         className="rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-white hover:bg-danger/80 transition-colors disabled:opacity-50"
                       >
-                        {isDeleting ? 'Deleting...' : 'Confirm'}
+                        {isDeleting ? t.modals.deletingBtn : t.modals.confirmBtn}
                       </button>
                       <button
                         type="button"
@@ -1201,7 +1301,7 @@ export default function NewJobModal({
                         disabled={isDeleting}
                         className="glass-button text-xs"
                       >
-                        No
+                        {t.modals.noBtn}
                       </button>
                     </div>
                   ) : (
@@ -1232,14 +1332,14 @@ export default function NewJobModal({
                     className="glass-button"
                     disabled={isFinishingJob || isSaving}
                   >
-                    {isFinishingJob ? 'Finishing...' : 'Finish job'}
+                    {isFinishingJob ? t.modals.finishingBtn : t.modals.finishJobBtn}
                   </button>
                 ) : null}
                 <button onClick={() => handleClose()} className="glass-button">
-                  Cancel
+                  {t.modals.cancelBtn}
                 </button>
                 <button form="new-job-form" type="submit" disabled={isSaving} className="glass-button-primary inline-flex items-center gap-2">
-                  {isSaving ? 'Saving...' : isEditMode ? 'Save Changes' : 'Save Job'}
+                  {isSaving ? t.modals.savingBtn : isEditMode ? t.modals.saveChangesBtn : t.modals.saveJobBtn}
                   <ChevronDown size={14} className="opacity-80" />
                 </button>
               </div>

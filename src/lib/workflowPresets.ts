@@ -32,7 +32,7 @@ export interface WorkflowPreset {
 }
 
 export const PRESET_CATEGORIES = [
-  { id: 'lead', label: 'Leads', icon: 'UserPlus' },
+  { id: 'lead', label: 'Quotes', icon: 'FileText' },
   { id: 'estimate', label: 'Estimates', icon: 'FileText' },
   { id: 'invoice', label: 'Invoices', icon: 'Receipt' },
   { id: 'job', label: 'Jobs', icon: 'Briefcase' },

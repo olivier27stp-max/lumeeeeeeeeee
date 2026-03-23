@@ -32,22 +32,31 @@ const statusVariants: Record<string, Variant> = {
   overdue: 'danger',
   // Lead / Pipeline stages
   new: 'info',
+  new_prospect: 'info',
+  no_response: 'warning',
+  quote_sent: 'warning',
+  closed_won: 'success',
+  closed_lost: 'danger',
+  // Display labels
+  'New Prospect': 'info',
+  'No Response': 'warning',
+  'Quote Sent': 'warning',
+  'Closed Won': 'success',
+  'Closed Lost': 'danger',
+  // Legacy (in case any DB value slips through)
   follow_up_1: 'info',
   follow_up_2: 'warning',
   follow_up_3: 'warning',
   closed: 'success',
   lost: 'danger',
-  // Display labels
   'New': 'info',
   'Follow-up 1': 'info',
   'Follow-up 2': 'warning',
   'Follow-up 3': 'warning',
   'Closed': 'success',
   'Lost': 'danger',
-  // Legacy (in case any DB value slips through)
   qualified: 'info',
   contacted: 'info',
-  quote_sent: 'warning',
   won: 'success',
   // Payment
   succeeded: 'success',

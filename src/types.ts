@@ -1,5 +1,6 @@
 /** DB-aligned lead status slugs */
-export type LeadStatus = 'new' | 'follow_up_1' | 'follow_up_2' | 'follow_up_3' | 'closed' | 'lost';
+export type LeadStatus = 'new_prospect' | 'no_response' | 'quote_sent' | 'closed_won' | 'closed_lost'
+  | 'new' | 'follow_up_1' | 'follow_up_2' | 'follow_up_3' | 'closed' | 'lost';
 
 export interface Lead {
   id: string;
@@ -198,4 +199,84 @@ export interface WebhookEvent {
   processed_at: string | null;
   error_message: string | null;
   created_at: string;
+}
+
+// ── Request Forms ──────────────────────────────────────────
+
+export type FormFieldType = 'text' | 'dropdown' | 'multiselect' | 'checkbox' | 'number' | 'paragraph';
+
+export interface FormField {
+  id: string;
+  label: string;
+  type: FormFieldType;
+  required: boolean;
+  options?: string[];
+  section: 'service_details' | 'final_notes';
+}
+
+export interface RequestForm {
+  id: string;
+  org_id: string;
+  api_key: string;
+  title: string;
+  description: string | null;
+  success_message: string;
+  enabled: boolean;
+  custom_fields: FormField[];
+  notify_email: boolean;
+  notify_in_app: boolean;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FormSubmission {
+  id: string;
+  org_id: string;
+  form_id: string;
+  first_name: string;
+  last_name: string;
+  company: string | null;
+  email: string;
+  phone: string;
+  street_address: string | null;
+  unit: string | null;
+  city: string | null;
+  country: string | null;
+  region: string | null;
+  postal_code: string | null;
+  custom_responses: Record<string, any>;
+  notes: string | null;
+  lead_id: string | null;
+  deal_id: string | null;
+  client_id: string | null;
+  ip_address: string | null;
+  created_at: string;
+}
+
+// ── Quote Templates ────────────────────────────────────────
+
+export interface QuoteTemplateService {
+  id: string;
+  name: string;
+  description: string;
+  unit_price_cents: number;
+  quantity: number;
+  is_optional: boolean;
+}
+
+export interface QuoteTemplate {
+  id: string;
+  org_id: string;
+  created_by: string | null;
+  name: string;
+  description: string | null;
+  services: QuoteTemplateService[];
+  images: string[];
+  notes: string | null;
+  terms: string | null;
+  custom_fields: Record<string, any>;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
 }

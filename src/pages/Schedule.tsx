@@ -708,10 +708,10 @@ function ScheduleContent() {
                     className={cn(
                       'h-8 rounded-lg text-xs font-medium transition-colors',
                       active
-                        ? 'bg-black text-white'
+                        ? 'bg-primary text-white'
                         : outsideMonth
-                          ? 'text-text-tertiary hover:bg-black/5'
-                          : 'text-text-primary hover:bg-black/5'
+                          ? 'text-text-tertiary hover:bg-surface-tertiary'
+                          : 'text-text-primary hover:bg-surface-tertiary'
                     )}
                   >
                     {format(day, 'd')}
@@ -778,7 +778,7 @@ function ScheduleContent() {
                 const color = isHexColor(team.color_hex) ? team.color_hex : FALLBACK_TEAM_COLOR;
 
                 return (
-                  <label key={team.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-black/5">
+                  <label key={team.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-surface-tertiary">
                     <input type="checkbox" checked={checked} onChange={() => toggleTeam(team.id)} />
                     <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
                     <span className="truncate">{team.name}</span>
@@ -817,7 +817,7 @@ function ScheduleContent() {
                     data-job-id={job.id}
                     data-title={job.title}
                     data-team-id={job.team_id || ''}
-                    className="w-full cursor-grab rounded-xl border border-outline-subtle bg-white px-3 py-2 text-left transition-colors hover:bg-black/5 active:cursor-grabbing"
+                    className="w-full cursor-grab rounded-xl border border-outline-subtle bg-surface px-3 py-2 text-left transition-colors hover:bg-surface-secondary active:cursor-grabbing"
                   >
                     <button
                       type="button"
@@ -865,7 +865,7 @@ function ScheduleContent() {
         </aside>
 
         <main className="glass rounded-2xl border border-outline-subtle p-3">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-subtle bg-white/60 px-4 py-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-subtle bg-surface px-4 py-3">
             <div className="flex items-center gap-2">
               <button type="button" onClick={goPrev} className="glass-button !p-2">
                 <ChevronLeft size={14} />
@@ -880,7 +880,7 @@ function ScheduleContent() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex rounded-xl border border-outline-subtle bg-white p-1">
+              <div className="inline-flex rounded-xl border border-outline-subtle bg-surface p-1">
                 {[
                   { id: 'month' as const, label: t.schedule.month },
                   { id: 'week' as const, label: t.schedule.week },
@@ -893,7 +893,7 @@ function ScheduleContent() {
                     onClick={() => setView(item.id)}
                     className={cn(
                       'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-                      view === item.id ? 'bg-black text-white' : 'text-text-primary hover:bg-black/5'
+                      view === item.id ? 'bg-primary text-white' : 'text-text-primary hover:bg-surface-tertiary'
                     )}
                   >
                     {item.label}
@@ -935,12 +935,12 @@ function ScheduleContent() {
                   className={cn(
                     'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
                     active
-                      ? 'border-black bg-black text-white'
-                      : 'border-white/30 bg-white/70 text-text-primary hover:bg-black/5'
+                      ? 'border-primary bg-primary text-white'
+                      : 'border-outline-subtle bg-surface text-text-primary hover:bg-surface-secondary'
                   )}
                 >
                   <span>{chip.label}</span>
-                  <span className={cn('rounded-full px-2 py-0.5 text-[11px]', active ? 'bg-white/20 text-white' : 'bg-black/5 text-text-primary')}>
+                  <span className={cn('rounded-full px-2 py-0.5 text-[11px]', active ? 'bg-white/20 text-white' : 'bg-surface-tertiary text-text-primary')}>
                     {chip.count}
                   </span>
                 </button>
@@ -956,7 +956,7 @@ function ScheduleContent() {
           ) : null}
 
           {isLoading ? (
-            <div className="h-[760px] rounded-xl bg-black/5" />
+            <div className="h-[760px] rounded-xl bg-surface-secondary" />
           ) : noTeamsSelected && !unassignedMode ? (
             <div className="grid h-[760px] place-items-center rounded-xl border border-dashed border-border text-center">
               <div>
@@ -973,7 +973,7 @@ function ScheduleContent() {
               onOpenJob={(jobId) => void openExistingJob(jobId)}
             />
           ) : (
-            <div className="lune-calendar rounded-xl border border-outline-subtle bg-white/70 p-2">
+            <div className="lune-calendar rounded-xl border border-outline-subtle bg-surface p-2">
               <FullCalendar
                 key={`${currentDateKey}-${fullCalendarView}`}
                 ref={calendarRef}
@@ -1074,18 +1074,18 @@ function ScheduleContent() {
       {/* Team picker overlay — shown when dropping an unassigned job with multiple teams */}
       {teamPickerDrop && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => { teamPickerDrop.revert(); setTeamPickerDrop(null); }}>
-          <div className="w-full max-w-sm rounded-2xl border border-outline-subtle bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-sm rounded-2xl border border-outline-subtle bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <UserPlus size={16} className="text-text-secondary" />
-                <h3 className="text-sm font-bold text-text-primary">Assign to team</h3>
+                <h3 className="text-sm font-bold text-text-primary">{t.schedule.assignToTeamTitle}</h3>
               </div>
-              <button type="button" onClick={() => { teamPickerDrop.revert(); setTeamPickerDrop(null); }} className="p-1 rounded-lg hover:bg-black/5">
+              <button type="button" onClick={() => { teamPickerDrop.revert(); setTeamPickerDrop(null); }} className="p-1 rounded-lg hover:bg-surface-tertiary">
                 <XIcon size={14} />
               </button>
             </div>
             <p className="mb-3 text-xs text-text-secondary">
-              Select a team for this job. The job will be scheduled at the dropped time slot.
+              {t.schedule.assignToTeamDesc}
             </p>
             <div className="space-y-1.5 max-h-72 overflow-y-auto">
               {teams.map((team) => {
@@ -1097,7 +1097,7 @@ function ScheduleContent() {
                       type="button"
                       onClick={() => void handleTeamPickerAssign(team.id)}
                       disabled={scheduleMutation.isPending}
-                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-black/5 disabled:opacity-50"
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-tertiary disabled:opacity-50"
                     >
                       <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: color }} />
                       <span className="flex-1 text-sm font-medium text-text-primary">{team.name}</span>
@@ -1118,7 +1118,7 @@ function ScheduleContent() {
                           const startTime = new Date(slot.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                           const endTime = new Date(slot.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                           return (
-                            <span key={i} className="inline-flex items-center gap-1 rounded-md bg-white px-1.5 py-0.5 text-[10px] font-medium text-text-secondary border border-outline-subtle/50">
+                            <span key={i} className="inline-flex items-center gap-1 rounded-md bg-surface-secondary px-1.5 py-0.5 text-[10px] font-medium text-text-secondary border border-outline-subtle/50">
                               <Clock size={9} className="text-emerald-500" />
                               {startTime}–{endTime}
                             </span>
@@ -1134,9 +1134,9 @@ function ScheduleContent() {
               type="button"
               onClick={() => void handleTeamPickerAssign('')}
               disabled={scheduleMutation.isPending}
-              className="mt-3 w-full rounded-xl border border-dashed border-outline-subtle px-3 py-2 text-center text-xs text-text-secondary hover:bg-black/5 disabled:opacity-50"
+              className="mt-3 w-full rounded-xl border border-dashed border-outline-subtle px-3 py-2 text-center text-xs text-text-secondary hover:bg-surface-tertiary disabled:opacity-50"
             >
-              Schedule without team (unassigned)
+              {t.schedule.scheduleWithoutTeam}
             </button>
           </div>
         </div>
@@ -1225,13 +1225,13 @@ function AssignJobModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl border border-outline-subtle bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-2xl border border-outline-subtle bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <UserCheck size={16} className="text-amber-600" />
             <h3 className="text-sm font-bold text-text-primary">{t.schedule.assignJob}</h3>
           </div>
-          <button type="button" onClick={onClose} className="p-1 rounded-lg hover:bg-black/5">
+          <button type="button" onClick={onClose} className="p-1 rounded-lg hover:bg-surface-tertiary">
             <XIcon size={14} />
           </button>
         </div>
@@ -1264,7 +1264,7 @@ function AssignJobModal({
                   type="button"
                   onClick={() => onAssign(team.id)}
                   disabled={isPending}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-black/5 disabled:opacity-50"
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-tertiary disabled:opacity-50"
                 >
                   <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: color }} />
                   <div className="flex-1 min-w-0">
@@ -1292,7 +1292,7 @@ function AssignJobModal({
                       const startTime = new Date(slot.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                       const endTime = new Date(slot.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                       return (
-                        <span key={i} className="inline-flex items-center gap-1 rounded-md bg-white px-1.5 py-0.5 text-[10px] font-medium text-text-secondary border border-outline-subtle/50">
+                        <span key={i} className="inline-flex items-center gap-1 rounded-md bg-surface-secondary px-1.5 py-0.5 text-[10px] font-medium text-text-secondary border border-outline-subtle/50">
                           <Clock size={9} className="text-emerald-500" />
                           {startTime}–{endTime}
                         </span>
