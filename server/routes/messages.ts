@@ -129,20 +129,6 @@ router.post('/messages/inbound', (req, res) => {
 
   (async () => {
     try {
-      // DB-level dedup check
-      if (MessageSid) {
-        const { data: existing } = await serviceClient
-          .from('messages')
-          .select('id')
-          .eq('provider_message_id', MessageSid)
-          .limit(1)
-          .maybeSingle();
-        if (existing) {
-          console.log('[SMS Inbound] Duplicate MessageSid (DB), skipping:', MessageSid);
-          return;
-        }
-      }
-
       // Build phone variants for flexible matching
       const phoneDigits = normalizedPhone.replace(/\D/g, '');
       const phoneVariants = [normalizedPhone];
@@ -222,36 +208,67 @@ router.post('/messages/inbound', (req, res) => {
 
       const effectiveOrgId = orgId || conversation.org_id;
 
-      // Save inbound message
-      const { error: msgError } = await serviceClient
-        .from('messages')
-        .insert({
-          conversation_id: conversation.id,
-          org_id: effectiveOrgId,
-          client_id: conversation.client_id,
-          phone_number: normalizedPhone,
-          direction: 'inbound',
-          message_text: Body,
-          status: 'received',
-          provider_message_id: MessageSid || null,
-        });
+      // Save inbound message — use upsert on provider_message_id to guarantee idempotency
+      // If MessageSid already exists, do nothing (Twilio retry)
+      if (MessageSid) {
+        const { data: inserted, error: msgError } = await serviceClient
+          .from('messages')
+          .upsert({
+            conversation_id: conversation.id,
+            org_id: effectiveOrgId,
+            client_id: conversation.client_id,
+            phone_number: normalizedPhone,
+            direction: 'inbound',
+            message_text: Body,
+            status: 'received',
+            provider_message_id: MessageSid,
+          }, { onConflict: 'provider_message_id', ignoreDuplicates: true })
+          .select('id')
+          .maybeSingle();
 
-      if (msgError) {
-        console.error('[SMS Inbound] Failed to save message:', msgError.message);
-        return;
+        if (msgError) {
+          console.error('[SMS Inbound] Failed to save message:', msgError.message);
+          return;
+        }
+
+        // If upsert returned null, the row already existed — skip everything
+        if (!inserted) {
+          console.log('[SMS Inbound] Duplicate MessageSid (upsert), skipping:', MessageSid);
+          return;
+        }
+      } else {
+        // No MessageSid (rare) — plain insert
+        const { error: msgError } = await serviceClient
+          .from('messages')
+          .insert({
+            conversation_id: conversation.id,
+            org_id: effectiveOrgId,
+            client_id: conversation.client_id,
+            phone_number: normalizedPhone,
+            direction: 'inbound',
+            message_text: Body,
+            status: 'received',
+            provider_message_id: null,
+          });
+
+        if (msgError) {
+          console.error('[SMS Inbound] Failed to save message:', msgError.message);
+          return;
+        }
       }
 
-      // Update conversation: last_message_text + atomic unread increment via RPC
+      // ── From here, we know exactly 1 message was inserted ──
+
+      // Update conversation: last_message_text + atomic unread increment
       const truncatedBody = Body.length > 200 ? Body.substring(0, 200) + '...' : Body;
       const { error: rpcError } = await serviceClient.rpc('increment_unread_count', { p_conversation_id: conversation.id });
       if (rpcError) {
-        // RPC not available — manual fallback (single update, no double increment)
         await serviceClient
           .from('conversations')
           .update({
             last_message_text: truncatedBody,
             last_message_at: new Date().toISOString(),
-            unread_count: 1, // reset to 1 since we can't read current value atomically
+            unread_count: 1,
           })
           .eq('id', conversation.id);
       } else {
@@ -261,10 +278,10 @@ router.post('/messages/inbound', (req, res) => {
           .eq('id', conversation.id);
       }
 
-      // Create notification
+      // Create notification (1 per message, guaranteed by the upsert gate above)
       if (effectiveOrgId) {
         const senderName = (conversation as any).client_name || normalizedPhone;
-        const { error: notifError } = await serviceClient
+        await serviceClient
           .from('notifications')
           .insert({
             org_id: effectiveOrgId,
@@ -278,7 +295,6 @@ router.post('/messages/inbound', (req, res) => {
               message_sid: MessageSid,
             },
           });
-        if (notifError) console.warn('[SMS Inbound] Notification error:', notifError.message);
       }
 
       console.log('[SMS Inbound] Processed OK:', { from: normalizedPhone, conversation_id: conversation.id });

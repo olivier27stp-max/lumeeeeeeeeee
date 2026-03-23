@@ -10,6 +10,11 @@ AS $$
   WHERE id = p_conversation_id;
 $$;
 
+-- Unique constraint on provider_message_id to prevent duplicate messages from Twilio retries
+CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_provider_message_id_unique
+  ON public.messages (provider_message_id)
+  WHERE provider_message_id IS NOT NULL;
+
 -- Ensure notifications table has the columns needed for SMS inbound
 -- (is_read alias for ActivityCenter compatibility)
 ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS is_read boolean NOT NULL DEFAULT false;
