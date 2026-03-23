@@ -234,23 +234,28 @@ router.post('/messages/inbound', async (req, res) => {
       console.error('[SMS Inbound] Failed to save message:', msgError.message);
     }
 
-    // Update conversation metadata: last_message, unread_count
-    await serviceClient
-      .from('conversations')
-      .update({
-        last_message_text: Body.length > 200 ? Body.substring(0, 200) + '...' : Body,
-        last_message_at: new Date().toISOString(),
-        unread_count: (conversation as any).unread_count
-          ? (conversation as any).unread_count + 1
-          : 1,
-      })
-      .eq('id', conversation.id);
-
-    // Increment unread_count atomically via RPC if available (fallback is the update above)
+    // Update conversation metadata: last_message + atomic unread increment
+    // Use RPC for atomic increment, fallback to manual update
+    const truncatedBody = Body.length > 200 ? Body.substring(0, 200) + '...' : Body;
     try {
       await serviceClient.rpc('increment_unread_count', { p_conversation_id: conversation.id });
+      // RPC handles unread_count + last_message_at; update last_message_text separately
+      await serviceClient
+        .from('conversations')
+        .update({ last_message_text: truncatedBody })
+        .eq('id', conversation.id);
     } catch {
-      // RPC may not exist yet — the update above is the fallback
+      // RPC not available — manual fallback
+      await serviceClient
+        .from('conversations')
+        .update({
+          last_message_text: truncatedBody,
+          last_message_at: new Date().toISOString(),
+          unread_count: (conversation as any).unread_count
+            ? (conversation as any).unread_count + 1
+            : 1,
+        })
+        .eq('id', conversation.id);
     }
 
     // Create notification for the org

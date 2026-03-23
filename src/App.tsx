@@ -147,6 +147,31 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const { unreadCount: unreadNotifs, resetCount: resetNotifCount } = useRealtimeNotifications(!!user);
+  const [unreadSms, setUnreadSms] = useState(0);
+
+  // Fetch unread SMS count + realtime subscription
+  useEffect(() => {
+    if (!user) { setUnreadSms(0); return; }
+
+    const loadUnread = async () => {
+      const { data } = await supabase
+        .from('conversations')
+        .select('unread_count');
+      const total = (data || []).reduce((sum: number, c: any) => sum + (c.unread_count || 0), 0);
+      setUnreadSms(total);
+    };
+
+    loadUnread();
+
+    const channel = supabase
+      .channel('sms-unread-badge')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
+        loadUnread();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark);
@@ -489,11 +514,25 @@ export default function App() {
                             : "text-text-secondary hover:bg-surface-secondary hover:text-text-primary"
                         )}
                       >
-                        <item.icon size={15} strokeWidth={active ? 2 : 1.75} className={cn(
-                          active ? "text-text-primary" : "text-text-tertiary"
-                        )} />
+                        <span className="relative">
+                          <item.icon size={15} strokeWidth={active ? 2 : 1.75} className={cn(
+                            active ? "text-text-primary" : "text-text-tertiary"
+                          )} />
+                          {item.id === 'messages' && unreadSms > 0 && !sidebarExpanded && (
+                            <span className="absolute -top-1.5 -right-1.5 bg-danger text-white text-[7px] font-bold rounded-full min-w-[12px] h-[12px] flex items-center justify-center px-0.5">
+                              {unreadSms > 9 ? '9+' : unreadSms}
+                            </span>
+                          )}
+                        </span>
                         {sidebarExpanded && (
-                          <span className="truncate">{item.label}</span>
+                          <>
+                            <span className="truncate">{item.label}</span>
+                            {item.id === 'messages' && unreadSms > 0 && (
+                              <span className="ml-auto bg-danger text-white text-[9px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-1 shrink-0">
+                                {unreadSms > 9 ? '9+' : unreadSms}
+                              </span>
+                            )}
+                          </>
                         )}
                       </button>
                     );
@@ -622,9 +661,14 @@ export default function App() {
               <button
                 onClick={() => navigate('/messages')}
                 title={t.nav.messages}
-                className="p-2 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
+                className="p-2 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors relative"
               >
                 <MessageSquare size={16} strokeWidth={1.75} />
+                {unreadSms > 0 && (
+                  <span className="absolute top-1 right-1 bg-danger text-white text-[8px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
+                    {unreadSms > 9 ? '9+' : unreadSms}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => { setActivityOpen(true); resetNotifCount(); }}
