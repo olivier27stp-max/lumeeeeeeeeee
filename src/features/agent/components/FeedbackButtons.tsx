@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
+import { useTranslation } from '../i18n';
 
 interface FeedbackButtonsProps {
   messageId: string;
@@ -32,7 +33,7 @@ export default function FeedbackButtons({ messageId, sessionId, language }: Feed
   if (feedback) {
     return (
       <span className="text-[10px] text-text-tertiary">
-        {feedback === 'up' ? (fr ? 'Merci!' : 'Thanks!') : (fr ? 'Note' : 'Noted')}
+        {feedback === 'up' ? (t.agent.thanks) : (t.agent.noted)}
       </span>
     );
   }
@@ -41,14 +42,14 @@ export default function FeedbackButtons({ messageId, sessionId, language }: Feed
     <div className="flex items-center gap-1">
       <button
         onClick={() => handleFeedback('up')}
-        aria-label={fr ? 'Utile' : 'Helpful'}
+        aria-label={t.agent.helpful}
         className="p-1 rounded text-text-tertiary hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
       >
         <ThumbsUp size={12} />
       </button>
       <button
         onClick={() => handleFeedback('down')}
-        aria-label={fr ? 'Pas utile' : 'Not helpful'}
+        aria-label={t.agent.notHelpful}
         className="p-1 rounded text-text-tertiary hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
       >
         <ThumbsDown size={12} />

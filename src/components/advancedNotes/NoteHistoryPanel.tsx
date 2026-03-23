@@ -10,6 +10,7 @@ import { fr } from 'date-fns/locale';
 import Modal from '../ui/Modal';
 import { fetchNoteHistory } from '../../lib/notesApi';
 import type { NoteHistoryEntry } from '../../types/note';
+import { useTranslation } from '../i18n';
 
 interface NoteHistoryPanelProps {
   open: boolean;
@@ -35,7 +36,7 @@ export default function NoteHistoryPanel({ open, onClose, noteId, language }: No
     <Modal
       open={open}
       onClose={onClose}
-      title={language === 'fr' ? 'Historique des modifications' : 'Edit History'}
+      title={t.advancedNotes.editHistory}
       size="lg"
     >
       {loading ? (
@@ -48,7 +49,7 @@ export default function NoteHistoryPanel({ open, onClose, noteId, language }: No
         <div className="text-center py-8">
           <History size={24} className="mx-auto text-text-tertiary mb-2" />
           <p className="text-[13px] text-text-tertiary">
-            {language === 'fr' ? 'Aucune modification' : 'No edits yet'}
+            {t.advancedNotes.noEditsYet}
           </p>
         </div>
       ) : (
@@ -66,7 +67,7 @@ export default function NoteHistoryPanel({ open, onClose, noteId, language }: No
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-red-50 dark:bg-red-950/20 rounded-md p-2">
                   <p className="text-[10px] font-medium text-red-600 dark:text-red-400 mb-1">
-                    {language === 'fr' ? 'Avant' : 'Before'}
+                    {t.advancedNotes.before}
                   </p>
                   <p className="text-[11px] text-text-secondary whitespace-pre-wrap line-clamp-4">
                     {entry.old_content || '(empty)'}
@@ -74,7 +75,7 @@ export default function NoteHistoryPanel({ open, onClose, noteId, language }: No
                 </div>
                 <div className="bg-green-50 dark:bg-green-950/20 rounded-md p-2">
                   <p className="text-[10px] font-medium text-green-600 dark:text-green-400 mb-1">
-                    {language === 'fr' ? 'Après' : 'After'}
+                    {t.advancedNotes.after}
                   </p>
                   <p className="text-[11px] text-text-secondary whitespace-pre-wrap line-clamp-4">
                     {entry.new_content || '(empty)'}

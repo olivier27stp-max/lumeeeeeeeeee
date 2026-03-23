@@ -11,7 +11,7 @@ import {
 import { createLeadScoped, fetchLeadsScoped } from '../../lib/leadsApi';
 import ServicePicker from '../ServicePicker';
 import type { PredefinedService } from '../../lib/servicesApi';
-import type { Lead } from '../../types';
+import type { Lead, QuoteTemplate } from '../../types';
 
 interface QuoteCreateModalProps {
   isOpen: boolean;
@@ -19,6 +19,7 @@ interface QuoteCreateModalProps {
   onCreated: (detail: QuoteDetail) => void;
   lead?: Lead | null;
   createLeadInline?: boolean;
+  template?: QuoteTemplate | null;
 }
 
 interface LineItemForm {
@@ -44,7 +45,7 @@ function sanitize(v: string) { return v.replace(',', '.').replace(/[^\d.]/g, '')
 const inputCls = 'w-full px-3 py-2.5 bg-surface border border-outline rounded-lg text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all';
 const labelCls = 'text-xs text-text-secondary font-medium mb-1 block';
 
-export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, createLeadInline }: QuoteCreateModalProps) {
+export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, createLeadInline, template }: QuoteCreateModalProps) {
   // ── Contact mode ──
   const [contactMode, setContactMode] = useState<'new' | 'existing'>('new');
   const [selectedLeadId, setSelectedLeadId] = useState('');
@@ -110,6 +111,25 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
       fetchLeadJobLineItems(lead.id).then(setJobLineItems).catch(() => {});
     } else {
       setTitle(''); setClientId('');
+    }
+
+    // ── Pre-fill from template ──
+    if (template) {
+      if (!lead) setTitle(template.name || '');
+      if (template.notes) setNotes(template.notes);
+      if (template.terms) setContractDisclaimer(template.terms);
+      if (template.services && template.services.length > 0) {
+        setLineItems(template.services.map(s => ({
+          id: crypto.randomUUID(),
+          source_service_id: null,
+          name: s.name || '',
+          description: s.description || '',
+          qtyInput: String(s.quantity || 1),
+          unitPriceInput: String((s.unit_price_cents || 0) / 100),
+          is_optional: s.is_optional || false,
+          item_type: 'service' as const,
+        })));
+      }
     }
 
     listClients({ page: 1, pageSize: 200, sort: 'name_asc' })

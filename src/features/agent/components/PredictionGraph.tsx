@@ -12,6 +12,7 @@ import '@xyflow/react/dist/style.css';
 import { X, Trophy, AlertTriangle, CheckCircle2, Users, Briefcase, FileText, DollarSign, User, Maximize2, Minimize2, Database, Brain, Target, Sparkles, Zap } from 'lucide-react';
 import MrLumeAvatar from './MrLumeAvatar';
 import type { ScenarioResult, ScenarioOption, AgentStateLabel } from '../types';
+import { useTranslation } from '../i18n';
 
 /* ═══════════════════════════════════════════════════════════════
    Custom Nodes — MiroFish style
@@ -360,16 +361,16 @@ function GraphLegend({ fr }: { fr: boolean }) {
   const items = [
     { color: 'bg-blue-400', label: 'Client' },
     { color: 'bg-green-400', label: 'Job' },
-    { color: 'bg-orange-400', label: fr ? 'Equipe' : 'Team' },
-    { color: 'bg-purple-400', label: fr ? 'Devis' : 'Quote' },
+    { color: 'bg-orange-400', label: t.agent.team },
+    { color: 'bg-purple-400', label: t.agent.quote },
     { color: 'bg-surface-tertiary', label: 'Signal' },
-    { color: 'bg-text-primary', label: fr ? 'Scenario' : 'Scenario' },
+    { color: 'bg-text-primary', label: t.agent.scenario },
   ];
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
       className="absolute bottom-4 left-4 z-10 rounded-xl bg-surface/90 backdrop-blur-sm border border-outline-subtle p-3">
-      <p className="text-[8px] font-bold uppercase tracking-wider text-red-500 mb-1.5">{fr ? 'TYPES' : 'TYPES'}</p>
+      <p className="text-[8px] font-bold uppercase tracking-wider text-red-500 mb-1.5">{t.agent.types}</p>
       <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
         {items.map(it => (
           <div key={it.label} className="flex items-center gap-1">
@@ -458,14 +459,14 @@ export default function PredictionGraph({
               <MrLumeAvatar size="sm" pulse={!!isAnalyzing} />
               <div>
                 <h2 className="text-sm font-bold text-text-primary">
-                  {fr ? 'Visualisation des predictions' : 'Prediction Visualization'}
+                  {t.agent.predictionVisualization}
                 </h2>
                 <p className="text-[10px] text-text-tertiary">
                   {isAnalyzing
-                    ? fr ? 'Analyse en cours...' : 'Analyzing...'
+                    ? t.agent.analyzing
                     : scenarioData
-                      ? `${scenarioData.options?.length || 0} ${fr ? 'scenarios' : 'scenarios'} · ${(scenarioData.durationMs / 1000).toFixed(1)}s`
-                      : fr ? 'En attente' : 'Waiting'}
+                      ? `${scenarioData.options?.length || 0} ${t.agent.scenarios} · ${(scenarioData.durationMs / 1000).toFixed(1)}s`
+                      : t.agent.waiting}
                 </p>
               </div>
             </div>
@@ -511,10 +512,10 @@ export default function PredictionGraph({
               <Trophy size={16} className="text-amber-500 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-text-primary truncate">
-                  {fr ? 'Recommandation' : 'Recommendation'}: {winner.label}
+                  {t.agent.recommendation}: {winner.label}
                 </p>
                 <p className="text-[10px] text-text-tertiary">
-                  Score {winner.score}/100 · {fr ? 'Confiance' : 'Confidence'} {Math.round(winner.confidence * 100)}%
+                  Score {winner.score}/100 · {t.agent.confidence} {Math.round(winner.confidence * 100)}%
                 </p>
               </div>
             </motion.div>

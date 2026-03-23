@@ -87,3 +87,11 @@ export function emitQuoteApproved(params: {
 }) {
   fireEvent('quote-approved', params);
 }
+
+/** Notify engine that a quote was declined */
+export function emitQuoteDeclined(params: {
+  quoteId: string;
+  leadId?: string;
+}) {
+  fireEvent('quote-declined', params);
+}

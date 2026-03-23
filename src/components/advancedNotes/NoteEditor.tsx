@@ -127,7 +127,7 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
           }
         }
 
-        toast.success(language === 'fr' ? 'Note modifiée' : 'Note updated');
+        toast.success(t.noteEditor.noteUpdated);
       } else {
         // Create note
         const created = await createNote({
@@ -151,7 +151,7 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
           await addChecklistItem(created.id, checklist[i].text, i);
         }
 
-        toast.success(language === 'fr' ? 'Note créée' : 'Note created');
+        toast.success(t.advancedNotes.noteCreated);
       }
 
       onSaved();
@@ -202,7 +202,7 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
           file_url: uploaded.file_url,
           file_type: uploaded.file_type,
         }]);
-        toast.success(`${file.name} ${language === 'fr' ? 'ajouté' : 'uploaded'}`);
+        toast.success(`${file.name} ${t.noteEditor.uploaded}`);
       } catch (err: any) {
         toast.error(`${file.name}: ${err.message}`);
       }
@@ -224,14 +224,14 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
       open={open}
       onClose={onClose}
       title={isEdit
-        ? (language === 'fr' ? 'Modifier la note' : 'Edit Note')
-        : (language === 'fr' ? 'Nouvelle note' : 'New Note')
+        ? (t.noteEditor.editNote)
+        : (t.advancedNotes.newNote)
       }
       size="lg"
       footer={
         <>
           <button onClick={onClose} className="btn-secondary text-[13px]">
-            {language === 'fr' ? 'Annuler' : 'Cancel'}
+            {t.advancedNotes.cancel}
           </button>
           <button
             onClick={handleSave}
@@ -239,8 +239,8 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
             className="btn-primary text-[13px]"
           >
             {saving
-              ? (language === 'fr' ? 'Enregistrement...' : 'Saving...')
-              : (language === 'fr' ? 'Enregistrer' : 'Save')
+              ? (t.billing.saving)
+              : (t.customFields.save)
             }
           </button>
         </>
@@ -275,7 +275,7 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
             )}
           >
             <Pin size={11} className={pinned ? 'rotate-45' : ''} />
-            {pinned ? (language === 'fr' ? 'Épinglée' : 'Pinned') : (language === 'fr' ? 'Épingler' : 'Pin')}
+            {pinned ? (t.noteEditor.pinned) : (t.advancedNotes.pin)}
           </button>
 
           {/* File upload (only in edit mode) */}
@@ -286,7 +286,7 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
                 className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border border-outline text-text-tertiary hover:text-text-secondary hover:bg-surface-secondary transition-colors"
               >
                 <Paperclip size={11} />
-                {language === 'fr' ? 'Fichier' : 'File'}
+                {t.noteEditor.file}
               </button>
               <input
                 ref={fileInputRef}
@@ -303,7 +303,7 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
         {/* ─── Color Picker ─── */}
         <div>
           <label className="text-[11px] font-medium text-text-tertiary mb-1.5 block">
-            {language === 'fr' ? 'Couleur' : 'Color'}
+            {t.advancedNotes.color}
           </label>
           <div className="flex items-center gap-1.5">
             <button
@@ -313,7 +313,7 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
                 color === null ? 'border-text-primary scale-110' : 'border-outline',
                 'bg-surface',
               )}
-              title={language === 'fr' ? 'Par défaut' : 'Default'}
+              title={t.noteEditor.default}
             />
             {NOTE_COLORS.map((c) => (
               <button
@@ -406,7 +406,7 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
               value={newCheckItem}
               onChange={(e) => setNewCheckItem(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCheckItem())}
-              placeholder={language === 'fr' ? 'Ajouter un élément...' : 'Add item...'}
+              placeholder={t.noteEditor.addItem}
               className="input-field text-[12px] flex-1"
             />
             <button onClick={handleAddCheckItem} className="btn-secondary text-[11px] px-2 py-1">
@@ -418,7 +418,7 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
         {/* ─── Entity Link ─── */}
         <div>
           <label className="text-[11px] font-medium text-text-tertiary mb-1.5 block">
-            {language === 'fr' ? 'Lier à un objet CRM' : 'Link to CRM object'}
+            {t.noteEditor.linkToCrmObject}
           </label>
           <div className="flex items-center gap-2">
             <select
@@ -426,7 +426,7 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
               onChange={(e) => setEntityType((e.target.value || null) as NoteEntityType | null)}
               className="input-field text-[12px] w-36"
             >
-              <option value="">{language === 'fr' ? 'Aucun' : 'None'}</option>
+              <option value="">{t.noteEditor.none}</option>
               {Object.entries(ENTITY_TYPE_META).map(([key, meta]) => (
                 <option key={key} value={key}>
                   {language === 'fr' ? meta.labelFr : meta.label}
@@ -449,7 +449,7 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
         <div>
           <label className="text-[11px] font-medium text-text-tertiary mb-1.5 block">
             <Calendar size={11} className="inline mr-1" />
-            {language === 'fr' ? 'Rappel' : 'Reminder'}
+            {t.noteEditor.reminder}
           </label>
           <input
             type="datetime-local"
@@ -464,7 +464,7 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
           <div>
             <label className="text-[11px] font-medium text-text-tertiary mb-1.5 block">
               <Paperclip size={11} className="inline mr-1" />
-              {language === 'fr' ? 'Fichiers' : 'Files'}
+              {t.noteEditor.files}
             </label>
             <div className="space-y-1">
               {files.map((f) => (

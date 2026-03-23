@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Database, Brain, BarChart3, Target, CheckCircle2, Sparkles } from 'lucide-react';
 import MrLumeAvatar from './MrLumeAvatar';
 import type { AgentStateLabel } from '../types';
+import { useTranslation } from '../i18n';
 
 interface AgentThinkingProps {
   currentState: AgentStateLabel;
@@ -69,7 +70,7 @@ export default function AgentThinking({ currentState, language }: AgentThinkingP
             <div className="flex items-center gap-2">
               <Sparkles size={14} className="text-text-primary" />
               <span className="text-xs font-bold text-text-primary">
-                {fr ? 'Mr Lume analyse...' : 'Mr Lume is analyzing...'}
+                {t.agent.mrLumeIsAnalyzing}
               </span>
             </div>
             <span className="text-[10px] font-mono text-text-tertiary tabular-nums">

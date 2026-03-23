@@ -6,6 +6,7 @@
 
 import type { CRMContext } from './types';
 import { getDashboardData, type DashboardData } from '../dashboardApi';
+import { useTranslation } from '../i18n';
 
 /**
  * Build a natural-language CRM context block for the system prompt.
@@ -21,7 +22,7 @@ export function buildCRMContextBlock(ctx: CRMContext, dashData?: DashboardData |
   // User identity
   lines.push(`- **User**: ${ctx.userName} (${ctx.userRole})`);
   lines.push(`- **Organization**: ${ctx.orgName}`);
-  lines.push(`- **Language**: ${fr ? 'French' : 'English'}`);
+  lines.push(`- **Language**: ${t.agent.english}`);
   lines.push(`- **Current page**: ${ctx.currentRoute}`);
 
   // Active entity context

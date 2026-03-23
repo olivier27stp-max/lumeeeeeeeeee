@@ -16,6 +16,7 @@ import { fr } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
 import type { Note, NoteChecklistItem } from '../../types/note';
 import { NOTE_COLORS, ENTITY_TYPE_META } from '../../types/note';
+import { useTranslation } from '../i18n';
 
 interface NoteCardProps {
   note: Note;
@@ -113,7 +114,7 @@ function NoteCard({
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-secondary transition-colors"
                 >
                   <Edit3 size={12} />
-                  {language === 'fr' ? 'Modifier' : 'Edit'}
+                  {t.advancedNotes.edit}
                 </button>
                 <button
                   onClick={() => { setMenuOpen(false); onTogglePin(note.id, !note.pinned); }}
@@ -121,8 +122,8 @@ function NoteCard({
                 >
                   {note.pinned ? <PinOff size={12} /> : <Pin size={12} />}
                   {note.pinned
-                    ? (language === 'fr' ? 'Désépingler' : 'Unpin')
-                    : (language === 'fr' ? 'Épingler' : 'Pin')
+                    ? (t.advancedNotes.unpin)
+                    : (t.advancedNotes.pin)
                   }
                 </button>
                 <button
@@ -130,7 +131,7 @@ function NoteCard({
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-secondary transition-colors"
                 >
                   <History size={12} />
-                  {language === 'fr' ? 'Historique' : 'History'}
+                  {t.advancedNotes.history}
                 </button>
                 <div className="border-t border-outline my-1" />
                 <button
@@ -138,7 +139,7 @@ function NoteCard({
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                 >
                   <Trash2 size={12} />
-                  {language === 'fr' ? 'Supprimer' : 'Delete'}
+                  {t.advancedNotes.delete}
                 </button>
               </div>
             </>
@@ -214,7 +215,7 @@ function NoteCard({
             className="flex items-center gap-1.5 text-[11px] font-medium text-text-tertiary hover:text-text-secondary mb-1.5"
           >
             <Paperclip size={12} />
-            {note.files?.length} {language === 'fr' ? 'fichier(s)' : 'file(s)'}
+            {note.files?.length} {t.advancedNotes.files}
             {filesExpanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
           </button>
           <AnimatePresence>
@@ -289,7 +290,7 @@ function NoteCard({
         </span>
         {note.updated_at !== note.created_at && (
           <span className="text-[10px] text-text-tertiary italic">
-            {language === 'fr' ? 'modifiée' : 'edited'}
+            {t.advancedNotes.edited}
           </span>
         )}
       </div>

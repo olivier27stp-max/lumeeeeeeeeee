@@ -89,11 +89,11 @@ export default function NoteBoards() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(language === 'fr' ? 'Supprimer ce tableau ?' : 'Delete this board?')) return;
+    if (!confirm(t.noteBoards.deleteThisBoard)) return;
     try {
       await deleteBoard(id);
       setBoards((prev) => prev.filter((b) => b.id !== id));
-      toast.success(language === 'fr' ? 'Tableau supprimé' : 'Board deleted');
+      toast.success(t.noteBoards.boardDeleted);
     } catch {
       toast.error('Failed to delete board');
     }
@@ -103,7 +103,7 @@ export default function NoteBoards() {
     try {
       await archiveBoard(id);
       setBoards((prev) => prev.filter((b) => b.id !== id));
-      toast.success(language === 'fr' ? 'Tableau archivé' : 'Board archived');
+      toast.success(t.noteBoards.boardArchived);
     } catch {
       toast.error('Failed to archive board');
     }
@@ -117,8 +117,8 @@ export default function NoteBoards() {
   return (
     <>
       <PageHeader
-        title={language === 'fr' ? 'Tableaux de notes' : 'Note Boards'}
-        subtitle={language === 'fr' ? 'Canevas collaboratif infini' : 'Infinite collaborative canvas'}
+        title={t.noteBoards.noteBoards}
+        subtitle={t.noteBoards.infiniteCollaborativeCanvas}
         icon={StickyNote}
         iconColor="blue"
       >
@@ -137,7 +137,7 @@ export default function NoteBoards() {
           className="btn-primary text-[13px] flex items-center gap-1.5"
         >
           <Plus size={14} />
-          {language === 'fr' ? 'Nouveau tableau' : 'New Board'}
+          {t.noteBoards.newBoard}
         </button>
       </PageHeader>
 
@@ -153,8 +153,8 @@ export default function NoteBoards() {
             icon={StickyNote}
             iconColor="blue"
             title={search
-              ? (language === 'fr' ? 'Aucun résultat' : 'No boards found')
-              : (language === 'fr' ? 'Aucun tableau' : 'No boards yet')
+              ? (t.noteBoards.noBoardsFound)
+              : (t.noteBoards.noBoardsYet)
             }
             description={search
               ? undefined
@@ -165,7 +165,7 @@ export default function NoteBoards() {
             action={!search ? (
               <button onClick={() => setShowCreate(true)} className="btn-primary text-[13px] flex items-center gap-1.5">
                 <Plus size={14} />
-                {language === 'fr' ? 'Créer un tableau' : 'Create Board'}
+                {t.noteBoards.createBoard}
               </button>
             ) : undefined}
           />
@@ -209,14 +209,14 @@ export default function NoteBoards() {
                             className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-secondary transition-colors"
                           >
                             <Archive size={12} />
-                            {language === 'fr' ? 'Archiver' : 'Archive'}
+                            {t.noteBoards.archive}
                           </button>
                           <button
                             onClick={() => { setMenuOpen(null); handleDelete(board.id); }}
                             className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                           >
                             <Trash2 size={12} />
-                            {language === 'fr' ? 'Supprimer' : 'Delete'}
+                            {t.advancedNotes.delete}
                           </button>
                         </div>
                       )}
@@ -234,7 +234,7 @@ export default function NoteBoards() {
                     <div className="flex items-center gap-3 text-[11px] text-text-tertiary">
                       <span className="flex items-center gap-1">
                         <FileText size={11} />
-                        {board.item_count ?? 0} {language === 'fr' ? 'éléments' : 'items'}
+                        {board.item_count ?? 0} {t.noteBoards.items}
                       </span>
                       <span className="flex items-center gap-1">
                         <Clock size={11} />
@@ -253,7 +253,7 @@ export default function NoteBoards() {
       <Modal
         open={showCreate}
         onClose={() => setShowCreate(false)}
-        title={language === 'fr' ? 'Nouveau tableau' : 'New Board'}
+        title={t.noteBoards.newBoard}
         size="lg"
         footer={
           <>
@@ -261,7 +261,7 @@ export default function NoteBoards() {
               {t.common.cancel}
             </button>
             <button onClick={handleCreate} disabled={creating || !newTitle.trim()} className="btn-primary text-[13px]">
-              {creating ? (language === 'fr' ? 'Création...' : 'Creating...') : (language === 'fr' ? 'Créer' : 'Create')}
+              {creating ? (t.customFields.creating) : (t.advancedNotes.create)}
             </button>
           </>
         }
@@ -269,13 +269,13 @@ export default function NoteBoards() {
         <div className="space-y-4">
           <div>
             <label className="text-[12px] font-medium text-text-secondary mb-1 block">
-              {language === 'fr' ? 'Nom du tableau' : 'Board Name'}
+              {t.noteBoards.boardName}
             </label>
             <input
               type="text"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              placeholder={language === 'fr' ? 'Mon tableau...' : 'My board...'}
+              placeholder={t.noteBoards.myBoard}
               className="input-field w-full text-[13px]"
               autoFocus
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
@@ -284,12 +284,12 @@ export default function NoteBoards() {
 
           <div>
             <label className="text-[12px] font-medium text-text-secondary mb-1 block">
-              {language === 'fr' ? 'Description' : 'Description'}
+              {t.automations.description}
             </label>
             <textarea
               value={newDesc}
               onChange={(e) => setNewDesc(e.target.value)}
-              placeholder={language === 'fr' ? 'Description optionnelle...' : 'Optional description...'}
+              placeholder={t.noteBoards.optionalDescription}
               className="input-field w-full text-[13px] resize-none"
               rows={2}
             />
@@ -297,7 +297,7 @@ export default function NoteBoards() {
 
           <div>
             <label className="text-[12px] font-medium text-text-secondary mb-2 block">
-              {language === 'fr' ? 'Type de tableau' : 'Board Type'}
+              {t.noteBoards.boardType}
             </label>
             <div className="grid grid-cols-3 gap-2">
               {(Object.keys(BOARD_TYPE_META) as BoardType[]).map((type) => {

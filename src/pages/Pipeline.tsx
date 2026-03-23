@@ -77,7 +77,7 @@ const DealCard: React.FC<{ deal: PipelineDeal; onClick: () => void; onDelete: ()
   };
 
   const leadName = `${deal.lead?.first_name || ''} ${deal.lead?.last_name || ''}`.trim() || t.pipeline.unknownLead;
-  const canDelete = stageToSlug(deal.stage) === 'lost';
+  const canDelete = stageToSlug(deal.stage) === 'closed_lost';
 
   // Hot/Cold lead indicator from tags
   const tags = deal.lead?.tags || [];
@@ -258,7 +258,7 @@ export default function Pipeline() {
   }, [searchParams, deals]);
 
   async function maybeOpenJobModalForClosedDeal(deal: PipelineDeal) {
-    if (stageToSlug(deal.stage) !== 'closed' || !deal.lead_id) return;
+    if (stageToSlug(deal.stage) !== 'closed_won' || !deal.lead_id) return;
     if (jobModalShownForLead.current.has(deal.lead_id)) return;
 
     try {
@@ -341,7 +341,7 @@ export default function Pipeline() {
       setCreateValue('0');
       setCreateNotes('');
       await load();
-      if (stageToSlug(created.stage) === 'closed') {
+      if (stageToSlug(created.stage) === 'closed_won') {
         await maybeOpenJobModalForClosedDeal(created);
       }
     } catch (e: any) {
@@ -528,12 +528,11 @@ export default function Pipeline() {
       const deal = deals.find((d) => d.id === dealId);
       if (deal?.lead_id) {
         const stageToStatus: Record<string, LeadStatus> = {
-          new: 'new',
-          follow_up_1: 'follow_up_1',
-          follow_up_2: 'follow_up_2',
-          follow_up_3: 'follow_up_3',
-          closed: 'closed',
-          lost: 'lost',
+          new_prospect: 'new_prospect',
+          no_response: 'no_response',
+          quote_sent: 'quote_sent',
+          closed_won: 'closed_won',
+          closed_lost: 'closed_lost',
         };
         const dbStatus = stageToStatus[stageToSlug(newStage)];
         if (dbStatus) {
@@ -646,7 +645,7 @@ export default function Pipeline() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {stageToSlug(deal.stage) === 'lost' ? (
+                    {stageToSlug(deal.stage) === 'closed_lost' ? (
                       <button
                         type="button"
                         className="inline-flex rounded p-1 text-text-tertiary hover:text-danger hover:bg-danger-light"

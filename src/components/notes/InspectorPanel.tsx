@@ -11,6 +11,7 @@ import { cn } from '../../lib/utils';
 import { STICKY_COLORS } from '../../types/noteBoard';
 import type { NoteItem, EntityType } from '../../types/noteBoard';
 import EntityBadge from './EntityBadge';
+import { useTranslation } from '../i18n';
 
 interface InspectorPanelProps {
   item: NoteItem | null;
@@ -38,7 +39,7 @@ export default function InspectorPanel({ item, onClose, onUpdate, onLinkEntity, 
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-outline">
         <span className="text-[12px] font-semibold text-text-primary">
-          {language === 'fr' ? 'Propriétés' : 'Properties'}
+          {t.noteCanvas.properties}
         </span>
         <button onClick={onClose} className="p-1 rounded-md text-text-tertiary hover:text-text-primary transition-colors">
           <X size={12} />
@@ -50,7 +51,7 @@ export default function InspectorPanel({ item, onClose, onUpdate, onLinkEntity, 
         {(item.item_type === 'sticky_note' || item.item_type === 'shape') && (
           <div>
             <label className="text-[11px] font-medium text-text-secondary mb-1.5 flex items-center gap-1">
-              <Palette size={11} /> {language === 'fr' ? 'Couleur' : 'Color'}
+              <Palette size={11} /> {t.advancedNotes.color}
             </label>
             <div className="flex flex-wrap gap-1.5">
               {STICKY_COLORS.map((c) => (
@@ -73,7 +74,7 @@ export default function InspectorPanel({ item, onClose, onUpdate, onLinkEntity, 
         {['sticky_note', 'text', 'shape'].includes(item.item_type) && (
           <div>
             <label className="text-[11px] font-medium text-text-secondary mb-1.5 flex items-center gap-1">
-              <Type size={11} /> {language === 'fr' ? 'Taille' : 'Font Size'}
+              <Type size={11} /> {t.noteCanvas.fontSize}
             </label>
             <input
               type="range"
@@ -91,7 +92,7 @@ export default function InspectorPanel({ item, onClose, onUpdate, onLinkEntity, 
         {['sticky_note', 'text', 'shape'].includes(item.item_type) && (
           <div>
             <label className="text-[11px] font-medium text-text-secondary mb-1.5 block">
-              {language === 'fr' ? 'Alignement' : 'Text Align'}
+              {t.noteCanvas.textAlign}
             </label>
             <div className="flex gap-1">
               {[
@@ -119,7 +120,7 @@ export default function InspectorPanel({ item, onClose, onUpdate, onLinkEntity, 
         {/* Rotation */}
         <div>
           <label className="text-[11px] font-medium text-text-secondary mb-1.5 flex items-center gap-1">
-            <RotateCw size={11} /> {language === 'fr' ? 'Rotation' : 'Rotation'}
+            <RotateCw size={11} /> {t.noteCanvas.rotation}
           </label>
           <div className="flex items-center gap-2">
             <input
@@ -146,14 +147,14 @@ export default function InspectorPanel({ item, onClose, onUpdate, onLinkEntity, 
             )}
           >
             {item.locked ? <Lock size={12} /> : <Unlock size={12} />}
-            {item.locked ? (language === 'fr' ? 'Verrouillé' : 'Locked') : (language === 'fr' ? 'Déverrouillé' : 'Unlocked')}
+            {item.locked ? (t.noteCanvas.locked) : (t.noteCanvas.unlocked)}
           </button>
         </div>
 
         {/* Entity links */}
         <div>
           <label className="text-[11px] font-medium text-text-secondary mb-1.5 flex items-center gap-1">
-            <Link2 size={11} /> {language === 'fr' ? 'Liens CRM' : 'CRM Links'}
+            <Link2 size={11} /> {t.noteCanvas.crmLinks}
           </label>
           {item.entity_links && item.entity_links.length > 0 && (
             <div className="flex flex-wrap gap-1 mb-2">

@@ -2,7 +2,7 @@
 // Defines all permission keys, role presets, and helper functions.
 // Designed to be reusable across the entire app.
 
-export type TeamRole = 'owner' | 'admin' | 'technician';
+export type TeamRole = 'owner' | 'admin' | 'sales_rep' | 'technician';
 
 // ── All permission keys ──────────────────────────────────────────────
 export const PERMISSION_KEYS = [
@@ -93,12 +93,12 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   {
     key: 'quotes',
     label_en: 'Quotes',
-    label_fr: 'Soumissions',
+    label_fr: 'Devis',
     permissions: [
-      { key: 'quotes.view', label_en: 'View quotes', label_fr: 'Voir les soumissions' },
-      { key: 'quotes.create', label_en: 'Create quotes', label_fr: 'Créer des soumissions' },
-      { key: 'quotes.edit', label_en: 'Edit quotes', label_fr: 'Modifier les soumissions' },
-      { key: 'quotes.send', label_en: 'Send quotes', label_fr: 'Envoyer des soumissions' },
+      { key: 'quotes.view', label_en: 'View quotes', label_fr: 'Voir les devis' },
+      { key: 'quotes.create', label_en: 'Create quotes', label_fr: 'Créer des devis' },
+      { key: 'quotes.edit', label_en: 'Edit quotes', label_fr: 'Modifier les devis' },
+      { key: 'quotes.send', label_en: 'Send quotes', label_fr: 'Envoyer des devis' },
     ],
   },
   {
@@ -187,6 +187,24 @@ const ADMIN_PRESET: PermissionsMap = {
   'team.manage_permissions': false,
 };
 
+const SALES_REP_PRESET: PermissionsMap = {
+  ...allFalse(),
+  'clients.view': true,
+  'clients.create': true,
+  'clients.edit': true,
+  'quotes.view': true,
+  'quotes.create': true,
+  'quotes.edit': true,
+  'quotes.send': true,
+  'invoices.view': true,
+  'invoices.create': true,
+  'invoices.send': true,
+  'payments.view_transactions': true,
+  'settings.view': true,
+  'timesheets.view_own': true,
+  'timesheets.edit': true,
+};
+
 const TECHNICIAN_PRESET: PermissionsMap = {
   ...allFalse(),
   'clients.view': true,
@@ -200,6 +218,7 @@ const TECHNICIAN_PRESET: PermissionsMap = {
 export const ROLE_PRESETS: Record<TeamRole, PermissionsMap> = {
   owner: allTrue(),
   admin: ADMIN_PRESET,
+  sales_rep: SALES_REP_PRESET,
   technician: TECHNICIAN_PRESET,
 };
 

@@ -83,7 +83,7 @@ export async function fetchContext(ctx: AgentContext): Promise<{ next: AgentStat
 
     const { count: leadCount } = await admin.from('leads')
       .select('*', { count: 'exact', head: true })
-      .eq('org_id', orgId).is('deleted_at', null).in('status', ['new', 'follow_up_1', 'follow_up_2']);
+      .eq('org_id', orgId).is('deleted_at', null).in('status', ['new_prospect', 'no_response', 'quote_sent', 'new', 'follow_up_1', 'follow_up_2']);
 
     data.stats = { activeJobs: jobCount || 0, activeLeads: leadCount || 0 };
 

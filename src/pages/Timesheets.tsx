@@ -227,8 +227,8 @@ export default function Timesheets() {
   const timesheetsContent = (
     <div className="space-y-5">
       <PageHeader
-        title={language === 'fr' ? 'Feuilles de temps' : 'Timesheets'}
-        subtitle={language === 'fr' ? 'Suivi du temps des employés' : 'Employee time tracking'}
+        title={t.timesheets.timesheets}
+        subtitle={t.timesheets.employeeTimeTracking}
         icon={Timer}
         iconColor="rose"
       >
@@ -237,7 +237,7 @@ export default function Timesheets() {
           className="glass-button inline-flex items-center gap-1.5"
         >
           <Download size={14} />
-          {language === 'fr' ? 'Exporter CSV' : 'Export CSV'}
+          {t.timesheets.exportCsv}
         </button>
       </PageHeader>
 
@@ -250,7 +250,7 @@ export default function Timesheets() {
             onChange={(e) => setSelectedEmployee(e.target.value)}
             className="glass-input !py-1.5 text-[13px]"
           >
-            <option value="all">{language === 'fr' ? 'Tous les employés' : 'All employees'}</option>
+            <option value="all">{t.timesheets.allEmployees}</option>
             {employees.map((emp) => (
               <option key={emp.id} value={emp.id}>{emp.name}</option>
             ))}
@@ -267,9 +267,9 @@ export default function Timesheets() {
                 viewMode === mode ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface-secondary'
               )}
             >
-              {mode === 'day' ? (language === 'fr' ? 'Jour' : 'Day') :
-               mode === 'week' ? (language === 'fr' ? 'Semaine' : 'Week') :
-               (language === 'fr' ? 'Mois' : 'Month')}
+              {mode === 'day' ? (t.timesheets.day) :
+               mode === 'week' ? (t.timesheets.week) :
+               (t.timesheets.month)}
             </button>
           ))}
         </div>
@@ -296,7 +296,7 @@ export default function Timesheets() {
           <div className="flex items-center gap-2 mb-1">
             <Clock size={14} className="text-primary" />
             <span className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
-              {language === 'fr' ? 'Heures travaillées' : 'Hours Worked'}
+              {t.timesheets.hoursWorked}
             </span>
           </div>
           <p className="text-xl font-bold text-text-primary tabular-nums">{formatHours(totalMinutes)}</p>
@@ -305,7 +305,7 @@ export default function Timesheets() {
           <div className="flex items-center gap-2 mb-1">
             <Coffee size={14} className="text-text-secondary" />
             <span className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
-              {language === 'fr' ? 'Pauses totales' : 'Total Breaks'}
+              {t.timesheets.totalBreaks}
             </span>
           </div>
           <p className="text-xl font-bold text-text-primary tabular-nums">{formatHours(totalBreakMinutes)}</p>
@@ -314,7 +314,7 @@ export default function Timesheets() {
           <div className="flex items-center gap-2 mb-1">
             <Calendar size={14} className="text-text-secondary" />
             <span className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
-              {language === 'fr' ? 'Entrées' : 'Entries'}
+              {t.timesheets.entries}
             </span>
           </div>
           <p className="text-xl font-bold text-text-primary tabular-nums">{viewEntries.length}</p>
@@ -326,8 +326,8 @@ export default function Timesheets() {
       ) : viewEntries.length === 0 ? (
         <EmptyState
           icon={Timer}
-          title={language === 'fr' ? 'Aucune entrée de temps' : 'No time entries'}
-          description={language === 'fr' ? 'Aucune feuille de temps pour cette période.' : 'No timesheets found for this period.'}
+          title={t.timesheets.noTimeEntries}
+          description={t.timesheets.noTimesheetsFoundForThisPeriod}
         />
       ) : viewMode === 'day' ? (
         <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="section-card overflow-hidden">
@@ -335,19 +335,19 @@ export default function Timesheets() {
             <thead>
               <tr className="border-b border-border">
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {language === 'fr' ? 'Employé' : 'Employee'}
+                  {t.timesheets.employee}
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  <div className="flex items-center gap-1.5"><LogIn size={12} /> {language === 'fr' ? 'Arrivée' : 'Punch In'}</div>
+                  <div className="flex items-center gap-1.5"><LogIn size={12} /> {t.timesheets.punchIn}</div>
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  <div className="flex items-center gap-1.5"><LogOut size={12} /> {language === 'fr' ? 'Départ' : 'Punch Out'}</div>
+                  <div className="flex items-center gap-1.5"><LogOut size={12} /> {t.timesheets.punchOut}</div>
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  <div className="flex items-center gap-1.5"><Coffee size={12} /> {language === 'fr' ? 'Pauses' : 'Breaks'}</div>
+                  <div className="flex items-center gap-1.5"><Coffee size={12} /> {t.timesheets.breaks}</div>
                 </th>
                 <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {language === 'fr' ? 'Durée travaillée' : 'Work Duration'}
+                  {t.timesheets.workDuration}
                 </th>
               </tr>
             </thead>
@@ -365,7 +365,7 @@ export default function Timesheets() {
             <tfoot>
               <tr className="border-t-2 border-border bg-surface-secondary">
                 <td colSpan={4} className="px-4 py-3 text-[13px] font-bold text-text-primary">
-                  {language === 'fr' ? 'Total du jour' : 'Day Total'}
+                  {t.timesheets.dayTotal}
                 </td>
                 <td className="px-4 py-3 text-right text-[13px] font-bold text-primary tabular-nums">{formatHours(totalMinutes)}</td>
               </tr>
@@ -411,8 +411,8 @@ export default function Timesheets() {
             <div className="flex items-center justify-between">
               <span className="text-[13px] font-bold text-text-primary">
                 {viewMode === 'week'
-                  ? (language === 'fr' ? 'Total de la semaine' : 'Week Total')
-                  : (language === 'fr' ? 'Total du mois' : 'Month Total')}
+                  ? (t.timesheets.weekTotal)
+                  : (t.timesheets.monthTotal)}
               </span>
               <span className="text-lg font-bold text-primary tabular-nums">{formatHours(totalMinutes)}</span>
             </div>

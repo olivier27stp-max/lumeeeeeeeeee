@@ -41,7 +41,7 @@ export async function log(ctx: AgentContext): Promise<{ next: AgentState; ctx: A
       entity_type: ctx.intent?.domain || 'general',
       summary: `User asked: "${ctx.userMessage.slice(0, 100)}" → ${ctx.responseType === 'scenario' ? 'scenario analysis' : 'direct response'}`,
       importance: 3,
-    }).then(() => {}).catch(() => {});
+    }).then(() => {}, () => {});
 
     // Save memory event only if we executed a real action successfully
     if (ctx.intent?.type === 'action' && ctx.executionResult?.success) {

@@ -1,9 +1,9 @@
 import { supabase } from './supabase';
 
-export type SearchEntityType = 'client' | 'job' | 'lead' | 'invoice' | 'quote' | 'team' | 'event';
-export type SearchTab = 'all' | 'clients' | 'jobs' | 'leads' | 'invoices' | 'quotes' | 'teams' | 'events';
+export type SearchEntityType = 'client' | 'job' | 'lead' | 'invoice' | 'quote' | 'request' | 'team' | 'event';
+export type SearchTab = 'all' | 'clients' | 'jobs' | 'leads' | 'invoices' | 'quotes' | 'requests' | 'teams' | 'events';
 
-export const ALL_ENTITY_GROUP_KEYS = ['clients', 'jobs', 'leads', 'invoices', 'quotes', 'teams', 'events'] as const;
+export const ALL_ENTITY_GROUP_KEYS = ['clients', 'jobs', 'leads', 'invoices', 'quotes', 'requests', 'teams', 'events'] as const;
 export type EntityGroupKey = typeof ALL_ENTITY_GROUP_KEYS[number];
 
 export interface SearchEntityItem {
@@ -72,7 +72,7 @@ export async function fetchSearchSuggestions(query: string, limit = 8) {
   const safeQuery = query.trim();
   if (!safeQuery) {
     const emptyGrouped: Record<EntityGroupKey, SearchEntityItem[]> = {
-      clients: [], jobs: [], leads: [], invoices: [], quotes: [], teams: [], events: [],
+      clients: [], jobs: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [],
     };
     return {
       query: '',
@@ -99,6 +99,7 @@ interface FetchSearchResultsOptions {
   leadsPage?: number;
   invoicesPage?: number;
   quotesPage?: number;
+  requestsPage?: number;
   teamsPage?: number;
   eventsPage?: number;
 }

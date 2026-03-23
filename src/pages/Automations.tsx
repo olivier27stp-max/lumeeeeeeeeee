@@ -40,9 +40,9 @@ const PRESET_META: Record<string, { icon: typeof Bell; categoryFr: string; categ
   thank_you_after_job:      { icon: Heart,         categoryFr: 'Suivi',       categoryEn: 'Follow-up' },
   cross_sell_30d:           { icon: Send,          categoryFr: 'Suivi',       categoryEn: 'Follow-up' },
   post_appointment_survey:  { icon: Star,          categoryFr: 'Suivi',       categoryEn: 'Follow-up' },
-  welcome_new_lead:         { icon: UserPlus,      categoryFr: 'Leads',       categoryEn: 'Leads' },
-  stale_lead_7d:            { icon: AlertTriangle, categoryFr: 'Leads',       categoryEn: 'Leads' },
-  lost_lead_reengagement:   { icon: UserX,         categoryFr: 'Leads',       categoryEn: 'Leads' },
+  welcome_new_lead:         { icon: UserPlus,      categoryFr: 'Devis', categoryEn: 'Quotes' },
+  stale_lead_7d:            { icon: AlertTriangle, categoryFr: 'Devis', categoryEn: 'Quotes' },
+  lost_lead_reengagement:   { icon: UserX,         categoryFr: 'Devis', categoryEn: 'Quotes' },
   client_anniversary:       { icon: Star,          categoryFr: 'Client',      categoryEn: 'Client' },
   seasonal_reminder_6m:     { icon: Sun,           categoryFr: 'Client',      categoryEn: 'Client' },
   payment_confirmation:     { icon: CreditCard,    categoryFr: 'Paiement',    categoryEn: 'Payment' },
@@ -142,10 +142,10 @@ export default function Automations() {
     try {
       await toggleAutomationRule(rule.id, newActive);
       toast.success(newActive
-        ? (fr ? 'Workflow activé' : 'Workflow enabled')
-        : (fr ? 'Workflow désactivé' : 'Workflow disabled'));
+        ? (t.automations.workflowEnabled)
+        : (t.automations.workflowDisabled));
     } catch {
-      toast.error(fr ? 'Erreur' : 'Failed to update');
+      toast.error(t.automations.failedToUpdate);
       setRules((prev) => prev.map((r) => r.id === rule.id ? { ...r, is_active: rule.is_active } : r));
     } finally {
       setTogglingId(null);
@@ -155,7 +155,7 @@ export default function Automations() {
   // ── Derive categories ──
   const getCategory = (r: AutomationRule) => {
     const meta = PRESET_META[r.preset_key || ''];
-    return meta ? (fr ? meta.categoryFr : meta.categoryEn) : (fr ? 'Personnalisé' : 'Custom');
+    return meta ? (fr ? meta.categoryFr : meta.categoryEn) : (t.automations.custom);
   };
   const categories = Array.from(new Set(rules.map(getCategory))).sort();
 
@@ -197,9 +197,9 @@ export default function Automations() {
       <div className="grid grid-cols-4 gap-3">
         {[
           { label: 'Total', value: totalCount },
-          { label: fr ? 'Actifs' : 'Active', value: activeCount },
-          { label: fr ? 'Inactifs' : 'Inactive', value: inactiveCount },
-          { label: fr ? 'Presets' : 'Presets', value: presetCount },
+          { label: t.automations.active, value: activeCount },
+          { label: t.automations.inactive, value: inactiveCount },
+          { label: t.automations.presets, value: presetCount },
         ].map((s) => (
           <div key={s.label} className="section-card px-4 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">{s.label}</p>
@@ -214,7 +214,7 @@ export default function Automations() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
           <input
             type="text"
-            placeholder={fr ? 'Rechercher...' : 'Search...'}
+            placeholder={t.automations.search}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="glass-input w-full pl-9 text-[13px]"
@@ -225,7 +225,7 @@ export default function Automations() {
           onChange={(e) => setFilterCategory(e.target.value)}
           className="glass-input text-[13px] py-2"
         >
-          <option value="all">{fr ? 'Toutes catégories' : 'All categories'}</option>
+          <option value="all">{t.automations.allCategories}</option>
           {categories.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
         <select
@@ -233,12 +233,12 @@ export default function Automations() {
           onChange={(e) => setFilterStatus(e.target.value as any)}
           className="glass-input text-[13px] py-2"
         >
-          <option value="all">{fr ? 'Tous' : 'All'}</option>
-          <option value="active">{fr ? 'Actifs' : 'Active'}</option>
-          <option value="inactive">{fr ? 'Inactifs' : 'Inactive'}</option>
+          <option value="all">{t.automations.all}</option>
+          <option value="active">{t.automations.active}</option>
+          <option value="inactive">{t.automations.inactive}</option>
         </select>
         <span className="text-[11px] text-text-tertiary ml-auto">
-          {filtered.length} {fr ? 'résultat(s)' : 'result(s)'}
+          {filtered.length} {t.automations.results}
         </span>
       </div>
 
@@ -251,7 +251,7 @@ export default function Automations() {
         <div className="section-card p-10 text-center">
           <Zap size={28} className="mx-auto text-text-tertiary/30 mb-3" />
           <p className="text-[13px] text-text-tertiary">
-            {search ? (fr ? 'Aucun résultat' : 'No results') : (fr ? 'Aucun workflow' : 'No workflows')}
+            {search ? (t.automations.noResults) : (t.automations.noWorkflows)}
           </p>
         </div>
       ) : (
@@ -261,11 +261,11 @@ export default function Automations() {
               <tr className="border-b border-outline bg-surface-secondary/40">
                 {[
                   { label: 'Workflow', cls: 'text-left' },
-                  { label: fr ? 'Catégorie' : 'Category', cls: 'text-left hidden md:table-cell' },
-                  { label: fr ? 'Déclencheur' : 'Trigger', cls: 'text-left hidden md:table-cell' },
-                  { label: fr ? 'Délai' : 'Timing', cls: 'text-left hidden lg:table-cell' },
-                  { label: fr ? 'Canaux' : 'Channels', cls: 'text-left hidden lg:table-cell' },
-                  { label: fr ? 'Statut' : 'Status', cls: 'text-center w-[80px]' },
+                  { label: t.automations.category, cls: 'text-left hidden md:table-cell' },
+                  { label: t.automations.trigger, cls: 'text-left hidden md:table-cell' },
+                  { label: t.automations.timing, cls: 'text-left hidden lg:table-cell' },
+                  { label: t.automations.channels, cls: 'text-left hidden lg:table-cell' },
+                  { label: t.automations.status, cls: 'text-center w-[80px]' },
                   { label: '', cls: 'text-right w-[60px]' },
                 ].map((col) => (
                   <th key={col.label || 'action'} className={cn('px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary', col.cls)}>
@@ -304,12 +304,12 @@ export default function Automations() {
                               <span className="font-semibold text-text-primary truncate">{rule.name}</span>
                               {isDefault && (
                                 <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-tertiary text-text-secondary shrink-0">
-                                  {fr ? 'Défaut' : 'Default'}
+                                  {t.automations.default}
                                 </span>
                               )}
                               {rule.is_preset && !isDefault && (
                                 <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-tertiary text-text-tertiary shrink-0">
-                                  {fr ? 'Optionnel' : 'Optional'}
+                                  {t.automations.optional}
                                 </span>
                               )}
                             </div>
@@ -354,7 +354,7 @@ export default function Automations() {
                             ? 'bg-text-primary/8 text-text-primary'
                             : 'bg-surface-tertiary text-text-tertiary',
                         )}>
-                          {rule.is_active ? (fr ? 'Actif' : 'Active') : (fr ? 'Inactif' : 'Off')}
+                          {rule.is_active ? (t.requestForm.active) : (t.automations.off)}
                         </span>
                       </td>
 
@@ -383,15 +383,15 @@ export default function Automations() {
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[12px]">
                             <div>
                               <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
-                                {fr ? 'Description' : 'Description'}
+                                {t.automations.description}
                               </p>
                               <p className="text-text-secondary leading-relaxed">
-                                {rule.description || (fr ? 'Aucune description' : 'No description')}
+                                {rule.description || (t.automations.noDescription)}
                               </p>
                             </div>
                             <div>
                               <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
-                                {fr ? 'Actions' : 'Actions'}
+                                {t.automations.actions}
                               </p>
                               <div className="space-y-1">
                                 {rule.actions.map((a, i) => (
@@ -404,7 +404,7 @@ export default function Automations() {
                             </div>
                             <div>
                               <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
-                                {fr ? 'Détails' : 'Details'}
+                                {t.automations.details}
                               </p>
                               <div className="space-y-1 text-text-secondary">
                                 <div className="flex items-center gap-1.5">

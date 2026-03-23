@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Users, MapPin, Clock, Zap, ChevronDown, ChevronUp, Loader2, AlertCircle } from 'lucide-react';
 import { getTeamSuggestions, type TeamSuggestion, type SuggestionParams } from '../lib/teamSuggestionsApi';
+import { useTranslation } from '../i18n';
 
 interface TeamSuggestionsProps {
   date: string | null;
@@ -15,11 +16,11 @@ interface TeamSuggestionsProps {
   compact?: boolean;
 }
 
-const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  available: { label: 'Available', className: 'bg-emerald-50 text-emerald-700' },
-  partially_available: { label: 'Partial', className: 'bg-amber-50 text-amber-700' },
-  busy: { label: 'Busy', className: 'bg-red-50 text-red-700' },
-  unavailable: { label: 'Off', className: 'bg-neutral-100 text-neutral-500' },
+const STATUS_CLASSNAMES: Record<string, string> = {
+  available: 'bg-emerald-50 text-emerald-700',
+  partially_available: 'bg-amber-50 text-amber-700',
+  busy: 'bg-red-50 text-red-700',
+  unavailable: 'bg-neutral-100 text-neutral-500',
 };
 
 export default function TeamSuggestions({
@@ -34,6 +35,13 @@ export default function TeamSuggestions({
   selectedTeamId,
   compact = false,
 }: TeamSuggestionsProps) {
+  const { t } = useTranslation();
+  const STATUS_LABELS: Record<string, { label: string; className: string }> = {
+    available: { label: t.teamSuggestions.available, className: STATUS_CLASSNAMES.available },
+    partially_available: { label: t.teamSuggestions.partial, className: STATUS_CLASSNAMES.partially_available },
+    busy: { label: t.teamSuggestions.busy, className: STATUS_CLASSNAMES.busy },
+    unavailable: { label: t.teamSuggestions.off, className: STATUS_CLASSNAMES.unavailable },
+  };
   const [suggestions, setSuggestions] = useState<TeamSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +74,7 @@ export default function TeamSuggestions({
           if (!cancelled) setSuggestions(res.suggestions);
         })
         .catch(err => {
-          if (!cancelled) setError(err?.message || 'Failed to load suggestions');
+          if (!cancelled) setError(err?.message || t.teamSuggestions.failedLoad);
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -82,7 +90,7 @@ export default function TeamSuggestions({
     return (
       <div className="flex items-center gap-2 py-3 text-[13px] text-text-tertiary">
         <Loader2 size={14} className="animate-spin" />
-        <span>Finding best teams...</span>
+        <span>{t.teamSuggestions.findingBestTeams}</span>
       </div>
     );
   }
@@ -104,7 +112,7 @@ export default function TeamSuggestions({
     <div className="space-y-1">
       <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider flex items-center gap-1.5">
         <Zap size={12} />
-        Suggested Teams
+        {t.teamSuggestions.suggestedTeams}
       </p>
       <div className="space-y-1">
         {topSuggestions.map((team) => {
@@ -173,7 +181,7 @@ export default function TeamSuggestions({
                     </span>
                   )}
                   {team.jobs_today > 0 && (
-                    <span>{team.jobs_today} job{team.jobs_today > 1 ? 's' : ''}</span>
+                    <span>{team.jobs_today} {team.jobs_today > 1 ? t.teamSuggestions.jobs : t.teamSuggestions.job}</span>
                   )}
                   {team.proximity_km !== null && (
                     <span>{team.proximity_km}km</span>
@@ -192,7 +200,7 @@ export default function TeamSuggestions({
                   {/* All reasons */}
                   {team.reasons.length > 1 && (
                     <div>
-                      <p className="font-semibold text-text-tertiary uppercase tracking-wider mb-1">Why recommended</p>
+                      <p className="font-semibold text-text-tertiary uppercase tracking-wider mb-1">{t.teamSuggestions.whyRecommended}</p>
                       <ul className="space-y-0.5">
                         {team.reasons.map((r, i) => (
                           <li key={i} className="text-text-secondary flex items-start gap-1.5">
@@ -206,7 +214,7 @@ export default function TeamSuggestions({
                   {/* Free windows */}
                   {team.availability_windows.length > 0 && (
                     <div>
-                      <p className="font-semibold text-text-tertiary uppercase tracking-wider mb-1">Available windows</p>
+                      <p className="font-semibold text-text-tertiary uppercase tracking-wider mb-1">{t.teamSuggestions.availableWindows}</p>
                       <div className="flex flex-wrap gap-1">
                         {team.availability_windows.map((w, i) => (
                           <span key={i} className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-medium">
@@ -219,9 +227,9 @@ export default function TeamSuggestions({
 
                   {/* Score breakdown */}
                   <div className="flex items-center gap-3 pt-1 border-t border-outline">
-                    <span className="text-text-tertiary">Score: <strong className="text-text-primary">{team.score}/100</strong></span>
-                    {team.skill_match && <span className="text-emerald-600">Skills matched</span>}
-                    {!team.skill_match && <span className="text-amber-600">Skill gap</span>}
+                    <span className="text-text-tertiary">{t.teamSuggestions.score}<strong className="text-text-primary">{team.score}/100</strong></span>
+                    {team.skill_match && <span className="text-emerald-600">{t.teamSuggestions.skillsMatched}</span>}
+                    {!team.skill_match && <span className="text-amber-600">{t.teamSuggestions.skillGap}</span>}
                   </div>
                 </div>
               )}

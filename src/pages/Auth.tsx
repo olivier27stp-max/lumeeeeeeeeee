@@ -184,7 +184,7 @@ export default function Auth({ onBack }: AuthProps) {
                 <button
                   onClick={async () => {
                     if (!email.trim()) {
-                      setMessage({ type: 'error', text: language === 'fr' ? 'Entrez votre email pour reinitialiser.' : 'Enter your email to reset password.' });
+                      setMessage({ type: 'error', text: t.auth.enterYourEmailToResetPassword });
                       return;
                     }
                     setLoading(true);
@@ -193,7 +193,7 @@ export default function Auth({ onBack }: AuthProps) {
                         redirectTo: `${window.location.origin}/settings`,
                       });
                       if (error) throw error;
-                      setMessage({ type: 'success', text: language === 'fr' ? 'Lien de reinitialisation envoye par email.' : 'Password reset link sent to your email.' });
+                      setMessage({ type: 'success', text: t.auth.passwordResetLinkSentToYourEmail });
                     } catch (err: any) {
                       setMessage({ type: 'error', text: err.message });
                     } finally {
@@ -203,7 +203,7 @@ export default function Auth({ onBack }: AuthProps) {
                   disabled={loading}
                   className="text-xs text-gray-400 hover:text-gray-600 transition-colors font-light underline"
                 >
-                  {language === 'fr' ? 'Mot de passe oublie ?' : 'Forgot password?'}
+                  {t.auth.forgotPassword}
                 </button>
               </div>
             )}

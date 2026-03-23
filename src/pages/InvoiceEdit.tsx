@@ -214,7 +214,7 @@ export default function InvoiceEdit() {
   // ── Save ──
   async function handleSave() {
     if (!clientId) {
-      toast.error(language === 'fr' ? 'Veuillez sélectionner un client' : 'Please select a client');
+      toast.error(t.invoiceEdit.pleaseSelectAClient);
       return;
     }
     setSaving(true);
@@ -256,7 +256,7 @@ export default function InvoiceEdit() {
       queryClient.invalidateQueries({ queryKey: ['invoiceDetails', id] });
       queryClient.invalidateQueries({ queryKey: ['invoiceEdit', id] });
 
-      toast.success(language === 'fr' ? 'Facture sauvegardée' : 'Invoice saved');
+      toast.success(t.invoiceEdit.invoiceSaved);
 
       if (isNew && id) {
         navigate(`/invoices/${id}/edit`, { replace: true });
@@ -288,7 +288,7 @@ export default function InvoiceEdit() {
       });
       queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
       queryClient.invalidateQueries({ queryKey: ['invoicesKpis30d'] });
-      toast.success(language === 'fr' ? 'Facture envoyée!' : 'Invoice sent!');
+      toast.success(t.invoiceDetails.invoiceSent);
       navigate(`/invoices/${draftId}`);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to send');
@@ -361,17 +361,17 @@ export default function InvoiceEdit() {
       <div className="mx-auto max-w-2xl space-y-4 py-6">
         <button type="button" onClick={() => navigate('/invoices')} className="glass-button inline-flex items-center gap-2">
           <ArrowLeft size={14} />
-          {language === 'fr' ? 'Retour' : 'Back'}
+          {t.companySettings.back}
         </button>
         <div className="section-card p-6">
           <h2 className="text-xl font-bold text-text-primary">
-            {language === 'fr' ? 'Nouvelle facture — Sélectionnez un client' : 'New Invoice — Select Client'}
+            {t.invoiceEdit.newInvoiceSelectClient}
           </h2>
           <div className="relative mt-4">
             <input
               value={clientSearch}
               onChange={(e) => setClientSearch(e.target.value)}
-              placeholder={language === 'fr' ? 'Rechercher un client...' : 'Search clients...'}
+              placeholder={t.invoiceEdit.searchClients}
               className="glass-input w-full"
               autoFocus
             />
@@ -413,7 +413,7 @@ export default function InvoiceEdit() {
           </button>
           <div>
             <h1 className="text-sm font-bold text-text-primary">
-              {isNew ? (language === 'fr' ? 'Nouvelle facture' : 'New Invoice') : detailQuery.data?.invoice?.invoice_number || 'Edit Invoice'}
+              {isNew ? (t.invoiceEdit.newInvoice) : detailQuery.data?.invoice?.invoice_number || 'Edit Invoice'}
             </h1>
             <p className="text-xs text-text-secondary">{clientName}</p>
           </div>
@@ -425,7 +425,7 @@ export default function InvoiceEdit() {
             className={`glass-button inline-flex items-center gap-1.5 !text-xs ${showPreview ? 'bg-primary/10 text-primary' : ''}`}
           >
             <Eye size={13} />
-            {language === 'fr' ? 'Aperçu' : 'Preview'}
+            {t.invoiceDetails.preview}
           </button>
           <button
             type="button"
@@ -434,7 +434,7 @@ export default function InvoiceEdit() {
             className="glass-button inline-flex items-center gap-1.5 !text-xs"
           >
             <Save size={13} />
-            {saving ? (language === 'fr' ? 'Sauvegarde...' : 'Saving...') : (language === 'fr' ? 'Sauvegarder' : 'Save Draft')}
+            {saving ? (t.invoiceEdit.saving) : (t.invoiceEdit.saveDraft)}
           </button>
           <button
             type="button"
@@ -443,7 +443,7 @@ export default function InvoiceEdit() {
             className="glass-button-primary inline-flex items-center gap-1.5 !text-xs"
           >
             <Send size={13} />
-            {sending ? (language === 'fr' ? 'Envoi...' : 'Sending...') : (language === 'fr' ? 'Envoyer' : 'Send Invoice')}
+            {sending ? (t.invoiceDetails.sending) : (t.invoiceDetails.sendInvoice)}
           </button>
         </div>
       </div>
@@ -457,12 +457,12 @@ export default function InvoiceEdit() {
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
               <div className="space-y-1.5 lg:col-span-2">
                 <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                  {language === 'fr' ? 'Sujet' : 'Subject'}
+                  {t.invoiceEdit.subject}
                 </label>
                 <input
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  placeholder={language === 'fr' ? 'Sujet de la facture' : 'Invoice subject'}
+                  placeholder={t.invoiceEdit.invoiceSubject}
                   className="glass-input w-full"
                 />
               </div>
@@ -483,7 +483,7 @@ export default function InvoiceEdit() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-text-primary">
-                  {language === 'fr' ? 'Articles' : 'Line Items'}
+                  {t.invoiceEdit.lineItems}
                 </h3>
                 <button
                   type="button"
@@ -491,7 +491,7 @@ export default function InvoiceEdit() {
                   className="glass-button inline-flex items-center gap-1.5 !px-2.5 !py-1.5 !text-xs"
                 >
                   <Plus size={12} />
-                  {language === 'fr' ? 'Ajouter' : 'Add Item'}
+                  {t.invoiceEdit.addItem}
                 </button>
               </div>
 
@@ -516,7 +516,7 @@ export default function InvoiceEdit() {
                     <input
                       value={line.description}
                       onChange={(e) => updateLine(line.id, { description: e.target.value })}
-                      placeholder={language === 'fr' ? 'Description' : 'Description'}
+                      placeholder={t.automations.description}
                       className={cn('glass-input w-full text-sm', !line.included && 'line-through')}
                     />
                   </div>
@@ -558,7 +558,7 @@ export default function InvoiceEdit() {
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                    {language === 'fr' ? 'Remise ($)' : 'Discount ($)'}
+                    {t.invoiceEdit.discount}
                   </label>
                   <input
                     type="number"
@@ -571,7 +571,7 @@ export default function InvoiceEdit() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                    {language === 'fr' ? 'Taxe ($)' : 'Tax ($)'}
+                    {t.invoiceEdit.tax}
                   </label>
                   <input
                     type="number"
@@ -585,17 +585,17 @@ export default function InvoiceEdit() {
               </div>
               <div className="rounded-xl border border-outline-subtle bg-surface-secondary p-4 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-text-secondary">{language === 'fr' ? 'Sous-total' : 'Subtotal'}</span>
+                  <span className="text-text-secondary">{t.invoiceEdit.subtotal}</span>
                   <span className="font-semibold">{fmt(totals.subtotal_cents)}</span>
                 </div>
                 {totals.discount_cents > 0 && (
                   <div className="mt-1 flex justify-between text-red-500">
-                    <span>{language === 'fr' ? 'Remise' : 'Discount'}</span>
+                    <span>{t.invoiceEdit.discount2}</span>
                     <span>-{fmt(totals.discount_cents)}</span>
                   </div>
                 )}
                 <div className="mt-1 flex justify-between">
-                  <span className="text-text-secondary">{language === 'fr' ? 'Taxe' : 'Tax'}</span>
+                  <span className="text-text-secondary">{t.invoiceEdit.tax2}</span>
                   <span className="font-semibold">{fmt(totals.tax_cents)}</span>
                 </div>
                 <div className="mt-2 flex justify-between border-t border-outline-subtle pt-2 text-base font-bold text-text-primary">
@@ -609,25 +609,25 @@ export default function InvoiceEdit() {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                  {language === 'fr' ? 'Notes (visible au client)' : 'Notes (visible to client)'}
+                  {t.invoiceEdit.notesVisibleToClient}
                 </label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
-                  placeholder={language === 'fr' ? 'Notes pour le client...' : 'Notes for the client...'}
+                  placeholder={t.invoiceEdit.notesForTheClient}
                   className="glass-input w-full resize-none"
                 />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                  {language === 'fr' ? 'Notes internes' : 'Internal Notes'}
+                  {t.invoiceEdit.internalNotes}
                 </label>
                 <textarea
                   value={internalNotes}
                   onChange={(e) => setInternalNotes(e.target.value)}
                   rows={3}
-                  placeholder={language === 'fr' ? 'Notes internes (non visibles)...' : 'Internal notes (not on invoice)...'}
+                  placeholder={t.invoiceEdit.internalNotesNotOnInvoice}
                   className="glass-input w-full resize-none"
                 />
               </div>

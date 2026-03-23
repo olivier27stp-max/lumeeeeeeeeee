@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, ChevronUp, Trophy, AlertTriangle, CheckCircle2, TrendingUp, Sparkles, Zap } from 'lucide-react';
 import MrLumeAvatar from './MrLumeAvatar';
 import type { ScenarioResult, ScenarioOption } from '../types';
+import { useTranslation } from '../i18n';
 
 interface ScenarioExpansionProps {
   data: ScenarioResult;
@@ -77,7 +78,7 @@ function ScenarioCard({ option, index, language, revealed }: ScenarioCardProps) 
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/30">
             <Trophy size={10} className="text-amber-500" />
             <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
-              {fr ? 'RECOMMANDE' : 'RECOMMENDED'}
+              {t.agent.recommended}
             </span>
           </div>
         </motion.div>
@@ -98,7 +99,7 @@ function ScenarioCard({ option, index, language, revealed }: ScenarioCardProps) 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-text-primary truncate">{option.label}</p>
           <p className="text-[10px] text-text-tertiary mt-0.5">
-            {fr ? 'Confiance' : 'Confidence'}: {Math.round(option.confidence * 100)}%
+            {t.agent.confidence}: {Math.round(option.confidence * 100)}%
           </p>
         </div>
 
@@ -121,7 +122,7 @@ function ScenarioCard({ option, index, language, revealed }: ScenarioCardProps) 
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-green-600 dark:text-green-400 mb-1.5 flex items-center gap-1">
                     <CheckCircle2 size={10} />
-                    {fr ? 'Avantages' : 'Benefits'}
+                    {t.agent.benefits}
                   </p>
                   <div className="space-y-1">
                     {option.benefits.filter(Boolean).map((b, i) => (
@@ -145,7 +146,7 @@ function ScenarioCard({ option, index, language, revealed }: ScenarioCardProps) 
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-red-500 dark:text-red-400 mb-1.5 flex items-center gap-1">
                     <AlertTriangle size={10} />
-                    {fr ? 'Risques' : 'Risks'}
+                    {t.agent.risks}
                   </p>
                   <div className="space-y-1">
                     {option.risks.filter(Boolean).map((r, i) => (
@@ -170,7 +171,7 @@ function ScenarioCard({ option, index, language, revealed }: ScenarioCardProps) 
                   <div className="flex items-center gap-1.5 mb-1">
                     <TrendingUp size={10} className="text-text-tertiary" />
                     <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                      {fr ? 'Resultat attendu' : 'Expected outcome'}
+                      {t.agent.expectedOutcome}
                     </span>
                   </div>
                   <p className="text-[11px] text-text-secondary leading-relaxed">{option.outcome}</p>
@@ -229,7 +230,7 @@ export default function ScenarioExpansion({ data, language }: ScenarioExpansionP
                 <Zap size={14} className="text-text-primary" />
               </motion.div>
               <span className="text-xs font-bold text-text-primary">
-                {fr ? 'Analyse de scenarios' : 'Scenario Analysis'}
+                {t.agent.scenarioAnalysis}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -244,7 +245,7 @@ export default function ScenarioExpansion({ data, language }: ScenarioExpansionP
                 >
                   <CheckCircle2 size={10} className="text-green-500" />
                   <span className="text-[10px] font-medium text-green-600 dark:text-green-400">
-                    {fr ? 'Termine' : 'Complete'}
+                    {t.agent.complete}
                   </span>
                 </motion.div>
               )}
@@ -283,7 +284,7 @@ export default function ScenarioExpansion({ data, language }: ScenarioExpansionP
           )) : (
             <div className="rounded-lg border border-outline-subtle bg-surface p-3 text-center">
               <p className="text-xs text-text-tertiary">
-                {fr ? 'Aucun scenario genere' : 'No scenarios generated'}
+                {t.agent.noScenariosGenerated}
               </p>
             </div>
           )}
@@ -300,12 +301,12 @@ export default function ScenarioExpansion({ data, language }: ScenarioExpansionP
             <Sparkles size={16} className="text-text-primary shrink-0" />
             <div>
               <p className="text-xs font-semibold text-text-primary">
-                {fr ? 'Recommandation de Mr Lume' : 'Mr Lume\'s Recommendation'}
+                {t.agent.mrLumeRecommendation}
               </p>
               <p className="text-[11px] text-text-secondary mt-0.5">
                 {data.options.find(o => o.isWinner)?.label || data.options[0]?.label}
                 {' — '}
-                {fr ? 'score' : 'score'} {data.options.find(o => o.isWinner)?.score || data.options[0]?.score}/100
+                {t.agent.score} {data.options.find(o => o.isWinner)?.score || data.options[0]?.score}/100
               </p>
             </div>
           </motion.div>

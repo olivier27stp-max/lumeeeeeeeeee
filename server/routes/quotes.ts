@@ -292,6 +292,16 @@ router.post('/quotes/send-email', async (req, res) => {
       reason: 'Sent via email',
     });
 
+    // Automation: move pipeline deal to Quote Sent
+    if (quote.lead_id) {
+      const { data: deal } = await admin.from('pipeline_deals')
+        .select('id').eq('lead_id', quote.lead_id).is('deleted_at', null)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (deal) {
+        await admin.rpc('set_deal_stage', { p_deal_id: deal.id, p_stage: 'quote_sent' });
+      }
+    }
+
     return res.json({ ok: true, channel: 'email', recipient: recipientEmail });
   } catch (error: any) {
     console.error('quote_send_email_failed', error);
@@ -377,6 +387,16 @@ router.post('/quotes/send-sms', async (req, res) => {
       changed_by: auth.user.id,
       reason: 'Sent via SMS',
     });
+
+    // Automation: move pipeline deal to Quote Sent
+    if (quote.lead_id) {
+      const { data: deal } = await admin.from('pipeline_deals')
+        .select('id').eq('lead_id', quote.lead_id).is('deleted_at', null)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (deal) {
+        await admin.rpc('set_deal_stage', { p_deal_id: deal.id, p_stage: 'quote_sent' });
+      }
+    }
 
     return res.json({ ok: true, channel: 'sms', recipient: recipientPhone });
   } catch (error: any) {
@@ -469,6 +489,117 @@ router.post('/quotes/convert-to-job', async (req, res) => {
   } catch (error: any) {
     console.error('quote_convert_failed', error);
     return res.status(500).json({ error: error?.message || 'Failed to convert quote.' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// PUBLIC: Get full quote data by view_token (no auth)
+// ══════════════════════════════════════════════════════════════
+
+router.get('/quotes/public/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    if (!token) return res.status(400).json({ error: 'Token is required.' });
+
+    const admin = getServiceClient();
+
+    const { data: quote, error: qErr } = await admin
+      .from('quotes')
+      .select('id, quote_number, title, status, valid_until, created_at, subtotal_cents, discount_cents, tax_rate_label, tax_cents, total_cents, currency, notes, contract_disclaimer, deposit_required, deposit_type, deposit_value, deposit_cents, deposit_status, require_payment_method, approved_at, declined_at, org_id, view_token, client_id, lead_id')
+      .eq('view_token', token)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
+
+    // Company branding
+    const { data: companyData } = await admin
+      .from('company_settings')
+      .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code, country')
+      .eq('org_id', quote.org_id)
+      .maybeSingle();
+
+    // Line items
+    const { data: items } = await admin
+      .from('quote_line_items')
+      .select('id, name, description, quantity, unit_price_cents, total_cents, is_optional, item_type')
+      .eq('quote_id', quote.id)
+      .order('sort_order', { ascending: true });
+
+    // Client or lead
+    let client = null;
+    let lead = null;
+    if (quote.client_id) {
+      const { data: c } = await admin
+        .from('clients')
+        .select('first_name, last_name, company, email, phone')
+        .eq('id', quote.client_id)
+        .is('deleted_at', null)
+        .maybeSingle();
+      client = c;
+    }
+    if (quote.lead_id) {
+      const { data: l } = await admin
+        .from('leads')
+        .select('first_name, last_name, company, email, phone')
+        .eq('id', quote.lead_id)
+        .is('deleted_at', null)
+        .maybeSingle();
+      lead = l;
+    }
+
+    // Signature (if approved)
+    let signature = null;
+    if (['approved', 'converted'].includes(quote.status)) {
+      const { data: sig } = await admin
+        .from('quote_attachments')
+        .select('file_url, file_name, uploaded_at')
+        .eq('quote_id', quote.id)
+        .eq('source_type', 'signature')
+        .order('uploaded_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (sig?.file_url) {
+        const signerName = sig.file_name
+          ?.replace(/^signature_/, '')
+          .replace(/\.png$/, '')
+          .replace(/_/g, ' ') || '';
+        signature = { signer_name: signerName, signature_url: sig.file_url, signed_at: sig.uploaded_at || quote.approved_at };
+      }
+    }
+
+    return res.json({
+      quote: {
+        id: quote.id, quote_number: quote.quote_number, title: quote.title, status: quote.status,
+        valid_until: quote.valid_until, created_at: quote.created_at,
+        subtotal_cents: Number(quote.subtotal_cents || 0), discount_cents: Number(quote.discount_cents || 0),
+        tax_rate_label: quote.tax_rate_label || 'Tax', tax_cents: Number(quote.tax_cents || 0),
+        total_cents: Number(quote.total_cents || 0), currency: quote.currency || 'CAD',
+        notes: quote.notes, contract_disclaimer: quote.contract_disclaimer,
+        deposit_required: quote.deposit_required, deposit_type: quote.deposit_type,
+        deposit_value: Number(quote.deposit_value || 0), deposit_cents: Number(quote.deposit_cents || 0),
+        deposit_status: quote.deposit_status || null, require_payment_method: quote.require_payment_method || false,
+        approved_at: quote.approved_at, declined_at: quote.declined_at,
+        org_id: quote.org_id, view_token: quote.view_token,
+      },
+      company: {
+        company_name: companyData?.company_name || 'Business', logo_url: companyData?.logo_url || null,
+        phone: companyData?.phone || null, email: companyData?.email || null, website: companyData?.website || null,
+        street1: companyData?.street1 || null, city: companyData?.city || null,
+        province: companyData?.province || null, postal_code: companyData?.postal_code || null,
+        country: companyData?.country || null,
+      },
+      client, lead,
+      items: (items || []).map((i: any) => ({
+        id: i.id, name: i.name, description: i.description,
+        quantity: Number(i.quantity || 0), unit_price_cents: Number(i.unit_price_cents || 0),
+        total_cents: Number(i.total_cents || 0), is_optional: i.is_optional, item_type: i.item_type,
+      })),
+      signature,
+    });
+  } catch (error: any) {
+    console.error('public_quote_fetch_failed', error);
+    return res.status(500).json({ error: error?.message || 'Failed to load quote.' });
   }
 });
 
@@ -593,6 +724,16 @@ router.post('/quotes/public/accept', async (req, res) => {
       entityId: quote.id,
       metadata: { quote_number: quote.quote_number, signer_name, accepted_via: 'electronic_signature' },
     });
+
+    // Automation: move pipeline deal to Closed Won
+    if (quote.lead_id) {
+      const { data: deal } = await admin.from('pipeline_deals')
+        .select('id').eq('lead_id', quote.lead_id).is('deleted_at', null)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (deal) {
+        await admin.rpc('set_deal_stage', { p_deal_id: deal.id, p_stage: 'closed_won' });
+      }
+    }
 
     return res.json({ ok: true, status: 'approved' });
   } catch (error: any) {
@@ -940,6 +1081,16 @@ router.post('/quotes/public/decline', async (req, res) => {
       entityId: quote.id,
       metadata: { quote_number: quote.quote_number, reason },
     });
+
+    // Automation: move pipeline deal to Closed Lost
+    if (quote.lead_id) {
+      const { data: deal } = await admin.from('pipeline_deals')
+        .select('id').eq('lead_id', quote.lead_id).is('deleted_at', null)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (deal) {
+        await admin.rpc('set_deal_stage', { p_deal_id: deal.id, p_stage: 'closed_lost' });
+      }
+    }
 
     return res.json({ ok: true, status: 'declined' });
   } catch (error: any) {

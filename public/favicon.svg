@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 170" fill="none">
+  <!-- Ears -->
+  <circle cx="52" cy="52" r="36" fill="white"/>
+  <circle cx="148" cy="52" r="36" fill="white"/>
+  <circle cx="52" cy="52" r="22" fill="#555"/>
+  <circle cx="148" cy="52" r="22" fill="#555"/>
+
+  <!-- Head -->
+  <ellipse cx="100" cy="100" rx="72" ry="68" fill="white"/>
+
+  <!-- Eye patches -->
+  <ellipse cx="68" cy="90" rx="24" ry="22" fill="#555" transform="rotate(-8 68 90)"/>
+  <ellipse cx="132" cy="90" rx="24" ry="22" fill="#555" transform="rotate(8 132 90)"/>
+
+  <!-- Eyes -->
+  <circle cx="68" cy="88" r="10" fill="white"/>
+  <circle cx="132" cy="88" r="10" fill="white"/>
+  <circle cx="71" cy="86" r="5" fill="#555"/>
+  <circle cx="135" cy="86" r="5" fill="#555"/>
+  <!-- Eye shine -->
+  <circle cx="73" cy="84" r="2" fill="white"/>
+  <circle cx="137" cy="84" r="2" fill="white"/>
+
+  <!-- Nose -->
+  <ellipse cx="100" cy="110" rx="10" ry="7" fill="#555"/>
+
+  <!-- Mouth -->
+  <path d="M92 116 Q100 126 108 116" stroke="#555" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <line x1="100" y1="117" x2="100" y2="122" stroke="#555" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

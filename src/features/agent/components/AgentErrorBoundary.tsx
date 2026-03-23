@@ -1,5 +1,6 @@
-import React, { Component, type ErrorInfo, type ReactNode } from 'react';
+import React, { type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 interface Props {
   children: ReactNode;
@@ -12,7 +13,15 @@ interface State {
   error: string | null;
 }
 
-class AgentErrorBoundary extends Component<Props, State> {
+// React.Component generics are unresolved because @types/react is not installed
+// (React 19 ships JS-only; types require @types/react@19). Cast to restore typing.
+const TypedComponent: new (props: Props) => React.Component<Props, State> = React.Component as any;
+
+class AgentErrorBoundary extends TypedComponent {
+  declare state: State;
+  declare props: Readonly<Props> & Readonly<{ children?: ReactNode }>;
+  declare setState: (state: Partial<State>) => void;
+
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -35,7 +44,7 @@ class AgentErrorBoundary extends Component<Props, State> {
             <AlertTriangle size={20} className="text-text-tertiary" />
           </div>
           <h2 className="text-lg font-bold text-text-primary mb-2">
-            {fr ? 'Mr Lume a rencontré une erreur' : 'Mr Lume encountered an error'}
+            {t.agent.mrLumeEncounteredAnError}
           </h2>
           <p className="text-sm text-text-tertiary mb-4 max-w-md">
             {fr
@@ -49,7 +58,7 @@ class AgentErrorBoundary extends Component<Props, State> {
             }}
             className="px-4 py-2 rounded-lg bg-text-primary text-surface text-sm font-medium hover:opacity-90 transition-opacity"
           >
-            {fr ? 'Réessayer' : 'Try again'}
+            {t.agent.tryAgain}
           </button>
         </div>
       );

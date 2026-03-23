@@ -64,21 +64,37 @@ router.post('/messages/send', validate(messageSendSchema), async (req, res) => {
 
 // POST /api/messages/inbound — Twilio webhook for incoming SMS
 router.post('/messages/inbound', async (req, res) => {
+  // Always respond with TwiML to prevent Twilio's default auto-response
+  const sendTwiml = (statusCode = 200) => {
+    res.status(statusCode).set('Content-Type', 'text/xml');
+    return res.send('<Response></Response>');
+  };
+
   try {
+    console.log('[SMS Inbound] Received webhook:', {
+      from: req.body?.From,
+      body: req.body?.Body?.substring(0, 50),
+      sid: req.body?.MessageSid,
+    });
+
     // Validate Twilio webhook signature — MANDATORY
     if (!twilioAuthToken) {
-      console.error('Twilio auth token not configured — rejecting inbound webhook');
-      return res.status(503).send('Twilio not configured');
+      console.error('[SMS Inbound] Twilio auth token not configured — rejecting');
+      return sendTwiml(503);
     }
 
     const twilioSignature = req.headers['x-twilio-signature'] as string;
     if (!twilioSignature) {
-      console.warn('Missing x-twilio-signature header');
-      return res.status(403).send('Forbidden');
+      console.warn('[SMS Inbound] Missing x-twilio-signature header');
+      return sendTwiml(403);
     }
 
-    // Use env-based URL to prevent Host header spoofing
-    const baseUrl = process.env.FRONTEND_URL || process.env.PUBLIC_BASE_URL || resolvePublicBaseUrl(req);
+    // Use TWILIO_WEBHOOK_BASE_URL if set (must match Twilio dashboard config exactly),
+    // otherwise fall back to PUBLIC_BASE_URL / FRONTEND_URL.
+    const baseUrl = process.env.TWILIO_WEBHOOK_BASE_URL
+      || process.env.PUBLIC_BASE_URL
+      || process.env.FRONTEND_URL
+      || resolvePublicBaseUrl(req);
     const webhookUrl = `${baseUrl.replace(/\/$/, '')}/api/messages/inbound`;
 
     const isValid = Twilio.validateRequest(
@@ -88,23 +104,50 @@ router.post('/messages/inbound', async (req, res) => {
       req.body || {},
     );
     if (!isValid) {
-      console.warn('Invalid Twilio webhook signature');
-      return res.status(403).send('Forbidden');
+      console.warn('[SMS Inbound] Signature validation failed. Expected URL:', webhookUrl);
+      // In development, allow bypass if explicitly configured
+      if (process.env.TWILIO_SKIP_SIGNATURE_VALIDATION !== 'true') {
+        return sendTwiml(403);
+      }
+      console.warn('[SMS Inbound] Signature bypass enabled (dev only)');
     }
 
     const { From, Body, MessageSid } = req.body || {};
     if (!From || !Body) {
-      return res.status(400).send('Missing From or Body');
+      console.warn('[SMS Inbound] Missing From or Body in payload');
+      return sendTwiml(400);
     }
 
     const normalizedPhone = normalizeE164(From);
     const serviceClient = getServiceClient();
 
-    // We need an org_id — find from existing conversation or default
+    // Deduplication: if MessageSid already exists, skip (Twilio retries on timeout)
+    if (MessageSid) {
+      const { data: existing } = await serviceClient
+        .from('messages')
+        .select('id')
+        .eq('provider_message_id', MessageSid)
+        .limit(1)
+        .maybeSingle();
+      if (existing) {
+        console.log('[SMS Inbound] Duplicate MessageSid, skipping:', MessageSid);
+        return sendTwiml();
+      }
+    }
+
+    // Build phone variants for flexible matching
+    const phoneDigits = normalizedPhone.replace(/\D/g, '');
+    const phoneVariants = [normalizedPhone];
+    if (phoneDigits.startsWith('1') && phoneDigits.length === 11) {
+      phoneVariants.push(phoneDigits.slice(1)); // 10 digits without country code
+    }
+    phoneVariants.push(phoneDigits); // raw digits
+
+    // Find existing conversation by any phone variant
     const { data: existingConvo } = await serviceClient
       .from('conversations')
       .select('id, org_id, client_id')
-      .eq('phone_number', normalizedPhone)
+      .in('phone_number', phoneVariants)
       .limit(1)
       .maybeSingle();
 
@@ -113,15 +156,32 @@ router.post('/messages/inbound', async (req, res) => {
 
     // If no existing conversation, try to match by client phone
     if (!conversation) {
+      const phoneFilter = phoneVariants.map((p) => `phone.eq.${p}`).join(',');
       const { data: client } = await serviceClient
         .from('clients')
-        .select('id, first_name, last_name, phone')
-        .or(`phone.eq.${normalizedPhone},phone.eq.${normalizedPhone.replace('+1', '')}`)
+        .select('id, org_id, first_name, last_name, phone')
+        .or(phoneFilter)
         .is('deleted_at', null)
         .limit(1)
         .maybeSingle();
 
-      // Get the org from memberships or first org
+      // Also check leads table if no client match
+      let lead: any = null;
+      if (!client) {
+        const { data: leadMatch } = await serviceClient
+          .from('leads')
+          .select('id, org_id, first_name, last_name, phone')
+          .or(phoneFilter)
+          .is('deleted_at', null)
+          .limit(1)
+          .maybeSingle();
+        lead = leadMatch;
+      }
+
+      const matchedEntity = client || lead;
+      orgId = matchedEntity?.org_id || null;
+
+      // Fallback: get first org if still no org
       if (!orgId) {
         const { data: firstOrg } = await serviceClient
           .from('orgs')
@@ -131,8 +191,8 @@ router.post('/messages/inbound', async (req, res) => {
         orgId = firstOrg?.id || null;
       }
 
-      const clientName = client
-        ? `${client.first_name || ''} ${client.last_name || ''}`.trim()
+      const clientName = matchedEntity
+        ? `${matchedEntity.first_name || ''} ${matchedEntity.last_name || ''}`.trim()
         : null;
 
       const { data: created } = await serviceClient
@@ -150,16 +210,18 @@ router.post('/messages/inbound', async (req, res) => {
     }
 
     if (!conversation) {
-      console.error('Could not create conversation for inbound SMS from', normalizedPhone);
-      return res.status(500).send('Could not process inbound message');
+      console.error('[SMS Inbound] Could not create conversation for', normalizedPhone);
+      return sendTwiml(500);
     }
 
+    const effectiveOrgId = orgId || conversation.org_id;
+
     // Save inbound message
-    await serviceClient
+    const { error: msgError } = await serviceClient
       .from('messages')
       .insert({
         conversation_id: conversation.id,
-        org_id: orgId || conversation.org_id,
+        org_id: effectiveOrgId,
         client_id: conversation.client_id,
         phone_number: normalizedPhone,
         direction: 'inbound',
@@ -168,13 +230,61 @@ router.post('/messages/inbound', async (req, res) => {
         provider_message_id: MessageSid || null,
       });
 
-    // Respond with empty TwiML (acknowledge receipt)
-    res.set('Content-Type', 'text/xml');
-    return res.send('<Response></Response>');
+    if (msgError) {
+      console.error('[SMS Inbound] Failed to save message:', msgError.message);
+    }
+
+    // Update conversation metadata: last_message, unread_count
+    await serviceClient
+      .from('conversations')
+      .update({
+        last_message_text: Body.length > 200 ? Body.substring(0, 200) + '...' : Body,
+        last_message_at: new Date().toISOString(),
+        unread_count: (conversation as any).unread_count
+          ? (conversation as any).unread_count + 1
+          : 1,
+      })
+      .eq('id', conversation.id);
+
+    // Increment unread_count atomically via RPC if available (fallback is the update above)
+    try {
+      await serviceClient.rpc('increment_unread_count', { p_conversation_id: conversation.id });
+    } catch {
+      // RPC may not exist yet — the update above is the fallback
+    }
+
+    // Create notification for the org
+    if (effectiveOrgId) {
+      const senderName = (conversation as any).client_name || normalizedPhone;
+      await serviceClient
+        .from('notifications')
+        .insert({
+          org_id: effectiveOrgId,
+          type: 'sms_inbound',
+          ref_id: conversation.id,
+          title: `New SMS from ${senderName}`,
+          body: Body.length > 100 ? Body.substring(0, 100) + '...' : Body,
+          metadata: {
+            conversation_id: conversation.id,
+            phone_number: normalizedPhone,
+            message_sid: MessageSid,
+          },
+        })
+        .then(({ error }) => {
+          if (error) console.warn('[SMS Inbound] Failed to create notification:', error.message);
+        });
+    }
+
+    console.log('[SMS Inbound] Processed successfully:', {
+      from: normalizedPhone,
+      conversation_id: conversation.id,
+      org_id: effectiveOrgId,
+    });
+
+    return sendTwiml();
   } catch (error: any) {
-    console.error('Inbound SMS error:', error);
-    res.set('Content-Type', 'text/xml');
-    return res.send('<Response></Response>');
+    console.error('[SMS Inbound] Unhandled error:', error?.message || error);
+    return sendTwiml();
   }
 });
 

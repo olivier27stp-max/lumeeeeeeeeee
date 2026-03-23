@@ -503,7 +503,7 @@ function CanvasInner() {
     }
 
     if (type === 'link') {
-      const url = prompt(language === 'fr' ? 'URL du lien:' : 'Link URL:');
+      const url = prompt(t.noteCanvas.linkUrl);
       if (!url) return;
       try {
         const item = await createItem({
@@ -720,7 +720,7 @@ function CanvasInner() {
       setItems((prev) => prev.map((i) =>
         i.id === itemId ? { ...i, entity_links: [...(i.entity_links || []), link] } : i
       ));
-      toast.success(language === 'fr' ? 'Entité liée' : 'Entity linked');
+      toast.success(t.noteCanvas.entityLinked);
     } catch {
       toast.error('Failed to link entity');
     }
@@ -831,7 +831,7 @@ function CanvasInner() {
             .map((c) => `**${c.theme}** (${c.itemIds.length} notes)`)
             .join('\n');
           setAiResult(
-            (language === 'fr' ? 'Clusters trouves:\n\n' : 'Clusters found:\n\n') + summary +
+            (t.noteCanvas.clustersFoundnn) + summary +
             (language === 'fr' ? '\n\nCliquez "Appliquer" pour repositionner les notes.' : '\n\nClick "Apply" to reposition notes.')
           );
           break;
@@ -873,13 +873,13 @@ function CanvasInner() {
         }
         case 'rewrite': {
           if (!selectedItem?.content) {
-            setAiResult(language === 'fr' ? 'Selectionnez une note avec du texte.' : 'Select a note with text first.');
+            setAiResult(t.noteCanvas.selectANoteWithTextFirst);
             break;
           }
           const result = await improveText(selectedItem.content, language);
           aiPendingDataRef.current = { itemId: selectedItem.id, text: result };
           setAiResult(
-            (language === 'fr' ? 'Texte ameliore:\n\n' : 'Improved text:\n\n') + result +
+            (t.noteCanvas.improvedTextnn) + result +
             (language === 'fr' ? '\n\nCliquez "Appliquer" pour remplacer.' : '\n\nClick "Apply" to replace.')
           );
           break;
@@ -887,7 +887,7 @@ function CanvasInner() {
       }
     } catch (err: any) {
       setAiResult(
-        (language === 'fr' ? 'Erreur: ' : 'Error: ') +
+        (t.noteCanvas.error) +
         (err?.message || 'Failed to process AI request. Is Ollama running?')
       );
     } finally {
@@ -942,7 +942,7 @@ function CanvasInner() {
             setNodes((nds) => [...nds, buildNode(frame)]);
             groupX += 280;
           }
-          toast.success(language === 'fr' ? 'Clusters appliques' : 'Clusters applied');
+          toast.success(t.noteCanvas.clustersApplied);
           break;
         }
         case 'mindmap': {
@@ -993,7 +993,7 @@ function CanvasInner() {
 
           await createMapNode(root, 200, 300, 0);
           setTimeout(() => fitView({ padding: 0.3 }), 300);
-          toast.success(language === 'fr' ? 'Mind map cree' : 'Mind map created');
+          toast.success(t.noteCanvas.mindMapCreated);
           break;
         }
         case 'expand': {
@@ -1014,7 +1014,7 @@ function CanvasInner() {
             setItems((prev) => [...prev, item]);
             setNodes((nds) => [...nds, buildNode(item)]);
           }
-          toast.success(language === 'fr' ? 'Idees ajoutees' : 'Ideas added');
+          toast.success(t.noteCanvas.ideasAdded);
           break;
         }
         case 'actions': {
@@ -1036,12 +1036,12 @@ function CanvasInner() {
               pos_y: center.y,
               width: 280,
               height: Math.max(200, checklist.length * 32 + 60),
-              content: language === 'fr' ? 'Actions' : 'Action Items',
+              content: t.noteCanvas.actionItems,
               rich_content: { checklist },
             });
             setItems((prev) => [...prev, item]);
             setNodes((nds) => [...nds, buildNode(item)]);
-            toast.success(language === 'fr' ? 'Checklist creee' : 'Checklist created');
+            toast.success(t.noteCanvas.checklistCreated);
           }
           break;
         }
@@ -1053,7 +1053,7 @@ function CanvasInner() {
           setNodes((nds) => nds.map((n) =>
             n.id === itemId ? { ...n, data: { ...n.data, content: text } } : n
           ));
-          toast.success(language === 'fr' ? 'Texte mis a jour' : 'Text updated');
+          toast.success(t.noteCanvas.textUpdated);
           break;
         }
       }
@@ -1189,7 +1189,7 @@ function CanvasInner() {
       await castVote(boardId, node.id, currentUser.name).catch(() => {});
       setVotes((prev) => [...prev, { itemId: node.id, userId: currentUser.id, userName: currentUser.name }]);
     } else {
-      toast.error(language === 'fr' ? 'Votes max atteints' : 'Max votes reached');
+      toast.error(t.noteCanvas.maxVotesReached);
     }
   }, [votingActive, boardId, currentUser, votes, votingMaxVotes, language]);
 
@@ -1392,28 +1392,28 @@ function CanvasInner() {
             <button
               onClick={() => setShowComments(!showComments)}
               className={`p-1.5 rounded-md transition-colors ${showComments ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'}`}
-              title={language === 'fr' ? 'Commentaires' : 'Comments'}
+              title={t.noteCanvas.comments}
             >
               <MessageCircle size={15} />
             </button>
             <button
               onClick={() => setShowVoting(!showVoting)}
               className={`p-1.5 rounded-md transition-colors ${showVoting ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'}`}
-              title={language === 'fr' ? 'Vote' : 'Voting'}
+              title={t.noteCanvas.voting}
             >
               <ThumbsUp size={15} />
             </button>
             <button
               onClick={() => { setPresenting(true); setPresentIndex(0); }}
               className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
-              title={language === 'fr' ? 'Presentation' : 'Present'}
+              title={t.noteCanvas.present}
             >
               <Play size={15} />
             </button>
             <button
               onClick={() => setActiveTool(isDrawing ? 'select' : 'draw' as any)}
               className={`p-1.5 rounded-md transition-colors ${isDrawing ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'}`}
-              title={language === 'fr' ? 'Dessiner' : 'Draw'}
+              title={t.noteCanvas.draw}
             >
               <Pen size={15} />
             </button>
@@ -1427,7 +1427,7 @@ function CanvasInner() {
           </div>
 
           <span className="text-[11px] text-text-tertiary">
-            {items.length} {language === 'fr' ? 'éléments' : 'items'}
+            {items.length} {t.noteBoards.items}
           </span>
         </div>
       </div>
@@ -1494,7 +1494,7 @@ function CanvasInner() {
                 onClick={() => setActiveTool('select')}
                 className="ml-2 px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded text-[11px] transition-colors"
               >
-                {language === 'fr' ? 'Annuler' : 'Cancel'}
+                {t.advancedNotes.cancel}
               </button>
             </div>
           </div>
@@ -1510,7 +1510,7 @@ function CanvasInner() {
                   onClick={() => setDrawTool(t)}
                   className={`px-3 py-1 rounded-lg text-[11px] font-medium transition-colors ${drawTool === t ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'text-text-tertiary hover:bg-surface-secondary'}`}
                 >
-                  {t === 'pen' ? (language === 'fr' ? 'Stylo' : 'Pen') : t === 'highlighter' ? (language === 'fr' ? 'Surligneur' : 'Highlighter') : (language === 'fr' ? 'Gomme' : 'Eraser')}
+                  {t === 'pen' ? (t.noteCanvas.pen) : t === 'highlighter' ? (t.noteCanvas.highlighter) : (t.noteCanvas.eraser)}
                 </button>
               ))}
               <div className="w-px h-5 bg-outline" />
@@ -1519,7 +1519,7 @@ function CanvasInner() {
                 value={drawColor}
                 onChange={(e) => setDrawColor(e.target.value)}
                 className="w-6 h-6 rounded border border-outline cursor-pointer"
-                title={language === 'fr' ? 'Couleur' : 'Color'}
+                title={t.advancedNotes.color}
               />
               <input
                 type="range"
@@ -1528,13 +1528,13 @@ function CanvasInner() {
                 value={drawStrokeWidth}
                 onChange={(e) => setDrawStrokeWidth(Number(e.target.value))}
                 className="w-16 accent-blue-500"
-                title={language === 'fr' ? 'Epaisseur' : 'Width'}
+                title={t.noteCanvas.width}
               />
               <button
                 onClick={() => setActiveTool('select')}
                 className="px-2 py-1 rounded-lg text-[11px] text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 font-medium transition-colors"
               >
-                {language === 'fr' ? 'Quitter' : 'Exit'}
+                {t.noteCanvas.exit}
               </button>
             </div>
           </div>

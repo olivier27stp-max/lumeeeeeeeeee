@@ -13,6 +13,7 @@ import { supabase } from '../lib/supabase';
 import { createClient } from '../lib/clientsApi';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { useTranslation } from '../i18n';
 
 interface OnboardingWizardProps {
   userId: string;
@@ -73,7 +74,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
 
   const handleSaveClient = useCallback(async () => {
     if (!clientFirst.trim()) {
-      toast.error(fr ? 'Le prenom est requis' : 'First name is required');
+      toast.error(t.onboarding.firstNameIsRequired);
       return false;
     }
     setSaving(true);
@@ -85,10 +86,10 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
         email: clientEmail.trim() || undefined,
         status: 'active',
       });
-      toast.success(fr ? 'Client cree !' : 'Client created!');
+      toast.success(t.onboarding.clientCreated);
       return true;
     } catch (err: any) {
-      toast.error(err?.message || (fr ? 'Erreur lors de la creation' : 'Failed to create client'));
+      toast.error(err?.message || (t.onboarding.failedToCreateClient));
       return false;
     } finally {
       setSaving(false);
@@ -146,7 +147,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
             <span className="text-[18px] font-semibold tracking-tight text-text-primary">Lume</span>
           </div>
           <p className="text-[13px] text-text-tertiary">
-            {fr ? 'Configurons votre espace de travail' : 'Let\'s set up your workspace'}
+            {t.onboarding.letsSetUpWorkspace}
           </p>
         </div>
 
@@ -185,10 +186,10 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                 <div className="space-y-4">
                   <div className="text-center mb-2">
                     <h2 className="text-[18px] font-bold text-text-primary">
-                      {fr ? 'Parlez-nous de votre entreprise' : 'Tell us about your business'}
+                      {t.onboarding.tellUsAboutYourBusiness}
                     </h2>
                     <p className="text-[13px] text-text-tertiary mt-1">
-                      {fr ? 'Ces informations apparaitront sur vos factures et devis.' : 'This info will appear on your invoices and quotes.'}
+                      {t.onboarding.thisInfoWillAppearOnYourInvoicesAndQuote}
                     </p>
                   </div>
                   <div>
@@ -201,7 +202,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                         value={companyName}
                         onChange={(e) => setCompanyName(e.target.value)}
                         className="glass-input w-full pl-10"
-                        placeholder={fr ? 'Ex: Paysagement ABC' : 'Ex: ABC Landscaping'}
+                        placeholder={t.onboarding.exAbcLandscaping}
                         autoFocus
                       />
                     </div>
@@ -209,7 +210,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                        {fr ? 'Telephone' : 'Phone'}
+                        {t.modals.phone}
                       </label>
                       <div className="relative mt-1">
                         <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" size={15} />
@@ -245,7 +246,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                 <div className="space-y-4">
                   <div className="text-center mb-2">
                     <h2 className="text-[18px] font-bold text-text-primary">
-                      {fr ? 'Ajoutez votre premier client' : 'Add your first client'}
+                      {t.onboarding.addYourFirstClient}
                     </h2>
                     <p className="text-[13px] text-text-tertiary mt-1">
                       {fr ? 'Vous pourrez en ajouter d\'autres plus tard.' : 'You can add more later.'}
@@ -254,7 +255,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                        {fr ? 'Prenom' : 'First name'}
+                        {t.onboarding.firstName}
                       </label>
                       <input
                         value={clientFirst}
@@ -266,7 +267,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                     </div>
                     <div>
                       <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                        {fr ? 'Nom' : 'Last name'}
+                        {t.onboarding.lastName}
                       </label>
                       <input
                         value={clientLast}
@@ -279,7 +280,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                        {fr ? 'Telephone' : 'Phone'}
+                        {t.modals.phone}
                       </label>
                       <input
                         value={clientPhone}
@@ -311,7 +312,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                     <Sparkles size={28} className="text-primary" />
                   </div>
                   <h2 className="text-[20px] font-bold text-text-primary">
-                    {fr ? 'Vous etes pret !' : 'You\'re all set!'}
+                    {t.onboarding.youreAllSet}
                   </h2>
                   <p className="text-[13px] text-text-tertiary mt-2 max-w-xs mx-auto">
                     {fr
@@ -320,13 +321,13 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                   </p>
                   <div className="mt-6 flex flex-wrap justify-center gap-2 text-[12px]">
                     <span className="px-3 py-1.5 rounded-full bg-surface-secondary text-text-secondary">
-                      {fr ? 'Creer des leads' : 'Create leads'}
+                      {t.onboarding.createLeads}
                     </span>
                     <span className="px-3 py-1.5 rounded-full bg-surface-secondary text-text-secondary">
-                      {fr ? 'Planifier des jobs' : 'Schedule jobs'}
+                      {t.onboarding.scheduleJobs}
                     </span>
                     <span className="px-3 py-1.5 rounded-full bg-surface-secondary text-text-secondary">
-                      {fr ? 'Envoyer des factures' : 'Send invoices'}
+                      {t.onboarding.sendInvoices}
                     </span>
                   </div>
                 </div>
@@ -340,7 +341,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
               onClick={handleSkip}
               className="text-[13px] text-text-tertiary hover:text-text-secondary transition-colors"
             >
-              {step === 2 ? '' : (fr ? 'Passer' : 'Skip')}
+              {step === 2 ? '' : (t.onboarding.skip)}
             </button>
             <div className="flex items-center gap-2">
               {step > 0 && step < 2 && (
@@ -350,7 +351,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                   disabled={saving}
                 >
                   <ArrowLeft size={14} />
-                  {fr ? 'Retour' : 'Back'}
+                  {t.companySettings.back}
                 </button>
               )}
               <button
@@ -359,10 +360,10 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                 className="glass-button-primary inline-flex items-center gap-1.5"
               >
                 {saving
-                  ? (fr ? 'Enregistrement...' : 'Saving...')
+                  ? (t.billing.saving)
                   : step === 2
-                    ? (fr ? 'Commencer' : 'Get started')
-                    : (fr ? 'Continuer' : 'Continue')}
+                    ? (t.onboarding.getStarted)
+                    : (t.billing.continue)}
                 {!saving && <ArrowRight size={14} />}
               </button>
             </div>

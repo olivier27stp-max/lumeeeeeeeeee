@@ -12,6 +12,7 @@ import {
   Loader2, Layers, Brain, Wand2,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../i18n';
 
 export interface AIBoardAction {
   id: string;
@@ -92,7 +93,7 @@ function AIBoardPanel({ language, loading, result, onAction, onClose, onApplyRes
         <div className="flex items-center gap-2">
           <Sparkles size={14} className="text-purple-500" />
           <span className="text-[12px] font-semibold text-text-primary">
-            {fr ? 'IA du Board' : 'Board AI'}
+            {t.noteCanvas.boardAi}
           </span>
         </div>
         <button onClick={onClose} className="p-1 rounded-md text-text-tertiary hover:text-text-primary transition-colors">
@@ -123,13 +124,13 @@ function AIBoardPanel({ language, loading, result, onAction, onClose, onApplyRes
                 className="flex-1 btn-primary text-[11px] py-1.5 flex items-center justify-center gap-1"
               >
                 <Sparkles size={11} />
-                {fr ? 'Appliquer' : 'Apply'}
+                {t.billing.apply}
               </button>
               <button
                 onClick={() => onAction('_clear')}
                 className="px-3 py-1.5 rounded-lg border border-outline text-[11px] text-text-secondary hover:bg-surface-secondary transition-colors"
               >
-                {fr ? 'Fermer' : 'Dismiss'}
+                {t.noteCanvas.dismiss}
               </button>
             </div>
           </div>

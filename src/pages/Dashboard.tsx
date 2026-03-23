@@ -49,7 +49,7 @@ export default function Dashboard() {
   }
 
   function formatLongDate(date = new Date()) {
-    const locale = language === 'fr' ? 'fr-CA' : 'en-US';
+    const locale = t.dashboard.enus;
     return date.toLocaleDateString(locale, {
       weekday: 'long',
       month: 'long',
@@ -111,7 +111,7 @@ export default function Dashboard() {
           onClick={() => setRefreshTick((n) => n + 1)}
           className="glass-button-primary text-[13px] px-4 py-2"
         >
-          {language === 'fr' ? 'Reessayer' : 'Retry'}
+          {t.dashboard.retry}
         </button>
       </div>
     );
@@ -123,7 +123,7 @@ export default function Dashboard() {
       {isOffline && (
         <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/30 px-4 py-2 text-[12px] text-amber-700 dark:text-amber-400 font-medium flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-amber-500" />
-          {language === 'fr' ? 'Mode hors-ligne — donnees en cache' : 'Offline mode — showing cached data'}
+          {t.dashboard.offlineModeShowingCachedData}
         </div>
       )}
 
@@ -194,10 +194,10 @@ export default function Dashboard() {
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
             <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
               <IconTile icon={Calendar} color="blue" size="sm" />
-              {language === 'fr' ? 'Jobs du jour' : 'Today\'s Jobs'}
+              {t.dashboard.todaysJobs}
             </h2>
             <button onClick={() => navigate('/calendar')} className="glass-button !text-[12px] !px-2.5 !py-1">
-              {language === 'fr' ? 'Voir le calendrier' : 'View calendar'}
+              {t.dashboard.viewCalendar}
             </button>
           </div>
           <div className="divide-y divide-outline-subtle">
@@ -218,10 +218,10 @@ export default function Dashboard() {
                   {/* Time */}
                   <div className="text-center shrink-0 w-14">
                     <p className="text-[14px] font-bold text-text-primary tabular-nums">
-                      {new Date(apt.startAt).toLocaleTimeString(language === 'fr' ? 'fr-CA' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(apt.startAt).toLocaleTimeString(t.dashboard.enus, { hour: '2-digit', minute: '2-digit' })}
                     </p>
                     <p className="text-[10px] text-text-tertiary">
-                      {new Date(apt.endAt).toLocaleTimeString(language === 'fr' ? 'fr-CA' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(apt.endAt).toLocaleTimeString(t.dashboard.enus, { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                   {/* Color bar */}
@@ -246,7 +246,7 @@ export default function Dashboard() {
                       rel="noreferrer"
                       onClick={(e) => e.stopPropagation()}
                       className="shrink-0 p-2 rounded-lg text-text-tertiary hover:text-primary hover:bg-primary/10 transition-colors"
-                      title={language === 'fr' ? 'Naviguer' : 'Navigate'}
+                      title={t.dashboard.navigate}
                     >
                       <Navigation size={15} />
                     </a>
@@ -263,7 +263,7 @@ export default function Dashboard() {
           <div className="section-card p-4 space-y-2.5">
             <h2 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
               <AlertTriangle size={11} />
-              {language === 'fr' ? 'Actions urgentes' : 'Urgent Actions'}
+              {t.dashboard.urgentActions}
             </h2>
 
             {(data.performance?.outstanding?.totalCents ?? 0) > 0 && (
@@ -276,10 +276,10 @@ export default function Dashboard() {
                 </div>
                 <div className="flex-1">
                   <p className="text-[12px] font-semibold text-red-700 dark:text-red-400">
-                    {language === 'fr' ? 'Factures en retard' : 'Overdue invoices'}
+                    {t.dashboard.overdueInvoices}
                   </p>
                   <p className="text-[11px] text-red-600/70 dark:text-red-400/70">
-                    {formatCurrency((data.performance?.outstanding?.totalCents ?? 0) / 100)} {language === 'fr' ? 'a collecter' : 'to collect'}
+                    {formatCurrency((data.performance?.outstanding?.totalCents ?? 0) / 100)} {t.dashboard.toCollect}
                   </p>
                 </div>
                 <ArrowUpRight size={13} className="text-red-400 shrink-0" />
@@ -296,7 +296,7 @@ export default function Dashboard() {
                 </div>
                 <div className="flex-1">
                   <p className="text-[12px] font-semibold text-amber-700 dark:text-amber-400">
-                    {data.workflow?.jobs?.actionRequired} {language === 'fr' ? 'jobs a traiter' : 'jobs need action'}
+                    {data.workflow?.jobs?.actionRequired} {t.dashboard.jobsNeedAction}
                   </p>
                 </div>
                 <ArrowUpRight size={13} className="text-amber-400 shrink-0" />
@@ -313,7 +313,7 @@ export default function Dashboard() {
                 </div>
                 <div className="flex-1">
                   <p className="text-[12px] font-semibold text-text-primary dark:text-neutral-400">
-                    {data.performance?.newLeadsToday} {language === 'fr' ? 'nouveaux leads' : 'new leads today'}
+                    {data.performance?.newLeadsToday} {t.dashboard.newQuotesToday}
                   </p>
                 </div>
                 <ArrowUpRight size={13} className="text-neutral-400 shrink-0" />
@@ -322,7 +322,7 @@ export default function Dashboard() {
 
             {(quoteKpis?.pending_count ?? 0) > 0 && (
               <button
-                onClick={() => navigate('/leads?tab=pending_quotes')}
+                onClick={() => navigate('/leads')}
                 className="w-full flex items-center gap-3 p-3 rounded-xl border border-neutral-200 bg-neutral-50 dark:bg-neutral-800/10 dark:border-neutral-700/30 text-left hover:border-neutral-300 transition-colors"
               >
                 <div className="p-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800/30 text-text-secondary shrink-0">
@@ -330,10 +330,10 @@ export default function Dashboard() {
                 </div>
                 <div className="flex-1">
                   <p className="text-[12px] font-semibold text-text-primary dark:text-neutral-400">
-                    {quoteKpis.pending_count} {language === 'fr' ? 'devis en attente' : 'pending quotes'}
+                    {quoteKpis.pending_count} {t.dashboard.pendingQuotes}
                   </p>
                   <p className="text-[11px] text-text-secondary dark:text-neutral-400/70">
-                    {formatQuoteMoney(quoteKpis.pending_value_cents)} {language === 'fr' ? 'en valeur' : 'total value'}
+                    {formatQuoteMoney(quoteKpis.pending_value_cents)} {t.dashboard.totalValue}
                   </p>
                 </div>
                 <ArrowUpRight size={13} className="text-neutral-400 shrink-0" />
@@ -344,7 +344,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 gap-2 pt-1">
               <button onClick={() => navigate('/calendar')} className="rounded-xl border border-outline-subtle p-3 text-left hover:border-outline transition-colors">
                 <p className="text-xl font-bold text-text-primary">{data.performance?.upcomingJobs?.next7Days ?? 0}</p>
-                <p className="text-[10px] text-text-tertiary font-medium">{language === 'fr' ? 'Jobs 7 prochains jours' : 'Jobs next 7 days'}</p>
+                <p className="text-[10px] text-text-tertiary font-medium">{t.dashboard.jobsNext7Days}</p>
               </button>
               <button onClick={() => navigate('/insights')} className="rounded-xl border border-outline-subtle p-3 text-left hover:border-outline transition-colors">
                 <p className="text-xl font-bold text-text-primary">{formatCurrency(data.performance?.revenue?.today ?? 0)}</p>

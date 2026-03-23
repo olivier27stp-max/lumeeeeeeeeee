@@ -209,7 +209,7 @@ export default function MrLumeChat() {
             case 'error':
               setMessages(prev => prev.map(m =>
                 m.id === assistantId
-                  ? { ...m, content: m.content || (fr ? 'Une erreur est survenue.' : 'An error occurred.'), isStreaming: false }
+                  ? { ...m, content: m.content || (t.agent.anErrorOccurred), isStreaming: false }
                   : m
               ));
               break;
@@ -254,7 +254,7 @@ export default function MrLumeChat() {
       if (err?.name !== 'AbortError') {
         setMessages(prev => prev.map(m =>
           m.id === assistantId
-            ? { ...m, content: fr ? 'Erreur de connexion.' : 'Connection error.', isStreaming: false }
+            ? { ...m, content: t.agent.connectionError, isStreaming: false }
             : m
         ));
       }
@@ -285,7 +285,7 @@ export default function MrLumeChat() {
       <div className="flex flex-col items-center justify-center min-h-[70vh]">
         <MrLumeAvatar size="lg" pulse className="mb-4" />
         <p className="text-sm text-text-tertiary font-medium">
-          {fr ? 'Connexion à Mr Lume...' : 'Connecting to Mr Lume...'}
+          {t.agent.connectingToMrLume}
         </p>
       </div>
     );
@@ -308,7 +308,7 @@ export default function MrLumeChat() {
           onClick={() => { setConnectionStatus('checking'); agentHealthCheck().then(h => setConnectionStatus(h.ok ? 'connected' : 'disconnected')); }}
           className="px-5 py-2.5 rounded-lg bg-text-primary text-surface text-sm font-medium hover:opacity-90 transition-opacity"
         >
-          {fr ? 'Réessayer' : 'Retry'}
+          {t.agent.retry}
         </button>
       </div>
     );
@@ -319,15 +319,15 @@ export default function MrLumeChat() {
     return (
       <div className="max-w-2xl mx-auto pt-4">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-lg font-bold text-text-primary">{fr ? 'Sessions Mr Lume' : 'Mr Lume Sessions'}</h1>
+          <h1 className="text-lg font-bold text-text-primary">{t.agent.mrLumeSessions}</h1>
           <button onClick={startNewChat} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-text-primary text-surface text-xs font-medium hover:opacity-90 transition-opacity">
-            <Plus size={14} />{fr ? 'Nouvelle session' : 'New session'}
+            <Plus size={14} />{t.agent.newSession}
           </button>
         </div>
         <div className="space-y-2">
           {sessions.length === 0 ? (
             <div className="rounded-xl border border-outline-subtle bg-surface-secondary p-8 text-center">
-              <p className="text-sm text-text-tertiary">{fr ? 'Aucune session précédente' : 'No previous sessions'}</p>
+              <p className="text-sm text-text-tertiary">{t.agent.noPreviousSessions}</p>
             </div>
           ) : sessions.map(s => (
             <div key={s.id} className="group flex items-start gap-3 rounded-xl border border-outline-subtle bg-surface p-4 hover:border-outline transition-all cursor-pointer" onClick={() => loadSession(s)}>
@@ -369,13 +369,13 @@ export default function MrLumeChat() {
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="w-full max-w-2xl mb-8">
           <div className="relative rounded-xl border border-outline-subtle bg-surface shadow-sm transition-all focus-within:border-outline focus-within:shadow-md">
             <textarea ref={inputRef} value={input} onChange={autoResize} onKeyDown={handleKeyDown}
-              aria-label={fr ? 'Message pour Mr Lume' : 'Message for Mr Lume'}
-              placeholder={fr ? 'Demandez à Mr Lume...' : 'Ask Mr Lume...'} rows={1}
+              aria-label={t.agent.messageForMrLume}
+              placeholder={t.agent.askMrLume} rows={1}
               className="w-full resize-none bg-transparent px-4 py-3.5 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none" style={{ maxHeight: 160 }} />
             <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
               {voiceEnabled && <VoiceInput onTranscript={(t) => setInput(prev => prev + t)} language={language as 'en' | 'fr'} />}
               <button onClick={() => handleSend()} disabled={!input.trim() || isProcessing}
-                aria-label={fr ? 'Envoyer le message' : 'Send message'}
+                aria-label={t.agent.sendMessage}
                 className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors disabled:opacity-30 disabled:pointer-events-none">
                 <Send size={16} />
               </button>
@@ -417,7 +417,7 @@ export default function MrLumeChat() {
         </div>
         <button onClick={startNewChat}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-text-primary text-surface text-xs font-medium hover:opacity-90 transition-opacity">
-          <Plus size={14} />{fr ? 'Nouvelle session' : 'New session'}
+          <Plus size={14} />{t.agent.newSession}
         </button>
       </div>
 
@@ -440,7 +440,7 @@ export default function MrLumeChat() {
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-outline-subtle text-[11px] font-medium text-text-secondary hover:text-text-primary hover:border-outline transition-all"
                     >
                       <Network size={12} />
-                      {fr ? 'Ouvrir le graphe' : 'Open graph'}
+                      {t.agent.openGraph}
                     </button>
                   </div>
                 </React.Fragment>
@@ -491,14 +491,14 @@ export default function MrLumeChat() {
       <div className="py-3">
         <div className="relative rounded-xl border border-outline-subtle bg-surface shadow-sm transition-all focus-within:border-outline focus-within:shadow-md">
           <textarea ref={inputRef} value={input} onChange={autoResize} onKeyDown={handleKeyDown}
-            aria-label={fr ? 'Message pour Mr Lume' : 'Message for Mr Lume'}
-            placeholder={fr ? 'Votre message...' : 'Your message...'} rows={1}
+            aria-label={t.agent.messageForMrLume}
+            placeholder={t.agent.yourMessage} rows={1}
             className="w-full resize-none bg-transparent px-4 py-3.5 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none"
             style={{ maxHeight: 160 }} />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
             {voiceEnabled && <VoiceInput onTranscript={(t) => setInput(prev => prev + t)} language={language as 'en' | 'fr'} disabled={isProcessing} />}
             <button onClick={() => handleSend()} disabled={!input.trim() || isProcessing}
-              aria-label={fr ? 'Envoyer le message' : 'Send message'}
+              aria-label={t.agent.sendMessage}
               className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors disabled:opacity-30 disabled:pointer-events-none">
               {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
             </button>
@@ -506,7 +506,7 @@ export default function MrLumeChat() {
         </div>
         <div className="flex items-center justify-center gap-2 mt-2">
           <p className="text-[10px] text-text-tertiary">
-            Mr Lume · {fr ? 'Votre agent CRM intelligent' : 'Your intelligent CRM agent'}
+            Mr Lume · {t.agent.yourIntelligentCrmAgent}
           </p>
           {graphData?.scenario && (
             <button
@@ -514,7 +514,7 @@ export default function MrLumeChat() {
               className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-outline-subtle text-[10px] font-medium text-text-secondary hover:text-text-primary hover:border-outline transition-all"
             >
               <Network size={10} />
-              {fr ? 'Voir graphe' : 'View graph'}
+              {t.agent.viewGraph}
             </button>
           )}
         </div>

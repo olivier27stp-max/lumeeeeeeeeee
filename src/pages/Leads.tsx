@@ -1,8 +1,5 @@
-import React, { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Contact,
-  Download,
-  Upload,
   Plus,
   Mail,
   Building2,
@@ -10,38 +7,33 @@ import {
   Edit2,
   Users,
   X,
+  FileText,
+  LayoutTemplate,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { Lead } from '../types';
-import { formatCurrency, formatDate, cn } from '../lib/utils';
-import Papa from 'papaparse';
-import { EmailConflictRecord, convertLeadToClient, createLeadScoped, deleteLeadScoped, exportAllLeadsCsv, fetchLeadsScoped, findEmailConflict, updateLeadScoped, updateLeadStatus, LEAD_STATUS_LABELS, type LeadStatus } from '../lib/leadsApi';
+import { formatCurrency, cn } from '../lib/utils';
+import { EmailConflictRecord, convertLeadToClient, createLeadScoped, deleteLeadScoped, fetchLeadsScoped, findEmailConflict, updateLeadScoped, updateLeadStatus, LEAD_STATUS_LABELS, type LeadStatus } from '../lib/leadsApi';
 import { supabase } from '../lib/supabase';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader, StatCard, EmptyState } from '../components/ui';
-import { FilterSelect } from '../components/ui/FilterBar';
-import StatusBadge from '../components/ui/StatusBadge';
 import { useTranslation } from '../i18n';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import QuickActions from '../components/QuickActions';
-import BulkActionBar, { type BulkAction } from '../components/BulkActionBar';
-import { Trash2 as TrashBulk, Send as SendBulk, Archive, FileText } from 'lucide-react';
 import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
 import QuoteDetailsModal from '../components/quotes/QuoteDetailsModal';
-import { type QuoteDetail, type Quote, listQuotesForLead, getQuoteById, formatQuoteMoney, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, fetchPendingQuotes, fetchQuoteKpis } from '../lib/quotesApi';
+import TemplateSelectModal from '../components/quotes/TemplateSelectModal';
+import { type QuoteDetail, type Quote, listQuotesForLead, getQuoteById, formatQuoteMoney, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, fetchQuoteKpis, fetchAllQuotesWithContext } from '../lib/quotesApi';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { DollarSign, Clock, FileText as FileTextIcon } from 'lucide-react';
+import type { QuoteTemplate } from '../types';
 
 type SortBy = 'recent' | 'oldest';
 
-const STATUS_OPTIONS = ['All', 'New', 'Follow-up 1', 'Follow-up 2', 'Follow-up 3', 'Closed', 'Lost'];
-
-type LeadsTab = 'leads' | 'pending_quotes';
+const STATUS_OPTIONS = ['All', 'New Prospect', 'No Response', 'Quote Sent', 'Closed Won', 'Closed Lost'];
 
 export default function Leads() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { t, language } = useTranslation();
   const queryClient = useQueryClient();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -49,7 +41,6 @@ export default function Leads() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
-  const [isImporting, setIsImporting] = useState(false);
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('recent');
@@ -62,7 +53,8 @@ export default function Leads() {
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
+  const [isTemplateSelectOpen, setIsTemplateSelectOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<QuoteTemplate | null>(null);
 
   const [isEditingLead, setIsEditingLead] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -89,23 +81,10 @@ export default function Leads() {
   const [loadingQuotes, setLoadingQuotes] = useState(false);
   const [quotesByLeadId, setQuotesByLeadId] = useState<Map<string, Quote[]>>(new Map());
 
-  // Tab management
-  const activeTab: LeadsTab = searchParams.get('tab') === 'pending_quotes' ? 'pending_quotes' : 'leads';
-  const setActiveTab = (tab: LeadsTab) => {
-    const next = new URLSearchParams(searchParams);
-    if (tab === 'leads') {
-      next.delete('tab');
-    } else {
-      next.set('tab', tab);
-    }
-    setSearchParams(next, { replace: true });
-  };
-
-  // Pending quotes query
-  const pendingQuotesQuery = useQuery({
-    queryKey: ['pending-quotes-leads-page'],
-    queryFn: fetchPendingQuotes,
-    enabled: activeTab === 'pending_quotes',
+  // All quotes query (unified view)
+  const allQuotesQuery = useQuery({
+    queryKey: ['all-quotes-page'],
+    queryFn: fetchAllQuotesWithContext,
     staleTime: 30_000,
   });
 
@@ -342,55 +321,6 @@ export default function Leads() {
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsImporting(true);
-    Papa.parse(file, {
-      header: true,
-      complete: async (results) => {
-        try {
-          const parsedRows = results.data as Record<string, string>[];
-          const seenEmails = new Set<string>();
-          let skipped = 0;
-          for (const row of parsedRows) {
-            const firstName = row.first_name || row.FirstName || '';
-            const lastName = row.last_name || row.LastName || '';
-            const company = row.company || row.Company || 'Imported lead';
-            if (!firstName || !lastName) continue;
-            const email = (row.email || row.Email || '').trim().toLowerCase();
-            // Skip duplicates within CSV and against existing leads
-            if (email && seenEmails.has(email)) { skipped++; continue; }
-            if (email) {
-              const conflict = await findEmailConflict(email).catch(() => null);
-              if (conflict) { skipped++; seenEmails.add(email); continue; }
-              seenEmails.add(email);
-            }
-            await createLeadScoped({
-              first_name: firstName,
-              last_name: lastName,
-              email: email || '',
-              company,
-              value: Number(row.value || row.Value || 0),
-              status: 'Lead',
-              tags: row.tags ? row.tags.split(',').map((tag) => tag.trim()) : [],
-            });
-          }
-          await fetchLeads();
-          if (skipped > 0) {
-            toast.info(`${skipped} duplicate${skipped > 1 ? 's' : ''} skipped`);
-          }
-        } catch (error: any) {
-          console.error('Error importing leads:', error);
-          toast.error(error?.message || 'Import failed');
-        } finally {
-          setIsImporting(false);
-        }
-      },
-    });
-  };
-
   const toggleSelectAll = () => {
     if (selectedLeads.length === leads.length) {
       setSelectedLeads([]);
@@ -420,7 +350,7 @@ export default function Leads() {
       toast.success(t.leads.leadDeleted);
       // Invalidate quote KPIs since lead's quotes may now be orphaned
       void queryClient.invalidateQueries({ queryKey: ['pending-quotes-kpis'] });
-      void queryClient.invalidateQueries({ queryKey: ['pending-quotes-leads-page'] });
+      void queryClient.invalidateQueries({ queryKey: ['all-quotes-page'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard-quote-kpis'] });
     } catch (error: any) {
       console.error('Error deleting lead:', error);
@@ -455,7 +385,7 @@ export default function Leads() {
       toast.success(t.leads.leadsDeleted.replace('{count}', String(idsToDelete.length)));
       // Invalidate quote KPIs since leads' quotes may now be orphaned
       void queryClient.invalidateQueries({ queryKey: ['pending-quotes-kpis'] });
-      void queryClient.invalidateQueries({ queryKey: ['pending-quotes-leads-page'] });
+      void queryClient.invalidateQueries({ queryKey: ['all-quotes-page'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard-quote-kpis'] });
     } catch (error: any) {
       setLeads(previousLeads);
@@ -508,45 +438,16 @@ export default function Leads() {
     }
   };
 
-  const noResults = !loading && leads.length === 0;
-  const sourceOptions = useMemo(() => ['All', ...Array.from(new Set(leads.map((lead) => lead.source).filter(Boolean) as string[]))], [leads]);
-  const assignedOptions = useMemo(() => ['All', ...Array.from(new Set(leads.map((lead) => lead.assigned_to).filter(Boolean) as string[]))], [leads]);
-
-  const handleExport = async () => {
-    setListError(null);
-    setIsExporting(true);
-    try {
-      const csv = await exportAllLeadsCsv();
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
-      toast.success(t.leads.leadsExported);
-    } catch (error: any) {
-      setListError(error?.message || t.leads.failedExport);
-      toast.error(error?.message || t.leads.failedExport);
-    } finally {
-      setIsExporting(false);
-    }
-  };
 
   return (
     <div className="space-y-5">
-      <PageHeader title={t.leads.title} subtitle={`${leads.length} ${t.leads.prospects}`} icon={Contact} iconColor="pink">
+      <PageHeader title={t.leads.title} subtitle={`${pendingQuoteKpis.data?.total_count ?? 0} ${t.leads.prospects}`} icon={FileText} iconColor="pink">
         <div className="flex items-center gap-2">
-          <label className="glass-button inline-flex items-center gap-1.5 cursor-pointer">
-            <Upload size={14} />
-            {isImporting ? t.common.importing : t.common.import}
-            <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
-          </label>
-          <button onClick={() => void handleExport()} disabled={isExporting} className="glass-button inline-flex items-center gap-1.5">
-            <Download size={14} />
-            {isExporting ? t.common.exporting : t.common.export}
+          <button onClick={() => navigate('/quotes/templates')} className="glass-button inline-flex items-center gap-1.5">
+            <LayoutTemplate size={14} />
+            {t.invoices.templates}
           </button>
-          <button onClick={() => setIsNewLeadModalOpen(true)} className="glass-button-primary inline-flex items-center gap-1.5">
+          <button onClick={() => setIsTemplateSelectOpen(true)} className="glass-button-primary inline-flex items-center gap-1.5">
             <Plus size={14} />
             {t.leads.addLead}
           </button>
@@ -555,66 +456,11 @@ export default function Leads() {
 
       {/* KPIs */}
       <div className="grid grid-cols-3 gap-3">
-        <StatCard label={t.leads.totalLeads} value={leads.length} iconColor="pink" />
-        <StatCard label={t.leads.qualified} value={leads.filter((l) => l.status === 'Qualified').length} iconColor="green" />
-        <StatCard label={t.leads.totalValue} value={formatCurrency(leads.reduce((s, l) => s + (l.value || 0), 0))} iconColor="amber" />
+        <StatCard label={t.leads.totalLeads} value={pendingQuoteKpis.data?.total_count ?? 0} iconColor="pink" />
+        <StatCard label={t.leads.qualified} value={pendingQuoteKpis.data?.approved_count ?? 0} iconColor="green" />
+        <StatCard label={t.leads.totalValue} value={formatCurrency((pendingQuoteKpis.data?.total_value_cents ?? 0) / 100)} iconColor="amber" />
       </div>
 
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 border-b border-border">
-        <button
-          type="button"
-          onClick={() => setActiveTab('leads')}
-          className={cn(
-            'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-            activeTab === 'leads'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-text-secondary hover:text-text-primary'
-          )}
-        >
-          {t.leads.title}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('pending_quotes')}
-          className={cn(
-            'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px inline-flex items-center gap-2',
-            activeTab === 'pending_quotes'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-text-secondary hover:text-text-primary'
-          )}
-        >
-          <FileTextIcon size={14} />
-          {language === 'fr' ? 'Devis en attente' : 'Pending Quotes'}
-          {(pendingQuoteKpis.data?.pending_count ?? 0) > 0 && (
-            <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-bold text-text-primary">
-              {pendingQuoteKpis.data?.pending_count}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {activeTab === 'pending_quotes' ? (
-        <PendingQuotesView
-          quotes={pendingQuotesQuery.data || []}
-          loading={pendingQuotesQuery.isLoading}
-          totalValue={pendingQuoteKpis.data?.pending_value_cents || 0}
-          language={language}
-          onOpenQuote={async (quoteId: string) => {
-            try {
-              const detail = await getQuoteById(quoteId);
-              setQuoteDetail(detail);
-              setIsQuoteDetailsOpen(true);
-            } catch {}
-          }}
-          onRefresh={() => {
-            void queryClient.invalidateQueries({ queryKey: ['pending-quotes-leads-page'] });
-            void queryClient.invalidateQueries({ queryKey: ['pending-quotes-kpis'] });
-            void queryClient.invalidateQueries({ queryKey: ['dashboard-quote-kpis'] });
-          }}
-        />
-      ) : (
-      <>
       {saveSuccess && (
         <div className="rounded-md bg-success-light border border-success/20 px-4 py-2.5 text-[13px] text-success">
           {saveSuccess}
@@ -626,33 +472,8 @@ export default function Leads() {
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <FilterSelect
-            value={statusFilter}
-            onChange={setStatusFilter}
-            options={STATUS_OPTIONS.map((s) => ({ value: s, label: s }))}
-          />
-          <FilterSelect
-            value={sourceFilter}
-            onChange={setSourceFilter}
-            options={sourceOptions.map((s) => ({ value: s, label: s }))}
-          />
-          <FilterSelect
-            value={assignedFilter}
-            onChange={setAssignedFilter}
-            options={assignedOptions.map((s) => ({ value: s, label: s }))}
-          />
-          <FilterSelect
-            value={sortBy}
-            onChange={(v) => setSortBy(v as SortBy)}
-            options={[
-              { value: 'recent', label: t.common.mostRecent },
-              { value: 'oldest', label: t.common.oldestFirst },
-            ]}
-          />
-        </div>
+      {/* Search */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <div className="relative w-full max-w-xs">
           <input
             type="text"
@@ -664,205 +485,99 @@ export default function Leads() {
         </div>
       </div>
 
-      {/* Batch actions */}
-      <AnimatePresence>
-        {selectedLeads.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="flex items-center gap-3 rounded-md bg-primary/5 border border-primary/10 px-4 py-2"
-          >
-            <span className="text-[13px] font-medium text-primary">{selectedLeads.length} {t.common.selected}</span>
-            <button onClick={deleteSelected} className="glass-button-danger inline-flex items-center gap-1.5 text-xs">
-              <Trash2 size={13} />
-              {t.common.delete}
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Quotes Table */}
+      {(() => {
+        const allQuotes = allQuotesQuery.data || [];
+        const filtered = debouncedSearch
+          ? allQuotes.filter((q) => {
+              const s = debouncedSearch.toLowerCase();
+              return (
+                (q.client_name || '').toLowerCase().includes(s) ||
+                (q.lead_name || '').toLowerCase().includes(s) ||
+                (q.quote_number || '').toLowerCase().includes(s) ||
+                (q.title || '').toLowerCase().includes(s)
+              );
+            })
+          : allQuotes;
+        const quotesLoading = allQuotesQuery.isLoading;
+        const noQuotes = !quotesLoading && filtered.length === 0;
 
-      {/* Table */}
+        return (
       <div className="section-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-border">
-                <th className="px-4 py-3 w-10">
-                  <input
-                    type="checkbox"
-                    checked={selectedLeads.length === leads.length && leads.length > 0}
-                    onChange={toggleSelectAll}
-                    className="rounded border-border"
-                  />
-                </th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.name}</th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.company}</th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{language === 'fr' ? 'Telephone' : 'Phone'}</th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.status}</th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{language === 'fr' ? 'Devis' : 'Quote'}</th>
+                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.invoices.client}</th>
+                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.leads.quoteNumber}</th>
+                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.leads.quoteStatus}</th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.value}</th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.dateAdded}</th>
-                <th className="px-4 py-3 w-10"></th>
+                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.leads.dateCreated}</th>
               </tr>
             </thead>
             <tbody>
-              {loading &&
+              {quotesLoading &&
                 Array.from({ length: 6 }).map((_, idx) => (
                   <tr key={`sk-${idx}`} className="border-b border-border">
-                    <td className="px-4 py-3" colSpan={8}>
+                    <td className="px-4 py-3" colSpan={5}>
                       <div className="skeleton h-4 w-full" />
                     </td>
                   </tr>
                 ))}
-              {!loading &&
-                leads.map((lead) => (
-                  <tr
-                    key={lead.id}
-                    onClick={() => setSelectedLead(lead)}
-                    className={cn(
-                      'table-row-hover cursor-pointer',
-                      selectedLeads.includes(lead.id) && 'bg-primary/[0.03]'
-                    )}
-                  >
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selectedLeads.includes(lead.id)}
-                        onChange={() => toggleSelectLead(lead.id)}
-                        className="rounded border-border"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="avatar-sm">
-                          {lead.first_name?.[0]}
-                          {lead.last_name?.[0]}
+              {!quotesLoading &&
+                filtered.map((quote) => {
+                  const contactName = quote.client_name || quote.lead_name || '—';
+                  const statusLabel = QUOTE_STATUS_LABELS[quote.status as keyof typeof QUOTE_STATUS_LABELS] || quote.status;
+                  const statusColor = QUOTE_STATUS_COLORS[quote.status as keyof typeof QUOTE_STATUS_COLORS] || 'bg-neutral-100 text-neutral-700';
+
+                  return (
+                    <tr
+                      key={quote.id}
+                      className="border-b border-border hover:bg-black/[0.02] cursor-pointer transition-colors"
+                      onClick={async () => {
+                        try {
+                          const detail = await getQuoteById(quote.id);
+                          if (detail) { setQuoteDetail(detail); setIsQuoteDetailsOpen(true); }
+                        } catch { toast.error(t.leads.failedToLoadQuote); }
+                      }}
+                    >
+                      <td className="px-4 py-3">
+                        <p className="text-[13px] font-medium text-text-primary">{contactName}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <FileText size={12} className="text-primary shrink-0" />
+                          <span className="text-[13px] font-medium text-text-primary">#{quote.quote_number}</span>
                         </div>
-                        <div>
-                          <p className="text-[13px] font-medium text-text-primary">
-                            {lead.first_name} {lead.last_name}
-                          </p>
-                          <p className="text-xs text-text-tertiary flex items-center gap-1">
-                            <Mail size={10} />
-                            {lead.email}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-[13px] text-text-secondary flex items-center gap-1.5">
-                        <Building2 size={13} className="text-text-tertiary" />
-                        {lead.company}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      {lead.phone ? (
-                        <a href={`tel:${lead.phone}`} onClick={e => e.stopPropagation()} className="text-[13px] text-primary hover:underline">{lead.phone}</a>
-                      ) : (
-                        <span className="text-[13px] text-text-tertiary">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={lead.status}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={async (e) => {
-                          e.stopPropagation();
-                          const newStatus = e.target.value as LeadStatus;
-                          const dbStatus = Object.entries(LEAD_STATUS_LABELS).find(([, v]) => v === newStatus)?.[0] || newStatus.toLowerCase().replace(/[\s-]+/g, '_');
-                          const previousStatus = lead.status;
-                          // Optimistic update
-                          setLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, status: newStatus } : l));
-                          try {
-                            await updateLeadStatus(lead.id, dbStatus as LeadStatus);
-                            toast.success(`Status updated to ${newStatus}`);
-                          } catch (err: any) {
-                            // Revert on failure
-                            setLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, status: previousStatus } : l));
-                            toast.error(err.message);
-                          }
-                        }}
-                        className="text-xs font-medium rounded-lg border border-outline bg-surface px-2 py-1 cursor-pointer hover:border-primary/40 transition-colors"
-                      >
-                        {STATUS_OPTIONS.filter((s) => s !== 'All').map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-4 py-3">
-                      {(() => {
-                        const quotes = quotesByLeadId.get(lead.id) || [];
-                        if (quotes.length === 0) return <span className="text-[12px] text-text-tertiary">—</span>;
-                        const latest = quotes[0];
-                        return (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              getQuoteById(latest.id).then(d => { if (d) { setQuoteDetail(d); setIsQuoteDetailsOpen(true); } }).catch(() => toast.error('Failed to load quote'));
-                            }}
-                            className="text-left rounded-lg border border-outline px-2.5 py-1.5 hover:bg-surface-secondary hover:border-primary/30 transition-all w-full"
-                          >
-                            <div className="flex items-center gap-1.5">
-                              <FileText size={12} className="text-primary shrink-0" />
-                              <span className="text-[12px] font-medium text-text-primary">#{latest.quote_number}</span>
-                              <span className={`text-[9px] font-semibold px-1 py-0.5 rounded-full ${QUOTE_STATUS_COLORS[latest.status] || 'bg-neutral-100 text-neutral-600'}`}>
-                                {QUOTE_STATUS_LABELS[latest.status] || latest.status}
-                              </span>
-                            </div>
-                            <p className="text-[12px] font-semibold text-text-primary tabular-nums mt-0.5">{formatQuoteMoney(latest.total_cents, latest.currency)}</p>
-                            {quotes.length > 1 && <p className="text-[10px] text-primary mt-0.5">+{quotes.length - 1} {language === 'fr' ? 'autres' : 'more'}</p>}
-                          </button>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-[13px] font-medium text-text-primary tabular-nums">{formatCurrency(lead.value || 0)}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-[13px] text-text-tertiary">{formatDate(lead.created_at)}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        {(quotesByLeadId.get(lead.id) || []).length > 0 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const quotes = quotesByLeadId.get(lead.id) || [];
-                              if (quotes.length > 0) {
-                                getQuoteById(quotes[0].id).then(d => {
-                                  if (d) { setQuoteDetail(d); setIsQuoteDetailsOpen(true); }
-                                }).catch(() => toast.error('Failed to load quote'));
-                              }
-                            }}
-                            className="p-1.5 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded transition-all"
-                            title={language === 'fr' ? 'Voir devis' : 'View quote'}
-                          >
-                            <FileText size={14} />
-                          </button>
-                        )}
-                        <button
-                          onClick={(e) => deleteLead(lead.id, e)}
-                          className="p-1.5 text-text-tertiary hover:text-danger hover:bg-danger-light rounded transition-all"
-                          title={t.common.delete}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              {noResults && (
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold', statusColor)}>
+                          {statusLabel}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-[13px] font-semibold text-text-primary tabular-nums">
+                          {formatQuoteMoney(quote.total_cents, quote.currency)}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-[13px] text-text-tertiary">
+                          {new Date(quote.created_at).toLocaleDateString(t.dashboard.enus, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      </td>
+                    </tr>
+                  );
+                })}
+              {noQuotes && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10">
+                  <td colSpan={5} className="px-4 py-10">
                     <EmptyState
-                      icon={Users}
+                      icon={FileText}
                       title={t.leads.noLeadsFound}
-                      description={leads.length === 0 ? (language === 'fr' ? 'Commencez par creer votre premier lead.' : 'Get started by creating your first lead.') : t.leads.tryAdjusting}
-                      action={leads.length === 0 ? (
+                      description={allQuotes.length === 0 ? (t.leads.getStartedByCreatingYourFirstQuote) : t.leads.tryAdjusting}
+                      action={allQuotes.length === 0 ? (
                         <button onClick={() => setIsNewLeadModalOpen(true)} className="glass-button-primary mt-3 inline-flex items-center gap-1.5 text-[13px]">
-                          <Plus size={14} /> {t.leads.newLead}
+                          <Plus size={14} /> {t.leads.addLead}
                         </button>
                       ) : undefined}
                     />
@@ -873,22 +588,49 @@ export default function Leads() {
           </table>
         </div>
       </div>
+        );
+      })()}
+
+      {/* Template Selection Modal */}
+      <AnimatePresence>
+        {isTemplateSelectOpen && (
+          <TemplateSelectModal
+            isOpen={isTemplateSelectOpen}
+            isFr={language === 'fr'}
+            onClose={() => setIsTemplateSelectOpen(false)}
+            onStartFromScratch={() => {
+              setIsTemplateSelectOpen(false);
+              setSelectedTemplate(null);
+              setIsNewLeadModalOpen(true);
+            }}
+            onSelectTemplate={(template) => {
+              setIsTemplateSelectOpen(false);
+              setSelectedTemplate(template);
+              setIsNewLeadModalOpen(true);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* New Lead = QuoteCreateModal with inline lead creation */}
       <AnimatePresence>
         {isNewLeadModalOpen && (
           <QuoteCreateModal
             isOpen={isNewLeadModalOpen}
-            onClose={() => { setIsNewLeadModalOpen(false); setCreateError(null); }}
+            onClose={() => { setIsNewLeadModalOpen(false); setSelectedTemplate(null); setCreateError(null); }}
             createLeadInline
+            template={selectedTemplate}
             onCreated={(detail) => {
               setIsNewLeadModalOpen(false);
+              setSelectedTemplate(null);
               fetchLeads();
-              setSaveSuccess(language === 'fr' ? 'Lead et devis crees avec succes' : 'Lead and quote created successfully');
-              // Ask user if they want to view the quote
+              void queryClient.invalidateQueries({ queryKey: ['all-quotes-page'] });
+              void queryClient.invalidateQueries({ queryKey: ['pending-quotes-kpis'] });
+              void queryClient.invalidateQueries({ queryKey: ['dashboard-quote-kpis'] });
+              setSaveSuccess(t.leads.quoteCreatedSuccessfully);
               const goToQuote = window.confirm(
                 language === 'fr'
-                  ? `Devis #${detail.quote.quote_number} cree. Voulez-vous le voir maintenant?`
+                  ? `Devis #${detail.quote.quote_number} créé. Voulez-vous le voir maintenant?`
                   : `Quote #${detail.quote.quote_number} created. View it now?`
               );
               if (goToQuote) navigate(`/quotes/${detail.quote.id}`);
@@ -1006,7 +748,7 @@ export default function Leads() {
                     className="glass-button inline-flex items-center gap-1.5 text-primary border-primary/20 hover:bg-primary/5"
                   >
                     <FileText size={13} />
-                    Send Quote
+                    {t.leads.sendQuote}
                   </button>
                 </div>
 
@@ -1060,20 +802,20 @@ export default function Leads() {
                     <div className="section-card p-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
-                          {language === 'fr' ? 'Devis' : 'Quotes'} ({leadQuotes.length})
+                          {t.clientDetails.quotes} ({leadQuotes.length})
                         </h3>
                         <button
                           onClick={() => setIsQuoteCreateOpen(true)}
                           className="glass-button-primary text-[11px] inline-flex items-center gap-1 px-2 py-0.5"
                         >
-                          <Plus size={11} /> {language === 'fr' ? 'Nouveau' : 'New'}
+                          <Plus size={11} /> {t.leads.new}
                         </button>
                       </div>
                       {loadingQuotes ? (
                         <p className="text-[12px] text-text-tertiary">Loading...</p>
                       ) : leadQuotes.length === 0 ? (
                         <p className="text-[12px] text-text-tertiary italic">
-                          {language === 'fr' ? 'Aucun devis pour ce lead' : 'No quotes for this lead'}
+                          {t.leads.noQuotesYet}
                         </p>
                       ) : (
                         <div className="space-y-1.5">
@@ -1093,7 +835,7 @@ export default function Leads() {
                                 <div className="flex items-center gap-2">
                                   <FileText size={13} className="text-text-tertiary" />
                                   <span className="text-[13px] font-medium text-text-primary">
-                                    {language === 'fr' ? 'Devis' : 'Quote'} #{q.quote_number}
+                                    {t.agent.quote} #{q.quote_number}
                                   </span>
                                 </div>
                                 <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
@@ -1172,28 +914,6 @@ export default function Leads() {
         )}
       </AnimatePresence>
 
-      {/* Bulk actions bar */}
-      <AnimatePresence>
-        {selectedLeads.length > 0 && (
-          <BulkActionBar
-            count={selectedLeads.length}
-            actions={[
-              { id: 'delete', label: language === 'fr' ? 'Supprimer' : 'Delete', icon: TrashBulk, variant: 'danger' },
-            ]}
-            onAction={async (actionId) => {
-              if (actionId === 'delete') {
-                if (!window.confirm(language === 'fr' ? `Supprimer ${selectedLeads.length} leads ?` : `Delete ${selectedLeads.length} leads?`)) return;
-                await deleteSelected();
-              }
-            }}
-            onClear={() => setSelectedLeads([])}
-            language={language}
-          />
-        )}
-      </AnimatePresence>
-      </>
-      )}
-
       {/* Quote Create Modal */}
       <AnimatePresence>
         {isQuoteCreateOpen && (
@@ -1223,14 +943,12 @@ export default function Leads() {
                 const refreshed = await getQuoteById(quoteDetail.quote.id);
                 if (refreshed) setQuoteDetail(refreshed);
               }
-              // Invalidate KPIs so pending counts stay in sync
-              void queryClient.invalidateQueries({ queryKey: ['pending-quotes-leads-page'] });
+              void queryClient.invalidateQueries({ queryKey: ['all-quotes-page'] });
               void queryClient.invalidateQueries({ queryKey: ['pending-quotes-kpis'] });
               void queryClient.invalidateQueries({ queryKey: ['dashboard-quote-kpis'] });
             }}
             onConvertedToJob={(jobId) => {
-              // Invalidate KPIs after conversion
-              void queryClient.invalidateQueries({ queryKey: ['pending-quotes-leads-page'] });
+              void queryClient.invalidateQueries({ queryKey: ['all-quotes-page'] });
               void queryClient.invalidateQueries({ queryKey: ['pending-quotes-kpis'] });
               void queryClient.invalidateQueries({ queryKey: ['dashboard-quote-kpis'] });
               navigate(`/jobs/${jobId}`);
@@ -1243,139 +961,3 @@ export default function Leads() {
   );
 }
 
-/** Pending quotes sub-view shown in the Leads page */
-function PendingQuotesView({
-  quotes,
-  loading,
-  totalValue,
-  language,
-  onOpenQuote,
-  onRefresh,
-}: {
-  quotes: Array<Quote & { lead_name?: string; client_name?: string }>;
-  loading: boolean;
-  totalValue: number;
-  language: string;
-  onOpenQuote: (quoteId: string) => void;
-  onRefresh: () => void;
-}) {
-  if (loading) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="skeleton h-16 w-full rounded-xl" />
-        ))}
-      </div>
-    );
-  }
-
-  if (quotes.length === 0) {
-    return (
-      <div className="section-card flex flex-col items-center justify-center py-16 text-center">
-        <FileTextIcon size={32} className="mb-3 text-text-tertiary" />
-        <p className="text-sm font-medium text-text-primary">
-          {language === 'fr' ? 'Aucun devis en attente' : 'No pending quotes'}
-        </p>
-        <p className="mt-1 text-xs text-text-secondary">
-          {language === 'fr' ? 'Tous les devis ont été traités.' : 'All quotes have been processed.'}
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Summary bar */}
-      <div className="flex items-center gap-4 rounded-xl border border-outline-subtle bg-surface-secondary px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="rounded-lg bg-black/5 p-1.5 text-text-secondary">
-            <FileTextIcon size={14} />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-text-primary">
-              {quotes.length} {language === 'fr' ? 'devis en attente' : 'pending quotes'}
-            </p>
-            <p className="text-xs text-text-secondary">
-              {formatQuoteMoney(totalValue)} {language === 'fr' ? 'valeur totale' : 'total value'}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Quotes table */}
-      <div className="section-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {language === 'fr' ? 'Devis' : 'Quote'}
-                </th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {language === 'fr' ? 'Client / Lead' : 'Client / Lead'}
-                </th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {language === 'fr' ? 'Statut' : 'Status'}
-                </th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {language === 'fr' ? 'Montant' : 'Amount'}
-                </th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {language === 'fr' ? 'Créé le' : 'Created'}
-                </th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {language === 'fr' ? 'Valide jusqu\'au' : 'Valid until'}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {quotes.map((quote) => {
-                const statusLabel = QUOTE_STATUS_LABELS[quote.status as keyof typeof QUOTE_STATUS_LABELS] || quote.status;
-                const statusColor = QUOTE_STATUS_COLORS[quote.status as keyof typeof QUOTE_STATUS_COLORS] || 'bg-neutral-100 text-neutral-700';
-                const contactName = quote.client_name || quote.lead_name || '—';
-
-                return (
-                  <tr
-                    key={quote.id}
-                    className="border-b border-border hover:bg-black/[0.02] cursor-pointer transition-colors"
-                    onClick={() => onOpenQuote(quote.id)}
-                  >
-                    <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-text-primary">{quote.title || quote.quote_number}</p>
-                      <p className="text-[10px] text-text-tertiary">{quote.quote_number}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm text-text-primary">{contactName}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold', statusColor)}>
-                        {statusLabel}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm font-semibold text-text-primary tabular-nums">
-                        {formatQuoteMoney(quote.total_cents)}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-xs text-text-secondary">
-                        {new Date(quote.created_at).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-xs text-text-secondary">
-                        {quote.valid_until
-                          ? new Date(quote.valid_until).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                          : '—'}
-                      </p>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}

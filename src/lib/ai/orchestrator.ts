@@ -268,14 +268,23 @@ function extractJobStatus(text: string): string | undefined {
 
 function extractLeadStatus(text: string): string | undefined {
   const statusMap: Record<string, string> = {
-    'new': 'New',
-    'nouveau': 'New',
-    'follow-up': 'Follow-up 1',
-    'suivi': 'Follow-up 1',
-    'closed': 'Closed',
-    'fermé': 'Closed',
-    'lost': 'Lost',
-    'perdu': 'Lost',
+    'new': 'New Prospect',
+    'nouveau': 'New Prospect',
+    'prospect': 'New Prospect',
+    'no response': 'No Response',
+    'sans réponse': 'No Response',
+    'follow-up': 'No Response',
+    'suivi': 'No Response',
+    'quote sent': 'Quote Sent',
+    'soumission': 'Quote Sent',
+    'devis': 'Quote Sent',
+    'closed won': 'Closed Won',
+    'closed': 'Closed Won',
+    'fermé': 'Closed Won',
+    'gagné': 'Closed Won',
+    'closed lost': 'Closed Lost',
+    'lost': 'Closed Lost',
+    'perdu': 'Closed Lost',
   };
   for (const [keyword, status] of Object.entries(statusMap)) {
     if (text.includes(keyword)) return status;

@@ -249,7 +249,7 @@ export default function Invoices() {
         ['Invoice #', 'Client', 'Amount', 'Status', 'Due Date'],
         csvRows,
       );
-      toast.success(language === 'fr' ? 'Export CSV terminé' : 'CSV exported');
+      toast.success(t.invoices.csvExported);
     } catch (err: any) {
       toast.error(err?.message || 'Export failed');
     }
@@ -282,7 +282,7 @@ export default function Invoices() {
       queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
       queryClient.invalidateQueries({ queryKey: ['invoicesKpis30d'] });
       queryClient.invalidateQueries({ queryKey: ['jobsTable'] });
-      toast.success(language === 'fr' ? 'Facture marquée comme payée' : 'Invoice marked as paid');
+      toast.success(t.invoices.invoiceMarkedAsPaid);
     } catch (err: any) {
       toast.error(err?.message || 'Error');
     }
@@ -295,7 +295,7 @@ export default function Invoices() {
         subject: row.subject ? `${row.subject} (copy)` : null,
         dueDate: null,
       });
-      toast.success(language === 'fr' ? 'Facture dupliquée' : 'Invoice duplicated');
+      toast.success(t.invoiceDetails.invoiceDuplicated);
       navigate(`/invoices/${draft.id}`);
     } catch (err: any) {
       toast.error(err?.message || 'Error');
@@ -303,12 +303,12 @@ export default function Invoices() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(language === 'fr' ? 'Supprimer cette facture ?' : 'Delete this invoice?')) return;
+    if (!confirm(t.invoices.deleteThisInvoice)) return;
     try {
       await supabase.from('invoices').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
       queryClient.invalidateQueries({ queryKey: ['invoicesKpis30d'] });
-      toast.success(language === 'fr' ? 'Facture supprimée' : 'Invoice deleted');
+      toast.success(t.invoices.invoiceDeleted);
     } catch (err: any) {
       toast.error(err?.message || 'Error');
     }
@@ -317,13 +317,13 @@ export default function Invoices() {
   const handleSend = async (row: InvoiceRow) => {
     const client = clientMap[row.client_id];
     if (!client?.email) {
-      toast.error(language === 'fr' ? 'Aucun email client' : 'No client email');
+      toast.error(t.invoices.noClientEmail);
       return;
     }
     try {
       await sendInvoice({ invoiceId: row.id, channels: ['email'], toEmail: client.email });
       queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
-      toast.success(language === 'fr' ? 'Facture envoyée' : 'Invoice sent');
+      toast.success(t.invoices.invoiceSent);
     } catch (err: any) {
       toast.error(err?.message || 'Error');
     }
@@ -362,19 +362,19 @@ export default function Invoices() {
     <div className="space-y-5">
       {/* ─── Header ─── */}
       <PageHeader
-        title={language === 'fr' ? 'Factures' : 'Invoices'}
-        subtitle={language === 'fr' ? `${total} factures` : `${total} invoices`}
+        title={t.commandPalette.invoices}
+        subtitle={t.invoices.totalInvoices}
         icon={FileText}
         iconColor="green"
       >
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => void handleExportCsv()} className="btn-secondary text-[13px] inline-flex items-center gap-1.5">
             <Download size={14} />
-            {language === 'fr' ? 'Exporter' : 'Export'}
+            {t.invoices.export}
           </button>
           <button type="button" onClick={() => navigate('/invoices/new')} className="btn-primary text-[13px] inline-flex items-center gap-1.5">
             <Plus size={14} />
-            {language === 'fr' ? 'Nouvelle facture' : 'New Invoice'}
+            {t.invoiceEdit.newInvoice}
           </button>
         </div>
       </PageHeader>
@@ -390,7 +390,7 @@ export default function Invoices() {
               : 'border-transparent text-text-tertiary hover:text-text-secondary',
           )}
         >
-          {language === 'fr' ? 'Factures' : 'Invoices'}
+          {t.commandPalette.invoices}
         </button>
         <button
           onClick={() => setMainTab('templates')}
@@ -401,7 +401,7 @@ export default function Invoices() {
               : 'border-transparent text-text-tertiary hover:text-text-secondary',
           )}
         >
-          {language === 'fr' ? 'Modèles' : 'Templates'}
+          {t.invoices.templates}
         </button>
       </div>
 
@@ -453,7 +453,7 @@ export default function Invoices() {
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder={language === 'fr' ? 'Rechercher...' : 'Search invoices...'}
+            placeholder={t.invoices.searchInvoices}
             className="input-field pl-8 w-full text-[13px]"
             onBlur={() => {
               if (searchInput.trim() !== q) {
@@ -475,25 +475,25 @@ export default function Invoices() {
             <thead>
               <tr className="border-b border-outline">
                 <Th onClick={() => applySort('invoice_number')}>
-                  {language === 'fr' ? 'Numéro' : 'Number'} {sortIcon('invoice_number')}
+                  {t.invoices.number} {sortIcon('invoice_number')}
                 </Th>
                 <Th onClick={() => applySort('client')}>
-                  {language === 'fr' ? 'Client' : 'Client'} {sortIcon('client')}
+                  {t.invoices.client} {sortIcon('client')}
                 </Th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
                   Email
                 </th>
                 <Th onClick={() => applySort('due_date')}>
-                  {language === 'fr' ? 'Dates' : 'Create & End Date'} {sortIcon('due_date')}
+                  {t.invoices.createEndDate} {sortIcon('due_date')}
                 </Th>
                 <Th onClick={() => applySort('total')} className="text-right">
-                  {language === 'fr' ? 'Montant' : 'Amount'} {sortIcon('total')}
+                  {t.invoices.amount} {sortIcon('total')}
                 </Th>
                 <Th onClick={() => applySort('status')}>
-                  {language === 'fr' ? 'Statut' : 'Status'} {sortIcon('status')}
+                  {t.automations.status} {sortIcon('status')}
                 </Th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {language === 'fr' ? 'Sujet' : 'Subject'}
+                  {t.invoiceEdit.subject}
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right">
                   Actions
@@ -519,12 +519,12 @@ export default function Invoices() {
                     <EmptyState
                       icon={FileText}
                       iconColor="green"
-                      title={language === 'fr' ? 'Aucune facture trouvée' : 'No invoices found'}
-                      description={language === 'fr' ? 'Ajustez vos filtres ou créez une nouvelle facture.' : 'Adjust your filters or create a new invoice.'}
+                      title={t.invoices.noInvoicesFound}
+                      description={t.invoices.adjustYourFiltersOrCreateANewInvoice}
                       action={
                         <button onClick={() => setIsCreateModalOpen(true)} className="btn-primary text-[13px] inline-flex items-center gap-1.5 mt-2">
                           <Plus size={14} />
-                          {language === 'fr' ? 'Nouvelle facture' : 'Create Invoice'}
+                          {t.invoices.createInvoice}
                         </button>
                       }
                     />
@@ -583,7 +583,7 @@ export default function Invoices() {
                             'text-[11px] tabular-nums',
                             uiStatus === 'past_due' ? 'text-red-500 font-medium' : 'text-text-tertiary',
                           )}>
-                            {language === 'fr' ? 'Éch.' : 'Due'} {formatDate(row.due_date)}
+                            {t.invoices.due} {formatDate(row.due_date)}
                           </span>
                         )}
                       </div>
@@ -596,7 +596,7 @@ export default function Invoices() {
                       </span>
                       {row.balance_cents > 0 && row.balance_cents !== row.total_cents && (
                         <span className="block text-[10px] text-orange-500 tabular-nums">
-                          {language === 'fr' ? 'Reste' : 'Bal.'} {formatMoneyFromCents(row.balance_cents)}
+                          {t.invoices.bal} {formatMoneyFromCents(row.balance_cents)}
                         </span>
                       )}
                     </td>
@@ -607,8 +607,8 @@ export default function Invoices() {
                         <StatusBadge status={uiStatus} dot />
                         {row.status !== 'draft' && view && (
                           <span title={view.is_viewed
-                            ? `${language === 'fr' ? 'Vu' : 'Viewed'} ${view.view_count}x`
-                            : (language === 'fr' ? 'Non ouvert' : 'Not opened')
+                            ? `${t.invoices.viewed} ${view.view_count}x`
+                            : (t.invoices.notOpened)
                           }>
                             {view.is_viewed
                               ? <Eye size={12} className="text-green-500" />
@@ -649,38 +649,38 @@ export default function Invoices() {
                               >
                                 <ActionItem
                                   icon={<Eye size={13} />}
-                                  label={language === 'fr' ? 'Voir la facture' : 'View invoice'}
+                                  label={t.invoices.viewInvoice}
                                   onClick={() => { setActionMenuId(null); navigate(`/invoices/${row.id}`); }}
                                 />
                                 <ActionItem
                                   icon={<Pencil size={13} />}
-                                  label={language === 'fr' ? 'Modifier' : 'Edit invoice'}
+                                  label={t.invoices.editInvoice}
                                   onClick={() => { setActionMenuId(null); navigate(`/invoices/${row.id}`); }}
                                 />
                                 {row.status === 'draft' && (
                                   <ActionItem
                                     icon={<Send size={13} />}
-                                    label={language === 'fr' ? 'Envoyer' : 'Send invoice'}
+                                    label={t.invoices.sendInvoice}
                                     onClick={() => { setActionMenuId(null); handleSend(row); }}
                                   />
                                 )}
                                 {row.status !== 'paid' && row.balance_cents > 0 && (
                                   <ActionItem
                                     icon={<CheckCircle2 size={13} />}
-                                    label={language === 'fr' ? 'Marquer payée' : 'Mark as paid'}
+                                    label={t.invoices.markAsPaid}
                                     onClick={() => { setActionMenuId(null); handleMarkPaid(row); }}
                                     className="text-green-600"
                                   />
                                 )}
                                 <ActionItem
                                   icon={<Copy size={13} />}
-                                  label={language === 'fr' ? 'Dupliquer' : 'Duplicate'}
+                                  label={t.invoiceDetails.duplicate}
                                   onClick={() => { setActionMenuId(null); handleDuplicate(row); }}
                                 />
                                 <div className="border-t border-outline my-1" />
                                 <ActionItem
                                   icon={<Trash2 size={13} />}
-                                  label={language === 'fr' ? 'Supprimer' : 'Delete'}
+                                  label={t.advancedNotes.delete}
                                   onClick={() => { setActionMenuId(null); handleDelete(row.id); }}
                                   className="text-red-600 hover:!bg-red-50 dark:hover:!bg-red-900/20"
                                 />
@@ -765,9 +765,9 @@ export default function Invoices() {
           <BulkActionBar
             count={selectedInvoiceIds.size}
             actions={[
-              { id: 'send', label: language === 'fr' ? 'Envoyer' : 'Send', icon: Send, variant: 'primary' },
-              { id: 'paid', label: language === 'fr' ? 'Marquer payee' : 'Mark paid', icon: CheckCircle2, variant: 'primary' },
-              { id: 'delete', label: language === 'fr' ? 'Supprimer' : 'Delete', icon: Trash2, variant: 'danger' },
+              { id: 'send', label: t.invoices.send, icon: Send, variant: 'primary' },
+              { id: 'paid', label: t.invoices.markPaid, icon: CheckCircle2, variant: 'primary' },
+              { id: 'delete', label: t.advancedNotes.delete, icon: Trash2, variant: 'danger' },
             ]}
             onAction={async (actionId) => {
               const ids = Array.from(selectedInvoiceIds);

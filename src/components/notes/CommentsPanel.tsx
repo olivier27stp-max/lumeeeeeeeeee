@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import { X, Send, CheckCircle2, MessageCircle, AtSign } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
+import { useTranslation } from '../i18n';
 
 export interface BoardComment {
   id: string;
@@ -67,7 +68,7 @@ function CommentsPanel({
         <div className="flex items-center gap-2">
           <MessageCircle size={14} className="text-text-tertiary" />
           <span className="text-[12px] font-semibold text-text-primary">
-            {fr ? 'Commentaires' : 'Comments'}
+            {t.noteCanvas.comments}
           </span>
           <span className="text-[10px] text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded-full">
             {contextFiltered.length}
@@ -91,7 +92,7 @@ function CommentsPanel({
                 : 'text-text-tertiary hover:bg-surface-secondary',
             )}
           >
-            {f === 'all' ? (fr ? 'Tous' : 'All') : f === 'open' ? (fr ? 'Ouvert' : 'Open') : (fr ? 'Resolu' : 'Resolved')}
+            {f === 'all' ? (t.automations.all) : f === 'open' ? (t.noteCanvas.open) : (t.noteCanvas.resolved)}
           </button>
         ))}
       </div>
@@ -100,7 +101,7 @@ function CommentsPanel({
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
         {contextFiltered.length === 0 && (
           <p className="text-[11px] text-text-tertiary text-center py-4">
-            {fr ? 'Aucun commentaire' : 'No comments yet'}
+            {t.noteCanvas.noCommentsYet}
           </p>
         )}
         {contextFiltered.map((comment) => {
@@ -121,14 +122,14 @@ function CommentsPanel({
                     onClick={() => setReplyTo(comment.id)}
                     className="text-[10px] text-blue-500 hover:text-blue-600 font-medium"
                   >
-                    {fr ? 'Repondre' : 'Reply'}
+                    {t.noteCanvas.reply}
                   </button>
                   {!comment.resolved && (
                     <button
                       onClick={() => onResolve(comment.id)}
                       className="text-[10px] text-green-500 hover:text-green-600 font-medium flex items-center gap-0.5"
                     >
-                      <CheckCircle2 size={10} /> {fr ? 'Resoudre' : 'Resolve'}
+                      <CheckCircle2 size={10} /> {t.noteCanvas.resolve}
                     </button>
                   )}
                   {comment.user_id === currentUserId && (
@@ -136,12 +137,12 @@ function CommentsPanel({
                       onClick={() => onDelete(comment.id)}
                       className="text-[10px] text-red-400 hover:text-red-500 font-medium"
                     >
-                      {fr ? 'Supprimer' : 'Delete'}
+                      {t.advancedNotes.delete}
                     </button>
                   )}
                   {comment.resolved && (
                     <span className="text-[9px] text-green-500 flex items-center gap-0.5 ml-auto">
-                      <CheckCircle2 size={9} /> {fr ? 'Resolu' : 'Resolved'}
+                      <CheckCircle2 size={9} /> {t.noteCanvas.resolved}
                     </span>
                   )}
                 </div>
@@ -172,7 +173,7 @@ function CommentsPanel({
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                    placeholder={fr ? 'Repondre...' : 'Reply...'}
+                    placeholder={t.noteCanvas.reply2}
                     className="input-field text-[11px] py-1 flex-1"
                     autoFocus
                   />
@@ -196,7 +197,7 @@ function CommentsPanel({
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-            placeholder={fr ? 'Ajouter un commentaire...' : 'Add a comment...'}
+            placeholder={t.noteCanvas.addAComment}
             className="input-field text-[11px] py-1.5 flex-1"
           />
           <button

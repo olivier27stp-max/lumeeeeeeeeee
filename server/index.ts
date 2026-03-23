@@ -1,6 +1,11 @@
 
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Import config (initializes dotenv, validates env vars)
 import { supabaseUrl, supabaseServiceRoleKey, twilioClient, twilioPhoneNumber, resendApiKey } from './lib/config';
@@ -33,9 +38,14 @@ import directorPanelRouter from './routes/director-panel';
 import teamSuggestionsRouter from './routes/team-suggestions';
 import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
+import requestFormsRouter from './routes/request-forms';
+import quoteTemplatesRouter from './routes/quote-templates';
 import featureFlagsRouter from './routes/feature-flags';
 import aiProxyRouter from './routes/ai-proxy';
 import agentRouter from './routes/agent';
+import invitationsRouter from './routes/invitations';
+import billingRouter from './routes/billing';
+import referralsRouter from './routes/referrals';
 
 const app = express();
 
@@ -170,6 +180,13 @@ app.use('/api', surveysRouter);
 app.use('/api', teamSuggestionsRouter);
 app.use('/api', jobsRouter);
 app.use('/api', trackingRouter);
+const formSubmitLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — public form submissions
+app.use('/api/public/form', formSubmitLimiter);
+app.use('/api', requestFormsRouter);
+app.use('/api', quoteTemplatesRouter);
+app.use('/api', invitationsRouter);
+app.use('/api', billingRouter);
+app.use('/api', referralsRouter);
 
 // ── Workflow action bridge — routes visual workflow actions to the real engine ──
 app.post('/api/workflows/execute-action', async (req, res) => {
@@ -221,6 +238,16 @@ app.post('/api/workflows/execute-action', async (req, res) => {
     console.error('[workflows/execute-action]', error.message);
     return res.status(500).json({ error: error?.message || 'Action execution failed' });
   }
+});
+
+// ── Serve static frontend (production) ──
+const distPath = path.resolve(__dirname, '..', 'dist');
+app.use(express.static(distPath));
+
+// SPA fallback — serve index.html for all non-API routes
+app.get('*', (_req, res, next) => {
+  if (_req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 // Health check endpoint

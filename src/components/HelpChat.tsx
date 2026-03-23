@@ -91,7 +91,7 @@ const LUME_KNOWLEDGE: Array<{ keywords: string[]; answer_en: string; answer_fr: 
   {
     keywords: ['automation', 'automations', 'workflow', 'reminder', 'auto'],
     answer_en: 'Go to **Settings → Automations** to manage automated workflows like appointment reminders, invoice payment reminders, quote follow-ups, and customer follow-ups. Each automation can be enabled/disabled and customized.',
-    answer_fr: 'Allez dans **Paramètres → Automatisations** pour gérer les workflows automatisés comme les rappels de rendez-vous, de paiement de factures, de suivi de soumissions et de clients.',
+    answer_fr: 'Allez dans **Paramètres → Automatisations** pour gérer les workflows automatisés comme les rappels de rendez-vous, de paiement de factures, de suivi de devis et de clients.',
   },
   {
     keywords: ['company', 'company settings', 'business info', 'company details'],
@@ -229,10 +229,10 @@ export default function HelpChat({ open, onClose }: { open: boolean; onClose: ()
                 </div>
                 <div>
                   <h3 className="text-[14px] font-bold text-text-primary">
-                    {language === 'fr' ? 'Assistant Lume' : 'Lume Assistant'}
+                    {t.helpChat.lumeAssistant}
                   </h3>
                   <p className="text-[10px] text-text-tertiary">
-                    {language === 'fr' ? 'Aide et support CRM' : 'CRM help & support'}
+                    {t.helpChat.crmHelpSupport}
                   </p>
                 </div>
               </div>
@@ -308,7 +308,7 @@ export default function HelpChat({ open, onClose }: { open: boolean; onClose: ()
                   className="space-y-1.5 pt-2"
                 >
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary px-1">
-                    {language === 'fr' ? 'Suggestions' : 'Quick questions'}
+                    {t.helpChat.quickQuestions}
                   </p>
                   {suggestions.map((s, i) => (
                     <button
@@ -334,7 +334,7 @@ export default function HelpChat({ open, onClose }: { open: boolean; onClose: ()
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                  placeholder={language === 'fr' ? 'Posez une question...' : 'Ask a question...'}
+                  placeholder={t.helpChat.askAQuestion}
                   className="glass-input flex-1 !py-2.5"
                   disabled={isTyping}
                 />

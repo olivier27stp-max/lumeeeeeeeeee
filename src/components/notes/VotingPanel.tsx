@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { X, ThumbsUp, Timer, Eye, EyeOff, Trophy, Play, Square } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../i18n';
 
 export interface Vote {
   itemId: string;
@@ -77,7 +78,7 @@ function VotingPanel({
         <div className="flex items-center gap-2">
           <ThumbsUp size={14} className="text-text-tertiary" />
           <span className="text-[12px] font-semibold text-text-primary">
-            {fr ? 'Vote' : 'Voting'}
+            {t.noteCanvas.voting}
           </span>
           {active && (
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -94,7 +95,7 @@ function VotingPanel({
           <>
             <div>
               <label className="text-[11px] font-medium text-text-secondary mb-1 block">
-                {fr ? 'Votes par personne' : 'Votes per person'}
+                {t.noteCanvas.votesPerPerson}
               </label>
               <input
                 type="number"
@@ -109,7 +110,7 @@ function VotingPanel({
             <div>
               <label className="text-[11px] font-medium text-text-secondary mb-1 block">
                 <Timer size={10} className="inline mr-1" />
-                {fr ? 'Duree (secondes)' : 'Duration (seconds)'}
+                {t.noteCanvas.durationSeconds}
               </label>
               <input
                 type="number"
@@ -130,7 +131,7 @@ function VotingPanel({
                 className="accent-blue-500"
               />
               {configAnonymous ? <EyeOff size={12} /> : <Eye size={12} />}
-              {fr ? 'Vote anonyme' : 'Anonymous voting'}
+              {t.noteCanvas.anonymousVoting}
             </label>
 
             <button
@@ -138,7 +139,7 @@ function VotingPanel({
               className="btn-primary w-full text-[12px] py-2 flex items-center justify-center gap-2"
             >
               <Play size={14} />
-              {fr ? 'Lancer le vote' : 'Start voting'}
+              {t.noteCanvas.startVoting}
             </button>
           </>
         ) : (
@@ -153,14 +154,14 @@ function VotingPanel({
                 {formatTime(timeLeft)}
               </div>
               <p className="text-[10px] text-text-tertiary mt-0.5">
-                {fr ? 'Cliquez sur les post-its pour voter' : 'Click sticky notes to vote'}
+                {t.noteCanvas.clickStickyNotesToVote}
               </p>
             </div>
 
             {/* My votes */}
             <div className="bg-surface-secondary rounded-lg p-2 text-center">
               <span className="text-[11px] text-text-secondary">
-                {fr ? 'Mes votes' : 'My votes'}: <strong>{myVoteCount}</strong> / {maxVotes}
+                {t.noteCanvas.myVotes}: <strong>{myVoteCount}</strong> / {maxVotes}
               </span>
               <div className="flex justify-center gap-1 mt-1">
                 {Array.from({ length: maxVotes }).map((_, i) => (
@@ -181,7 +182,7 @@ function VotingPanel({
             {topItems.length > 0 && (
               <div>
                 <p className="text-[10px] font-medium text-text-tertiary mb-1 flex items-center gap-1">
-                  <Trophy size={10} /> {fr ? 'Top votes' : 'Top voted'}
+                  <Trophy size={10} /> {t.noteCanvas.topVoted}
                 </p>
                 <div className="space-y-1">
                   {topItems.map(([itemId, count], idx) => (
@@ -205,7 +206,7 @@ function VotingPanel({
               className="w-full py-2 rounded-lg border border-red-300 text-red-500 text-[12px] font-medium hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
             >
               <Square size={12} />
-              {fr ? 'Arreter le vote' : 'End voting'}
+              {t.noteCanvas.endVoting}
             </button>
           </>
         )}

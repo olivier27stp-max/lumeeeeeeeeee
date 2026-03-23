@@ -194,13 +194,13 @@ export default function CompanySettings() {
     <div className="space-y-5">
       <PageHeader
         title={language === 'fr' ? 'Paramètres de l\'entreprise' : 'Company Settings'}
-        subtitle={language === 'fr' ? 'Informations utilisées pour les factures, devis et courriels' : 'Information used for invoices, quotes, and emails'}
+        subtitle={t.companySettings.informationUsedForInvoicesQuotesAndEmail}
         icon={Building}
         iconColor="cyan"
       >
         <button className="glass-button inline-flex items-center gap-1.5" onClick={() => navigate('/settings')}>
           <ArrowLeft size={14} />
-          {language === 'fr' ? 'Retour' : 'Back'}
+          {t.companySettings.back}
         </button>
       </PageHeader>
 
@@ -226,7 +226,7 @@ export default function CompanySettings() {
               </div>
               <div className="space-y-2">
                 <p className="text-[12px] text-text-secondary truncate max-w-[240px]">
-                  {language === 'fr' ? 'Logo actuel' : 'Current logo'}
+                  {t.companySettings.currentLogo}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
@@ -238,7 +238,7 @@ export default function CompanySettings() {
                     className="glass-button inline-flex items-center gap-1.5 text-[11px] !text-danger !border-danger/30 hover:!bg-danger/10"
                   >
                     <Trash2 size={11} />
-                    {language === 'fr' ? 'Supprimer' : 'Remove'}
+                    {t.companySettings.remove}
                   </button>
                 </div>
               </div>
@@ -278,7 +278,7 @@ export default function CompanySettings() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
-                <Phone size={10} /> {language === 'fr' ? 'Téléphone' : 'Phone Number'}
+                <Phone size={10} /> {t.companySettings.phoneNumber}
               </label>
               <input
                 type="tel"
@@ -290,7 +290,7 @@ export default function CompanySettings() {
             </div>
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
-                <Globe size={10} /> {language === 'fr' ? 'Site web' : 'Website URL'}
+                <Globe size={10} /> {t.companySettings.websiteUrl}
               </label>
               <input
                 type="url"
@@ -304,7 +304,7 @@ export default function CompanySettings() {
 
           <div>
             <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
-              <Mail size={10} /> {language === 'fr' ? 'Adresse courriel' : 'Email Address'}
+              <Mail size={10} /> {t.companySettings.emailAddress}
             </label>
             <input
               type="email"
@@ -319,12 +319,12 @@ export default function CompanySettings() {
         {/* Address */}
         <div className="section-card p-5 space-y-4">
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
-            <MapPin size={12} /> {language === 'fr' ? 'Adresse' : 'Address'}
+            <MapPin size={12} /> {t.billing.address}
           </h3>
 
           <div>
             <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-              {language === 'fr' ? 'Rue 1' : 'Street 1'}
+              {t.companySettings.street1}
             </label>
             <input
               type="text"
@@ -337,21 +337,21 @@ export default function CompanySettings() {
 
           <div>
             <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-              {language === 'fr' ? 'Rue 2' : 'Street 2'}
+              {t.companySettings.street2}
             </label>
             <input
               type="text"
               value={form.street2}
               onChange={(e) => update('street2', e.target.value)}
               className="glass-input w-full mt-1"
-              placeholder={language === 'fr' ? 'App., bureau, etc.' : 'Apt, suite, unit, etc.'}
+              placeholder={t.companySettings.aptSuiteUnitEtc}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {language === 'fr' ? 'Ville' : 'City'}
+                {t.billing.city}
               </label>
               <input
                 type="text"
@@ -362,7 +362,7 @@ export default function CompanySettings() {
             </div>
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {language === 'fr' ? 'Province / État' : 'Province / State'}
+                {t.companySettings.provinceState}
               </label>
               <input
                 type="text"
@@ -376,7 +376,7 @@ export default function CompanySettings() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {language === 'fr' ? 'Code postal' : 'Postal Code'}
+                {t.billing.postalCode}
               </label>
               <input
                 type="text"
@@ -387,7 +387,7 @@ export default function CompanySettings() {
             </div>
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {language === 'fr' ? 'Pays' : 'Country'}
+                {t.billing.country}
               </label>
               <input
                 type="text"
@@ -403,12 +403,12 @@ export default function CompanySettings() {
         {/* Google Reviews */}
         <div className="section-card p-5 space-y-4">
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
-            <Star size={12} /> {language === 'fr' ? 'Avis Google' : 'Google Reviews'}
+            <Star size={12} /> {t.companySettings.googleReviews}
           </h3>
 
           <div>
             <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
-              <ExternalLink size={10} /> {language === 'fr' ? 'Lien Google Review' : 'Google Review URL'}
+              <ExternalLink size={10} /> {t.companySettings.googleReviewUrl}
             </label>
             <input
               type="url"
@@ -478,20 +478,20 @@ export default function CompanySettings() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {language === 'fr' ? 'Thème' : 'Theme'}
+                {t.companySettings.theme}
               </label>
               <select
                 value={form.review_widget_settings.theme}
                 onChange={(e) => update('review_widget_settings', { ...form.review_widget_settings, theme: e.target.value as 'light' | 'dark' })}
                 className="glass-input w-full mt-1"
               >
-                <option value="light">{language === 'fr' ? 'Clair' : 'Light'}</option>
-                <option value="dark">{language === 'fr' ? 'Sombre' : 'Dark'}</option>
+                <option value="light">{t.companySettings.light}</option>
+                <option value="dark">{t.companySettings.dark}</option>
               </select>
             </div>
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {language === 'fr' ? 'Disposition' : 'Layout'}
+                {t.companySettings.layout}
               </label>
               <select
                 value={form.review_widget_settings.layout}
@@ -507,22 +507,22 @@ export default function CompanySettings() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {language === 'fr' ? 'Filtre' : 'Filter'}
+                {t.companySettings.filter}
               </label>
               <select
                 value={form.review_widget_settings.filter}
                 onChange={(e) => update('review_widget_settings', { ...form.review_widget_settings, filter: e.target.value })}
                 className="glass-input w-full mt-1"
               >
-                <option value="all">{language === 'fr' ? 'Tous' : 'All'}</option>
-                <option value="latest">{language === 'fr' ? 'Récents' : 'Latest'}</option>
-                <option value="highest">{language === 'fr' ? 'Meilleurs' : 'Highest'}</option>
-                <option value="4_stars_above">4+ {language === 'fr' ? 'étoiles' : 'stars'}</option>
+                <option value="all">{t.automations.all}</option>
+                <option value="latest">{t.companySettings.latest}</option>
+                <option value="highest">{t.companySettings.highest}</option>
+                <option value="4_stars_above">4+ {t.companySettings.stars}</option>
               </select>
             </div>
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {language === 'fr' ? 'Nombre max affiché' : 'Max displayed'}
+                {t.companySettings.maxDisplayed}
               </label>
               <input
                 type="number"
@@ -546,7 +546,7 @@ export default function CompanySettings() {
           )}
         >
           {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <Check size={13} /> : null}
-          {saving ? (language === 'fr' ? 'Enregistrement...' : 'Saving...') : saved ? (language === 'fr' ? 'Enregistré' : 'Saved') : (language === 'fr' ? 'Enregistrer' : 'Save Changes')}
+          {saving ? (t.billing.saving) : saved ? (t.companySettings.saved) : (t.companySettings.saveChanges)}
         </button>
       </motion.div>
     </div>

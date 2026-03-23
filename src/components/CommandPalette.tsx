@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Search, Plus, Users, Contact, Briefcase, FileText,
+  Search, Plus, Users, Contact, Briefcase, FileText, ClipboardList,
   Calendar, Kanban, Settings, MessageSquare, ArrowRight,
   CreditCard, TrendingUp, StickyNote, Zap, Receipt, UsersRound, CalendarDays,
 } from 'lucide-react';
@@ -15,6 +15,7 @@ import {
   SearchEntityItem, SearchEntityType, fetchSearchSuggestions,
 } from '../lib/globalSearchApi';
 import { getSearchItemHref } from '../lib/searchHelpers';
+import { useTranslation } from '../i18n';
 
 interface CommandItem {
   id: string;
@@ -34,15 +35,16 @@ interface CommandPaletteProps {
 
 const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
   client: Users, job: Briefcase, lead: Contact, invoice: Receipt,
-  quote: FileText, team: UsersRound, event: CalendarDays,
+  quote: FileText, request: ClipboardList, team: UsersRound, event: CalendarDays,
 };
 
 const ENTITY_SECTION_LABELS: Record<SearchEntityType, { en: string; fr: string }> = {
   client: { en: 'Clients', fr: 'Clients' },
   job: { en: 'Jobs', fr: 'Jobs' },
-  lead: { en: 'Leads', fr: 'Leads' },
+  lead: { en: 'Leads', fr: 'Prospects' },
   invoice: { en: 'Invoices', fr: 'Factures' },
   quote: { en: 'Quotes', fr: 'Devis' },
+  request: { en: 'Requests', fr: 'Demandes' },
   team: { en: 'Teams', fr: 'Equipes' },
   event: { en: 'Calendar', fr: 'Calendrier' },
 };
@@ -58,29 +60,29 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
 
   // Navigation commands
   const navCommands = useMemo((): CommandItem[] => [
-    { id: 'nav-dashboard', label: fr ? 'Accueil' : 'Dashboard', icon: Search, action: () => navigate('/dashboard'), section: fr ? 'Navigation' : 'Navigation', keywords: 'home accueil' },
-    { id: 'nav-leads', label: 'Leads', icon: Contact, action: () => navigate('/leads'), section: fr ? 'Navigation' : 'Navigation', keywords: 'prospects' },
-    { id: 'nav-pipeline', label: 'Pipeline', icon: Kanban, action: () => navigate('/pipeline'), section: fr ? 'Navigation' : 'Navigation', keywords: 'deals kanban' },
-    { id: 'nav-clients', label: 'Clients', icon: Users, action: () => navigate('/clients'), section: fr ? 'Navigation' : 'Navigation', keywords: 'customers' },
-    { id: 'nav-jobs', label: 'Jobs', icon: Briefcase, action: () => navigate('/jobs'), section: fr ? 'Navigation' : 'Navigation', keywords: 'travaux' },
-    { id: 'nav-calendar', label: fr ? 'Calendrier' : 'Calendar', icon: Calendar, action: () => navigate('/calendar'), section: fr ? 'Navigation' : 'Navigation', keywords: 'schedule horaire' },
-    { id: 'nav-invoices', label: fr ? 'Factures' : 'Invoices', icon: FileText, action: () => navigate('/invoices'), section: fr ? 'Navigation' : 'Navigation', keywords: 'bills' },
-    { id: 'nav-quotes', label: fr ? 'Devis' : 'Quotes', icon: FileText, action: () => navigate('/quotes'), section: fr ? 'Navigation' : 'Navigation', keywords: 'estimates' },
-    { id: 'nav-payments', label: fr ? 'Paiements' : 'Payments', icon: CreditCard, action: () => navigate('/payments'), section: fr ? 'Navigation' : 'Navigation' },
-    { id: 'nav-messages', label: 'Messages', icon: MessageSquare, action: () => navigate('/messages'), section: fr ? 'Navigation' : 'Navigation', keywords: 'sms text' },
-    { id: 'nav-insights', label: 'Insights', icon: TrendingUp, action: () => navigate('/insights'), section: fr ? 'Navigation' : 'Navigation', keywords: 'analytics stats' },
-    { id: 'nav-notes', label: 'Notes', icon: StickyNote, action: () => navigate('/notes'), section: fr ? 'Navigation' : 'Navigation', keywords: 'boards whiteboard' },
-    { id: 'nav-workflows', label: 'Workflows', icon: Zap, action: () => navigate('/workflows'), section: fr ? 'Navigation' : 'Navigation', keywords: 'automations' },
-    { id: 'nav-settings', label: fr ? 'Parametres' : 'Settings', icon: Settings, action: () => navigate('/settings'), section: fr ? 'Navigation' : 'Navigation' },
+    { id: 'nav-dashboard', label: t.commandPalette.dashboard, icon: Search, action: () => navigate('/dashboard'), section: t.commandPalette.navigation, keywords: 'home accueil' },
+    { id: 'nav-leads', label: t.clientDetails.quotes, icon: FileText, action: () => navigate('/leads'), section: t.commandPalette.navigation, keywords: 'prospects quotes devis' },
+    { id: 'nav-pipeline', label: 'Pipeline', icon: Kanban, action: () => navigate('/pipeline'), section: t.commandPalette.navigation, keywords: 'deals kanban' },
+    { id: 'nav-clients', label: 'Clients', icon: Users, action: () => navigate('/clients'), section: t.commandPalette.navigation, keywords: 'customers' },
+    { id: 'nav-jobs', label: 'Jobs', icon: Briefcase, action: () => navigate('/jobs'), section: t.commandPalette.navigation, keywords: 'travaux' },
+    { id: 'nav-calendar', label: t.commandPalette.calendar, icon: Calendar, action: () => navigate('/calendar'), section: t.commandPalette.navigation, keywords: 'schedule horaire' },
+    { id: 'nav-invoices', label: t.commandPalette.invoices, icon: FileText, action: () => navigate('/invoices'), section: t.commandPalette.navigation, keywords: 'bills' },
+    { id: 'nav-quotes', label: t.clientDetails.quotes, icon: FileText, action: () => navigate('/quotes'), section: t.commandPalette.navigation, keywords: 'estimates' },
+    { id: 'nav-payments', label: t.commandPalette.payments, icon: CreditCard, action: () => navigate('/payments'), section: t.commandPalette.navigation },
+    { id: 'nav-messages', label: 'Messages', icon: MessageSquare, action: () => navigate('/messages'), section: t.commandPalette.navigation, keywords: 'sms text' },
+    { id: 'nav-insights', label: 'Insights', icon: TrendingUp, action: () => navigate('/insights'), section: t.commandPalette.navigation, keywords: 'analytics stats' },
+    { id: 'nav-notes', label: 'Notes', icon: StickyNote, action: () => navigate('/notes'), section: t.commandPalette.navigation, keywords: 'boards whiteboard' },
+    { id: 'nav-workflows', label: 'Workflows', icon: Zap, action: () => navigate('/workflows'), section: t.commandPalette.navigation, keywords: 'automations' },
+    { id: 'nav-settings', label: t.commandPalette.settings, icon: Settings, action: () => navigate('/settings'), section: t.commandPalette.navigation },
   ], [fr, navigate]);
 
   const actionCommands = useMemo((): CommandItem[] => [
-    { id: 'act-new-lead', label: fr ? 'Creer un lead' : 'Create lead', icon: Plus, action: () => { navigate('/leads'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-lead')), 300); }, section: fr ? 'Actions' : 'Actions', keywords: 'add new prospect' },
-    { id: 'act-new-client', label: fr ? 'Creer un client' : 'Create client', icon: Plus, action: () => { navigate('/clients'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-client')), 300); }, section: fr ? 'Actions' : 'Actions', keywords: 'add new customer' },
-    { id: 'act-new-job', label: fr ? 'Creer une job' : 'Create job', icon: Plus, action: () => { navigate('/jobs'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-job')), 300); }, section: fr ? 'Actions' : 'Actions', keywords: 'add new travail' },
-    { id: 'act-new-invoice', label: fr ? 'Creer une facture' : 'Create invoice', icon: Plus, action: () => { navigate('/invoices'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-invoice')), 300); }, section: fr ? 'Actions' : 'Actions', keywords: 'add new bill' },
-    { id: 'act-new-quote', label: fr ? 'Creer un devis' : 'Create quote', icon: Plus, action: () => { navigate('/quotes'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-quote')), 300); }, section: fr ? 'Actions' : 'Actions', keywords: 'add new estimate' },
-    { id: 'act-new-deal', label: fr ? 'Creer un deal' : 'Create deal', icon: Plus, action: () => { navigate('/pipeline'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-deal')), 300); }, section: fr ? 'Actions' : 'Actions', keywords: 'add new' },
+    { id: 'act-new-lead', label: t.commandPalette.createQuote, icon: Plus, action: () => { navigate('/leads'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-lead')), 300); }, section: t.automations.actions, keywords: 'add new prospect quote devis' },
+    { id: 'act-new-client', label: t.commandPalette.createClient, icon: Plus, action: () => { navigate('/clients'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-client')), 300); }, section: t.automations.actions, keywords: 'add new customer' },
+    { id: 'act-new-job', label: t.commandPalette.createJob, icon: Plus, action: () => { navigate('/jobs'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-job')), 300); }, section: t.automations.actions, keywords: 'add new travail' },
+    { id: 'act-new-invoice', label: t.commandPalette.createInvoice, icon: Plus, action: () => { navigate('/invoices'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-invoice')), 300); }, section: t.automations.actions, keywords: 'add new bill' },
+    { id: 'act-new-quote', label: fr ? 'Creer un devis' : 'Create quote', icon: Plus, action: () => { navigate('/quotes'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-quote')), 300); }, section: t.automations.actions, keywords: 'add new estimate' },
+    { id: 'act-new-deal', label: t.commandPalette.createDeal, icon: Plus, action: () => { navigate('/pipeline'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-deal')), 300); }, section: t.automations.actions, keywords: 'add new' },
   ], [fr, navigate]);
 
   // Global search via shared API
@@ -203,7 +205,7 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={fr ? 'Chercher ou executer une commande...' : 'Search or run a command...'}
+              placeholder={t.commandPalette.searchOrRunACommand}
               className="flex-1 bg-transparent border-none outline-none text-[14px] text-text-primary placeholder:text-text-tertiary"
             />
             <kbd className="hidden sm:inline-flex px-1.5 py-0.5 rounded border border-outline text-[10px] text-text-tertiary font-mono">
@@ -214,7 +216,7 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
           <div ref={listRef} className="max-h-[50vh] overflow-y-auto py-1">
             {filtered.length === 0 && (
               <p className="text-center text-[13px] text-text-tertiary py-8">
-                {fr ? 'Aucun resultat' : 'No results'}
+                {t.commandPalette.noResults}
               </p>
             )}
             {sections.map(([section, items]) => (
@@ -253,9 +255,9 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
           </div>
 
           <div className="flex items-center gap-4 px-4 py-2 border-t border-outline text-[10px] text-text-tertiary">
-            <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded border border-outline font-mono">↑↓</kbd> {fr ? 'naviguer' : 'navigate'}</span>
-            <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded border border-outline font-mono">↵</kbd> {fr ? 'ouvrir' : 'open'}</span>
-            <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded border border-outline font-mono">esc</kbd> {fr ? 'fermer' : 'close'}</span>
+            <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded border border-outline font-mono">↑↓</kbd> {t.commandPalette.navigate}</span>
+            <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded border border-outline font-mono">↵</kbd> {t.commandPalette.open}</span>
+            <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded border border-outline font-mono">esc</kbd> {t.commandPalette.close}</span>
           </div>
         </motion.div>
       </div>

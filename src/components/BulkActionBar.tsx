@@ -6,6 +6,7 @@ import React, { memo } from 'react';
 import { motion } from 'motion/react';
 import { X } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useTranslation } from '../i18n';
 
 export interface BulkAction {
   id: string;
@@ -37,7 +38,7 @@ function BulkActionBar({ count, actions, onAction, onClear, language }: BulkActi
       <div className="pointer-events-auto flex items-center gap-2 bg-text-primary text-surface rounded-xl shadow-2xl px-4 py-2.5">
         {/* Count */}
         <span className="text-[13px] font-semibold tabular-nums mr-1">
-          {count} {fr ? 'selectionne' : 'selected'}{count > 1 ? 's' : ''}
+          {count} {t.bulkActions.selected}{count > 1 ? 's' : ''}
         </span>
 
         {/* Divider */}
@@ -69,7 +70,7 @@ function BulkActionBar({ count, actions, onAction, onClear, language }: BulkActi
         <button
           onClick={onClear}
           className="p-1.5 rounded-lg hover:bg-white/10 text-surface/60 transition-colors"
-          title={fr ? 'Deselectionner' : 'Clear selection'}
+          title={t.bulkActions.clearSelection}
         >
           <X size={14} />
         </button>

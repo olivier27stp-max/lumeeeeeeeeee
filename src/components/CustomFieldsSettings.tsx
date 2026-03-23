@@ -137,7 +137,7 @@ export default function CustomFieldsSettings() {
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <div>
             <h3 className="text-[14px] font-semibold text-text-primary">
-              {isFr ? 'Colonnes personnalisées' : 'Custom Columns'}
+              {t.customFields.customColumns}
               {' '}
               <span className="text-text-tertiary font-normal">— {isFr ? ENTITY_TABS.find((t) => t.key === entity)!.labelFr : ENTITY_TABS.find((t) => t.key === entity)!.label}</span>
             </h3>
@@ -152,7 +152,7 @@ export default function CustomFieldsSettings() {
             className="glass-button-primary inline-flex items-center gap-1.5 text-[13px]"
           >
             <Plus size={14} />
-            {isFr ? 'Ajouter colonne' : 'Add Column'}
+            {t.customFields.addColumn}
           </button>
         </div>
 
@@ -165,13 +165,13 @@ export default function CustomFieldsSettings() {
           <div className="py-12 text-center">
             <Settings size={28} className="text-text-tertiary mx-auto mb-3 opacity-30" />
             <p className="text-[13px] text-text-tertiary">
-              {isFr ? 'Aucune colonne personnalisée.' : 'No custom columns yet.'}
+              {t.customFields.noCustomColumnsYet}
             </p>
             <button
               onClick={() => setShowAddModal(true)}
               className="mt-3 text-[13px] font-medium text-primary hover:underline"
             >
-              {isFr ? 'Créer votre première colonne' : 'Create your first column'}
+              {t.customFields.createYourFirstColumn}
             </button>
           </div>
         ) : (
@@ -200,7 +200,7 @@ export default function CustomFieldsSettings() {
                       <p className="text-[13px] font-semibold text-text-primary truncate">{col.name}</p>
                       {col.required && (
                         <span className="text-[9px] font-bold uppercase tracking-wider text-red-500 bg-red-50 rounded px-1.5 py-0.5">
-                          {isFr ? 'Requis' : 'Required'}
+                          {t.customFields.required}
                         </span>
                       )}
                     </div>
@@ -212,7 +212,7 @@ export default function CustomFieldsSettings() {
                       {!col.visible && (
                         <span className="inline-flex items-center gap-0.5 text-[10px] text-text-tertiary/70">
                           <EyeOff size={10} />
-                          {isFr ? 'Masquée' : 'Hidden'}
+                          {t.customFields.hidden}
                         </span>
                       )}
                     </p>
@@ -226,21 +226,21 @@ export default function CustomFieldsSettings() {
                           ? 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'
                           : 'text-warning hover:text-warning hover:bg-warning/10'
                       )}
-                      title={col.visible ? (isFr ? 'Masquer' : 'Hide') : (isFr ? 'Afficher' : 'Show')}
+                      title={col.visible ? (t.customFields.hide) : (t.customFields.show)}
                     >
                       {col.visible ? <Eye size={14} /> : <EyeOff size={14} />}
                     </button>
                     <button
                       onClick={() => setEditingColumn(col)}
                       className="p-1.5 rounded-lg text-text-tertiary hover:text-primary hover:bg-primary/5 transition-colors"
-                      title={isFr ? 'Modifier' : 'Edit'}
+                      title={t.advancedNotes.edit}
                     >
                       <Pencil size={14} />
                     </button>
                     <button
                       onClick={() => handleDelete(col.id)}
                       className="p-1.5 rounded-lg text-text-tertiary hover:text-red-600 hover:bg-red-50 transition-colors"
-                      title={isFr ? 'Supprimer' : 'Delete'}
+                      title={t.advancedNotes.delete}
                     >
                       <Trash2 size={14} />
                     </button>
@@ -324,8 +324,8 @@ function AddColumnModal({
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <h3 className="text-[14px] font-semibold text-text-primary">
             {step === 'type'
-              ? (isFr ? 'Choisir le type de colonne' : 'Choose Column Type')
-              : (isFr ? 'Nommer la colonne' : 'Name Your Column')}
+              ? (t.customFields.chooseColumnType)
+              : (t.customFields.nameYourColumn)}
           </h3>
           <button onClick={onClose} className="p-1 rounded-md hover:bg-surface-secondary text-text-tertiary">
             <X size={16} />
@@ -363,14 +363,14 @@ function AddColumnModal({
           <div className="p-5 space-y-4">
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {isFr ? 'Nom de la colonne' : 'Column Name'}
+                {t.customFields.columnName}
               </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="glass-input w-full mt-1"
-                placeholder={isFr ? 'Ex: Priorité' : 'E.g. Priority'}
+                placeholder={t.customFields.egPriority}
                 autoFocus
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               />
@@ -380,7 +380,7 @@ function AddColumnModal({
                 onClick={() => setStep('type')}
                 className="glass-button text-[13px]"
               >
-                {isFr ? 'Retour' : 'Back'}
+                {t.companySettings.back}
               </button>
               <button
                 onClick={handleCreate}
@@ -388,7 +388,7 @@ function AddColumnModal({
                 className="glass-button-primary flex-1 inline-flex items-center justify-center gap-1.5 text-[13px]"
               >
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={14} />}
-                {saving ? (isFr ? 'Création...' : 'Creating...') : (isFr ? 'Créer la colonne' : 'Create Column')}
+                {saving ? (t.customFields.creating) : (t.customFields.createColumn)}
               </button>
             </div>
           </div>
@@ -489,7 +489,7 @@ function EditColumnModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border shrink-0">
           <h3 className="text-[14px] font-semibold text-text-primary">
-            {isFr ? 'Modifier la colonne' : 'Edit Column'}
+            {t.customFields.editColumn}
           </h3>
           <button onClick={onClose} className="p-1 rounded-md hover:bg-surface-secondary text-text-tertiary">
             <X size={16} />
@@ -500,7 +500,7 @@ function EditColumnModal({
           {/* Name */}
           <div>
             <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-              {isFr ? 'Nom' : 'Name'}
+              {t.customFields.name}
             </label>
             <input
               type="text"
@@ -513,7 +513,7 @@ function EditColumnModal({
           {/* Type (read-only) */}
           <div>
             <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-              {isFr ? 'Type' : 'Type'}
+              {t.customFields.type}
             </label>
             <div className="mt-1 flex items-center gap-2 px-3 py-2 rounded-md bg-surface-secondary text-[13px] text-text-secondary">
               {React.createElement(COL_TYPE_META[column.col_type as ColumnType]?.icon || Type, { size: 14 })}
@@ -523,7 +523,7 @@ function EditColumnModal({
 
           {/* Required toggle */}
           <div className="flex items-center justify-between">
-            <span className="text-[13px] text-text-primary">{isFr ? 'Requis' : 'Required'}</span>
+            <span className="text-[13px] text-text-primary">{t.customFields.required}</span>
             <button
               onClick={() => setRequired(!required)}
               className={cn(
@@ -542,7 +542,7 @@ function EditColumnModal({
           {isStatusType && (
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {isFr ? 'Options de statut' : 'Status Options'}
+                {t.customFields.statusOptions}
               </label>
               <div className="mt-2 space-y-1.5">
                 {(config.statuses || []).map((status, idx) => (
@@ -567,7 +567,7 @@ function EditColumnModal({
                     type="text"
                     value={newOptionValue}
                     onChange={(e) => setNewOptionValue(e.target.value)}
-                    placeholder={isFr ? 'Nouveau statut...' : 'New status...'}
+                    placeholder={t.customFields.newStatus}
                     className="glass-input flex-1 text-[13px]"
                     onKeyDown={(e) => e.key === 'Enter' && addStatusOption()}
                   />
@@ -587,7 +587,7 @@ function EditColumnModal({
           {isDropdownType && (
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {isFr ? 'Options' : 'Options'}
+                {t.customFields.options}
               </label>
               <div className="mt-2 space-y-1.5">
                 {(config.options || []).map((opt, idx) => (
@@ -606,7 +606,7 @@ function EditColumnModal({
                     type="text"
                     value={newOptionValue}
                     onChange={(e) => setNewOptionValue(e.target.value)}
-                    placeholder={isFr ? 'Nouvelle option...' : 'New option...'}
+                    placeholder={t.customFields.newOption}
                     className="glass-input flex-1 text-[13px]"
                     onKeyDown={(e) => e.key === 'Enter' && addDropdownOption()}
                   />
@@ -626,7 +626,7 @@ function EditColumnModal({
           {column.col_type === 'currency' && (
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {isFr ? 'Code devise' : 'Currency Code'}
+                {t.customFields.currencyCode}
               </label>
               <select
                 value={config.currency_code || 'CAD'}
@@ -645,7 +645,7 @@ function EditColumnModal({
           {column.col_type === 'rating' && (
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {isFr ? 'Note maximale' : 'Max Rating'}
+                {t.customFields.maxRating}
               </label>
               <select
                 value={config.max_rating || 5}
@@ -663,7 +663,7 @@ function EditColumnModal({
         {/* Footer */}
         <div className="px-5 py-3.5 border-t border-border flex items-center gap-2 shrink-0">
           <button onClick={onClose} className="glass-button text-[13px]">
-            {isFr ? 'Annuler' : 'Cancel'}
+            {t.advancedNotes.cancel}
           </button>
           <button
             onClick={handleSave}
@@ -671,7 +671,7 @@ function EditColumnModal({
             className="glass-button-primary flex-1 inline-flex items-center justify-center gap-1.5 text-[13px]"
           >
             {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={14} />}
-            {saving ? (isFr ? 'Enregistrement...' : 'Saving...') : (isFr ? 'Enregistrer' : 'Save')}
+            {saving ? (t.billing.saving) : (t.customFields.save)}
           </button>
         </div>
       </motion.div>

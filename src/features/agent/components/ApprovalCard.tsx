@@ -4,6 +4,7 @@ import { ShieldCheck, X, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import MrLumeAvatar from './MrLumeAvatar';
 import { agentApprove } from '../lib/agentApi';
 import type { ApprovalRequest } from '../types';
+import { useTranslation } from '../i18n';
 
 interface ApprovalCardProps {
   data: ApprovalRequest;
@@ -26,7 +27,7 @@ export default function ApprovalCard({ data, language, onResolved }: ApprovalCar
       if (decision === 'approve') {
         if (res.ok) {
           setStatus('approved');
-          setResult(res.result?.summary || (fr ? 'Action exécutée' : 'Action executed'));
+          setResult(res.result?.summary || (t.agent.actionExecuted));
         } else {
           setStatus('pending'); // Revert — approval failed server-side
         }
@@ -65,7 +66,7 @@ export default function ApprovalCard({ data, language, onResolved }: ApprovalCar
           <div className="flex items-center gap-2 mb-3">
             <ShieldCheck size={14} className="text-text-tertiary" />
             <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-              {fr ? 'Validation requise' : 'Approval Required'}
+              {t.agent.approvalRequired}
             </span>
           </div>
 
@@ -77,12 +78,12 @@ export default function ApprovalCard({ data, language, onResolved }: ApprovalCar
           {/* Action details */}
           <div className="rounded-md bg-surface-secondary p-2.5 mb-3">
             <p className="text-[10px] font-medium text-text-tertiary mb-1">
-              {fr ? 'Action proposée' : 'Proposed action'}
+              {t.agent.proposedAction}
             </p>
             <p className="text-xs font-medium text-text-primary">{data.actionType}</p>
             {data.expiresAt && (
               <p className="text-[10px] text-text-tertiary mt-1">
-                {fr ? 'Expire' : 'Expires'}: {new Date(data.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                {t.agent.expires}: {new Date(data.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
               </p>
             )}
           </div>
@@ -94,14 +95,14 @@ export default function ApprovalCard({ data, language, onResolved }: ApprovalCar
                 <>
                   <CheckCircle2 size={14} className="text-green-500" />
                   <span className="text-xs font-medium text-green-600 dark:text-green-400">
-                    {result || (fr ? 'Approuvé' : 'Approved')}
+                    {result || (t.agent.approved)}
                   </span>
                 </>
               ) : (
                 <>
                   <XCircle size={14} className="text-red-400" />
                   <span className="text-xs font-medium text-red-500 dark:text-red-400">
-                    {fr ? 'Rejeté' : 'Rejected'}
+                    {t.agent.rejected}
                   </span>
                 </>
               )}
@@ -118,7 +119,7 @@ export default function ApprovalCard({ data, language, onResolved }: ApprovalCar
                 ) : (
                   <CheckCircle2 size={12} />
                 )}
-                {fr ? 'Approuver' : 'Approve'}
+                {t.agent.approve}
               </button>
               <button
                 onClick={() => handleDecision('reject')}
@@ -126,7 +127,7 @@ export default function ApprovalCard({ data, language, onResolved }: ApprovalCar
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-outline-subtle text-text-secondary text-xs font-medium hover:border-outline hover:text-text-primary transition-all disabled:opacity-50"
               >
                 <X size={12} />
-                {fr ? 'Rejeter' : 'Reject'}
+                {t.agent.reject}
               </button>
             </div>
           )}

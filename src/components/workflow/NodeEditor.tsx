@@ -5,6 +5,7 @@ import {
 import { cn } from '../../lib/utils';
 import { ACTION_DEFS, TRIGGER_DEFS, type ActionType, type TriggerType } from '../../lib/workflowApi';
 import type { Node } from '@xyflow/react';
+import { useTranslation } from '../i18n';
 
 interface NodeEditorProps {
   node: Node | null;
@@ -95,7 +96,7 @@ export default function NodeEditor({ node, onUpdate, onDelete, onClose, fr }: No
         {/* Label */}
         <div>
           <label className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary block mb-1.5">
-            {fr ? 'Nom' : 'Label'}
+            {t.workflows.label}
           </label>
           <input
             type="text"
@@ -109,7 +110,7 @@ export default function NodeEditor({ node, onUpdate, onDelete, onClose, fr }: No
         {nodeType === 'trigger' && (
           <div>
             <label className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary block mb-1.5">
-              {fr ? 'Type de déclencheur' : 'Trigger Type'}
+              {t.workflows.triggerType}
             </label>
             <select
               value={localData.trigger_type || ''}
@@ -128,7 +129,7 @@ export default function NodeEditor({ node, onUpdate, onDelete, onClose, fr }: No
           <>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary block mb-1.5">
-                {fr ? 'Durée' : 'Duration'}
+                {t.workflows.duration}
               </label>
               <div className="flex gap-2">
                 <input
@@ -158,7 +159,7 @@ export default function NodeEditor({ node, onUpdate, onDelete, onClose, fr }: No
           <>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary block mb-1.5">
-                {fr ? 'Opérateur' : 'Operator'}
+                {t.workflows.operator}
               </label>
               <div className="flex gap-1.5">
                 {['AND', 'OR'].map((op) => (
@@ -181,11 +182,11 @@ export default function NodeEditor({ node, onUpdate, onDelete, onClose, fr }: No
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                  {fr ? 'Conditions' : 'Conditions'}
+                  {t.workflows.conditions}
                 </label>
                 <button onClick={addCondition} className="text-[10px] text-primary font-semibold flex items-center gap-0.5 hover:underline">
                   <Plus size={10} />
-                  {fr ? 'Ajouter' : 'Add'}
+                  {t.workflows.add}
                 </button>
               </div>
 
@@ -202,7 +203,7 @@ export default function NodeEditor({ node, onUpdate, onDelete, onClose, fr }: No
                       type="text"
                       value={cond.field || ''}
                       onChange={(e) => handleConditionChange(idx, 'field', e.target.value)}
-                      placeholder={fr ? 'Champ' : 'Field'}
+                      placeholder={t.workflows.field}
                       className="glass-input w-full text-[11px] py-1"
                     />
                     <select
@@ -219,14 +220,14 @@ export default function NodeEditor({ node, onUpdate, onDelete, onClose, fr }: No
                         type="text"
                         value={cond.value || ''}
                         onChange={(e) => handleConditionChange(idx, 'value', e.target.value)}
-                        placeholder={fr ? 'Valeur' : 'Value'}
+                        placeholder={t.modals.value}
                         className="glass-input w-full text-[11px] py-1"
                       />
                     )}
                   </div>
                 ))}
                 {(localData.conditions || []).length === 0 && (
-                  <p className="text-[10px] text-text-tertiary text-center py-3">{fr ? 'Aucune condition' : 'No conditions yet'}</p>
+                  <p className="text-[10px] text-text-tertiary text-center py-3">{t.workflows.noConditionsYet}</p>
                 )}
               </div>
             </div>
@@ -270,7 +271,7 @@ export default function NodeEditor({ node, onUpdate, onDelete, onClose, fr }: No
             className="w-full text-[11px] font-medium text-danger hover:bg-danger/5 rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5"
           >
             <Trash2 size={12} />
-            {fr ? 'Supprimer ce nœud' : 'Delete this node'}
+            {t.workflows.deleteThisNode}
           </button>
         </div>
       )}

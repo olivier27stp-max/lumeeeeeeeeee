@@ -3,6 +3,7 @@
 import React, { useCallback, memo } from 'react';
 import { ChevronLeft, ChevronRight, X, Maximize2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../i18n';
 
 interface FrameInfo {
   id: string;
@@ -38,7 +39,7 @@ function PresentationMode({ frames, currentIndex, language, onNavigate, onExit }
         <div className="bg-surface rounded-xl p-6 text-center max-w-sm">
           <Maximize2 size={32} className="mx-auto text-text-tertiary mb-3" />
           <p className="text-[14px] text-text-primary font-semibold mb-2">
-            {fr ? 'Aucun frame trouve' : 'No frames found'}
+            {t.noteCanvas.noFramesFound}
           </p>
           <p className="text-[12px] text-text-secondary mb-4">
             {fr
@@ -46,7 +47,7 @@ function PresentationMode({ frames, currentIndex, language, onNavigate, onExit }
               : 'Add frames to the canvas to use presentation mode.'}
           </p>
           <button onClick={onExit} className="btn-primary text-[12px] px-4 py-2">
-            {fr ? 'Fermer' : 'Close'}
+            {t.noteCanvas.close}
           </button>
         </div>
       </div>
@@ -118,7 +119,7 @@ function PresentationMode({ frames, currentIndex, language, onNavigate, onExit }
           <button
             onClick={onExit}
             className="p-2 rounded-lg text-text-tertiary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-            title={fr ? 'Quitter' : 'Exit'}
+            title={t.noteCanvas.exit}
           >
             <X size={16} />
           </button>

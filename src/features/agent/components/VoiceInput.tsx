@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { Mic, MicOff } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 interface VoiceInputProps {
   onTranscript: (text: string) => void;
@@ -45,7 +46,7 @@ export default function VoiceInput({ onTranscript, language, disabled = false }:
     if (!SpeechRecognitionAPI) return;
 
     const recognition = new SpeechRecognitionAPI();
-    recognition.lang = language === 'fr' ? 'fr-CA' : 'en-CA';
+    recognition.lang = t.agent.enca;
     recognition.interimResults = false;
     recognition.continuous = false;
     recognition.maxAlternatives = 1;
@@ -65,11 +66,11 @@ export default function VoiceInput({ onTranscript, language, disabled = false }:
       recognitionRef.current = null;
       const errType = e?.error || 'unknown';
       if (errType === 'not-allowed') {
-        setError(language === 'fr' ? 'Micro refusé' : 'Mic denied');
+        setError(t.agent.micDenied);
       } else if (errType === 'no-speech') {
-        setError(language === 'fr' ? 'Aucune voix détectée' : 'No speech detected');
+        setError(t.agent.noSpeechDetected);
       } else {
-        setError(language === 'fr' ? 'Erreur micro' : 'Mic error');
+        setError(t.agent.micError);
       }
       setTimeout(() => setError(null), 3000);
     };
