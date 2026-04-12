@@ -13,7 +13,7 @@ import {
 import { cn } from '../../lib/utils';
 import { STICKY_COLORS } from '../../types/noteBoard';
 import type { NoteItemType, ShapeType } from '../../types/noteBoard';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 export type ToolType = 'select' | 'connector' | 'draw' | NoteItemType;
 
@@ -40,6 +40,7 @@ export default function CanvasToolbar({
   onDelete, onDuplicate, onToggleLock,
   hasSelection, isLocked, language,
 }: CanvasToolbarProps) {
+  const { t } = useTranslation();
   const [showColors, setShowColors] = useState(false);
   const [showShapes, setShowShapes] = useState(false);
 
@@ -95,7 +96,7 @@ export default function CanvasToolbar({
               }}
               className={cn(
                 'p-2 rounded-lg transition-all text-text-tertiary hover:text-text-primary hover:bg-surface-secondary',
-                activeTool === tool.id && 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
+                activeTool === tool.id && 'bg-primary/10 text-text-primary',
               )}
               title={language === 'fr' ? tool.labelFr : tool.label}
             >

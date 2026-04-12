@@ -69,10 +69,10 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
           : [emptyLineItem()]
       );
       setTaxes(
-        template.taxes.map((t) => ({
+        template.taxes.map((tx) => ({
           id: crypto.randomUUID(),
-          name: t.name,
-          rate: t.rate,
+          name: tx.name,
+          rate: tx.rate,
         }))
       );
       setPaymentTerms(template.payment_terms);
@@ -102,11 +102,11 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
   }
 
   function updateTax(id: string, patch: Partial<TaxForm>) {
-    setTaxes((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    setTaxes((prev) => prev.map((tx) => (tx.id === id ? { ...tx, ...patch } : tx)));
   }
 
   function removeTax(id: string) {
-    setTaxes((prev) => prev.filter((t) => t.id !== id));
+    setTaxes((prev) => prev.filter((tx) => tx.id !== id));
   }
 
   async function handleSubmit() {
@@ -129,10 +129,10 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
             unit_price_cents: Math.round((Number(li.unit_price) || 0) * 100),
           })),
         taxes: taxes
-          .filter((t) => t.name.trim())
-          .map((t) => ({
-            name: t.name.trim(),
-            rate: Number(t.rate) || 0,
+          .filter((tx) => tx.name.trim())
+          .map((tx) => ({
+            name: tx.name.trim(),
+            rate: Number(tx.rate) || 0,
           })),
         payment_terms: paymentTerms.trim(),
         client_note: clientNote.trim(),

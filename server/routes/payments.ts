@@ -48,6 +48,7 @@ import {
   markWebhookEventProcessed,
   updatePaymentRequestStatus as updatePayReqStatus,
 } from '../lib/stripe-connect';
+import { logSecurityEvent, extractIP } from '../lib/security';
 
 const router = Router();
 
@@ -62,12 +63,48 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
 
     const signature = req.header('stripe-signature');
     if (!signature) {
+      logSecurityEvent({
+        event_type: 'stripe_webhook_missing_signature',
+        severity: 'high',
+        source: 'webhook',
+        ip_address: extractIP(req),
+        user_agent: req.headers['user-agent'],
+        details: { path: '/api/webhooks/stripe' },
+      });
       res.status(400).json({ error: 'Missing Stripe signature header.' });
       return;
     }
 
     const rawBody = req.body instanceof Buffer ? req.body : Buffer.from('');
-    const event = stripeWebhookClient.webhooks.constructEvent(rawBody, signature, stripeWebhookSecret);
+    let event: Stripe.Event;
+    try {
+      event = stripeWebhookClient.webhooks.constructEvent(rawBody, signature, stripeWebhookSecret);
+    } catch (sigErr: any) {
+      logSecurityEvent({
+        event_type: 'stripe_webhook_invalid_signature',
+        severity: 'critical',
+        source: 'webhook',
+        ip_address: extractIP(req),
+        user_agent: req.headers['user-agent'],
+        details: { error: sigErr?.message, path: '/api/webhooks/stripe' },
+      });
+      res.status(400).json({ error: 'Invalid Stripe signature.' });
+      return;
+    }
+
+    // Reject events older than 5 minutes (anti-replay)
+    const eventAge = Math.floor(Date.now() / 1000) - event.created;
+    if (eventAge > 300) {
+      logSecurityEvent({
+        event_type: 'stripe_webhook_stale_event',
+        severity: 'medium',
+        source: 'webhook',
+        ip_address: extractIP(req),
+        details: { event_id: event.id, event_type: event.type, age_seconds: eventAge },
+      });
+      res.json({ received: true, note: 'stale_event_ignored' });
+      return;
+    }
 
     // Log webhook event for auditing & idempotency
     const connectAccountId = (event as any).account || null;
@@ -156,11 +193,12 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         const quoteId = String((intent.metadata as any)?.quote_id || '').trim();
         if (entityType === 'quote_deposit' && quoteId) {
           const admin = getServiceClient();
-          // Mark quote deposit as paid
-          await admin.from('quotes').update({
-            deposit_status: 'paid',
-            updated_at: new Date().toISOString(),
-          }).eq('id', quoteId);
+          const webhookOrgId = String((intent.metadata as any)?.org_id || '').trim();
+          // Mark quote deposit as paid — scoped to org for safety
+          const quoteUpdate: Record<string, any> = { deposit_status: 'paid', updated_at: new Date().toISOString() };
+          let qb = admin.from('quotes').update(quoteUpdate).eq('id', quoteId);
+          if (webhookOrgId) qb = qb.eq('org_id', webhookOrgId);
+          await qb;
 
           // Mark payment_requirement as paid
           const payReqId = String((intent.metadata as any)?.payment_requirement_id || '').trim();
@@ -231,7 +269,8 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
 
     res.json({ received: true });
   } catch (error: any) {
-    res.status(400).json({ error: error?.message || 'Stripe webhook handling failed.' });
+    console.error('[webhook] signature verification failed:', error?.message);
+    res.status(400).json({ error: 'Webhook signature verification failed.' });
   }
 };
 

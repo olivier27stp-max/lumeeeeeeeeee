@@ -46,6 +46,10 @@ export const softDeleteLeadSchema = z.object({
   orgId: optionalOrgId,
 });
 
+export const softDeleteClientSchema = z.object({
+  clientId: z.string().trim().min(1, 'clientId is required.'),
+});
+
 export const softDeleteDealSchema = z.object({
   dealId: z.string().trim().min(1, 'dealId is required.'),
   alsoDeleteLead: z.boolean().optional().default(false),

@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabase } from '../supabase';
+import { getCurrentOrgIdOrThrow } from '../orgApi';
 import { getTopPerformingPrompts, getAnalyticsSummary, listStyleDna, type StyleDnaRecord } from '../directorApi';
 
 export interface PromptPerformance {
@@ -55,7 +56,9 @@ export async function loadLiaContext(): Promise<LiaContext> {
   };
 
   try {
-    // All queries run in parallel for speed
+    const orgId = await getCurrentOrgIdOrThrow();
+
+    // All queries run in parallel for speed — scoped to current org
     const [
       companyRes,
       clientsRes,
@@ -70,27 +73,27 @@ export async function loadLiaContext(): Promise<LiaContext> {
       styleDnaRes,
     ] = await Promise.allSettled([
       // Company info
-      supabase.from('company_settings').select('company_name,phone,website,industry').limit(1).maybeSingle(),
+      supabase.from('company_settings').select('company_name,phone,website,industry').eq('org_id', orgId).limit(1).maybeSingle(),
       // Top clients
-      supabase.from('clients_active').select('first_name,last_name,company').order('created_at', { ascending: false }).limit(10),
+      supabase.from('clients').select('first_name,last_name,company').eq('org_id', orgId).is('deleted_at', null).order('created_at', { ascending: false }).limit(10),
       // Recent leads
-      supabase.from('leads_active').select('first_name,last_name,company,stage').order('created_at', { ascending: false }).limit(10),
+      supabase.from('leads_active').select('first_name,last_name,company,stage').eq('org_id', orgId).order('created_at', { ascending: false }).limit(10),
       // Active jobs count + revenue
-      supabase.from('jobs_active').select('status,total_cents').limit(500),
+      supabase.from('jobs_active').select('status,total_cents').eq('org_id', orgId).limit(500),
       // Pipeline summary
-      supabase.from('pipeline_deals').select('stage,value').is('deleted_at', null).limit(200),
+      supabase.from('pipeline_deals').select('stage,value').eq('org_id', orgId).is('deleted_at', null).limit(200),
       // Teams
-      supabase.from('teams').select('name').is('deleted_at', null).order('name').limit(20),
+      supabase.from('teams').select('name').eq('org_id', orgId).is('deleted_at', null).order('name').limit(20),
       // Recent generations
-      supabase.from('director_generations').select('title,output_type,model,prompt,created_at').is('deleted_at', null).order('created_at', { ascending: false }).limit(5),
+      supabase.from('director_generations').select('title,output_type,model,prompt,created_at').eq('org_id', orgId).is('deleted_at', null).order('created_at', { ascending: false }).limit(5),
       // Credits
-      supabase.from('org_credit_balances').select('credits_balance').limit(1).maybeSingle(),
+      supabase.from('org_credit_balances').select('credits_balance').eq('org_id', orgId).limit(1).maybeSingle(),
       // Top performing prompts
-      getTopPerformingPrompts('').catch(() => []),
+      getTopPerformingPrompts(orgId).catch(() => []),
       // Analytics summary
-      getAnalyticsSummary('').catch(() => ({ totalGenerations: 0, totalDownloads: 0, totalReuses: 0, favoriteCount: 0, topModel: null })),
+      getAnalyticsSummary(orgId).catch(() => ({ totalGenerations: 0, totalDownloads: 0, totalReuses: 0, favoriteCount: 0, topModel: null })),
       // Style DNA
-      listStyleDna('').catch(() => []),
+      listStyleDna(orgId).catch(() => []),
     ]);
 
     // Company

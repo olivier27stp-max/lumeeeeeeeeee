@@ -33,13 +33,22 @@ export const STAGE_LABEL_MAP: Record<string, PipelineStageName> = {
   quote_sent: 'Quote Sent',
   closed_won: 'Closed Won',
   closed_lost: 'Closed Lost',
-  // Legacy mappings
+  // Legacy slug mappings
   new: 'New Prospect',
   follow_up_1: 'No Response',
   follow_up_2: 'Quote Sent',
   follow_up_3: 'Quote Sent',
   closed: 'Closed Won',
   lost: 'Closed Lost',
+  contacted: 'No Response',
+  estimate_sent: 'Quote Sent',
+  follow_up: 'No Response',
+  won: 'Closed Won',
+  archived: 'Closed Lost',
+  qualified: 'New Prospect',
+  lead: 'New Prospect',
+  proposal: 'No Response',
+  negotiation: 'Quote Sent',
 };
 
 /** Display label → DB slug */
@@ -49,7 +58,30 @@ export const STAGE_DB_MAP: Record<string, string> = {
   'Quote Sent': 'quote_sent',
   'Closed Won': 'closed_won',
   'Closed Lost': 'closed_lost',
+  // Legacy label mappings
+  New: 'new_prospect',
+  'Follow-up 1': 'no_response',
+  'Follow-up 2': 'quote_sent',
+  'Follow-up 3': 'quote_sent',
+  Closed: 'closed_won',
+  Lost: 'closed_lost',
+  Contacted: 'no_response',
+  'Estimate Sent': 'quote_sent',
+  'Follow-Up': 'no_response',
+  Won: 'closed_won',
+  Archived: 'closed_lost',
+  Lead: 'new_prospect',
+  Qualified: 'new_prospect',
+  Proposal: 'no_response',
+  Negotiation: 'quote_sent',
 };
+/** All valid DB-level status slugs (canonical + legacy) */
+export const ALL_STAGE_SLUGS = [
+  'new_prospect', 'no_response', 'quote_sent', 'closed_won', 'closed_lost',
+  'new', 'follow_up_1', 'follow_up_2', 'follow_up_3', 'closed', 'lost',
+] as const;
+export type StageSlug = (typeof ALL_STAGE_SLUGS)[number];
+
 export const ALLOW_CREATE_ANOTHER_JOB = false;
 
 export interface PipelineDeal {
@@ -465,9 +497,7 @@ export async function getAvailableSlots(params: {
   slotMinutes?: number;
   timezone?: string;
 }): Promise<AvailabilitySlot[]> {
-  const { data: orgId, error: orgError } = await supabase.rpc('current_org_id');
-  if (orgError) throw orgError;
-  if (!orgId) throw new Error('No organization context found.');
+  const orgId = await getCurrentOrgIdOrThrow();
 
   const startDate = new Date().toISOString().slice(0, 10);
   const { data, error } = await supabase.rpc('get_available_slots', {
@@ -525,9 +555,7 @@ export async function deleteLeadAndOptionalClient(params: {
   job_intents: number;
   client_deleted: number;
 }> {
-  const { data: orgId, error: orgError } = await supabase.rpc('current_org_id');
-  if (orgError) throw orgError;
-  if (!orgId) throw new Error('No organization context found.');
+  const orgId = await getCurrentOrgIdOrThrow();
 
   const { data, error } = await supabase.rpc('delete_lead_and_optional_client', {
     p_org_id: orgId,

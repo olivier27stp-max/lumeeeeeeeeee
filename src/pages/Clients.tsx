@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, Archive, ChevronLeft, ChevronRight, Upload, MoreHorizontal, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
+import BatchMessageModal from '../components/BatchMessageModal';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
@@ -19,10 +20,10 @@ import {
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import type { StructuredAddress } from '../components/AddressAutocomplete';
 import { supabase } from '../lib/supabase';
-import { PageHeader, StatusBadge, StatCard } from '../components/ui';
-import FilterBar, { FilterSelect } from '../components/ui/FilterBar';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useTranslation } from '../i18n';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 
 type ClientSort = 'recent' | 'oldest' | 'name_asc' | 'name_desc';
 
@@ -69,7 +70,7 @@ const EMPTY_FORM: ClientFormState = {
 export default function Clients() {
   const navigate = useNavigate();
   const { id: clientIdFromRoute } = useParams();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [items, setItems] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -93,9 +94,9 @@ export default function Clients() {
   const [isDeletingClient, setIsDeletingClient] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBatchArchiving, setIsBatchArchiving] = useState(false);
+  const [showBatchMessage, setShowBatchMessage] = useState(false);
   const [addressDuplicateWarning, setAddressDuplicateWarning] = useState<string | null>(null);
 
-  const totalColSpan = 7;
 
   // Escape key closes drawers/modals
   useEscapeKey(() => {
@@ -208,19 +209,89 @@ export default function Clients() {
     void loadClientJobs(selected.id);
   }, [selected?.id]);
 
+  async function computeClientStatus(clientId: string): Promise<'active' | 'lead' | 'inactive'> {
+    const orgId = await getCurrentOrgIdOrThrow();
+    // Check jobs for this client
+    const { data: jobs } = await supabase
+      .from('jobs')
+      .select('id,status')
+      .eq('org_id', orgId)
+      .eq('client_id', clientId)
+      .is('deleted_at', null)
+      .limit(5);
+
+    if (jobs && jobs.length > 0) {
+      return 'active';
+    }
+
+    // Check quotes for this client
+    const { data: quotes } = await supabase
+      .from('quotes')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('client_id', clientId)
+      .is('deleted_at', null)
+      .limit(1);
+
+    if (quotes && quotes.length > 0) {
+      return 'lead';
+    }
+
+    return 'inactive';
+  }
+
   async function loadClients() {
     setLoading(true);
     setError(null);
     try {
+      // Fetch without status filter first if we need to compute statuses
+      const fetchStatus = statusFilter !== 'All' ? undefined : undefined;
       const res = await listClients({
         page,
         pageSize,
-        status: statusFilter,
+        status: 'All',
         q: debouncedSearch,
         sort: sortBy,
       });
-      setItems(res.items);
-      setTotal(res.total);
+
+      // Compute status for each client based on quotes/jobs
+      const clientIds = res.items.map(c => c.id);
+
+      // Batch fetch: all jobs and quotes for these clients (scoped to current org)
+      const orgId = await getCurrentOrgIdOrThrow();
+      const [jobsRes, quotesRes] = await Promise.all([
+        supabase.from('jobs').select('client_id').eq('org_id', orgId).in('client_id', clientIds).is('deleted_at', null),
+        supabase.from('quotes').select('client_id').eq('org_id', orgId).in('client_id', clientIds).is('deleted_at', null),
+      ]);
+
+      const clientsWithJobs = new Set((jobsRes.data || []).map(j => j.client_id));
+      const clientsWithQuotes = new Set((quotesRes.data || []).map(q => q.client_id));
+
+      const enriched = res.items.map(c => {
+        let computed: string;
+        if (clientsWithJobs.has(c.id)) {
+          computed = 'active';
+        } else if (clientsWithQuotes.has(c.id)) {
+          computed = 'lead';
+        } else {
+          computed = 'inactive';
+        }
+
+        // Update DB if status changed (fire-and-forget)
+        if (c.status !== computed) {
+          supabase.from('clients').update({ status: computed }).eq('id', c.id).then(() => {});
+        }
+
+        return { ...c, status: computed };
+      });
+
+      // Apply status filter client-side
+      const filtered = statusFilter === 'All'
+        ? enriched
+        : enriched.filter(c => c.status === statusFilter);
+
+      setItems(filtered);
+      setTotal(statusFilter === 'All' ? res.total : filtered.length);
     } catch (err: any) {
       setError(err?.message || t.clients.failedCreate);
     } finally {
@@ -291,7 +362,7 @@ export default function Clients() {
       setIsCreateOpen(false);
       setForm(EMPTY_FORM);
       await loadClients();
-      toast.success(t.clients.clientCreated);
+      toast.success(t.clients.clientCreated, { action: { label: 'Create Job', onClick: () => window.dispatchEvent(new CustomEvent('crm:open-new-job')) } });
     } catch (err: any) {
       setSaveError(err?.message || t.clients.failedCreate);
       toast.error(err?.message || t.clients.failedCreate);
@@ -365,7 +436,8 @@ export default function Clients() {
   const kpis = useMemo(() => {
     const active = items.filter((item) => item.status === 'active').length;
     const leads = items.filter((item) => item.status === 'lead').length;
-    return { active, leads, total: items.length };
+    const inactive = items.filter((item) => item.status === 'inactive').length;
+    return { active, leads, inactive, total: items.length };
   }, [items]);
 
   const handleImportCsv = () => {
@@ -421,183 +493,197 @@ export default function Clients() {
     label: s === 'All' ? t.common.allStatuses : s === 'active' ? t.clients.statusActive : s === 'lead' ? t.clients.statusLead : t.clients.statusInactive,
   }));
 
-  return (
-    <div className="space-y-5">
-      <PageHeader title={t.clients.title} subtitle={`${total} ${t.common.total}`}>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleImportCsv}
-            className="glass-button inline-flex items-center gap-1.5"
-          >
-            <Upload size={14} />
-            {t.clients.importCsv}
-          </button>
-          <button
-            onClick={() => {
-              setForm(EMPTY_FORM);
-              setSaveError(null);
-              setAddressDuplicateWarning(null);
-              setIsCreateOpen(true);
-            }}
-            className="glass-button-primary inline-flex items-center gap-1.5"
-          >
-            <Plus size={15} /> {t.clients.newClient}
-          </button>
-        </div>
-      </PageHeader>
+  const fr = language === 'fr';
 
-      {/* KPIs */}
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard label={t.common.active} value={kpis.active} />
-        <StatCard label={t.clients.statusLead + 's'} value={kpis.leads} />
-        <StatCard label={t.clients.onPage} value={kpis.total} />
+
+  /* ═══════════════════════════════════════════════════════
+     ENTIRE VISUAL LAYER — built from scratch to match
+     the shadcnuikit "Users" reference pixel-for-pixel.
+     Only data bindings come from the existing logic above.
+     ═══════════════════════════════════════════════════════ */
+
+  const allSelected = items.length > 0 && selectedIds.size === items.length;
+
+
+  // ── Status badge ──
+  function Badge({ status }: { status: string }) {
+    const s = status || 'inactive';
+    const map: Record<string, { label: string; badge: string }> = {
+      active:   { label: fr ? 'Actif' : 'Active',     badge: 'badge-success' },
+      lead:     { label: fr ? 'Lead' : 'Lead',         badge: 'badge-info' },
+      inactive: { label: fr ? 'Inactif' : 'Inactive',  badge: 'badge-neutral' },
+    };
+    const v = map[s] || map.inactive;
+    return <span className={v.badge}>{v.label}</span>;
+  }
+
+  // ── Status dropdown state ──
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const statusBtnRef = useRef<HTMLButtonElement>(null);
+
+  // ── City filter state ──
+  const [cityFilter, setCityFilter] = useState('');
+  const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
+  const cityBtnRef = useRef<HTMLButtonElement>(null);
+  const availableCities = useMemo(() => {
+    const cities = items.map(i => i.city).filter(Boolean) as string[];
+    return [...new Set(cities)].sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  // ── Row actions menu state ──
+  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (statusDropdownOpen && statusBtnRef.current && !statusBtnRef.current.parentElement?.contains(e.target as Node)) setStatusDropdownOpen(false);
+      if (cityDropdownOpen && cityBtnRef.current && !cityBtnRef.current.parentElement?.contains(e.target as Node)) setCityDropdownOpen(false);
+      // Don't close action menu here — it closes itself via its own click handlers
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [statusDropdownOpen, cityDropdownOpen]);
+
+  // ── Filter items by city ──
+  const displayItems = useMemo(() => {
+    if (!cityFilter) return items;
+    return items.filter(i => i.city === cityFilter);
+  }, [items, cityFilter]);
+
+  const IconSort = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>;
+  const IconPlus = (c: string) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>;
+
+  return (
+    <>
+      {/* ── PAGE HEADER ── */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-[28px] font-bold text-[var(--color-text-primary)] leading-tight">Clients</h1>
+        <button
+          onClick={() => { setForm(EMPTY_FORM); setSaveError(null); setAddressDuplicateWarning(null); setIsCreateOpen(true); }}
+          className="inline-flex items-center gap-2 h-10 px-5 bg-primary text-white rounded-lg text-[14px] font-medium hover:bg-primary-hover active:scale-[0.98] transition-all"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+          {fr ? 'Nouveau client' : 'Add New Client'}
+        </button>
       </div>
 
-      {/* Filters */}
-      <FilterBar
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder={t.clients.searchClients}
-      >
-        <FilterSelect
-          value={statusFilter}
-          onChange={(v) => { setStatusFilter(v); setPage(1); }}
-          options={statusFilterOptions}
-        />
-        <FilterSelect
-          value={sortBy}
-          onChange={(v) => { setSortBy(v as ClientSort); setPage(1); }}
-          options={[
-            { value: 'recent', label: t.common.mostRecent },
-            { value: 'oldest', label: t.common.oldest },
-            { value: 'name_asc', label: t.common.nameAZ },
-            { value: 'name_desc', label: t.common.nameZA },
-          ]}
-        />
-      </FilterBar>
+      {/* ── TOOLBAR ── */}
+      <div className="flex items-center gap-2 mt-5 mb-4">
+        <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+          placeholder={fr ? 'Rechercher clients...' : 'Search clients...'}
+          className="h-9 w-[200px] px-3 text-[14px] bg-surface border border-[var(--color-outline)] rounded-md text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:ring-1 focus:ring-[var(--color-text-tertiary)] focus:border-[var(--color-text-tertiary)] transition-all" />
 
-      {/* Batch action bar */}
-      <AnimatePresence>
-        {selectedIds.size > 0 && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary-lighter px-4 py-2.5">
-              <span className="text-[13px] font-medium text-primary">{selectedIds.size} {t.common.selected}</span>
-              <button
-                type="button"
-                onClick={() => void handleBatchArchive()}
-                disabled={isBatchArchiving}
-                className="glass-button-ghost inline-flex items-center gap-1.5 text-primary !text-[13px]"
-              >
-                <Archive size={14} />
-                {isBatchArchiving ? t.clients.archiving : t.clients.archive}
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedIds(new Set())}
-                className="ml-auto text-[13px] text-text-tertiary hover:text-text-primary"
-              >
-                {t.common.clear}
-              </button>
+        {/* Status filter with dropdown */}
+        <div className="relative">
+          <button ref={statusBtnRef} onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+            className={`inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors ${statusFilter !== 'All' ? 'bg-[var(--color-text-primary)] text-white border-[var(--color-text-primary)]' : 'bg-surface text-[var(--color-text-primary)] border-[var(--color-outline)] hover:bg-[var(--color-surface-secondary)]'}`}>
+            {IconPlus(statusFilter !== 'All' ? '#fff' : 'var(--color-text-secondary)')} Status
+          </button>
+          {statusDropdownOpen && (
+            <div className="absolute top-full left-0 mt-1 w-48 bg-surface border border-[var(--color-outline)] rounded-md shadow-lg z-50 py-1">
+              {['All', 'active', 'lead', 'inactive'].map(s => (
+                <button key={s} onClick={() => { setStatusFilter(s); setStatusDropdownOpen(false); setPage(1); }}
+                  className={`w-full text-left px-3 py-2 text-[13px] transition-colors ${statusFilter === s ? 'bg-[var(--color-surface-tertiary)] font-medium text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}>
+                  {s === 'All' ? (fr ? 'Tous' : 'All') : s === 'active' ? (fr ? 'Actif' : 'Active') : s === 'lead' ? (fr ? 'Lead' : 'Lead') : (fr ? 'Inactif' : 'Inactive')}
+                </button>
+              ))}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Table */}
-      <div className="section-card">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="px-3 py-2.5 w-10">
-                  <input
-                    type="checkbox"
-                    checked={items.length > 0 && selectedIds.size === items.length}
-                    onChange={toggleSelectAll}
-                    className="rounded border-border accent-primary"
-                  />
-                </th>
-                <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.name}</th>
-                <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.company}</th>
-                <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.clients.contact}</th>
-                <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.status}</th>
-                <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.createdAt}</th>
-                <th className="px-3 py-2.5 w-10" />
-              </tr>
-            </thead>
-            <tbody>
-              {loading && Array.from({ length: 6 }).map((_, idx) => (
-                <tr key={`skel-${idx}`} className="border-b border-border-light">
-                  <td className="px-3 py-3" colSpan={totalColSpan}><div className="skeleton h-4 w-full" /></td>
-                </tr>
-              ))}
-              {!loading && error && (
-                <tr><td className="px-3 py-8 text-[13px] text-danger" colSpan={totalColSpan}>{error}</td></tr>
-              )}
-              {!loading && !error && items.length === 0 && (
-                <tr><td className="px-3 py-12 text-center text-[13px] text-text-tertiary" colSpan={totalColSpan}>{t.clients.noClientsFound}</td></tr>
-              )}
-              {!loading && !error && items.map((item) => (
-                <tr
-                  key={item.id}
-                  onClick={() => navigate(`/clients/${item.id}`)}
-                  className="table-row-hover border-b border-border-light cursor-pointer group"
-                >
-                  <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(item.id)}
-                      onChange={() => toggleSelect(item.id)}
-                      className="rounded border-border accent-primary"
-                    />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-2.5">
-                      <span className="avatar-sm">{getInitials(item.first_name, item.last_name)}</span>
-                      <span className="text-[13px] font-semibold text-text-primary">
-                        {item.first_name} {item.last_name}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 text-[13px] text-text-secondary">{item.company || '—'}</td>
-                  <td className="px-3 py-2.5 text-[13px] text-text-secondary">{item.email || item.phone || '—'}</td>
-                  <td className="px-3 py-2.5"><StatusBadge status={item.status} /></td>
-                  <td className="px-3 py-2.5 text-[13px] text-text-tertiary tabular-nums">{formatDate(item.created_at)}</td>
-                  <td className="px-3 py-2.5 text-right">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setClientToDelete(item);
-                      }}
-                      className="p-1 rounded text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-danger hover:bg-danger-light transition-all"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          )}
         </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between px-3 py-2.5 border-t border-border">
-          <p className="text-[13px] text-text-tertiary tabular-nums">
-            {t.common.page} {page} {t.common.of} {pageCount} — {total} {t.common.records}
-          </p>
-          <div className="flex items-center gap-1">
-            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="glass-button !px-2 !py-1">
-              <ChevronLeft size={14} />
-            </button>
-            <button onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page === pageCount} className="glass-button !px-2 !py-1">
-              <ChevronRight size={14} />
-            </button>
-          </div>
+      </div>
+
+      {/* ── TABLE ── */}
+      <div className="border border-[var(--color-outline)] rounded-md bg-surface">
+        <div className="grid" style={{ gridTemplateColumns: '40px 1fr 1fr 1fr 1fr 1fr 120px 48px' }}>
+          {/* HEADER */}
+          <div className="py-3 pl-4 border-b border-[var(--color-outline)] flex items-center"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="rounded-[3px] border-[var(--color-outline)] w-4 h-4 accent-[var(--color-text-primary)] cursor-pointer" /></div>
+          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Nom' : 'Name'} {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Entreprise' : 'Company'} {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Téléphone' : 'Phone'} {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">Email {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Ville' : 'City'} {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</span></div>
+          <div className="py-3 border-b border-[var(--color-outline)]" />
+
+          {/* LOADING */}
+          {loading && Array.from({ length: 10 }).map((_, i) => (
+            <React.Fragment key={`sk-${i}`}>
+              <div className="py-3 pl-4 border-b border-[var(--color-surface-tertiary)] flex items-center"><div className="w-4 h-4 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-24 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-28 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-16 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-14 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
+              <div className="py-3 border-b border-[var(--color-surface-tertiary)]" />
+            </React.Fragment>
+          ))}
+
+          {/* EMPTY */}
+          {!loading && displayItems.length === 0 && (
+            <div className="col-span-8 py-20 text-center text-[14px] text-[var(--color-text-tertiary)]">{t.clients.noClientsFound}</div>
+          )}
+
+          {/* ROWS */}
+          {!loading && displayItems.map(item => {
+            const rowCls = `border-b border-[var(--color-surface-tertiary)] transition-colors ${selectedIds.has(item.id) ? 'bg-[var(--color-primary-light)]' : 'hover:bg-[var(--color-surface-secondary)]'}`;
+            const click = () => navigate(`/clients/${item.id}`);
+            return (
+              <React.Fragment key={item.id}>
+                <div className={`py-3 pl-4 flex items-center ${rowCls}`} onClick={e => e.stopPropagation()}>
+                  <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} className="rounded-[3px] border-[var(--color-outline)] w-4 h-4 accent-[var(--color-text-primary)] cursor-pointer" />
+                </div>
+                <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click}>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <UnifiedAvatar id={item.id} name={`${item.first_name || ''} ${item.last_name || ''}`.trim()} />
+                    <span className="text-[14px] text-[var(--color-text-primary)] truncate">{item.first_name} {item.last_name}</span>
+                  </div>
+                </div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] truncate">{item.company || '—'}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] tabular-nums truncate">{item.phone || '—'}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] truncate">{item.email || '—'}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] truncate">{item.city || '—'}</span></div>
+                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}><Badge status={item.status} /></div>
+                <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`}>
+                  <button className="p-1 rounded text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-tertiary)] transition-colors" onClick={e => { e.stopPropagation(); setActionMenuId(actionMenuId === item.id ? null : item.id); }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                  </button>
+                  {actionMenuId === item.id && (
+                    <div className="absolute right-0 top-full mt-1 w-40 bg-surface border border-[var(--color-outline)] rounded-md shadow-lg z-50 py-1" onClick={e => e.stopPropagation()}>
+                      <button className="w-full text-left px-3 py-2 text-[13px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors flex items-center gap-2"
+                        onClick={() => { setActionMenuId(null); navigate(`/clients/${item.id}`); }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                        {fr ? 'Modifier' : 'Edit client'}
+                      </button>
+                      <button className="w-full text-left px-3 py-2 text-[13px] text-[var(--color-danger)] hover:bg-[var(--color-danger-light)] transition-colors flex items-center gap-2"
+                        onClick={() => { setActionMenuId(null); setClientToDelete(item); }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                        {fr ? 'Supprimer' : 'Delete client'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── FOOTER: selection count + pagination ── */}
+      <div className="flex items-center justify-between mt-3">
+        <span className="text-[14px] text-[var(--color-text-secondary)]">
+          {selectedIds.size} of {total} row(s) selected.
+        </span>
+        <div className="flex items-center gap-2">
+          <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
+            className="h-9 px-4 bg-surface border border-[var(--color-outline)] rounded-md text-[14px] text-[var(--color-text-primary)] font-normal disabled:opacity-40 disabled:cursor-default hover:bg-[var(--color-surface-secondary)] transition-colors cursor-pointer">
+            Previous
+          </button>
+          <button disabled={page >= pageCount} onClick={() => setPage(p => Math.min(pageCount, p + 1))}
+            className="h-9 px-4 bg-surface border border-[var(--color-outline)] rounded-md text-[14px] text-[var(--color-text-primary)] font-normal disabled:opacity-40 disabled:cursor-default hover:bg-[var(--color-surface-secondary)] transition-colors cursor-pointer">
+            Next
+          </button>
         </div>
       </div>
 
@@ -612,17 +698,17 @@ export default function Clients() {
               exit={{ opacity: 0, y: 8 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between px-5 pt-5">
-                <h3 className="text-[15px] font-bold text-text-primary">{t.clients.newClient}</h3>
-                <button onClick={() => setIsCreateOpen(false)} className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
+              <div className="flex items-center justify-between px-6 pt-6">
+                <h3 className="text-lg font-bold text-text-primary">{t.clients.newClient}</h3>
+                <button onClick={() => setIsCreateOpen(false)} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors">
                   <X size={16} />
                 </button>
               </div>
-              <div className="px-5 py-4">
+              <div className="px-6 py-5">
                 <ClientForm form={form} setForm={setForm} t={t} onAddressSelect={(addr) => void handleAddressSelect(addr)} addressDuplicateWarning={addressDuplicateWarning} />
                 {saveError && <p className="text-[13px] text-danger mt-3">{saveError}</p>}
               </div>
-              <div className="flex justify-end gap-2 px-5 pb-5">
+              <div className="flex justify-end gap-3 px-6 pb-6">
                 <button onClick={() => setIsCreateOpen(false)} className="glass-button">{t.common.cancel}</button>
                 <button onClick={() => void onCreate()} disabled={isSaving} className="glass-button-primary">
                   {isSaving ? t.common.saving : t.clients.createClient}
@@ -645,31 +731,31 @@ export default function Clients() {
               onClick={() => navigate('/clients')}
             />
             <motion.div
-              className="fixed right-0 top-0 h-screen w-full max-w-lg bg-surface z-[90] shadow-lg overflow-y-auto border-l border-outline"
+              className="fixed right-0 top-0 h-screen w-full max-w-lg bg-surface z-[90] shadow-2xl overflow-y-auto border-l border-outline/60"
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
             >
-              <div className="sticky top-0 bg-surface z-10 flex items-center justify-between px-5 py-4 border-b border-outline">
+              <div className="sticky top-0 bg-surface/95 backdrop-blur-sm z-10 flex items-center justify-between px-6 py-5 border-b border-outline/40">
                 <div className="flex items-center gap-3">
-                  <span className="avatar-md">{getInitials(selected.first_name, selected.last_name)}</span>
+                  <UnifiedAvatar id={selected.id} name={`${selected.first_name || ''} ${selected.last_name || ''}`.trim()} size={36} />
                   <div>
-                    <h3 className="text-[15px] font-bold text-text-primary">
+                    <h3 className="text-[16px] font-extrabold text-text-primary">
                       {selected.first_name} {selected.last_name}
                     </h3>
-                    <p className="text-[13px] text-text-tertiary">{selected.company || t.common.noCompany}</p>
+                    <p className="text-[13px] text-text-muted">{selected.company || t.common.noCompany}</p>
                   </div>
                 </div>
-                <button onClick={() => navigate('/clients')} className="p-1.5 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
+                <button onClick={() => navigate('/clients')} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors">
                   <X size={16} />
                 </button>
               </div>
 
-              <div className="p-5 space-y-5">
+              <div className="p-6 space-y-6">
                 <ClientForm form={form} setForm={setForm} t={t} onAddressSelect={(addr) => void handleAddressSelect(addr)} addressDuplicateWarning={addressDuplicateWarning} isEdit />
                 {saveError && <p className="text-[13px] text-danger mt-2">{saveError}</p>}
-                <div className="flex items-center justify-between pt-2">
+                <div className="flex items-center justify-between pt-3">
                   <button onClick={() => setClientToDelete(selected)} className="glass-button-danger">
                     {t.common.delete}
                   </button>
@@ -679,26 +765,26 @@ export default function Clients() {
                 </div>
 
                 {/* Jobs section */}
-                <div className="border-t border-outline pt-5">
-                  <h4 className="text-[13px] font-bold text-text-primary mb-3">{t.clients.jobs} ({selectedJobs.length})</h4>
+                <div className="border-t border-outline/40 pt-6">
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-3">{t.clients.jobs} ({selectedJobs.length})</h4>
                   {selectedJobs.length === 0 ? (
-                    <p className="text-[13px] text-text-tertiary">{t.clients.noJobsLinked}</p>
+                    <p className="text-[13px] text-text-muted">{t.clients.noJobsLinked}</p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       {selectedJobs.map((job) => (
                         <button
                           key={job.id}
                           type="button"
                           onClick={() => navigate(`/jobs/${job.id}`)}
-                          className="w-full rounded-xl border border-outline-subtle bg-surface-secondary p-3 flex items-center justify-between text-left hover:border-primary/30 transition-colors"
+                          className="w-full rounded-2xl border border-outline-subtle bg-surface-secondary/60 p-4 flex items-center justify-between text-left hover:border-primary/30 hover:shadow-sm transition-all"
                         >
                           <div>
                             <p className="text-[13px] font-semibold text-text-primary">{job.title}</p>
-                            <p className="text-xs text-text-tertiary mt-0.5">
+                            <p className="text-xs text-text-muted mt-0.5">
                               {job.scheduled_at ? formatDate(job.scheduled_at) : t.clients.unscheduled}
                             </p>
                           </div>
-                          <span className="text-[13px] font-medium text-text-primary tabular-nums">
+                          <span className="text-[14px] font-bold text-text-primary tabular-nums">
                             {formatCurrency(Math.round(Number(job.total_amount || 0)))}
                           </span>
                         </button>
@@ -729,16 +815,16 @@ export default function Clients() {
               exit={{ opacity: 0, y: 8 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-5">
-                <h3 className="text-[15px] font-bold text-text-primary">{t.clients.deleteClient}</h3>
+              <div className="p-6">
+                <h3 className="text-[1.1rem] font-extrabold text-text-primary">{t.clients.deleteClient}</h3>
                 <p className="text-[13px] text-text-secondary mt-2">
                   {t.clients.deleteClientMsg.replace('{name}', `${clientToDelete.first_name} ${clientToDelete.last_name}`)}
                 </p>
-                <p className="mt-3 inline-flex items-center gap-2 rounded-md bg-warning-light px-3 py-2 text-[13px] text-warning">
+                <p className="mt-4 inline-flex items-center gap-2 rounded-xl bg-warning-light px-4 py-2.5 text-[13px] text-warning">
                   <AlertTriangle size={14} />
                   {t.clients.irreversible}
                 </p>
-                <div className="mt-5 flex justify-end gap-2">
+                <div className="mt-6 flex justify-end gap-3">
                   <button className="glass-button" onClick={() => setClientToDelete(null)} disabled={isDeletingClient}>{t.common.cancel}</button>
                   <button
                     className="glass-button-danger"
@@ -770,24 +856,24 @@ export default function Clients() {
               exit={{ opacity: 0, y: 8 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-5">
-                <h3 className="text-[15px] font-bold text-text-primary">{t.clients.emailExists}</h3>
+              <div className="p-6">
+                <h3 className="text-[1.1rem] font-extrabold text-text-primary">{t.clients.emailExists}</h3>
                 <p className="text-[13px] text-text-secondary mt-2">
                   {t.clients.foundClients.replace('{count}', String(duplicateCandidates.length))}
                 </p>
-                <div className="mt-3 max-h-40 space-y-2 overflow-auto rounded-xl border border-outline-subtle p-2">
+                <div className="mt-4 max-h-40 space-y-2 overflow-auto rounded-2xl border border-outline-subtle p-3">
                   {duplicateCandidates.map((client) => (
-                    <div key={client.id} className="rounded-md bg-surface-secondary px-3 py-2">
-                      <p className="text-[13px] font-medium text-text-primary">
+                    <div key={client.id} className="rounded-xl bg-surface-secondary px-4 py-2.5">
+                      <p className="text-[13px] font-semibold text-text-primary">
                         {client.first_name} {client.last_name}
                       </p>
-                      <p className="text-xs text-text-tertiary">{client.email || t.common.noEmail} — {formatDate(client.created_at)}</p>
+                      <p className="text-xs text-text-muted">{client.email || t.common.noEmail} — {formatDate(client.created_at)}</p>
                     </div>
                   ))}
                 </div>
-                <div className="mt-5 flex justify-end gap-2">
+                <div className="mt-6 flex justify-end gap-3">
                   <button className="glass-button" onClick={() => setIsDuplicateModalOpen(false)} disabled={isSaving}>{t.common.cancel}</button>
-                  <button className="glass-button" onClick={() => void onResolveDuplicate('add')} disabled={isSaving}>
+                  <button className="glass-button-secondary" onClick={() => void onResolveDuplicate('add')} disabled={isSaving}>
                     {isSaving ? t.common.saving : t.common.addAnyway}
                   </button>
                   <button className="glass-button-primary" onClick={() => void onResolveDuplicate('replace')} disabled={isSaving}>
@@ -799,7 +885,15 @@ export default function Clients() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+
+      {/* Batch Message Modal */}
+      <BatchMessageModal
+        isOpen={showBatchMessage}
+        onClose={() => setShowBatchMessage(false)}
+        clients={items.filter((i: any) => selectedIds.has(i.id))}
+        language={language}
+      />
+    </>
   );
 }
 
@@ -821,30 +915,30 @@ function ClientForm({
   const [showAddress, setShowAddress] = useState(isEdit || !!form.address);
   const patch = (key: keyof ClientFormState, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* Essential fields — always shown */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.common.firstName}</label>
-          <input value={form.first_name} onChange={(e) => patch('first_name', e.target.value)} className="glass-input w-full mt-1" placeholder="John" />
+          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.firstName}</label>
+          <input value={form.first_name} onChange={(e) => patch('first_name', e.target.value)} className="glass-input w-full mt-1.5" placeholder="John" />
         </div>
         <div>
-          <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.common.lastName}</label>
-          <input value={form.last_name} onChange={(e) => patch('last_name', e.target.value)} className="glass-input w-full mt-1" placeholder="Doe" />
+          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.lastName}</label>
+          <input value={form.last_name} onChange={(e) => patch('last_name', e.target.value)} className="glass-input w-full mt-1.5" placeholder="Doe" />
         </div>
       </div>
       <div>
-        <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.common.company}</label>
-        <input value={form.company} onChange={(e) => patch('company', e.target.value)} className="glass-input w-full mt-1" placeholder="Acme Inc." />
+        <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.company}</label>
+        <input value={form.company} onChange={(e) => patch('company', e.target.value)} className="glass-input w-full mt-1.5" placeholder="Acme Inc." />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.common.email}</label>
-          <input type="email" value={form.email} onChange={(e) => patch('email', e.target.value)} className="glass-input w-full mt-1" placeholder="john@example.com" />
+          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.email}</label>
+          <input type="email" value={form.email} onChange={(e) => patch('email', e.target.value)} className="glass-input w-full mt-1.5" placeholder="john@example.com" />
         </div>
         <div>
-          <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.common.phone}</label>
-          <input value={form.phone} onChange={(e) => patch('phone', e.target.value)} className="glass-input w-full mt-1" placeholder="(555) 123-4567" />
+          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.phone}</label>
+          <input value={form.phone} onChange={(e) => patch('phone', e.target.value)} className="glass-input w-full mt-1.5" placeholder="(555) 123-4567" />
         </div>
       </div>
 
@@ -860,8 +954,8 @@ function ClientForm({
       ) : (
         <>
           <div>
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.common.address}</label>
-            <div className="mt-1">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.address}</label>
+            <div className="mt-1.5">
               <AddressAutocomplete
                 value={form.address}
                 onChange={(v) => patch('address', v)}
@@ -871,18 +965,18 @@ function ClientForm({
             </div>
           </div>
           {form.city && (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.address.city}</label>
-                <input value={form.city} readOnly className="glass-input w-full mt-1 bg-surface-secondary text-text-secondary cursor-default" />
+                <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.address.city}</label>
+                <input value={form.city} readOnly className="glass-input w-full mt-1.5 bg-surface-secondary text-text-secondary cursor-default" />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.address.province}</label>
-                <input value={form.province} readOnly className="glass-input w-full mt-1 bg-surface-secondary text-text-secondary cursor-default" />
+                <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.address.province}</label>
+                <input value={form.province} readOnly className="glass-input w-full mt-1.5 bg-surface-secondary text-text-secondary cursor-default" />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.address.postalCode}</label>
-                <input value={form.postal_code} readOnly className="glass-input w-full mt-1 bg-surface-secondary text-text-secondary cursor-default" />
+                <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.address.postalCode}</label>
+                <input value={form.postal_code} readOnly className="glass-input w-full mt-1.5 bg-surface-secondary text-text-secondary cursor-default" />
               </div>
             </div>
           )}
@@ -892,14 +986,15 @@ function ClientForm({
       {/* Status — only show on edit, defaults to "active" on create */}
       {isEdit && (
         <div>
-          <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.common.status}</label>
-          <select value={form.status} onChange={(e) => patch('status', e.target.value)} className="glass-input w-full mt-1">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.status}</label>
+          <select value={form.status} onChange={(e) => patch('status', e.target.value)} className="glass-input w-full mt-1.5">
             <option value="active">{t.clients.statusActive}</option>
-            <option value="lead">{t.clients.statusLead}</option>
+            <option value="lead">Lead</option>
             <option value="inactive">{t.clients.statusInactive}</option>
           </select>
         </div>
       )}
+
     </div>
   );
 }

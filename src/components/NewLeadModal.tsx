@@ -150,8 +150,8 @@ export default function NewLeadModal({
     setLineItems([{ id: '1', name: '', quantity: 1, unitCost: 0, unitPrice: 0, description: '' }]);
   };
 
-  const inputCls = 'w-full px-3 py-2.5 bg-surface border border-outline rounded-lg text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all';
-  const labelCls = 'text-xs text-text-secondary font-medium mb-1 block';
+  const inputCls = 'glass-input w-full mt-1.5';
+  const labelCls = 'text-xs font-medium text-text-tertiary block';
 
   return (
     <AnimatePresence>
@@ -170,28 +170,28 @@ export default function NewLeadModal({
                   {mode === 'lead' ? <User size={18} className="text-primary" /> : <Briefcase size={18} className="text-primary" />}
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-text-primary">
+                  <h2 className="text-[16px] font-bold tracking-tight text-text-primary">
                     {mode === 'lead' ? (t.modals.newLead) : (t.modals.newJob)}
                   </h2>
-                  <p className="text-xs text-text-tertiary">
+                  <p className="text-[13px] text-text-tertiary">
                     {mode === 'lead'
                       ? (t.modals.fillInTheProspectInformation)
                       : (t.modals.createANewJob)}
                   </p>
                 </div>
               </div>
-              <button onClick={onClose} className="p-2 rounded-full hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors">
+              <button onClick={onClose} className="p-2 rounded-xl border border-outline hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors">
                 <X size={18} />
               </button>
             </div>
 
             {/* Body */}
-            <form ref={formRef} onSubmit={handleSave} className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+            <form ref={formRef} onSubmit={handleSave} className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
               {mode === 'lead' ? (
                 <>
                   {/* Contact info */}
                   <div className="section-card p-5 space-y-4">
-                    <h3 className="text-[14px] font-semibold text-text-primary flex items-center gap-2">
+                    <h3 className="text-[16px] font-bold tracking-tight text-text-primary flex items-center gap-2">
                       <User size={15} className="text-text-tertiary" />
                       {t.modals.contactInformation}
                     </h3>
@@ -239,7 +239,7 @@ export default function NewLeadModal({
 
                   {/* Lead details */}
                   <div className="section-card p-5 space-y-4">
-                    <h3 className="text-[14px] font-semibold text-text-primary flex items-center gap-2">
+                    <h3 className="text-[16px] font-bold tracking-tight text-text-primary flex items-center gap-2">
                       <Tag size={15} className="text-text-tertiary" />
                       {t.modals.leadDetails}
                     </h3>
@@ -280,7 +280,7 @@ export default function NewLeadModal({
 
                   {/* Notes */}
                   <div className="section-card border-dashed p-5">
-                    <h4 className="text-[13px] font-semibold text-text-primary mb-2">Notes</h4>
+                    <h4 className="text-[13px] font-bold tracking-tight text-text-primary mb-2">Notes</h4>
                     <textarea value={leadNotes} onChange={(e) => setLeadNotes(e.target.value)}
                       className="w-full px-3 py-2 border-0 text-sm min-h-[60px] resize-none outline-none bg-transparent text-text-primary placeholder:text-text-tertiary"
                       placeholder={t.modals.addInternalNotes} />
@@ -290,7 +290,7 @@ export default function NewLeadModal({
                 <>
                   {/* Job details */}
                   <div className="section-card p-5 space-y-4">
-                    <h3 className="text-[14px] font-semibold text-text-primary">{t.modals.jobDetails}</h3>
+                    <h3 className="text-[16px] font-bold tracking-tight text-text-primary">{t.modals.jobDetails}</h3>
                     <div>
                       <label className={labelCls}>{t.modals.jobTitle}</label>
                       <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
@@ -333,7 +333,7 @@ export default function NewLeadModal({
 
                   {/* Schedule */}
                   <div className="section-card p-5 space-y-4">
-                    <h3 className="text-[14px] font-semibold text-text-primary flex items-center gap-2">
+                    <h3 className="text-[16px] font-bold tracking-tight text-text-primary flex items-center gap-2">
                       <Calendar size={15} className="text-text-tertiary" /> {t.modals.schedule}
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -354,7 +354,7 @@ export default function NewLeadModal({
 
                   {/* Line items */}
                   <div className="section-card p-5 space-y-4">
-                    <h3 className="text-[14px] font-semibold text-text-primary">{t.modals.productService}</h3>
+                    <h3 className="text-[16px] font-bold tracking-tight text-text-primary">{t.modals.productService}</h3>
                     {lineItems.map((item) => (
                       <div key={item.id} className="grid grid-cols-12 gap-3 items-start p-3 rounded-lg border border-outline bg-surface">
                         <div className="col-span-5 space-y-1">
@@ -364,17 +364,17 @@ export default function NewLeadModal({
                             className={cn(inputCls, 'py-1.5 text-xs min-h-[40px] resize-none')} placeholder={t.modals.addDescription || 'Description'} />
                         </div>
                         <div className="col-span-2">
-                          <label className="text-[10px] text-text-tertiary font-medium">{t.invoiceDetails.qty}</label>
+                          <label className="text-xs font-medium text-text-tertiary">{t.invoiceDetails.qty}</label>
                           <input type="number" value={item.quantity} onChange={(e) => updateLineItem(item.id, 'quantity', Number(e.target.value))}
                             className={cn(inputCls, 'py-2 text-center')} />
                         </div>
                         <div className="col-span-2">
-                          <label className="text-[10px] text-text-tertiary font-medium">{t.modals.unitPrice}</label>
+                          <label className="text-xs font-medium text-text-tertiary">{t.modals.unitPrice}</label>
                           <input type="number" value={item.unitPrice} onChange={(e) => updateLineItem(item.id, 'unitPrice', Number(e.target.value))}
                             className={cn(inputCls, 'py-2 text-right')} />
                         </div>
                         <div className="col-span-2">
-                          <label className="text-[10px] text-text-tertiary font-medium">{t.common.total}</label>
+                          <label className="text-xs font-medium text-text-tertiary">{t.common.total}</label>
                           <p className="px-2.5 py-2 text-sm font-medium text-right text-text-primary">{formatCurrency(item.quantity * item.unitPrice)}</p>
                         </div>
                         <div className="col-span-1 flex items-center justify-center pt-5">
@@ -403,7 +403,7 @@ export default function NewLeadModal({
 
                   {/* Billing */}
                   <div className="section-card p-5 space-y-3">
-                    <h3 className="text-[13px] font-semibold text-text-primary">{t.modals.billing}</h3>
+                    <h3 className="text-[14px] font-bold tracking-tight text-text-primary">{t.modals.billing}</h3>
                     <label className="flex items-center gap-3 cursor-pointer">
                       <input type="checkbox" checked={billingRemind} onChange={() => setBillingRemind(!billingRemind)} className="h-4 w-4 rounded" />
                       <span className="text-sm text-text-secondary">{t.modals.remindInvoice}</span>
@@ -422,7 +422,7 @@ export default function NewLeadModal({
             </form>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-outline bg-surface-secondary flex items-center justify-between">
+            <div className="px-6 pt-4 pb-6 border-t border-border-light bg-surface-secondary flex items-center justify-between">
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-text-tertiary font-semibold">
                   {mode === 'lead' ? (t.modals.value) : (t.billing.total)}

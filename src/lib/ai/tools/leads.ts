@@ -11,7 +11,7 @@ export const leadTools: ToolDefinition[] = [
     label: 'Search Leads',
     description: 'Search and list leads in the pipeline by name, email, status, or source.',
     category: 'read',
-    requiredPermissions: ['clients.view'],
+    requiredPermissions: ['clients.read'],
     parameters: [
       { name: 'query', type: 'string', description: 'Search term (name, email)', required: false },
       { name: 'status', type: 'string', description: 'Filter by lead status', required: false, enum: ['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed'] },

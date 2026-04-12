@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 
 // ─── Types ───────────────────────────────────────────────────────────
 export interface Conversation {
@@ -43,9 +44,11 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 // ─── Conversations ───────────────────────────────────────────────────
 export async function fetchConversations(): Promise<Conversation[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('conversations')
     .select('*')
+    .eq('org_id', orgId)
     .order('last_message_at', { ascending: false });
 
   if (error) throw error;
@@ -62,9 +65,11 @@ export async function markConversationRead(conversationId: string): Promise<void
 
 // ─── Messages ────────────────────────────────────────────────────────
 export async function fetchMessages(conversationId: string): Promise<Message[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('messages')
     .select('*')
+    .eq('org_id', orgId)
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
 

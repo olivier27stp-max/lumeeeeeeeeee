@@ -11,7 +11,7 @@ export const scheduleTools: ToolDefinition[] = [
     label: 'List Schedule Events',
     description: 'List scheduled events (appointments, jobs) within a date range. Defaults to today if no dates provided.',
     category: 'read',
-    requiredPermissions: ['jobs.view'],
+    requiredPermissions: ['jobs.read'],
     parameters: [
       { name: 'startDate', type: 'string', description: 'Start date (ISO format, e.g. 2026-03-13)', required: false },
       { name: 'endDate', type: 'string', description: 'End date (ISO format)', required: false },
@@ -53,7 +53,7 @@ export const scheduleTools: ToolDefinition[] = [
     label: 'List Unscheduled Jobs',
     description: 'List jobs that have no scheduled date yet and need to be planned.',
     category: 'read',
-    requiredPermissions: ['jobs.view'],
+    requiredPermissions: ['jobs.read'],
     parameters: [],
     execute: async () => {
       try {

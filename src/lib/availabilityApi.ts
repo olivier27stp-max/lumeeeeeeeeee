@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 
 export interface AvailabilityRecord {
   id: string;
@@ -51,9 +52,7 @@ export async function listAvailability(teamId?: string): Promise<AvailabilityRec
 }
 
 export async function createAvailability(input: AvailabilityInput): Promise<AvailabilityRecord> {
-  const { data: orgId, error: orgError } = await supabase.rpc('current_org_id');
-  if (orgError) throw orgError;
-  if (!orgId) throw new Error('No organization context found.');
+  const orgId = await getCurrentOrgIdOrThrow();
 
   // Remove existing entry for same team+weekday+start_minute (soft delete)
   await supabase
@@ -90,9 +89,7 @@ export async function deleteAvailability(id: string): Promise<void> {
 }
 
 export async function setDefaultAvailability(teamId: string): Promise<AvailabilityRecord[]> {
-  const { data: orgId, error: orgError } = await supabase.rpc('current_org_id');
-  if (orgError) throw orgError;
-  if (!orgId) throw new Error('No organization context found.');
+  const orgId = await getCurrentOrgIdOrThrow();
 
   // Clear existing weekly availability for this team first
   await supabase
@@ -203,7 +200,7 @@ export async function findFreeSlots(params: {
             day_label: dayLabel,
             team_id: avail.team_id,
             team_name: team.name,
-            team_color: team.color_hex || '#111827',
+            team_color: team.color_hex || '#3B82F6',
             start_time: slotStart.toISOString(),
             end_time: slotEnd.toISOString(),
             duration_minutes: slotDuration,

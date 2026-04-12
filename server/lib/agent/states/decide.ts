@@ -1,98 +1,36 @@
-/* State: decide — Determine if scenario engine is needed or direct recommendation */
+/* State: decide — Pure heuristic routing (zero Gemini tokens) */
 
 import type { AgentContext, AgentState } from '../types';
-import { geminiChat } from '../../gemini';
 
-// These domains benefit from scenario analysis (comparing options)
-const SCENARIO_DOMAINS = ['team_assignment', 'pricing', 'scheduling'];
-
-// These domains are direct actions (no scenario needed)
-const DIRECT_ACTION_DOMAINS = [
-  'convert_lead', 'update_job_status', 'update_lead_status',
-  'send_invoice', 'record_payment', 'followup',
-];
+const SCENARIO_DOMAINS = new Set(['team_assignment', 'pricing', 'scheduling']);
+const SCENARIO_KEYWORDS = /\b(who should|qui devrait|compare|comparer|best option|meilleure option|which team|quelle equipe|how much should|combien devrait)\b/i;
 
 export async function decide(ctx: AgentContext): Promise<{ next: AgentState; ctx: AgentContext }> {
   const intent = ctx.intent;
 
-  // Fast path: simple queries or follow-ups don't need scenario engine
+  // Fast path: non-actionable intents → direct recommend
   if (!intent || intent.type === 'query' || intent.type === 'followup' || intent.type === 'chat') {
-    ctx.decision = {
-      type: 'direct',
-      requiresScenario: false,
-      reasoning: 'Simple query — direct response',
-    };
+    ctx.decision = { type: 'direct', requiresScenario: false, reasoning: 'Non-actionable intent' };
     return { next: 'recommend', ctx };
   }
 
-  const domainRequiresScenario = SCENARIO_DOMAINS.includes(intent.domain || '');
-  const isScenarioRequest = intent.type === 'scenario_request';
-
-  if (!domainRequiresScenario && !isScenarioRequest) {
-    ctx.decision = {
-      type: 'action',
-      requiresScenario: false,
-      reasoning: `Action in domain "${intent.domain}" — direct recommendation`,
-    };
-    return { next: 'recommend', ctx };
+  // Explicit scenario request
+  if (intent.type === 'scenario_request') {
+    ctx.decision = { type: intent.domain || 'general', requiresScenario: true, reasoning: 'User explicitly requested comparison' };
+    return { next: 'scenario_engine', ctx };
   }
 
-  try {
-    const crmSummary = JSON.stringify(ctx.crmData || {}, null, 0).slice(0, 2000);
-    const memorySummary = ctx.memory?.entities?.length
-      ? `Known context: ${ctx.memory.entities.map(e => `${e.key}: ${JSON.stringify(e.value)}`).join(', ')}`
-      : 'No prior memory.';
+  // Domain-based heuristic + keyword detection
+  const domainMatch = SCENARIO_DOMAINS.has(intent.domain || '');
+  const keywordMatch = SCENARIO_KEYWORDS.test(ctx.userMessage);
+  const hasMultipleOptions = (ctx.crmData as any)?.teams?.length > 1 || (ctx.crmData as any)?.quotes?.length > 1;
 
-    const response = await geminiChat({
-      systemPrompt: `You are a decision router for a CRM agent. Determine if the user's request requires scenario analysis (comparing multiple options) or a direct answer.
-
-Respond ONLY with valid JSON:
-{
-  "requiresScenario": true/false,
-  "reasoning": "brief explanation",
-  "scenarioType": "team_assignment" | "pricing" | "scheduling" | null
-}
-
-Use scenario analysis when:
-- User asks "who should do this job?" (team assignment)
-- User asks about pricing strategy for a quote
-- User needs to compare scheduling options
-- Decision has multiple valid outcomes
-
-Skip scenario when:
-- Question has one clear answer
-- User just wants information
-- Action is straightforward (create follow-up, etc.)`,
-      messages: [{
-        role: 'user',
-        content: `User intent: ${JSON.stringify(intent)}
-CRM data: ${crmSummary}
-Memory: ${memorySummary}
-User message: "${ctx.userMessage}"`,
-      }],
-      jsonMode: true,
-      temperature: 0.1,
-      maxTokens: 256,
-    });
-
-    const parsed = JSON.parse(response.content);
-
-    ctx.decision = {
-      type: parsed.scenarioType || intent.domain || 'general',
-      requiresScenario: Boolean(parsed.requiresScenario),
-      reasoning: parsed.reasoning || 'LLM decision',
-    };
-  } catch (err: any) {
-    ctx.decision = {
-      type: intent.domain || 'general',
-      requiresScenario: domainRequiresScenario || isScenarioRequest,
-      reasoning: `Fallback heuristic (${err?.message})`,
-    };
-    console.warn('[agent/decide] Error:', err?.message);
+  if ((domainMatch && hasMultipleOptions) || keywordMatch) {
+    ctx.decision = { type: intent.domain || 'general', requiresScenario: true, reasoning: `Heuristic: domain=${intent.domain}, keywords=${keywordMatch}, multipleOptions=${hasMultipleOptions}` };
+    return { next: 'scenario_engine', ctx };
   }
 
-  return {
-    next: ctx.decision.requiresScenario ? 'scenario_engine' : 'recommend',
-    ctx,
-  };
+  // Default: direct action/recommendation
+  ctx.decision = { type: intent.domain || 'general', requiresScenario: false, reasoning: 'Direct action — no comparison needed' };
+  return { next: 'recommend', ctx };
 }

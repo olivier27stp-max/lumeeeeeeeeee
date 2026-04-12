@@ -49,6 +49,13 @@ export function JobModalControllerProvider({ children }: { children: React.React
   }, []);
 
   const openJobModal = useCallback((params?: OpenJobModalParams) => {
+    // Reset state first to prevent leakage from previous modal opens
+    setInitialValues(null);
+    setOnCreatedCallback(() => null);
+    setOnCancelCallback(() => null);
+    setSaveError(null);
+    setSourceContext(params?.sourceContext || null);
+
     if (params?.jobId) {
       void getJobModalDraftById(params.jobId)
         .then((draft) => {
@@ -57,6 +64,8 @@ export function JobModalControllerProvider({ children }: { children: React.React
             toast.error('Job not found.');
             return;
           }
+          setOnCreatedCallback(() => params?.onCreated || null);
+          setOnCancelCallback(() => params?.onCancel || null);
           setIsOpen(true);
         })
         .catch((error: any) => {
@@ -64,12 +73,10 @@ export function JobModalControllerProvider({ children }: { children: React.React
         });
     } else {
       setInitialValues(params?.initialValues || null);
+      setOnCreatedCallback(() => params?.onCreated || null);
+      setOnCancelCallback(() => params?.onCancel || null);
       setIsOpen(true);
     }
-    setSourceContext(params?.sourceContext || null);
-    setOnCreatedCallback(() => params?.onCreated || null);
-    setOnCancelCallback(() => params?.onCancel || null);
-    setSaveError(null);
   }, []);
 
   const handleSave = useCallback(async (payload: Parameters<typeof createJob>[0]) => {

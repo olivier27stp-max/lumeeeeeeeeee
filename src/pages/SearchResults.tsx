@@ -21,9 +21,9 @@ const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
 };
 
 const ENTITY_COLORS: Record<SearchEntityType, string> = {
-  client: 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-500/10',
+  client: 'text-text-secondary bg-surface-secondary',
   job: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-500/10',
-  lead: 'text-purple-600 bg-purple-50 dark:text-purple-400 dark:bg-purple-500/10',
+  lead: 'text-text-secondary bg-surface-secondary',
   invoice: 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10',
   quote: 'text-indigo-600 bg-indigo-50 dark:text-indigo-400 dark:bg-indigo-500/10',
   request: 'text-cyan-600 bg-cyan-50 dark:text-cyan-400 dark:bg-cyan-500/10',
@@ -56,12 +56,12 @@ function parsePage(raw: string | null, fallback = 1) {
 function highlightText(text: string, query: string) {
   const normalized = query.trim();
   if (!normalized) return text;
-  const tokens = normalized.split(/\s+/).map((t) => t.trim()).filter(Boolean).slice(0, 5);
+  const tokens = normalized.split(/\s+/).map((tk) => tk.trim()).filter(Boolean).slice(0, 5);
   if (tokens.length === 0) return text;
-  const matcher = new RegExp(`(${tokens.map((t) => escapeRegExp(t)).join('|')})`, 'ig');
+  const matcher = new RegExp(`(${tokens.map((tk) => escapeRegExp(tk)).join('|')})`, 'ig');
   const parts = text.split(matcher);
   return parts.map((part, index) => {
-    const isMatch = tokens.some((t) => t.toLowerCase() === part.toLowerCase());
+    const isMatch = tokens.some((tk) => tk.toLowerCase() === part.toLowerCase());
     if (!isMatch) return <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>;
     return (
       <mark key={`${part}-${index}`} className="rounded bg-primary/15 px-0.5 text-inherit">{part}</mark>
@@ -233,11 +233,11 @@ export default function SearchResultsPage() {
   const counts = payload?.counts || { clients: 0, jobs: 0, leads: 0, invoices: 0, quotes: 0, requests: 0, teams: 0, events: 0, all: 0 };
 
   const tabs = useMemo(
-    () => TAB_ORDER.map((t) => ({
-      key: t.key,
-      label: t.labelKey === 'all'
+    () => TAB_ORDER.map((tab) => ({
+      key: tab.key,
+      label: tab.labelKey === 'all'
         ? `All (${counts.all})`
-        : `${getSearchEntityLabel(GROUP_KEY_TO_ENTITY_TYPE[t.key] || 'client')} (${counts[t.labelKey as EntityGroupKey] || 0})`,
+        : `${getSearchEntityLabel(GROUP_KEY_TO_ENTITY_TYPE[tab.key] || 'client')} (${counts[tab.labelKey as EntityGroupKey] || 0})`,
     })),
     [counts]
   );
@@ -291,7 +291,7 @@ export default function SearchResultsPage() {
             className={cn(
               'rounded-xl border px-3 py-1.5 text-[13px] transition-colors',
               tab === tabOption.key
-                ? 'border-text-primary bg-text-primary text-surface'
+                ? 'border-text-primary bg-primary text-white'
                 : 'border-outline bg-surface text-text-secondary hover:bg-surface-secondary'
             )}
           >

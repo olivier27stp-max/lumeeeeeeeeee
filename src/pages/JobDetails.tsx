@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useRecentItems } from '../hooks/useRecentItems';
 import {
   ArrowLeft,
   Briefcase,
@@ -20,6 +21,7 @@ import {
   Printer,
   Send,
   X,
+  Copy,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -28,7 +30,7 @@ import { toast } from 'sonner';
 import { cn, formatDate } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { getJobById, getJobLineItems, updateJob, type JobLineItem } from '../lib/jobsApi';
-import { createInvoiceFromJob } from '../lib/invoicesApi';
+import { createInvoiceFromJob, getInvoiceRowUiStatus } from '../lib/invoicesApi';
 import { formatCents, type TaxLine } from '../lib/jobCalc';
 import { Job } from '../types';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -40,6 +42,7 @@ import { getRecurrenceRule, createRecurrenceRule, deactivateRecurrenceRule, type
 import SendSmsModal from '../components/communications/SendSmsModal';
 import SendEmailModal from '../components/communications/SendEmailModal';
 import CommunicationsTimeline from '../components/communications/CommunicationsTimeline';
+import SpecificNotes from '../components/SpecificNotes';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface ScheduleEvent {
@@ -77,6 +80,7 @@ export default function JobDetails() {
   const { id } = useParams<{ id: string }>();
   const { openJobModal } = useJobModalController();
 
+  const { updateLabel: updateRecentLabel } = useRecentItems();
   const [job, setJob] = useState<Job | null>(null);
   const [lineItems, setLineItems] = useState<JobLineItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -157,6 +161,7 @@ export default function JobDetails() {
           return;
         }
         setJob(jobData);
+        updateRecentLabel(`/jobs/${id}`, `#${jobData.job_number} ${jobData.title || ''}`);
         setLineItems(items);
       })
       .catch((err) => setError(err.message || 'Failed to load job'))
@@ -215,8 +220,9 @@ export default function JobDetails() {
     (async () => {
       try {
         const { data } = await supabase
-          .from('clients_active')
+          .from('clients')
           .select('phone,email,address,company')
+          .is('deleted_at', null)
           .eq('id', job.client_id)
           .maybeSingle();
         if (data) setClientInfo(data as ClientInfo);
@@ -252,11 +258,11 @@ export default function JobDetails() {
       ? Math.round(job.total * 100)
       : 0;
   const taxLines: TaxLine[] = Array.isArray(job?.tax_lines) ? job.tax_lines as TaxLine[] : [];
-  const enabledTaxes = taxLines.filter((t) => t.enabled && t.rate > 0);
+  const enabledTaxes = taxLines.filter((tx) => tx.enabled && tx.rate > 0);
 
   const computedSubtotalCents = lineItems.reduce((sum, item) => sum + Math.round(item.qty * item.unit_price_cents), 0);
   const displaySubtotalCents = subtotalCents > 0 ? subtotalCents : computedSubtotalCents;
-  const displayTaxCents = subtotalCents > 0 ? taxCents : enabledTaxes.reduce((sum, t) => sum + Math.round(computedSubtotalCents * (t.rate / 100)), 0);
+  const displayTaxCents = subtotalCents > 0 ? taxCents : enabledTaxes.reduce((sum, tx) => sum + Math.round(computedSubtotalCents * (tx.rate / 100)), 0);
   const displayTotalCents = subtotalCents > 0 ? totalCents : displaySubtotalCents + displayTaxCents;
 
   // Profitability — cost_cents on line items if available, otherwise 0 (not revenue)
@@ -348,41 +354,37 @@ export default function JobDetails() {
   // ── Render ──
   return (
     <>
-      <div className="space-y-5 print:space-y-4 relative" {...dropHandlers}>
+      <div className="space-y-8 print:space-y-4 relative" {...dropHandlers}>
         {/* Drop zone overlay */}
         {isDragging && (
           <div className="absolute inset-0 z-50 bg-primary/10 border-2 border-dashed border-primary rounded-xl flex items-center justify-center pointer-events-none">
             <p className="text-primary font-semibold text-lg">Drop files here</p>
           </div>
         )}
-        {/* ═══ BACK NAV ═══ */}
-        <button
-          onClick={() => navigate('/jobs')}
-          className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-text-secondary hover:text-text-primary transition-colors print:hidden"
-        >
-          <ArrowLeft size={14} /> {t.jobDetails.backToJobs}
-        </button>
+        {/* ═══ BREADCRUMB ═══ */}
+        <nav className="flex items-center gap-1.5 text-[12px] print:hidden">
+          <button onClick={() => navigate('/jobs')} className="text-text-tertiary hover:text-text-primary transition-colors">Jobs</button>
+          <span className="text-text-tertiary">/</span>
+          {job.client_name && (
+            <>
+              <button onClick={() => job.client_id && navigate(`/clients/${job.client_id}`)} className="text-text-tertiary hover:text-text-primary transition-colors">{job.client_name}</button>
+              <span className="text-text-tertiary">/</span>
+            </>
+          )}
+          <span className="text-text-primary font-medium">#{job.job_number}</span>
+        </nav>
 
         {/* ═══ HEADER ═══ */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-4">
-            <div className="icon-tile icon-tile-lg icon-tile-purple">
+            <div className="icon-tile icon-tile-lg icon-tile-blue">
               <Briefcase size={18} strokeWidth={2} />
             </div>
             <div>
               <div className="flex items-center gap-2.5">
-                <h1 className="text-[22px] font-extrabold text-text-primary leading-tight">
+                <h1 className="text-[22px] font-bold text-text-primary leading-tight">
                   {job.client_name || 'Unassigned'}
                 </h1>
-                {job.client_id && (
-                  <button
-                    onClick={() => navigate(`/clients/${job.client_id}`)}
-                    className="text-text-tertiary hover:text-text-primary transition-colors"
-                    title="View client"
-                  >
-                    <LinkIcon size={14} />
-                  </button>
-                )}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[13px] text-text-secondary">{job.title}</span>
@@ -406,6 +408,40 @@ export default function JobDetails() {
               <Edit3 size={14} /> Edit
             </button>
 
+            {/* 1-click Complete & Invoice — primary CTA when job is active */}
+            {job.status !== 'completed' && job.status !== 'cancelled' && (
+              <button
+                onClick={async () => {
+                  setIsClosing(true);
+                  try {
+                    const updated = await updateJob(job.id, { status: 'completed' });
+                    setJob(updated);
+                    // Auto-create invoice immediately — no confirmation needed
+                    if (invoices.length === 0) {
+                      const result = await createInvoiceFromJob({ jobId: job.id, sendNow: false });
+                      const invoiceId = String(result.invoice_id || result.invoice?.id || '').trim();
+                      if (invoiceId) {
+                        toast.success('Job completed & invoice created', {
+                          action: { label: 'View Invoice', onClick: () => navigate(`/invoices/${invoiceId}`) },
+                        });
+                        navigate(`/invoices/${invoiceId}/edit`);
+                        return;
+                      }
+                    }
+                    toast.success('Job completed');
+                  } catch (err: any) {
+                    toast.error(err?.message || 'Failed');
+                  } finally {
+                    setIsClosing(false);
+                  }
+                }}
+                disabled={isClosing}
+                className="px-3 py-1.5 rounded-lg bg-primary text-white text-[12px] font-semibold hover:opacity-90 transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <CheckCircle2 size={13} /> {isClosing ? 'Processing...' : 'Complete & Invoice'}
+              </button>
+            )}
+
             {/* More dropdown */}
             <div className="relative" ref={moreActionsRef}>
               <button
@@ -423,6 +459,19 @@ export default function JobDetails() {
                     <DropdownItem icon={<Mail size={13} />} label="Send Email" onClick={() => { setEmailMode('generic'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
                     <div className="border-t border-border my-1" />
                     <DropdownItem icon={<FileText size={13} />} label={isCreatingInvoice ? 'Creating...' : 'Create Invoice'} onClick={handleCreateInvoice} disabled={isCreatingInvoice} />
+                    <DropdownItem icon={<Copy size={13} />} label="Clone Job" onClick={() => {
+                      setMoreActionsOpen(false);
+                      openJobModal({
+                        initialValues: {
+                          title: `${job.title} (copy)`,
+                          client_id: job.client_id || null,
+                          property_address: job.property_address || null,
+                          description: (job as any).description || null,
+                          line_items: lineItems.map(li => ({ name: (li as any).name || (li as any).description || '', qty: li.qty, unit_price_cents: li.unit_price_cents })),
+                        },
+                        onCreated: () => { toast.success('Job cloned', { action: { label: 'View', onClick: () => navigate('/jobs') } }); },
+                      });
+                    }} />
                     <DropdownItem icon={<Download size={13} />} label="Download PDF" onClick={handleDownloadPdf} />
                     <DropdownItem icon={<Printer size={13} />} label="Print" onClick={handlePrint} />
                   </div>
@@ -432,18 +481,42 @@ export default function JobDetails() {
           </div>
         </div>
 
+        {/* ═══ FLOW PROGRESS — shows where job is in the lifecycle ═══ */}
+        <div className="flex items-center gap-0 px-1 pb-4">
+          {['Scheduled', 'In Progress', 'Completed', 'Invoiced', 'Paid'].map((step, i) => {
+            const currentIdx = job.status === 'scheduled' ? 0 : job.status === 'in_progress' ? 1 : job.status === 'completed' ? (invoices.length > 0 ? 3 : 2) : job.status === 'cancelled' ? -1 : 0;
+            const isPaidIdx = invoices.some((inv: any) => inv.status === 'paid') ? 4 : -1;
+            const activeIdx = isPaidIdx === 4 ? 4 : currentIdx;
+            const done = i <= activeIdx;
+            return (
+              <React.Fragment key={step}>
+                {i > 0 && <div className={cn('flex-1 h-px', done ? 'bg-primary' : 'bg-outline')} />}
+                <div className="flex flex-col items-center gap-1">
+                  <div className={cn('w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border',
+                    done ? 'bg-primary text-white border-text-primary' : 'bg-surface text-text-tertiary border-outline')}>
+                    {done ? '\u2713' : i + 1}
+                  </div>
+                  <span className={cn('text-[9px] font-medium whitespace-nowrap', done ? 'text-text-primary' : 'text-text-tertiary',
+                    step === 'Invoiced' && invoices.length > 0 && 'cursor-pointer hover:underline')}
+                    onClick={() => { if (step === 'Invoiced' && invoices[0]) navigate(`/invoices/${(invoices[0] as any).id}`); }}>{step}</span>
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
+
         {/* ═══ SUMMARY CARD — green accent top ═══ */}
         <div className="rounded-xl border border-outline bg-surface overflow-hidden">
           {/* Accent bar */}
-          <div className="h-1 bg-text-primary" />
+          <div className="h-1 bg-primary" />
 
           {/* Status row */}
           <div className="flex items-center justify-between px-5 py-3 border-b border-outline-subtle">
             <div className="flex items-center gap-2.5">
               <StatusBadge status={job.status} />
               {isToday && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-primary">
-                  <span className="w-1.5 h-1.5 rounded-full bg-text-primary" />
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-text-primary">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary" />
                   Today
                 </span>
               )}
@@ -464,15 +537,6 @@ export default function JobDetails() {
               <h2 className="text-[20px] font-bold text-text-primary">
                 {job.client_name || 'Unassigned'}
               </h2>
-              {job.client_id && (
-                <button
-                  onClick={() => navigate(`/clients/${job.client_id}`)}
-                  className="text-text-tertiary hover:text-text-primary transition-colors"
-                  title="View client profile"
-                >
-                  <LinkIcon size={14} />
-                </button>
-              )}
             </div>
             <p className="text-[13px] text-text-secondary mt-0.5">{job.title}</p>
           </div>
@@ -483,9 +547,9 @@ export default function JobDetails() {
             <div className="p-5 space-y-5">
               {/* Property address */}
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Property address</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">Property address</p>
                 <div className="flex items-start gap-3">
-                  <div className="icon-tile icon-tile-sm icon-tile-purple mt-0.5">
+                  <div className="icon-tile icon-tile-sm icon-tile-blue mt-0.5">
                     <MapPin size={13} strokeWidth={2} />
                   </div>
                   <div className="text-[13px] text-text-primary leading-relaxed">
@@ -502,7 +566,7 @@ export default function JobDetails() {
 
               {/* Contact details */}
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Contact details</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">Contact details</p>
                 <div className="space-y-1.5">
                   {clientInfo?.phone && (
                     <a href={`tel:${clientInfo.phone}`} className="flex items-center gap-2 text-[13px] text-text-primary hover:text-text-secondary transition-colors">
@@ -525,7 +589,7 @@ export default function JobDetails() {
 
             {/* Right: Job details */}
             <div className="p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Job details</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">Job details</p>
               <div className="space-y-0">
                 <JobDetailRow label="Job type" value={job.job_type || 'One-off job'} />
                 <JobDetailRow label="Starts on" value={job.scheduled_at ? formatDate(job.scheduled_at) : '—'} />
@@ -561,7 +625,7 @@ export default function JobDetails() {
                   <div className="pt-4 flex flex-col lg:flex-row lg:items-center gap-5">
                     {/* Margin */}
                     <div>
-                      <p className="text-[28px] font-extrabold text-text-primary leading-none">{profitMargin}%</p>
+                      <p className="text-[28px] font-bold text-text-primary leading-none">{profitMargin}%</p>
                       <p className="text-[11px] text-text-tertiary mt-1">Profit margin</p>
                     </div>
 
@@ -581,7 +645,7 @@ export default function JobDetails() {
                     {/* Mini donut */}
                     <div className="ml-auto hidden lg:block">
                       <div className="w-10 h-10 rounded-full border-[3px] border-text-primary flex items-center justify-center">
-                        <div className="w-4 h-4 rounded-full bg-text-primary/10" />
+                        <div className="w-4 h-4 rounded-full bg-primary/10" />
                       </div>
                     </div>
                   </div>
@@ -593,7 +657,7 @@ export default function JobDetails() {
           {/* Line Items */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
             <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-              <div className="icon-tile icon-tile-sm icon-tile-purple">
+              <div className="icon-tile icon-tile-sm icon-tile-blue">
                 <Briefcase size={13} strokeWidth={2} />
               </div>
               Line Items
@@ -611,11 +675,11 @@ export default function JobDetails() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-border">
-                      <th className="px-0 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Product / Service</th>
-                      <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-center w-24">Quantity</th>
-                      <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right w-28">Cost</th>
-                      <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right w-28">Price</th>
-                      <th className="px-0 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right w-28">Total</th>
+                      <th className="px-0 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">Product / Service</th>
+                      <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-center w-24">Quantity</th>
+                      <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">Cost</th>
+                      <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">Price</th>
+                      <th className="px-0 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">Total</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -669,7 +733,7 @@ export default function JobDetails() {
         <div className="rounded-xl border border-outline bg-surface overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
             <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-              <div className="icon-tile icon-tile-sm icon-tile-purple">
+              <div className="icon-tile icon-tile-sm icon-tile-blue">
                 <Calendar size={13} strokeWidth={2} />
               </div>
               Visits
@@ -728,7 +792,7 @@ export default function JobDetails() {
         <div className="rounded-xl border border-outline bg-surface overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
             <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-              <div className="icon-tile icon-tile-sm icon-tile-purple">
+              <div className="icon-tile icon-tile-sm icon-tile-blue">
                 <DollarSign size={13} strokeWidth={2} />
               </div>
               Invoices
@@ -771,12 +835,12 @@ export default function JobDetails() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="px-0 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Invoice</th>
-                        <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Due Date</th>
-                        <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Status</th>
-                        <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Subject</th>
-                        <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right">Balance</th>
-                        <th className="px-0 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right">Total</th>
+                        <th className="px-0 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">Invoice</th>
+                        <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">Due Date</th>
+                        <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">Status</th>
+                        <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">Subject</th>
+                        <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right">Balance</th>
+                        <th className="px-0 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right">Total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -810,7 +874,7 @@ export default function JobDetails() {
                             <td className="px-3 py-3 text-[13px] text-text-secondary">
                               {inv.due_date ? formatDate(inv.due_date) : '—'}
                             </td>
-                            <td className="px-3 py-3"><StatusBadge status={inv.status} /></td>
+                            <td className="px-3 py-3"><StatusBadge status={getInvoiceRowUiStatus(inv as any)} /></td>
                             <td className="px-3 py-3 text-[13px] text-text-secondary">{inv.subject}</td>
                             <td className="px-3 py-3 text-[13px] text-text-primary text-right tabular-nums">{formatCents(inv.balance_cents)}</td>
                             <td className="py-3 text-[13px] text-text-primary text-right tabular-nums">{formatCents(inv.total_cents)}</td>
@@ -840,6 +904,9 @@ export default function JobDetails() {
             </div>
           </div>
         )}
+
+        {/* ═══ SPECIFIC NOTES ═══ */}
+        <SpecificNotes entityType="job" entityId={id!} mode="full" />
 
         {/* ═══ RECURRENCE ═══ */}
         <div className="rounded-xl border border-outline bg-surface overflow-hidden">

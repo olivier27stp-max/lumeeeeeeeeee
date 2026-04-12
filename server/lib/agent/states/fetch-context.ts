@@ -57,7 +57,8 @@ export async function fetchContext(ctx: AgentContext): Promise<{ next: AgentStat
     if (domain === 'team_assignment' || domain === 'scheduling') {
       const { data: teams } = await admin.from('teams')
         .select('id, name, color_hex, description, is_active')
-        .eq('org_id', orgId).is('deleted_at', null).eq('is_active', true);
+        .eq('org_id', orgId).is('deleted_at', null).eq('is_active', true)
+        .limit(20);
 
       if (teams?.length) data.teams = teams;
     }

@@ -34,14 +34,14 @@ export default function Landing({ onStart }: LandingProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] text-[#111] antialiased selection:bg-black/10">
+    <div className="min-h-screen bg-surface text-text-primary antialiased selection:bg-black/10">
       {/* ── Navbar ── */}
-      <nav className="fixed top-0 w-full z-50 bg-[#FAFAFA]/80 backdrop-blur-xl border-b border-black/5">
+      <nav className="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl border-b border-black/5">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-6 h-16">
           <span className="text-lg font-bold tracking-[0.25em] uppercase">Lume</span>
           <a
             href="mailto:willhebert30@gmail.com"
-            className="text-xs font-medium text-[#888] hover:text-black transition-colors tracking-wide uppercase"
+            className="text-xs font-medium text-text-tertiary hover:text-black transition-colors tracking-wide uppercase"
           >
             Contact
           </a>
@@ -81,7 +81,7 @@ export default function Landing({ onStart }: LandingProps) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25 }}
-            className="max-w-xl mx-auto text-[#888] text-lg font-light leading-relaxed"
+            className="max-w-xl mx-auto text-text-tertiary text-lg font-light leading-relaxed"
           >
             {t.landing.heroDesc}
           </motion.p>
@@ -109,7 +109,7 @@ export default function Landing({ onStart }: LandingProps) {
             <h2 className="text-3xl md:text-4xl font-extralight tracking-tight">
               {t.landing.simplePricing}
             </h2>
-            <p className="text-[#888] font-light">{t.landing.choosePlan}</p>
+            <p className="text-text-tertiary font-light">{t.landing.choosePlan}</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

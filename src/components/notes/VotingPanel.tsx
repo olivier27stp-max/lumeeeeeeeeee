@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { X, ThumbsUp, Timer, Eye, EyeOff, Trophy, Play, Square } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 export interface Vote {
   itemId: string;
@@ -29,6 +29,7 @@ function VotingPanel({
   active, votes, maxVotes, anonymous, timerSeconds, timerRunning,
   currentUserId, language, onStart, onStop, onClose,
 }: VotingPanelProps) {
+  const { t } = useTranslation();
   const fr = language === 'fr';
   const [configMaxVotes, setConfigMaxVotes] = useState(3);
   const [configAnonymous, setConfigAnonymous] = useState(false);
@@ -170,7 +171,7 @@ function VotingPanel({
                     className={cn(
                       'w-3 h-3 rounded-full border',
                       i < myVoteCount
-                        ? 'bg-blue-500 border-blue-600'
+                        ? 'bg-primary border-primary'
                         : 'bg-surface border-outline',
                     )}
                   />
@@ -194,7 +195,7 @@ function VotingPanel({
                       <span className="flex-1 text-text-secondary truncate">
                         {itemId.slice(0, 8)}...
                       </span>
-                      <span className="font-bold text-blue-500">{count}</span>
+                      <span className="font-bold text-text-primary">{count}</span>
                     </div>
                   ))}
                 </div>

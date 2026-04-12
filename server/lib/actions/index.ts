@@ -96,18 +96,20 @@ export async function resolveEntityVariables(
   if (entityType === 'job') {
     const { data: job } = await supabase
       .from('jobs')
-      .select('title, client_id, clients(first_name, last_name, email, phone)')
+      .select('title, client_id')
       .eq('id', entityId)
-      .maybeSingle() as any;
+      .maybeSingle();
     if (job) {
       vars.job_name = job.title || '';
-      const c = job.clients;
-      if (c) {
-        vars.client_first_name = c.first_name || '';
-        vars.client_last_name = c.last_name || '';
-        vars.client_name = `${c.first_name || ''} ${c.last_name || ''}`.trim();
-        vars.client_email = c.email || '';
-        vars.client_phone = c.phone || '';
+      if (job.client_id) {
+        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone').eq('id', job.client_id).maybeSingle();
+        if (c) {
+          vars.client_first_name = c.first_name || '';
+          vars.client_last_name = c.last_name || '';
+          vars.client_name = `${c.first_name || ''} ${c.last_name || ''}`.trim();
+          vars.client_email = c.email || '';
+          vars.client_phone = c.phone || '';
+        }
       }
     }
   }
@@ -115,23 +117,26 @@ export async function resolveEntityVariables(
   if (entityType === 'invoice') {
     const { data: inv } = await supabase
       .from('invoices')
-      .select('invoice_number, due_date, total_cents, client_id, job_id, clients(first_name, last_name, email, phone), jobs(title)')
+      .select('invoice_number, due_date, total_cents, client_id, job_id')
       .eq('id', entityId)
-      .maybeSingle() as any;
+      .maybeSingle();
     if (inv) {
       vars.invoice_number = inv.invoice_number || '';
       vars.invoice_due_date = inv.due_date || '';
       vars.invoice_total = inv.total_cents ? `$${(inv.total_cents / 100).toFixed(2)}` : '$0.00';
-      const c = inv.clients;
-      if (c) {
-        vars.client_first_name = c.first_name || '';
-        vars.client_last_name = c.last_name || '';
-        vars.client_name = `${c.first_name || ''} ${c.last_name || ''}`.trim();
-        vars.client_email = c.email || '';
-        vars.client_phone = c.phone || '';
+      if (inv.client_id) {
+        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone').eq('id', inv.client_id).maybeSingle();
+        if (c) {
+          vars.client_first_name = c.first_name || '';
+          vars.client_last_name = c.last_name || '';
+          vars.client_name = `${c.first_name || ''} ${c.last_name || ''}`.trim();
+          vars.client_email = c.email || '';
+          vars.client_phone = c.phone || '';
+        }
       }
-      if (inv.jobs) {
-        vars.job_name = inv.jobs.title || '';
+      if (inv.job_id) {
+        const { data: j } = await supabase.from('jobs').select('title').eq('id', inv.job_id).maybeSingle();
+        if (j) vars.job_name = j.title || '';
       }
     }
   }

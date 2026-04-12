@@ -132,21 +132,21 @@ export default function ArchivesPanel() {
     <div className="space-y-5">
       {/* Tabs */}
       <div className="flex items-center gap-2">
-        {tabs.map((t) => (
+        {tabs.map((tb) => (
           <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
+            key={tb.key}
+            onClick={() => setTab(tb.key)}
             className={cn(
               'px-3 py-1.5 rounded-lg text-[13px] font-medium transition-all',
-              tab === t.key
+              tab === tb.key
                 ? 'bg-surface-secondary text-text-primary font-semibold'
                 : 'text-text-secondary hover:bg-surface-secondary/50'
             )}
           >
-            {t.label}
-            {t.count > 0 && (
+            {tb.label}
+            {tb.count > 0 && (
               <span className="ml-1.5 text-[10px] bg-surface-tertiary text-text-tertiary rounded-full px-1.5 py-0.5">
-                {t.count}
+                {tb.count}
               </span>
             )}
           </button>
@@ -177,19 +177,19 @@ export default function ArchivesPanel() {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-border">
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
                   {archiveStrings.type || 'Type'}
                 </th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
                   {archiveStrings.name || 'Name'}
                 </th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
                   {t.common.status}
                 </th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
                   {archiveStrings.archivedOn || 'Archived on'}
                 </th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
                   {t.common.actions}
                 </th>
               </tr>

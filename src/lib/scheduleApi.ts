@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 import { emitAppointmentCreated, emitAppointmentCancelled } from './automationEventsApi';
 
 export const DEFAULT_TIMEZONE = 'America/Montreal';
@@ -25,6 +26,7 @@ export interface ScheduleJobRef {
   longitude: number | null;
   geocode_status: string | null;
   total_cents?: number | null;
+  job_number?: string | null;
 }
 
 export interface ScheduleEventRecord {
@@ -116,16 +118,12 @@ export async function listScheduleEventsRange(params: {
     if (hit && now - hit.cachedAt < CACHE_TTL_MS) return hit.rows;
   }
 
+  // Fetch events and jobs separately to avoid PostgREST JOIN "id ambiguous" with RLS
+  const orgId = await getCurrentOrgIdOrThrow();
   let query = supabase
     .from('schedule_events')
-    .select(
-      `
-      id,job_id,team_id,start_at,end_at,timezone,status,notes,deleted_at,
-      job:jobs!schedule_events_job_id_fkey(
-        id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,deleted_at
-      )
-      `
-    )
+    .select('id,job_id,team_id,start_at,end_at,timezone,status,notes,deleted_at')
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .lt('start_at', endAt)
     .gt('end_at', startAt)
@@ -141,9 +139,32 @@ export async function listScheduleEventsRange(params: {
 
   const { data, error } = await query;
   if (error) throw error;
-  // Filter out events whose parent job has been soft-deleted (keep events even if job join is null)
-  let activeRows = (data || []).filter((row: any) => {
-    if (row.job && row.job.deleted_at) return false; // job was soft-deleted
+
+  const eventRows = data || [];
+  if (eventRows.length === 0) {
+    eventsCache.set(key, { cachedAt: now, rows: [] });
+    return [];
+  }
+
+  // Fetch linked jobs separately (avoids PostgREST JOIN + RLS "id ambiguous")
+  const jobIds = [...new Set(eventRows.map((r: any) => r.job_id).filter(Boolean))];
+  const jobMap: Record<string, any> = {};
+  if (jobIds.length > 0) {
+    const { data: jobs } = await supabase
+      .from('jobs')
+      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,deleted_at')
+      .in('id', jobIds);
+    for (const j of jobs || []) {
+      jobMap[j.id] = j;
+    }
+  }
+
+  // Merge job data into event rows
+  const merged = eventRows.map((row: any) => ({ ...row, job: jobMap[row.job_id] || null }));
+
+  // Filter out events whose parent job has been soft-deleted
+  let activeRows = merged.filter((row: any) => {
+    if (row.job && row.job.deleted_at) return false;
     return true;
   });
   // Secondary team filter: for events with NULL team_id, check if the job's team_id matches
@@ -265,16 +286,11 @@ export async function listUnassignedScheduledEvents(params: {
   const startAt = toIsoOrThrow(params.startAt);
   const endAt = toIsoOrThrow(params.endAt);
 
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('schedule_events')
-    .select(
-      `
-      id,job_id,team_id,start_at,end_at,timezone,status,notes,deleted_at,
-      job:jobs!schedule_events_job_id_fkey(
-        id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,deleted_at
-      )
-      `
-    )
+    .select('id,job_id,team_id,start_at,end_at,timezone,status,notes,deleted_at')
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .is('team_id', null)
     .lt('start_at', endAt)
@@ -283,10 +299,26 @@ export async function listUnassignedScheduledEvents(params: {
 
   if (error) throw error;
 
-  return (data || [])
+  const eventRows = data || [];
+  if (eventRows.length === 0) return [];
+
+  // Fetch linked jobs separately (avoids PostgREST JOIN + RLS "id ambiguous")
+  const jobIds = [...new Set(eventRows.map((r: any) => r.job_id).filter(Boolean))];
+  const jobMap: Record<string, any> = {};
+  if (jobIds.length > 0) {
+    const { data: jobs } = await supabase
+      .from('jobs')
+      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,deleted_at')
+      .in('id', jobIds);
+    for (const j of jobs || []) {
+      jobMap[j.id] = j;
+    }
+  }
+
+  return eventRows
+    .map((row: any) => ({ ...row, job: jobMap[row.job_id] || null }))
     .filter((row: any) => {
       if (row.job && row.job.deleted_at) return false;
-      // Only truly unassigned: event has no team AND job has no team
       if (row.job?.team_id) return false;
       return true;
     })

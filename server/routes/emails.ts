@@ -51,10 +51,18 @@ async function getCompanySettings(orgId: string): Promise<CompanyInfo> {
     const serviceClient = getServiceClient();
     const { data } = await serviceClient
       .from('company_settings')
-      .select('company_name, company_email, company_phone, company_address, company_logo_url')
+      .select('company_name, email, phone, street1, city, province, postal_code, logo_url')
       .eq('org_id', orgId)
       .maybeSingle();
-    return data || {};
+    if (!data) return {};
+    const address = [data.street1, data.city, data.province, data.postal_code].filter(Boolean).join(', ') || null;
+    return {
+      company_name: data.company_name || null,
+      company_email: data.email || null,
+      company_phone: data.phone || null,
+      company_address: address,
+      company_logo_url: data.logo_url || null,
+    };
   } catch {
     return {};
   }
@@ -130,7 +138,7 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
     // Fetch invoice
     const { data: invoice, error: invoiceError } = await client
       .from('invoices')
-      .select('id, invoice_number, total_amount, balance_cents, currency, due_date, status, client_id, view_token, created_at')
+      .select('id, invoice_number, total_cents, balance_cents, currency, due_date, status, client_id, view_token, created_at')
       .eq('id', invoiceId)
       .eq('org_id', orgId)
       .is('deleted_at', null)
@@ -150,7 +158,7 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
 
     const clientName = `${clientData.first_name || ''} ${clientData.last_name || ''}`.trim() || 'Client';
     const company = await getCompanySettings(orgId);
-    const amountStr = formatCurrency(invoice.total_amount || invoice.balance_cents || 0, invoice.currency || 'CAD');
+    const amountStr = formatCurrency(invoice.total_cents || invoice.balance_cents || 0, invoice.currency || 'CAD');
     const baseUrl = resolvePublicBaseUrl(req);
     const viewUrl = invoice.view_token ? `${baseUrl}/q/${invoice.view_token}` : null;
 
@@ -299,7 +307,7 @@ router.post('/emails/send-quote', validate(sendQuoteEmailSchema), async (req, re
     // Fetch quote (invoices table, quotes are stored as invoices)
     const { data: quote, error: quoteError } = await client
       .from('invoices')
-      .select('id, invoice_number, total_amount, balance_cents, currency, due_date, status, client_id, view_token, created_at')
+      .select('id, invoice_number, total_cents, balance_cents, currency, due_date, status, client_id, view_token, created_at')
       .eq('id', invoiceId)
       .eq('org_id', orgId)
       .is('deleted_at', null)
@@ -319,7 +327,7 @@ router.post('/emails/send-quote', validate(sendQuoteEmailSchema), async (req, re
 
     const clientName = `${clientData.first_name || ''} ${clientData.last_name || ''}`.trim() || 'Client';
     const company = await getCompanySettings(orgId);
-    const amountStr = formatCurrency(quote.total_amount || quote.balance_cents || 0, quote.currency || 'CAD');
+    const amountStr = formatCurrency(quote.total_cents || quote.balance_cents || 0, quote.currency || 'CAD');
     const baseUrl = resolvePublicBaseUrl(req);
     const viewUrl = quote.view_token ? `${baseUrl}/q/${quote.view_token}` : null;
 

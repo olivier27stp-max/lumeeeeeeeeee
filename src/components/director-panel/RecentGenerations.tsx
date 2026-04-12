@@ -121,7 +121,7 @@ export default function RecentGenerations({ orgId }: Props) {
             className={cn(
               'px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors',
               filter === f.key
-                ? 'bg-text-primary text-surface'
+                ? 'bg-primary text-white'
                 : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'
             )}
           >

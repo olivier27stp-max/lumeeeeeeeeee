@@ -1,4 +1,5 @@
 ﻿import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 
 export interface TeamInput {
   name: string;
@@ -81,12 +82,14 @@ export async function updateTeam(teamId: string, input: TeamInput): Promise<Team
 }
 
 export async function softDeleteTeam(teamId: string): Promise<void> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const nowIso = new Date().toISOString();
 
   const { error: teamError } = await supabase
     .from('teams')
     .update({ deleted_at: nowIso, updated_at: nowIso })
-    .eq('id', teamId);
+    .eq('id', teamId)
+    .eq('org_id', orgId);
 
   if (teamError) throw teamError;
 
@@ -94,6 +97,7 @@ export async function softDeleteTeam(teamId: string): Promise<void> {
     .from('jobs')
     .update({ team_id: null, updated_at: nowIso })
     .eq('team_id', teamId)
+    .eq('org_id', orgId)
     .is('deleted_at', null);
 
   if (jobsError) throw jobsError;
@@ -102,6 +106,7 @@ export async function softDeleteTeam(teamId: string): Promise<void> {
     .from('schedule_events')
     .update({ team_id: null, updated_at: nowIso })
     .eq('team_id', teamId)
+    .eq('org_id', orgId)
     .is('deleted_at', null);
 
   if (eventsError) throw eventsError;

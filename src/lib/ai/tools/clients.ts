@@ -11,7 +11,7 @@ export const clientTools: ToolDefinition[] = [
     label: 'Search Clients',
     description: 'Search and list clients by name, email, company, or tag. Returns paginated results.',
     category: 'read',
-    requiredPermissions: ['clients.view'],
+    requiredPermissions: ['clients.read'],
     parameters: [
       { name: 'query', type: 'string', description: 'Search term (name, email, company)', required: false },
       { name: 'page', type: 'number', description: 'Page number (default 1)', required: false, default: 1 },
@@ -49,7 +49,7 @@ export const clientTools: ToolDefinition[] = [
     label: 'Get Client Details',
     description: 'Get full details for a specific client by ID.',
     category: 'read',
-    requiredPermissions: ['clients.view'],
+    requiredPermissions: ['clients.read'],
     parameters: [
       { name: 'clientId', type: 'string', description: 'The client UUID', required: true },
     ],

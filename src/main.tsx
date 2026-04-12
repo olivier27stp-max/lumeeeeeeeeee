@@ -20,7 +20,6 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {/* @ts-expect-error — ErrorBoundary uses @ts-nocheck internally */}
     <ErrorBoundary>
       <LanguageProvider>
         <QueryClientProvider client={queryClient}>

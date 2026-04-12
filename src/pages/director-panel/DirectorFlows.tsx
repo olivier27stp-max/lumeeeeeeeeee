@@ -160,7 +160,7 @@ export default function DirectorFlows({ orgId }: { orgId: string }) {
               className={cn(
                 'px-3 py-1.5 text-[12px] font-medium transition-colors',
                 statusFilter === sf.value
-                  ? 'bg-text-primary text-surface'
+                  ? 'bg-primary text-white'
                   : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'
               )}
             >

@@ -50,7 +50,7 @@ const STATUS_COLORS = [
 
 // ─── Main Component ─────────────────────────────────────────────
 export default function CustomFieldsSettings() {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const isFr = language === 'fr';
 
   const [entity, setEntity] = useState<EntityType>('clients');
@@ -139,7 +139,7 @@ export default function CustomFieldsSettings() {
             <h3 className="text-[14px] font-semibold text-text-primary">
               {t.customFields.customColumns}
               {' '}
-              <span className="text-text-tertiary font-normal">— {isFr ? ENTITY_TABS.find((t) => t.key === entity)!.labelFr : ENTITY_TABS.find((t) => t.key === entity)!.label}</span>
+              <span className="text-text-tertiary font-normal">— {isFr ? ENTITY_TABS.find((tab) => tab.key === entity)!.labelFr : ENTITY_TABS.find((tab) => tab.key === entity)!.label}</span>
             </h3>
             <p className="text-[12px] text-text-tertiary mt-0.5">
               {isFr
@@ -293,6 +293,7 @@ function AddColumnModal({
   onClose: () => void;
   onCreated: (col: CustomColumn) => void;
 }) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<'type' | 'name'>('type');
   const [selectedType, setSelectedType] = useState<ColumnType | null>(null);
   const [name, setName] = useState('');
@@ -352,7 +353,7 @@ function AddColumnModal({
                   <div className="w-9 h-9 rounded-lg bg-surface-secondary/80 group-hover/type:bg-primary/10 flex items-center justify-center transition-colors">
                     <Icon size={17} className="text-text-secondary group-hover/type:text-primary transition-colors" />
                   </div>
-                  <span className="text-[11px] font-semibold text-text-secondary group-hover/type:text-text-primary transition-colors">
+                  <span className="text-xs font-medium text-text-secondary group-hover/type:text-text-primary transition-colors">
                     {isFr ? meta.labelFr : meta.label}
                   </span>
                 </button>
@@ -410,6 +411,7 @@ function EditColumnModal({
   onClose: () => void;
   onUpdated: (col: CustomColumn) => void;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(column.name);
   const [required, setRequired] = useState(column.required);
   const [config, setConfig] = useState<ColumnConfig>(column.config || {});

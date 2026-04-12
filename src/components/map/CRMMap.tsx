@@ -7,7 +7,7 @@ import JobPopup from './JobPopup';
 
 const DEFAULT_CENTER: L.LatLngTuple = [45.5017, -73.5673];
 const DEFAULT_ZOOM = 10;
-const OSM_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+const OSM_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
 
 function createPinIcon(color: string, selected: boolean): L.DivIcon {

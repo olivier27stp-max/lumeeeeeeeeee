@@ -3,7 +3,7 @@
 import React, { useCallback, memo } from 'react';
 import { ChevronLeft, ChevronRight, X, Maximize2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 interface FrameInfo {
   id: string;
@@ -23,6 +23,7 @@ interface PresentationModeProps {
 }
 
 function PresentationMode({ frames, currentIndex, language, onNavigate, onExit }: PresentationModeProps) {
+  const { t } = useTranslation();
   const fr = language === 'fr';
 
   const handlePrev = useCallback(() => {
@@ -85,7 +86,7 @@ function PresentationMode({ frames, currentIndex, language, onNavigate, onExit }
                 className={cn(
                   'transition-all rounded-full',
                   i === currentIndex
-                    ? 'w-8 h-2.5 bg-blue-500'
+                    ? 'w-8 h-2.5 bg-primary'
                     : 'w-2.5 h-2.5 bg-gray-300 hover:bg-gray-400',
                 )}
                 title={frame.label}

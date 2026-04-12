@@ -3,47 +3,81 @@ import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 
 const router = Router();
 
-// GET /api/notifications — list notifications for current user
+// GET /api/notifications — list unread + recent
 router.get('/notifications', async (req, res) => {
   try {
-    const authed = await requireAuthedClient(req, res);
-    if (!authed) return;
-    const { orgId } = authed;
-    const serviceClient = getServiceClient();
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
 
-    const { data, error } = await serviceClient
-      .from('notifications')
+    const { data, error } = await admin.from('notifications')
       .select('*')
-      .eq('org_id', orgId)
+      .eq('org_id', auth.orgId)
+      .is('dismissed_at', null)
       .order('created_at', { ascending: false })
       .limit(50);
 
     if (error) throw error;
     return res.json(data || []);
-  } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to load notifications' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Failed to fetch notifications' });
   }
 });
 
-// POST /api/notifications/read — mark notifications as read
+// GET /api/notifications/unread-count
+router.get('/notifications/unread-count', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+
+    const { count, error } = await admin.from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('org_id', auth.orgId)
+      .is('read_at', null)
+      .is('dismissed_at', null);
+
+    if (error) throw error;
+    return res.json({ count: count || 0 });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Failed to count' });
+  }
+});
+
+// POST /api/notifications/read — mark as read (single or all)
 router.post('/notifications/read', async (req, res) => {
   try {
-    const authed = await requireAuthedClient(req, res);
-    if (!authed) return;
-
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
     const { ids } = req.body || {};
-    const serviceClient = getServiceClient();
 
     if (ids && Array.isArray(ids)) {
-      await serviceClient.from('notifications').update({ is_read: true }).in('id', ids);
+      await admin.from('notifications').update({ read_at: new Date().toISOString(), is_read: true }).eq('org_id', auth.orgId).in('id', ids);
     } else {
-      // Mark all as read
-      await serviceClient.from('notifications').update({ is_read: true }).eq('org_id', authed.orgId);
+      await admin.from('notifications').update({ read_at: new Date().toISOString(), is_read: true }).eq('org_id', auth.orgId).is('read_at', null);
     }
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Failed to mark as read' });
+  }
+});
+
+// DELETE /api/notifications/:id — dismiss
+router.delete('/notifications/:id', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+
+    await admin.from('notifications')
+      .update({ dismissed_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .eq('org_id', auth.orgId);
 
     return res.json({ ok: true });
-  } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to mark as read' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message });
   }
 });
 

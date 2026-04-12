@@ -8,9 +8,11 @@ import {
   ArrowLeft, MoreHorizontal, Mail, MessageSquare, Briefcase, Copy,
   Eye, Printer, FileSignature, Trash2, Clock, CheckCircle2,
   MapPin, Phone as PhoneIcon, Mail as MailIcon, Pencil, FileText,
-  Plus, Check, X, Save,
+  Plus, Check, X, Save, Ruler,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { usePermissions } from '../hooks/usePermissions';
+import { hasPermission } from '../lib/permissions';
 import {
   getQuoteById, updateQuote, saveQuoteLineItems, type QuoteDetail,
   type QuoteStatus, type QuoteLineItemInput, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS,
@@ -19,7 +21,11 @@ import {
 } from '../lib/quotesApi';
 import { supabase } from '../lib/supabase';
 import { downloadQuotePdf } from '../lib/generateQuotePdf';
+import { getCompanySettings } from '../lib/invoicesApi';
+import QuoteRenderer from '../components/quote/QuoteRenderer';
+import { buildQuoteRenderData } from '../components/quote/buildQuoteRenderData';
 import { toast } from 'sonner';
+import SpecificNotes from '../components/SpecificNotes';
 import { format } from 'date-fns';
 import { useTranslation } from '../i18n';
 
@@ -28,11 +34,15 @@ type EditMode = null | 'title' | 'intro' | 'lineItems' | 'disclaimer' | 'notes' 
 export default function QuoteDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
+  const { permissions } = usePermissions();
+  const canMeasure = hasPermission(permissions, 'quotes.update');
   const [detail, setDetail] = useState<QuoteDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [moreOpen, setMoreOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [companySettings, setCompanySettings] = useState<any>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   // ── Edit state ──
   const [editing, setEditing] = useState<EditMode>(null);
@@ -48,6 +58,11 @@ export default function QuoteDetails() {
   }>>([]);
 
   useEffect(() => { if (id) loadQuote(); }, [id]);
+  useEffect(() => {
+    getCompanySettings()
+      .then((cs: any) => setCompanySettings(cs))
+      .catch(() => setCompanySettings({ company_name: null, company_email: null, company_phone: null, company_address: null, company_logo_url: null }));
+  }, []);
 
   async function loadQuote() {
     setLoading(true);
@@ -82,7 +97,7 @@ export default function QuoteDetails() {
   async function act(fn: () => Promise<void>) {
     setBusy(true);
     try { await fn(); } catch (e: any) { toast.error(e?.message || 'Error'); }
-    finally { setBusy(false); setMoreOpen(false); }
+    finally { setBusy(false); setMoreOpen(false); setEditing(null); }
   }
 
   // ── Edit helpers ──
@@ -141,6 +156,7 @@ export default function QuoteDetails() {
             is_optional: i.is_optional,
             item_type: 'service' as const,
           }));
+        if (items.length === 0) { toast.error(language === 'fr' ? 'Au moins un item requis' : 'At least one line item required'); return; }
         await saveQuoteLineItems(quote.id, items);
       }
       toast.success(t.quoteDetails.saved);
@@ -154,6 +170,7 @@ export default function QuoteDetails() {
   }
 
   const cancelEdit = () => setEditing(null);
+
 
   const inputCls = 'w-full px-3 py-2 bg-surface border border-outline rounded-lg text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all';
 
@@ -174,7 +191,7 @@ export default function QuoteDetails() {
           <div className="flex items-center gap-3 mb-3">
             <button onClick={() => navigate('/quotes')} className="text-text-tertiary hover:text-text-primary transition-colors"><ArrowLeft size={16} /></button>
             <FileText size={16} className="text-text-tertiary" />
-            <span className={cn('px-2.5 py-0.5 rounded-full text-[11px] font-semibold border inline-flex items-center gap-1',
+            <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-medium border inline-flex items-center gap-1',
               QUOTE_STATUS_COLORS[quote.status as QuoteStatus] || QUOTE_STATUS_COLORS.draft)}>
               <span className="w-1.5 h-1.5 rounded-full bg-current" />
               {QUOTE_STATUS_LABELS[quote.status as QuoteStatus] || quote.status}
@@ -198,6 +215,10 @@ export default function QuoteDetails() {
 
         {/* Actions */}
         <div className="flex items-center gap-2 shrink-0">
+          <button onClick={() => navigate(`/quotes/${id}/measure`)}
+            className="glass-button px-3 py-2 text-[13px] font-medium flex items-center gap-1.5">
+            <Ruler size={15} /> Mesure
+          </button>
           <div className="relative">
             <button onClick={() => setMoreOpen(!moreOpen)} disabled={busy}
               className="glass-button px-3 py-2 text-[13px] font-medium flex items-center gap-1.5">
@@ -218,6 +239,9 @@ export default function QuoteDetails() {
                   <button onClick={() => act(async () => { const d = await duplicateQuote(quote.id); toast.success('Duplicated'); navigate(`/quotes/${d.quote.id}`); })}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
                     <Copy size={14} /> Create Similar Quote</button>
+                  <button onClick={() => navigate(`/quotes/${id}/measure`)}
+                    className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
+                    <Ruler size={14} /> Mesure</button>
                   <div className="border-t border-outline my-1" />
                   <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">Send as...</p>
                   <button onClick={() => act(async () => { await sendQuoteEmail(quote.id); toast.success('Email sent'); loadQuote(); })}
@@ -323,8 +347,9 @@ export default function QuoteDetails() {
                       {formatQuoteMoney(Math.round((parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0) * 100))}
                     </div>
                     <div className="col-span-1 flex justify-center pt-1.5">
-                      <button onClick={() => setEditLineItems(p => p.length > 1 ? p.filter((_, i) => i !== idx) : p)}
-                        className="p-1 text-text-tertiary hover:text-danger"><Trash2 size={13} /></button>
+                      <button onClick={() => { if (editLineItems.length <= 1) { toast.error(language === 'fr' ? 'Au moins un item requis' : 'At least one item required'); return; } setEditLineItems(p => p.filter((_, i) => i !== idx)); }}
+                        disabled={editLineItems.length <= 1}
+                        className={cn("p-1 hover:text-danger", editLineItems.length <= 1 ? "text-text-muted cursor-not-allowed" : "text-text-tertiary")}><Trash2 size={13} /></button>
                     </div>
                   </div>
                 ))}
@@ -432,7 +457,7 @@ export default function QuoteDetails() {
             </div>
             {editing === 'notes' ? (
               <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)}
-                className={cn(inputCls, 'min-h-[100px]')} autoFocus placeholder="Leave an internal note..." />
+                className={cn(inputCls, 'min-h-[100px]')} autoFocus placeholder="Notes visible on the quote..." />
             ) : quote.notes ? (
               <p className="text-[13px] text-text-secondary whitespace-pre-wrap">{quote.notes}</p>
             ) : (
@@ -440,12 +465,42 @@ export default function QuoteDetails() {
                 <div className="w-10 h-10 rounded-full bg-surface-secondary flex items-center justify-center mx-auto mb-2">
                   <FileText size={16} className="text-text-tertiary" />
                 </div>
-                <p className="text-[12px] text-text-tertiary">Click to add internal notes</p>
+                <p className="text-[12px] text-text-tertiary">Click to add notes (visible on quote)</p>
               </div>
             )}
           </div>
+
+          {/* Specific Notes */}
+          <SpecificNotes entityType="quote" entityId={quote.id} mode="full" />
+
+          {/* Quote Preview Button */}
+          <div className="section-card p-4">
+            <button onClick={() => setShowPreview(true)}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-outline text-[13px] font-medium text-text-secondary hover:bg-surface-secondary transition-all">
+              <Eye size={14} />
+              {language === 'fr' ? 'Aperçu du devis' : 'Preview Quote'}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Quote Preview Modal */}
+      {showPreview && detail && companySettings && (
+        <div className="modal-overlay" onClick={() => setShowPreview(false)}>
+          <div className="modal-content max-w-3xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 z-10 bg-surface border-b border-border px-5 py-3 flex items-center justify-between">
+              <p className="text-[14px] font-bold text-text-primary">{language === 'fr' ? 'Aperçu du devis' : 'Quote Preview'}</p>
+              <button onClick={() => setShowPreview(false)} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="rounded-b-xl overflow-hidden">
+              <QuoteRenderer data={buildQuoteRenderData(detail, companySettings)} />
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

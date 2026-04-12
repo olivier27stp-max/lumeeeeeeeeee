@@ -30,6 +30,7 @@ import {
   Filter,
   LayoutGrid,
   List,
+  Copy,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { toast } from 'sonner';
@@ -48,8 +49,10 @@ import {
 } from '../lib/jobsApi';
 import { Job } from '../types';
 import StatusBadge from '../components/ui/StatusBadge';
+import { CrmPageHeader, CrmFilterBtn, CrmTableCard, CrmAvatar, CrmBadge } from '../components/ui/CrmTable';
 import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
+import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
 
 // ─── View mode ───────────────────────────────────────────────────
@@ -69,15 +72,15 @@ const StatChip: React.FC<StatChipProps> = ({ label, value, color, active, onClic
     <button
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all whitespace-nowrap',
+        'inline-flex items-center gap-2 h-8 px-3.5 rounded-full text-xs font-medium transition-all whitespace-nowrap',
         active
-          ? 'bg-text-primary text-surface shadow-sm'
-          : 'bg-surface-secondary/60 text-text-secondary hover:bg-surface-secondary hover:text-text-primary'
+          ? 'bg-primary text-white shadow-sm'
+          : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'
       )}
     >
-      <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', color)} />
+      <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', color, active && 'bg-surface/60')} />
       {label}
-      <span className={cn('font-bold tabular-nums', active ? 'text-surface' : 'text-text-primary')}>
+      <span className={cn('font-bold tabular-nums', active ? 'text-white' : 'text-text-primary')}>
         {value}
       </span>
     </button>
@@ -100,7 +103,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onDelete, formatMoney }
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       onClick={onClick}
-      className="w-full text-left rounded-xl bg-surface border border-outline-subtle/60 p-4 hover:border-primary/30 hover:shadow-md transition-all group relative"
+      className="w-full text-left rounded-2xl bg-surface-card border border-outline p-5 hover:border-primary/30 hover:shadow-card-hover transition-all group relative"
     >
       {/* Status stripe */}
       <div className={cn(
@@ -117,14 +120,14 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onDelete, formatMoney }
           </div>
           <button
             onClick={onDelete}
-            className="p-1 rounded-md text-text-tertiary hover:text-danger hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-all"
+            className="p-1 rounded-lg text-text-muted hover:text-danger hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-all"
           >
             <Trash2 size={12} />
           </button>
         </div>
 
         {/* Title */}
-        <h3 className="text-[14px] font-semibold text-text-primary leading-snug mb-1.5 group-hover:text-primary transition-colors line-clamp-1">
+        <h3 className="text-sm font-semibold text-text-primary leading-snug mb-1.5 group-hover:text-primary transition-colors line-clamp-1">
           {job.title}
         </h3>
 
@@ -145,12 +148,12 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onDelete, formatMoney }
         )}
 
         {/* Bottom row: schedule + amount */}
-        <div className="flex items-center justify-between pt-2 border-t border-outline-subtle/50">
+        <div className="flex items-center justify-between pt-2 border-t border-outline/30">
           <span className="text-[11px] text-text-tertiary flex items-center gap-1">
             <Calendar size={10} />
             {job.scheduled_at ? formatDate(job.scheduled_at) : 'Unscheduled'}
           </span>
-          <span className="text-[13px] font-bold text-text-primary tabular-nums">
+          <span className="text-sm font-bold text-text-primary tabular-nums">
             {formatMoney(job)}
           </span>
         </div>
@@ -190,10 +193,10 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: '100%', opacity: 0 }}
       transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-      className="w-[420px] shrink-0 h-full border-l border-outline-subtle bg-surface overflow-y-auto"
+      className="w-[420px] shrink-0 h-full border-l border-outline/40 bg-surface overflow-y-auto"
     >
       {/* Header */}
-      <div className="sticky top-0 bg-surface z-10 px-5 py-4 border-b border-outline-subtle/60">
+      <div className="sticky top-0 bg-surface z-10 px-5 py-4 border-b border-outline/40">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className={cn('w-2.5 h-2.5 rounded-full', statusColor(job.status))} />
@@ -201,10 +204,10 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
             <StatusBadge status={job.status} />
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={onEdit} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
+            <button onClick={onEdit} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors focus:ring-1 focus:ring-primary/30 outline-none">
               <Edit2 size={13} />
             </button>
-            <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
+            <button onClick={onClose} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors focus:ring-1 focus:ring-primary/30 outline-none">
               <X size={14} />
             </button>
           </div>
@@ -214,18 +217,18 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
 
       <div className="px-5 py-4 space-y-5">
         {/* Amount card */}
-        <div className="rounded-xl bg-surface-secondary/80 p-4">
-          <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider mb-1">Total Value</p>
-          <p className="text-[24px] font-bold text-text-primary tabular-nums">{formatMoney(job)}</p>
+        <div className="stat-card">
+          <p className="text-xs font-medium text-text-tertiary mb-1">Total Value</p>
+          <p className="text-[24px] font-extrabold text-text-primary tabular-nums">{formatMoney(job)}</p>
         </div>
 
         {/* Client */}
         <div>
-          <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2.5">Client</p>
+          <p className="text-xs font-medium text-text-tertiary mb-2.5">Client</p>
           <div className="space-y-2">
             {job.client_name && (
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-text-primary text-surface flex items-center justify-center text-[11px] font-bold shrink-0">
+                <div className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center text-[11px] font-bold shrink-0">
                   {job.client_name.charAt(0).toUpperCase()}
                 </div>
                 <span className="text-[13px] font-semibold text-text-primary">{job.client_name}</span>
@@ -237,8 +240,8 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
         {/* Address */}
         {job.property_address && (
           <div>
-            <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2.5">Property</p>
-            <div className="flex items-start gap-2.5 rounded-lg bg-surface-secondary/60 p-3">
+            <p className="text-xs font-medium text-text-tertiary mb-2.5">Property</p>
+            <div className="flex items-start gap-2.5 rounded-xl bg-surface-secondary/50 p-3">
               <MapPin size={13} className="text-text-tertiary mt-0.5 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] text-text-primary">{job.property_address}</p>
@@ -254,15 +257,15 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
 
         {/* Schedule */}
         <div>
-          <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2.5">Schedule</p>
+          <p className="text-xs font-medium text-text-tertiary mb-2.5">Schedule</p>
           <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg bg-surface-secondary/60 p-3">
+            <div className="rounded-xl bg-surface-secondary/50 p-3">
               <p className="text-[10px] font-medium text-text-tertiary uppercase mb-1">Date</p>
               <p className="text-[13px] font-semibold text-text-primary">
                 {job.scheduled_at ? formatDate(job.scheduled_at) : 'Unscheduled'}
               </p>
             </div>
-            <div className="rounded-lg bg-surface-secondary/60 p-3">
+            <div className="rounded-xl bg-surface-secondary/50 p-3">
               <p className="text-[10px] font-medium text-text-tertiary uppercase mb-1">Time</p>
               <p className="text-[13px] font-semibold text-text-primary">
                 {job.scheduled_at
@@ -276,7 +279,7 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
 
         {/* Details */}
         <div>
-          <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2.5">Details</p>
+          <p className="text-xs font-medium text-text-tertiary mb-2.5">Details</p>
           <div className="space-y-2">
             {job.job_type && (
               <div className="flex items-center justify-between text-[13px]">
@@ -296,8 +299,8 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
         {/* Notes */}
         {job.notes && (
           <div>
-            <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2.5">Notes</p>
-            <div className="rounded-lg bg-surface-secondary/60 p-3">
+            <p className="text-xs font-medium text-text-tertiary mb-2.5">Notes</p>
+            <div className="rounded-xl bg-surface-secondary/50 p-3">
               <p className="text-[13px] text-text-secondary leading-relaxed whitespace-pre-wrap">{job.notes}</p>
             </div>
           </div>
@@ -305,18 +308,18 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
       </div>
 
       {/* Footer */}
-      <div className="sticky bottom-0 bg-surface px-5 py-3 border-t border-outline-subtle/60 flex items-center justify-between">
+      <div className="sticky bottom-0 bg-surface px-5 py-3 border-t border-outline/40 flex items-center justify-between">
         <button
           onClick={onDelete}
-          className="text-[12px] font-medium text-danger hover:text-danger flex items-center gap-1.5 px-2 py-1.5 rounded-md hover:bg-danger/10 transition-colors"
+          className="glass-button-ghost text-[12px] font-medium text-danger hover:text-danger flex items-center gap-1.5 hover:bg-danger/10"
         >
-          <Trash2 size={12} /> Delete
+          <Trash2 size={13} /> Delete
         </button>
         <button
           onClick={onEdit}
-          className="glass-button-primary !text-[12px] !px-3.5 inline-flex items-center gap-1.5"
+          className="glass-button-primary inline-flex items-center gap-1.5"
         >
-          <Edit2 size={12} /> Edit Job
+          <Edit2 size={13} /> Edit Job
         </button>
       </div>
     </motion.div>
@@ -324,6 +327,70 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
 }
 
 // ─── Main Component ──────────────────────────────────────────────
+function JobStatusDropdown({ value, onChange, fr }: { value: string; onChange: (v: string) => void; fr: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const isActive = value !== 'All';
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const options = [
+    { value: 'All', label: fr ? 'Tous' : 'All' },
+    { value: 'scheduled', label: fr ? 'Planifié' : 'Scheduled' },
+    { value: 'in_progress', label: fr ? 'En cours' : 'In Progress' },
+    { value: 'action_required', label: fr ? 'Action requise' : 'Action Required' },
+    { value: 'late', label: fr ? 'En retard' : 'Late' },
+    { value: 'completed', label: fr ? 'Complété' : 'Done' },
+    { value: 'draft', label: fr ? 'Brouillon' : 'Draft' },
+    { value: 'cancelled', label: fr ? 'Annulé' : 'Cancelled' },
+  ];
+
+  const activeLabel = options.find(o => o.value === value)?.label;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors',
+          isActive
+            ? 'bg-primary text-white border-primary'
+            : 'bg-surface text-text-primary border-outline hover:bg-surface-secondary'
+        )}
+      >
+        <Filter size={14} className={isActive ? 'text-white' : 'text-[#64748b]'} />
+        Status
+        {isActive && <span className="ml-0.5 text-[11px] opacity-80">({activeLabel})</span>}
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1.5 w-48 bg-surface-elevated border border-outline rounded-md shadow-dropdown z-50 py-1">
+          {options.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={cn(
+                'w-full text-left px-3 py-1.5 text-[13px] transition-colors',
+                value === opt.value
+                  ? 'bg-primary-light text-text-primary font-medium'
+                  : 'text-text-secondary hover:bg-surface-secondary'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Jobs() {
   const { t, language } = useTranslation();
 
@@ -347,7 +414,22 @@ export default function Jobs() {
   const [jobToDelete, setJobToDelete] = useState<Job | null>(null);
   const [isDeletingJob, setIsDeletingJob] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [focusedIdx, setFocusedIdx] = useState(-1);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+
+  // Keyboard navigation in list view
+  useEffect(() => {
+    if (viewMode !== 'list' || jobs.length === 0) return;
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); setFocusedIdx(prev => Math.min(jobs.length - 1, prev + 1)); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setFocusedIdx(prev => Math.max(0, prev - 1)); }
+      else if (e.key === 'Enter' && focusedIdx >= 0 && focusedIdx < jobs.length) { e.preventDefault(); handleJobClick(jobs[focusedIdx]); }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [viewMode, jobs, focusedIdx]);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
   const { openJobModal } = useJobModalController();
@@ -456,7 +538,19 @@ export default function Jobs() {
       if (selectedJob?.id === jobToDelete.id) setSelectedJob(null);
       setJobToDelete(null);
       await Promise.all([loadJobs(), loadKpis()]);
-      toast.success(t.jobs.jobDeleted);
+      toast.success(t.jobs.jobDeleted, {
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            try {
+              await supabase.from('jobs').update({ deleted_at: null, updated_at: new Date().toISOString() }).eq('id', jobToDelete.id);
+              await loadJobs();
+              toast.success('Job restored');
+            } catch { toast.error('Failed to restore'); }
+          },
+        },
+        duration: 6000,
+      });
     } catch (err: any) {
       toast.error(err?.message || t.jobs.failedDelete);
     } finally { setIsDeletingJob(false); }
@@ -483,312 +577,129 @@ export default function Jobs() {
     { label: 'Unscheduled', key: 'unscheduled' as const, color: 'bg-text-tertiary', filter: t.jobs.unscheduled },
   ], [t]);
 
+  const fr = language === 'fr';
+  const allSel = jobs.length > 0 && selectedJobIds.size === jobs.length;
+  const toggleAll = () => { allSel ? setSelectedJobIds(new Set()) : setSelectedJobIds(new Set(jobs.map(j => j.id))); };
+  const toggleOne = (id: string) => { const n = new Set(selectedJobIds); n.has(id) ? n.delete(id) : n.add(id); setSelectedJobIds(n); };
+
+
+  function JobBadge({ status }: { status: string }) {
+    const s = (status || 'draft').toLowerCase();
+    const map: Record<string, { label: string; badge: string }> = {
+      completed: { label: fr ? 'Complété' : 'Completed', badge: 'badge-success' },
+      scheduled: { label: fr ? 'Planifié' : 'Scheduled', badge: 'badge-info' },
+      in_progress: { label: fr ? 'En cours' : 'In Progress', badge: 'badge-warning' },
+      cancelled: { label: fr ? 'Annulé' : 'Cancelled', badge: 'badge-danger' },
+      draft: { label: fr ? 'Brouillon' : 'Draft', badge: 'badge-neutral' },
+    };
+    const v = map[s] || map.draft;
+    return <span className={v.badge}>{v.label}</span>;
+  }
+
+  const IconSort = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>;
+  const IconPlus = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>;
+  const IconPlusSm = (c: string) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>;
+  const IconSliders = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg>;
+  const IconDots = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>;
+
   return (
     <>
-      <div className="h-full flex flex-col">
-        {/* ═══ HEADER ═══ */}
-        <div className="flex items-center justify-between px-1 pb-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-[20px] font-bold text-text-primary tracking-tight">{t.jobs.title}</h1>
-            <span className="text-[12px] font-medium text-text-tertiary bg-surface-secondary rounded-md px-2 py-0.5 tabular-nums">
-              {total}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setIsTeamsManagerOpen(true)} className="glass-button !text-[12px] inline-flex items-center gap-1.5">
-              <Users size={13} /> {t.jobs.teams}
-            </button>
-            <button
-              onClick={() => openJobModal({
-                sourceContext: { type: 'jobs' },
-                onCreated: async () => { await Promise.all([loadJobs(), loadKpis()]); },
-              })}
-              className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5"
-            >
-              <Plus size={13} /> {t.jobs.newJob}
-            </button>
-            <div className="relative">
-              <button onClick={() => setShowMoreActions((prev) => !prev)} className="glass-button !px-2">
-                <MoreHorizontal size={14} />
-              </button>
-              <AnimatePresence>
-                {showMoreActions && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowMoreActions(false)} />
-                    <motion.div
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 4 }}
-                      className="absolute right-0 mt-1 w-44 z-50 rounded-lg border border-outline bg-surface shadow-lg py-1"
-                    >
-                      <button onClick={handleExportCsv} className="w-full px-3 py-2 text-[13px] text-text-primary hover:bg-surface-secondary flex items-center gap-2 text-left">
-                        <Download size={13} /> {t.jobs.exportCsv}
-                      </button>
-                      <button
-                        onClick={() => { void Promise.all([loadJobs(), loadKpis()]); setShowMoreActions(false); }}
-                        className="w-full px-3 py-2 text-[13px] text-text-primary hover:bg-surface-secondary text-left"
-                      >
-                        {t.common.refresh}
-                      </button>
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        </div>
+      {/* ── PAGE HEADER ── */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-[28px] font-bold text-text-primary leading-tight">Jobs</h1>
+        <button onClick={() => openJobModal({ sourceContext: { type: 'jobs' }, onCreated: async () => { await Promise.all([loadJobs(), loadKpis()]); } })}
+          className="inline-flex items-center gap-2 h-10 px-5 bg-primary text-white rounded-md text-[14px] font-medium hover:bg-primary-hover active:scale-[0.98] transition-all">
+          {IconPlus} {t.jobs.newJob}
+        </button>
+      </div>
 
-        {/* ═══ STAT CHIPS ═══ */}
-        <div className="flex items-center gap-2 px-1 pb-4 overflow-x-auto">
-          {overviewBullets.map((item) => (
-            <StatChip
-              key={item.key}
-              label={item.label}
-              value={kpiLoading ? '--' : (kpis?.[item.key] ?? 0)}
-              color={item.color}
-              active={statusFilter === item.filter}
-              onClick={() => {
-                setStatusFilter(statusFilter === item.filter ? 'All' : item.filter);
-                setPage(1);
-              }}
-            />
+      {/* ── TOOLBAR ── */}
+      <div className="flex items-center gap-2 mt-5 mb-4">
+        <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+          placeholder={fr ? 'Rechercher jobs...' : 'Search jobs...'}
+          className="h-9 w-[200px] px-3 text-[14px] bg-surface border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all" />
+        <JobStatusDropdown
+          value={statusFilter}
+          onChange={(v) => { setStatusFilter(v); setPage(1); }}
+          fr={fr}
+        />
+      </div>
+
+      {/* ── TABLE (grid layout — identical structure to Clients & Devis) ── */}
+      <div className="border border-outline rounded-md overflow-hidden bg-surface">
+        <div className="grid" style={{ gridTemplateColumns: '40px 1fr 1fr 1fr 1fr 100px 100px 48px' }}>
+          {/* HEADER */}
+          <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
+          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Titre' : 'Title'} {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Client {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Date' : 'Date'} {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Total {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Status {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-outline" />
+          <div className="py-3 border-b border-outline" />
+
+          {/* LOADING */}
+          {loading && Array.from({ length: 10 }).map((_, i) => (
+            <React.Fragment key={`sk-${i}`}>
+              <div className="py-3 pl-4 border-b border-outline/30 flex items-center"><div className="w-4 h-4 bg-surface-tertiary rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-24 bg-surface-tertiary rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-outline/30" />
+              <div className="py-3 border-b border-outline/30" />
+            </React.Fragment>
           ))}
-          {statusFilter !== 'All' && (
-            <button
-              onClick={() => { setStatusFilter('All'); setPage(1); }}
-              className="text-[11px] text-text-tertiary hover:text-text-primary flex items-center gap-1 ml-1"
-            >
-              <X size={11} /> Clear
-            </button>
+
+          {/* EMPTY */}
+          {!loading && jobs.length === 0 && (
+            <div className="col-span-8 py-20 text-center text-[14px] text-text-tertiary">{t.jobs.noJobsFound}</div>
           )}
-        </div>
 
-        {/* ═══ TOOLBAR ═══ */}
-        <div className="flex items-center justify-between gap-3 px-1 pb-4">
-          <div className="flex items-center gap-2 flex-1">
-            {/* Search */}
-            <div className="relative flex-1 max-w-sm">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={t.jobs.searchJobs}
-                className="w-full bg-surface-secondary/60 border border-outline-subtle/60 rounded-lg pl-8 pr-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40 focus:bg-surface transition-colors"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary">
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-
-            {/* Type filter */}
-            {jobTypes.length > 0 && (
-              <select
-                value={jobTypeFilter}
-                onChange={(e) => { setJobTypeFilter(e.target.value); setPage(1); }}
-                className="bg-surface-secondary/60 border border-outline-subtle/60 rounded-lg px-3 py-2 text-[13px] text-text-primary focus:outline-none focus:border-primary/40 cursor-pointer"
-              >
-                <option value="All">{t.common.allTypes}</option>
-                {jobTypes.map((jt) => <option key={jt} value={jt}>{jt}</option>)}
-              </select>
-            )}
-
-            {/* Sort */}
-            <select
-              value={`${sortBy}-${sortDirection}`}
-              onChange={(e) => {
-                const [s, d] = e.target.value.split('-');
-                setSortBy(s as JobSort);
-                setSortDirection(d as JobSortDirection);
-                setPage(1);
-              }}
-              className="bg-surface-secondary/60 border border-outline-subtle/60 rounded-lg px-3 py-2 text-[13px] text-text-primary focus:outline-none focus:border-primary/40 cursor-pointer"
-            >
-              <option value="schedule-asc">Schedule (earliest)</option>
-              <option value="schedule-desc">Schedule (latest)</option>
-              <option value="client-asc">Client A-Z</option>
-              <option value="client-desc">Client Z-A</option>
-              <option value="total-desc">Amount (high)</option>
-              <option value="total-asc">Amount (low)</option>
-              <option value="job_number-desc">Newest first</option>
-              <option value="job_number-asc">Oldest first</option>
-            </select>
-          </div>
-
-          {/* View toggle */}
-          <div className="flex items-center rounded-lg border border-outline-subtle/60 overflow-hidden">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={cn(
-                'p-2 transition-colors',
-                viewMode === 'grid' ? 'bg-text-primary text-surface' : 'bg-surface-secondary/60 text-text-tertiary hover:text-text-primary'
-              )}
-            >
-              <LayoutGrid size={14} />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={cn(
-                'p-2 transition-colors',
-                viewMode === 'list' ? 'bg-text-primary text-surface' : 'bg-surface-secondary/60 text-text-tertiary hover:text-text-primary'
-              )}
-            >
-              <List size={14} />
-            </button>
-          </div>
-        </div>
-
-        {/* ═══ MAIN CONTENT (with optional preview panel) ═══ */}
-        <div className="flex-1 flex min-h-0 overflow-hidden rounded-xl border border-outline-subtle/40">
-          {/* Jobs area */}
-          <div className="flex-1 overflow-y-auto">
-            {/* Loading */}
-            {loading && (
-              <div className="p-5">
-                <div className={cn(
-                  viewMode === 'grid'
-                    ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3'
-                    : 'space-y-1'
-                )}>
-                  {Array.from({ length: 9 }).map((_, i) => (
-                    <div key={i} className="rounded-xl bg-surface-secondary/40 animate-pulse h-[140px]" />
-                  ))}
+          {/* ROWS */}
+          {!loading && jobs.map(job => {
+            const rowCls = `border-b border-outline/30 transition-colors ${selectedJobIds.has(job.id) ? 'bg-[#f0f4ff]' : 'hover:bg-surface-secondary'}`;
+            const click = () => handleJobClick(job);
+            return (
+              <React.Fragment key={job.id}>
+                <div className={`py-3 pl-4 flex items-center ${rowCls}`} onClick={e => e.stopPropagation()}>
+                  <input type="checkbox" checked={selectedJobIds.has(job.id)} onChange={() => toggleOne(job.id)} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
                 </div>
-              </div>
-            )}
-
-            {/* Error */}
-            {!loading && error && (
-              <div className="flex items-center justify-center h-48">
-                <div className="text-center">
-                  <AlertCircle size={24} className="text-danger mx-auto mb-2" />
-                  <p className="text-[13px] text-danger">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Empty */}
-            {!loading && !error && jobs.length === 0 && (
-              <div className="flex items-center justify-center h-48">
-                <div className="text-center">
-                  <Briefcase size={28} className="text-text-tertiary mx-auto mb-3 opacity-40" />
-                  <p className="text-[14px] font-medium text-text-secondary">{t.jobs.noJobsFound}</p>
-                  <p className="text-[12px] text-text-tertiary mt-1">{t.jobs.adjustFilters}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Grid view */}
-            {!loading && !error && jobs.length > 0 && viewMode === 'grid' && (
-              <div className="p-4">
-                <AnimatePresence mode="popLayout">
-                  <div className={cn(
-                    'grid gap-3',
-                    selectedJob
-                      ? 'grid-cols-1 md:grid-cols-2'
-                      : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
-                  )}>
-                    {jobs.map((job) => (
-                      <JobCard
-                        key={job.id}
-                        job={job}
-                        onClick={() => handleJobClick(job)}
-                        onDelete={(e) => { e.stopPropagation(); setJobToDelete(job); }}
-                        formatMoney={formatMoney}
-                      />
-                    ))}
+                <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click}>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <UnifiedAvatar id={job.client_id || job.id} name={job.client_name || job.title} />
+                    <span className="text-[14px] text-text-primary truncate">{job.title}</span>
                   </div>
-                </AnimatePresence>
-              </div>
-            )}
-
-            {/* List view */}
-            {!loading && !error && jobs.length > 0 && viewMode === 'list' && (
-              <div className="space-y-2">
-                {jobs.map((job) => (
-                  <button
-                    key={job.id}
-                    onClick={() => handleJobClick(job)}
-                    className={cn(
-                      'w-full flex items-center gap-4 px-5 py-3.5 text-left rounded-xl bg-surface border border-outline-subtle/60 hover:border-primary/30 hover:shadow-md transition-all group relative',
-                      selectedJob?.id === job.id && 'border-primary/40 shadow-sm'
-                    )}
-                  >
-                    <div className={cn('absolute left-0 top-3 bottom-3 w-[3px] rounded-full', statusColor(job.status))} />
-                    <div className="flex-1 min-w-0 pl-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-bold text-text-tertiary tabular-nums">#{job.job_number}</span>
-                        <span className="text-[13px] font-semibold text-text-primary truncate">{job.title}</span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-0.5">
-                        {job.client_name && (
-                          <span className="text-[12px] text-text-tertiary truncate">{job.client_name}</span>
-                        )}
-                        {job.property_address && (
-                          <span className="text-[11px] text-text-tertiary truncate flex items-center gap-1">
-                            <MapPin size={9} /> {job.property_address}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-[13px] font-bold text-text-primary tabular-nums">{formatMoney(job)}</p>
-                      <p className="text-[11px] text-text-tertiary">
-                        {job.scheduled_at ? formatDate(job.scheduled_at) : 'Unscheduled'}
-                      </p>
-                    </div>
-                    <StatusBadge status={job.status} />
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setJobToDelete(job); }}
-                      className="p-1 rounded-md text-text-tertiary hover:text-danger hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-all"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Pagination */}
-            {!loading && !error && total > 0 && (
-              <div className="flex items-center justify-between px-5 py-3 border-t border-outline-subtle/30">
-                <p className="text-[11px] text-text-tertiary">
-                  {t.common.page} {page} {t.common.of} {pageCount} <span className="ml-2 text-text-tertiary">({total} jobs)</span>
-                </p>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={pageSize}
-                    onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                    className="bg-surface-secondary/60 border border-outline-subtle/60 rounded-md px-2 py-1 text-[11px] text-text-primary focus:outline-none cursor-pointer"
-                  >
-                    {[10, 20, 30, 50].map((size) => (
-                      <option key={size} value={size}>{size} / page</option>
-                    ))}
-                  </select>
-                  <button className="p-1.5 rounded-md bg-surface-secondary/60 text-text-tertiary hover:text-text-primary disabled:opacity-30" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                    <ChevronLeft size={13} />
-                  </button>
-                  <button className="p-1.5 rounded-md bg-surface-secondary/60 text-text-tertiary hover:text-text-primary disabled:opacity-30" disabled={page >= pageCount} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>
-                    <ChevronRight size={13} />
+                </div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-text-primary truncate">{job.client_name || '—'}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-text-primary tabular-nums truncate">{job.scheduled_at ? formatDate(job.scheduled_at) : (fr ? 'Non planifié' : 'Unscheduled')}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] font-semibold text-text-primary tabular-nums">{formatMoney(job)}</span></div>
+                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}><JobBadge status={job.status} /></div>
+                <div className={`py-3 px-4 flex items-center justify-end gap-1 ${rowCls}`}>
+                  <button onClick={(e) => { e.stopPropagation(); handleEditJob(job); }} className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors">
+                    <Edit2 size={14} />
                   </button>
                 </div>
-              </div>
-            )}
-          </div>
+                <div className={`py-3 pr-4 flex items-center justify-center ${rowCls}`}>
+                  <button className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors" onClick={e => { e.stopPropagation(); setJobToDelete(job); }}>
+                    {IconDots}
+                  </button>
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
 
-          {/* Preview panel */}
-          <AnimatePresence>
-            {selectedJob && (
-              <JobPreviewPanel
-                job={selectedJob}
-                onClose={() => setSelectedJob(null)}
-                onEdit={() => handleEditJob(selectedJob)}
-                onDelete={() => { setJobToDelete(selectedJob); }}
-                formatMoney={formatMoney}
-              />
-            )}
-          </AnimatePresence>
+      {/* ── FOOTER ── */}
+      <div className="flex items-center justify-between mt-3">
+        <span className="text-[14px] text-text-secondary">{selectedJobIds.size} of {total} row(s) selected.</span>
+        <div className="flex items-center gap-2">
+          <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
+            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">Previous</button>
+          <button disabled={page >= pageCount} onClick={() => setPage(p => Math.min(pageCount, p + 1))}
+            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">Next</button>
         </div>
       </div>
 
@@ -797,22 +708,22 @@ export default function Jobs() {
         {jobToDelete && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !isDeletingJob && setJobToDelete(null)}>
             <motion.div
-              className="bg-surface rounded-xl border border-outline shadow-2xl max-w-sm w-full mx-4"
+              className="bg-surface rounded-2xl border border-outline/40 shadow-2xl max-w-sm w-full mx-4"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-5">
-                <h3 className="text-[15px] font-semibold text-text-primary">{t.jobs.deleteThisJob}</h3>
-                <p className="mt-2 text-[13px] text-text-secondary">
+              <div className="p-6">
+                <h3 className="text-[15px] font-bold text-text-primary">{t.jobs.deleteThisJob}</h3>
+                <p className="mt-2 text-[13px] text-text-secondary leading-relaxed">
                   {t.jobs.deletingJobMsg.replace('{number}', String(jobToDelete.job_number))}
                 </p>
-                <div className="mt-4 flex justify-end gap-2">
-                  <button className="glass-button !text-[12px]" onClick={() => setJobToDelete(null)} disabled={isDeletingJob}>
+                <div className="mt-5 flex justify-end gap-3">
+                  <button className="glass-button" onClick={() => setJobToDelete(null)} disabled={isDeletingJob}>
                     {t.common.cancel}
                   </button>
-                  <button className="glass-button-danger !text-[12px]" onClick={() => void handleDeleteJob()} disabled={isDeletingJob}>
+                  <button className="glass-button-danger" onClick={() => void handleDeleteJob()} disabled={isDeletingJob}>
                     {isDeletingJob ? t.common.deleting : t.common.delete}
                   </button>
                 </div>
@@ -830,6 +741,8 @@ export default function Jobs() {
           <BulkActionBar
             count={selectedJobIds.size}
             actions={[
+              { id: 'schedule', label: 'Schedule', icon: Calendar, variant: 'default' as any },
+              { id: 'in_progress', label: 'In Progress', icon: Clock, variant: 'default' as any },
               { id: 'complete', label: t.jobs?.markComplete || 'Complete', icon: Briefcase, variant: 'primary' },
               { id: 'delete', label: t.common.delete, icon: Trash2, variant: 'danger' },
             ]}
@@ -837,16 +750,23 @@ export default function Jobs() {
               const ids = Array.from(selectedJobIds);
               if (actionId === 'delete') {
                 if (!window.confirm(`Delete ${ids.length} jobs?`)) return;
-                for (const jid of ids) { await softDeleteJob(String(jid)).catch(() => {}); }
+                let deleteFailed = 0;
+                for (const jid of ids) { await softDeleteJob(String(jid)).catch(() => { deleteFailed++; }); }
                 setJobs((prev) => prev.filter((j) => !selectedJobIds.has(j.id)));
-                toast.success(`${ids.length} jobs deleted`);
+                if (deleteFailed > 0) toast.error(`${deleteFailed} job(s) failed to delete`);
+                else toast.success(`${ids.length} jobs deleted`);
               }
-              if (actionId === 'complete') {
+              if (actionId === 'complete' || actionId === 'in_progress' || actionId === 'schedule') {
+                const statusMap: Record<string, string> = { complete: 'completed', in_progress: 'in_progress', schedule: 'scheduled' };
+                const newStatus = statusMap[actionId] || 'completed';
+                let updateFailed = 0;
                 for (const jid of ids) {
-                  await supabase.from('jobs').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', jid).then(() => {});
+                  const { error: updateErr } = await supabase.from('jobs').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', jid);
+                  if (updateErr) updateFailed++;
                 }
-                setJobs((prev) => prev.map((j) => selectedJobIds.has(j.id) ? { ...j, status: 'completed' } : j));
-                toast.success(`${ids.length} jobs completed`);
+                setJobs((prev) => prev.map((j) => selectedJobIds.has(j.id) ? { ...j, status: newStatus } : j));
+                if (updateFailed > 0) toast.error(`${updateFailed}/${ids.length} job(s) failed to update`);
+                else toast.success(`${ids.length} jobs updated to ${newStatus}`);
               }
               setSelectedJobIds(new Set());
             }}

@@ -47,7 +47,7 @@ import {
 const ROLE_CONFIG: Record<MemberRole, { label_en: string; label_fr: string; icon: typeof Crown; color: string; badge: string }> = {
   owner:      { label_en: 'Account Owner',  label_fr: 'Propriétaire',     icon: Crown,       color: 'text-text-secondary',  badge: 'bg-surface-tertiary text-text-secondary' },
   admin:      { label_en: 'Admin',          label_fr: 'Administrateur',   icon: ShieldCheck, color: 'text-primary',          badge: 'bg-primary/10 text-primary' },
-  sales_rep:  { label_en: 'Sales Rep',      label_fr: 'Représentant',     icon: Briefcase,   color: 'text-text-secondary',   badge: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
+  sales_rep:  { label_en: 'Sales Rep',      label_fr: 'Représentant',     icon: Briefcase,   color: 'text-text-secondary',   badge: 'bg-surface-secondary text-text-secondary' },
   technician: { label_en: 'Technician',     label_fr: 'Technicien',       icon: Wrench,      color: 'text-text-secondary',   badge: 'bg-surface-tertiary text-text-secondary' },
 };
 
@@ -201,8 +201,8 @@ export default function ManageTeam() {
   }
 
   return (
-    <PermissionGate permission="team.view">
-    <div className="space-y-5">
+    <PermissionGate permission="team.read">
+    <div className="space-y-6">
       <PageHeader
         title={isFr ? 'Gérer l\'équipe' : 'Manage Team'}
         subtitle={isFr
@@ -211,35 +211,35 @@ export default function ManageTeam() {
         icon={Users}
         iconColor="blue"
       >
-        <button className="glass-button inline-flex items-center gap-1.5" onClick={() => navigate('/settings')}>
+        <button className="glass-button-ghost inline-flex items-center gap-2" onClick={() => navigate('/settings')}>
           <ArrowLeft size={14} />
           {t.manageTeam.settings}
         </button>
-        <button className="glass-button-primary inline-flex items-center gap-1.5" onClick={() => setShowInviteModal(true)}>
+        <button className="glass-button-primary inline-flex items-center gap-2" onClick={() => setShowInviteModal(true)}>
           <MailPlus size={14} />
           {t.manageTeam.inviteMember}
         </button>
       </PageHeader>
 
       {/* Search */}
-      <div className="relative max-w-sm">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+      <div className="relative max-w-md">
+        <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t.manageTeam.searchMembers}
-          className="glass-input w-full !pl-9"
+          className="glass-input w-full !pl-10"
         />
       </div>
 
       {/* Active Members */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-[13px] font-bold text-text-primary">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2.5">
+          <p className="text-xs font-medium text-text-tertiary">
             {t.manageTeam.activeMembers}
-          </h2>
-          <span className="text-[11px] font-semibold text-text-tertiary bg-surface-secondary px-2 py-0.5 rounded-full">
+          </p>
+          <span className="text-[10px] font-bold text-text-tertiary bg-surface-secondary px-2.5 py-0.5 rounded-full">
             {activeMembers.length}
           </span>
         </div>
@@ -251,7 +251,7 @@ export default function ManageTeam() {
             description={t.manageTeam.inviteAMemberOrAdjustYourSearch}
           />
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {activeMembers.map((member) => (
               <MemberRow
                 key={member.user_id}
@@ -269,23 +269,23 @@ export default function ManageTeam() {
 
       {/* Pending Invitations */}
       {invitations.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <h2 className="text-[13px] font-bold text-text-primary">
-              <Mail size={13} className="inline mr-1.5 -mt-0.5" />
+        <div className="space-y-3">
+          <div className="flex items-center gap-2.5">
+            <p className="text-xs font-medium text-text-tertiary">
+              <Mail size={11} className="inline mr-1.5 -mt-0.5" />
               {t.manageTeam.pendingInvitations}
-            </h2>
-            <span className="text-[11px] font-semibold text-warning bg-warning/10 px-2 py-0.5 rounded-full">
+            </p>
+            <span className="text-[10px] font-bold text-warning bg-warning/10 px-2.5 py-0.5 rounded-full">
               {invitations.length}
             </span>
           </div>
-          <div className="space-y-1.5">
+          <div className="section-card rounded-2xl divide-y divide-border overflow-hidden">
             {invitations.map((inv) => (
               <div
                 key={inv.id}
-                className="section-card p-4 flex items-center gap-4"
+                className="px-5 py-4 flex items-center gap-4 hover:bg-surface-secondary/40 transition-colors"
               >
-                <div className="w-10 h-10 rounded-xl bg-warning/10 border border-warning/20 flex items-center justify-center shrink-0">
+                <div className="w-11 h-11 rounded-2xl bg-warning/10 border border-warning/20 flex items-center justify-center shrink-0">
                   <Clock size={16} className="text-warning" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -302,18 +302,18 @@ export default function ManageTeam() {
                     {t.agent.expires}: {new Date(inv.expires_at).toLocaleDateString(t.dashboard.enus, { month: 'short', day: 'numeric', year: 'numeric' })}
                   </p>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => handleResend(inv.id)}
                     title={t.invoiceDetails.resend}
-                    className="p-2 rounded-lg border border-transparent text-text-tertiary hover:text-text-primary hover:bg-surface-secondary hover:border-outline-subtle transition-all"
+                    className="p-2.5 rounded-xl border border-transparent text-text-tertiary hover:text-text-primary hover:bg-surface-secondary hover:border-outline-subtle transition-all"
                   >
                     <RefreshCw size={14} />
                   </button>
                   <button
                     onClick={() => handleRevoke(inv.id)}
                     title={t.manageTeam.revoke}
-                    className="p-2 rounded-lg border border-transparent text-text-tertiary hover:text-danger hover:bg-danger-light transition-all"
+                    className="p-2.5 rounded-xl border border-transparent text-text-tertiary hover:text-danger hover:bg-danger-light transition-all"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -326,16 +326,16 @@ export default function ManageTeam() {
 
       {/* Suspended Members */}
       {suspendedMembers.length > 0 && (
-        <div className="space-y-2 pt-3 border-t border-border">
-          <div className="flex items-center gap-2">
-            <h2 className="text-[13px] font-bold text-text-tertiary">
+        <div className="space-y-3 pt-4 border-t border-border">
+          <div className="flex items-center gap-2.5">
+            <p className="text-xs font-medium text-text-tertiary">
               {t.manageTeam.suspendedMembers}
-            </h2>
-            <span className="text-[11px] font-semibold text-text-tertiary bg-surface-secondary px-2 py-0.5 rounded-full">
+            </p>
+            <span className="text-[10px] font-bold text-text-tertiary bg-surface-secondary px-2.5 py-0.5 rounded-full">
               {suspendedMembers.length}
             </span>
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {suspendedMembers.map((member) => (
               <MemberRow
                 key={member.user_id}
@@ -353,25 +353,25 @@ export default function ManageTeam() {
       )}
 
       {/* Role Permissions Reference */}
-      <div className="section-card p-5 space-y-4">
-        <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
+      <div className="glass-card rounded-2xl p-6 space-y-5">
+        <p className="text-xs font-medium text-text-tertiary">
           {t.manageTeam.rolePermissions}
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {(['owner', 'admin', 'sales_rep', 'technician'] as MemberRole[]).map((role) => {
             const cfg = ROLE_CONFIG[role];
             const RoleIcon = cfg.icon;
             return (
-              <div key={role} className="bg-surface-secondary rounded-xl p-3.5 space-y-2">
-                <div className="flex items-center gap-2">
-                  <RoleIcon size={14} className={cfg.color} />
+              <div key={role} className="bg-surface-secondary rounded-2xl p-4 space-y-3 hover:bg-surface-secondary/80 transition-colors">
+                <div className="flex items-center gap-2.5">
+                  <RoleIcon size={15} className={cfg.color} />
                   <span className="text-[13px] font-bold text-text-primary">
                     {isFr ? cfg.label_fr : cfg.label_en}
                   </span>
                 </div>
-                <ul className="space-y-1">
+                <ul className="space-y-1.5">
                   {roleDescriptions[role].map((perm, i) => (
-                    <li key={i} className="text-[12px] text-text-secondary flex items-start gap-1.5">
+                    <li key={i} className="text-[12px] text-text-secondary flex items-start gap-2">
                       <Check size={10} className="text-success mt-0.5 shrink-0" />
                       {perm}
                     </li>
@@ -407,7 +407,7 @@ export default function ManageTeam() {
         size="sm"
       >
         {roleChangeMember && (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {(['admin', 'sales_rep', 'technician'] as MemberRole[]).map((role) => {
               const cfg = ROLE_CONFIG[role];
               const RoleIcon = cfg.icon;
@@ -417,11 +417,11 @@ export default function ManageTeam() {
                   key={role}
                   onClick={() => handleChangeRole(roleChangeMember.user_id, role)}
                   className={cn(
-                    'w-full flex items-center justify-between p-3 rounded-xl border transition-all text-left',
-                    isSelected ? 'border-primary bg-primary/5' : 'border-outline-subtle hover:border-outline'
+                    'w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left',
+                    isSelected ? 'border-primary bg-primary/5' : 'border-outline-subtle hover:border-outline hover:bg-surface-secondary/40'
                   )}
                 >
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-3">
                     <RoleIcon size={15} className={cfg.color} />
                     <div>
                       <span className="text-[13px] font-semibold text-text-primary">
@@ -469,6 +469,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
   onRemove,
   isSuspended,
 }) => {
+  const { t } = useTranslation();
   const isFr = language === 'fr';
   const cfg = ROLE_CONFIG[member.role] || ROLE_CONFIG.technician;
   const RoleIcon = cfg.icon;
@@ -484,12 +485,12 @@ const MemberRow: React.FC<MemberRowProps> = ({
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'section-card p-4 flex items-center gap-4 transition-all group',
+        'section-card rounded-2xl p-4 flex items-center gap-4 transition-all group hover:bg-surface-secondary/30',
         isSuspended && 'opacity-50'
       )}
     >
       <div className={cn(
-        'w-10 h-10 rounded-xl flex items-center justify-center text-[13px] font-bold shrink-0',
+        'w-11 h-11 rounded-2xl flex items-center justify-center text-[13px] font-bold shrink-0',
         isSuspended
           ? 'bg-surface-secondary text-text-tertiary border border-outline-subtle'
           : 'bg-primary/10 text-primary border border-primary/20'
@@ -502,12 +503,12 @@ const MemberRow: React.FC<MemberRowProps> = ({
           <span className="text-[13px] font-bold text-text-primary truncate">
             {member.full_name || (t.manageTeam.unnamed)}
           </span>
-          <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full', cfg.badge)}>
+          <span className={cn('text-[10px] font-semibold px-2.5 py-0.5 rounded-full', cfg.badge)}>
             <RoleIcon size={9} className="inline mr-0.5 -mt-px" />
             {isFr ? cfg.label_fr : cfg.label_en}
           </span>
           {isSuspended && (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-danger/10 text-danger">
+            <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-danger/10 text-danger">
               {t.manageTeam.suspended}
             </span>
           )}
@@ -525,7 +526,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
         <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={(e) => { e.stopPropagation(); setOpenMenuId(isMenuOpen ? null : member.user_id); }}
-            className="p-2 rounded-lg border border-transparent text-text-tertiary hover:text-text-primary hover:bg-surface-secondary hover:border-outline-subtle transition-all"
+            className="p-2.5 rounded-xl border border-transparent text-text-tertiary hover:text-text-primary hover:bg-surface-secondary hover:border-outline-subtle transition-all"
           >
             <MoreHorizontal size={16} />
           </button>
@@ -537,12 +538,12 @@ const MemberRow: React.FC<MemberRowProps> = ({
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: -4 }}
                 transition={{ duration: 0.1 }}
-                className="absolute right-0 top-full mt-1 w-48 bg-surface border border-outline rounded-xl shadow-dropdown z-30 py-1 overflow-hidden"
+                className="absolute right-0 top-full mt-1.5 w-52 bg-surface border border-outline rounded-2xl shadow-dropdown z-30 py-1.5 overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
                 <button
                   onClick={() => { setOpenMenuId(null); onChangeRole(); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors"
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors"
                 >
                   <Shield size={13} />
                   {t.manageTeam.changeRole2}
@@ -552,7 +553,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
                     <div className="border-t border-border my-1" />
                     <button
                       onClick={() => { setOpenMenuId(null); onRemove(); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-danger hover:bg-danger-light transition-colors"
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-danger hover:bg-danger-light transition-colors"
                     >
                       <UserX size={13} />
                       {isFr ? 'Retirer de l\'équipe' : 'Remove from team'}
@@ -578,6 +579,7 @@ function InviteForm({
   onSend: (email: string, role: MemberRole) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const isFr = language === 'fr';
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<MemberRole>('technician');
@@ -585,7 +587,7 @@ function InviteForm({
   const roleDescriptions = isFr ? ROLE_DESCRIPTIONS_FR : ROLE_DESCRIPTIONS_EN;
 
   const handleSubmit = () => {
-    if (!email.trim() || !email.includes('@')) {
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       toast.error(t.manageTeam.validEmailIsRequired);
       return;
     }
@@ -595,26 +597,26 @@ function InviteForm({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
-        <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+        <label className="text-xs font-medium text-text-tertiary">
           {t.companySettings.emailAddress}
         </label>
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="glass-input w-full mt-1"
+          className="glass-input w-full mt-1.5"
           placeholder="john@company.com"
           autoFocus
         />
       </div>
 
       <div>
-        <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+        <label className="text-xs font-medium text-text-tertiary">
           {t.manageTeam.role}
         </label>
-        <div className="space-y-1.5 mt-1.5">
+        <div className="space-y-2 mt-2">
           {(['admin', 'sales_rep', 'technician'] as MemberRole[]).map((r) => {
             const cfg = ROLE_CONFIG[r];
             const RoleIcon = cfg.icon;
@@ -624,11 +626,11 @@ function InviteForm({
                 type="button"
                 onClick={() => setRole(r)}
                 className={cn(
-                  'w-full flex items-center gap-2.5 p-2.5 rounded-xl border transition-all text-left',
-                  role === r ? 'border-primary bg-primary/5' : 'border-outline-subtle hover:border-outline'
+                  'w-full flex items-center gap-3 p-3.5 rounded-2xl border transition-all text-left',
+                  role === r ? 'border-primary bg-primary/5' : 'border-outline-subtle hover:border-outline hover:bg-surface-secondary/40'
                 )}
               >
-                <RoleIcon size={14} className={cfg.color} />
+                <RoleIcon size={15} className={cfg.color} />
                 <div>
                   <span className="text-[13px] font-semibold text-text-primary">
                     {isFr ? cfg.label_fr : cfg.label_en}
@@ -641,12 +643,12 @@ function InviteForm({
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-        <button className="glass-button" onClick={onCancel}>
+      <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
+        <button className="glass-button-ghost" onClick={onCancel}>
           {t.advancedNotes.cancel}
         </button>
         <button
-          className="glass-button-primary inline-flex items-center gap-1.5"
+          className="glass-button-primary inline-flex items-center gap-2"
           onClick={handleSubmit}
           disabled={sending}
         >

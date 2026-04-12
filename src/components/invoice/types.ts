@@ -50,4 +50,5 @@ export interface InvoiceRenderItem {
   line_total_cents: number;
 }
 
-export type InvoiceLayoutType = 'classic' | 'modern' | 'minimal';
+// Single fixed layout — no template system
+export type InvoiceLayoutType = 'clean_billing';

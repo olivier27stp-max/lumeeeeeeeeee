@@ -8,12 +8,12 @@ import {
   Users,
   X,
   FileText,
-  LayoutTemplate,
+  Package,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { Lead } from '../types';
-import { formatCurrency, cn } from '../lib/utils';
+import { formatCurrency, cn, expiryLabel } from '../lib/utils';
 import { EmailConflictRecord, convertLeadToClient, createLeadScoped, deleteLeadScoped, fetchLeadsScoped, findEmailConflict, updateLeadScoped, updateLeadStatus, LEAD_STATUS_LABELS, type LeadStatus } from '../lib/leadsApi';
 import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
@@ -23,10 +23,10 @@ import { useEscapeKey } from '../hooks/useEscapeKey';
 import QuickActions from '../components/QuickActions';
 import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
 import QuoteDetailsModal from '../components/quotes/QuoteDetailsModal';
-import TemplateSelectModal from '../components/quotes/TemplateSelectModal';
-import { type QuoteDetail, type Quote, listQuotesForLead, getQuoteById, formatQuoteMoney, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, fetchQuoteKpis, fetchAllQuotesWithContext } from '../lib/quotesApi';
+import PresetSelectModal from '../components/quotes/PresetSelectModal';
+import { type QuoteDetail, type Quote, listQuotesForLead, getQuoteById, formatQuoteMoney, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, fetchQuoteKpis, fetchAllQuotesWithContext, deleteQuote } from '../lib/quotesApi';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { QuoteTemplate } from '../types';
+import type { QuotePreset } from '../types';
 
 type SortBy = 'recent' | 'oldest';
 
@@ -53,8 +53,8 @@ export default function Leads() {
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
-  const [isTemplateSelectOpen, setIsTemplateSelectOpen] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<QuoteTemplate | null>(null);
+  const [isPresetSelectOpen, setIsPresetSelectOpen] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState<QuotePreset | null>(null);
 
   const [isEditingLead, setIsEditingLead] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -440,52 +440,59 @@ export default function Leads() {
 
 
   return (
-    <div className="space-y-5">
-      <PageHeader title={t.leads.title} subtitle={`${pendingQuoteKpis.data?.total_count ?? 0} ${t.leads.prospects}`} icon={FileText} iconColor="pink">
-        <div className="flex items-center gap-2">
-          <button onClick={() => navigate('/quotes/templates')} className="glass-button inline-flex items-center gap-1.5">
-            <LayoutTemplate size={14} />
-            {t.invoices.templates}
-          </button>
-          <button onClick={() => setIsTemplateSelectOpen(true)} className="glass-button-primary inline-flex items-center gap-1.5">
-            <Plus size={14} />
-            {t.leads.addLead}
-          </button>
-        </div>
-      </PageHeader>
+    <div className="space-y-0">
+      {(() => {
+        const activeQuotes = allQuotesQuery.data || [];
+        const kpiTotal = activeQuotes.length;
+        const kpiApproved = activeQuotes.filter((q) => q.status === 'approved').length;
+        const kpiValue = activeQuotes.reduce((s, q) => s + Number((q as any).total_cents || 0), 0);
+        return (
+          <>
+            {/* ── Attio header ── */}
+            <div className="flex items-center justify-between px-1 py-4">
+              <div className="flex items-center gap-3">
+                <h1 className="text-[16px] font-bold text-text-primary tracking-tight">{t.leads.title}</h1>
+                <span className="text-[12px] text-text-tertiary font-medium tabular-nums">{kpiTotal}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => navigate('/quotes/presets')}
+                  className="px-3 py-1.5 rounded-lg border border-outline text-[12px] font-medium text-text-secondary hover:text-text-primary hover:border-text-tertiary transition-all inline-flex items-center gap-1.5">
+                  <Package size={12} /> Presets
+                </button>
+                <button onClick={() => setIsPresetSelectOpen(true)}
+                  className="px-3 py-1.5 rounded-lg bg-primary text-white text-[12px] font-semibold hover:opacity-90 transition-all inline-flex items-center gap-1.5">
+                  <Plus size={13} /> {t.leads.addLead}
+                </button>
+              </div>
+            </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard label={t.leads.totalLeads} value={pendingQuoteKpis.data?.total_count ?? 0} iconColor="pink" />
-        <StatCard label={t.leads.qualified} value={pendingQuoteKpis.data?.approved_count ?? 0} iconColor="green" />
-        <StatCard label={t.leads.totalValue} value={formatCurrency((pendingQuoteKpis.data?.total_value_cents ?? 0) / 100)} iconColor="amber" />
+            {/* ── KPI strip ── */}
+            <div className="flex items-center gap-6 px-1 pb-4">
+              {[
+                { label: t.leads.totalLeads, value: String(kpiTotal) },
+                { label: t.leads.qualified, value: String(kpiApproved) },
+                { label: t.leads.totalValue, value: formatCurrency(kpiValue / 100) },
+              ].map((m) => (
+                <div key={m.label} className="min-w-[100px]">
+                  <p className="text-[10px] font-medium text-text-tertiary uppercase tracking-wider">{m.label}</p>
+                  <p className="text-[16px] font-bold text-text-primary tabular-nums mt-0.5">{m.value}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      })()}
+
+      {saveSuccess && <div className="rounded-lg bg-surface-secondary border border-outline px-4 py-2 text-[12px] text-text-primary mx-1 mb-3">{saveSuccess}</div>}
+      {listError && <div className="rounded-lg bg-surface-secondary border border-outline px-4 py-2 text-[12px] text-danger mx-1 mb-3">{listError}</div>}
+
+      {/* ── Search bar ── */}
+      <div className="flex items-center gap-2 px-1 pb-3">
+        <input type="text" placeholder={t.leads.searchLeads} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full max-w-xs pl-3 pr-3 py-1.5 text-[12px] border border-outline rounded-lg bg-surface text-text-primary placeholder:text-text-tertiary outline-none focus:border-text-tertiary transition-colors" />
       </div>
 
-      {saveSuccess && (
-        <div className="rounded-md bg-success-light border border-success/20 px-4 py-2.5 text-[13px] text-success">
-          {saveSuccess}
-        </div>
-      )}
-      {listError && (
-        <div className="rounded-md bg-danger-light border border-danger/20 px-4 py-2.5 text-[13px] text-danger">
-          {listError}
-        </div>
-      )}
-
-      {/* Search */}
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <div className="relative w-full max-w-xs">
-          <input
-            type="text"
-            placeholder={t.leads.searchLeads}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="glass-input w-full"
-          />
-        </div>
-      </div>
-
-      {/* Quotes Table */}
+      {/* ── Attio-style quotes table ── */}
       {(() => {
         const allQuotes = allQuotesQuery.data || [];
         const filtered = debouncedSearch
@@ -503,110 +510,137 @@ export default function Leads() {
         const noQuotes = !quotesLoading && filtered.length === 0;
 
         return (
-      <div className="section-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.invoices.client}</th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.leads.quoteNumber}</th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.leads.quoteStatus}</th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.value}</th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.leads.dateCreated}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {quotesLoading &&
-                Array.from({ length: 6 }).map((_, idx) => (
-                  <tr key={`sk-${idx}`} className="border-b border-border">
-                    <td className="px-4 py-3" colSpan={5}>
-                      <div className="skeleton h-4 w-full" />
-                    </td>
-                  </tr>
-                ))}
-              {!quotesLoading &&
-                filtered.map((quote) => {
-                  const contactName = quote.client_name || quote.lead_name || '—';
-                  const statusLabel = QUOTE_STATUS_LABELS[quote.status as keyof typeof QUOTE_STATUS_LABELS] || quote.status;
-                  const statusColor = QUOTE_STATUS_COLORS[quote.status as keyof typeof QUOTE_STATUS_COLORS] || 'bg-neutral-100 text-neutral-700';
+      <div className="border border-outline rounded-xl overflow-hidden bg-surface">
+        <div className="grid" style={{ gridTemplateColumns: '1fr 60px 1fr 100px 90px 100px 70px 36px' }}>
+          {/* Header */}
+          <div className="px-4 py-2.5 border-b border-outline text-[10px] font-semibold uppercase tracking-widest text-text-tertiary flex items-center">{t.invoices.client}</div>
+          <div className="px-3 py-2.5 border-b border-outline text-[10px] font-semibold uppercase tracking-widest text-text-tertiary flex items-center">#</div>
+          <div className="px-3 py-2.5 border-b border-outline text-[10px] font-semibold uppercase tracking-widest text-text-tertiary flex items-center">{t.quotes?.title || 'Title'}</div>
+          <div className="px-3 py-2.5 border-b border-outline text-[10px] font-semibold uppercase tracking-widest text-text-tertiary flex items-center">{language === 'fr' ? 'Statut' : 'Status'}</div>
+          <div className="px-3 py-2.5 border-b border-outline text-[10px] font-semibold uppercase tracking-widest text-text-tertiary flex items-center justify-end">{t.common.value}</div>
+          <div className="px-3 py-2.5 border-b border-outline text-[10px] font-semibold uppercase tracking-widest text-text-tertiary flex items-center">{t.leads.dateCreated}</div>
+          <div className="px-3 py-2.5 border-b border-outline text-[10px] font-semibold uppercase tracking-widest text-text-tertiary flex items-center">{language === 'fr' ? 'Expire' : 'Expires'}</div>
+          <div className="border-b border-outline" />
 
-                  return (
-                    <tr
-                      key={quote.id}
-                      className="border-b border-border hover:bg-black/[0.02] cursor-pointer transition-colors"
-                      onClick={async () => {
-                        try {
-                          const detail = await getQuoteById(quote.id);
-                          if (detail) { setQuoteDetail(detail); setIsQuoteDetailsOpen(true); }
-                        } catch { toast.error(t.leads.failedToLoadQuote); }
-                      }}
-                    >
-                      <td className="px-4 py-3">
-                        <p className="text-[13px] font-medium text-text-primary">{contactName}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <FileText size={12} className="text-primary shrink-0" />
-                          <span className="text-[13px] font-medium text-text-primary">#{quote.quote_number}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold', statusColor)}>
-                          {statusLabel}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-[13px] font-semibold text-text-primary tabular-nums">
-                          {formatQuoteMoney(quote.total_cents, quote.currency)}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-[13px] text-text-tertiary">
-                          {new Date(quote.created_at).toLocaleDateString(t.dashboard.enus, { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </p>
-                      </td>
-                    </tr>
-                  );
-                })}
-              {noQuotes && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-10">
-                    <EmptyState
-                      icon={FileText}
-                      title={t.leads.noLeadsFound}
-                      description={allQuotes.length === 0 ? (t.leads.getStartedByCreatingYourFirstQuote) : t.leads.tryAdjusting}
-                      action={allQuotes.length === 0 ? (
-                        <button onClick={() => setIsNewLeadModalOpen(true)} className="glass-button-primary mt-3 inline-flex items-center gap-1.5 text-[13px]">
-                          <Plus size={14} /> {t.leads.addLead}
-                        </button>
-                      ) : undefined}
-                    />
-                  </td>
-                </tr>
+          {/* Loading */}
+          {quotesLoading && Array.from({ length: 6 }).map((_, idx) => (
+            <React.Fragment key={`sk-${idx}`}>
+              <div className="px-4 py-3 border-b border-outline/50"><div className="h-4 w-20 bg-surface-secondary rounded animate-pulse" /></div>
+              <div className="px-3 py-3 border-b border-outline/50"><div className="h-4 w-8 bg-surface-secondary rounded animate-pulse" /></div>
+              <div className="px-3 py-3 border-b border-outline/50"><div className="h-4 w-24 bg-surface-secondary rounded animate-pulse" /></div>
+              <div className="px-3 py-3 border-b border-outline/50"><div className="h-4 w-14 bg-surface-secondary rounded-full animate-pulse" /></div>
+              <div className="px-3 py-3 border-b border-outline/50"><div className="h-4 w-12 bg-surface-secondary rounded animate-pulse ml-auto" /></div>
+              <div className="px-3 py-3 border-b border-outline/50"><div className="h-4 w-16 bg-surface-secondary rounded animate-pulse" /></div>
+              <div className="px-3 py-3 border-b border-outline/50"><div className="h-4 w-10 bg-surface-secondary rounded animate-pulse" /></div>
+              <div className="border-b border-outline/50" />
+            </React.Fragment>
+          ))}
+
+          {/* Rows */}
+          {!quotesLoading && filtered.map((quote) => {
+            const contactName = quote.client_name || quote.lead_name || '\u2014';
+            const statusLabel = QUOTE_STATUS_LABELS[quote.status as keyof typeof QUOTE_STATUS_LABELS] || quote.status;
+            const rowCls = 'border-b border-outline/50 hover:bg-surface-secondary/40 cursor-pointer transition-colors';
+            const openQuote = async () => {
+              try {
+                const detail = await getQuoteById(quote.id);
+                if (detail) { setQuoteDetail(detail); setIsQuoteDetailsOpen(true); }
+              } catch { toast.error(t.leads.failedToLoadQuote); }
+            };
+            return (
+              <React.Fragment key={quote.id}>
+                <div className={`px-4 py-2.5 flex items-center gap-2 min-w-0 ${rowCls}`} onClick={openQuote}>
+                  <div className="w-6 h-6 rounded-full bg-surface-secondary border border-outline flex items-center justify-center text-[9px] font-bold text-text-tertiary shrink-0">
+                    {contactName.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-[12px] font-medium text-text-primary truncate">{contactName}</span>
+                </div>
+                <div className={`px-3 py-2.5 flex items-center ${rowCls}`} onClick={openQuote}>
+                  <span className="text-[12px] font-medium text-text-secondary tabular-nums">#{quote.quote_number}</span>
+                </div>
+                <div className={`px-3 py-2.5 flex items-center min-w-0 ${rowCls}`} onClick={openQuote}>
+                  <span className="text-[12px] text-text-secondary truncate">{(quote as any).title || '\u2014'}</span>
+                </div>
+                <div className={`px-3 py-2.5 flex items-center ${rowCls}`} onClick={openQuote}>
+                  <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium',
+                    quote.status === 'draft' ? 'bg-surface-secondary text-text-tertiary' :
+                    quote.status === 'approved' ? 'bg-surface-secondary text-text-primary' :
+                    quote.status === 'declined' || quote.status === 'expired' ? 'bg-surface-secondary text-text-tertiary' :
+                    'bg-surface-secondary text-text-secondary')}>
+                    {statusLabel}
+                  </span>
+                </div>
+                <div className={`px-3 py-2.5 flex items-center justify-end ${rowCls}`} onClick={openQuote}>
+                  <span className="text-[12px] font-semibold text-text-primary tabular-nums">{formatQuoteMoney(quote.total_cents, quote.currency)}</span>
+                </div>
+                <div className={`px-3 py-2.5 flex items-center ${rowCls}`} onClick={openQuote}>
+                  <span className="text-[11px] text-text-tertiary tabular-nums">
+                    {new Date(quote.created_at).toLocaleDateString(t.dashboard.enus, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                </div>
+                <div className={`px-3 py-2.5 flex items-center ${rowCls}`} onClick={openQuote}>
+                  {(quote as any).valid_until ? (() => {
+                    const exp = expiryLabel((quote as any).valid_until, language === 'fr');
+                    return <span className={cn('text-[10px]', exp.className)}>{exp.text}</span>;
+                  })() : <span className="text-[10px] text-text-tertiary">—</span>}
+                </div>
+                <div className={`py-2.5 flex items-center justify-center ${rowCls} group`}>
+                  <button onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!window.confirm(t.leads.confirmDelete)) return;
+                    try {
+                      await deleteQuote(quote.id);
+                      toast.success(t.leads.leadDeleted);
+                      void queryClient.invalidateQueries({ queryKey: ['all-quotes-page'] });
+                      void queryClient.invalidateQueries({ queryKey: ['pending-quotes-kpis'] });
+                    } catch (err: any) { toast.error(err?.message || t.leads.failedDelete); }
+                  }}
+                    className="p-1 rounded text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-danger transition-all">
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </React.Fragment>
+            );
+          })}
+
+          {/* Empty */}
+          {noQuotes && (
+            <div className="col-span-8 px-4 py-16 text-center">
+              <FileText size={20} className="mx-auto text-text-tertiary opacity-40 mb-2" />
+              <p className="text-[12px] text-text-tertiary">{allQuotes.length === 0 ? t.leads.getStartedByCreatingYourFirstQuote : t.leads.tryAdjusting}</p>
+              {allQuotes.length === 0 && (
+                <button onClick={() => setIsNewLeadModalOpen(true)}
+                  className="mt-3 px-3 py-1.5 rounded-lg bg-primary text-white text-[12px] font-semibold hover:opacity-90 transition-all inline-flex items-center gap-1.5">
+                  <Plus size={13} /> {t.leads.addLead}
+                </button>
               )}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
       </div>
         );
       })()}
 
-      {/* Template Selection Modal */}
+      {/* Preset Selection Modal */}
       <AnimatePresence>
-        {isTemplateSelectOpen && (
-          <TemplateSelectModal
-            isOpen={isTemplateSelectOpen}
+        {isPresetSelectOpen && (
+          <PresetSelectModal
+            isOpen={isPresetSelectOpen}
             isFr={language === 'fr'}
-            onClose={() => setIsTemplateSelectOpen(false)}
+            onClose={() => setIsPresetSelectOpen(false)}
             onStartFromScratch={() => {
-              setIsTemplateSelectOpen(false);
-              setSelectedTemplate(null);
+              setIsPresetSelectOpen(false);
+              setSelectedPreset(null);
               setIsNewLeadModalOpen(true);
             }}
-            onSelectTemplate={(template) => {
-              setIsTemplateSelectOpen(false);
-              setSelectedTemplate(template);
+            onSelectPreset={(preset) => {
+              setIsPresetSelectOpen(false);
+              setSelectedPreset(preset);
               setIsNewLeadModalOpen(true);
+            }}
+            onCreatePreset={() => {
+              setIsPresetSelectOpen(false);
+              navigate('/quotes/presets');
             }}
           />
         )}
@@ -617,12 +651,12 @@ export default function Leads() {
         {isNewLeadModalOpen && (
           <QuoteCreateModal
             isOpen={isNewLeadModalOpen}
-            onClose={() => { setIsNewLeadModalOpen(false); setSelectedTemplate(null); setCreateError(null); }}
+            onClose={() => { setIsNewLeadModalOpen(false); setSelectedPreset(null); setCreateError(null); }}
             createLeadInline
-            template={selectedTemplate}
+            preset={selectedPreset}
             onCreated={(detail) => {
               setIsNewLeadModalOpen(false);
-              setSelectedTemplate(null);
+              setSelectedPreset(null);
               fetchLeads();
               void queryClient.invalidateQueries({ queryKey: ['all-quotes-page'] });
               void queryClient.invalidateQueries({ queryKey: ['pending-quotes-kpis'] });
@@ -757,11 +791,11 @@ export default function Leads() {
                     {/* Stats */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="section-card p-4">
-                        <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">{t.common.value}</p>
+                        <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1">{t.common.value}</p>
                         <p className="text-lg font-bold text-text-primary tabular-nums">{formatCurrency(selectedLead.value || 0)}</p>
                       </div>
                       <div className="section-card p-4">
-                        <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">{t.common.status}</p>
+                        <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1">{t.common.status}</p>
                         <select
                           value={selectedLead.status}
                           onChange={async (e) => {

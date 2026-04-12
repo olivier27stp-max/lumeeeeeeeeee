@@ -30,7 +30,7 @@ type Step = 'plan' | 'onboarding' | 'payment';
 export default function BillingCheckout() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const isFr = language === 'fr';
 
   // URL params
@@ -141,7 +141,7 @@ export default function BillingCheckout() {
   };
 
   const isOnboardingValid = fullName.trim() && companyName.trim() && email.includes('@');
-  const isPaymentValid = plan?.slug === 'starter' || (cardName.trim() && cardNumber.replace(/\s/g, '').length >= 15 && cardExpiry.length >= 4 && cardCvc.length >= 3);
+  const isPaymentValid = plan?.slug === 'starter' || (cardName.trim() && cardNumber.replace(/\s/g, '').length >= 16 && cardExpiry.length >= 4 && cardCvc.length >= 3);
 
   const handleCheckPromo = async () => {
     if (!promoCode.trim()) return;
@@ -228,7 +228,7 @@ export default function BillingCheckout() {
   ];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       {/* Back */}
       <button
         onClick={() => step === 'plan' ? navigate('/settings?tab=billing') : setStep(step === 'payment' ? 'onboarding' : 'plan')}
@@ -291,7 +291,7 @@ export default function BillingCheckout() {
                     onClick={() => setInterval(int)}
                     className={cn(
                       'px-4 py-2 rounded-lg text-[12px] font-semibold transition-all',
-                      interval === int ? 'bg-text-primary text-surface' : 'text-text-secondary hover:text-text-primary'
+                      interval === int ? 'bg-primary text-white' : 'text-text-secondary hover:text-text-primary'
                     )}
                   >
                     {int === 'monthly' ? (t.billing.monthly) : (t.billing.yearly)}
@@ -306,7 +306,7 @@ export default function BillingCheckout() {
                     onClick={() => setCurrency(cur)}
                     className={cn(
                       'px-3 py-2 rounded-lg text-[12px] font-semibold transition-all',
-                      currency === cur ? 'bg-text-primary text-surface' : 'text-text-secondary hover:text-text-primary'
+                      currency === cur ? 'bg-primary text-white' : 'text-text-secondary hover:text-text-primary'
                     )}
                   >
                     {cur}
@@ -407,7 +407,7 @@ export default function BillingCheckout() {
           <div className="section-card p-6 space-y-5">
             <div className="flex items-center gap-2">
               <Building2 size={14} className="text-text-tertiary" />
-              <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">
+              <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                 {isFr ? 'Informations de l\'entreprise' : 'Business Information'}
               </p>
             </div>
@@ -553,7 +553,7 @@ export default function BillingCheckout() {
               <div className="section-card p-6 space-y-5">
                 <div className="flex items-center gap-2">
                   <Lock size={14} className="text-text-tertiary" />
-                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">
+                  <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                     {t.billing.securePayment}
                   </p>
                 </div>

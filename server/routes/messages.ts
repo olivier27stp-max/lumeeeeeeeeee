@@ -4,6 +4,7 @@ import { getServiceClient } from '../lib/supabase';
 import { twilioClient, twilioPhoneNumber, twilioAuthToken, Twilio } from '../lib/config';
 import { normalizeE164, findOrCreateConversation, resolvePublicBaseUrl } from '../lib/helpers';
 import { validate, messageSendSchema } from '../lib/validation';
+import { logSecurityEvent, sanitizeText, checkAnomalies, extractIP } from '../lib/security';
 
 const router = Router();
 
@@ -82,37 +83,62 @@ router.post('/messages/inbound', (req, res) => {
     sid: req.body?.MessageSid,
   });
 
-  // ── Quick validation — respond to Twilio FAST to prevent retries ──
+  // ── Strict signature validation — NEVER skip in production ──
 
   if (!twilioAuthToken) {
     console.error('[SMS Inbound] Twilio auth token not configured');
+    logSecurityEvent({
+      event_type: 'twilio_webhook_no_auth',
+      severity: 'high',
+      source: 'webhook',
+      ip_address: extractIP(req),
+      details: { path: '/api/messages/inbound' },
+    });
     return sendTwiml();
   }
 
   const twilioSignature = req.headers['x-twilio-signature'] as string;
-  if (!twilioSignature && process.env.TWILIO_SKIP_SIGNATURE_VALIDATION !== 'true') {
+  if (!twilioSignature) {
     console.warn('[SMS Inbound] Missing x-twilio-signature header');
+    logSecurityEvent({
+      event_type: 'twilio_webhook_missing_signature',
+      severity: 'high',
+      source: 'webhook',
+      ip_address: extractIP(req),
+      user_agent: req.headers['user-agent'],
+      details: { path: '/api/messages/inbound' },
+    });
     return sendTwiml();
   }
 
-  if (twilioSignature) {
-    const baseUrl = process.env.TWILIO_WEBHOOK_BASE_URL
-      || process.env.PUBLIC_BASE_URL
-      || process.env.FRONTEND_URL
-      || resolvePublicBaseUrl(req);
-    const webhookUrl = `${baseUrl.replace(/\/$/, '')}/api/messages/inbound`;
-    const isValid = Twilio.validateRequest(twilioAuthToken, twilioSignature, webhookUrl, req.body || {});
-    if (!isValid && process.env.TWILIO_SKIP_SIGNATURE_VALIDATION !== 'true') {
-      console.warn('[SMS Inbound] Signature validation failed. URL:', webhookUrl);
-      return sendTwiml();
-    }
+  // Validate signature — NO bypass allowed
+  const baseUrl = process.env.TWILIO_WEBHOOK_BASE_URL
+    || process.env.PUBLIC_BASE_URL
+    || process.env.FRONTEND_URL
+    || resolvePublicBaseUrl(req);
+  const webhookUrl = `${baseUrl.replace(/\/$/, '')}/api/messages/inbound`;
+  const isValid = Twilio.validateRequest(twilioAuthToken, twilioSignature, webhookUrl, req.body || {});
+  if (!isValid) {
+    console.warn('[SMS Inbound] Signature validation FAILED. URL:', webhookUrl);
+    logSecurityEvent({
+      event_type: 'twilio_webhook_invalid_signature',
+      severity: 'critical',
+      source: 'webhook',
+      ip_address: extractIP(req),
+      user_agent: req.headers['user-agent'],
+      details: { path: '/api/messages/inbound', url_used: webhookUrl },
+    });
+    return sendTwiml();
   }
 
-  const { From, Body, MessageSid } = req.body || {};
-  if (!From || !Body) {
+  const { From, Body: rawBody, MessageSid } = req.body || {};
+  if (!From || !rawBody) {
     console.warn('[SMS Inbound] Missing From or Body');
     return sendTwiml();
   }
+
+  // Sanitize inbound SMS content to prevent stored XSS
+  const Body = sanitizeText(rawBody);
 
   // In-memory dedup: reject if we already saw this MessageSid
   if (MessageSid && recentMessageSids.has(MessageSid)) {
@@ -307,14 +333,32 @@ router.post('/messages/inbound', (req, res) => {
 // POST /api/messages/status — Twilio status callback (delivery updates)
 router.post('/messages/status', async (req, res) => {
   try {
-    // Validate Twilio signature on status callbacks too
-    if (twilioAuthToken) {
-      const sig = req.headers['x-twilio-signature'] as string;
-      if (sig) {
-        const baseUrl = process.env.FRONTEND_URL || process.env.PUBLIC_BASE_URL || resolvePublicBaseUrl(req);
-        const isValid = Twilio.validateRequest(twilioAuthToken, sig, `${baseUrl.replace(/\/$/, '')}/api/messages/status`, req.body || {});
-        if (!isValid) return res.status(403).json({ error: 'Invalid signature' });
-      }
+    // MANDATORY signature verification on status callbacks
+    if (!twilioAuthToken) {
+      return res.status(503).json({ error: 'Twilio not configured' });
+    }
+    const sig = req.headers['x-twilio-signature'] as string;
+    if (!sig) {
+      logSecurityEvent({
+        event_type: 'twilio_status_missing_signature',
+        severity: 'medium',
+        source: 'webhook',
+        ip_address: extractIP(req),
+        details: { path: '/api/messages/status' },
+      });
+      return res.status(403).json({ error: 'Missing signature' });
+    }
+    const baseUrl = process.env.TWILIO_WEBHOOK_BASE_URL || process.env.PUBLIC_BASE_URL || process.env.FRONTEND_URL || resolvePublicBaseUrl(req);
+    const isValid = Twilio.validateRequest(twilioAuthToken, sig, `${baseUrl.replace(/\/$/, '')}/api/messages/status`, req.body || {});
+    if (!isValid) {
+      logSecurityEvent({
+        event_type: 'twilio_status_invalid_signature',
+        severity: 'high',
+        source: 'webhook',
+        ip_address: extractIP(req),
+        details: { path: '/api/messages/status' },
+      });
+      return res.status(403).json({ error: 'Invalid signature' });
     }
 
     const { MessageSid, MessageStatus } = req.body || {};

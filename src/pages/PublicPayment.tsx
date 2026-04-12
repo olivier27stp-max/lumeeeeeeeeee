@@ -176,7 +176,7 @@ export default function PublicPayment() {
           appearance: {
             theme: 'stripe',
             variables: {
-              colorPrimary: '#2563eb',
+              colorPrimary: '#1f2937',
               borderRadius: '8px',
             },
           },
@@ -297,7 +297,7 @@ function PublicPageShell({ children, business }: {
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-900 flex flex-col">
       {/* Header */}
-      <header className="border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-4 py-4">
+      <header className="border-b border-neutral-200 dark:border-neutral-700 bg-surface-card dark:bg-neutral-800 px-4 py-4">
         <div className="max-w-lg mx-auto flex items-center gap-3">
           {business?.logo_url ? (
             <img src={business.logo_url} alt={business.name || ''} className="h-8 w-8 rounded-lg object-cover" />
@@ -314,13 +314,13 @@ function PublicPageShell({ children, business }: {
 
       {/* Content */}
       <main className="flex-1 px-4 py-8">
-        <div className="max-w-lg mx-auto bg-white dark:bg-neutral-800 rounded-xl shadow-sm border border-neutral-200 dark:border-neutral-700 p-6">
+        <div className="max-w-lg mx-auto bg-surface-card dark:bg-neutral-800 rounded-xl shadow-sm border border-neutral-200 dark:border-neutral-700 p-6">
           {children}
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-4 py-3">
+      <footer className="border-t border-neutral-200 dark:border-neutral-700 bg-surface-card dark:bg-neutral-800 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between text-xs text-neutral-400">
           <span>Powered by Lume</span>
           {business?.email && <a href={`mailto:${business.email}`} className="hover:underline">{business.email}</a>}

@@ -1,10 +1,21 @@
 import React from 'react';
 import { ShieldAlert } from 'lucide-react';
 import { usePermissions } from '../hooks/usePermissions';
-import { type PermissionKey, hasPermission } from '../lib/permissions';
+import { type PermissionKey, hasPermission, checkScope, can } from '../lib/permissions';
 
 interface PermissionGateProps {
-  permission: PermissionKey;
+  /** Single permission to check */
+  permission?: PermissionKey;
+  /** Multiple permissions — all required (AND) */
+  permissions?: PermissionKey[];
+  /** Multiple permissions — any required (OR) */
+  anyPermission?: PermissionKey[];
+  /** Optional resource context for scope check */
+  resource?: {
+    owner_id?: string | null;
+    team_id?: string | null;
+    department_id?: string | null;
+  };
   children: React.ReactNode;
   fallback?: React.ReactNode;
 }
@@ -23,14 +34,43 @@ const DefaultFallback: React.FC = () => (
   </div>
 );
 
-export default function PermissionGate({ permission, children, fallback }: PermissionGateProps) {
-  const { permissions, loading } = usePermissions();
+export default function PermissionGate({ permission, permissions: allPerms, anyPermission, resource, children, fallback }: PermissionGateProps) {
+  const ctx = usePermissions();
 
-  if (loading) return null;
+  if (ctx.loading) return null;
 
-  if (hasPermission(permissions, permission)) {
-    return <>{children}</>;
+  // Owner bypasses everything
+  if (ctx.role === 'owner') return <>{children}</>;
+
+  const perms = ctx.permissions;
+
+  // Single permission check
+  if (permission) {
+    if (resource && ctx.role && ctx.userId) {
+      const allowed = can(
+        { role: ctx.role, permissions: perms, scope: ctx.scope, userId: ctx.userId, teamId: ctx.teamId, departmentId: ctx.departmentId },
+        permission,
+        resource
+      );
+      if (!allowed) return <>{fallback ?? <DefaultFallback />}</>;
+    } else {
+      if (!hasPermission(perms, permission, ctx.role ?? undefined)) {
+        return <>{fallback ?? <DefaultFallback />}</>;
+      }
+    }
   }
 
-  return <>{fallback ?? <DefaultFallback />}</>;
+  // All permissions required (AND)
+  if (allPerms) {
+    const allOk = allPerms.every((p) => hasPermission(perms, p, ctx.role ?? undefined));
+    if (!allOk) return <>{fallback ?? <DefaultFallback />}</>;
+  }
+
+  // Any permission required (OR)
+  if (anyPermission) {
+    const anyOk = anyPermission.some((p) => hasPermission(perms, p, ctx.role ?? undefined));
+    if (!anyOk) return <>{fallback ?? <DefaultFallback />}</>;
+  }
+
+  return <>{children}</>;
 }

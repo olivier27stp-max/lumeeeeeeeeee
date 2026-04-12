@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { BriefcaseBusiness, Calendar, ChevronDown, Clock3, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -13,7 +13,10 @@ import ServicePicker from './ServicePicker';
 import type { PredefinedService } from '../lib/servicesApi';
 import { supabase } from '../lib/supabase';
 import AddressAutocomplete, { type StructuredAddress } from './AddressAutocomplete';
+import { resolveTaxes, type TaxConfig } from '../lib/taxApi';
 import { useTranslation } from '../i18n';
+import SpecificNotes from './SpecificNotes';
+import SpecificNotesInline, { type SpecificNotesInlineHandle } from './SpecificNotesInline';
 
 interface LineItemForm {
   id: string;
@@ -209,6 +212,7 @@ export default function NewJobModal({
 }: NewJobModalProps) {
   const { t } = useTranslation();
   const isEditMode = Boolean(initialValues?.id);
+  const specificNotesRef = useRef<SpecificNotesInlineHandle>(null);
   const [title, setTitle] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSearch, setClientSearch] = useState('');
@@ -251,6 +255,8 @@ export default function NewJobModal({
   const [servicePickerOpen, setServicePickerOpen] = useState(false);
   const [addedServiceIds, setAddedServiceIds] = useState<Set<string>>(new Set());
   const [orgCurrency, setOrgCurrency] = useState('CAD');
+  const [resolvedTaxConfigs, setResolvedTaxConfigs] = useState<TaxConfig[]>([]);
+  const [taxConfigured, setTaxConfigured] = useState<boolean | null>(null);
   const [tpsEnabled, setTpsEnabled] = useState(true);
   const [tpsRate, setTpsRate] = useState(5);
   const [tvqEnabled, setTvqEnabled] = useState(true);
@@ -334,17 +340,42 @@ export default function NewJobModal({
     }
     const initialTotal = initialValues?.subtotal ?? initialValues?.total ?? null;
     setTotalInput(initialTotal == null ? '' : String(initialTotal));
+    // Load taxes from Settings (dynamic)
     const initialTaxes = initialValues?.tax_lines || [];
-    const initialTps = initialTaxes.find((tax) => String(tax.code || '').toLowerCase() === 'tps');
-    const initialTvq = initialTaxes.find((tax) => String(tax.code || '').toLowerCase() === 'tvq');
-    const initialCustom = initialTaxes.find((tax) => String(tax.code || '').toLowerCase() === 'custom');
-    setTpsEnabled(initialTps ? Boolean(initialTps.enabled) : true);
-    setTpsRate(initialTps?.rate ?? 5);
-    setTvqEnabled(initialTvq ? Boolean(initialTvq.enabled) : true);
-    setTvqRate(initialTvq?.rate ?? 9.975);
-    setCustomTaxEnabled(initialCustom ? Boolean(initialCustom.enabled) : false);
-    setCustomTaxLabel(initialCustom?.label || 'Custom tax');
-    setCustomTaxRate(initialCustom?.rate ?? 0);
+    if (isEditMode && initialTaxes.length > 0) {
+      // Edit mode: use existing job's tax lines
+      const initialTps = initialTaxes.find((tax) => String(tax.code || '').toLowerCase() === 'tps') || initialTaxes[0];
+      const initialTvq = initialTaxes.find((tax) => String(tax.code || '').toLowerCase() === 'tvq') || initialTaxes[1];
+      const initialCustom = initialTaxes.find((tax) => String(tax.code || '').toLowerCase() === 'custom');
+      setTpsEnabled(initialTps ? Boolean(initialTps.enabled) : false);
+      setTpsRate(initialTps?.rate ?? 0);
+      setTvqEnabled(initialTvq ? Boolean(initialTvq.enabled) : false);
+      setTvqRate(initialTvq?.rate ?? 0);
+      setCustomTaxEnabled(initialCustom ? Boolean(initialCustom.enabled) : false);
+      setCustomTaxLabel(initialCustom?.label || 'Custom tax');
+      setCustomTaxRate(initialCustom?.rate ?? 0);
+      setResolvedTaxConfigs(initialTaxes.map((t: any) => ({ id: t.code, org_id: '', name: t.label, rate: t.rate, type: 'percentage' as const, region: '', country: '', is_compound: false, is_active: t.enabled, sort_order: 0 })));
+      setTaxConfigured(true);
+    } else {
+      // New job: resolve from Settings
+      setTaxConfigured(null);
+      resolveTaxes(initialValues?.client_id || null, initialValues?.lead_id || null).then(({ taxes }) => {
+        if (taxes.length > 0) {
+          setResolvedTaxConfigs(taxes);
+          setTaxConfigured(true);
+          const t1 = taxes[0]; const t2 = taxes[1];
+          setTpsEnabled(t1 ? t1.is_active : false);
+          setTpsRate(t1 ? t1.rate : 0);
+          setTvqEnabled(t2 ? t2.is_active : false);
+          setTvqRate(t2 ? t2.rate : 0);
+          setCustomTaxEnabled(false); setCustomTaxRate(0);
+        } else {
+          setTaxConfigured(false);
+          setTpsEnabled(false); setTpsRate(0);
+          setTvqEnabled(false); setTvqRate(0);
+        }
+      }).catch(() => { setTaxConfigured(false); });
+    }
 
     listClients({ page: 1, pageSize: 200, sort: 'name_asc' })
       .then((result) => {
@@ -394,15 +425,20 @@ export default function NewJobModal({
       .then(setSalespeople)
       .catch(() => setSalespeople([]));
 
-    // Fetch org currency
-    supabase
-      .from('org_billing_settings')
-      .select('currency')
-      .limit(1)
-      .maybeSingle()
-      .then(({ data: billing }) => {
-        if (billing?.currency) setOrgCurrency(billing.currency);
-      });
+    // Fetch org currency (scoped to current org)
+    import('../lib/orgApi').then(({ getCurrentOrgIdOrThrow }) =>
+      getCurrentOrgIdOrThrow().then(oid =>
+        supabase
+          .from('org_billing_settings')
+          .select('currency')
+          .eq('org_id', oid)
+          .limit(1)
+          .maybeSingle()
+          .then(({ data: billing }) => {
+            if (billing?.currency) setOrgCurrency(billing.currency);
+          })
+      )
+    ).catch(() => {});
   }, [isOpen, initialValues, isEditMode, source?.type]);
 
   const selectedClient = useMemo(
@@ -445,19 +481,21 @@ export default function NewJobModal({
     return lineItemsSubtotalValue;
   }, [lineItemsSubtotalValue, totalInput]);
   const effectiveSubtotalCents = useMemo(() => Math.round(effectiveSubtotalValue * 100), [effectiveSubtotalValue]);
-  const taxLines = useMemo(
-    () => [
-      { code: 'tps', label: 'TPS', rate: Number.isFinite(tpsRate) ? tpsRate : 0, enabled: tpsEnabled },
-      { code: 'tvq', label: 'TVQ', rate: Number.isFinite(tvqRate) ? tvqRate : 0, enabled: tvqEnabled },
-      {
-        code: 'custom',
-        label: customTaxLabel.trim() || 'Custom tax',
-        rate: Number.isFinite(customTaxRate) ? customTaxRate : 0,
-        enabled: customTaxEnabled,
-      },
-    ],
-    [customTaxEnabled, customTaxLabel, customTaxRate, tpsEnabled, tpsRate, tvqEnabled, tvqRate]
-  );
+  const taxLines = useMemo(() => {
+    if (resolvedTaxConfigs.length > 0) {
+      return resolvedTaxConfigs.map((tax, idx) => ({
+        code: tax.name.toLowerCase().replace(/\s+/g, '_'),
+        label: tax.name,
+        rate: tax.rate,
+        enabled: idx === 0 ? tpsEnabled : idx === 1 ? tvqEnabled : customTaxEnabled,
+      }));
+    }
+    // Fallback to manual inputs if no resolved configs
+    return [
+      { code: 'tax1', label: 'Tax 1', rate: Number.isFinite(tpsRate) ? tpsRate : 0, enabled: tpsEnabled },
+      { code: 'tax2', label: 'Tax 2', rate: Number.isFinite(tvqRate) ? tvqRate : 0, enabled: tvqEnabled },
+    ].filter(t => t.rate > 0);
+  }, [resolvedTaxConfigs, customTaxEnabled, tpsEnabled, tpsRate, tvqEnabled, tvqRate]);
 
   const taxTotalCents = useMemo(
     () =>
@@ -493,18 +531,33 @@ export default function NewJobModal({
     setBillingSplit(false);
     setDescription(null);
     setPrefilledAddress(null);
-    setStatus('Scheduled');
+    setStatus('Draft');
     setLineItems([{ id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }]);
     setTotalInput('');
     setInlineError(null);
     setCalendarHint(null);
-    setTpsEnabled(true);
-    setTpsRate(5);
-    setTvqEnabled(true);
-    setTvqRate(9.975);
     setCustomTaxEnabled(false);
     setCustomTaxLabel('Custom tax');
     setCustomTaxRate(0);
+    // Load taxes from settings
+    setTaxConfigured(null);
+    resolveTaxes(null, null).then(({ taxes }) => {
+      if (taxes.length > 0) {
+        setResolvedTaxConfigs(taxes);
+        setTaxConfigured(true);
+        // Map resolved taxes to existing TPS/TVQ state for backward compat
+        const t1 = taxes[0];
+        const t2 = taxes[1];
+        setTpsEnabled(t1 ? t1.is_active : false);
+        setTpsRate(t1 ? t1.rate : 0);
+        setTvqEnabled(t2 ? t2.is_active : false);
+        setTvqRate(t2 ? t2.rate : 0);
+      } else {
+        setTaxConfigured(false);
+        setTpsEnabled(false); setTpsRate(0);
+        setTvqEnabled(false); setTvqRate(0);
+      }
+    }).catch(() => { setTaxConfigured(false); });
   };
 
   const handleClose = (reason: 'cancel' | 'created' = 'cancel') => {
@@ -610,10 +663,7 @@ export default function NewJobModal({
 
     const scheduledAt = startDate && startTime ? buildDateTime(startDate, startTime) : null;
     const endAt = startDate && endTime ? buildDateTime(startDate, endTime) : null;
-    if (!scheduledAt || !endAt) {
-      setInlineError(t.modals.datesRequired);
-      return;
-    }
+    // Allow draft jobs without dates — only validate if partially filled
     if (endAt && !scheduledAt) {
       setInlineError(t.modals.startTimeRequired);
       return;
@@ -668,6 +718,11 @@ export default function NewJobModal({
         total: grandTotalCents / 100,
         tax_lines: taxLines,
       });
+      // Save specific notes (photos, files, etc.) if any were added
+      if (createdJob?.id && specificNotesRef.current?.hasContent()) {
+        await specificNotesRef.current.saveNote('job', createdJob.id);
+      }
+
       onCreated?.(createdJob);
       handleClose('created');
     } catch (error: any) {
@@ -693,25 +748,25 @@ export default function NewJobModal({
                   <BriefcaseBusiness size={18} />
                 </div>
                 <div>
-                  <h2 className="text-3xl font-semibold tracking-tight">{isEditMode ? t.modals.editJobHeading : t.modals.newJobHeading}</h2>
-                  <p className="text-sm text-text-secondary uppercase tracking-wide font-bold">
+                  <h2 className="text-[16px] font-bold tracking-tight">{isEditMode ? t.modals.editJobHeading : t.modals.newJobHeading}</h2>
+                  <p className="text-[13px] text-text-tertiary">
                     {isEditMode ? t.modals.editJobSubtitle : t.modals.newJobSubtitle}
                   </p>
                 </div>
               </div>
-              <button onClick={() => handleClose()} className="p-2 rounded-full hover:bg-surface-secondary transition-colors">
+              <button onClick={() => handleClose()} className="p-2 rounded-xl border border-outline hover:bg-surface-secondary transition-colors">
                 <X size={18} />
               </button>
             </div>
 
-            <form id="new-job-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
+            <form id="new-job-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
               <section className="space-y-2">
-                <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.jobTitle}</label>
+                <label className="text-xs font-medium text-text-tertiary">{t.modals.jobTitle}</label>
                 <input
                   autoFocus
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  className="glass-input w-full text-3xl"
+                  className="glass-input w-full text-lg"
                   placeholder="e.g. Residential Cleaning - Smith Residence"
                   required
                 />
@@ -721,7 +776,7 @@ export default function NewJobModal({
                 {isCreatingNewClient ? (
                   <div className="lg:col-span-4 space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.createNewClient}</label>
+                      <label className="text-xs font-medium text-text-tertiary">{t.modals.createNewClient}</label>
                       <button
                         type="button"
                         onClick={() => { setIsCreatingNewClient(false); setNewClientFirst(''); setNewClientLast(''); setNewClientEmail(''); setNewClientPhone(''); }}
@@ -732,26 +787,26 @@ export default function NewJobModal({
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       <div className="space-y-1">
-                        <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.newClientFirstName} <span className="text-danger">*</span></label>
+                        <label className="text-xs font-medium text-text-tertiary">{t.modals.newClientFirstName} <span className="text-danger">*</span></label>
                         <input value={newClientFirst} onChange={(e) => setNewClientFirst(e.target.value)} className="glass-input w-full" autoFocus />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.newClientLastName} <span className="text-danger">*</span></label>
+                        <label className="text-xs font-medium text-text-tertiary">{t.modals.newClientLastName} <span className="text-danger">*</span></label>
                         <input value={newClientLast} onChange={(e) => setNewClientLast(e.target.value)} className="glass-input w-full" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.newClientEmail}</label>
+                        <label className="text-xs font-medium text-text-tertiary">{t.modals.newClientEmail}</label>
                         <input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} className="glass-input w-full" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.newClientPhone}</label>
+                        <label className="text-xs font-medium text-text-tertiary">{t.modals.newClientPhone}</label>
                         <input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} className="glass-input w-full" />
                       </div>
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-2 relative">
-                    <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.clientName}</label>
+                    <label className="text-xs font-medium text-text-tertiary">{t.modals.clientName}</label>
                     <input
                       type="text"
                       value={clientSearch || (clientId ? clients.find(c => c.id === clientId)?.label || '' : '')}
@@ -798,7 +853,7 @@ export default function NewJobModal({
                 )}
 
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.assignTeam}</label>
+                  <label className="text-xs font-medium text-text-tertiary">{t.modals.assignTeam}</label>
                   <select
                     value={teamSelection}
                     onChange={(event) => { setTeamSelection(event.target.value); setShowTeamSuggestions(true); }}
@@ -835,7 +890,7 @@ export default function NewJobModal({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.jobs.jobNumber}</label>
+                  <label className="text-xs font-medium text-text-tertiary">{t.jobs.jobNumber}</label>
                   <input
                     value={jobNumber}
                     onChange={(event) => setJobNumber(event.target.value)}
@@ -845,7 +900,7 @@ export default function NewJobModal({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.salesperson}</label>
+                  <label className="text-xs font-medium text-text-tertiary">{t.modals.salesperson}</label>
                   <div className="relative">
                     <select
                       value={salespersonId}
@@ -868,12 +923,12 @@ export default function NewJobModal({
               <section className="space-y-4 pt-6 border-t border-border">
                 <div className="flex items-center gap-2">
                   <MapPin size={18} className="text-text-secondary" />
-                  <h3 className="text-3xl font-semibold tracking-tight">{t.modals.jobSiteAddress}</h3>
+                  <h3 className="text-[16px] font-bold tracking-tight">{t.modals.jobSiteAddress}</h3>
                 </div>
 
                 <div className="space-y-3">
                   <div className="space-y-2">
-                    <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.searchAddress}</label>
+                    <label className="text-xs font-medium text-text-tertiary">{t.modals.searchAddress}</label>
                     <AddressAutocomplete
                       value={addressSearch}
                       onChange={setAddressSearch}
@@ -893,7 +948,7 @@ export default function NewJobModal({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">
+                      <label className="text-xs font-medium text-text-tertiary">
                         {t.modals.addressLine1} <span className="text-danger">*</span>
                       </label>
                       <input
@@ -905,7 +960,7 @@ export default function NewJobModal({
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.addressLine2}</label>
+                      <label className="text-xs font-medium text-text-tertiary">{t.modals.addressLine2}</label>
                       <input
                         value={addressLine2}
                         onChange={(e) => setAddressLine2(e.target.value)}
@@ -917,7 +972,7 @@ export default function NewJobModal({
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">
+                      <label className="text-xs font-medium text-text-tertiary">
                         {t.modals.cityLabel} <span className="text-danger">*</span>
                       </label>
                       <input
@@ -929,7 +984,7 @@ export default function NewJobModal({
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">
+                      <label className="text-xs font-medium text-text-tertiary">
                         {t.modals.provinceLabel} <span className="text-danger">*</span>
                       </label>
                       <input
@@ -941,7 +996,7 @@ export default function NewJobModal({
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.postalCodeLabel}</label>
+                      <label className="text-xs font-medium text-text-tertiary">{t.modals.postalCodeLabel}</label>
                       <input
                         value={addressPostalCode}
                         onChange={(e) => setAddressPostalCode(e.target.value)}
@@ -950,7 +1005,7 @@ export default function NewJobModal({
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.countryLabel}</label>
+                      <label className="text-xs font-medium text-text-tertiary">{t.modals.countryLabel}</label>
                       <input
                         value={addressCountry}
                         onChange={(e) => setAddressCountry(e.target.value)}
@@ -964,13 +1019,13 @@ export default function NewJobModal({
 
               <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-6 border-t border-border">
                 <div className="space-y-4">
-                  <h3 className="text-3xl font-semibold tracking-tight">{t.modals.jobType}</h3>
+                  <h3 className="text-[16px] font-bold tracking-tight">{t.modals.jobType}</h3>
                   <div className="inline-flex rounded-xl bg-surface-secondary border border-border p-1">
                     <button
                       type="button"
                       onClick={() => setJobType('one_off')}
                       className={cn(
-                        'px-4 py-2 rounded-lg text-lg font-medium transition-colors',
+                        'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
                         jobType === 'one_off' ? 'bg-surface shadow-sm text-text-primary' : 'text-text-tertiary'
                       )}
                     >
@@ -980,7 +1035,7 @@ export default function NewJobModal({
                       type="button"
                       onClick={() => setJobType('recurring')}
                       className={cn(
-                        'px-4 py-2 rounded-lg text-lg font-medium transition-colors',
+                        'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
                         jobType === 'recurring' ? 'bg-surface shadow-sm text-text-primary' : 'text-text-tertiary'
                       )}
                     >
@@ -991,12 +1046,12 @@ export default function NewJobModal({
 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-3xl font-semibold tracking-tight">{t.modals.schedule}</h3>
+                    <h3 className="text-[16px] font-bold tracking-tight">{t.modals.schedule}</h3>
                     <a
                       href="/calendar"
                       target="_blank"
                       rel="noreferrer"
-                      className="text-sm text-text-secondary uppercase tracking-widest hover:text-text-primary inline-flex items-center gap-1"
+                      className="text-[10px] font-bold text-text-muted uppercase tracking-widest hover:text-text-primary inline-flex items-center gap-1"
                     >
                       <Calendar size={12} />
                       {t.modals.viewCalendar}
@@ -1004,7 +1059,7 @@ export default function NewJobModal({
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.startDate}</label>
+                      <label className="text-xs font-medium text-text-tertiary">{t.modals.startDate}</label>
                       <div className="relative">
                         <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                         <input
@@ -1016,7 +1071,7 @@ export default function NewJobModal({
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.startTime}</label>
+                      <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
                       <div className="relative">
                         <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                         <input
@@ -1028,7 +1083,7 @@ export default function NewJobModal({
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.endTime}</label>
+                      <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
                       <div className="relative">
                         <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                         <input
@@ -1044,7 +1099,7 @@ export default function NewJobModal({
               </section>
 
               <section className="pt-6 border-t border-border space-y-4">
-                <h3 className="text-3xl font-semibold tracking-tight">{t.modals.billing}</h3>
+                <h3 className="text-[16px] font-bold tracking-tight">{t.modals.billing}</h3>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -1052,7 +1107,7 @@ export default function NewJobModal({
                     onChange={(event) => setRequiresInvoicing(event.target.checked)}
                     className="h-4 w-4"
                   />
-                  <span className="text-xl">{t.modals.remindInvoice}</span>
+                  <span className="text-sm">{t.modals.remindInvoice}</span>
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
@@ -1061,13 +1116,13 @@ export default function NewJobModal({
                     onChange={(event) => setBillingSplit(event.target.checked)}
                     className="h-4 w-4"
                   />
-                  <span className="text-xl">{t.modals.splitInvoices}</span>
+                  <span className="text-sm">{t.modals.splitInvoices}</span>
                 </label>
               </section>
 
               <section className="pt-6 border-t border-border space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-3xl font-semibold tracking-tight">{t.modals.lineItems}</h3>
+                  <h3 className="text-[16px] font-bold tracking-tight">{t.modals.lineItems}</h3>
                   <button
                     type="button"
                     onClick={() => setServicePickerOpen(true)}
@@ -1105,7 +1160,7 @@ export default function NewJobModal({
                         )}
                       >
                         <div className="md:col-span-5 space-y-1">
-                          <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.nameCol}</label>
+                          <label className="text-xs font-medium text-text-tertiary">{t.modals.nameCol}</label>
                           <div className="flex items-center gap-2">
                             <input
                               type="checkbox"
@@ -1123,7 +1178,7 @@ export default function NewJobModal({
                           </div>
                         </div>
                         <div className="md:col-span-2 space-y-1">
-                          <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.qtyCol}</label>
+                          <label className="text-xs font-medium text-text-tertiary">{t.modals.qtyCol}</label>
                           <input
                             type="text"
                             inputMode="numeric"
@@ -1137,7 +1192,7 @@ export default function NewJobModal({
                           />
                         </div>
                         <div className="md:col-span-3 space-y-1">
-                          <label className="text-[10px] uppercase tracking-widest text-text-tertiary font-semibold">{t.modals.unitPriceCol}</label>
+                          <label className="text-xs font-medium text-text-tertiary">{t.modals.unitPriceCol}</label>
                           <input
                             type="text"
                             inputMode="decimal"
@@ -1185,37 +1240,39 @@ export default function NewJobModal({
               </section>
 
               <section className="pt-6 border-t border-border space-y-4">
-                <h3 className="text-3xl font-semibold tracking-tight">{t.modals.taxes}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <label className="space-y-2">
-                    <span className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.tpsLabel}</span>
-                    <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={tpsEnabled} onChange={(event) => setTpsEnabled(event.target.checked)} className="h-4 w-4" />
-                      <input type="number" min={0} step={0.001} value={tpsRate} onChange={(event) => setTpsRate(Number(event.target.value) || 0)} className="glass-input w-full" />
-                    </div>
-                  </label>
-                  <label className="space-y-2">
-                    <span className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.tvqLabel}</span>
-                    <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={tvqEnabled} onChange={(event) => setTvqEnabled(event.target.checked)} className="h-4 w-4" />
-                      <input type="number" min={0} step={0.001} value={tvqRate} onChange={(event) => setTvqRate(Number(event.target.value) || 0)} className="glass-input w-full" />
-                    </div>
-                  </label>
-                  <div className="space-y-2">
-                    <span className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.customTax}</span>
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={customTaxEnabled} onChange={(event) => setCustomTaxEnabled(event.target.checked)} className="h-4 w-4" />
-                        {t.modals.enabledLabel}
-                      </label>
-                      <input value={customTaxLabel} onChange={(event) => setCustomTaxLabel(event.target.value)} className="glass-input w-full" placeholder={t.modals.taxLabelPlaceholder} />
-                      <input type="number" min={0} step={0.001} value={customTaxRate} onChange={(event) => setCustomTaxRate(Number(event.target.value) || 0)} className="glass-input w-full" />
-                    </div>
+                <h3 className="text-[16px] font-bold tracking-tight">{t.modals.taxes}</h3>
+                {taxConfigured === null ? (
+                  <p className="text-[12px] text-text-tertiary">Loading taxes...</p>
+                ) : taxConfigured === false ? (
+                  <div className="rounded-lg border border-danger/30 bg-danger-light p-4">
+                    <p className="text-[13px] font-semibold text-danger">No taxes configured</p>
+                    <p className="text-[12px] text-text-secondary mt-1">You need to configure your tax region in Settings before creating jobs.</p>
+                    <a href="/settings/taxes" className="inline-block mt-2 text-[12px] font-medium text-primary hover:underline">Go to Tax Settings</a>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-2">
+                    {resolvedTaxConfigs.map((tax, idx) => (
+                      <div key={tax.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-surface-secondary">
+                        <div className="flex items-center gap-2">
+                          <input type="checkbox"
+                            checked={idx === 0 ? tpsEnabled : idx === 1 ? tvqEnabled : customTaxEnabled}
+                            onChange={(e) => {
+                              if (idx === 0) setTpsEnabled(e.target.checked);
+                              else if (idx === 1) setTvqEnabled(e.target.checked);
+                              else setCustomTaxEnabled(e.target.checked);
+                            }}
+                            className="h-4 w-4" />
+                          <span className="text-[13px] font-medium text-text-primary">{tax.name}</span>
+                        </div>
+                        <span className="text-[13px] text-text-secondary tabular-nums">{tax.rate}%</span>
+                      </div>
+                    ))}
+                    <p className="text-[10px] text-text-tertiary">Taxes from your <a href="/settings/taxes" className="text-primary hover:underline">Tax Settings</a></p>
+                  </div>
+                )}
                 <div className="rounded-xl border border-border bg-surface/70 p-4 text-sm">
                   <label className="mb-2 block space-y-1">
-                    <span className="text-[11px] uppercase tracking-widest text-text-secondary">{t.modals.totalBeforeTaxes}</span>
+                    <span className="text-xs font-medium text-text-tertiary">{t.modals.totalBeforeTaxes}</span>
                     <input
                       value={totalInput}
                       onChange={(event) => setTotalInput(sanitizeMoneyInput(event.target.value))}
@@ -1270,6 +1327,13 @@ export default function NewJobModal({
                 </label>
               </section>
 
+              {/* ── Specific Notes ── */}
+              {isEditMode && initialValues?.id ? (
+                <SpecificNotes entityType="job" entityId={initialValues.id} mode="full" />
+              ) : (
+                <SpecificNotesInline ref={specificNotesRef} tempEntityType="job" />
+              )}
+
               {(inlineError || errorMessage) && (
                 <div className="rounded-xl border border-danger bg-danger-light text-danger px-4 py-3 text-sm">
                   {inlineError || errorMessage}
@@ -1277,11 +1341,11 @@ export default function NewJobModal({
               )}
             </form>
 
-            <div className="px-6 py-4 border-t border-border bg-surface/70 backdrop-blur sticky bottom-0 flex items-center justify-between">
+            <div className="px-6 pt-4 pb-6 border-t border-border-light bg-surface/70 backdrop-blur sticky bottom-0 flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div>
-                  <p className="text-xs uppercase tracking-widest text-text-primary font-semibold">{t.modals.totalValue}</p>
-                  <p className="text-4xl font-semibold tracking-tight">{formatCurrency(grandTotalCents / 100)}</p>
+                  <p className="text-xs font-medium text-text-tertiary">{t.modals.totalValue}</p>
+                  <p className="text-lg font-bold tracking-tight">{formatCurrency(grandTotalCents / 100)}</p>
                 </div>
                 {isEditMode && initialValues?.id && onDelete && (
                   confirmDelete ? (
@@ -1291,7 +1355,7 @@ export default function NewJobModal({
                         type="button"
                         onClick={() => void onDelete(initialValues.id as string)}
                         disabled={isDeleting}
-                        className="rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-white hover:bg-danger/80 transition-colors disabled:opacity-50"
+                        className="glass-button-danger px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
                       >
                         {isDeleting ? t.modals.deletingBtn : t.modals.confirmBtn}
                       </button>
@@ -1308,7 +1372,7 @@ export default function NewJobModal({
                     <button
                       type="button"
                       onClick={() => setConfirmDelete(true)}
-                      className="rounded-lg border border-danger/30 p-2 text-danger hover:bg-danger/10 transition-colors"
+                      className="glass-button-danger p-2"
                       title="Delete job"
                     >
                       <Trash2 size={15} />

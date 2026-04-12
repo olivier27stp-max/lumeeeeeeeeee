@@ -111,7 +111,7 @@ export default function ApprovalCard({ data, language, onResolved }: ApprovalCar
               <button
                 onClick={() => handleDecision('approve')}
                 disabled={status === 'approving'}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-text-primary text-surface text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
               >
                 {status === 'approving' ? (
                   <Loader2 size={12} className="animate-spin" />

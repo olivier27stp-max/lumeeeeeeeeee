@@ -16,6 +16,7 @@ import {
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { cn } from '../lib/utils';
 import { PageHeader } from '../components/ui';
 import { useTranslation } from '../i18n';
@@ -79,10 +80,12 @@ export default function CompanySettings() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Try to fetch from company_settings table
+        // Try to fetch from company_settings table (scoped to current org)
+        const orgId = await getCurrentOrgIdOrThrow();
         const { data, error } = await supabase
           .from('company_settings')
           .select('*')
+          .eq('org_id', orgId)
           .limit(1)
           .maybeSingle();
 
@@ -190,8 +193,8 @@ export default function CompanySettings() {
   }
 
   return (
-    <PermissionGate permission="settings.edit_company">
-    <div className="space-y-5">
+    <PermissionGate permission="settings.update">
+    <div className="space-y-8">
       <PageHeader
         title={language === 'fr' ? 'Paramètres de l\'entreprise' : 'Company Settings'}
         subtitle={t.companySettings.informationUsedForInvoicesQuotesAndEmail}
@@ -211,7 +214,7 @@ export default function CompanySettings() {
       >
         {/* Company Logo */}
         <div className="section-card p-5 space-y-4">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
             <ImageIcon size={12} /> {language === 'fr' ? 'Logo de l\'entreprise' : 'Company Logo'}
           </h3>
 
@@ -258,7 +261,7 @@ export default function CompanySettings() {
 
         {/* Company Info */}
         <div className="section-card p-5 space-y-4">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
             {language === 'fr' ? 'Détails de l\'entreprise' : 'Company Details'}
           </h3>
 
@@ -318,7 +321,7 @@ export default function CompanySettings() {
 
         {/* Address */}
         <div className="section-card p-5 space-y-4">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
             <MapPin size={12} /> {t.billing.address}
           </h3>
 
@@ -402,7 +405,7 @@ export default function CompanySettings() {
 
         {/* Google Reviews */}
         <div className="section-card p-5 space-y-4">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
             <Star size={12} /> {t.companySettings.googleReviews}
           </h3>
 
@@ -452,7 +455,7 @@ export default function CompanySettings() {
               )}
             >
               <span className={cn(
-                'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                'inline-block h-4 w-4 transform rounded-full bg-surface-card transition-transform',
                 form.review_enabled ? 'translate-x-6' : 'translate-x-1',
               )} />
             </button>
@@ -471,7 +474,7 @@ export default function CompanySettings() {
 
         {/* Review Widget Settings */}
         <div className="section-card p-5 space-y-4">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
             {language === 'fr' ? 'Widget d\'avis' : 'Reviews Widget'}
           </h3>
 

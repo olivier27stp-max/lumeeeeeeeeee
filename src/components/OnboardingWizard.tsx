@@ -10,6 +10,7 @@ import {
   Check, X, Sparkles, Phone, Mail, MapPin,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { createClient } from '../lib/clientsApi';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -28,10 +29,18 @@ const STEPS = [
   { id: 'done', icon: Sparkles, labelEn: 'Ready!', labelFr: 'Pret !' },
 ] as const;
 
-export default function OnboardingWizard({ userId, orgId, language, onComplete }: OnboardingWizardProps) {
+export default function OnboardingWizard({ userId, orgId: orgIdProp, language, onComplete }: OnboardingWizardProps) {
+  const { t } = useTranslation();
   const fr = language === 'fr';
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [resolvedOrgId, setResolvedOrgId] = useState(orgIdProp);
+
+  // Resolve org_id from CompanyContext or RPC on mount
+  React.useEffect(() => {
+    if (resolvedOrgId) return;
+    getCurrentOrgIdOrThrow().then(setResolvedOrgId).catch(() => {});
+  }, []);
 
   // Step 1: Company info
   const [companyName, setCompanyName] = useState('');
@@ -55,7 +64,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
       const { error } = await supabase
         .from('company_settings')
         .upsert({
-          org_id: orgId,
+          org_id: resolvedOrgId,
           company_name: companyName.trim(),
           company_phone: companyPhone.trim() || null,
           company_email: companyEmail.trim() || null,
@@ -70,7 +79,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
     } finally {
       setSaving(false);
     }
-  }, [companyName, companyPhone, companyEmail, orgId, fr]);
+  }, [companyName, companyPhone, companyEmail, resolvedOrgId, fr]);
 
   const handleSaveClient = useCallback(async () => {
     if (!clientFirst.trim()) {
@@ -141,8 +150,8 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-lg bg-text-primary flex items-center justify-center">
-              <span className="text-[14px] font-bold text-surface">L</span>
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+              <span className="text-[14px] font-bold text-white">L</span>
             </div>
             <span className="text-[18px] font-semibold tracking-tight text-text-primary">Lume</span>
           </div>

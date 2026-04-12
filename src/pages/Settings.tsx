@@ -14,12 +14,10 @@ import {
   Users,
   Package,
   MapPin,
-  Route,
   Receipt,
   Wallet,
   Store,
   Archive,
-  Phone,
   FileText,
   Gift,
 } from 'lucide-react';
@@ -28,16 +26,19 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types';
 import { cn } from '../lib/utils';
+import MfaEnroll from '../components/auth/MfaEnroll';
 import { useTranslation, Language } from '../i18n';
 import LocationServices from '../components/LocationServices';
 import ArchivesPanel from '../components/ArchivesPanel';
+import { fetchPlans, fetchCurrentBilling, cancelSubscription, type Plan, type Subscription } from '../lib/billingApi';
 
 // ─── All settings tabs (unified) ─────────────────────────────────
 type SettingsTab =
   | 'account' | 'billing' | 'workspace' | 'language'
-  | 'company' | 'products' | 'payments' | 'expense-tracking' | 'automations' | 'phone-number' | 'request-form'
-  | 'team' | 'manage-team' | 'schedule' | 'location' | 'route-optimization'
-  | 'marketplace' | 'archives' | 'referrals';
+  | 'company' | 'products' | 'payments' | 'taxes' | 'automations' | 'request-form'
+  | 'team' | 'manage-team' | 'schedule' | 'location'
+  | 'marketplace' | 'archives' | 'referrals'
+  | 'roles' | 'users' | 'd2d-config';
 
 interface NavItem {
   id: SettingsTab;
@@ -54,11 +55,11 @@ interface NavGroup {
 // ─── Placeholder panel for unbuilt sections ──────────────────────
 function PlaceholderPanel({ title, description }: { title: string; description: string }) {
   return (
-    <div className="section-card p-8 text-center">
-      <SettingsIcon size={28} className="text-text-tertiary mx-auto mb-3 opacity-30" />
-      <h3 className="text-[15px] font-semibold text-text-primary">{title}</h3>
-      <p className="text-[13px] text-text-tertiary mt-1 max-w-sm mx-auto">{description}</p>
-      <span className="badge-neutral text-[10px] mt-3 inline-block">Coming soon</span>
+    <div className="glass-card rounded-2xl p-10 text-center">
+      <SettingsIcon size={32} className="text-text-tertiary mx-auto mb-4 opacity-25" />
+      <h3 className="text-xl font-bold text-text-primary">{title}</h3>
+      <p className="text-[13px] text-text-tertiary mt-2 max-w-sm mx-auto leading-relaxed">{description}</p>
+      <span className="badge-neutral text-[10px] mt-4 inline-block">Coming soon</span>
     </div>
   );
 }
@@ -128,23 +129,23 @@ function WorkspaceTab() {
   if (loading) return <div className="flex justify-center py-12"><Loader2 size={18} className="animate-spin text-text-tertiary" /></div>;
 
   return (
-    <div className="space-y-5">
-      <div className="section-card p-5 space-y-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.settings.general}</h3>
-        <div className="space-y-3">
+    <div className="space-y-6">
+      <div className="glass-card rounded-2xl p-6 space-y-5">
+        <p className="text-xs font-medium text-text-tertiary">{t.settings.general}</p>
+        <div className="space-y-4">
           <div>
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.settings.workspaceName}</label>
+            <label className="text-xs font-medium text-text-tertiary">{t.settings.workspaceName}</label>
             <input
               type="text"
               value={wsName}
               onChange={(e) => handleNameChange(e.target.value)}
-              className="glass-input w-full mt-1"
+              className="glass-input w-full mt-1.5"
               placeholder="My Company"
             />
           </div>
           <div>
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.settings.workspaceUrl}</label>
-            <div className="flex items-center gap-2 mt-1">
+            <label className="text-xs font-medium text-text-tertiary">{t.settings.workspaceUrl}</label>
+            <div className="flex items-center gap-2.5 mt-1.5">
               <span className="text-xs text-text-tertiary shrink-0">lume.crm/</span>
               <input
                 type="text"
@@ -159,17 +160,17 @@ function WorkspaceTab() {
         <button
           onClick={handleSave}
           disabled={saving || !wsName.trim()}
-          className={cn('glass-button inline-flex items-center gap-1.5', saved && '!bg-success !text-white !border-success')}
+          className={cn('glass-button-primary inline-flex items-center gap-2', saved && '!bg-success !text-white !border-success')}
         >
           {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <Check size={13} /> : null}
           {saving ? (t.billing.saving) : saved ? (t.companySettings.saved) : (t.customFields.save)}
         </button>
       </div>
-      <div className="section-card p-5 space-y-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.settings.appearance}</h3>
-        <div className="flex items-center justify-between p-3 bg-surface-secondary rounded-xl">
-          <div className="flex items-center gap-3">
-            <Moon size={16} className="text-text-tertiary" />
+      <div className="glass-card rounded-2xl p-6 space-y-5">
+        <p className="text-xs font-medium text-text-tertiary">{t.settings.appearance}</p>
+        <div className="flex items-center justify-between p-4 bg-surface-secondary rounded-xl hover:bg-surface-secondary/80 transition-colors">
+          <div className="flex items-center gap-3.5">
+            <Moon size={18} className="text-text-tertiary" />
             <div>
               <p className="text-[13px] font-semibold text-text-primary">{t.settings.darkMode}</p>
               <p className="text-xs text-text-tertiary">{t.settings.darkModeDesc}</p>
@@ -183,6 +184,306 @@ function WorkspaceTab() {
 }
 
 // ─── Main Component ──────────────────────────────────────────────
+// ── MFA Section Component ──
+function MfaSection() {
+  const { t } = useTranslation();
+  const [mfaEnabled, setMfaEnabled] = React.useState<boolean | null>(null);
+  const [showEnroll, setShowEnroll] = React.useState(false);
+  const [disabling, setDisabling] = React.useState(false);
+
+  React.useEffect(() => {
+    checkMfaStatus();
+  }, []);
+
+  const checkMfaStatus = async () => {
+    try {
+      const { data } = await supabase.auth.mfa.listFactors();
+      const verified = data?.totp?.filter(f => f.status === 'verified') || [];
+      setMfaEnabled(verified.length > 0);
+    } catch {
+      setMfaEnabled(false);
+    }
+  };
+
+  const handleDisableMfa = async () => {
+    if (!confirm('Are you sure you want to disable two-factor authentication? This will make your account less secure.')) return;
+    setDisabling(true);
+    try {
+      const { data } = await supabase.auth.mfa.listFactors();
+      const factors = data?.totp?.filter(f => f.status === 'verified') || [];
+      for (const factor of factors) {
+        await supabase.auth.mfa.unenroll({ factorId: factor.id });
+      }
+      setMfaEnabled(false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to disable 2FA');
+    } finally {
+      setDisabling(false);
+    }
+  };
+
+  if (showEnroll) {
+    return (
+      <div className="glass-card rounded-2xl p-6">
+        <MfaEnroll
+          onComplete={() => { setShowEnroll(false); setMfaEnabled(true); }}
+          onCancel={() => setShowEnroll(false)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="glass-card rounded-2xl p-6 space-y-5">
+      <p className="text-xs font-medium text-text-tertiary">{t.settings.security}</p>
+      <div className="flex items-center justify-between p-4 bg-surface-secondary rounded-xl hover:bg-surface-secondary/80 transition-colors">
+        <div className="flex items-center gap-3.5">
+          <Shield size={18} className={mfaEnabled ? 'text-green-600' : 'text-text-tertiary'} />
+          <div>
+            <p className="text-[13px] font-semibold text-text-primary">{t.settings.twoFactor}</p>
+            <p className="text-xs text-text-tertiary">{t.settings.twoFactorDesc}</p>
+          </div>
+        </div>
+        {mfaEnabled === null ? (
+          <Loader2 size={14} className="animate-spin text-text-tertiary" />
+        ) : mfaEnabled ? (
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 rounded-full px-3 py-1">
+              <Check size={9} /> Active
+            </span>
+            <button
+              onClick={handleDisableMfa}
+              disabled={disabling}
+              className="glass-button-ghost text-[10px] text-red-500 hover:text-red-700 font-medium"
+            >
+              {disabling ? 'Disabling...' : 'Disable'}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowEnroll(true)}
+            className="glass-button-secondary text-[11px] !py-2 !px-4"
+          >
+            Enable 2FA
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Billing Tab — connected to real Stripe/DB data
+   ═══════════════════════════════════════════════════════════════ */
+function BillingTab({ navigate, isFr, t }: { navigate: (path: string) => void; isFr: boolean; t: any }) {
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [canceling, setCanceling] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [plansData, billingData] = await Promise.all([
+          fetchPlans().catch(() => []),
+          fetchCurrentBilling().catch(() => ({ subscription: null, billing_profile: null })),
+        ]);
+        setPlans(plansData);
+        setSubscription(billingData.subscription);
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  // Current plan info
+  const currentPlan = subscription?.plans || plans.find((p) => p.id === subscription?.plan_id);
+  const priceDisplay = subscription
+    ? `$${(subscription.amount_cents / 100).toFixed(0)}`
+    : null;
+
+  // Progress bar calculation
+  const now = Date.now();
+  const periodStart = subscription?.current_period_start ? new Date(subscription.current_period_start).getTime() : 0;
+  const periodEnd = subscription?.current_period_end ? new Date(subscription.current_period_end).getTime() : 0;
+  const periodTotal = periodEnd - periodStart;
+  const periodElapsed = now - periodStart;
+  const progressPct = periodTotal > 0 ? Math.min(100, Math.max(0, Math.round((periodElapsed / periodTotal) * 100))) : 0;
+
+  const daysLeft = periodEnd > now ? Math.ceil((periodEnd - now) / (1000 * 60 * 60 * 24)) : 0;
+  const renewalDate = periodEnd > 0
+    ? new Date(periodEnd).toLocaleDateString(isFr ? 'fr-CA' : 'en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
+    : null;
+
+  const statusLabel = (s: string) => {
+    if (s === 'active') return isFr ? 'Actif' : 'Active';
+    if (s === 'past_due') return isFr ? 'En retard' : 'Past Due';
+    if (s === 'canceled') return isFr ? 'Annulé' : 'Canceled';
+    if (s === 'trialing') return isFr ? 'Essai' : 'Trial';
+    return s;
+  };
+  const statusStyle = (s: string) => {
+    if (s === 'active' || s === 'trialing') return 'bg-surface-card/20 text-white';
+    if (s === 'past_due') return 'bg-warning/30 text-warning';
+    return 'bg-surface-card/10 text-white/60';
+  };
+
+  const handleCancel = async () => {
+    if (!confirm(isFr ? 'Annuler votre abonnement à la fin de la période ?' : 'Cancel subscription at end of period?')) return;
+    setCanceling(true);
+    try {
+      await cancelSubscription();
+      const fresh = await fetchCurrentBilling().catch(() => ({ subscription: null, billing_profile: null }));
+      setSubscription(fresh.subscription);
+    } catch { /* silent */ }
+    finally { setCanceling(false); }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="h-44 bg-surface-tertiary rounded-2xl" />
+        <div className="h-64 bg-surface-tertiary rounded-2xl" />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="section-card p-8 text-center">
+        <p className="text-sm text-danger">{error}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* ── Current Plan Card ── */}
+      {subscription && subscription.status !== 'canceled' ? (
+        <div className="glass-card rounded-2xl p-6 bg-primary overflow-hidden relative">
+          <div className="relative z-10 space-y-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">{t.settings.currentPlan}</p>
+                <p className="text-xl font-bold mt-1.5 text-white">
+                  LUME {currentPlan?.name || 'Plan'}
+                </p>
+              </div>
+              <span className={cn('inline-flex items-center gap-1.5 text-[10px] font-bold rounded-full px-3 py-1', statusStyle(subscription.status))}>
+                <Check size={9} /> {statusLabel(subscription.status)}
+              </span>
+            </div>
+
+            {/* Progress bar — real billing cycle */}
+            {periodTotal > 0 && (
+              <div>
+                <div className="flex justify-between text-[10px] uppercase tracking-widest text-white/60 mb-1.5">
+                  <span>{isFr ? 'Cycle de facturation' : 'Billing Cycle'}</span>
+                  <span>{progressPct}%</span>
+                </div>
+                <div className="h-2 bg-surface-card/20 rounded-full overflow-hidden">
+                  <div className="h-full bg-surface-card rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <p className="text-[11px] text-white/50">
+                  {priceDisplay}/{subscription.interval === 'yearly' ? (isFr ? 'an' : 'yr') : (isFr ? 'mois' : 'mo')}
+                  {renewalDate && (
+                    <> &middot; {isFr ? 'Renouvellement le' : 'Renews'} {renewalDate}</>
+                  )}
+                </p>
+                {daysLeft > 0 && (
+                  <p className="text-[11px] text-white/40">
+                    {daysLeft} {isFr ? 'jours restants' : 'days remaining'}
+                  </p>
+                )}
+                {subscription.cancel_at_period_end && (
+                  <p className="text-[11px] text-warning font-medium">
+                    {isFr ? 'Annulation prévue à la fin de la période' : 'Cancels at end of period'}
+                  </p>
+                )}
+              </div>
+              {!subscription.cancel_at_period_end && (
+                <button
+                  onClick={handleCancel}
+                  disabled={canceling}
+                  className="text-[11px] text-white/40 hover:text-white/70 transition-colors underline"
+                >
+                  {isFr ? 'Annuler' : 'Cancel'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="section-card rounded-2xl p-6 text-center">
+          <p className="text-sm text-text-secondary">
+            {isFr ? 'Aucun plan actif' : 'No active plan'}
+          </p>
+          <p className="text-xs text-text-muted mt-1">
+            {isFr ? 'Choisissez un plan ci-dessous pour commencer.' : 'Choose a plan below to get started.'}
+          </p>
+        </div>
+      )}
+
+      {/* ── Plans Grid ── */}
+      <div className="glass-card rounded-2xl p-6 space-y-5">
+        <p className="text-xs font-medium text-text-tertiary">{t.settings.subscriptionTiers}</p>
+        <div className="space-y-3">
+          {plans.map((plan) => {
+            const isCurrent = subscription?.plan_id === plan.id && subscription?.status !== 'canceled';
+            const price = plan.monthly_price_usd / 100;
+            const features = Array.isArray(plan.features) ? plan.features.join(' · ') : '';
+
+            return (
+              <button
+                key={plan.id}
+                onClick={() => {
+                  if (!isCurrent) navigate(`/settings/billing/checkout?plan=${plan.slug}&interval=monthly`);
+                }}
+                className={cn(
+                  'w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left',
+                  isCurrent
+                    ? 'border-primary bg-primary/5'
+                    : 'border-outline-subtle hover:border-outline hover:bg-surface-secondary/40 cursor-pointer',
+                )}
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className={cn('w-3 h-3 rounded-full', isCurrent ? 'bg-primary' : 'bg-border')} />
+                  <div>
+                    <span className="text-[13px] font-semibold text-text-primary">
+                      {isFr ? plan.name_fr : plan.name}
+                    </span>
+                    <p className="text-[11px] text-text-tertiary mt-0.5 line-clamp-1">{features}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[14px] font-bold text-text-primary tabular-nums">
+                    ${price}
+                    <span className="text-[10px] font-normal text-text-tertiary">/{isFr ? 'mois' : 'mo'}</span>
+                  </span>
+                  {isCurrent ? (
+                    <span className="badge-info text-[10px]">{t.settings.current}</span>
+                  ) : (
+                    <span className="text-xs font-medium text-primary">{t.settings.choose || (isFr ? 'Choisir' : 'Choose')}</span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { t, language, setLanguage } = useTranslation();
   const navigate = useNavigate();
@@ -265,9 +566,8 @@ export default function Settings() {
         { id: 'company',          label: t.settings.companySettings, icon: Building, link: '/settings/company' },
         { id: 'products',         label: t.settings.productsServices, icon: Package, link: '/settings/products' },
         { id: 'payments',         label: t.commandPalette.payments,                        icon: Wallet, link: '/settings/payments' },
-        { id: 'expense-tracking', label: t.settings.expenseTracking,    icon: Receipt },
-        { id: 'automations',      label: t.settings.automations,            icon: Zap, link: '/settings/automations' },
-        { id: 'phone-number',     label: t.settings.phoneNumber,      icon: Phone, link: '/settings/phone-number' },
+        { id: 'taxes',            label: 'Taxes',                                            icon: Receipt, link: '/settings/taxes' },
+        { id: 'automations',      label: t.settings.automations,            icon: Zap, link: '/automations' },
         { id: 'request-form',     label: (t.settings as any).requestForm || (t.requestForm.requestForm), icon: FileText, link: '/settings/request-form' },
       ],
     },
@@ -276,9 +576,11 @@ export default function Settings() {
       items: [
         { id: 'team',               label: t.settings.organization,          icon: Users },
         { id: 'manage-team',        label: isFr ? 'Gérer l\'équipe' : 'Manage Team',       icon: Users, link: '/settings/team' },
+        { id: 'roles',              label: isFr ? 'Rôles & Permissions' : 'Roles & Permissions', icon: Shield, link: '/settings/roles' },
+        { id: 'users',              label: isFr ? 'Utilisateurs' : 'Users',                 icon: Users, link: '/settings/users' },
+        { id: 'd2d-config',         label: 'Config D2D',                                     icon: MapPin, link: '/d2d-settings/general' },
         { id: 'schedule',           label: t.settings.schedule,                   icon: Users },
         { id: 'location',           label: t.settings.locationServices, icon: MapPin },
-        { id: 'route-optimization', label: t.settings.routeOptimization, icon: Route },
       ],
     },
     {
@@ -304,32 +606,27 @@ export default function Settings() {
   // Items that navigate to a separate route
   const linkItems = new Set(navSections.flatMap((s) => s.items.filter((i) => i.link).map((i) => i.id)));
 
-  const planLabels: Record<string, string> = {
-    Free: t.settings.free, Pro: t.settings.pro, Enterprise: t.settings.enterprise,
-  };
-  const planPrices: Record<string, string> = {
-    Free: '$0', Pro: '$29', Enterprise: t.settings.custom,
-  };
+  // Plan labels kept for legacy — billing tab now uses real data
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-surface-secondary flex items-center justify-center">
-          <SettingsIcon size={18} className="text-text-tertiary" />
+      <div className="flex items-center gap-4">
+        <div className="w-11 h-11 rounded-2xl bg-surface-secondary flex items-center justify-center">
+          <SettingsIcon size={20} className="text-text-tertiary" />
         </div>
         <div>
-          <h1 className="text-[20px] font-bold text-text-primary tracking-tight">{t.settings.title}</h1>
-          <p className="text-[12px] text-text-tertiary">{t.settings.subtitle}</p>
+          <h1 className="text-xl font-bold text-text-primary tracking-tight">{t.settings.title}</h1>
+          <p className="text-[12px] text-text-tertiary mt-0.5">{t.settings.subtitle}</p>
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col lg:flex-row gap-8">
         {/* ── Sidebar ─────────────────────────────────── */}
-        <div className="lg:w-56 flex flex-col gap-5 shrink-0">
+        <div className="lg:w-60 flex flex-col gap-6 shrink-0">
           {navSections.map((section, sIdx) => (
             <div key={sIdx}>
-              <p className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-text-tertiary">
+              <p className="px-3 pb-2 text-xs font-medium text-text-tertiary">
                 {section.heading}
               </p>
               <div className="space-y-0.5">
@@ -346,13 +643,13 @@ export default function Settings() {
                         }
                       }}
                       className={cn(
-                        'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all',
+                        'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all',
                         isActive
                           ? 'bg-surface-secondary text-text-primary font-semibold'
                           : 'text-text-secondary hover:bg-surface-secondary/50 hover:text-text-primary'
                       )}
                     >
-                      <item.icon size={14} className={isActive ? 'text-primary' : 'text-text-tertiary'} />
+                      <item.icon size={15} className={isActive ? 'text-primary' : 'text-text-tertiary'} />
                       <span className="truncate">{item.label}</span>
                     </button>
                   );
@@ -368,12 +665,12 @@ export default function Settings() {
             key={activeTab}
             initial={{ opacity: 0, x: 6 }}
             animate={{ opacity: 1, x: 0 }}
-            className="space-y-5"
+            className="space-y-6"
           >
             {/* ═══ ACCOUNT ═══ */}
             {activeTab === 'account' && (
-              <div className="space-y-5">
-                <div className="section-card p-5 space-y-5">
+              <div className="space-y-6">
+                <div className="glass-card rounded-2xl p-6 space-y-6">
                   <div className="flex items-center gap-4">
                     <div className="avatar-md text-lg">
                       {profile?.full_name?.[0] || 'U'}
@@ -383,109 +680,32 @@ export default function Settings() {
                       <p className="text-xs text-text-tertiary">{t.settings.updateAvatar}</p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
-                      <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.settings.fullName}</label>
-                      <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} className="glass-input w-full mt-1" />
+                      <label className="text-xs font-medium text-text-tertiary">{t.settings.fullName}</label>
+                      <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} className="glass-input w-full mt-1.5" />
                     </div>
                     <div>
-                      <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.settings.emailAddress}</label>
-                      <input type="email" disabled value={userEmail} className="glass-input w-full mt-1 opacity-50" />
+                      <label className="text-xs font-medium text-text-tertiary">{t.settings.emailAddress}</label>
+                      <input type="email" disabled value={userEmail} className="glass-input w-full mt-1.5 opacity-50" />
                     </div>
                   </div>
                   <button
                     onClick={handleSaveProfile}
                     disabled={saving || fullName.trim() === (profile?.full_name || '')}
-                    className={cn('glass-button inline-flex items-center gap-1.5', saved && '!bg-success !text-white !border-success')}
+                    className={cn('glass-button-primary inline-flex items-center gap-2', saved && '!bg-success !text-white !border-success')}
                   >
                     {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <Check size={13} /> : null}
                     {saving ? t.common.saving : saved ? t.common.saved : t.common.save}
                   </button>
                 </div>
-                <div className="section-card p-5 space-y-4">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.settings.security}</h3>
-                  <div className="flex items-center justify-between p-3 bg-surface-secondary rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <Shield size={16} className="text-text-tertiary" />
-                      <div>
-                        <p className="text-[13px] font-semibold text-text-primary">{t.settings.twoFactor}</p>
-                        <p className="text-xs text-text-tertiary">{t.settings.twoFactorDesc}</p>
-                      </div>
-                    </div>
-                    <span className="badge-neutral text-[10px]">{t.common.comingSoon}</span>
-                  </div>
-                </div>
+                <MfaSection />
               </div>
             )}
 
             {/* ═══ BILLING ═══ */}
             {activeTab === 'billing' && (
-              <div className="space-y-5">
-                <div className="section-card p-5 bg-primary overflow-hidden relative">
-                  <div className="relative z-10 space-y-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="text-[11px] font-medium uppercase tracking-wider text-white/60">{t.settings.currentPlan}</p>
-                        <p className="text-xl font-bold mt-1 text-white">LUME Pro</p>
-                      </div>
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-white/20 rounded-full px-2.5 py-0.5">
-                        <Check size={9} /> {t.common.active}
-                      </span>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-[10px] uppercase tracking-wider text-white/60 mb-1">
-                        <span>{t.settings.usage}</span><span>85%</span>
-                      </div>
-                      <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
-                        <div className="h-full bg-white w-[85%] rounded-full" />
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-white/50">$29 {t.settings.perMonth} &middot; {t.settings.nextBillingOnApril12026}</p>
-                  </div>
-                </div>
-                <div className="section-card p-5 space-y-4">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.settings.subscriptionTiers}</h3>
-                  <div className="space-y-2">
-                    {([
-                      { key: 'Free', price: '$0', features: t.settings.threeClients10Jobsmo },
-                      { key: 'Pro', price: '$29', features: t.settings.unlimitedIntegrationsPrioritySupport },
-                      { key: 'Enterprise', price: t.settings.custom, features: t.settings.ssoApiDedicatedManager },
-                    ]).map(({ key: plan, price, features }) => {
-                      const isCurrent = plan === 'Pro';
-                      return (
-                        <button
-                          key={plan}
-                          onClick={() => {
-                            if (!isCurrent) navigate(`/settings/billing/checkout?plan=${plan.toLowerCase()}&interval=monthly`);
-                          }}
-                          className={cn(
-                            'w-full flex items-center justify-between p-3.5 rounded-xl border transition-all text-left',
-                            isCurrent ? 'border-primary bg-primary/5' : 'border-outline-subtle hover:border-outline hover:bg-surface-secondary/40 cursor-pointer'
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={cn('w-2.5 h-2.5 rounded-full', isCurrent ? 'bg-primary' : 'bg-border')} />
-                            <div>
-                              <span className="text-[13px] font-semibold text-text-primary">{planLabels[plan]}</span>
-                              <p className="text-[11px] text-text-tertiary mt-0.5">{features}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-[13px] font-bold text-text-primary tabular-nums">{price}<span className="text-[10px] font-normal text-text-tertiary">/{t.billing.mo}</span></span>
-                            {isCurrent ? (
-                              <span className="badge-info text-[10px]">{t.settings.current}</span>
-                            ) : plan === 'Enterprise' ? (
-                              <span className="badge-neutral text-[10px]">{t.settings.contact}</span>
-                            ) : (
-                              <span className="text-[11px] font-semibold text-primary">{t.settings.choose} &rarr;</span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
+              <BillingTab navigate={navigate} isFr={isFr} t={t} />
             )}
 
             {/* ═══ WORKSPACE ═══ */}
@@ -495,10 +715,10 @@ export default function Settings() {
 
             {/* ═══ LANGUAGE ═══ */}
             {activeTab === 'language' && (
-              <div className="section-card p-5 space-y-4">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.settings.languageLabel}</h3>
-                <p className="text-[13px] text-text-secondary">{t.settings.languageDesc}</p>
-                <div className="space-y-2">
+              <div className="glass-card rounded-2xl p-6 space-y-5">
+                <p className="text-xs font-medium text-text-tertiary">{t.settings.languageLabel}</p>
+                <p className="text-[13px] text-text-secondary leading-relaxed">{t.settings.languageDesc}</p>
+                <div className="space-y-3">
                   {([
                     { code: 'en' as Language, label: 'English', flag: '🇬🇧' },
                     { code: 'fr' as Language, label: 'Français', flag: '🇫🇷' },
@@ -507,12 +727,12 @@ export default function Settings() {
                       key={lang.code}
                       onClick={() => setLanguage(lang.code)}
                       className={cn(
-                        'w-full flex items-center justify-between p-3.5 rounded-xl border transition-all text-left',
-                        language === lang.code ? 'border-primary bg-primary/5' : 'border-outline-subtle hover:border-outline'
+                        'w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left',
+                        language === lang.code ? 'border-primary bg-primary/5' : 'border-outline-subtle hover:border-outline hover:bg-surface-secondary/40'
                       )}
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="text-lg">{lang.flag}</span>
+                      <div className="flex items-center gap-3.5">
+                        <span className="text-xl">{lang.flag}</span>
                         <span className="text-[13px] font-semibold text-text-primary">{lang.label}</span>
                       </div>
                       {language === lang.code && (
@@ -525,9 +745,6 @@ export default function Settings() {
             )}
 
             {/* ═══ PLACEHOLDER PANELS for unbuilt sections ═══ */}
-            {activeTab === 'expense-tracking' && (
-              <PlaceholderPanel title="Expense Tracking" description="Track business expenses and categorize spending." />
-            )}
             {activeTab === 'team' && (
               <PlaceholderPanel title="Organization" description="Manage your organization structure and departments." />
             )}
@@ -537,25 +754,22 @@ export default function Settings() {
             {activeTab === 'location' && (
               <LocationServices />
             )}
-            {activeTab === 'route-optimization' && (
-              <PlaceholderPanel title="Route Optimization" description="Optimize driving routes between job sites for your teams." />
-            )}
             {activeTab === 'marketplace' && (
-              <div className="section-card p-8 text-center">
-                <Store size={28} className="text-text-tertiary mx-auto mb-3 opacity-30" />
-                <h3 className="text-[15px] font-semibold text-text-primary">
+              <div className="glass-card rounded-2xl p-10 text-center">
+                <Store size={32} className="text-text-tertiary mx-auto mb-4 opacity-25" />
+                <h3 className="text-xl font-bold text-text-primary">
                   {t.settings.noApplicationsConnectedYet}
                 </h3>
-                <p className="text-[13px] text-text-tertiary mt-1 max-w-sm mx-auto">
+                <p className="text-[13px] text-text-tertiary mt-2 max-w-sm mx-auto leading-relaxed">
                   {isFr
                     ? 'Connectez des outils externes pour automatiser vos workflows et synchroniser vos données.'
                     : 'Connect external tools to automate workflows and sync your data.'}
                 </p>
                 <button
                   onClick={() => navigate('/settings/marketplace')}
-                  className="glass-button-primary inline-flex items-center gap-1.5 mt-4 text-[12px]"
+                  className="glass-button-primary inline-flex items-center gap-2 mt-5 text-[12px]"
                 >
-                  <Store size={13} />
+                  <Store size={14} />
                   {t.settings.browseMarketplace}
                 </button>
               </div>

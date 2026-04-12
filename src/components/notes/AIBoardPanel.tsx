@@ -12,7 +12,7 @@ import {
   Loader2, Layers, Brain, Wand2,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 export interface AIBoardAction {
   id: string;
@@ -84,6 +84,7 @@ interface AIBoardPanelProps {
 }
 
 function AIBoardPanel({ language, loading, result, onAction, onClose, onApplyResult }: AIBoardPanelProps) {
+  const { t } = useTranslation();
   const fr = language === 'fr';
 
   return (

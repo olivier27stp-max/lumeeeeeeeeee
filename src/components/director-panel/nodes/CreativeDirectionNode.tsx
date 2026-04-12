@@ -157,7 +157,7 @@ export default function CreativeDirectionNode({ id, data, selected }: Props) {
       <button
         type="button"
         onClick={() => setExpanded(expanded === sectionId ? null : sectionId)}
-        className="flex items-center justify-between w-full px-3 py-2 text-[11px] font-semibold text-[#999] hover:text-[#ccc] transition-colors"
+        className="flex items-center justify-between w-full px-3 py-2 text-xs font-medium text-[#999] hover:text-[#ccc] transition-colors"
       >
         <span className="flex items-center gap-1.5">
           <Icon className="w-3 h-3" />

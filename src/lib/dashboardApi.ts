@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 
 type Money = number;
 
@@ -123,20 +124,12 @@ function getMonthRange(now = new Date()) {
   return { startIso: start.toISOString(), endIso: end.toISOString() };
 }
 
-async function getCurrentOrgId(): Promise<string> {
-  const { data, error } = await supabase.rpc('current_org_id');
-  if (error) throw new Error('Failed to resolve organization context.');
-  const orgId = (data as string | null) || null;
-  if (!orgId) throw new Error('No organization context found. Please refresh.');
-  return orgId;
-}
-
 export async function getDashboardData(): Promise<DashboardData> {
   const now = new Date();
   const { startIso: dayStart, endIso: dayEnd } = getDayRange(now);
   const { startIso: weekStart, endIso: weekEnd } = getNext7DaysRange(now);
 
-  const [{ data: authData }, orgId] = await Promise.all([supabase.auth.getUser(), getCurrentOrgId()]);
+  const [{ data: authData }, orgId] = await Promise.all([supabase.auth.getUser(), getCurrentOrgIdOrThrow()]);
   const user = authData.user;
   if (!user) throw new Error('User not authenticated.');
 
@@ -145,6 +138,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   let dealsQuery = supabase
     .from('pipeline_deals')
     .select('id,lead_id,stage,value,deleted_at')
+    .eq('org_id', orgId)
     .is('deleted_at', null);
 
   let jobsQuery = supabase
@@ -160,6 +154,7 @@ export async function getDashboardData(): Promise<DashboardData> {
           job:jobs!schedule_events_job_id_fkey(id,title,status,client_name,property_address,team_id,latitude,longitude,geocode_status)
         `
     )
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .gte('start_at', dayStart)
     .lte('start_at', dayEnd)
@@ -168,6 +163,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   let upcomingEventsQuery = supabase
     .from('schedule_events')
     .select('id,start_at')
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .gte('start_at', weekStart)
     .lte('start_at', weekEnd);
@@ -181,7 +177,8 @@ export async function getDashboardData(): Promise<DashboardData> {
   // Invoice-based revenue: paid invoices today
   let paidInvoicesTodayQuery = supabase
     .from('invoices')
-    .select('id,total_cents,paid_at')
+    .select('invoice_number,total_cents,paid_at')
+    .eq('org_id', orgId)
     .eq('status', 'paid')
     .is('deleted_at', null)
     .gte('paid_at', dayStart)
@@ -190,7 +187,8 @@ export async function getDashboardData(): Promise<DashboardData> {
   // Outstanding invoices (sent or partial, not paid)
   let outstandingInvoicesQuery = supabase
     .from('invoices')
-    .select('id,balance_cents,status')
+    .select('invoice_number,balance_cents,status')
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .in('status', ['sent', 'partial']);
 
@@ -198,6 +196,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   let leadsTodayQuery = supabase
     .from('pipeline_deals')
     .select('id,stage,created_at')
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .gte('created_at', dayStart)
     .lte('created_at', dayEnd);

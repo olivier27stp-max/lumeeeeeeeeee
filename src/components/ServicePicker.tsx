@@ -119,7 +119,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
         <div className="px-5 py-4 border-b border-outline-subtle/60">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-text-primary text-surface flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center">
                 <Package size={16} />
               </div>
               <h2 className="text-[16px] font-bold text-text-primary">Add line item</h2>
@@ -166,7 +166,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
               className="overflow-hidden border-b border-outline-subtle/60"
             >
               <div className="p-4 space-y-3 bg-surface-secondary/30">
-                <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">New service</p>
+                <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">New service</p>
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     value={newName}
@@ -299,12 +299,12 @@ const ServiceRow: React.FC<ServiceRowProps> = ({ service, isAdded, onToggle }) =
         className={cn(
           'w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all',
           isAdded
-            ? 'bg-text-primary border-text-primary'
+            ? 'bg-primary border-text-primary'
             : 'border-outline bg-surface group-hover:border-text-tertiary'
         )}
       >
         {isAdded ? (
-          <Check size={11} className="text-surface" />
+          <Check size={11} className="text-white" />
         ) : null}
       </div>
 

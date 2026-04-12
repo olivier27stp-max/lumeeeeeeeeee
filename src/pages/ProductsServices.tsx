@@ -62,12 +62,13 @@ export default function ProductsServices() {
   }
 
   function openEdit(service: PredefinedService) {
-    setEditingId(service.id);
+    // Reset form state first to prevent saving to wrong service
     setFormName(service.name);
     setFormDesc(service.description || '');
     setFormPrice(String(service.default_price_cents / 100));
     setFormCategory(service.category || '');
     setFormDuration(service.default_duration_minutes ? String(service.default_duration_minutes) : '');
+    setEditingId(service.id);  // Set ID AFTER populating fields
     setShowForm(true);
   }
 
@@ -76,7 +77,7 @@ export default function ProductsServices() {
     setSaving(true);
     try {
       const priceCents = Math.round((parseFloat(formPrice) || 0) * 100);
-      const durationMin = parseInt(formDuration) || undefined;
+      const durationMin = Math.max(0, parseInt(formDuration) || 0) || undefined;
 
       if (editingId) {
         const updated = await updatePredefinedService(editingId, {
@@ -118,7 +119,7 @@ export default function ProductsServices() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       {/* Header */}
       <button onClick={() => navigate('/settings')} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-text-secondary hover:text-text-primary transition-colors">
         <ArrowLeft size={14} /> Settings

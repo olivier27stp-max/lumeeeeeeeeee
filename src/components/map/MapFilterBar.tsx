@@ -37,7 +37,7 @@ export default function MapFilterBar({
             className={cn(
               'rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors',
               dateRange === chip.value
-                ? 'border-text-primary bg-text-primary text-surface'
+                ? 'border-text-primary bg-primary text-white'
                 : 'border-outline-subtle bg-surface text-text-secondary hover:border-outline hover:bg-surface-secondary'
             )}
           >

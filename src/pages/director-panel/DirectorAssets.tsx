@@ -117,7 +117,7 @@ export default function DirectorAssets() {
           {TYPE_FILTERS.map((f) => (
             <button key={f.key} onClick={() => setFilter(f.key)}
               className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors',
-                filter === f.key ? 'bg-text-primary text-surface' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary')}>
+                filter === f.key ? 'bg-primary text-white' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary')}>
               <f.icon className="w-3 h-3" /> {f.label}
             </button>
           ))}

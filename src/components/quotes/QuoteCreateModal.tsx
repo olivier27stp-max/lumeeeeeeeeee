@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { FileText, Plus, Trash2, X, Package, ChevronDown, User, Mail, Phone, MapPin, Download } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -11,7 +11,10 @@ import {
 import { createLeadScoped, fetchLeadsScoped } from '../../lib/leadsApi';
 import ServicePicker from '../ServicePicker';
 import type { PredefinedService } from '../../lib/servicesApi';
-import type { Lead, QuoteTemplate } from '../../types';
+import type { Lead, QuotePreset } from '../../types';
+import { resolveTaxes, calculateTaxes, type TaxConfig } from '../../lib/taxApi';
+import { useTranslation } from '../../i18n';
+import SpecificNotesInline, { type SpecificNotesInlineHandle } from '../SpecificNotesInline';
 
 interface QuoteCreateModalProps {
   isOpen: boolean;
@@ -19,7 +22,7 @@ interface QuoteCreateModalProps {
   onCreated: (detail: QuoteDetail) => void;
   lead?: Lead | null;
   createLeadInline?: boolean;
-  template?: QuoteTemplate | null;
+  preset?: QuotePreset | null;
 }
 
 interface LineItemForm {
@@ -42,10 +45,11 @@ function emptyLine(): LineItemForm {
 
 function sanitize(v: string) { return v.replace(',', '.').replace(/[^\d.]/g, ''); }
 
-const inputCls = 'w-full px-3 py-2.5 bg-surface border border-outline rounded-lg text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all';
-const labelCls = 'text-xs text-text-secondary font-medium mb-1 block';
+const inputCls = 'glass-input w-full mt-1.5';
+const labelCls = 'text-xs font-medium text-text-tertiary block';
 
-export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, createLeadInline, template }: QuoteCreateModalProps) {
+export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, createLeadInline, preset }: QuoteCreateModalProps) {
+  const { language } = useTranslation();
   // ── Contact mode ──
   const [contactMode, setContactMode] = useState<'new' | 'existing'>('new');
   const [selectedLeadId, setSelectedLeadId] = useState('');
@@ -72,14 +76,19 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
   const [requirePaymentMethod, setRequirePaymentMethod] = useState(false);
   const [lineItems, setLineItems] = useState<LineItemForm[]>([emptyLine()]);
   const [taxEnabled, setTaxEnabled] = useState(true);
-  const [taxRate, setTaxRate] = useState(14.975);
-  const [taxLabel, setTaxLabel] = useState('TPS+TVQ (14.975%)');
+  const [taxRate, setTaxRate] = useState(0);
+  const [taxLabel, setTaxLabel] = useState('');
+  const [taxConfigured, setTaxConfigured] = useState<boolean | null>(null); // null = loading
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed' | ''>('');
   const [discountValue, setDiscountValue] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [servicePickerOpen, setServicePickerOpen] = useState(false);
   const [addedServiceIds, setAddedServiceIds] = useState<Set<string>>(new Set());
+  const specificNotesRef = useRef<SpecificNotesInlineHandle>(null);
+
+  // ── Auto-tax ──
+  const [resolvedTaxes, setResolvedTaxes] = useState<TaxConfig[]>([]);
 
   // ── Sections ──
   const [introEnabled, setIntroEnabled] = useState(false);
@@ -113,19 +122,19 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
       setTitle(''); setClientId('');
     }
 
-    // ── Pre-fill from template ──
-    if (template) {
-      if (!lead) setTitle(template.name || '');
-      if (template.notes) setNotes(template.notes);
-      if (template.terms) setContractDisclaimer(template.terms);
-      if (template.services && template.services.length > 0) {
-        setLineItems(template.services.map(s => ({
+    // ── Pre-fill from preset (content only, no pricing) ──
+    if (preset) {
+      if (!lead) setTitle(preset.name || '');
+      if (preset.notes) setNotes(preset.notes);
+      if (preset.intro_text) { setIntroEnabled(true); setIntroContent(preset.intro_text); }
+      if (preset.services && preset.services.length > 0) {
+        setLineItems(preset.services.map(s => ({
           id: crypto.randomUUID(),
           source_service_id: null,
           name: s.name || '',
           description: s.description || '',
           qtyInput: String(s.quantity || 1),
-          unitPriceInput: String((s.unit_price_cents || 0) / 100),
+          unitPriceInput: '0',
           is_optional: s.is_optional || false,
           item_type: 'service' as const,
         })));
@@ -148,6 +157,33 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
     }
   }, [isOpen, lead]);
 
+  // ── Auto-resolve taxes from Settings ──
+  useEffect(() => {
+    if (!isOpen) return;
+    setTaxConfigured(null);
+    resolveTaxes(clientId || null, lead?.id || null).then((result) => {
+      const taxes = result?.taxes || [];
+      if (taxes.length > 0) {
+        setResolvedTaxes(taxes);
+        const active = taxes.filter((t: any) => t.is_active);
+        const totalRate = active.reduce((s: number, t: any) => s + t.rate, 0);
+        const label = active.map((t: any) => t.name).join(' + ') + ` (${totalRate}%)`;
+        setTaxRate(totalRate);
+        setTaxLabel(label);
+        setTaxEnabled(true);
+        setTaxConfigured(true);
+      } else {
+        setTaxConfigured(false);
+        setTaxEnabled(false);
+        setTaxRate(0);
+        setTaxLabel('');
+      }
+    }).catch((err) => {
+      console.error('[QuoteCreateModal] tax resolve failed:', err);
+      setTaxConfigured(false);
+    });
+  }, [isOpen, clientId, lead?.id]);
+
   // ── Calculations ──
   const subtotalCents = useMemo(() =>
     lineItems.reduce((s, i) => {
@@ -161,9 +197,19 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
     return discountType === 'percentage' ? Math.round(subtotalCents * v / 100) : Math.round(v * 100);
   }, [subtotalCents, discountType, discountValue]);
 
+  const taxBreakdown = useMemo(() =>
+    taxEnabled && resolvedTaxes.length > 0
+      ? calculateTaxes(subtotalCents, discountCents, resolvedTaxes)
+      : [],
+  [subtotalCents, discountCents, taxEnabled, resolvedTaxes]);
+
   const taxCents = useMemo(() =>
-    taxEnabled ? Math.round((subtotalCents - discountCents) * taxRate / 100) : 0,
-  [subtotalCents, discountCents, taxEnabled, taxRate]);
+    taxEnabled
+      ? (taxBreakdown.length > 0
+          ? taxBreakdown.reduce((s, t) => s + t.amount_cents, 0)
+          : Math.round((subtotalCents - discountCents) * taxRate / 100))
+      : 0,
+  [subtotalCents, discountCents, taxEnabled, taxRate, taxBreakdown]);
 
   const totalCents = subtotalCents - discountCents + taxCents;
 
@@ -286,9 +332,17 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
         tax_rate_label: taxEnabled ? taxLabel : 'No tax',
         discount_type: discountType || null,
         discount_value: parseFloat(discountValue) || 0,
+        source_template_id: preset?.id || null,
+        source_template_name: preset?.name || null,
         line_items: filteredItems,
         sections,
       });
+
+      // Save specific notes (photos, files, etc.) attached to this quote
+      if (specificNotesRef.current?.hasContent()) {
+        await specificNotesRef.current.saveNote('quote', detail.quote.id);
+      }
+
       onCreated(detail);
       onClose();
     } catch (err: any) {
@@ -323,23 +377,23 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                 <FileText size={18} className="text-primary" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-text-primary">New Quote</h2>
-                {lead && <p className="text-xs text-text-tertiary">for {lead.first_name} {lead.last_name}</p>}
+                <h2 className="text-[16px] font-bold tracking-tight text-text-primary">New Quote</h2>
+                {lead && <p className="text-[13px] text-text-tertiary">for {lead.first_name} {lead.last_name}</p>}
               </div>
             </div>
-            <button onClick={onClose} className="p-2 rounded-full hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors">
+            <button onClick={onClose} className="p-2 rounded-xl border border-outline hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors">
               <X size={18} />
             </button>
           </div>
 
           {/* ── Body ── */}
-          <form id="quote-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+          <form id="quote-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
 
             {/* ── Contact section (inline lead creation) ── */}
             {createLeadInline && !lead && (
               <div className="section-card p-5 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-[14px] font-semibold text-text-primary flex items-center gap-2">
+                  <h3 className="text-[16px] font-bold tracking-tight text-text-primary flex items-center gap-2">
                     <User size={15} className="text-text-tertiary" /> Contact
                   </h3>
                   <div className="flex p-0.5 bg-surface-tertiary rounded-lg border border-outline">
@@ -425,18 +479,17 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
               </div>
             </div>
 
-            {/* ── Section toggles ── */}
-            <div className="flex flex-wrap gap-2">
-              <span className="text-xs text-text-tertiary self-center mr-1">+ Add section</span>
+            {/* ── Optional sections ── */}
+            <div className="flex flex-wrap items-center gap-2">
               {[
-                { key: 'intro', label: 'Introduction', enabled: introEnabled, toggle: setIntroEnabled },
-                { key: 'disclaimer', label: 'Contract / Disclaimer', enabled: disclaimerEnabled, toggle: setDisclaimerEnabled },
-                { key: 'clientMsg', label: 'Client message', enabled: clientMessageEnabled, toggle: setClientMessageEnabled },
+                { key: 'intro', label: language === 'fr' ? 'Introduction' : 'Introduction', enabled: introEnabled, toggle: setIntroEnabled },
+                { key: 'disclaimer', label: language === 'fr' ? 'Contrat / Clause' : 'Contract / Disclaimer', enabled: disclaimerEnabled, toggle: setDisclaimerEnabled },
+                { key: 'clientMsg', label: language === 'fr' ? 'Message au client' : 'Client message', enabled: clientMessageEnabled, toggle: setClientMessageEnabled },
               ].map(s => (
                 <button key={s.key} type="button" onClick={() => s.toggle(!s.enabled)}
                   className={cn('px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
                     s.enabled ? 'bg-primary/10 text-primary border-primary/30' : 'bg-surface-secondary text-text-secondary border-outline hover:bg-surface-tertiary')}>
-                  {s.label}
+                  {s.enabled ? '✓ ' : '+ '}{s.label}
                 </button>
               ))}
             </div>
@@ -444,7 +497,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
             {/* ── Introduction ── */}
             {introEnabled && (
               <div className="section-card p-4 space-y-2">
-                <h4 className="text-sm font-semibold text-text-primary">Introduction</h4>
+                <h4 className="text-[14px] font-bold tracking-tight text-text-primary">Introduction</h4>
                 <textarea value={introContent} onChange={e => setIntroContent(e.target.value)}
                   className={cn(inputCls, 'min-h-[80px]')} placeholder="Write an introduction for this quote..." />
               </div>
@@ -453,7 +506,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
             {/* ── Product / Service ── */}
             <div className="section-card p-5 space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold text-text-primary">Product / Service</h3>
+                <h3 className="text-[16px] font-bold tracking-tight text-text-primary">Product / Service</h3>
                 <div className="flex items-center gap-2">
                   {jobLineItems.length > 0 && (
                     <button type="button" onClick={importJobLineItems}
@@ -480,17 +533,17 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                       className={cn(inputCls, 'py-1.5 text-xs min-h-[40px] resize-none')} placeholder="Description" />
                   </div>
                   <div className="col-span-2">
-                    <label className="text-[10px] text-text-tertiary font-medium">Quantity</label>
+                    <label className="text-xs font-medium text-text-tertiary">Quantity</label>
                     <input value={item.qtyInput} onChange={e => updateLine(item.id, { qtyInput: sanitize(e.target.value) })}
                       className={cn(inputCls, 'py-2 text-center')} />
                   </div>
                   <div className="col-span-2">
-                    <label className="text-[10px] text-text-tertiary font-medium">Unit price</label>
+                    <label className="text-xs font-medium text-text-tertiary">Unit price</label>
                     <input value={item.unitPriceInput} onChange={e => updateLine(item.id, { unitPriceInput: sanitize(e.target.value) })}
                       className={cn(inputCls, 'py-2 text-right')} />
                   </div>
                   <div className="col-span-2">
-                    <label className="text-[10px] text-text-tertiary font-medium">Total</label>
+                    <label className="text-xs font-medium text-text-tertiary">Total</label>
                     <p className="px-2.5 py-2 text-sm font-medium text-right text-text-primary">
                       {formatQuoteMoney(Math.round((parseFloat(item.qtyInput) || 0) * (parseFloat(item.unitPriceInput) || 0) * 100))}
                     </p>
@@ -548,16 +601,15 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
               <div className="flex justify-between items-center text-sm">
                 <span className="text-text-secondary">Tax</span>
                 <div className="flex items-center gap-2">
-                  <select value={taxEnabled ? taxLabel : ''} onChange={e => { setTaxEnabled(!!e.target.value); if (e.target.value) setTaxLabel(e.target.value); }}
-                    className="text-xs border border-outline rounded px-2 py-1 bg-surface text-text-primary">
-                    <option value="">No tax</option>
-                    <option value="TPS+TVQ (14.975%)">TPS+TVQ (14.975%)</option>
-                    <option value="TPS (5%)">TPS (5%)</option>
-                    <option value="TVQ (9.975%)">TVQ (9.975%)</option>
-                  </select>
-                  <span className="text-xs font-medium text-text-primary">{formatQuoteMoney(taxCents)}</span>
-                  {taxEnabled && (
-                    <button type="button" onClick={() => setTaxEnabled(false)} className="text-text-tertiary hover:text-danger"><Trash2 size={12} /></button>
+                  {taxConfigured === null ? (
+                    <span className="text-[11px] text-text-tertiary">Loading...</span>
+                  ) : taxConfigured === false ? (
+                    <a href="/settings/taxes" className="text-[11px] text-danger hover:underline font-medium">Configure taxes in Settings</a>
+                  ) : (
+                    <>
+                      <span className="text-[11px] font-medium text-text-primary px-2 py-0.5 bg-surface-secondary rounded">{taxLabel}</span>
+                      <span className="text-xs font-medium text-text-primary">{formatQuoteMoney(taxCents)}</span>
+                    </>
                   )}
                 </div>
               </div>
@@ -569,7 +621,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
 
             {/* ── Deposit Settings ── */}
             <div className="section-card p-5 space-y-3">
-              <h3 className="text-sm font-semibold text-text-primary">Deposit & Payment Settings</h3>
+              <h3 className="text-[14px] font-bold tracking-tight text-text-primary">Deposit & Payment Settings</h3>
               <label className="flex items-center gap-3 cursor-pointer">
                 <input type="checkbox" checked={depositRequired} onChange={e => setDepositRequired(e.target.checked)} className="h-4 w-4 rounded" />
                 <span className="text-[13px] text-text-primary">Require deposit when quote is accepted</span>
@@ -611,7 +663,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
             {disclaimerEnabled && (
               <div className="section-card p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-text-primary">Contract / Disclaimer</h4>
+                  <h4 className="text-[14px] font-bold tracking-tight text-text-primary">Contract / Disclaimer</h4>
                   <button type="button" onClick={() => setDisclaimerEnabled(false)} className="text-text-tertiary hover:text-danger"><Trash2 size={14} /></button>
                 </div>
                 <textarea value={contractDisclaimer} onChange={e => setContractDisclaimer(e.target.value)}
@@ -621,16 +673,20 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
 
             {/* ── Notes ── */}
             <div className="section-card border-dashed p-5">
-              <h4 className="text-sm font-semibold text-text-primary mb-2">Notes</h4>
+              <h4 className="text-[14px] font-bold tracking-tight text-text-primary mb-2">Notes</h4>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                className="w-full px-3 py-2 border-0 text-sm min-h-[60px] resize-none outline-none bg-transparent text-text-primary placeholder:text-text-tertiary"
-                placeholder="Leave an internal note for yourself or a team member" />
+                className="w-full px-3 py-2 border-0 text-sm min-h-[80px] resize-none outline-none bg-transparent text-text-primary placeholder:text-text-tertiary"
+                placeholder={language === 'fr' ? 'Notes visibles sur le devis (conditions, détails supplémentaires...)' : 'Notes visible on the quote (conditions, additional details...)'} />
+              <p className="text-[10px] text-text-muted mt-1">{language === 'fr' ? 'Visible par le client sur le devis' : 'Visible to the client on the quote'}</p>
             </div>
+
+            {/* ── Specific Notes (photos, files, etc.) ── */}
+            <SpecificNotesInline ref={specificNotesRef} tempEntityType="quote" />
 
             {/* ── Client message ── */}
             {clientMessageEnabled && (
               <div className="section-card p-4 space-y-2">
-                <h4 className="text-sm font-semibold text-text-primary">Client Message</h4>
+                <h4 className="text-[14px] font-bold tracking-tight text-text-primary">Client Message</h4>
                 <textarea value={clientMessage} onChange={e => setClientMessage(e.target.value)}
                   className={cn(inputCls, 'min-h-[60px]')} placeholder="Message visible to the client..." />
               </div>
@@ -642,7 +698,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
           </form>
 
           {/* ── Footer ── */}
-          <div className="px-6 py-4 border-t border-outline bg-surface-secondary flex items-center justify-end gap-3">
+          <div className="px-6 pt-4 pb-6 border-t border-border-light bg-surface-secondary flex items-center justify-end gap-3">
             <button type="button" onClick={onClose} className="glass-button px-5 py-2.5 text-sm font-medium">Cancel</button>
             <button form="quote-form" type="submit" disabled={saving}
               className="glass-button-primary px-6 py-2.5 text-sm font-semibold disabled:opacity-50 flex items-center gap-2">

@@ -3,10 +3,8 @@ import { cn } from '../../lib/utils';
 import { InsightsTab } from '../../lib/insightsApi';
 
 const TAB_OPTIONS: Array<{ id: InsightsTab; label: string }> = [
-  { id: 'revenue', label: 'Revenue' },
-  { id: 'lead_conversion', label: 'Lead conversion' },
-  { id: 'jobs', label: 'Jobs' },
-  { id: 'invoices', label: 'Invoices' },
+  { id: 'finance', label: 'Finance' },
+  { id: 'revenue', label: 'Performance' },
 ];
 
 export default function InsightsTabs({
@@ -17,15 +15,17 @@ export default function InsightsTabs({
   onTabChange: (tab: InsightsTab) => void;
 }) {
   return (
-    <div className="inline-flex rounded-xl border border-white/20 bg-white p-1">
+    <div className="inline-flex rounded-md border border-outline overflow-hidden">
       {TAB_OPTIONS.map((tab) => (
         <button
           key={tab.id}
           type="button"
           onClick={() => onTabChange(tab.id)}
           className={cn(
-            'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-            activeTab === tab.id ? 'bg-black text-white' : 'text-text-primary hover:bg-black/5'
+            'px-5 py-2 text-[13px] font-medium transition-all',
+            activeTab === tab.id
+              ? 'bg-text-primary text-white'
+              : 'bg-surface text-text-secondary hover:bg-surface-secondary'
           )}
         >
           {tab.label}

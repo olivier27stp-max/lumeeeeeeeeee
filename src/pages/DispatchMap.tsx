@@ -23,7 +23,7 @@ import { Briefcase, Calendar as CalendarIcon } from 'lucide-react';
 
 const DEFAULT_CENTER: L.LatLngTuple = [45.5017, -73.5673];
 const DEFAULT_ZOOM = 11;
-const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+const TILE_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 const TILE_ATTR = '&copy; OpenStreetMap &copy; CARTO';
 
 // ── Technician marker icon ──────────────────────────────────────
@@ -42,7 +42,7 @@ function createTechIcon(color: string, initials: string): L.DivIcon {
   });
 }
 
-const TECH_COLORS = ['#2563eb', '#7c3aed', '#db2777', '#ea580c', '#059669', '#0891b2', '#4f46e5', '#be123c'];
+const TECH_COLORS = ['#2563eb', '#475569', '#db2777', '#ea580c', '#059669', '#0891b2', '#4f46e5', '#be123c'];
 
 function getInitials(name?: string): string {
   if (!name) return '??';
@@ -377,7 +377,7 @@ export default function DispatchMap() {
 
             {/* Browser-based live tracking markers */}
             {liveLocations.map((loc) => {
-              const color = loc.team_color || '#7c3aed';
+              const color = loc.team_color || '#475569';
               const initials = getInitials(loc.user_name);
               const icon = createLiveTrackingIcon(color, initials, loc.is_moving);
               const staleMs = Date.now() - new Date(loc.recorded_at).getTime();
@@ -500,7 +500,7 @@ export default function DispatchMap() {
             )}
             {liveLocations.length > 0 && (
               <div className="flex items-center gap-1.5">
-                <div className="w-3.5 h-3.5 rounded-full bg-violet-500 border-2 border-white" />
+                <div className="w-3.5 h-3.5 rounded-full bg-gray-500 border-2 border-white" />
                 <span className="text-text-secondary">Live Tracking</span>
               </div>
             )}

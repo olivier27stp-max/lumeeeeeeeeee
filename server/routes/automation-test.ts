@@ -45,11 +45,10 @@ router.get('/automations/test', async (req, res) => {
 
   try {
     // ── Get org context ──
-    const { data: orgs } = await admin.from('orgs').select('id').limit(1).single();
-    if (!orgs?.id) {
+    const orgId = auth.orgId;
+    if (!orgId) {
       return res.json({ error: 'No organization found', results: [] });
     }
-    const orgId = orgs.id;
 
     // ── 1. Verify preset rules exist ──
     const { data: rules } = await admin

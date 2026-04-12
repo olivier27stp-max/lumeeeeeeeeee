@@ -162,24 +162,6 @@ const traccar = apiKeyProvider({
   },
 });
 
-// ── DocuSign ──────────────────────────────────────────────────
-const docusign = apiKeyProvider({
-  slug: 'docusign',
-  display_name: 'DocuSign',
-  credential_fields: [
-    { key: 'integration_key', label: 'Integration Key', type: 'text', required: true },
-    { key: 'secret_key', label: 'Secret Key', type: 'password', required: true },
-    { key: 'account_id', label: 'Account ID', type: 'text', required: true },
-  ],
-  testConnection: async (creds) => {
-    const accountId = creds.extra?.account_id;
-    const integrationKey = creds.extra?.integration_key;
-    if (!accountId || !integrationKey) return { success: false, error: 'Integration key and Account ID required' };
-    // DocuSign requires OAuth for API calls, so we validate the credentials format
-    return { success: true, account_name: `DocuSign (${accountId})`, account_id: accountId };
-  },
-});
-
 // ── Gemini ────────────────────────────────────────────────────
 const gemini = apiKeyProvider({
   slug: 'gemini',
@@ -481,67 +463,40 @@ const dropbox = apiKeyProvider({
   },
 });
 
-// ── Simple credential-validation providers (format check only) ──
-
-function credentialCheckProvider(slug: string, displayName: string, fields: ProviderDefinition['credential_fields']): ProviderDefinition {
-  return {
-    slug,
-    display_name: displayName,
-    auth_type: 'api_key',
-    credential_fields: fields,
-    testConnection: async (creds) => {
-      // Validate that required fields are non-empty
-      const hasValues = fields?.every(f => !f?.required || (creds.extra?.[f.key]?.trim()));
-      if (!hasValues) return { success: false, error: 'Missing required credentials' };
-      return { success: true, account_name: displayName };
-    },
-  };
-}
-
-// These providers don't have a simple public test endpoint but accept credentials
-const xero = credentialCheckProvider('xero', 'Xero', [
-  { key: 'client_id', label: 'Client ID', type: 'text', required: true },
-  { key: 'client_secret', label: 'Client Secret', type: 'password', required: true },
-]);
-
-const helcim = credentialCheckProvider('helcim', 'Helcim', [
-  { key: 'api_token', label: 'API Token', type: 'password', required: true },
-]);
-
-const wise = credentialCheckProvider('wise', 'Wise Business', [
-  { key: 'api_token', label: 'API Token', type: 'password', required: true },
-]);
-
-const plaid = credentialCheckProvider('plaid', 'Plaid', [
-  { key: 'client_id', label: 'Client ID', type: 'text', required: true },
-  { key: 'secret', label: 'Secret', type: 'password', required: true },
-]);
-
-const fastfield = credentialCheckProvider('fastfield', 'FastField Forms', [
-  { key: 'username', label: 'Username', type: 'text', required: true },
-  { key: 'password', label: 'Password', type: 'password', required: true },
-  { key: 'api_key', label: 'API Key', type: 'password', required: true },
-]);
-
-const googleReviews = credentialCheckProvider('google-reviews', 'Google Reviews', [
-  { key: 'api_key', label: 'API Key', type: 'password', required: true },
-  { key: 'place_id', label: 'Place ID', type: 'text', required: true },
-]);
-
-const googleAnalytics = credentialCheckProvider('google-analytics', 'Google Analytics', [
-  { key: 'measurement_id', label: 'Measurement ID', type: 'text', required: true },
-  { key: 'api_secret', label: 'API Secret', type: 'password', required: true },
-]);
-
-const googleDrive = credentialCheckProvider('google-drive', 'Google Drive', [
-  { key: 'service_account_json', label: 'Service Account JSON', type: 'password', required: true },
-]);
-
-const onedrive = credentialCheckProvider('onedrive', 'OneDrive', [
-  { key: 'client_id', label: 'Client ID', type: 'text', required: true },
-  { key: 'client_secret', label: 'Client Secret', type: 'password', required: true },
-  { key: 'tenant_id', label: 'Tenant ID', type: 'text', required: true },
-]);
+// ── Xero — real API test via /api.xro/2.0/Organisation ──────────
+const xero = apiKeyProvider({
+  slug: 'xero',
+  display_name: 'Xero',
+  credential_fields: [
+    { key: 'client_id', label: 'Client ID', type: 'text', required: true },
+    { key: 'client_secret', label: 'Client Secret', type: 'password', required: true },
+  ],
+  testConnection: async (creds) => {
+    const clientId = creds.extra?.client_id;
+    const clientSecret = creds.extra?.client_secret || creds.api_secret;
+    if (!clientId || !clientSecret) return { success: false, error: 'Client ID and Client Secret required' };
+    try {
+      // Xero uses OAuth2 client_credentials for app-level access
+      const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+      const res = await fetch('https://identity.xero.com/connect/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${basicAuth}`,
+        },
+        body: 'grant_type=client_credentials&scope=accounting.settings.read',
+      });
+      if (res.status === 401) return { success: false, error: 'Invalid Client ID or Client Secret' };
+      if (!res.ok) {
+        const body = await res.text();
+        return { success: false, error: `Xero auth error (${res.status}): ${body.slice(0, 200)}` };
+      }
+      return { success: true, account_name: 'Xero Account' };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to connect to Xero' };
+    }
+  },
+});
 
 // ── Webhook-based providers ───────────────────────────────────
 const n8n = webhookProvider({ slug: 'n8n', display_name: 'n8n' });
@@ -553,11 +508,10 @@ const make = webhookProvider({ slug: 'make', display_name: 'Make' });
 
 export function registerGenericProviders(): void {
   const all = [
-    mailchimp, openai, googleMaps, traccar, docusign,
+    mailchimp, openai, googleMaps, traccar,
     gemini, claude, elevenlabs, github, vercel, mapbox,
     jotform, klaviyo, pandadoc, paypal, square, dropbox,
-    xero, helcim, wise, plaid, fastfield,
-    googleReviews, googleAnalytics, googleDrive, onedrive,
+    xero,
     n8n, make,
   ];
   for (const provider of all) {

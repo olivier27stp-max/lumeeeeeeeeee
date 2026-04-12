@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 
 export type ArchiveItemType = 'client' | 'lead' | 'job';
 
@@ -21,16 +22,8 @@ export interface ArchiveData {
   jobs: ArchivedItem[];
 }
 
-async function getCurrentOrgId(): Promise<string> {
-  const { data, error } = await supabase.rpc('current_org_id');
-  if (error) throw new Error('Failed to resolve organization context.');
-  const orgId = (data as string | null) || null;
-  if (!orgId) throw new Error('No organization context found.');
-  return orgId;
-}
-
 export async function fetchArchivedItems(): Promise<ArchiveData> {
-  const orgId = await getCurrentOrgId();
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase.rpc('list_archived_items', { p_org_id: orgId });
   if (error) throw error;
 
@@ -43,7 +36,7 @@ export async function fetchArchivedItems(): Promise<ArchiveData> {
 }
 
 export async function restoreClient(clientId: string): Promise<void> {
-  const orgId = await getCurrentOrgId();
+  const orgId = await getCurrentOrgIdOrThrow();
   const { error } = await supabase.rpc('restore_client', {
     p_org_id: orgId,
     p_client_id: clientId,
@@ -52,7 +45,7 @@ export async function restoreClient(clientId: string): Promise<void> {
 }
 
 export async function restoreLead(leadId: string): Promise<void> {
-  const orgId = await getCurrentOrgId();
+  const orgId = await getCurrentOrgIdOrThrow();
   const { error } = await supabase.rpc('restore_lead', {
     p_org_id: orgId,
     p_lead_id: leadId,
@@ -61,7 +54,7 @@ export async function restoreLead(leadId: string): Promise<void> {
 }
 
 export async function restoreJob(jobId: string): Promise<void> {
-  const orgId = await getCurrentOrgId();
+  const orgId = await getCurrentOrgIdOrThrow();
   const { error } = await supabase.rpc('restore_job', {
     p_org_id: orgId,
     p_job_id: jobId,
@@ -78,7 +71,7 @@ export async function restoreItem(type: ArchiveItemType, id: string): Promise<vo
 }
 
 export async function permanentDeleteItem(type: ArchiveItemType, id: string): Promise<void> {
-  const orgId = await getCurrentOrgId();
+  const orgId = await getCurrentOrgIdOrThrow();
   if (type === 'client') {
     const { error } = await supabase.rpc('delete_client_cascade', {
       p_org_id: orgId,
@@ -87,12 +80,16 @@ export async function permanentDeleteItem(type: ArchiveItemType, id: string): Pr
     });
     if (error) throw error;
   } else if (type === 'job') {
-    // Hard delete job
-    const { error } = await supabase.from('jobs').delete().eq('id', id).eq('org_id', orgId);
+    const { error } = await supabase.rpc('delete_job_cascade', {
+      p_org_id: orgId,
+      p_job_id: id,
+    });
     if (error) throw error;
   } else if (type === 'lead') {
-    // Hard delete lead
-    const { error } = await supabase.from('leads').delete().eq('id', id).eq('org_id', orgId);
+    const { error } = await supabase.rpc('delete_lead_cascade', {
+      p_org_id: orgId,
+      p_lead_id: id,
+    });
     if (error) throw error;
   }
 }

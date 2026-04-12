@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { Mail, Lock, ArrowRight, Github } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import MfaChallenge from '../components/auth/MfaChallenge';
 
 interface AuthProps {
   onBack?: () => void;
@@ -17,6 +18,9 @@ export default function Auth({ onBack }: AuthProps) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+  // MFA challenge state
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -24,12 +28,34 @@ export default function Auth({ onBack }: AuthProps) {
 
     try {
       if (isSignUp) {
+        // Enforce password policy client-side
+        if (password.length < 10) {
+          throw new Error('Password must be at least 10 characters.');
+        }
+        if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+          throw new Error('Password must contain uppercase, lowercase, and a number.');
+        }
+        if (!/[^a-zA-Z0-9]/.test(password)) {
+          throw new Error('Password must contain at least one special character.');
+        }
+
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
         setMessage({ type: 'success', text: t.auth.checkEmail });
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+
+        // Check if user has MFA enrolled — if so, show challenge
+        const { data: factorsData } = await supabase.auth.mfa.listFactors();
+        const verifiedFactors = factorsData?.totp?.filter(f => f.status === 'verified') || [];
+
+        if (verifiedFactors.length > 0) {
+          // User has MFA — show challenge screen
+          setMfaFactorId(verifiedFactors[0].id);
+          return;
+        }
+        // No MFA — login completes normally via Supabase session
       }
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -37,6 +63,23 @@ export default function Auth({ onBack }: AuthProps) {
       setLoading(false);
     }
   };
+
+  // Show MFA challenge screen
+  if (mfaFactorId) {
+    return (
+      <MfaChallenge
+        factorId={mfaFactorId}
+        onSuccess={() => {
+          setMfaFactorId(null);
+          // Session is now fully authenticated — App.tsx will detect it
+        }}
+        onCancel={async () => {
+          await supabase.auth.signOut();
+          setMfaFactorId(null);
+        }}
+      />
+    );
+  }
 
   const handleGoogleLogin = async () => {
     if (loading) return;

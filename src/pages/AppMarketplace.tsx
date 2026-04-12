@@ -94,7 +94,7 @@ function StatusBadge({ status }: { status: ResolvedStatus }) {
     case 'requires_setup':
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 rounded-full px-2 py-0.5">
-          Requires Setup
+          Configuration requise
         </span>
       );
     case 'pending':
@@ -198,8 +198,8 @@ const AppCard: React.FC<AppCardProps> = ({ app, status, onClick }) => {
       <p className="text-[12px] text-text-secondary leading-relaxed flex-1">{app.description_short}</p>
       <div className="mt-3 pt-3 border-t border-outline-subtle/40 flex items-center justify-between">
         <span className="text-[11px] text-text-tertiary font-medium">{connectionLabel(app.connection_type)}</span>
-        <span className="text-[11px] font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1">
-          View details <ChevronRight size={10} />
+        <span className="text-xs font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1">
+          Voir détails <ChevronRight size={10} />
         </span>
       </div>
     </button>
@@ -468,7 +468,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
           {/* Webhook URL for webhook apps */}
           {app.connection_type === 'webhook' && (
             <div className="space-y-2">
-              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Webhook Endpoint</p>
+              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Endpoint Webhook</p>
               <div className="flex items-center gap-2 p-3 bg-surface-secondary/50 rounded-lg">
                 <code className="text-[11px] text-text-secondary font-mono flex-1 truncate">{webhookUrl}</code>
                 <button onClick={handleCopyWebhook} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary">
@@ -607,8 +607,8 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
     if (app.connection_type === 'coming_soon') {
       return (
         <div className="p-4 bg-surface-secondary/50 rounded-xl text-center">
-          <p className="text-[13px] font-medium text-text-secondary">This integration is coming soon.</p>
-          <p className="text-[11px] text-text-tertiary mt-1">We'll notify you when it becomes available.</p>
+          <p className="text-[13px] font-medium text-text-secondary">Cette intégration arrive bientôt.</p>
+          <p className="text-[11px] text-text-tertiary mt-1">Nous vous notifierons dès qu'elle sera disponible.</p>
         </div>
       );
     }
@@ -622,17 +622,17 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               <Check size={16} className="text-success" />
             </div>
             <div>
-              <p className="text-[13px] font-semibold text-text-primary">Built-in Integration</p>
-              <p className="text-[11px] text-text-tertiary">This integration is pre-configured and always active.</p>
+              <p className="text-[13px] font-semibold text-text-primary">Intégration intégrée</p>
+              <p className="text-[11px] text-text-tertiary">Cette intégration est préconfigurée et toujours active.</p>
             </div>
           </div>
           {app.auth_fields.length > 0 && (
             <div className="space-y-3">
-              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Current Configuration</p>
+              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Configuration actuelle</p>
               {app.auth_fields.map((field) => (
                 <div key={field.key} className="flex items-center justify-between py-2 px-3 bg-surface-secondary/50 rounded-lg">
                   <span className="text-[12px] text-text-secondary">{field.label}</span>
-                  <span className="text-[12px] text-text-tertiary font-mono">Configured</span>
+                  <span className="text-[12px] text-text-tertiary font-mono">Configuré</span>
                 </div>
               ))}
             </div>
@@ -683,7 +683,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
         <div className="space-y-4">
           {/* Webhook URL */}
           <div className="space-y-2">
-            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Your Webhook Endpoint</p>
+            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Votre endpoint webhook</p>
             <div className="flex items-center gap-2 p-3 bg-surface-secondary/50 rounded-xl border border-outline-subtle/40">
               <code className="text-[11px] text-text-primary font-mono flex-1 truncate">{webhookUrl}</code>
               <button onClick={handleCopyWebhook} className="p-1.5 rounded-md text-text-tertiary hover:text-primary hover:bg-primary/5 transition-colors" title="Copy URL">
@@ -698,7 +698,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
           {/* API key if needed */}
           {app.auth_fields.length > 0 && (
             <div className="space-y-3">
-              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Authentication</p>
+              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Authentification</p>
               {app.auth_fields.map((field) => (
                 <CredentialField
                   key={field.key}
@@ -716,65 +716,8 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
             className="glass-button-primary !text-[12px] w-full inline-flex items-center justify-center gap-2"
           >
             {saving ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
-            {saving ? 'Connecting...' : 'Activate Webhook'}
+            {saving ? 'Connexion...' : 'Activer le Webhook'}
           </button>
-        </div>
-      );
-    }
-
-    // ── LIFE360 SETUP GUIDE (manual, no API) ──
-    if (app.id === 'life360') {
-      return (
-        <div className="space-y-4">
-          <a
-            href="https://www.life360.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 p-4 bg-primary/5 border border-primary/20 rounded-xl text-[13px] text-primary hover:bg-primary/10 transition-colors font-medium"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <ExternalLink size={14} />
-            Open Life360 Website
-          </a>
-
-          <div>
-            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-3">Setup Guide</p>
-            <div className="space-y-2.5">
-              {[
-                { step: '1', title: 'Install the Life360 app', desc: 'Download Life360 from the App Store or Google Play on each technician\'s phone.' },
-                { step: '2', title: 'Create a team circle', desc: 'Open the app and create a new circle for your field team.' },
-                { step: '3', title: 'Invite technicians', desc: 'Add all technicians to the circle using their phone numbers or email addresses.' },
-                { step: '4', title: 'Enable location sharing', desc: 'Each technician must accept the invite and enable "Always" location sharing.' },
-              ].map((item) => (
-                <div key={item.step} className="flex items-start gap-3 p-3 bg-surface-secondary/50 rounded-xl">
-                  <div className="w-5 h-5 rounded-md bg-text-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                    <span className="text-[10px] font-bold text-text-secondary">{item.step}</span>
-                  </div>
-                  <div>
-                    <p className="text-[12px] font-semibold text-text-primary">{item.title}</p>
-                    <p className="text-[11px] text-text-tertiary mt-0.5 leading-relaxed">{item.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="p-3 bg-surface-secondary/30 rounded-xl border border-outline-subtle/30">
-            <p className="text-[11px] text-text-tertiary leading-relaxed">
-              Life360 does not currently offer a public API for third-party integrations. This setup guide helps your team use Life360's mobile app for location sharing. Full API integration will be added when available.
-            </p>
-          </div>
-
-          <a
-            href="https://www.life360.com/download/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="glass-button-primary !text-[12px] w-full inline-flex items-center justify-center gap-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <ExternalLink size={12} />
-            Download Life360 App
-          </a>
         </div>
       );
     }
@@ -902,7 +845,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
 
           {/* Features */}
           <div>
-            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-2">Supported Features</p>
+            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-2">Fonctionnalités</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {app.supported_features.map((f, i) => (
                 <div key={i} className="flex items-center gap-2 text-[12px] text-text-secondary">
@@ -919,7 +862,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
           {/* Connection UI */}
           <div>
             <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-3">
-              {status === 'connected' ? 'Connection Status' : 'Setup'}
+              {status === 'connected' ? 'Statut de connexion' : 'Configuration'}
             </p>
             {renderConnectionUI()}
           </div>
@@ -944,7 +887,7 @@ function ConnectedAppsSummary({
     <div className="section-card p-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
-          Connected ({connected.length})
+          Connectées ({connected.length})
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -1006,12 +949,12 @@ export default function AppMarketplace() {
 
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-text-primary flex items-center justify-center">
-          <Zap size={18} className="text-surface" />
+        <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
+          <Zap size={18} className="text-white" />
         </div>
         <div>
-          <h1 className="text-[22px] font-bold text-text-primary tracking-tight">App Marketplace</h1>
-          <p className="text-[13px] text-text-tertiary">Connect your favorite tools to extend your business workflow.</p>
+          <h1 className="text-[22px] font-bold text-text-primary tracking-tight">Marketplace</h1>
+          <p className="text-[13px] text-text-tertiary">Connectez vos outils préférés pour étendre vos processus d'affaires.</p>
         </div>
       </div>
 
@@ -1024,7 +967,7 @@ export default function AppMarketplace() {
         <input
           value={search}
           onChange={(e) => { setSearch(e.target.value); setActiveCategory(null); }}
-          placeholder="Search apps or features..."
+          placeholder="Rechercher des applications..."
           className="w-full bg-surface border border-outline-subtle/60 rounded-xl pl-9 pr-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40 transition-colors"
         />
         {search && (
@@ -1039,22 +982,22 @@ export default function AppMarketplace() {
         <button
           onClick={() => setActiveCategory(null)}
           className={cn(
-            'px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border',
+            'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
             !activeCategory
-              ? 'bg-text-primary text-surface border-text-primary'
+              ? 'bg-primary text-white border-text-primary'
               : 'bg-surface border-outline-subtle/60 text-text-secondary hover:border-outline hover:text-text-primary'
           )}
         >
-          All Apps
+          Toutes
         </button>
         {CATEGORIES.map((cat) => (
           <button
             key={cat}
             onClick={() => { setActiveCategory(activeCategory === cat ? null : cat); setSearch(''); }}
             className={cn(
-              'px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border',
+              'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
               activeCategory === cat
-                ? 'bg-text-primary text-surface border-text-primary'
+                ? 'bg-primary text-white border-text-primary'
                 : 'bg-surface border-outline-subtle/60 text-text-secondary hover:border-outline hover:text-text-primary'
             )}
           >
@@ -1070,7 +1013,7 @@ export default function AppMarketplace() {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Star size={14} className="text-text-secondary" />
-              <h2 className="text-[15px] font-bold text-text-primary">Featured Apps</h2>
+              <h2 className="text-[15px] font-bold text-text-primary">Applications vedettes</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {featured.map((app) => (
@@ -1098,12 +1041,12 @@ export default function AppMarketplace() {
       ) : filtered.length === 0 ? (
         <div className="section-card p-12 text-center">
           <Search size={28} className="text-text-tertiary mx-auto mb-3 opacity-30" />
-          <p className="text-[14px] font-medium text-text-secondary">No apps found</p>
-          <p className="text-[12px] text-text-tertiary mt-1">Try a different search term or category.</p>
+          <p className="text-[14px] font-medium text-text-secondary">Aucune application trouvée</p>
+          <p className="text-[12px] text-text-tertiary mt-1">Essayez un autre terme de recherche ou une autre catégorie.</p>
         </div>
       ) : (
         <div>
-          <p className="text-[12px] text-text-tertiary mb-3">{filtered.length} app{filtered.length !== 1 ? 's' : ''} found</p>
+          <p className="text-[12px] text-text-tertiary mb-3">{filtered.length} application{filtered.length !== 1 ? 's' : ''} trouvée{filtered.length !== 1 ? 's' : ''}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {filtered.map((app) => (
               <AppCard key={app.id} app={app} status={getStatus(app)} onClick={() => setSelectedApp(app)} />

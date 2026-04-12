@@ -98,8 +98,5 @@ export function formatCents(cents: number, currency = 'CAD'): string {
   }).format(cents / 100);
 }
 
-/** Default tax lines for Quebec. */
-export const DEFAULT_TAX_LINES: TaxLine[] = [
-  { code: 'tps', label: 'TPS', rate: 5, enabled: true },
-  { code: 'tvq', label: 'TVQ', rate: 9.975, enabled: true },
-];
+/** Default tax lines — empty until configured in Settings > Taxes. */
+export const DEFAULT_TAX_LINES: TaxLine[] = [];

@@ -191,10 +191,12 @@ export default function QuoteView() {
 
       if (quote.status === 'approved') {
         // Check if deposit is pending - auto-load payment
-        if (quote.deposit_required && (quote.deposit_status === 'pending' || quote.deposit_status === 'not_required') && Number(quote.deposit_value || 0) > 0) {
+        if (quote.deposit_required && quote.deposit_status === 'pending' && Number(quote.deposit_value || 0) > 0) {
           setViewState('deposit_payment');
-          // Auto-load deposit intent after setting data
-          setTimeout(() => loadDepositIntent(), 100);
+          setTimeout(() => loadDepositIntent().catch((err) => {
+            console.error('[QuoteView] Deposit intent failed:', err);
+            setError('Could not load deposit payment. Please refresh the page.');
+          }), 100);
         } else {
           setViewState('accepted');
         }
@@ -372,7 +374,7 @@ export default function QuoteView() {
   // ── Loading ──
   if (viewState === 'loading') {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="min-h-screen bg-surface flex items-center justify-center">
         <div className="w-5 h-5 border-2 border-[#e5e5e5] border-t-[#111] rounded-full animate-spin" />
       </div>
     );
@@ -381,7 +383,7 @@ export default function QuoteView() {
   // ── Error ──
   if (viewState === 'error' || !data) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="min-h-screen bg-surface flex items-center justify-center">
         <div className="text-center">
           <FileText size={36} className="text-[#d4d4d4] mx-auto mb-3" />
           <h1 className="text-[16px] font-semibold text-[#111]">Quote Not Found</h1>
@@ -437,7 +439,7 @@ export default function QuoteView() {
         )}
 
         {/* ═══ QUOTE DOCUMENT ═══ */}
-        <div className="quote-doc bg-white rounded-lg border border-[#e5e5e5] shadow-sm overflow-hidden">
+        <div className="quote-doc bg-surface rounded-lg border border-[#e5e5e5] shadow-sm overflow-hidden">
 
           {/* ── HEADER ── */}
           <div className="px-8 pt-8 pb-6">
@@ -586,7 +588,7 @@ export default function QuoteView() {
             {/* Optional items */}
             {optionalItems.length > 0 && (
               <>
-                <p className="text-[11px] font-semibold text-[#aaa] uppercase tracking-[0.05em] mt-6 mb-2">Optional Items</p>
+                <p className="text-xs font-medium text-[#aaa] uppercase tracking-[0.05em] mt-6 mb-2">Optional Items</p>
                 <table className="w-full text-[13px]">
                   <tbody>
                     {optionalItems.map((item) => (
@@ -700,7 +702,7 @@ export default function QuoteView() {
                     <button
                       onClick={handleDecline}
                       disabled={declining}
-                      className="flex-1 bg-white border border-[#ddd] text-[#555] py-3 rounded-lg font-medium text-[14px] hover:bg-[#f8f8f8] transition-colors flex items-center justify-center gap-2"
+                      className="flex-1 bg-surface border border-[#ddd] text-[#555] py-3 rounded-lg font-medium text-[14px] hover:bg-[#f8f8f8] transition-colors flex items-center justify-center gap-2"
                     >
                       <XCircle size={16} />
                       {declining ? 'Declining...' : 'Decline'}
@@ -737,7 +739,7 @@ export default function QuoteView() {
                     {/* Signature canvas */}
                     <div>
                       <label className="block text-[12px] font-medium text-[#666] mb-1">Signature</label>
-                      <div className="border border-[#ddd] rounded-lg overflow-hidden bg-white relative">
+                      <div className="border border-[#ddd] rounded-lg overflow-hidden bg-surface relative">
                         <canvas
                           ref={canvasRef}
                           width={500}
@@ -778,7 +780,7 @@ export default function QuoteView() {
                       </button>
                       <button
                         onClick={() => { setShowSignature(false); clearSignature(); setSignerName(''); setError(''); }}
-                        className="px-5 bg-white border border-[#ddd] text-[#555] py-3 rounded-lg font-medium text-[14px] hover:bg-[#f8f8f8] transition-colors"
+                        className="px-5 bg-surface border border-[#ddd] text-[#555] py-3 rounded-lg font-medium text-[14px] hover:bg-[#f8f8f8] transition-colors"
                       >
                         Cancel
                       </button>

@@ -248,7 +248,7 @@ export async function listPayments(query: ListPaymentsQuery): Promise<ListPaymen
   };
 }
 
-export async function fetchPaymentSettings(orgId?: string) {
+export async function fetchPaymentSettings(orgId?: string): Promise<PaymentSettingsResponse> {
   const params = new URLSearchParams();
   if (orgId) params.set('orgId', orgId);
   const suffix = params.toString() ? `?${params.toString()}` : '';

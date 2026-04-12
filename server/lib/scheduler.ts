@@ -53,7 +53,7 @@ async function handleDaysAfterQuoteSent(
 
   const { data: rows, error } = await supabase
     .from('invoices')
-    .select('id, invoice_number, sent_at, client_id, clients(first_name, last_name, phone)')
+    .select('id, invoice_number, sent_at, client_id')
     .eq('org_id', automation.org_id)
     .eq('status', 'sent')
     .not('sent_at', 'is', null);
@@ -65,7 +65,9 @@ async function handleDaysAfterQuoteSent(
     const target = addDelay(new Date(inv.sent_at), automation.delay_value, automation.delay_unit);
     if (target !== today) continue;
 
-    const client = inv.clients as any;
+    const { data: client } = inv.client_id
+      ? await supabase.from('clients').select('first_name, last_name, phone').eq('id', inv.client_id).maybeSingle()
+      : { data: null };
     const clientName = client
       ? `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client'
       : 'Client';
@@ -89,7 +91,7 @@ async function handleDaysBeforeAppointment(
 
   const { data: events, error } = await supabase
     .from('schedule_events')
-    .select('id, title, start_time, client_id, clients(first_name, last_name, phone)')
+    .select('id, title, start_time, client_id')
     .eq('org_id', automation.org_id);
 
   if (error || !events) return;
@@ -99,7 +101,9 @@ async function handleDaysBeforeAppointment(
     const target = subtractDelay(new Date(evt.start_time), automation.delay_value, automation.delay_unit);
     if (target !== today) continue;
 
-    const client = evt.clients as any;
+    const { data: client } = evt.client_id
+      ? await supabase.from('clients').select('first_name, last_name, phone').eq('id', evt.client_id).maybeSingle()
+      : { data: null };
     const clientName = client
       ? `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client'
       : 'Client';
@@ -122,7 +126,7 @@ async function handleOnInvoiceDueDate(
 
   const { data: invoices, error } = await supabase
     .from('invoices')
-    .select('id, invoice_number, due_date, client_id, clients(first_name, last_name, phone)')
+    .select('id, invoice_number, due_date, client_id')
     .eq('org_id', automation.org_id)
     .eq('due_date', today)
     .neq('status', 'paid');
@@ -130,7 +134,9 @@ async function handleOnInvoiceDueDate(
   if (error || !invoices) return;
 
   for (const inv of invoices as any[]) {
-    const client = inv.clients as any;
+    const { data: client } = inv.client_id
+      ? await supabase.from('clients').select('first_name, last_name, phone').eq('id', inv.client_id).maybeSingle()
+      : { data: null };
     const clientName = client
       ? `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client'
       : 'Client';
@@ -153,7 +159,7 @@ async function handleDaysAfterInvoiceDue(
 
   const { data: invoices, error } = await supabase
     .from('invoices')
-    .select('id, invoice_number, due_date, client_id, clients(first_name, last_name, phone)')
+    .select('id, invoice_number, due_date, client_id')
     .eq('org_id', automation.org_id)
     .neq('status', 'paid');
 
@@ -164,7 +170,9 @@ async function handleDaysAfterInvoiceDue(
     const target = addDelay(new Date(inv.due_date), automation.delay_value, automation.delay_unit);
     if (target !== today) continue;
 
-    const client = inv.clients as any;
+    const { data: client } = inv.client_id
+      ? await supabase.from('clients').select('first_name, last_name, phone').eq('id', inv.client_id).maybeSingle()
+      : { data: null };
     const clientName = client
       ? `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client'
       : 'Client';
@@ -187,7 +195,7 @@ async function handleDaysAfterJobCompleted(
 
   const { data: jobs, error } = await supabase
     .from('jobs')
-    .select('id, title, completed_at, client_id, clients(first_name, last_name, phone)')
+    .select('id, title, completed_at, client_id')
     .eq('org_id', automation.org_id)
     .eq('status', 'completed')
     .not('completed_at', 'is', null);
@@ -199,7 +207,9 @@ async function handleDaysAfterJobCompleted(
     const target = addDelay(new Date(job.completed_at), automation.delay_value, automation.delay_unit);
     if (target !== today) continue;
 
-    const client = job.clients as any;
+    const { data: client } = job.client_id
+      ? await supabase.from('clients').select('first_name, last_name, phone').eq('id', job.client_id).maybeSingle()
+      : { data: null };
     const clientName = client
       ? `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client'
       : 'Client';
@@ -531,6 +541,19 @@ async function tick(supabase: SupabaseClient, twilio: TwilioConfig | null) {
       await expireOverdueQuotes(supabase);
     } catch (err: any) {
       console.error('[scheduler] quote expiry check failed:', err.message);
+    }
+
+    // Auto-archive expired quotes older than 30 days
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+      await supabase
+        .from('quotes')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('status', ['expired', 'declined'])
+        .lt('valid_until', thirtyDaysAgo)
+        .is('deleted_at', null);
+    } catch (err: any) {
+      console.error('[scheduler] quote auto-archive failed:', err.message);
     }
 
     const { data: automations, error } = await supabase

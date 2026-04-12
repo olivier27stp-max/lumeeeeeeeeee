@@ -60,6 +60,6 @@ export function buildRenderData(
     })),
 
     primary_color: branding?.primary_color || '#1a1a2e',
-    accent_color: branding?.accent_color || '#4f46e5',
+    accent_color: branding?.accent_color || '#374151',
   };
 }

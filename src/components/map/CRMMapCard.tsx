@@ -68,7 +68,7 @@ export default function CRMMapCard({
             type="button"
             onClick={handleGeocodeMissing}
             disabled={geocoding}
-            className="rounded-lg border border-warning/40 bg-warning/10 px-2.5 py-1 text-[11px] font-semibold text-warning hover:bg-warning/20 transition-colors disabled:opacity-50"
+            className="rounded-lg border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning hover:bg-warning/20 transition-colors disabled:opacity-50"
           >
             {geocoding ? 'Geocoding...' : `Geocode ${data.missingLocationCount} missing`}
           </button>

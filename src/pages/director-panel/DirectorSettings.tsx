@@ -147,7 +147,7 @@ export default function DirectorSettings() {
         </div>
         <div className="space-y-3 px-1">
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">Image Model</label>
+            <label className="text-xs font-medium uppercase tracking-wider text-text-secondary">Image Model</label>
             <select value={prefs.defaultModel} onChange={(e) => updatePref('defaultModel', e.target.value)} className="glass-input w-full mt-1">
               <option value="flux-2-pro">Flux 2 Pro (5 credits)</option>
               <option value="flux-pro-1.1-ultra">Flux Pro 1.1 Ultra (5 credits)</option>
@@ -158,7 +158,7 @@ export default function DirectorSettings() {
             </select>
           </div>
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">Video Model</label>
+            <label className="text-xs font-medium uppercase tracking-wider text-text-secondary">Video Model</label>
             <select value={prefs.defaultVideoModel} onChange={(e) => updatePref('defaultVideoModel', e.target.value)} className="glass-input w-full mt-1">
               <option value="wan-2.5">Wan 2.5 (15 credits)</option>
               <option value="kling-3">Kling 3 (20 credits)</option>
@@ -172,9 +172,7 @@ export default function DirectorSettings() {
       {/* Generation Preferences */}
       <div className="section-card p-5 space-y-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
-            <Key className="w-5 h-5 text-blue-600" />
-          </div>
+          <Key className="w-5 h-5 text-text-secondary shrink-0" />
           <div>
             <h3 className="text-[13px] font-semibold text-text-primary">Generation Preferences</h3>
             <p className="text-[12px] text-text-tertiary">Default settings applied to new generations</p>
@@ -182,7 +180,7 @@ export default function DirectorSettings() {
         </div>
         <div className="space-y-3 px-1">
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">Default Quality</label>
+            <label className="text-xs font-medium uppercase tracking-wider text-text-secondary">Default Quality</label>
             <select value={prefs.qualityPreset} onChange={(e) => updatePref('qualityPreset', e.target.value)} className="glass-input w-full mt-1">
               <option value="draft">Draft (fast, lower quality)</option>
               <option value="standard">Standard</option>
@@ -218,7 +216,7 @@ export default function DirectorSettings() {
         </div>
         <div className="space-y-3 px-1">
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">Chat Model</label>
+            <label className="text-xs font-medium uppercase tracking-wider text-text-secondary">Chat Model</label>
             <select value={prefs.chatModel} onChange={(e) => updatePref('chatModel', e.target.value)} className="glass-input w-full mt-1">
               <option value="llama3.2">Llama 3.2 (3B — fast)</option>
               <option value="llama3.3">Llama 3.3 (70B — smart)</option>
@@ -229,7 +227,7 @@ export default function DirectorSettings() {
             <p className="text-[10px] text-text-tertiary mt-1">Run <code className="bg-surface-tertiary px-1 rounded">ollama pull {prefs.chatModel}</code> first</p>
           </div>
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">Vision Model</label>
+            <label className="text-xs font-medium uppercase tracking-wider text-text-secondary">Vision Model</label>
             <select value={prefs.visionModel} onChange={(e) => updatePref('visionModel', e.target.value)} className="glass-input w-full mt-1">
               <option value="llava">LLaVA (7B)</option>
               <option value="llava:13b">LLaVA 13B</option>

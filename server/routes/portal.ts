@@ -30,7 +30,7 @@ router.get('/portal/:token', async (req, res) => {
     // Fetch company info
     const { data: company } = await serviceClient
       .from('company_settings')
-      .select('company_name, company_logo_url, company_phone')
+      .select('company_name, logo_url, phone')
       .eq('org_id', client.org_id)
       .maybeSingle();
 
@@ -72,8 +72,8 @@ router.get('/portal/:token', async (req, res) => {
       },
       company: {
         company_name: company?.company_name || 'Business',
-        company_logo_url: company?.company_logo_url || null,
-        company_phone: company?.company_phone || null,
+        company_logo_url: company?.logo_url || null,
+        company_phone: company?.phone || null,
       },
       invoices: (invoices || []).map((inv: any) => ({
         id: inv.id,

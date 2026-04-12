@@ -13,6 +13,7 @@ import {
   convertQuoteToJob, duplicateQuote, deleteQuote,
 } from '../../lib/quotesApi';
 import { toast } from 'sonner';
+import SpecificNotes from '../SpecificNotes';
 import { format } from 'date-fns';
 
 interface QuoteDetailsModalProps {
@@ -181,7 +182,7 @@ export default function QuoteDetailsModal({
             </div>
             {entityPhone && (
               <button onClick={handleSendSms} disabled={busy}
-                className="px-3 py-2 text-sm font-semibold text-white bg-text-primary hover:bg-text-primary/90 rounded-lg flex items-center gap-1.5">
+                className="px-3 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg flex items-center gap-1.5">
                 <MessageSquare size={14} /> Send Text
               </button>
             )}
@@ -366,12 +367,15 @@ export default function QuoteDetailsModal({
                 <p className="text-sm text-text-secondary whitespace-pre-wrap">{quote.notes}</p>
               </div>
             )}
+
+            {/* Specific Notes */}
+            <SpecificNotes entityType="quote" entityId={quote.id} mode="tab" />
           </div>
         </div>
       </motion.div>
 
       {/* Backdrop click to close more menu */}
-      {moreOpen && <div className="fixed inset-0 z-[129]" onClick={() => setMoreOpen(false)} />}
+      {moreOpen && <div className="fixed inset-0 z-[131]" onClick={() => setMoreOpen(false)} />}
     </div>
   );
 }

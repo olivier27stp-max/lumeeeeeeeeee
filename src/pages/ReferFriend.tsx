@@ -25,14 +25,14 @@ import {
 
 const STATUS_CONFIG: Record<string, { label_en: string; label_fr: string; color: string }> = {
   invited:        { label_en: 'Invited',          label_fr: 'Invité',            color: 'bg-surface-tertiary text-text-secondary' },
-  signed_up:      { label_en: 'Signed Up',        label_fr: 'Inscrit',           color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
+  signed_up:      { label_en: 'Signed Up',        label_fr: 'Inscrit',           color: 'bg-surface-secondary text-text-secondary' },
   subscribed:     { label_en: 'Subscribed',        label_fr: 'Abonné',           color: 'bg-success/10 text-success' },
   reward_pending: { label_en: 'Reward Pending',    label_fr: 'Récompense en attente', color: 'bg-warning/10 text-warning' },
   rewarded:       { label_en: 'Rewarded',          label_fr: 'Récompensé',        color: 'bg-success/10 text-success' },
 };
 
 export default function ReferFriend() {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const navigate = useNavigate();
   const isFr = language === 'fr';
 
@@ -88,7 +88,7 @@ export default function ReferFriend() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       <PageHeader
         title={t.referFriend.referAFriend}
         subtitle={isFr
@@ -105,8 +105,8 @@ export default function ReferFriend() {
 
       {/* Hero banner */}
       <div className="section-card p-6 bg-gradient-to-br from-primary via-primary to-blue-600 text-white overflow-hidden relative">
-        <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-        <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+        <div className="absolute top-0 right-0 w-40 h-40 bg-surface-card/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute bottom-0 left-0 w-32 h-32 bg-surface-card/5 rounded-full translate-y-1/2 -translate-x-1/2" />
         <div className="relative z-10 space-y-3">
           <div className="flex items-center gap-2">
             <Gift size={20} />
@@ -242,10 +242,10 @@ export default function ReferFriend() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-outline-subtle">
-                  <th className="py-2 pr-4 text-[11px] font-semibold text-text-tertiary uppercase">{t.billing.email}</th>
-                  <th className="py-2 pr-4 text-[11px] font-semibold text-text-tertiary uppercase">{t.automations.status}</th>
-                  <th className="py-2 pr-4 text-[11px] font-semibold text-text-tertiary uppercase">{t.payments.date}</th>
-                  <th className="py-2 text-[11px] font-semibold text-text-tertiary uppercase">{t.referFriend.reward}</th>
+                  <th className="py-2 pr-4 text-xs font-medium text-text-tertiary uppercase">{t.billing.email}</th>
+                  <th className="py-2 pr-4 text-xs font-medium text-text-tertiary uppercase">{t.automations.status}</th>
+                  <th className="py-2 pr-4 text-xs font-medium text-text-tertiary uppercase">{t.payments.date}</th>
+                  <th className="py-2 text-xs font-medium text-text-tertiary uppercase">{t.referFriend.reward}</th>
                 </tr>
               </thead>
               <tbody>

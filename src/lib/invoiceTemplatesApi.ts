@@ -19,116 +19,71 @@ export interface InvoiceTemplate {
   archived_at: string | null;
   created_at: string;
   updated_at: string;
+  layout_type?: string;
 }
 
 export type InvoiceTemplateInput = Omit<
   InvoiceTemplate,
-  'id' | 'org_id' | 'created_by' | 'created_at' | 'updated_at' | 'archived_at'
+  'id' | 'org_id' | 'created_by' | 'created_at' | 'updated_at' | 'archived_at' | 'layout_type'
 >;
 
+/* ── Auth helper ─────────────────────────────────────────────── */
+async function authHeaders(extra?: Record<string, string>): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error('You must be signed in.');
+  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...extra };
+}
+
+async function apiFetch<T>(url: string, opts: RequestInit = {}): Promise<T> {
+  const headers = await authHeaders(opts.headers as Record<string, string>);
+  const res = await fetch(url, { ...opts, headers });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as any)?.error || `Request failed (${res.status})`);
+  return body as T;
+}
+
+/* ── CRUD via Express backend (service_role — bypasses RLS) ── */
+
 export async function listInvoiceTemplates(): Promise<InvoiceTemplate[]> {
-  const { data, error } = await supabase
-    .from('invoice_templates')
-    .select('*')
-    .is('archived_at', null)
-    .order('is_default', { ascending: false })
-    .order('name', { ascending: true });
-  if (error) throw error;
-  return (data || []) as InvoiceTemplate[];
+  return apiFetch<InvoiceTemplate[]>('/api/invoice-templates');
 }
 
 export async function getInvoiceTemplate(id: string): Promise<InvoiceTemplate> {
-  const { data, error } = await supabase
-    .from('invoice_templates')
-    .select('*')
-    .eq('id', id)
-    .single();
-  if (error) throw error;
-  return data as InvoiceTemplate;
+  return apiFetch<InvoiceTemplate>(`/api/invoice-templates/${id}`);
 }
 
 export async function createInvoiceTemplate(input: InvoiceTemplateInput): Promise<InvoiceTemplate> {
-  const { data, error } = await supabase
-    .from('invoice_templates')
-    .insert({
-      name: input.name,
-      title: input.title,
-      description: input.description,
-      line_items: input.line_items,
-      taxes: input.taxes,
-      payment_terms: input.payment_terms,
-      client_note: input.client_note,
-      branding: input.branding,
-      payment_methods: input.payment_methods,
-      email_subject: input.email_subject,
-      email_body: input.email_body,
-      is_default: input.is_default,
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return data as InvoiceTemplate;
+  return apiFetch<InvoiceTemplate>('/api/invoice-templates', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function updateInvoiceTemplate(
   id: string,
-  input: Partial<InvoiceTemplateInput>
+  input: Partial<InvoiceTemplateInput>,
 ): Promise<InvoiceTemplate> {
-  const { data, error } = await supabase
-    .from('invoice_templates')
-    .update({ ...input, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single();
-  if (error) throw error;
-  return data as InvoiceTemplate;
+  return apiFetch<InvoiceTemplate>(`/api/invoice-templates/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function duplicateInvoiceTemplate(id: string): Promise<InvoiceTemplate> {
-  const source = await getInvoiceTemplate(id);
-
-  const { data, error } = await supabase
-    .from('invoice_templates')
-    .insert({
-      name: `${source.name} (Copy)`,
-      title: source.title,
-      description: source.description,
-      line_items: source.line_items,
-      taxes: source.taxes,
-      payment_terms: source.payment_terms,
-      client_note: source.client_note,
-      branding: source.branding,
-      payment_methods: source.payment_methods,
-      email_subject: source.email_subject,
-      email_body: source.email_body,
-      is_default: false,
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return data as InvoiceTemplate;
+  return apiFetch<InvoiceTemplate>(`/api/invoice-templates/${id}/duplicate`, {
+    method: 'POST',
+  });
 }
 
 export async function setDefaultInvoiceTemplate(id: string): Promise<void> {
-  // Unset all defaults for the org
-  const { error: unsetError } = await supabase
-    .from('invoice_templates')
-    .update({ is_default: false, updated_at: new Date().toISOString() })
-    .eq('is_default', true);
-  if (unsetError) throw unsetError;
-
-  // Set this one as default
-  const { error: setError } = await supabase
-    .from('invoice_templates')
-    .update({ is_default: true, updated_at: new Date().toISOString() })
-    .eq('id', id);
-  if (setError) throw setError;
+  await apiFetch<any>(`/api/invoice-templates/${id}/set-default`, {
+    method: 'POST',
+  });
 }
 
 export async function deleteInvoiceTemplate(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('invoice_templates')
-    .update({ archived_at: new Date().toISOString() })
-    .eq('id', id);
-  if (error) throw error;
+  await apiFetch<any>(`/api/invoice-templates/${id}`, {
+    method: 'DELETE',
+  });
 }

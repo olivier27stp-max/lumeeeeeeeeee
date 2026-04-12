@@ -12,9 +12,12 @@ async function authHeaders(): Promise<Record<string, string>> {
   };
 }
 
-export async function listQuoteTemplates(): Promise<QuoteTemplate[]> {
+export async function listQuoteTemplates(activeOnly = false): Promise<QuoteTemplate[]> {
   const headers = await authHeaders();
-  const res = await fetch(`${API_BASE}/quote-templates`, { headers });
+  const url = activeOnly
+    ? `${API_BASE}/quote-templates?active_only=true`
+    : `${API_BASE}/quote-templates`;
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to fetch templates');
   const { templates } = await res.json();
   return templates || [];
@@ -28,7 +31,7 @@ export async function getQuoteTemplate(id: string): Promise<QuoteTemplate> {
   return template;
 }
 
-export async function createQuoteTemplate(payload: {
+export type QuoteTemplatePayload = {
   name: string;
   description?: string | null;
   services?: QuoteTemplateService[];
@@ -36,7 +39,25 @@ export async function createQuoteTemplate(payload: {
   notes?: string | null;
   terms?: string | null;
   custom_fields?: Record<string, any>;
-}): Promise<QuoteTemplate> {
+  is_default?: boolean;
+  is_active?: boolean;
+  sort_order?: number;
+  template_category?: string | null;
+  quote_title?: string | null;
+  intro_text?: string | null;
+  footer_notes?: string | null;
+  deposit_required?: boolean;
+  deposit_type?: 'percentage' | 'fixed' | null;
+  deposit_value?: number;
+  tax_enabled?: boolean;
+  tax_rate?: number;
+  tax_label?: string;
+  sections?: Array<{ type: string; title: string; content: string; sort_order: number; enabled: boolean }>;
+  layout_config?: Record<string, any>;
+  style_config?: Record<string, any>;
+};
+
+export async function createQuoteTemplate(payload: QuoteTemplatePayload): Promise<QuoteTemplate> {
   const headers = await authHeaders();
   const res = await fetch(`${API_BASE}/quote-templates`, {
     method: 'POST',
@@ -48,15 +69,7 @@ export async function createQuoteTemplate(payload: {
   return template;
 }
 
-export async function updateQuoteTemplate(id: string, payload: {
-  name: string;
-  description?: string | null;
-  services?: QuoteTemplateService[];
-  images?: string[];
-  notes?: string | null;
-  terms?: string | null;
-  custom_fields?: Record<string, any>;
-}): Promise<QuoteTemplate> {
+export async function updateQuoteTemplate(id: string, payload: QuoteTemplatePayload): Promise<QuoteTemplate> {
   const headers = await authHeaders();
   const res = await fetch(`${API_BASE}/quote-templates/${id}`, {
     method: 'PUT',
@@ -86,4 +99,38 @@ export async function duplicateQuoteTemplate(id: string): Promise<QuoteTemplate>
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to duplicate template');
   const { template } = await res.json();
   return template;
+}
+
+export async function setTemplateDefault(id: string, isDefault: boolean): Promise<QuoteTemplate> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/quote-templates/${id}/default`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ is_default: isDefault }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to update default');
+  const { template } = await res.json();
+  return template;
+}
+
+export async function setTemplateActive(id: string, isActive: boolean): Promise<QuoteTemplate> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/quote-templates/${id}/active`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ is_active: isActive }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to toggle active');
+  const { template } = await res.json();
+  return template;
+}
+
+export async function seedQuoteTemplates(): Promise<{ seeded: boolean; templates?: QuoteTemplate[] }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/quote-templates/seed`, {
+    method: 'POST',
+    headers,
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to seed templates');
+  return res.json();
 }

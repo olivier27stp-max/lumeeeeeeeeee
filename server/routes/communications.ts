@@ -5,6 +5,7 @@ import { twilioClient, twilioPhoneNumber, resendApiKey, emailFrom } from '../lib
 import { normalizeE164, findOrCreateConversation } from '../lib/helpers';
 import { provisionSmsNumber, getOrgSmsChannel } from '../lib/twilioProvisioning';
 import { validate, sendSmsSchema } from '../lib/validation';
+import { sanitizeText, sanitizeHtml, logSecurityEvent, checkAnomalies, extractIP } from '../lib/security';
 
 const router = Router();
 
@@ -30,7 +31,8 @@ router.post('/communications/send-sms', validate(sendSmsSchema), async (req, res
       return res.status(503).json({ error: 'SMS is not configured.' });
     }
 
-    const { to, body, client_id, job_id } = req.body;
+    const { to, body: rawBody, client_id, job_id } = req.body;
+    const body = sanitizeText(rawBody);
 
     const normalizedTo = normalizeE164(to);
     const serviceClient = getServiceClient();
@@ -114,6 +116,9 @@ router.post('/communications/send-email', async (req, res) => {
     if (!to || !subject || (!body && !body_html)) {
       return res.status(400).json({ error: 'to, subject, and body are required.' });
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      return res.status(400).json({ error: 'Invalid email address.' });
+    }
 
     const resend = getResend();
     const serviceClient = getServiceClient();
@@ -121,7 +126,8 @@ router.post('/communications/send-email', async (req, res) => {
     // Resolve sender identity: user email or org default
     const senderReplyTo = reply_to || user.email || undefined;
 
-    const htmlContent = body_html || `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;white-space:pre-wrap;">${(body || '').replace(/\n/g, '<br/>')}</div>`;
+    const safeBodyHtml = body_html ? sanitizeHtml(body_html) : null;
+    const htmlContent = safeBodyHtml || `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;white-space:pre-wrap;">${sanitizeText(body || '').replace(/\n/g, '<br/>')}</div>`;
 
     // Send via Resend
     const result = await resend.emails.send({

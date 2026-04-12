@@ -45,7 +45,7 @@ const EXACT_COMMAND_MAP: Record<string, string> = {
   insights: '/insights',
   dashboard: '/',
   notes: '/notes',
-  workflows: '/workflows',
+  automations: '/automations',
   settings: '/settings',
   dispatch: '/dispatch',
 };
@@ -64,7 +64,7 @@ const COMMAND_DEFINITIONS: CommandDefinition[] = [
   { command: 'insights', path: '/insights', aliases: ['insights', 'analytics'], label: 'Open insights' },
   { command: 'dashboard', path: '/', aliases: ['dashboard', 'home'], label: 'Go to dashboard' },
   { command: 'notes', path: '/notes', aliases: ['notes'], label: 'Open notes' },
-  { command: 'workflows', path: '/workflows', aliases: ['workflows', 'automations'], label: 'Open workflows' },
+  { command: 'automations', path: '/automations', aliases: ['workflows', 'automations'], label: 'Open automations' },
   { command: 'settings', path: '/settings', aliases: ['settings'], label: 'Open settings' },
   { command: 'dispatch', path: '/dispatch', aliases: ['dispatch', 'map'], label: 'Open dispatch' },
 ];

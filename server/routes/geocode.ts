@@ -40,7 +40,7 @@ router.post('/geocode-job', validate(geocodeJobSchema), async (req, res) => {
         .eq('id', jobId)
         .eq('org_id', orgId);
       if (updateError) throw updateError;
-      return res.status(200).json({ ok: false, reason: 'missing_address' });
+      return res.status(422).json({ ok: false, reason: 'missing_address' });
     }
 
     const geocoded = await geocodeAddress(address);
@@ -51,7 +51,7 @@ router.post('/geocode-job', validate(geocodeJobSchema), async (req, res) => {
         .eq('id', jobId)
         .eq('org_id', orgId);
       if (updateError) throw updateError;
-      return res.status(200).json({ ok: false, reason: 'geocode_not_found' });
+      return res.status(422).json({ ok: false, reason: 'geocode_not_found' });
     }
 
     const { error: updateError } = await client

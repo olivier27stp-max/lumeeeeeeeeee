@@ -1,4 +1,4 @@
-import React, { Component, type ErrorInfo, type ReactNode } from 'react';
+import React, { type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 interface Props {
@@ -12,11 +12,8 @@ interface State {
   error: string | null;
 }
 
-class AgentErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+class AgentErrorBoundary extends React.Component<Props, State> {
+  state: State = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error: error.message };
@@ -47,7 +44,7 @@ class AgentErrorBoundary extends Component<Props, State> {
               this.setState({ hasError: false, error: null });
               this.props.onReset?.();
             }}
-            className="px-4 py-2 rounded-lg bg-text-primary text-surface text-sm font-medium hover:opacity-90 transition-opacity"
+            className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:opacity-90 transition-opacity"
           >
             {fr ? 'Réessayer' : 'Try again'}
           </button>

@@ -18,7 +18,7 @@ export const invoiceTools: ToolDefinition[] = [
     label: 'Search Invoices',
     description: 'Search and list invoices by client name, invoice number, or status. Returns paginated results.',
     category: 'read',
-    requiredPermissions: ['invoices.view'],
+    requiredPermissions: ['invoices.read'],
     parameters: [
       { name: 'query', type: 'string', description: 'Search term (client name, invoice number)', required: false },
       { name: 'status', type: 'string', description: 'Filter by status', required: false, enum: ['all', 'draft', 'sent', 'paid', 'overdue'] },
@@ -63,7 +63,7 @@ export const invoiceTools: ToolDefinition[] = [
     label: 'Get Invoice Details',
     description: 'Get full details for a specific invoice by ID, including line items.',
     category: 'read',
-    requiredPermissions: ['invoices.view'],
+    requiredPermissions: ['invoices.read'],
     parameters: [
       { name: 'invoiceId', type: 'string', description: 'The invoice UUID', required: true },
     ],
@@ -88,7 +88,7 @@ export const invoiceTools: ToolDefinition[] = [
     label: 'Invoice KPIs (30 days)',
     description: 'Get invoice statistics for the last 30 days: totals, paid, pending, overdue amounts.',
     category: 'read',
-    requiredPermissions: ['invoices.view'],
+    requiredPermissions: ['invoices.read'],
     parameters: [],
     execute: async () => {
       try {

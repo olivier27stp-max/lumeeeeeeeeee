@@ -1,5 +1,7 @@
 import { startOfMonth, subDays } from 'date-fns';
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
+import { emitInvoicePaidManually } from './automationEventsApi';
 
 export type InvoiceStatusFilter = 'all' | 'draft' | 'sent_not_due' | 'past_due' | 'paid';
 export type InvoiceRangeFilter = 'all' | '30d' | 'this_month' | 'custom';
@@ -231,8 +233,9 @@ export async function searchActiveClients(query: { q: string; page: number; page
   const to = from + query.pageSize - 1;
 
   let request = supabase
-    .from('clients_active')
+    .from('clients')
     .select('id,first_name,last_name,company,email,status', { count: 'exact' })
+    .is('deleted_at', null)
     .range(from, to)
     .order('last_name', { ascending: true })
     .order('first_name', { ascending: true });
@@ -265,6 +268,7 @@ export async function createInvoiceDraft(payload: {
   clientId: string;
   subject?: string | null;
   dueDate?: string | null;
+  jobId?: string;
 }) {
   const { data, error } = await supabase.rpc('rpc_create_invoice_draft', {
     p_client_id: payload.clientId,
@@ -274,8 +278,18 @@ export async function createInvoiceDraft(payload: {
   if (error) throw error;
 
   const row = Array.isArray(data) ? data[0] : data;
+  const invoiceId = String(row?.id);
+
+  // Link invoice to job if provided
+  if (payload.jobId && invoiceId) {
+    await supabase
+      .from('invoices')
+      .update({ job_id: payload.jobId })
+      .eq('id', invoiceId);
+  }
+
   return {
-    id: String(row?.id),
+    id: invoiceId,
     invoice_number: String(row?.invoice_number || ''),
   };
 }
@@ -326,8 +340,9 @@ export async function getInvoiceById(invoiceId: string): Promise<InvoiceDetail |
   if (itemsError) throw itemsError;
 
   const { data: clientRow, error: clientError } = await supabase
-    .from('clients_active')
+    .from('clients')
     .select('id,first_name,last_name,company,email,phone')
+    .is('deleted_at', null)
     .eq('id', invoiceRow.client_id)
     .maybeSingle();
   if (clientError) throw clientError;
@@ -499,6 +514,23 @@ export async function updateInvoiceFields(
     internal_notes?: string | null;
     template_id?: string | null;
   },
+  expectedVersion?: number,
+) {
+  let query = supabase
+    .from('invoices')
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq('id', invoiceId);
+  if (expectedVersion != null) query = query.eq('version', expectedVersion);
+  const { error } = await query;
+  if (error?.code === 'PGRST116' && expectedVersion != null) {
+    throw new Error('This invoice was modified by another user. Please refresh and try again.');
+  }
+  if (error) throw error;
+}
+
+export async function updateInvoiceRecurrence(
+  invoiceId: string,
+  fields: { is_recurring: boolean; recurrence_interval?: string | null; next_recurrence_date?: string | null },
 ) {
   const { error } = await supabase
     .from('invoices')
@@ -562,8 +594,9 @@ export async function markInvoicePaidManually(invoiceId: string) {
     .from('invoices')
     .select('total_cents')
     .eq('id', invoiceId)
-    .single();
+    .maybeSingle();
   if (fetchErr) throw fetchErr;
+  if (!inv) throw new Error('Invoice not found');
 
   const { error } = await supabase
     .from('invoices')
@@ -575,6 +608,9 @@ export async function markInvoicePaidManually(invoiceId: string) {
     })
     .eq('id', invoiceId);
   if (error) throw error;
+
+  // Emit automation event to stop invoice reminders and trigger payment workflows
+  emitInvoicePaidManually({ invoiceId });
 }
 
 // ── Job line items for invoice prefill ──
@@ -636,11 +672,19 @@ export async function getInvoiceSendEvents(invoiceId: string) {
 export async function getCompanySettings() {
   const { data, error } = await supabase
     .from('company_settings')
-    .select('company_name,company_email,company_phone,company_address,company_logo_url')
+    .select('company_name, email, phone, street1, city, province, postal_code, logo_url')
     .limit(1)
     .maybeSingle();
   if (error) throw error;
-  return data || { company_name: null, company_email: null, company_phone: null, company_address: null, company_logo_url: null };
+  if (!data) return { company_name: null, company_email: null, company_phone: null, company_address: null, company_logo_url: null };
+  const address = [data.street1, data.city, data.province, data.postal_code].filter(Boolean).join(', ') || null;
+  return {
+    company_name: data.company_name || null,
+    company_email: data.email || null,
+    company_phone: data.phone || null,
+    company_address: address,
+    company_logo_url: data.logo_url || null,
+  };
 }
 
 export async function listInvoiceTemplates() {
@@ -680,4 +724,14 @@ export function defaultCustomRange(range: InvoiceRangeFilter) {
   }
 
   return { fromDate: null, toDate: null };
+}
+
+/** Hard delete an invoice and all its items/payments via RPC. */
+export async function deleteInvoice(invoiceId: string): Promise<void> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { error } = await supabase.rpc('delete_invoice_cascade', {
+    p_org_id: orgId,
+    p_invoice_id: invoiceId,
+  });
+  if (error) throw error;
 }

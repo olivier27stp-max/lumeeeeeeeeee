@@ -8,6 +8,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { supabase } from './supabase';
+import { getCurrentOrgId } from './orgApi';
 
 export interface AutomationRule {
   id: string;
@@ -27,7 +28,7 @@ export interface AutomationRule {
 
 export async function getAutomationRules(): Promise<AutomationRule[]> {
   // Resolve current org to avoid cross-org leakage when user has multiple memberships
-  const { data: orgId } = await supabase.rpc('current_org_id');
+  const orgId = await getCurrentOrgId();
   if (!orgId) return [];
 
   const { data, error } = await supabase
@@ -49,8 +50,7 @@ export async function toggleAutomationRule(id: string, isActive: boolean): Promi
 
 /** Manually trigger preset seeding for an org (admin use only) */
 export async function seedDefaultPresets(): Promise<number> {
-  const { data: orgData } = await supabase.rpc('current_org_id');
-  const orgId = orgData as string | null;
+  const orgId = await getCurrentOrgId();
   if (!orgId) return 0;
 
   const { data, error } = await supabase.rpc('seed_automation_presets', { p_org_id: orgId });

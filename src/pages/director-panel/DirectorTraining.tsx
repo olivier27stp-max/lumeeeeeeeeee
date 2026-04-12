@@ -378,11 +378,11 @@ export default function DirectorTraining() {
                     {job.error && <span className="text-red-500 ml-2">{job.error}</span>}
                   </p>
                 </div>
-                <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium',
-                  job.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
-                  job.status === 'failed' ? 'bg-red-50 text-red-500' :
-                  job.status === 'training' ? 'bg-purple-50 text-purple-600' :
-                  'bg-amber-50 text-amber-600')}>
+                <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium capitalize',
+                  job.status === 'completed' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' :
+                  job.status === 'failed' ? 'bg-red-50 text-red-500 dark:bg-red-500/10 dark:text-red-400' :
+                  job.status === 'training' ? 'bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400' :
+                  'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400')}>
                   {job.status}
                 </span>
                 {job.status === 'completed' && job.modelId && (

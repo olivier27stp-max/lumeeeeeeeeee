@@ -41,7 +41,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 const EVENT_COLORS: Record<string, string> = {
   lead_created: 'bg-neutral-100 text-neutral-600',
   lead_converted: 'bg-green-100 text-green-600',
-  status_changed: 'bg-purple-100 text-purple-600',
+  status_changed: 'bg-surface-secondary text-text-secondary',
   job_created: 'bg-neutral-100 text-neutral-600',
   job_completed: 'bg-green-100 text-green-600',
   invoice_paid: 'bg-green-100 text-green-600',
@@ -66,12 +66,10 @@ function getEventDetail(entry: ActivityLogEntry, lang: 'en' | 'fr'): string {
   const meta = entry.metadata || {};
 
   if (entry.event_type === 'status_changed') {
-    return lang === 'fr'
-      ? `${meta.old_status || '?'} → ${meta.new_status || '?'}`
-      : `${meta.old_status || '?'} → ${meta.new_status || '?'}`;
+    return `${meta.old_status || '?'} \u203A ${meta.new_status || '?'}`;
   }
   if (entry.event_type === 'lead_converted') {
-    return meta.job_title ? `→ ${meta.job_title}` : '';
+    return meta.job_title || '';
   }
   if (entry.event_type === 'invoice_reminded') {
     return meta.days_overdue ? `J+${meta.days_overdue}` : '';

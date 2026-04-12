@@ -162,7 +162,7 @@ export default function DirectorStyles() {
 
   const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <div className="space-y-1.5">
-      <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">{label}</label>
+      <label className="text-xs font-medium uppercase tracking-wider text-text-secondary">{label}</label>
       {children}
     </div>
   );

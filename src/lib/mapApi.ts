@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 
 export type MapDateRange = 'today' | 'tomorrow' | 'this_week' | 'all';
 
@@ -51,14 +52,6 @@ function getDateBounds(range: MapDateRange): { start: string | null; end: string
   return { start: null, end: null };
 }
 
-async function getCurrentOrgId(): Promise<string> {
-  const { data, error } = await supabase.rpc('current_org_id');
-  if (error) throw new Error('Failed to resolve organization context.');
-  const orgId = (data as string | null) || null;
-  if (!orgId) throw new Error('No organization context found.');
-  return orgId;
-}
-
 export interface MapJobResult {
   pins: MapJobPin[];
   totalEvents: number;
@@ -78,7 +71,7 @@ function hasValidCoords(e: any): boolean {
 }
 
 export async function fetchMapJobs(range: MapDateRange): Promise<MapJobResult> {
-  const orgId = await getCurrentOrgId();
+  const orgId = await getCurrentOrgIdOrThrow();
   const { start, end } = getDateBounds(range);
 
   let query = supabase

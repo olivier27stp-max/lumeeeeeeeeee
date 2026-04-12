@@ -3,6 +3,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 
 export interface ActivityLogEntry {
   id: string;
@@ -50,9 +51,11 @@ export async function fetchActivityLog(
   const limit = options.limit || 50;
   const offset = options.offset || 0;
 
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('activity_log')
     .select('*')
+    .eq('org_id', orgId)
     .or(`and(entity_type.eq.${entityType},entity_id.eq.${entityId}),and(related_entity_type.eq.${entityType},related_entity_id.eq.${entityId})`)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
@@ -66,9 +69,11 @@ export async function fetchRecentActivity(
 ): Promise<ActivityLogEntry[]> {
   const limit = options.limit || 30;
 
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('activity_log')
     .select('*')
+    .eq('org_id', orgId)
     .order('created_at', { ascending: false })
     .limit(limit);
 

@@ -10,9 +10,13 @@ const router = Router();
 
 const inviteSchema = z.object({
   email: z.string().trim().email('Valid email is required.'),
-  role: z.enum(['admin', 'sales_rep', 'technician'], {
-    error: 'Role must be admin, sales_rep, or technician.',
+  role: z.enum(['admin', 'manager', 'sales_rep', 'technician', 'support', 'viewer'], {
+    error: 'Role must be admin, manager, sales_rep, technician, support, or viewer.',
   }),
+  scope: z.enum(['self', 'assigned', 'team', 'department', 'company'], { error: 'Invalid scope.' }).optional(),
+  team_id: z.string().uuid().nullable().optional(),
+  department_id: z.string().uuid().nullable().optional(),
+  custom_permissions: z.record(z.string(), z.boolean()).optional(),
 });
 
 const acceptInviteSchema = z.object({
@@ -31,9 +35,13 @@ const revokeInviteSchema = z.object({
 
 const updateMemberRoleSchema = z.object({
   memberId: z.string().uuid('Invalid member ID.'),
-  role: z.enum(['admin', 'sales_rep', 'technician'], {
-    error: 'Role must be admin, sales_rep, or technician.',
+  role: z.enum(['admin', 'manager', 'sales_rep', 'technician', 'support', 'viewer'], {
+    error: 'Role must be admin, manager, sales_rep, technician, support, or viewer.',
   }),
+  scope: z.enum(['self', 'assigned', 'team', 'department', 'company'], { error: 'Invalid scope.' }).optional(),
+  team_id: z.string().uuid().nullable().optional(),
+  department_id: z.string().uuid().nullable().optional(),
+  custom_permissions: z.record(z.string(), z.boolean()).optional(),
 });
 
 const removeMemberSchema = z.object({
@@ -159,6 +167,10 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
         org_id: auth.orgId,
         email: email.toLowerCase(),
         role,
+        scope: req.body.scope || 'self',
+        team_id: req.body.team_id || null,
+        department_id: req.body.department_id || null,
+        custom_permissions: req.body.custom_permissions || {},
         token,
         invited_by: auth.user.id,
         status: 'pending',
@@ -325,13 +337,18 @@ router.post('/invitations/accept', validate(acceptInviteSchema), async (req, res
       full_name,
     });
 
-    // Create membership
+    // Create membership with scope, team, department, and custom permissions from invitation
     const { error: memError } = await admin
       .from('memberships')
       .insert({
         user_id: newUser.id,
         org_id: invitation.org_id,
         role: invitation.role,
+        scope: invitation.scope || 'self',
+        team_id: invitation.team_id || null,
+        department_id: invitation.department_id || null,
+        permissions: invitation.custom_permissions || {},
+        full_name,
         status: 'active',
       });
 
@@ -549,9 +566,15 @@ router.post('/invitations/update-role', validate(updateMemberRoleSchema), async 
       return res.status(403).json({ error: 'Cannot change the owner\'s role.' });
     }
 
+    const updateData: Record<string, any> = { role };
+    if (req.body.scope) updateData.scope = req.body.scope;
+    if (req.body.team_id !== undefined) updateData.team_id = req.body.team_id || null;
+    if (req.body.department_id !== undefined) updateData.department_id = req.body.department_id || null;
+    if (req.body.custom_permissions) updateData.permissions = req.body.custom_permissions;
+
     const { error } = await admin
       .from('memberships')
-      .update({ role })
+      .update(updateData)
       .eq('user_id', memberId)
       .eq('org_id', auth.orgId);
 

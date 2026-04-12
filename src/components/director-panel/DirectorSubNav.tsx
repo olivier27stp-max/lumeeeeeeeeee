@@ -34,7 +34,7 @@ export default function DirectorSubNav() {
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium whitespace-nowrap transition-colors',
               isActive
-                ? 'bg-text-primary text-surface'
+                ? 'bg-primary text-white'
                 : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary',
             )}
           >

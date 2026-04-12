@@ -206,11 +206,43 @@ async function scheduleDelayedActions(
 
 // ── Event handler ───────────────────────────────────────────
 
+// ── Map CRM event types to workflow trigger_type values ────
+const EVENT_TO_TRIGGER: Record<string, string> = {
+  'lead.created': 'lead_created',
+  'lead.updated': 'lead_updated',
+  'lead.status_changed': 'lead_status_changed',
+  'lead.converted': 'lead_converted',
+  'pipeline_deal.stage_changed': 'pipeline_deal_stage_changed',
+  'estimate.sent': 'estimate_sent',
+  'estimate.accepted': 'estimate_approved',
+  'quote.created': 'quote_created',
+  'quote.sent': 'quote_sent',
+  'quote.approved': 'quote_approved',
+  'quote.declined': 'quote_declined',
+  'quote.converted': 'quote_converted',
+  'appointment.created': 'job_scheduled',
+  'job.created': 'job_scheduled',
+  'job.completed': 'job_completed',
+  'invoice.created': 'invoice_created',
+  'invoice.sent': 'invoice_created',
+  'invoice.overdue': 'invoice_overdue',
+  'invoice.paid': 'payment_received',
+};
+
+// ── Convert delay_value + delay_unit to seconds ───────────
+function delayToSeconds(value: number, unit: string): number {
+  if (unit === 'immediate' || value <= 0) return 0;
+  if (unit === 'minutes') return value * 60;
+  if (unit === 'hours') return value * 3600;
+  if (unit === 'days') return value * 86400;
+  return 0;
+}
+
 async function handleEvent(event: CRMEvent) {
   if (!engineConfig) return;
 
   try {
-    // Find matching active rules for this event type and org
+    // ── 1. Match automation_rules (legacy system) ──
     const { data: rules, error } = await engineConfig.supabase
       .from('automation_rules')
       .select('*')
@@ -220,19 +252,72 @@ async function handleEvent(event: CRMEvent) {
 
     if (error) {
       console.error('[automationEngine] failed to fetch rules:', error.message);
-      return;
     }
-    if (!rules || rules.length === 0) return;
 
-    for (const rule of rules as AutomationRule[]) {
-      // Evaluate conditions
-      if (!evaluateConditions(rule.conditions, event)) continue;
+    if (rules && rules.length > 0) {
+      for (const rule of rules as AutomationRule[]) {
+        if (!evaluateConditions(rule.conditions, event)) continue;
+        if (rule.delay_seconds !== 0) {
+          await scheduleDelayedActions(rule, event, engineConfig);
+        } else {
+          await executeRuleActions(rule, event, engineConfig);
+        }
+      }
+    }
 
-      // Execute or schedule
-      if (rule.delay_seconds !== 0) {
-        await scheduleDelayedActions(rule, event, engineConfig);
-      } else {
-        await executeRuleActions(rule, event, engineConfig);
+    // ── 2. Match workflows table (new system) ──
+    const triggerType = EVENT_TO_TRIGGER[event.type];
+    if (triggerType) {
+      const { data: workflows, error: wfError } = await engineConfig.supabase
+        .from('workflows')
+        .select('id, org_id, name, trigger_type, delay_value, delay_unit, conditions, actions_config')
+        .eq('org_id', event.orgId)
+        .eq('trigger_type', triggerType)
+        .eq('active', true)
+        .eq('status', 'published');
+
+      if (wfError) {
+        console.error('[automationEngine] failed to fetch workflows:', wfError.message);
+      }
+
+      if (workflows && workflows.length > 0) {
+        for (const wf of workflows as any[]) {
+          // Evaluate conditions (array format)
+          const wfConditions = wf.conditions || [];
+          if (Array.isArray(wfConditions) && wfConditions.length > 0) {
+            const condObj: Record<string, any> = {};
+            for (const c of wfConditions) {
+              if (c.operator === 'equals') condObj[c.field] = { eq: c.value };
+              else if (c.operator === 'not_equals') condObj[c.field] = { neq: c.value };
+            }
+            if (!evaluateConditions(condObj, event)) continue;
+          }
+
+          // Convert workflow to AutomationRule format for execution
+          const wfActions = wf.actions_config || [];
+          if (!Array.isArray(wfActions) || wfActions.length === 0) continue;
+
+          const delaySeconds = delayToSeconds(wf.delay_value || 0, wf.delay_unit || 'immediate');
+
+          const pseudoRule: AutomationRule = {
+            id: wf.id,
+            org_id: wf.org_id,
+            name: wf.name,
+            trigger_event: event.type,
+            conditions: {},
+            delay_seconds: delaySeconds,
+            actions: wfActions,
+            is_active: true,
+          };
+
+          if (delaySeconds > 0) {
+            await scheduleDelayedActions(pseudoRule, event, engineConfig);
+          } else {
+            await executeRuleActions(pseudoRule, event, engineConfig);
+          }
+
+          console.log(`[automationEngine] workflow "${wf.name}" matched event ${event.type}`);
+        }
       }
     }
   } catch (err: any) {
@@ -362,13 +447,17 @@ async function checkStopConditions(
   if (entityType === 'invoice') {
     const { data: inv } = await supabase
       .from('invoices')
-      .select('status, client_id, clients(deleted_at)')
+      .select('status, client_id')
       .eq('id', entityId)
-      .maybeSingle() as any;
+      .maybeSingle();
 
     if (!inv) return true; // Invoice deleted
     if (['paid', 'cancelled', 'void'].includes(inv.status)) return true;
-    if (inv.clients?.deleted_at) return true; // Client archived/deleted
+    // Check if client is archived/deleted
+    if (inv.client_id) {
+      const { data: cl } = await supabase.from('clients').select('deleted_at').eq('id', inv.client_id).maybeSingle();
+      if (cl?.deleted_at) return true;
+    }
   }
 
   // Estimate follow-ups: stop if accepted, rejected, or lead archived
@@ -396,6 +485,19 @@ async function checkStopConditions(
     if (evt.status === 'cancelled') return true;
   }
 
+  // Quote follow-ups: stop if approved, declined, expired, converted, or deleted
+  if (entityType === 'quote') {
+    const { data: quote } = await supabase
+      .from('quotes')
+      .select('status, deleted_at')
+      .eq('id', entityId)
+      .maybeSingle();
+
+    if (!quote) return true; // Quote deleted
+    if (quote.deleted_at) return true;
+    if (['approved', 'declined', 'expired', 'converted', 'void'].includes(quote.status)) return true;
+  }
+
   // Lead: stop if archived or deleted
   if (entityType === 'lead') {
     const { data: lead } = await supabase
@@ -406,7 +508,7 @@ async function checkStopConditions(
 
     if (!lead) return true;
     if (lead.deleted_at) return true;
-    if (lead.status === 'lost') return true;
+    if (['lost', 'closed', 'converted'].includes(lead.status)) return true;
   }
 
   return false;

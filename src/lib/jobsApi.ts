@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 import { Job } from '../types';
 import type { JobDraftInitialValues } from '../components/NewJobModal';
 import { calculateJobFinancials, type CalcLineItem, type TaxLine } from './jobCalc';
@@ -84,6 +85,51 @@ function isMissingJobLineItemsTableError(error: any): boolean {
   );
 }
 
+/**
+ * Derive the display status for a job, taking into account business rules:
+ * - "Late": job is scheduled but the date has passed
+ * - "Action Required": job is scheduled but date passed > 30 days ago
+ * - "Requires Invoicing": job is completed + requires_invoicing flag
+ * - "Unscheduled": job has no scheduled_at or is draft
+ */
+function deriveJobDisplayStatus(raw: {
+  status?: string | null;
+  scheduled_at?: string | null;
+  requires_invoicing?: boolean;
+}): string {
+  const dbStatus = (raw.status || '').toLowerCase();
+  const scheduledAt = raw.scheduled_at ? new Date(raw.scheduled_at) : null;
+  const now = new Date();
+
+  // Draft or no schedule → Unscheduled
+  if (!dbStatus || dbStatus === 'draft') {
+    return scheduledAt ? 'Draft' : 'Unscheduled';
+  }
+
+  // Scheduled but date is in the past
+  if (dbStatus === 'scheduled' && scheduledAt) {
+    const daysSince = (now.getTime() - scheduledAt.getTime()) / 86400000;
+    if (daysSince > 30) return 'Action Required';
+    if (daysSince > 0) return 'Late';
+    return 'Scheduled';
+  }
+  if (dbStatus === 'scheduled') return 'Scheduled';
+
+  // Completed + requires invoicing
+  if (dbStatus === 'completed' && raw.requires_invoicing) return 'Requires Invoicing';
+  if (dbStatus === 'completed') return 'Completed';
+
+  if (dbStatus === 'in_progress') return 'In Progress';
+  if (dbStatus === 'cancelled' || dbStatus === 'canceled') return 'Cancelled';
+
+  // Fallback
+  return dbStatus
+    .split('_')
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join(' ');
+}
+
+/** Simple label formatter (no business logic — used when raw context is unavailable) */
 function formatStatusLabel(value: string | null | undefined): string {
   if (!value) return 'Unscheduled';
   const normalized = value.toLowerCase();
@@ -176,7 +222,7 @@ function mapJob(raw: any, clientNameFallback?: string | null): Job {
     property_address: raw.property_address || '',
     scheduled_at: raw.scheduled_at || null,
     end_at: raw.end_at || null,
-    status: formatStatusLabel(raw.status),
+    status: deriveJobDisplayStatus(raw),
     total_cents: raw.total_cents ?? Math.round(Number(raw.total_amount || 0) * 100),
     currency: raw.currency || 'CAD',
     subtotal: raw.subtotal == null ? undefined : Number(raw.subtotal),
@@ -213,8 +259,9 @@ function buildSearchFilter(search: string): string {
 async function loadClientNames(clientIds: string[]): Promise<Map<string, string>> {
   if (clientIds.length === 0) return new Map();
   const { data, error } = await supabase
-    .from('clients_active')
+    .from('clients')
     .select('id, first_name, last_name, company')
+    .is('deleted_at', null)
     .in('id', clientIds);
 
   if (error) return new Map();
@@ -397,6 +444,31 @@ export async function getJobModalDraftById(id: string): Promise<JobModalDraft | 
   };
 }
 
+/** Check if a time slot has scheduling conflicts */
+export async function checkScheduleConflict(scheduledAt: string, durationHours = 2, excludeJobId?: string): Promise<{ hasConflict: boolean; conflicts: Array<{ id: string; title: string; client_name: string; scheduled_at: string }> }> {
+  const start = new Date(scheduledAt);
+  const end = new Date(start.getTime() + durationHours * 3600000);
+
+  let query = supabase
+    .from('schedule_events')
+    .select('id, job_id, start_time, end_time, jobs!inner(id, title, client_name)')
+    .lt('start_time', end.toISOString())
+    .gt('end_time', start.toISOString())
+    .is('deleted_at', null);
+
+  const { data } = await query;
+  const conflicts = (data ?? [])
+    .filter((e: any) => !excludeJobId || e.job_id !== excludeJobId)
+    .map((e: any) => ({
+      id: e.job_id,
+      title: e.jobs?.title ?? '',
+      client_name: e.jobs?.client_name ?? '',
+      scheduled_at: e.start_time,
+    }));
+
+  return { hasConflict: conflicts.length > 0, conflicts };
+}
+
 export async function createJob(payload: {
   id?: string;
   lead_id?: string | null;
@@ -433,12 +505,7 @@ export async function createJob(payload: {
   total?: number;
   tax_lines?: Array<{ code: string; label: string; rate: number; enabled: boolean }>;
 }): Promise<Job> {
-  const { data: orgIdData, error: orgIdError } = await supabase.rpc('current_org_id');
-  if (orgIdError) throw orgIdError;
-  const orgId = String(orgIdData || '').trim();
-  if (!orgId) {
-    throw new Error('Cannot save job: organization context is missing. Please refresh and try again.');
-  }
+  const orgId = await getCurrentOrgIdOrThrow();
 
   // Auto-resolve client_id from lead_id if not provided
   if (payload.lead_id && !payload.client_id) {
@@ -468,8 +535,9 @@ export async function createJob(payload: {
   let shouldQueueGeocode = false;
   if (payload.client_id) {
     const { data: clientRow, error: clientError } = await supabase
-      .from('clients_active')
+      .from('clients')
       .select('id,first_name,last_name,company,address')
+      .is('deleted_at', null)
       .eq('id', payload.client_id)
       .single();
     if (clientError) throw clientError;
@@ -825,7 +893,14 @@ export async function updateJob(
   if (payload.total !== undefined) updatePayload.total = payload.total;
   if (payload.tax_lines !== undefined) updatePayload.tax_lines = payload.tax_lines;
 
-  const { data, error } = await supabase.from('jobs').update(updatePayload).eq('id', id).select('*').single();
+  // Support optimistic locking if version provided in payload
+  const expectedVersion = (payload as any).version;
+  let query = supabase.from('jobs').update(updatePayload).eq('id', id);
+  if (expectedVersion != null) query = query.eq('version', expectedVersion);
+  const { data, error } = await query.select('*').single();
+  if (error?.code === 'PGRST116' && expectedVersion != null) {
+    throw new Error('This job was modified by another user. Please refresh and try again.');
+  }
   if (error) throw error;
 
   // Fire automation hook when job marked completed (non-blocking)
@@ -943,9 +1018,7 @@ export async function getJobWithLineItems(jobId: string): Promise<{ job: Job; li
 }
 
 export async function softDeleteJob(jobId: string): Promise<SoftDeleteJobResult> {
-  const { data: orgId, error: orgError } = await supabase.rpc('current_org_id');
-  if (orgError) throw orgError;
-  if (!orgId) throw new Error('No organization context found.');
+  const orgId = await getCurrentOrgIdOrThrow();
 
   // Soft-delete associated schedule_events first
   const nowIso = new Date().toISOString();

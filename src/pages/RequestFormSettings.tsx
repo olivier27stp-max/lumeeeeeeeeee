@@ -58,6 +58,7 @@ function FieldEditor({
   onUpdate: (updated: FormField) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   const needsOptions = field.type === 'dropdown' || field.type === 'multiselect';
 
   return (
@@ -146,6 +147,7 @@ function FormPreview({
   customFields: FormField[];
   isFr: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="section-card p-6 space-y-5 max-w-lg mx-auto">
       <div className="text-center space-y-1">
@@ -379,7 +381,7 @@ export default function RequestFormSettings() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center gap-3">
         <button
@@ -436,7 +438,7 @@ export default function RequestFormSettings() {
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all',
               activeSection === tab.id
-                ? 'bg-white dark:bg-surface-primary text-text-primary shadow-sm'
+                ? 'bg-surface-card dark:bg-surface-primary text-text-primary shadow-sm'
                 : 'text-text-tertiary hover:text-text-secondary'
             )}
           >
@@ -570,8 +572,10 @@ export default function RequestFormSettings() {
                   axis="y"
                   values={customFields.filter(f => f.section === 'service_details')}
                   onReorder={(reordered) => {
-                    const otherFields = customFields.filter(f => f.section !== 'service_details');
-                    setCustomFields([...reordered, ...otherFields]);
+                    setCustomFields(prev => {
+                      const otherFields = prev.filter(f => f.section !== 'service_details');
+                      return [...reordered, ...otherFields];
+                    });
                   }}
                   className="space-y-2"
                 >

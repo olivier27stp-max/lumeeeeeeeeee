@@ -110,7 +110,7 @@ export default function TeamSuggestions({
 
   return (
     <div className="space-y-1">
-      <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider flex items-center gap-1.5">
+      <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1.5">
         <Zap size={12} />
         {t.teamSuggestions.suggestedTeams}
       </p>

@@ -15,7 +15,7 @@ export default function InsightsOverviewCards({ items }: { items: InsightsOvervi
       <h2 className="text-3xl font-semibold tracking-tight text-text-primary">Overview</h2>
       <div className={`mt-4 grid gap-3 ${items.length >= 5 ? 'grid-cols-1 md:grid-cols-5' : 'grid-cols-1 md:grid-cols-4'}`}>
         {items.map((item) => (
-          <article key={item.id} className="rounded-xl border border-white/30 bg-white/70 p-3">
+          <article key={item.id} className="rounded-xl border border-white/30 bg-surface-card/70 p-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-text-primary">{item.label}</p>
               <ChevronRight size={14} className="text-text-tertiary" />

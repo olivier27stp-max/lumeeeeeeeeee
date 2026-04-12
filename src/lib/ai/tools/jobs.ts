@@ -11,7 +11,7 @@ export const jobTools: ToolDefinition[] = [
     label: 'Search Jobs',
     description: 'Search and list jobs by title, client name, status, or job type. Returns paginated results.',
     category: 'read',
-    requiredPermissions: ['jobs.view'],
+    requiredPermissions: ['jobs.read'],
     parameters: [
       { name: 'query', type: 'string', description: 'Search term', required: false },
       { name: 'status', type: 'string', description: 'Filter by status', required: false, enum: ['Late', 'Unscheduled', 'Requires Invoicing', 'Action Required', 'Ending within 30 days', 'Scheduled', 'Completed'] },
@@ -57,7 +57,7 @@ export const jobTools: ToolDefinition[] = [
     label: 'Get Job Details',
     description: 'Get full details for a specific job by ID.',
     category: 'read',
-    requiredPermissions: ['jobs.view'],
+    requiredPermissions: ['jobs.read'],
     parameters: [
       { name: 'jobId', type: 'string', description: 'The job UUID', required: true },
     ],
@@ -95,7 +95,7 @@ export const jobTools: ToolDefinition[] = [
     label: 'Jobs KPIs',
     description: 'Get job statistics: counts by status, total values, and overdue/action-required counts.',
     category: 'read',
-    requiredPermissions: ['jobs.view'],
+    requiredPermissions: ['jobs.read'],
     parameters: [
       { name: 'status', type: 'string', description: 'Filter KPIs by status', required: false },
       { name: 'jobType', type: 'string', description: 'Filter KPIs by job type', required: false },

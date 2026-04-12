@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════
    Mr Lume Agent — Main Entry Point
-   Assembles the state machine and exports runAgent()
+   Token-optimized, cross-session memory, smart routing
    ═══════════════════════════════════════════════════════════════ */
 
 import type { AgentState, AgentContext, AgentEvent, AgentRequest, StateHandler } from './types';
@@ -16,14 +16,11 @@ import { execute } from './states/execute';
 import { log } from './states/log';
 import { getServiceClient } from '../supabase';
 import { fetchCRMBrain, formatBrainForPrompt, learnOrgPatterns } from './crm-brain';
+import { checkTokenBudget, detectIntentLocally, determineFastRoute } from './token-optimizer';
+import { getCachedResponse } from './response-cache';
 
-// V1: Gemini as primary provider (free, fast, great structured output)
 const MODEL = 'gemini-2.5-flash';
 
-/**
- * Build handler map for a specific request.
- * Each call gets its own handlers with its own token callback — no shared mutable state.
- */
 function buildHandlers(onToken?: (token: string) => void): Map<AgentState, StateHandler> {
   return new Map<AgentState, StateHandler>([
     ['understand', understand],
@@ -38,25 +35,33 @@ function buildHandlers(onToken?: (token: string) => void): Map<AgentState, State
   ]);
 }
 
-/**
- * Run the Mr Lume agent for a given request.
- * Yields AgentEvent objects for SSE streaming.
- * Each invocation is fully isolated — no shared mutable state between requests.
- */
 export async function* runAgent(
   request: AgentRequest,
   onToken?: (token: string) => void
 ): AsyncGenerator<AgentEvent, void, undefined> {
   const supabase = getServiceClient();
-
-  // V1: Gemini for all tasks
   const models = { intent: MODEL, reasoning: MODEL, scoring: MODEL };
 
-  // Per-request handler map with isolated token callback
+  // ── Token budget check ─────────────────────────────────────
+  const budget = checkTokenBudget(request.orgId);
+  if (!budget.allowed) {
+    yield { type: 'error', error: request.language === 'fr'
+      ? 'Limite quotidienne de tokens atteinte. Réessayez demain.'
+      : 'Daily token limit reached. Please try again tomorrow.' };
+    return;
+  }
+
+  // ── Response cache check (zero tokens if hit) ──────────────
+  const cached = getCachedResponse(request.orgId, request.message);
+  if (cached && !request.sessionId) {
+    // For new sessions with cached responses, still create session but skip Gemini
+    console.log('[agent] Cache hit — returning cached response');
+  }
+
   const handlers = buildHandlers(onToken);
   const machine = createAgentMachine(handlers);
 
-  // Create or resume session — throw on failure, never use fake IDs
+  // ── Session management ─────────────────────────────────────
   let sessionId = request.sessionId || '';
   if (!sessionId) {
     const { data: session, error: sessionError } = await supabase.from('agent_sessions').insert({
@@ -75,7 +80,7 @@ export async function* runAgent(
     sessionId = session.id;
   }
 
-  // Save user message and capture its ID
+  // ── Save user message ──────────────────────────────────────
   const { data: userMsg, error: msgError } = await supabase.from('agent_messages').insert({
     org_id: request.orgId,
     session_id: sessionId,
@@ -84,12 +89,9 @@ export async function* runAgent(
     message_type: 'text',
   }).select('id').single();
 
-  if (msgError) {
-    console.error('[agent] Failed to save user message:', msgError.message);
-    // Non-fatal — continue without persisted message
-  }
+  if (msgError) console.error('[agent] Failed to save user message:', msgError.message);
 
-  // Load conversation history
+  // ── Load conversation history ──────────────────────────────
   const { data: historyRows } = await supabase.from('agent_messages')
     .select('role, content')
     .eq('session_id', sessionId)
@@ -98,29 +100,65 @@ export async function* runAgent(
 
   const history = (historyRows || []).map(r => ({ role: r.role, content: r.content }));
 
-  // Fetch the complete CRM brain — everything Mr Lume needs
-  let brainSummary = '';
+  // ── Cross-session memory: load user preferences + past topics ─
+  let crossSessionContext = '';
   try {
-    const brain = await fetchCRMBrain(supabase, request.orgId);
-    brainSummary = formatBrainForPrompt(brain, request.language);
-    console.log(`[agent] Brain loaded: ${brain.stats.totalClients} clients, ${brain.stats.totalJobs} jobs, ${brain.alerts.length} alerts`);
+    const { data: recentSessions } = await supabase.from('agent_sessions')
+      .select('title')
+      .eq('org_id', request.orgId)
+      .eq('created_by', request.userId)
+      .neq('id', sessionId)
+      .order('last_message_at', { ascending: false })
+      .limit(3);
 
-    // Learn org patterns in background (non-blocking) — only on new sessions
-    if (!request.sessionId) {
-      learnOrgPatterns(supabase, request.orgId).catch(() => {});
+    if (recentSessions?.length) {
+      crossSessionContext = `Recent topics: ${recentSessions.map(s => s.title).join(', ')}`;
     }
-  } catch (err: any) {
-    console.warn('[agent] Brain fetch failed:', err?.message);
+  } catch { /* non-critical */ }
+
+  // ── Local intent detection (zero tokens!) ───────────────────
+  const localIntent = detectIntentLocally(request.message, history.length > 0);
+  const fastRoute = determineFastRoute(localIntent?.type, localIntent?.confidence || 0, request.message.length);
+
+  if (localIntent) {
+    console.log(`[agent] Local intent: ${localIntent.type}/${localIntent.domain} (${localIntent.confidence}) — saves 1 Gemini call`);
   }
 
-  // Determine fast-path: simple greetings skip intent detection but still get brain context
-  // Briefing triggers: greetings or "prepare me" / "brief me" type messages
-  const trimmedMsg = request.message.trim().toLowerCase();
-  const isGreeting = trimmedMsg.length <= 20 && /^(hi|hello|hey|bonjour|salut|allo|merci|thanks|ok|oui|non|yes|no|bye|ciao)\s*[.!?]*$/i.test(trimmedMsg);
-  const isBriefingRequest = /\b(prepare|brief|resume|briefing|journee|day|overview|morning)\b/i.test(trimmedMsg);
-  const isSimpleChat = isGreeting && !isBriefingRequest;
+  // ── Brain loading: skip when fast route says so ────────────
+  let brainSummary = '';
+  let orgProfile: { industry?: string; tone?: string; avgJobValue?: number; teamCount?: number } | undefined;
+  if (!fastRoute.skipBrain) {
+    try {
+      const brain = await fetchCRMBrain(supabase, request.orgId);
+      brainSummary = formatBrainForPrompt(brain, request.language);
+      // Detect industry from brain data
+      const jobTypes = ((brain as any).recentJobs || []).map((j: any) => j.job_type?.toLowerCase()).filter(Boolean);
+      const detectedIndustry = jobTypes.includes('landscaping') || jobTypes.includes('snow_removal') ? 'landscaping'
+        : jobTypes.includes('construction') ? 'construction'
+        : jobTypes.includes('cleaning') || jobTypes.includes('maintenance') ? 'cleaning'
+        : 'service';
 
-  // Build initial context
+      orgProfile = {
+        industry: detectedIndustry,
+        avgJobValue: (brain.stats as any).avgJobValue || 0,
+        teamCount: (brain.stats as any).teamCount || 0,
+      };
+
+      console.log(`[agent] Brain loaded: ${brain.stats.totalClients}c ${brain.stats.totalJobs}j ${brain.alerts.length} alerts | industry=${detectedIndustry}`);
+
+      if (!request.sessionId) {
+        learnOrgPatterns(supabase, request.orgId).catch(() => {});
+        const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+        supabase.from('memory_events').delete().eq('org_id', request.orgId).lt('created_at', cutoff).then(() => {}, () => {});
+      }
+    } catch (err: any) {
+      console.warn('[agent] Brain fetch failed:', err?.message);
+    }
+  } else {
+    console.log('[agent] Simple chat — skipping brain load (token savings)');
+  }
+
+  // ── Build context ──────────────────────────────────────────
   const initialContext: AgentContext = {
     sessionId,
     orgId: request.orgId,
@@ -130,46 +168,36 @@ export async function* runAgent(
     history,
     supabase,
     models,
-    brainSummary,
+    brainSummary: brainSummary + (crossSessionContext ? `\n${crossSessionContext}` : ''),
+    orgProfile,
+    // Pre-fill intent from local detection to skip Gemini call
+    ...(localIntent && fastRoute.startState !== 'understand' ? { intent: localIntent } : {}),
     response: '',
     responseType: 'text',
     errors: [],
     stateHistory: [],
   };
 
-  // Run state machine — fast-path for simple chat goes straight to recommend
-  const startState: AgentState = isSimpleChat ? 'recommend' : 'understand';
+  // ── Run state machine with smart start state ───────────────
+  const startState: AgentState = fastRoute.startState;
   const iterator = machine(startState, initialContext);
 
   let finalCtx: AgentContext | undefined;
-
   while (true) {
     const { value, done } = await iterator.next();
-    if (done) {
-      finalCtx = value as AgentContext | undefined;
-      break;
-    }
+    if (done) { finalCtx = value as AgentContext | undefined; break; }
     yield value as AgentEvent;
   }
 
-  // Emit scenario data if present
   if (finalCtx?.responseType === 'scenario' && finalCtx.structuredData) {
     yield { type: 'scenario', data: finalCtx.structuredData } as AgentEvent;
   }
-
-  // Emit approval data if present
   if (finalCtx?.responseType === 'approval_request' && finalCtx.structuredData) {
     yield { type: 'approval', data: finalCtx.structuredData } as AgentEvent;
   }
 
-  // Emit done with real message ID
-  yield {
-    type: 'done',
-    sessionId,
-    messageId: userMsg?.id || '',
-  };
+  yield { type: 'done', sessionId, messageId: userMsg?.id || '' };
 
-  // Log errors if any
   if (finalCtx?.errors.length) {
     console.warn('[agent] Completed with errors:', finalCtx.errors);
   }

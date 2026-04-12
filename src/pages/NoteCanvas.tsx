@@ -192,7 +192,7 @@ function CanvasInner() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingFileType = useRef<'image' | 'file'>('image');
-  const saveViewportTimer = useRef<ReturnType<typeof setTimeout>>();
+  const saveViewportTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const initialLoadDone = useRef(false);
   const recentLocalUpdates = useRef<Set<string>>(new Set());
 
@@ -222,7 +222,7 @@ function CanvasInner() {
       n.id === itemId ? { ...n, data: { ...n.data, content } } : n
     ));
     markLocalUpdate(itemId);
-    updateItem(itemId, { content }).catch(() => {});
+    updateItem(itemId, { content }).catch((e: any) => { console.error('[canvas]', e?.message); toast.error('Failed to save note'); });
   }, [setNodes, markLocalUpdate]);
 
   const onChecklistChange = useCallback((itemId: string, checklist: ChecklistItem[]) => {
@@ -233,7 +233,7 @@ function CanvasInner() {
       n.id === itemId ? { ...n, data: { ...n.data, checklist } } : n
     ));
     markLocalUpdate(itemId);
-    updateItem(itemId, { rich_content: { checklist } }).catch(() => {});
+    updateItem(itemId, { rich_content: { checklist } }).catch((e: any) => { console.error('[canvas]', e?.message); });
   }, [setNodes, markLocalUpdate]);
 
   const callbacksRef = useRef({ onContentChange, onChecklistChange });
@@ -440,7 +440,7 @@ function CanvasInner() {
         updateItem(change.id, {
           pos_x: change.position.x,
           pos_y: change.position.y,
-        }).catch(() => {});
+        }).catch((e: any) => { console.error('[canvas]', e?.message); });
         setItems((prev) => prev.map((i) =>
           i.id === change.id ? { ...i, pos_x: change.position!.x, pos_y: change.position!.y } : i
         ));
@@ -450,7 +450,7 @@ function CanvasInner() {
         updateItem(change.id, {
           width: change.dimensions.width,
           height: change.dimensions.height,
-        }).catch(() => {});
+        }).catch((e: any) => { console.error('[canvas]', e?.message); });
       }
     }
   }, [setNodes, markLocalUpdate]);
@@ -460,7 +460,7 @@ function CanvasInner() {
     for (const change of changes) {
       if (change.type === 'remove') {
         setConnections((prev) => prev.filter((c) => c.id !== change.id));
-        deleteConnection(change.id).catch(() => {});
+        deleteConnection(change.id).catch((e: any) => { console.error('[canvas]', e?.message); });
       }
     }
   }, [setEdges]);
@@ -676,7 +676,7 @@ function CanvasInner() {
     if (!selectedItem) return;
     const maxZ = Math.max(...items.map((i) => i.z_index || 0), 0) + 1;
     markLocalUpdate(selectedItem.id);
-    updateItem(selectedItem.id, { z_index: maxZ }).catch(() => {});
+    updateItem(selectedItem.id, { z_index: maxZ }).catch((e: any) => { console.error('[canvas]', e?.message); });
     setItems((prev) => prev.map((i) => i.id === selectedItem.id ? { ...i, z_index: maxZ } : i));
   }, [selectedItem, items, markLocalUpdate]);
 
@@ -684,7 +684,7 @@ function CanvasInner() {
     if (!selectedItem) return;
     const minZ = Math.min(...items.map((i) => i.z_index || 0), 0) - 1;
     markLocalUpdate(selectedItem.id);
-    updateItem(selectedItem.id, { z_index: minZ }).catch(() => {});
+    updateItem(selectedItem.id, { z_index: minZ }).catch((e: any) => { console.error('[canvas]', e?.message); });
     setItems((prev) => prev.map((i) => i.id === selectedItem.id ? { ...i, z_index: minZ } : i));
   }, [selectedItem, items, markLocalUpdate]);
 
@@ -781,7 +781,7 @@ function CanvasInner() {
     setVotingActive(true);
     setVotingTimerRunning(true);
     setVotes([]);
-    if (boardId) clearBoardVotes(boardId).catch(() => {});
+    if (boardId) clearBoardVotes(boardId).catch((e: any) => { console.error('[canvas]', e?.message); });
   }, [boardId]);
 
   const handleStopVoting = useCallback(() => {
@@ -800,13 +800,13 @@ function CanvasInner() {
         stroke_width: path.strokeWidth,
         opacity: path.opacity,
         tool: path.tool,
-      }).catch(() => {});
+      }).catch((e: any) => { console.error('[canvas]', e?.message); });
     }
   }, [boardId]);
 
   const handlePathErase = useCallback(async (pathId: string) => {
     setDrawPaths((prev) => prev.filter((p) => p.id !== pathId));
-    deleteBoardDrawing(pathId).catch(() => {});
+    deleteBoardDrawing(pathId).catch((e: any) => { console.error('[canvas]', e?.message); });
   }, []);
 
   // ─── AI action handler ──────────────────────────────────────
@@ -913,7 +913,7 @@ function CanvasInner() {
                 pos_x: groupX,
                 pos_y: 100 + offsetY,
                 color: cluster.color,
-              }).catch(() => {});
+              }).catch((e: any) => { console.error('[canvas]', e?.message); });
               setItems((prev) => prev.map((i) =>
                 i.id === itemId ? { ...i, pos_x: groupX, pos_y: 100 + offsetY, color: cluster.color } : i
               ));
@@ -1182,11 +1182,11 @@ function CanvasInner() {
 
     if (alreadyVoted) {
       // Remove vote
-      await removeVote(boardId, node.id).catch(() => {});
+      await removeVote(boardId, node.id).catch((e: any) => { console.error('[canvas]', e?.message); });
       setVotes((prev) => prev.filter((v) => !(v.userId === currentUser.id && v.itemId === node.id)));
     } else if (myVotes.length < votingMaxVotes) {
       // Cast vote
-      await castVote(boardId, node.id, currentUser.name).catch(() => {});
+      await castVote(boardId, node.id, currentUser.name).catch((e: any) => { console.error('[canvas]', e?.message); });
       setVotes((prev) => [...prev, { itemId: node.id, userId: currentUser.id, userName: currentUser.name }]);
     } else {
       toast.error(t.noteCanvas.maxVotesReached);
@@ -1209,7 +1209,7 @@ function CanvasInner() {
     if (saveViewportTimer.current) clearTimeout(saveViewportTimer.current);
     saveViewportTimer.current = setTimeout(() => {
       const vp = getViewport();
-      updateBoard(boardId, { viewport_x: vp.x, viewport_y: vp.y, viewport_zoom: vp.zoom }).catch(() => {});
+      updateBoard(boardId, { viewport_x: vp.x, viewport_y: vp.y, viewport_zoom: vp.zoom }).catch((e: any) => { console.error('[canvas]', e?.message); });
     }, 1000);
   }, [boardId, getViewport]);
 
@@ -1272,7 +1272,7 @@ function CanvasInner() {
           }).then((item) => {
             setItems((prev) => [...prev, item]);
             setNodes((nds) => [...nds, buildNode(item)]);
-          }).catch(() => {});
+          }).catch((e: any) => { console.error('[canvas]', e?.message); });
         }
         return;
       }
@@ -1376,7 +1376,7 @@ function CanvasInner() {
           ) : (
             <button
               onClick={() => setEditingTitle(true)}
-              className="flex items-center gap-1.5 text-[14px] font-semibold text-text-primary hover:text-blue-600 transition-colors"
+              className="flex items-center gap-1.5 text-[14px] font-semibold text-text-primary hover:text-text-secondary transition-colors"
             >
               {board?.title || 'Untitled'}
               <Pencil size={11} className="text-text-tertiary" />
@@ -1391,14 +1391,14 @@ function CanvasInner() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setShowComments(!showComments)}
-              className={`p-1.5 rounded-md transition-colors ${showComments ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'}`}
+              className={`p-1.5 rounded-md transition-colors ${showComments ? 'bg-primary/10 text-text-primary' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'}`}
               title={t.noteCanvas.comments}
             >
               <MessageCircle size={15} />
             </button>
             <button
               onClick={() => setShowVoting(!showVoting)}
-              className={`p-1.5 rounded-md transition-colors ${showVoting ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'}`}
+              className={`p-1.5 rounded-md transition-colors ${showVoting ? 'bg-primary/10 text-text-primary' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'}`}
               title={t.noteCanvas.voting}
             >
               <ThumbsUp size={15} />
@@ -1412,7 +1412,7 @@ function CanvasInner() {
             </button>
             <button
               onClick={() => setActiveTool(isDrawing ? 'select' : 'draw' as any)}
-              className={`p-1.5 rounded-md transition-colors ${isDrawing ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'}`}
+              className={`p-1.5 rounded-md transition-colors ${isDrawing ? 'bg-primary/10 text-text-primary' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'}`}
               title={t.noteCanvas.draw}
             >
               <Pen size={15} />
@@ -1485,14 +1485,14 @@ function CanvasInner() {
         {/* ─── Connect mode banner ─── */}
         {connectMode && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-            <div className="pointer-events-auto bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-[13px] font-medium flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+            <div className="pointer-events-auto bg-primary text-white px-4 py-2 rounded-lg shadow-lg text-[13px] font-medium flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-surface-card animate-pulse" />
               {language === 'fr'
                 ? 'Mode flèche — glisse d\'un point bleu vers un autre pour relier'
                 : 'Arrow mode — drag from a blue dot to another to connect'}
               <button
                 onClick={() => setActiveTool('select')}
-                className="ml-2 px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded text-[11px] transition-colors"
+                className="ml-2 px-2 py-0.5 bg-surface-card/20 hover:bg-surface-card/30 rounded text-[11px] transition-colors"
               >
                 {t.advancedNotes.cancel}
               </button>
@@ -1504,13 +1504,13 @@ function CanvasInner() {
         {isDrawing && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
             <div className="pointer-events-auto flex items-center gap-2 bg-surface border border-outline rounded-xl shadow-lg px-3 py-2">
-              {(['pen', 'highlighter', 'eraser'] as DrawTool[]).map((t) => (
+              {(['pen', 'highlighter', 'eraser'] as DrawTool[]).map((dt) => (
                 <button
-                  key={t}
-                  onClick={() => setDrawTool(t)}
-                  className={`px-3 py-1 rounded-lg text-[11px] font-medium transition-colors ${drawTool === t ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'text-text-tertiary hover:bg-surface-secondary'}`}
+                  key={dt}
+                  onClick={() => setDrawTool(dt)}
+                  className={`px-3 py-1 rounded-lg text-[11px] font-medium transition-colors ${drawTool === dt ? 'bg-primary/10 text-text-primary' : 'text-text-tertiary hover:bg-surface-secondary'}`}
                 >
-                  {t === 'pen' ? (t.noteCanvas.pen) : t === 'highlighter' ? (t.noteCanvas.highlighter) : (t.noteCanvas.eraser)}
+                  {dt === 'pen' ? (t.noteCanvas.pen) : dt === 'highlighter' ? (t.noteCanvas.highlighter) : (t.noteCanvas.eraser)}
                 </button>
               ))}
               <div className="w-px h-5 bg-outline" />

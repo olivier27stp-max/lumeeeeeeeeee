@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
-import { emitQuoteDeclined } from './automationEventsApi';
+import { getCurrentOrgIdOrThrow } from './orgApi';
+import { emitQuoteDeclined, emitQuoteSent, emitQuoteApproved } from './automationEventsApi';
 
 // ── Types ──
 
@@ -204,6 +205,8 @@ export async function createQuote(payload: {
   tax_rate_label?: string;
   discount_type?: 'percentage' | 'fixed' | null;
   discount_value?: number;
+  source_template_id?: string | null;
+  source_template_name?: string | null;
   line_items: QuoteLineItemInput[];
   sections?: QuoteSectionInput[];
 }): Promise<QuoteDetail> {
@@ -235,6 +238,8 @@ export async function createQuote(payload: {
     if (payload.discount_value !== undefined) updatePayload.discount_value = payload.discount_value || 0;
     if (payload.deposit_type !== undefined) updatePayload.deposit_type = payload.deposit_type || null;
     if (payload.deposit_value !== undefined) updatePayload.deposit_value = payload.deposit_value || 0;
+    if (payload.source_template_id) updatePayload.source_template_id = payload.source_template_id;
+    if (payload.source_template_name) updatePayload.source_template_name = payload.source_template_name;
     if (Object.keys(updatePayload).length > 0) {
       const { error: updErr } = await supabase.from('quotes').update(updatePayload).eq('id', quoteId);
       if (updErr) console.error('[createQuote] settings update failed:', updErr.message);
@@ -392,8 +397,14 @@ export async function updateQuoteStatus(
   if (targetStage) {
     moveLeadDealToStage(quoteData.lead_id, targetStage);
   }
+  if (newStatus === 'approved') {
+    emitQuoteApproved({ quoteId, leadId: quoteData.lead_id || undefined });
+  }
   if (newStatus === 'declined') {
     emitQuoteDeclined({ quoteId, leadId: quoteData.lead_id || undefined });
+  }
+  if (newStatus === 'sent') {
+    emitQuoteSent({ quoteId, leadId: quoteData.lead_id || undefined, channel: 'email' });
   }
 
   return quoteData;
@@ -406,22 +417,18 @@ export async function updateQuote(
     'tax_rate' | 'tax_rate_label' | 'discount_type' | 'discount_value' |
     'deposit_required' | 'deposit_type' | 'deposit_value' | 'require_payment_method' |
     'valid_until'
-  >>
+  >>,
+  expectedVersion?: number,
 ): Promise<Quote> {
-  const { data, error } = await supabase
-    .from('quotes')
-    .update({ ...payload, updated_at: new Date().toISOString() })
-    .eq('id', quoteId)
-    .select('*')
-    .single();
-  if (error) throw error;
+  const { optimisticUpdate } = await import('./optimisticLock');
+  const data = await optimisticUpdate<Quote>('quotes', quoteId, { ...payload }, expectedVersion);
 
   // Recalculate totals if financial fields changed
   if (payload.tax_rate !== undefined || payload.discount_type !== undefined || payload.discount_value !== undefined) {
     await supabase.rpc('rpc_recalculate_quote', { p_quote_id: quoteId });
   }
 
-  return data as Quote;
+  return data;
 }
 
 export async function saveQuoteLineItems(
@@ -459,10 +466,13 @@ export async function saveQuoteLineItems(
 }
 
 export async function deleteQuote(quoteId: string): Promise<void> {
-  const { error } = await supabase
-    .from('quotes')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', quoteId);
+  const orgId = await getCurrentOrgIdOrThrow();
+  // Hard delete via RPC — DB ON DELETE CASCADE handles quote_line_items,
+  // quote_sections, quote_send_log, quote_status_history, quote_attachments
+  const { error } = await supabase.rpc('delete_quote_cascade', {
+    p_org_id: orgId,
+    p_quote_id: quoteId,
+  });
   if (error) throw error;
 }
 
@@ -576,7 +586,7 @@ export async function listAllQuotes(opts?: {
 
   let query = supabase
     .from('quotes')
-    .select('*, clients(first_name, last_name, company), leads(first_name, last_name, company)', { count: 'exact' })
+    .select('*, clients(first_name, last_name, company, deleted_at), leads(first_name, last_name, company, deleted_at)', { count: 'exact' })
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .range(offset, offset + pageSize - 1);
@@ -604,10 +614,11 @@ export async function fetchQuoteKpis(): Promise<{
   pending_value_cents: number;
   approved_value_cents: number;
 }> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const [allRes, pendingRes, approvedRes] = await Promise.all([
-    supabase.from('quotes').select('total_cents', { count: 'exact' }).is('deleted_at', null),
-    supabase.from('quotes').select('total_cents, lead_id, client_id').is('deleted_at', null).in('status', PENDING_QUOTE_STATUSES),
-    supabase.from('quotes').select('total_cents', { count: 'exact' }).is('deleted_at', null).eq('status', 'approved'),
+    supabase.from('quotes').select('total_cents', { count: 'exact' }).eq('org_id', orgId).is('deleted_at', null),
+    supabase.from('quotes').select('total_cents, lead_id, client_id').eq('org_id', orgId).is('deleted_at', null).in('status', PENDING_QUOTE_STATUSES),
+    supabase.from('quotes').select('total_cents', { count: 'exact' }).eq('org_id', orgId).is('deleted_at', null).eq('status', 'approved'),
   ]);
 
   const sumCents = (rows: any[]) => rows.reduce((s, r) => s + Number(r.total_cents || 0), 0);

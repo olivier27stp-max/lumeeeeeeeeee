@@ -302,6 +302,24 @@ router.post('/quotes/send-email', async (req, res) => {
       }
     }
 
+    // Emit automation event for quote follow-up workflows
+    try {
+      await eventBus.emit('quote.sent', {
+        orgId: auth.orgId,
+        entityType: 'quote',
+        entityId: quoteId,
+        actorId: auth.user.id,
+        metadata: {
+          lead_id: quote.lead_id || null,
+          channel: 'email',
+          quote_number: quote.quote_number || '',
+          client_name: quote.client_name || '',
+        },
+      });
+    } catch (e: any) {
+      console.error('[quotes] failed to emit quote.sent event:', e.message);
+    }
+
     return res.json({ ok: true, channel: 'email', recipient: recipientEmail });
   } catch (error: any) {
     console.error('quote_send_email_failed', error);
@@ -398,9 +416,27 @@ router.post('/quotes/send-sms', async (req, res) => {
       }
     }
 
+    // Emit automation event for quote follow-up workflows
+    try {
+      await eventBus.emit('quote.sent', {
+        orgId: auth.orgId,
+        entityType: 'quote',
+        entityId: quoteId,
+        actorId: auth.user.id,
+        metadata: {
+          lead_id: quote.lead_id || null,
+          channel: 'sms',
+          quote_number: quote.quote_number || '',
+          client_name: quote.client_name || '',
+        },
+      });
+    } catch (e: any) {
+      console.error('[quotes] failed to emit quote.sent event:', e.message);
+    }
+
     return res.json({ ok: true, channel: 'sms', recipient: recipientPhone });
   } catch (error: any) {
-    console.error('quote_send_sms_failed', error);
+    console.error('quote_send_sms_failed', error?.message || error, error?.code, error?.status);
     return res.status(500).json({ error: error?.message || 'Failed to send quote SMS.' });
   }
 });
@@ -460,13 +496,17 @@ router.post('/quotes/convert-to-job', async (req, res) => {
       }
     }
 
-    // Update job financials
+    // Update job financials + transfer deposit settings from quote
     await admin.from('jobs').update({
       total_cents: quote.total_cents,
       total_amount: quote.total_cents / 100,
       subtotal: quote.subtotal_cents / 100,
       tax_total: quote.tax_cents / 100,
       total: quote.total_cents / 100,
+      deposit_required: quote.deposit_required || false,
+      deposit_type: quote.deposit_type || null,
+      deposit_value: quote.deposit_value || null,
+      require_payment_method: quote.require_payment_method || false,
     }).eq('id', jobId);
 
     // Update quote status to converted

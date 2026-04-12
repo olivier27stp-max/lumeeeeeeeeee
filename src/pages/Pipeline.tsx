@@ -125,6 +125,19 @@ const DealCard: React.FC<{ deal: PipelineDeal; onClick: () => void; onDelete: ()
         <span className="text-[14px] font-bold text-text-primary tabular-nums">{formatCurrency(deal.value)}</span>
         <span className="badge-neutral text-[10px]">{deal.job?.status || t.pipeline.noStatus}</span>
       </div>
+
+      {/* Next step indicator */}
+      <div className="mt-2 pt-2 border-t border-outline/50">
+        <p className="text-[10px] text-text-tertiary flex items-center gap-1">
+          <span className="w-1 h-1 rounded-full bg-text-tertiary shrink-0" />
+          {stageToSlug(deal.stage) === 'new_prospect' ? 'Next: Send quote' :
+           stageToSlug(deal.stage) === 'no_response' ? 'Next: Follow up' :
+           stageToSlug(deal.stage) === 'quote_sent' ? 'Next: Close deal' :
+           stageToSlug(deal.stage) === 'closed_won' ? 'Next: Create job' :
+           stageToSlug(deal.stage) === 'closed_lost' ? 'Lost' :
+           'Next: Move forward'}
+        </p>
+      </div>
     </article>
   );
 };
@@ -133,7 +146,7 @@ const DealCard: React.FC<{ deal: PipelineDeal; onClick: () => void; onDelete: ()
 const stageToSlug = stageToDbSlug;
 
 export default function Pipeline() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { openJobModal } = useJobModalController();
@@ -236,10 +249,10 @@ export default function Pipeline() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pipeline_deals' }, () => {
         void load();
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads', filter: 'deleted_at=neq.null' }, () => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads', filter: 'deleted_at=is.null' }, () => {
         void load();
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'clients', filter: 'deleted_at=neq.null' }, () => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'clients', filter: 'deleted_at=is.null' }, () => {
         void load();
       })
       .subscribe();
@@ -258,7 +271,13 @@ export default function Pipeline() {
   }, [searchParams, deals]);
 
   async function maybeOpenJobModalForClosedDeal(deal: PipelineDeal) {
-    if (stageToSlug(deal.stage) !== 'closed_won' || !deal.lead_id) return;
+    if (stageToSlug(deal.stage) !== 'closed_won') return;
+    if (!deal.lead_id) {
+      toast.info(language === 'fr' ? 'Deal gagné — créez un job manuellement (aucun lead lié)' : 'Deal won — create a job manually (no linked lead)', {
+        action: { label: language === 'fr' ? 'Créer Job' : 'Create Job', onClick: () => window.dispatchEvent(new CustomEvent('crm:open-new-job')) },
+      });
+      return;
+    }
     if (jobModalShownForLead.current.has(deal.lead_id)) return;
 
     try {
@@ -335,7 +354,7 @@ export default function Pipeline() {
         stage: createStage,
         notes: createNotes.trim() || null,
       });
-      toast.success(t.pipeline.dealCreated);
+      toast.success(t.pipeline.dealCreated, { action: { label: 'View Pipeline', onClick: () => {} } });
       setCreateOpen(false);
       setCreateTitle('');
       setCreateValue('0');
@@ -536,7 +555,11 @@ export default function Pipeline() {
         };
         const dbStatus = stageToStatus[stageToSlug(newStage)];
         if (dbStatus) {
-          updateLeadStatus(deal.lead_id, dbStatus).catch(() => {});
+          try {
+            await updateLeadStatus(deal.lead_id, dbStatus);
+          } catch {
+            toast.error('Deal moved but lead status sync failed');
+          }
         }
       }
 
@@ -574,8 +597,8 @@ export default function Pipeline() {
   }, [leads, leadSearch]);
 
   return (
-    <div className="space-y-5">
-      <PageHeader title={t.pipeline.title} subtitle={`${formatCurrency(totals.overall)} • ${filteredDeals.length} ${t.pipeline.deals}`} icon={Kanban} iconColor="purple">
+    <div className="space-y-8">
+      <PageHeader title={t.pipeline.title} subtitle={`${formatCurrency(totals.overall)} • ${filteredDeals.length} ${t.pipeline.deals}`} icon={Kanban} iconColor="blue">
         <div className="flex items-center gap-2">
           <input
             value={query}
@@ -620,12 +643,12 @@ export default function Pipeline() {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-border">
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.title}</th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.pipeline.lead}</th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.pipeline.stage}</th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.value}</th>
-                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.pipeline.job}</th>
-                <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.actions}</th>
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">{t.common.title}</th>
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">{t.pipeline.lead}</th>
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">{t.pipeline.stage}</th>
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">{t.common.value}</th>
+                <th className="px-4 py-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">{t.pipeline.job}</th>
+                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-text-tertiary">{t.common.actions}</th>
               </tr>
             </thead>
             <tbody>
@@ -775,7 +798,7 @@ export default function Pipeline() {
               </header>
 
               <section className="space-y-3 section-card p-4">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.pipeline.deal}</h3>
+                <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary">{t.pipeline.deal}</h3>
                 <div className="space-y-2">
                   <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.common.title}</label>
                   <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="glass-input w-full" />
@@ -801,13 +824,13 @@ export default function Pipeline() {
               </section>
 
               <section className="space-y-3 section-card p-4">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.pipeline.lead}</h3>
+                <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary">{t.pipeline.lead}</h3>
                 <p className="text-[13px] text-text-primary">{selected.lead ? `${selected.lead.first_name} ${selected.lead.last_name}` : t.pipeline.unknownLead}</p>
                 <p className="text-[13px] text-text-secondary">{selected.lead?.email || t.common.noEmail}</p>
                 <p className="text-[13px] text-text-secondary">{selected.lead?.phone || t.common.noPhone}</p>
                 <div className="flex gap-2">
                   {selected.lead_id && (
-                    <button type="button" className="glass-button text-text-primary" onClick={() => navigate('/leads')}>
+                    <button type="button" className="glass-button text-text-primary" onClick={() => navigate('/quotes')}>
                       {t.pipeline.openLead}
                     </button>
                   )}
@@ -823,7 +846,7 @@ export default function Pipeline() {
               </section>
 
               <section className="space-y-3 section-card p-4">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.pipeline.job}</h3>
+                <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary">{t.pipeline.job}</h3>
                 <p className="text-[13px] text-text-primary">{selected.job?.title || t.pipeline.untitledJob}</p>
                 <p className="text-[13px] text-text-secondary">{`${t.common.status}:`} {selected.job?.status || t.pipeline.na}</p>
                 {selected.job_id ? (
@@ -837,7 +860,7 @@ export default function Pipeline() {
 
               <section className="space-y-3 section-card p-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.pipeline.schedule}</h3>
+                  <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary">{t.pipeline.schedule}</h3>
                   <button type="button" onClick={() => void handleAddEventFromDeal()} className="glass-button-primary inline-flex items-center gap-2" disabled={saving}>
                     <CalendarPlus size={14} /> {t.pipeline.addEvent}
                   </button>

@@ -104,6 +104,7 @@ router.post('/referrals/track', async (req, res) => {
   try {
     const { code, email } = req.body;
     if (!code) return res.status(400).json({ error: 'Referral code is required.' });
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email format.' });
 
     const admin = getServiceClient();
 

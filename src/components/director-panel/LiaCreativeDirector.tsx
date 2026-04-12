@@ -822,7 +822,7 @@ export default function LiaCreativeDirector() {
     )}>
       {/* ─── Header ─── */}
       <div className="flex items-center gap-3 px-5 py-3 border-b border-outline bg-surface">
-        <div className="w-9 h-9 rounded-xl bg-white border border-outline flex items-center justify-center shadow-sm">
+        <div className="w-9 h-9 rounded-xl bg-surface-card border border-outline flex items-center justify-center shadow-sm">
           <OllamaIcon size={22} />
         </div>
         <div className="flex-1 min-w-0">
@@ -835,7 +835,7 @@ export default function LiaCreativeDirector() {
           {([['generate', 'Generate'], ['chat', 'Chat'], ['campaigns', 'Campaigns'], ['compare', 'Compare']] as const).map(([key, label]) => (
             <button key={key} onClick={() => setActiveTab(key)}
               className={cn('px-2.5 py-1 rounded-md text-[11px] font-medium transition-all',
-                activeTab === key ? 'bg-text-primary text-surface shadow-sm' : 'text-text-tertiary hover:text-text-primary')}>
+                activeTab === key ? 'bg-primary text-white shadow-sm' : 'text-text-tertiary hover:text-text-primary')}>
               {label}
               {key === 'campaigns' && activeCampaigns.length > 0 && (
                 <span className="ml-1 w-4 h-4 inline-flex items-center justify-center rounded-full bg-purple-500 text-white text-[9px] font-bold">{activeCampaigns.length}</span>
@@ -882,11 +882,11 @@ export default function LiaCreativeDirector() {
               {outputs.length > 1 && (
                 <>
                   <button onClick={() => setOutputIndex(Math.max(0, outputIndex - 1))} disabled={outputIndex === 0}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/80 border border-outline shadow-sm disabled:opacity-30 hover:bg-white transition-colors">
+                    className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-surface-card/80 border border-outline shadow-sm disabled:opacity-30 hover:bg-surface-card transition-colors">
                     <ChevronLeft className="w-4 h-4" />
                   </button>
                   <button onClick={() => setOutputIndex(Math.min(outputs.length - 1, outputIndex + 1))} disabled={outputIndex === outputs.length - 1}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/80 border border-outline shadow-sm disabled:opacity-30 hover:bg-white transition-colors">
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-surface-card/80 border border-outline shadow-sm disabled:opacity-30 hover:bg-surface-card transition-colors">
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </>
@@ -909,8 +909,8 @@ export default function LiaCreativeDirector() {
 
               {/* Output action bar */}
               {currentOutput && (
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-white/90 backdrop-blur-sm border border-outline rounded-xl px-2 py-1.5 shadow-lg">
-                  <span className="text-[11px] font-semibold text-text-secondary px-1">{outputIndex + 1}/{outputs.length}</span>
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-surface-card/90 backdrop-blur-sm border border-outline rounded-xl px-2 py-1.5 shadow-lg">
+                  <span className="text-xs font-medium text-text-secondary px-1">{outputIndex + 1}/{outputs.length}</span>
                   <div className="w-px h-4 bg-outline" />
                   <button onClick={() => handleRemix(currentOutput)} className="p-1.5 rounded-lg text-text-tertiary hover:text-purple-600 hover:bg-purple-50 transition-colors" title="Remix">
                     <Shuffle className="w-3.5 h-3.5" />
@@ -1085,7 +1085,7 @@ export default function LiaCreativeDirector() {
                 return (
                   <button key={ar} onClick={() => setSelectedAspect(ar)}
                     className={cn('flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium transition-colors',
-                      selectedAspect === ar ? 'bg-text-primary text-surface' : 'text-text-tertiary hover:text-text-primary')}>
+                      selectedAspect === ar ? 'bg-primary text-white' : 'text-text-tertiary hover:text-text-primary')}>
                     <Icon className="w-3 h-3" />{ar}
                   </button>
                 );
@@ -1117,7 +1117,7 @@ export default function LiaCreativeDirector() {
             {!isVideoModel && (
               <div className="flex items-center gap-1 rounded-lg bg-surface-secondary border border-outline px-1">
                 <button onClick={() => setImageCount(Math.max(1, imageCount - 1))} className="p-1 text-text-tertiary hover:text-text-primary"><span className="text-[12px] font-bold">-</span></button>
-                <span className="text-[11px] font-semibold text-text-primary w-8 text-center">{imageCount}/4</span>
+                <span className="text-xs font-medium text-text-primary w-8 text-center">{imageCount}/4</span>
                 <button onClick={() => setImageCount(Math.min(4, imageCount + 1))} className="p-1 text-text-tertiary hover:text-text-primary"><span className="text-[12px] font-bold">+</span></button>
               </div>
             )}
@@ -1229,9 +1229,9 @@ export default function LiaCreativeDirector() {
             <div ref={scrollRef} className={cn('overflow-y-auto px-5 py-4 space-y-4', expanded ? 'max-h-[calc(100vh-200px)]' : 'max-h-[400px]')}>
               {messages.map((msg) => (
                 <div key={msg.id} className={cn('flex gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
-                  {msg.role === 'assistant' && <div className="w-7 h-7 rounded-lg bg-white border border-outline flex items-center justify-center shrink-0 mt-0.5"><OllamaIcon size={16} /></div>}
+                  {msg.role === 'assistant' && <div className="w-7 h-7 rounded-lg bg-surface-card border border-outline flex items-center justify-center shrink-0 mt-0.5"><OllamaIcon size={16} /></div>}
                   <div className={cn('max-w-[80%] rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed',
-                    msg.role === 'user' ? 'bg-text-primary text-surface rounded-br-md' : 'bg-surface-secondary border border-outline text-text-primary rounded-bl-md')}>
+                    msg.role === 'user' ? 'bg-primary text-white rounded-br-md' : 'bg-surface-secondary border border-outline text-text-primary rounded-bl-md')}>
                     {msg.imageUrl && <div className="mb-2 rounded-lg overflow-hidden border border-outline/50"><img src={msg.imageUrl} alt="Ref" className="max-h-[150px] w-auto object-cover" /></div>}
                     {msg.content ? <div className="whitespace-pre-wrap">{msg.content}</div> : (
                       <span className="inline-flex gap-1 py-1">
@@ -1270,7 +1270,7 @@ export default function LiaCreativeDirector() {
               {!streaming && detectedCampaign.length > 0 && (
                 <div className="ml-10 space-y-2">
                   <div className="flex items-center gap-2">
-                    <p className="text-[11px] font-semibold text-text-secondary">Campaign Plan:</p>
+                    <p className="text-xs font-medium text-text-secondary">Campaign Plan:</p>
                     <button onClick={handleSaveCampaign} className="flex items-center gap-1 px-2 py-1 rounded-md bg-purple-50 border border-purple-200 text-purple-600 text-[10px] font-medium hover:bg-purple-100 transition-colors">
                       <Plus className="w-3 h-3" /> Save
                     </button>

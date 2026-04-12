@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useTranslation } from '../i18n';
 
 interface ActivityItem {
@@ -107,7 +108,7 @@ function getLabel(type: string, name: string, lang: string): { title: string; su
 }
 
 export default function ActivityCenter({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const navigate = useNavigate();
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,8 +116,10 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
   useEffect(() => {
     if (!open) return;
     loadActivities();
-    // Mark all notifications as read when opening
-    supabase.from('notifications').update({ is_read: true }).eq('is_read', false).then(() => {});
+    // Mark all notifications as read when opening (scoped to current org)
+    getCurrentOrgIdOrThrow().then(oid =>
+      supabase.from('notifications').update({ is_read: true }).eq('org_id', oid).eq('is_read', false).then(() => {})
+    ).catch(() => {});
 
     // Subscribe to realtime notifications so new ones appear while panel is open
     const channel = supabase
@@ -153,12 +156,14 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
   async function loadActivities() {
     setLoading(true);
     try {
+      const orgId = await getCurrentOrgIdOrThrow();
       const items: ActivityItem[] = [];
 
       // Fetch recent clients
       const { data: clients } = await supabase
         .from('clients')
         .select('id, first_name, last_name, created_at, updated_at')
+        .eq('org_id', orgId)
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -185,6 +190,7 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
       const { data: leads } = await supabase
         .from('leads')
         .select('id, first_name, last_name, created_at')
+        .eq('org_id', orgId)
         .order('created_at', { ascending: false })
         .limit(8);
 
@@ -207,6 +213,7 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
       const { data: jobs } = await supabase
         .from('jobs')
         .select('id, title, created_at')
+        .eq('org_id', orgId)
         .order('created_at', { ascending: false })
         .limit(8);
 
@@ -228,6 +235,7 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
       const { data: invoices } = await supabase
         .from('invoices')
         .select('id, invoice_number, status, created_at')
+        .eq('org_id', orgId)
         .order('created_at', { ascending: false })
         .limit(8);
 
@@ -250,6 +258,7 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
       const { data: msgs } = await supabase
         .from('messages')
         .select('id, direction, phone_number, message_text, created_at')
+        .eq('org_id', orgId)
         .order('created_at', { ascending: false })
         .limit(8);
 
@@ -273,6 +282,7 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
       const { data: payments } = await supabase
         .from('payments')
         .select('id, amount_cents, currency, created_at')
+        .eq('org_id', orgId)
         .order('created_at', { ascending: false })
         .limit(5);
 
@@ -295,6 +305,7 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
       const { data: notifications } = await supabase
         .from('notifications')
         .select('id, type, title, body, link, created_at')
+        .eq('org_id', orgId)
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -340,21 +351,19 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed top-0 right-0 bottom-0 z-50 w-[380px] max-w-[90vw] bg-surface border-l border-outline shadow-2xl flex flex-col"
+            className="fixed top-0 right-0 bottom-0 z-50 w-[400px] max-w-[90vw] bg-surface border-l border-outline/60 shadow-2xl flex flex-col"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-outline">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Activity size={16} className="text-primary" />
-                </div>
-                <h2 className="text-[15px] font-bold text-text-primary">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-outline/60">
+              <div className="flex items-center gap-3">
+                <Activity size={16} className="text-primary" />
+                <h2 className="text-xl font-bold text-text-primary">
                   {language === 'fr' ? 'Centre d\'activités' : 'Activity Center'}
                 </h2>
               </div>
               <button
                 onClick={onClose}
-                className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
+                className="p-2 rounded-xl text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
               >
                 <X size={16} />
               </button>
@@ -363,40 +372,40 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
             {/* Activity list */}
             <div className="flex-1 overflow-y-auto">
               {loading ? (
-                <div className="p-8 flex justify-center">
+                <div className="p-10 flex justify-center">
                   <div className="w-5 h-5 border-2 border-outline-subtle border-t-text-primary rounded-full animate-spin" />
                 </div>
               ) : activities.length === 0 ? (
-                <div className="p-8 text-center text-text-tertiary text-[13px]">
+                <div className="p-10 text-center text-text-tertiary text-[13px]">
                   {t.activityCenter.noRecentActivity}
                 </div>
               ) : (
-                <div className="py-2">
+                <div className="py-3">
                   {activities.map((item, idx) => (
                     <div
                       key={item.id}
                       className={cn(
-                        "flex items-start gap-3 px-5 py-3 transition-colors",
+                        "flex items-start gap-3.5 px-6 py-3.5 transition-all duration-150",
                         item.link ? "hover:bg-surface-tertiary/50 cursor-pointer" : "",
                       )}
                       onClick={item.link ? () => { navigate(item.link!); onClose(); } : undefined}
                     >
-                      <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5", item.iconColor)}>
-                        <item.icon size={14} />
+                      <div className={cn("w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 mt-0.5", item.iconColor)}>
+                        <item.icon size={15} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-semibold text-text-primary">{item.title}</p>
-                        <p className="text-[12px] text-text-tertiary truncate">{item.subtitle}</p>
+                        <p className="text-[13px] font-bold text-text-primary">{item.title}</p>
+                        <p className="text-[12px] text-text-tertiary truncate mt-0.5">{item.subtitle}</p>
                         {item.actionLabel && item.link && (
                           <button
                             onClick={(e) => { e.stopPropagation(); navigate(item.link!); onClose(); }}
-                            className="mt-1 text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors"
+                            className="mt-1.5 text-[11px] font-bold text-primary hover:text-primary/80 transition-colors"
                           >
-                            {item.actionLabel} →
+                            {item.actionLabel}
                           </button>
                         )}
                       </div>
-                      <span className="text-[11px] text-text-tertiary shrink-0 mt-0.5">
+                      <span className="text-[10px] font-medium text-text-tertiary shrink-0 mt-1">
                         {timeAgo(item.timestamp, language)}
                       </span>
                     </div>

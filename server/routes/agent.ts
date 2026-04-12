@@ -8,6 +8,20 @@ import { runAgent } from '../lib/agent/index';
 
 const router = Router();
 
+// Feature flag check helper
+async function isAgentEnabled(orgId: string): Promise<boolean> {
+  try {
+    const admin = getServiceClient();
+    const { data } = await admin.from('org_features')
+      .select('enabled')
+      .eq('org_id', orgId)
+      .eq('feature', 'agent')
+      .maybeSingle();
+    // If no row exists, agent is enabled by default
+    return data?.enabled !== false;
+  } catch { return true; }
+}
+
 // Max message length (4000 chars — prevents abuse and keeps LLM context reasonable)
 const MAX_MESSAGE_LENGTH = 4000;
 
@@ -34,6 +48,12 @@ router.post('/agent/chat', async (req, res) => {
   }
 
   const lang = language === 'fr' ? 'fr' : 'en';
+
+  // Feature flag check
+  const enabled = await isAgentEnabled(auth.orgId);
+  if (!enabled) {
+    return res.status(403).json({ error: lang === 'fr' ? 'Mr Lume est désactivé pour cette organisation.' : 'Mr Lume is disabled for this organization.' });
+  }
 
   // Set up SSE
   res.writeHead(200, {
@@ -143,6 +163,12 @@ router.post('/agent/approve', async (req, res) => {
         responded_by: auth.user.id,
       }).eq('id', approvalId);
 
+      // Record rejection as training outcome
+      try {
+        const { recordApprovalOutcome } = await import('../lib/agent/training-engine');
+        await recordApprovalOutcome(admin, auth.orgId, auth.user.id, approvalId, false);
+      } catch { /* training is optional */ }
+
       return res.json({ ok: true, status: 'rejected' });
     }
 
@@ -175,6 +201,12 @@ router.post('/agent/approve', async (req, res) => {
       message_type: 'tool_result',
       structured_data: result,
     });
+
+    // Record approval as training outcome
+    try {
+      const { recordApprovalOutcome } = await import('../lib/agent/training-engine');
+      await recordApprovalOutcome(admin, auth.orgId, auth.user.id, approvalId, true);
+    } catch { /* training is optional */ }
 
     return res.json({ ok: true, status: 'approved', result });
   } catch (err: any) {

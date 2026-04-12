@@ -1,20 +1,18 @@
 import React from 'react';
-import { LucideIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import type { TileColor } from './IconTile';
 
 interface StatCardProps {
   label: string;
   value: string | number;
   subtitle?: string;
-  icon?: LucideIcon;
-  iconColor?: TileColor;
+  icon?: any;
+  iconColor?: string;
   trend?: { value: number; label?: string };
   onClick?: () => void;
   className?: string;
 }
 
-export default function StatCard({ label, value, subtitle, icon: Icon, iconColor, trend, onClick, className }: StatCardProps) {
+export default function StatCard({ label, value, subtitle, trend, onClick, className }: StatCardProps) {
   const Comp = onClick ? 'button' : 'div';
 
   return (
@@ -22,27 +20,24 @@ export default function StatCard({ label, value, subtitle, icon: Icon, iconColor
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       className={cn(
-        'stat-card text-left',
-        onClick && 'cursor-pointer hover:border-primary transition-colors',
+        'text-left transition-colors',
+        onClick && 'cursor-pointer group',
         className
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{label}</p>
-        {Icon && <Icon size={14} strokeWidth={1.75} className="text-text-tertiary" />}
-      </div>
-      <p className="text-2xl font-bold text-text-primary mt-2 tabular-nums">{value}</p>
+      <p className="text-[13px] text-text-tertiary leading-none">{label}</p>
+      <p className="text-[22px] font-semibold text-text-primary mt-1.5 tabular-nums tracking-tight leading-none group-hover:text-primary transition-colors">{value}</p>
       {(subtitle || trend) && (
-        <div className="flex items-center gap-2 mt-1.5">
+        <div className="flex items-center gap-1.5 mt-2">
           {trend && (
             <span className={cn(
-              'text-xs font-semibold',
-              trend.value > 0 ? 'text-success' : trend.value < 0 ? 'text-danger' : 'text-text-tertiary'
+              'text-[11px] font-medium',
+              trend.value > 0 ? 'text-emerald-600' : trend.value < 0 ? 'text-red-600' : 'text-text-tertiary'
             )}>
               {trend.value > 0 ? '+' : ''}{trend.value}%
             </span>
           )}
-          {subtitle && <span className="text-xs text-text-tertiary">{subtitle}</span>}
+          {subtitle && <span className="text-[12px] text-text-muted">{subtitle}</span>}
         </div>
       )}
     </Comp>

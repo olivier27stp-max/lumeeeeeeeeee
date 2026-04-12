@@ -1,6 +1,6 @@
-/** DB-aligned lead status slugs */
-export type LeadStatus = 'new_prospect' | 'no_response' | 'quote_sent' | 'closed_won' | 'closed_lost'
-  | 'new' | 'follow_up_1' | 'follow_up_2' | 'follow_up_3' | 'closed' | 'lost';
+/** DB-aligned lead status slugs — canonical source: pipelineApi.ts */
+import type { StageSlug } from './lib/pipelineApi';
+export type LeadStatus = StageSlug;
 
 export interface Lead {
   id: string;
@@ -254,29 +254,343 @@ export interface FormSubmission {
   created_at: string;
 }
 
-// ── Quote Templates ────────────────────────────────────────
+// ── Quote Content Presets ──────────────────────────────────
+// A preset is a reusable content template for quotes.
+// It pre-fills services, descriptions, images, and notes — but NO prices.
+// The quote layout is always the same; presets only affect content.
 
-export interface QuoteTemplateService {
+export interface QuotePresetService {
   id: string;
   name: string;
   description: string;
-  unit_price_cents: number;
   quantity: number;
   is_optional: boolean;
 }
 
-export interface QuoteTemplate {
+export interface QuotePreset {
   id: string;
   org_id: string;
   created_by: string | null;
   name: string;
   description: string | null;
-  services: QuoteTemplateService[];
+  cover_image: string | null;
   images: string[];
+  services: QuotePresetService[];
   notes: string | null;
-  terms: string | null;
-  custom_fields: Record<string, any>;
+  intro_text: string | null;
+  is_active: boolean;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** @deprecated Use QuotePreset instead */
+export type QuoteTemplate = QuotePreset;
+/** @deprecated Use QuotePresetService instead */
+export type QuoteTemplateService = QuotePresetService;
+
+// ── Clostra: Gamification & D2D Field Sales ─────────────────────────
+
+export type PeriodType = 'daily' | 'weekly' | 'monthly';
+export type ChallengeType = 'daily' | 'weekly';
+export type ChallengeStatus = 'active' | 'completed' | 'cancelled';
+export type BattleType = 'rep_vs_rep' | 'team_vs_team';
+export type BattleStatus = 'pending' | 'active' | 'completed' | 'cancelled';
+export type FeedPostType = 'win' | 'milestone' | 'badge' | 'challenge' | 'battle' | 'manual';
+export type FeedVisibility = 'company' | 'team';
+export type FeedReactionEmoji = 'fire' | 'clap' | 'trophy' | 'heart';
+export type FieldSessionStatus = 'active' | 'paused' | 'completed';
+export type CheckInType = 'check_in' | 'check_out';
+export type CommissionRuleType = 'flat' | 'percentage' | 'tiered';
+export type CommissionEntryStatus = 'pending' | 'approved' | 'paid' | 'reversed';
+
+// ── Badges ──
+
+export interface FsBadge {
+  id: string;
+  org_id: string;
+  slug: string;
+  name_en: string;
+  name_fr: string;
+  description_en: string | null;
+  description_fr: string | null;
+  icon: string | null;
+  color: string | null;
+  category: string | null;
+  criteria: Record<string, any>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface FsRepBadge {
+  id: string;
+  org_id: string;
+  user_id: string;
+  badge_id: string;
+  earned_at: string;
+  metadata: Record<string, any>;
+  created_at: string;
+  badge?: FsBadge;
+}
+
+// ── Leaderboard ──
+
+export interface RepStatSnapshot {
+  id: string;
+  org_id: string;
+  user_id: string;
+  period: PeriodType;
+  period_start: string;
+  period_end: string;
+  doors_knocked: number;
+  conversations: number;
+  demos_set: number;
+  demos_held: number;
+  quotes_sent: number;
+  closes: number;
+  revenue: number;
+  follow_ups_completed: number;
+  conversion_rate: number;
+  average_ticket: number;
+  created_at: string;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  user_id: string;
+  full_name: string;
+  avatar_url: string | null;
+  team_name: string | null;
+  closes: number;
+  revenue: number;
+  doors_knocked: number;
+  conversion_rate: number;
+  trend: number;
+}
+
+export interface RepPerformanceDetail {
+  doors_knocked: number;
+  conversations: number;
+  demos_set: number;
+  demos_held: number;
+  quotes_sent: number;
+  closes: number;
+  revenue: number;
+  conversion_rate: number;
+  average_ticket: number;
+  follow_ups_completed: number;
+}
+
+// ── Challenges ──
+
+export interface FsChallenge {
+  id: string;
+  org_id: string;
+  created_by: string;
+  name_en: string;
+  name_fr: string;
+  description_en: string | null;
+  description_fr: string | null;
+  type: ChallengeType;
+  metric_slug: string;
+  target_value: number | null;
+  start_date: string;
+  end_date: string;
+  status: ChallengeStatus;
+  prize_description: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  participants?: FsChallengeParticipant[];
+}
+
+export interface FsChallengeParticipant {
+  id: string;
+  challenge_id: string;
+  user_id: string;
+  current_value: number;
+  completed_at: string | null;
+  joined_at: string;
+  updated_at: string;
+  full_name?: string;
+  avatar_url?: string | null;
+}
+
+// ── Battles ──
+
+export interface FsBattle {
+  id: string;
+  org_id: string;
+  created_by: string;
+  name: string;
+  type: BattleType;
+  metric_slug: string;
+  challenger_user_id: string | null;
+  challenger_team_id: string | null;
+  opponent_user_id: string | null;
+  opponent_team_id: string | null;
+  challenger_score: number;
+  opponent_score: number;
+  start_date: string;
+  end_date: string;
+  status: BattleStatus;
+  winner_user_id: string | null;
+  winner_team_id: string | null;
+  prize_description: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  challenger_name?: string;
+  opponent_name?: string;
+}
+
+// ── Social Feed ──
+
+export interface FsFeedPost {
+  id: string;
+  org_id: string;
+  user_id: string;
+  type: FeedPostType;
+  visibility: FeedVisibility;
+  team_id: string | null;
+  title: string | null;
+  body: string | null;
+  image_url: string | null;
+  reference_type: string | null;
+  reference_id: string | null;
+  is_pinned: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  // Relations
+  author_name?: string;
+  author_avatar?: string | null;
+  reactions?: FsFeedReaction[];
+  comments?: FsFeedComment[];
+  reaction_counts?: Record<FeedReactionEmoji, number>;
+  my_reaction?: FeedReactionEmoji | null;
+}
+
+export interface FsFeedReaction {
+  id: string;
+  post_id: string;
+  user_id: string;
+  emoji: FeedReactionEmoji;
+  created_at: string;
+}
+
+export interface FsFeedComment {
+  id: string;
+  post_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  author_name?: string;
+  author_avatar?: string | null;
+}
+
+// ── Commissions ──
+
+export interface FsCommissionRule {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string | null;
+  type: CommissionRuleType;
+  flat_amount: number | null;
+  percentage: number | null;
+  tiers: Array<{ min: number; max: number; rate: number }>;
+  applies_to_role: string | null;
+  applies_to_user_id: string | null;
+  is_active: boolean;
+  priority: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface FsCommissionEntry {
+  id: string;
+  org_id: string;
+  user_id: string;
+  rule_id: string;
+  lead_id: string | null;
+  job_id: string | null;
+  status: CommissionEntryStatus;
+  amount: number;
+  base_amount: number;
+  description: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  // Relations
+  rep_name?: string;
+  rep_avatar?: string | null;
+  rule_name?: string;
+}
+
+export interface CommissionPayrollPreview {
+  total: number;
+  pending: number;
+  approved: number;
+  paid: number;
+  reversed: number;
+  count: number;
+  entries: FsCommissionEntry[];
+}
+
+// ── Field Sessions ──
+
+export interface FsFieldSession {
+  id: string;
+  org_id: string;
+  user_id: string;
+  territory_id: string | null;
+  status: FieldSessionStatus;
+  started_at: string;
+  paused_at: string | null;
+  completed_at: string | null;
+  total_duration_minutes: number | null;
+  doors_knocked: number;
+  created_at: string;
+  updated_at: string;
+  // Relations
+  rep_name?: string;
+  rep_avatar?: string | null;
+  territory_name?: string | null;
+}
+
+export interface FsGpsPoint {
+  id: string;
+  session_id: string;
+  user_id: string;
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+  altitude: number | null;
+  speed: number | null;
+  heading: number | null;
+  recorded_at: string;
+  created_at: string;
+}
+
+export interface FsCheckInRecord {
+  id: string;
+  org_id: string;
+  user_id: string;
+  session_id: string | null;
+  type: CheckInType;
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+  photo_url: string | null;
+  notes: string | null;
+  recorded_at: string;
+  created_at: string;
 }

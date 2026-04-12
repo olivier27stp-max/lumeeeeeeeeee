@@ -50,19 +50,58 @@ function formatDate(d: string | null): string {
 const statusColors: Record<string, string> = {
   paid: 'bg-green-100 text-green-700',
   sent: 'bg-neutral-100 text-neutral-700',
+  sent_not_due: 'bg-neutral-100 text-neutral-700',
   draft: 'bg-gray-100 text-gray-600',
+  partial: 'bg-amber-100 text-amber-700',
   past_due: 'bg-red-100 text-red-700',
+  void: 'bg-gray-100 text-gray-500',
   completed: 'bg-green-100 text-green-700',
   pending: 'bg-amber-100 text-amber-700',
-  in_progress: 'bg-neutral-100 text-neutral-700',
-  scheduled: 'bg-purple-100 text-purple-700',
+  in_progress: 'bg-amber-100 text-amber-700',
+  scheduled: 'bg-blue-100 text-blue-700',
+  late: 'bg-red-100 text-red-700',
+  unscheduled: 'bg-gray-100 text-gray-600',
+  action_required: 'bg-red-100 text-red-700',
+  requires_invoicing: 'bg-amber-100 text-amber-700',
+  cancelled: 'bg-gray-100 text-gray-500',
   approved: 'bg-emerald-100 text-emerald-700',
   declined: 'bg-red-100 text-red-700',
   expired: 'bg-gray-100 text-gray-500',
-  action_required: 'bg-amber-100 text-amber-700',
-  awaiting_response: 'bg-purple-100 text-purple-700',
+  awaiting_response: 'bg-amber-100 text-amber-700',
   converted: 'bg-green-100 text-green-700',
 };
+
+const statusLabels: Record<string, string> = {
+  paid: 'Paid', sent: 'Sent', sent_not_due: 'Sent', draft: 'Draft', partial: 'Partial',
+  past_due: 'Past Due', void: 'Void', completed: 'Completed', pending: 'Pending',
+  in_progress: 'In Progress', scheduled: 'Scheduled', late: 'Late',
+  unscheduled: 'Unscheduled', action_required: 'Action Required',
+  requires_invoicing: 'Requires Invoicing', cancelled: 'Cancelled',
+  approved: 'Approved', declined: 'Declined', expired: 'Expired',
+  awaiting_response: 'Awaiting Response', converted: 'Converted',
+};
+
+function deriveInvoiceStatus(inv: { status: string; balance_cents: number; due_date: string | null }): string {
+  const dueDate = inv.due_date ? new Date(`${inv.due_date}T00:00:00`) : null;
+  const now = new Date();
+  if (inv.balance_cents > 0 && (inv.status === 'sent' || inv.status === 'partial') && dueDate && dueDate < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+    return 'past_due';
+  }
+  return inv.status;
+}
+
+function deriveJobStatus(job: { status: string; scheduled_at: string | null }): string {
+  const dbStatus = (job.status || '').toLowerCase();
+  const scheduledAt = job.scheduled_at ? new Date(job.scheduled_at) : null;
+  const now = new Date();
+  if (dbStatus === 'scheduled' && scheduledAt) {
+    const daysSince = (now.getTime() - scheduledAt.getTime()) / 86400000;
+    if (daysSince > 30) return 'action_required';
+    if (daysSince > 0) return 'late';
+  }
+  if (!dbStatus || dbStatus === 'draft') return scheduledAt ? 'draft' : 'unscheduled';
+  return dbStatus;
+}
 
 export default function ClientPortal() {
   const { token } = useParams<{ token: string }>();
@@ -187,8 +226,8 @@ export default function ClientPortal() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[inv.status] || 'bg-gray-100 text-gray-600'}`}>
-                      {inv.status}
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[deriveInvoiceStatus(inv)] || 'bg-gray-100 text-gray-600'}`}>
+                      {statusLabels[deriveInvoiceStatus(inv)] || inv.status}
                     </span>
                     <span className="text-sm font-bold text-gray-900 tabular-nums">{formatMoney(inv.total_cents)}</span>
                     {inv.view_token && inv.balance_cents > 0 && (
@@ -264,8 +303,8 @@ export default function ClientPortal() {
                       )}
                     </div>
                   </div>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[job.status] || 'bg-gray-100 text-gray-600'}`}>
-                    {job.status}
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[deriveJobStatus(job)] || 'bg-gray-100 text-gray-600'}`}>
+                    {statusLabels[deriveJobStatus(job)] || job.status}
                   </span>
                 </div>
               ))}

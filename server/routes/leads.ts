@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuthedClient, isOrgMember, isOrgAdminOrOwner, getServiceClient } from '../lib/supabase';
 import { parseOrgId, ensureLeadInPipeline } from '../lib/helpers';
-import { validate, createLeadSchema, softDeleteLeadSchema, softDeleteDealSchema, invoiceFromJobSchema, updateLeadStatusSchema, convertLeadToJobSchema } from '../lib/validation';
+import { validate, createLeadSchema, softDeleteLeadSchema, softDeleteClientSchema, softDeleteDealSchema, invoiceFromJobSchema, updateLeadStatusSchema, convertLeadToJobSchema } from '../lib/validation';
 import { eventBus } from '../lib/eventBus';
 import { ensureClientForLead, resolveClientIdForLead, promoteClientFromLead } from '../lib/leadClientSync';
 
@@ -286,6 +286,71 @@ router.post('/deals/soft-delete', validate(softDeleteDealSchema), async (req, re
     // eslint-disable-next-line no-console
     console.error('deal_soft_delete_failed', { message: error?.message || 'unknown' });
     return res.status(500).json({ error: error?.message || 'Unable to delete deal.' });
+  }
+});
+
+router.post('/clients/soft-delete', validate(softDeleteClientSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const clientId = String(req.body?.clientId || '').trim();
+    if (!clientId) return res.status(400).json({ error: 'clientId is required.' });
+
+    const admin = getServiceClient();
+
+    const { data: clientRow, error: fetchErr } = await admin
+      .from('clients')
+      .select('id, org_id')
+      .eq('id', clientId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (fetchErr) throw fetchErr;
+    if (!clientRow) return res.status(404).json({ error: 'Client not found or already deleted.' });
+
+    const clientOrgId = String(clientRow.org_id);
+    const member = await isOrgMember(auth.client, auth.user.id, clientOrgId);
+    if (!member) return res.status(403).json({ error: 'Forbidden: not a member of this organization.' });
+
+    const now = new Date().toISOString();
+
+    // Soft-delete the client
+    const { error: clientErr } = await admin
+      .from('clients')
+      .update({ deleted_at: now, updated_at: now })
+      .eq('id', clientId)
+      .is('deleted_at', null);
+    if (clientErr) throw clientErr;
+
+    // Cascade: soft-delete related entities
+    const [jobsRes, leadsRes, dealsRes, invoicesRes, quotesRes] = await Promise.all([
+      admin.from('jobs').update({ deleted_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
+      admin.from('leads').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
+      admin.from('pipeline_deals').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
+      admin.from('invoices').update({ deleted_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
+      admin.from('quotes').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
+    ]);
+
+    // Cascade: soft-delete schedule events for deleted jobs
+    const deletedJobIds = (jobsRes.data ?? []).map((j: any) => j.id).filter(Boolean);
+    if (deletedJobIds.length > 0) {
+      await admin.from('schedule_events').update({ deleted_at: now }).in('job_id', deletedJobIds).eq('org_id', clientOrgId).is('deleted_at', null);
+    }
+
+    // Clean up tags
+    await admin.from('client_tags').delete().eq('client_id', clientId);
+
+    return res.status(200).json({
+      ok: true,
+      client: 1,
+      jobs: (jobsRes.data ?? []).length,
+      leads: (leadsRes.data ?? []).length,
+      pipeline_deals: (dealsRes.data ?? []).length,
+      other_rows: (invoicesRes.data ?? []).length + (quotesRes.data ?? []).length,
+    });
+  } catch (error: any) {
+    console.error('client_soft_delete_failed', { code: String(error?.code || ''), message: String(error?.message || 'unknown') });
+    return res.status(500).json({ error: error?.message || 'Unable to delete client.' });
   }
 });
 

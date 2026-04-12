@@ -27,7 +27,7 @@ function ScoreRing({ score, size = 48 }: { score: number; size?: number }) {
     <div className="relative" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={radius} fill="none"
-          stroke="currentColor" strokeWidth={3} className="text-surface-tertiary" />
+          stroke="currentColor" strokeWidth={3} className="text-text-tertiary" />
         <motion.circle cx={size / 2} cy={size / 2} r={radius} fill="none"
           stroke={color} strokeWidth={3} strokeLinecap="round"
           strokeDasharray={circumference}
@@ -256,7 +256,7 @@ export default function ScenarioExpansion({ data, language }: ScenarioExpansionP
             {(data.options || []).map((_, i) => (
               <motion.div
                 key={i}
-                className={`h-0.5 flex-1 rounded-full ${i < revealedCount ? 'bg-text-primary' : 'bg-surface-tertiary'}`}
+                className={`h-0.5 flex-1 rounded-full ${i < revealedCount ? 'bg-primary' : 'bg-surface-tertiary'}`}
                 animate={i < revealedCount ? { opacity: 1 } : { opacity: 0.3 }}
                 transition={{ duration: 0.3 }}
               />

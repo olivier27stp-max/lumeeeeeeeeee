@@ -42,9 +42,7 @@ function LinkNode({ data, selected }: NodeProps & { data: LinkNodeData }) {
 
       <div className="p-3">
         <div className="flex items-start gap-2">
-          <div className="w-8 h-8 rounded-md bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0 mt-0.5">
-            <Link2 size={14} className="text-blue-500" />
-          </div>
+          <Link2 size={14} className="text-text-secondary shrink-0 mt-1.5" />
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium text-text-primary truncate">
               {data.linkTitle || data.linkUrl}
@@ -56,7 +54,7 @@ function LinkNode({ data, selected }: NodeProps & { data: LinkNodeData }) {
               href={data.linkUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="nodrag inline-flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-600 mt-1"
+              className="nodrag inline-flex items-center gap-1 text-[11px] text-text-secondary hover:text-text-primary mt-1"
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
             >

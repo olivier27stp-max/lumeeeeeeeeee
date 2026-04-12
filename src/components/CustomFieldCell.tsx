@@ -418,7 +418,7 @@ const PILL_PALETTE = [
   { bg: '#fce7f3', text: '#be185d', border: '#f9a8d4' },  // pink
   { bg: '#e0e7ff', text: '#4338ca', border: '#a5b4fc' },  // indigo
   { bg: '#ffedd5', text: '#c2410c', border: '#fdba74' },  // orange
-  { bg: '#f3e8ff', text: '#7c3aed', border: '#c4b5fd' },  // violet
+  { bg: '#f1f5f9', text: '#475569', border: '#94a3b8' },  // neutral
   { bg: '#ccfbf1', text: '#0f766e', border: '#5eead4' },  // teal
   { bg: '#f1f5f9', text: '#475569', border: '#cbd5e1' },  // slate
   { bg: '#fef2f2', text: '#dc2626', border: '#fca5a5' },  // red
@@ -485,7 +485,7 @@ function StatusCell({ column, recordId, value, onChange }: CellProps) {
                 )}
               >
                 <span
-                  className="inline-flex items-center rounded-full px-2 py-[1px] text-[11px] font-semibold"
+                  className="inline-flex items-center rounded-full px-2 py-[1px] text-xs font-medium"
                   style={{
                     backgroundColor: `${status.color}18`,
                     color: status.color,

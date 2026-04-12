@@ -149,7 +149,7 @@ export default function EmailTemplatePicker({
           <button
             type="button"
             onClick={() => setShowPreview(!showPreview)}
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-tertiary hover:text-text-primary transition-colors"
+            className="inline-flex items-center gap-1 text-xs font-medium text-text-tertiary hover:text-text-primary transition-colors"
           >
             {showPreview ? (
               <>

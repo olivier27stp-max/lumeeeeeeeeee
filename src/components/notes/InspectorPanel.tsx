@@ -11,7 +11,7 @@ import { cn } from '../../lib/utils';
 import { STICKY_COLORS } from '../../types/noteBoard';
 import type { NoteItem, EntityType } from '../../types/noteBoard';
 import EntityBadge from './EntityBadge';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 interface InspectorPanelProps {
   item: NoteItem | null;
@@ -23,6 +23,7 @@ interface InspectorPanelProps {
 }
 
 export default function InspectorPanel({ item, onClose, onUpdate, onLinkEntity, onUnlinkEntity, language }: InspectorPanelProps) {
+  const { t } = useTranslation();
   const [linkType, setLinkType] = useState<EntityType>('lead');
   const [linkId, setLinkId] = useState('');
 
@@ -106,7 +107,7 @@ export default function InspectorPanel({ item, onClose, onUpdate, onLinkEntity, 
                   className={cn(
                     'p-1.5 rounded-md border transition-colors',
                     item.text_align === value
-                      ? 'border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-900/20'
+                      ? 'border-primary bg-primary/5 text-text-primary'
                       : 'border-outline text-text-tertiary hover:text-text-primary',
                   )}
                 >

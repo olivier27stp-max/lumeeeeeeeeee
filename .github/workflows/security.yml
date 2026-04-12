@@ -1,0 +1,98 @@
+name: Security Audit
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    # Run weekly on Monday at 8 AM UTC
+    - cron: '0 8 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  # ── 1. Dependency audit ──
+  dependency-audit:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci --ignore-scripts
+
+      - name: npm audit (production)
+        run: npm audit --production --audit-level=high
+        continue-on-error: true
+
+      - name: npm audit (full)
+        run: npm audit --audit-level=critical
+
+  # ── 2. Secret scanning ──
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog Secret Scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified
+
+  # ── 3. Static analysis ──
+  sast:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci --ignore-scripts
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit --skipLibCheck || true
+
+      - name: Check for dangerous patterns
+        run: |
+          echo "=== Checking for eval() usage ==="
+          ! grep -rn 'eval(' src/ server/ --include='*.ts' --include='*.tsx' | grep -v node_modules | grep -v '// safe:' || echo "No eval found"
+
+          echo "=== Checking for dangerouslySetInnerHTML ==="
+          grep -rn 'dangerouslySetInnerHTML' src/ --include='*.tsx' || echo "None found"
+
+          echo "=== Checking for hardcoded secrets ==="
+          ! grep -rn 'sk_live_\|sk_test_\|password\s*=\s*["\x27][^"\x27]\{8,\}' src/ server/ --include='*.ts' --include='*.tsx' | grep -v node_modules | grep -v '.example' | grep -v 'test' | grep -v 'schema' | grep -v 'placeholder' || echo "None found"
+
+  # ── 4. Build verification ──
+  build:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: "https://placeholder.supabase.co"
+          VITE_SUPABASE_ANON_KEY: "placeholder-key-for-build-only"

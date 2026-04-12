@@ -12,13 +12,13 @@ export default function PaymentSettings() {
   const navigate = useNavigate();
 
   return (
-    <PermissionGate permission="payments.manage_settings">
+    <PermissionGate permission="payments.create">
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-2">
-            <button type="button" onClick={() => navigate('/payments')} className="glass-button inline-flex items-center gap-2">
+            <button type="button" onClick={() => navigate('/settings')} className="glass-button inline-flex items-center gap-2">
               <ArrowLeft size={14} />
-              {t.payments.backToPayments}
+              {language === 'fr' ? 'Paramètres' : 'Settings'}
             </button>
             <h1 className="text-5xl font-semibold tracking-tight text-text-primary">
               {t.commandPalette.payments}

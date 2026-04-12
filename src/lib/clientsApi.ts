@@ -77,9 +77,12 @@ export async function listClients(query: ClientsQuery = {}): Promise<ClientsResu
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
+  const orgId = await getCurrentOrgIdOrThrow();
   let request = supabase
-    .from('clients_active')
+    .from('clients')
     .select('*', { count: 'exact' })
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
     .range(from, to);
 
   if (query.q?.trim()) request = request.or(buildSearchFilter(query.q));
@@ -124,9 +127,13 @@ import { getCurrentOrgIdOrThrow } from './orgApi';
 export async function findClientsByEmail(email: string): Promise<ClientRecord[]> {
   const normalized = String(email || '').trim().toLowerCase();
   if (!normalized) return [];
+  // Defense-in-depth: always scope to current org (RLS also enforces)
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
-    .from('clients_active')
+    .from('clients')
     .select('*')
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
     .ilike('email', normalized)
     .order('created_at', { ascending: true });
   if (error) throw error;
@@ -188,51 +195,37 @@ export async function updateClient(id: string, payload: Partial<ClientPayload>):
   if (payload.place_id !== undefined) updatePayload.place_id = payload.place_id?.trim() || null;
   if (payload.status !== undefined) updatePayload.status = payload.status;
 
-  const { data, error } = await supabase.from('clients').update(updatePayload).eq('id', id).select('*').single();
+  // Support optimistic locking if version provided in payload
+  const expectedVersion = (payload as any).version;
+  let query = supabase.from('clients').update(updatePayload).eq('id', id);
+  if (expectedVersion != null) query = query.eq('version', expectedVersion);
+  const { data, error } = await query.select('*').single();
+  if (error?.code === 'PGRST116' && expectedVersion != null) {
+    throw new Error('This client was modified by another user. Please refresh and try again.');
+  }
   if (error) throw error;
   return data as ClientRecord;
 }
 
 export async function softDeleteClient(id: string): Promise<SoftDeleteClientResult> {
-  const orgId = await getCurrentOrgIdOrThrow();
-  const now = new Date().toISOString();
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new Error('You need to be authenticated for this action.');
 
-  // Try the RPC first
-  const { data, error } = await supabase.rpc('soft_delete_client', {
-    p_org_id: orgId,
-    p_client_id: id,
+  const response = await fetch('/api/clients/soft-delete', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId: id }),
   });
-
-  const rpcWorked = !error && Number((data as any)?.client || 0) > 0;
-
-  if (!rpcWorked) {
-    // Fallback: direct update — handles org_id mismatch edge cases
-    console.warn('[clients] soft_delete_client RPC returned 0 or failed, using direct update fallback');
-    const { error: updateError } = await supabase
-      .from('clients')
-      .update({ deleted_at: now })
-      .eq('id', id)
-      .is('deleted_at', null);
-    if (updateError) throw updateError;
-
-    // Also soft-delete related entities (complete cascade)
-    await supabase.from('jobs').update({ deleted_at: now }).eq('client_id', id).is('deleted_at', null);
-    await supabase.from('leads').update({ deleted_at: now }).eq('client_id', id).is('deleted_at', null);
-    await supabase.from('pipeline_deals').update({ deleted_at: now }).eq('client_id', id).is('deleted_at', null);
-    await supabase.from('invoices').update({ deleted_at: now }).eq('client_id', id).is('deleted_at', null);
-    await supabase.from('quotes').update({ deleted_at: now }).eq('client_id', id).is('deleted_at', null);
-    // Clean up tags (hard delete since they're relational)
-    await supabase.from('client_tags').delete().eq('client_id', id);
-
-    return { client: 1, jobs: 0, leads: 0, pipeline_deals: 0, other_rows: 0 };
-  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || `Failed to delete client (${response.status}).`);
 
   return {
-    client: Number((data as any)?.client || 0),
-    jobs: Number((data as any)?.jobs || 0),
-    leads: Number((data as any)?.leads || 0),
-    pipeline_deals: Number((data as any)?.pipeline_deals || 0),
-    other_rows: Number((data as any)?.other_rows || 0),
+    client: Number(payload.client || 0),
+    jobs: Number(payload.jobs || 0),
+    leads: Number(payload.leads || 0),
+    pipeline_deals: Number(payload.pipeline_deals || 0),
+    other_rows: Number(payload.other_rows || 0),
   };
 }
 
@@ -268,7 +261,7 @@ export async function listClientJobs(clientId: string) {
 }
 
 export async function getClientById(clientId: string): Promise<ClientRecord | null> {
-  const { data, error } = await supabase.from('clients_active').select('*').eq('id', clientId).maybeSingle();
+  const { data, error } = await supabase.from('clients').select('*').is('deleted_at', null).eq('id', clientId).maybeSingle();
   if (error) throw error;
   return (data as ClientRecord | null) || null;
 }
@@ -277,8 +270,9 @@ export async function getClientById(clientId: string): Promise<ClientRecord | nu
 export async function findClientsByPlaceId(placeId: string, excludeClientId?: string): Promise<ClientRecord[]> {
   if (!placeId) return [];
   let query = supabase
-    .from('clients_active')
+    .from('clients')
     .select('*')
+    .is('deleted_at', null)
     .eq('place_id', placeId)
     .order('created_at', { ascending: true });
   if (excludeClientId) query = query.neq('id', excludeClientId);

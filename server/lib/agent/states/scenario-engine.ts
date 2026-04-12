@@ -66,6 +66,8 @@ ${memoryCtx}`,
       jsonMode: true,
       temperature: 0.3,
       maxTokens: 2048,
+      orgId: ctx.orgId,
+      purpose: 'scenario-generation',
     });
 
     const parsed = JSON.parse(response.content);
@@ -83,6 +85,22 @@ ${memoryCtx}`,
           confidence: Number(s.confidence) || 0.5,
           isWinner: i === 0,
         }));
+
+        // Apply confidence calibration from training engine
+        try {
+          const { getCalibrationFactor, calibrateConfidence } = await import('../training-engine');
+          const factor = await getCalibrationFactor(ctx.supabase, ctx.orgId, ctx.intent?.domain || 'general');
+          if (factor !== 1.0) {
+            scenarios = scenarios.map(s => ({
+              ...s,
+              confidence: calibrateConfidence(Math.round(s.confidence * 100), factor) / 100,
+              score: calibrateConfidence(s.score, factor),
+            }));
+            // Re-sort and pick winner
+            scenarios.sort((a, b) => b.score - a.score);
+            scenarios = scenarios.map((s, i) => ({ ...s, isWinner: i === 0 }));
+          }
+        } catch { /* calibration is optional */ }
     }
   } catch (err: any) {
     ctx.errors.push(`Scenario generation failed: ${err?.message}`);

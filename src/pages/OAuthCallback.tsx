@@ -34,7 +34,7 @@ export default function OAuthCallback() {
 
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-lg p-8 max-w-md w-full text-center space-y-4">
+      <div className="bg-surface-card dark:bg-zinc-900 rounded-xl shadow-lg p-8 max-w-md w-full text-center space-y-4">
         {success ? (
           <>
             <CheckCircle className="mx-auto w-16 h-16 text-green-500" />

@@ -151,7 +151,7 @@ export default function TeamsManagerModal({ isOpen, onClose }: TeamsManagerModal
             </div>
 
             <div className="space-y-5 px-5 py-4">
-              <section className="rounded-xl border border-border bg-white/70 p-3">
+              <section className="rounded-xl border border-border bg-surface-card/70 p-3">
                 <h3 className="mb-3 text-sm font-semibold text-text-primary">{t.modals.addTeam}</h3>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_170px_auto]">
                   <input
@@ -182,7 +182,7 @@ export default function TeamsManagerModal({ isOpen, onClose }: TeamsManagerModal
                 </div>
               </section>
 
-              <section className="rounded-xl border border-border bg-white/70 p-3">
+              <section className="rounded-xl border border-border bg-surface-card/70 p-3">
                 <h3 className="mb-3 text-sm font-semibold text-text-primary">{t.modals.existingTeams}</h3>
 
                 {teamsQuery.isLoading ? <p className="text-sm text-text-secondary">{t.modals.loadingTeams}</p> : null}
@@ -192,7 +192,7 @@ export default function TeamsManagerModal({ isOpen, onClose }: TeamsManagerModal
                   {teams.map((team) => {
                     const draft = drafts[team.id] || { name: team.name, color_hex: normalizeColorHex(team.color_hex) };
                     return (
-                      <div key={team.id} className="grid grid-cols-1 gap-2 rounded-xl border border-border bg-white p-2 md:grid-cols-[1fr_170px_auto_auto]">
+                      <div key={team.id} className="grid grid-cols-1 gap-2 rounded-xl border border-border bg-surface-card p-2 md:grid-cols-[1fr_170px_auto_auto]">
                         <input
                           value={draft.name}
                           onChange={(event) =>

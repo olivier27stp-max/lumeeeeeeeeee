@@ -95,3 +95,27 @@ export function emitQuoteDeclined(params: {
 }) {
   fireEvent('quote-declined', params);
 }
+
+/** Notify engine that an invoice was paid manually */
+export function emitInvoicePaidManually(params: {
+  invoiceId: string;
+  clientId?: string;
+}) {
+  fireEvent('invoice-paid', params);
+}
+
+/** Notify engine that a lead was created */
+export function emitLeadCreated(params: {
+  leadId: string;
+}) {
+  fireEvent('lead-created', params);
+}
+
+/** Notify engine that a lead's status changed */
+export function emitLeadStatusChanged(params: {
+  leadId: string;
+  oldStatus: string;
+  newStatus: string;
+}) {
+  fireEvent('lead-status-changed', params);
+}

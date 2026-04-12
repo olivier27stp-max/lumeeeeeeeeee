@@ -59,9 +59,9 @@ const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
 };
 
 const ENTITY_COLORS: Record<SearchEntityType, string> = {
-  client: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10',
+  client: 'text-text-secondary bg-surface-secondary',
   job: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10',
-  lead: 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-500/10',
+  lead: 'text-text-secondary bg-surface-secondary',
   invoice: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10',
   quote: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10',
   request: 'text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-500/10',
@@ -85,7 +85,7 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
   action_required: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
   void: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-500/15 dark:text-neutral-500',
   partial: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
-  awaiting_response: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400',
+  awaiting_response: 'bg-surface-secondary text-text-secondary',
   converted: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
   expired: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-500/15 dark:text-neutral-500',
   unscheduled: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400',
@@ -104,7 +104,7 @@ interface QuickAction {
 
 const QUICK_ACTIONS: QuickAction[] = [
   { id: 'qa-new-client', label: 'Create New Client', labelFr: 'Nouveau client', icon: Plus, destination: '/clients?action=new', keywords: 'create add new client customer nouveau' },
-  { id: 'qa-new-lead', label: 'Create New Quote', labelFr: 'Nouveau devis', icon: Plus, destination: '/leads?action=new', keywords: 'create add new quote devis prospect nouveau' },
+  { id: 'qa-new-lead', label: 'Create New Lead', labelFr: 'Nouveau prospect', icon: Plus, destination: '/leads?action=new', keywords: 'create add new lead prospect nouveau' },
   { id: 'qa-new-job', label: 'Create New Job', labelFr: 'Nouvelle job', icon: Plus, destination: '/jobs?action=new', keywords: 'create add new job work travail nouveau' },
   { id: 'qa-new-quote', label: 'Create New Quote', labelFr: 'Nouveau devis', icon: Plus, destination: '/quotes?action=new', keywords: 'create add new quote estimate devis nouveau' },
   { id: 'qa-new-invoice', label: 'Create New Invoice', labelFr: 'Nouvelle facture', icon: Plus, destination: '/invoices?action=new', keywords: 'create add new invoice bill facture nouveau' },
@@ -119,14 +119,14 @@ function highlightText(text: string, query: string) {
   const normalized = normalizeSearchQuery(query);
   if (!normalized) return text;
 
-  const tokens = normalized.split(' ').map((t) => t.trim()).filter(Boolean).slice(0, 4);
+  const tokens = normalized.split(' ').map((tk) => tk.trim()).filter(Boolean).slice(0, 4);
   if (tokens.length === 0) return text;
 
-  const matcher = new RegExp(`(${tokens.map((t) => escapeRegExp(t)).join('|')})`, 'ig');
+  const matcher = new RegExp(`(${tokens.map((tk) => escapeRegExp(tk)).join('|')})`, 'ig');
   const parts = text.split(matcher);
 
   return parts.map((part, index) => {
-    const isMatch = tokens.some((t) => t.toLowerCase() === part.toLowerCase());
+    const isMatch = tokens.some((tk) => tk.toLowerCase() === part.toLowerCase());
     if (!isMatch) return <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>;
     return (
       <mark key={`${part}-${index}`} className="rounded bg-primary/15 px-0.5 text-inherit">
@@ -439,10 +439,10 @@ export default function GlobalSearch() {
   const showDropdown = open && normalizedQuery.length > 0;
 
   return (
-    <div ref={rootRef} className="relative w-full max-w-3xl" onBlur={handleBlur}>
+    <div ref={rootRef} className="relative w-full max-w-4xl" onBlur={handleBlur}>
       {/* Search Input */}
-      <div className="relative">
-        <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+      <div className="relative group">
+        <Search size={15} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary transition-colors group-focus-within:text-primary" />
         <input
           ref={inputRef}
           value={query}
@@ -454,7 +454,7 @@ export default function GlobalSearch() {
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           placeholder={t.globalSearch.placeholder}
-          className="glass-input w-full pl-9 pr-16"
+          className="glass-input w-full rounded-xl pl-10 pr-20 py-2.5 text-[13px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           aria-label="Global search"
           role="combobox"
           aria-expanded={showDropdown}
@@ -466,7 +466,7 @@ export default function GlobalSearch() {
           }
           aria-autocomplete="list"
         />
-        <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden items-center gap-0.5 rounded border border-outline px-1.5 py-0.5 text-[10px] font-mono text-text-tertiary sm:inline-flex">
+        <kbd className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 hidden items-center gap-0.5 rounded-lg border border-outline/60 bg-surface-secondary/50 px-2 py-1 text-[10px] font-mono text-text-tertiary sm:inline-flex">
           Ctrl K
         </kbd>
       </div>
@@ -476,7 +476,7 @@ export default function GlobalSearch() {
         <div
           id={listboxId}
           role="listbox"
-          className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 max-h-[520px] overflow-y-auto rounded-xl border border-outline bg-surface shadow-2xl"
+          className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-[520px] overflow-y-auto rounded-2xl border border-outline/60 bg-surface shadow-2xl backdrop-blur-sm"
         >
           {/* Loading state */}
           {loading && flatItems.length === 0 ? (
@@ -502,7 +502,7 @@ export default function GlobalSearch() {
             <div className="py-1">
               {sections.map((section) => (
                 <div key={section.key}>
-                  <p className="px-3 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">
+                  <p className="px-4 pb-1 pt-3 text-xs font-medium text-text-tertiary">
                     {section.label}
                   </p>
                   {section.items.map((item) => {
@@ -525,11 +525,11 @@ export default function GlobalSearch() {
 
               {/* See all results */}
               {seeAllItem ? (
-                <div className="border-t border-outline px-2 py-2">
+                <div className="border-t border-outline/60 px-2.5 py-2.5">
                   <button
                     type="button"
                     onClick={() => handleSelect(seeAllItem)}
-                    className="w-full rounded-lg px-3 py-2 text-left text-[13px] font-medium text-primary transition-colors hover:bg-primary/5"
+                    className="w-full rounded-xl px-3 py-2.5 text-left text-[13px] font-medium text-primary transition-colors hover:bg-primary/5"
                   >
                     <div className="flex items-center gap-2">
                       <Search size={13} />
@@ -543,7 +543,7 @@ export default function GlobalSearch() {
 
           {/* Footer hints */}
           {flatItems.length > 0 ? (
-            <div className="flex items-center gap-4 border-t border-outline px-3 py-1.5 text-[10px] text-text-tertiary">
+            <div className="flex items-center gap-4 border-t border-outline/60 px-4 py-2 text-[10px] text-text-tertiary">
               <span className="flex items-center gap-1">
                 <kbd className="rounded border border-outline px-1 py-0.5 font-mono">↑↓</kbd>
                 {t.commandPalette.navigate}
@@ -595,7 +595,7 @@ function SearchResultRow({
   const iconColor = item.entityType
     ? ENTITY_COLORS[item.entityType]
     : isActive
-      ? 'text-white bg-white/20'
+      ? 'text-white bg-surface-card/20'
       : 'text-text-secondary bg-surface-tertiary';
 
   return (
@@ -607,16 +607,16 @@ function SearchResultRow({
       onMouseEnter={onMouseEnter}
       onClick={onClick}
       className={cn(
-        'mx-1 w-[calc(100%-0.5rem)] rounded-lg px-2.5 py-2 text-left transition-colors',
+        'mx-1.5 w-[calc(100%-0.75rem)] rounded-xl px-3 py-2.5 text-left transition-all duration-150',
         isActive ? 'bg-primary text-white' : 'hover:bg-surface-secondary'
       )}
     >
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-3">
         {/* Icon */}
         <span
           className={cn(
-            'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors',
-            isActive ? 'bg-white/20 text-white' : iconColor
+            'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors',
+            isActive ? 'bg-surface-card/20 text-white' : iconColor
           )}
         >
           <Icon size={14} strokeWidth={1.75} />
@@ -630,7 +630,7 @@ function SearchResultRow({
             </p>
             {item.status ? (
               isActive ? (
-                <span className="inline-flex items-center rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide leading-none text-white">
+                <span className="inline-flex items-center rounded-full bg-surface-card/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide leading-none text-white">
                   {item.status.replace(/_/g, ' ')}
                 </span>
               ) : (

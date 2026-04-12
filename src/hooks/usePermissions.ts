@@ -1,93 +1,74 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { useContext, useMemo } from 'react';
 import {
   type TeamRole,
+  type Scope,
   type PermissionsMap,
-  getDefaultPermissions,
 } from '../lib/permissions';
+import { CompanyContext } from '../contexts/CompanyContext';
 
-interface UsePermissionsResult {
+export interface UserPermissionContext {
   permissions: PermissionsMap | null;
   role: TeamRole | null;
+  scope: Scope;
+  userId: string | null;
+  teamId: string | null;
+  departmentId: string | null;
+  managerId: string | null;
   loading: boolean;
 }
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-let cachedResult: UsePermissionsResult | null = null;
-let cachedAt = 0;
-let fetchPromise: Promise<UsePermissionsResult> | null = null;
+const EMPTY: UserPermissionContext = {
+  permissions: null, role: null, scope: 'self',
+  userId: null, teamId: null, departmentId: null, managerId: null,
+  loading: false,
+};
 
-async function fetchPermissions(): Promise<UsePermissionsResult> {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { permissions: null, role: null, loading: false };
+// ── Dev role override ──────────────────────────────────────────────
+const DEV_ROLE_KEY = 'lume-dev-role-override';
 
-    const { data: membership, error } = await supabase
-      .from('memberships')
-      .select('role, permissions')
-      .eq('user_id', user.id)
-      .limit(1)
-      .maybeSingle();
-
-    if (error || !membership) {
-      // No membership found — grant full access (owner-level) so the app
-      // is usable before teams/memberships are configured.
-      return { permissions: getDefaultPermissions('owner'), role: 'owner', loading: false };
-    }
-
-    const role = membership.role as TeamRole;
-
-    // Use custom permissions if present, otherwise derive from role
-    const permissions: PermissionsMap =
-      membership.permissions && typeof membership.permissions === 'object'
-        ? (membership.permissions as PermissionsMap)
-        : getDefaultPermissions(role);
-
-    return { permissions, role, loading: false };
-  } catch {
-    return { permissions: null, role: null, loading: false };
+export function setDevRoleOverride(role: TeamRole | null) {
+  if (role) {
+    localStorage.setItem(DEV_ROLE_KEY, role);
+  } else {
+    localStorage.removeItem(DEV_ROLE_KEY);
   }
 }
 
-export function usePermissions(): UsePermissionsResult {
-  const [result, setResult] = useState<UsePermissionsResult>(
-    cachedResult ?? { permissions: null, role: null, loading: true }
-  );
-
-  useEffect(() => {
-    // If we have a cached result that's still fresh, use it
-    if (cachedResult && Date.now() - cachedAt < CACHE_TTL_MS) {
-      setResult(cachedResult);
-      return;
-    }
-    // Stale cache — refetch
-    cachedResult = null;
-
-    // If a fetch is already in progress, wait for it
-    if (!fetchPromise) {
-      fetchPromise = fetchPermissions();
-    }
-
-    let cancelled = false;
-
-    fetchPromise.then((res) => {
-      cachedResult = res;
-      cachedAt = Date.now();
-      fetchPromise = null;
-      if (!cancelled) setResult(res);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return result;
+export function getDevRoleOverride(): TeamRole | null {
+  return (localStorage.getItem(DEV_ROLE_KEY) as TeamRole) || null;
 }
 
-/** Call this to invalidate the cached permissions (e.g. after role change). */
+// ── Hook — derives from CompanyContext (single source of truth) ────
+
+/**
+ * usePermissions now delegates to CompanyContext.
+ * This avoids a duplicate memberships query and ensures permissions
+ * always reflect the currently active company (not an arbitrary one).
+ */
+export function usePermissions(): UserPermissionContext {
+  const company = useContext(CompanyContext);
+
+  return useMemo<UserPermissionContext>(() => {
+    // CompanyProvider not mounted — return loading state
+    if (!company) return { ...EMPTY, loading: true };
+
+    if (company.loading) return { ...EMPTY, loading: true };
+    if (!company.current) return EMPTY;
+
+    return {
+      permissions: company.currentPermissions,
+      role: company.currentRole,
+      scope: company.currentScope,
+      userId: company.userId,
+      teamId: company.current.teamId,
+      departmentId: company.current.departmentId,
+      managerId: company.current.managerId,
+      loading: false,
+    };
+  }, [company]);
+}
+
+/** Invalidate cache (call after role/permission change). */
 export function invalidatePermissionsCache() {
-  cachedResult = null;
-  cachedAt = 0;
-  fetchPromise = null;
+  // No-op now — CompanyContext handles refresh via its own refresh() method.
 }

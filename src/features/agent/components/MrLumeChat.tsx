@@ -1,45 +1,99 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Loader2, Plus, Clock, Trash2, ArrowRight, Network } from 'lucide-react';
+import {
+  Send, Loader2, Plus, Clock, Trash2, ArrowRight, Network,
+  Paperclip, Sparkles, ArrowUp,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import VoiceInput from './VoiceInput';
-import PredictionGraph from './PredictionGraph';
 import { useFeatureFlags } from '../hooks/useFeatureFlags';
 import { useTranslation } from '../../../i18n';
-import MrLumeAvatar from './MrLumeAvatar';
 import AgentThinking from './AgentThinking';
 import ScenarioExpansion from './ScenarioExpansion';
 import ApprovalCard from './ApprovalCard';
 import FeedbackButtons from './FeedbackButtons';
 import { agentChat, agentHealthCheck, agentGetSessions, agentGetSessionMessages, agentDeleteSession } from '../lib/agentApi';
 import type { UIAgentMessage, AgentSession, AgentStateLabel, ScenarioResult, ApprovalRequest, AgentSSEEvent } from '../types';
+import RelationshipGraph from '../../../components/insights/RelationshipGraph';
 
-/** Simple markdown renderer — bold, lists, links */
+/** Markdown renderer — bold, italic, inline code, code blocks, links, lists, headers */
 function renderMarkdown(text: string): React.ReactNode {
   const lines = text.split('\n');
-  return lines.map((line, i) => {
-    // Bold
-    let processed: React.ReactNode = line.replace(/\*\*(.*?)\*\*/g, '§BOLD§$1§/BOLD§');
-    const parts = (processed as string).split(/(§BOLD§.*?§\/BOLD§)/g);
-    const elements = parts.map((part, j) => {
-      if (part.startsWith('§BOLD§')) {
-        return <strong key={j}>{part.replace('§BOLD§', '').replace('§/BOLD§', '')}</strong>;
-      }
-      return part;
-    });
+  let inCodeBlock = false;
+  let codeBuffer: string[] = [];
+  const result: React.ReactNode[] = [];
 
-    // List items
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim().startsWith('```')) {
+      if (inCodeBlock) {
+        result.push(
+          <pre key={`code-${i}`} className="bg-[var(--color-surface-secondary)] rounded-lg p-3 text-xs font-mono overflow-x-auto my-1.5 border border-[var(--color-outline)]">
+            <code>{codeBuffer.join('\n')}</code>
+          </pre>
+        );
+        codeBuffer = [];
+        inCodeBlock = false;
+      } else {
+        inCodeBlock = true;
+      }
+      continue;
+    }
+    if (inCodeBlock) { codeBuffer.push(line); continue; }
+
+    function formatInline(str: string): React.ReactNode[] {
+      const regex = /(\*\*.*?\*\*|`[^`]+`|\[([^\]]+)\]\(([^)]+)\))/g;
+      const parts: React.ReactNode[] = [];
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      let key = 0;
+      while ((match = regex.exec(str)) !== null) {
+        if (match.index > lastIndex) parts.push(str.slice(lastIndex, match.index));
+        const m = match[0];
+        if (m.startsWith('**')) {
+          parts.push(<strong key={key++}>{m.slice(2, -2)}</strong>);
+        } else if (m.startsWith('`')) {
+          parts.push(<code key={key++} className="bg-[var(--color-surface-secondary)] px-1 py-0.5 rounded text-xs font-mono">{m.slice(1, -1)}</code>);
+        } else if (m.startsWith('[')) {
+          parts.push(<a key={key++} href={match[3]} target="_blank" rel="noopener noreferrer" className="text-[var(--color-primary)] underline">{match[2]}</a>);
+        }
+        lastIndex = match.index + m.length;
+      }
+      if (lastIndex < str.length) parts.push(str.slice(lastIndex));
+      return parts;
+    }
+
+    if (line.match(/^###\s/)) {
+      result.push(<div key={i} className="font-bold text-sm mt-2 mb-0.5">{formatInline(line.replace(/^###\s/, ''))}</div>);
+      continue;
+    }
+    if (line.match(/^##\s/)) {
+      result.push(<div key={i} className="font-bold text-sm mt-2 mb-0.5">{formatInline(line.replace(/^##\s/, ''))}</div>);
+      continue;
+    }
     if (line.match(/^[\-\*]\s/)) {
-      return <div key={i} className="flex gap-1.5 ml-1"><span className="text-text-tertiary">•</span><span>{elements}</span></div>;
+      result.push(<div key={i} className="flex gap-1.5 ml-1"><span className="text-neutral-400">•</span><span>{formatInline(line.replace(/^[\-\*]\s/, ''))}</span></div>);
+      continue;
     }
     if (line.match(/^\d+\.\s/)) {
-      return <div key={i} className="ml-1">{elements}</div>;
+      result.push(<div key={i} className="ml-1">{formatInline(line)}</div>);
+      continue;
     }
-    // Empty line
-    if (!line.trim()) return <div key={i} className="h-1" />;
-    return <div key={i}>{elements}</div>;
-  });
+    if (!line.trim()) { result.push(<div key={i} className="h-1" />); continue; }
+    result.push(<div key={i}>{formatInline(line)}</div>);
+  }
+
+  if (inCodeBlock && codeBuffer.length) {
+    result.push(<pre key="code-end" className="bg-[var(--color-surface-secondary)] rounded-lg p-3 text-xs font-mono overflow-x-auto my-1.5 border border-[var(--color-outline)]"><code>{codeBuffer.join('\n')}</code></pre>);
+  }
+  return result;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Lume Agent — AI Chat Page
+   Premium minimal UI matching reference screenshot.
+   All business logic preserved from original MrLumeChat.
+   ═══════════════════════════════════════════════════════════════ */
 
 export default function MrLumeChat() {
   const { language } = useTranslation();
@@ -48,6 +102,7 @@ export default function MrLumeChat() {
   const { isEnabled } = useFeatureFlags();
   const voiceEnabled = isEnabled('voice');
 
+  /* ── State (preserved from original) ── */
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
   const [messages, setMessages] = useState<UIAgentMessage[]>([]);
   const [input, setInput] = useState('');
@@ -57,8 +112,7 @@ export default function MrLumeChat() {
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [graphData, setGraphData] = useState<{ scenario: ScenarioResult | null; question: string; entities: { type: string; label: string }[] } | null>(null);
-  const [graphOpen, setGraphOpen] = useState(false);
-  const [welcomeSent, setWelcomeSent] = useState(false);
+  const [showRelationGraph, setShowRelationGraph] = useState(false);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -67,54 +121,35 @@ export default function MrLumeChat() {
 
   const isInConversation = messages.length > 0;
 
-  // Check connection + load sessions on mount + cleanup abort on unmount
+  /* ── Mount: health check + load sessions ── */
   useEffect(() => {
     mountedRef.current = true;
-
     agentHealthCheck().then(h => { if (mountedRef.current) setConnectionStatus(h.ok ? 'connected' : 'disconnected'); });
     agentGetSessions().then(s => { if (mountedRef.current) setSessions(s); }).catch(() => {});
-
     return () => {
       mountedRef.current = false;
-      if (abortRef.current) {
-        abortRef.current.abort();
-        abortRef.current = null;
-      }
+      if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; }
     };
   }, []);
 
-  // Auto-scroll only on new messages (not on state changes to avoid jarring)
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
   const startNewChat = useCallback(() => {
-    setMessages([]);
-    setSessionId(null);
-    setCurrentState(null);
-    setShowHistory(false);
+    setMessages([]); setSessionId(null); setCurrentState(null); setShowHistory(false);
   }, []);
 
   async function loadSession(session: AgentSession) {
-    setShowHistory(false);
-    setSessionId(session.id);
+    setShowHistory(false); setSessionId(session.id);
     try {
       const msgs = await agentGetSessionMessages(session.id);
-      setMessages(msgs
-        .filter(m => m.role === 'user' || m.role === 'assistant')
-        .map(m => ({
-          id: m.id,
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-          messageType: (m.message_type || 'text') as UIAgentMessage['messageType'],
-          structuredData: m.structured_data ?? null,
-        }))
-      );
-    } catch {
-      setMessages([]);
-    }
+      setMessages(msgs.filter(m => m.role === 'user' || m.role === 'assistant').map(m => ({
+        id: m.id, role: m.role as 'user' | 'assistant', content: m.content,
+        messageType: (m.message_type || 'text') as UIAgentMessage['messageType'],
+        structuredData: m.structured_data ?? null,
+      })));
+    } catch { setMessages([]); }
   }
 
   async function handleDeleteSession(id: string) {
@@ -123,36 +158,34 @@ export default function MrLumeChat() {
     if (sessionId === id) startNewChat();
   }
 
+  /* ── Send message (all original logic preserved) ── */
   async function handleSend(text?: string) {
     const content = (text || input).trim();
     if (!content || isProcessing) return;
 
-    // Add user message
-    const userMsg: UIAgentMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content,
-      messageType: 'text',
-    };
+    if (connectionStatus === 'disconnected') {
+      const userMsg: UIAgentMessage = { id: crypto.randomUUID(), role: 'user', content, messageType: 'text' };
+      const errMsg: UIAgentMessage = {
+        id: crypto.randomUUID(), role: 'assistant', content: fr
+          ? 'Le service AI n\'est pas disponible pour le moment. Veuillez vérifier que le backend est en cours d\'exécution.'
+          : 'AI service unavailable. Please make sure the backend is running.',
+        messageType: 'text',
+      };
+      setMessages(prev => [...prev, userMsg, errMsg]);
+      setInput('');
+      return;
+    }
+
+    const userMsg: UIAgentMessage = { id: crypto.randomUUID(), role: 'user', content, messageType: 'text' };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsProcessing(true);
     setCurrentState('understand');
+    setShowRelationGraph(false);
+    if (inputRef.current) inputRef.current.style.height = 'auto';
 
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
-    }
-
-    // Prepare assistant message placeholder
     const assistantId = crypto.randomUUID();
-    setMessages(prev => [...prev, {
-      id: assistantId,
-      role: 'assistant',
-      content: '',
-      messageType: 'text',
-      isStreaming: true,
-    }]);
-
+    setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', messageType: 'text', isStreaming: true }]);
     abortRef.current = new AbortController();
 
     try {
@@ -161,115 +194,70 @@ export default function MrLumeChat() {
       let approvalData: ApprovalRequest | null = null;
 
       await agentChat({
-        message: content,
-        sessionId,
-        language: language as 'en' | 'fr',
+        message: content, sessionId, language: language as 'en' | 'fr',
         signal: abortRef.current.signal,
         onEvent: (event: AgentSSEEvent) => {
           if (!mountedRef.current) return;
           switch (event.type) {
             case 'state_change':
               setCurrentState(event.state as AgentStateLabel);
-              // Auto-open graph when scenario engine starts
               if (event.state === 'scenario_engine' || event.state === 'decide') {
                 setGraphData(prev => prev || { scenario: null, question: content, entities: [] });
-                setGraphOpen(true);
+                setShowRelationGraph(true);
               }
               break;
-
             case 'token':
-              setMessages(prev => prev.map(m =>
-                m.id === assistantId
-                  ? { ...m, content: m.content + event.content }
-                  : m
-              ));
+              setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + event.content } : m));
               break;
-
             case 'scenario':
               scenarioData = event.data;
-              // Build entity nodes from scenario labels
-              const entities = (event.data.options || []).map((o: any) => ({
-                type: 'team', label: o.label,
-              }));
+              const entities = (event.data.options || []).map((o: any) => ({ type: 'team', label: o.label }));
               setGraphData({ scenario: event.data, question: content, entities });
-              setGraphOpen(true);
+              setShowRelationGraph(true);
               break;
-
             case 'approval':
               approvalData = event.data;
               break;
-
             case 'done':
-              if (event.sessionId) {
-                gotSessionId = event.sessionId;
-                setSessionId(event.sessionId);
-              }
+              if (event.sessionId) { gotSessionId = event.sessionId; setSessionId(event.sessionId); }
+              const allText = (content).toLowerCase();
+              const hasCrmContext = /\b(client|job|equipe|team|facture|invoice|lead|devis|quote|revenue|pipeline|deal|assign|schedul|planifi|overdue|retard|completion|performance|churn|conversion|relation|graph|analyse|overview|apercu|resume|reseau|network|portrait|montre|show|fais.*voir|donne)\b/i.test(allText);
+              if (hasCrmContext && content.length > 80) setShowRelationGraph(true);
               break;
-
             case 'error':
-              setMessages(prev => prev.map(m =>
-                m.id === assistantId
-                  ? { ...m, content: m.content || (fr ? 'Une erreur est survenue.' : 'An error occurred.'), isStreaming: false }
-                  : m
-              ));
+              setMessages(prev => prev.map(m => m.id === assistantId
+                ? { ...m, content: m.content || (fr ? 'Une erreur est survenue.' : 'An error occurred.'), isStreaming: false } : m));
               break;
           }
         },
       });
 
-      // Finalize assistant message — if still empty and no error, show fallback
       setMessages(prev => prev.map(m => {
         if (m.id !== assistantId) return m;
-        const content = m.content || (fr ? 'Je n\'ai pas pu générer de réponse.' : 'I couldn\'t generate a response.');
-        return { ...m, content, isStreaming: false };
+        return { ...m, content: m.content || (fr ? 'Je n\'ai pas pu générer de réponse.' : 'I couldn\'t generate a response.'), isStreaming: false };
       }));
 
-      // Add scenario expansion if present + store for graph
       if (scenarioData) {
-        setGraphData({ scenario: scenarioData, question: content });
-        setMessages(prev => [...prev, {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: '',
-          messageType: 'scenario',
-          structuredData: scenarioData,
-        }]);
+        setGraphData({ scenario: scenarioData, question: content, entities: [] });
+        setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: '', messageType: 'scenario', structuredData: scenarioData }]);
       }
-
-      // Add approval card if present
       if (approvalData) {
-        setMessages(prev => [...prev, {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: '',
-          messageType: 'approval_request',
-          structuredData: approvalData,
-        }]);
+        setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: '', messageType: 'approval_request', structuredData: approvalData }]);
       }
-
-      // Refresh sessions
       agentGetSessions().then(setSessions).catch(() => {});
 
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
-        setMessages(prev => prev.map(m =>
-          m.id === assistantId
-            ? { ...m, content: fr ? 'Erreur de connexion.' : 'Connection error.', isStreaming: false }
-            : m
-        ));
+        setMessages(prev => prev.map(m => m.id === assistantId
+          ? { ...m, content: fr ? 'Erreur de connexion.' : 'Connection error.', isStreaming: false } : m));
       }
     } finally {
-      setIsProcessing(false);
-      setCurrentState(null);
-      abortRef.current = null;
+      setIsProcessing(false); setCurrentState(null); abortRef.current = null;
     }
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   }
 
   function autoResize(e: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -279,200 +267,218 @@ export default function MrLumeChat() {
     setInput(el.value);
   }
 
-  /* ── Checking state ── */
-  if (connectionStatus === 'checking') {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh]">
-        <MrLumeAvatar size="lg" pulse className="mb-4" />
-        <p className="text-sm text-text-tertiary font-medium">
-          {fr ? 'Connexion à Mr Lume...' : 'Connecting to Mr Lume...'}
-        </p>
-      </div>
-    );
-  }
+  /* ── Suggestions ── */
+  const suggestions = fr
+    ? ['Prépare-moi pour la journée', 'Y a-t-il des problèmes à régler?', 'Qui devrait faire le prochain job?', 'Résume mes clients actifs', 'Analyse mes revenus du mois']
+    : ['Prepare me for the day', 'Any issues to address?', 'Who should handle the next job?', 'Summarize active clients', 'Analyze this month\'s revenue'];
 
-  /* ── Disconnected state ── */
-  if (connectionStatus === 'disconnected') {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] text-center px-4">
-        <MrLumeAvatar size="lg" className="mb-5" />
-        <h1 className="text-xl font-bold text-text-primary mb-2">
-          {fr ? 'Mr Lume n\'est pas disponible' : 'Mr Lume is unavailable'}
-        </h1>
-        <p className="text-sm text-text-tertiary leading-relaxed mb-6 max-w-md">
-          {fr
-            ? 'Le serveur AI n\'est pas accessible. Vérifiez que le backend est en cours d\'exécution.'
-            : 'The AI server is not reachable. Make sure the backend is running.'}
-        </p>
-        <button
-          onClick={() => { setConnectionStatus('checking'); agentHealthCheck().then(h => setConnectionStatus(h.ok ? 'connected' : 'disconnected')); }}
-          className="px-5 py-2.5 rounded-lg bg-text-primary text-surface text-sm font-medium hover:opacity-90 transition-opacity"
-        >
-          {fr ? 'Réessayer' : 'Retry'}
-        </button>
-      </div>
-    );
-  }
+  /* ── Disconnected inline banner ── */
+  const disconnectedBanner = connectionStatus === 'disconnected' && (
+    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-[12px] mb-4 max-w-2xl mx-auto">
+      <div className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+      <span>{fr ? 'Backend non connecté — les réponses ne sont pas disponibles.' : 'Backend disconnected — responses unavailable.'}</span>
+      <button
+        onClick={() => { setConnectionStatus('checking'); agentHealthCheck().then(h => setConnectionStatus(h.ok ? 'connected' : 'disconnected')); }}
+        className="ml-auto text-amber-600 dark:text-amber-400 font-medium hover:underline shrink-0"
+      >
+        {fr ? 'Réessayer' : 'Retry'}
+      </button>
+    </div>
+  );
 
-  /* ── History view ── */
+  /* ═══════════════════════════════════════════════════════════
+     HISTORY VIEW
+     ═══════════════════════════════════════════════════════════ */
   if (showHistory && !isInConversation) {
     return (
-      <div className="max-w-2xl mx-auto pt-4">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-lg font-bold text-text-primary">{fr ? 'Sessions Mr Lume' : 'Mr Lume Sessions'}</h1>
-          <button onClick={startNewChat} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-text-primary text-surface text-xs font-medium hover:opacity-90 transition-opacity">
-            <Plus size={14} />{fr ? 'Nouvelle session' : 'New session'}
-          </button>
-        </div>
-        <div className="space-y-2">
-          {sessions.length === 0 ? (
-            <div className="rounded-xl border border-outline-subtle bg-surface-secondary p-8 text-center">
-              <p className="text-sm text-text-tertiary">{fr ? 'Aucune session précédente' : 'No previous sessions'}</p>
-            </div>
-          ) : sessions.map(s => (
-            <div key={s.id} className="group flex items-start gap-3 rounded-xl border border-outline-subtle bg-surface p-4 hover:border-outline transition-all cursor-pointer" onClick={() => loadSession(s)}>
-              <MrLumeAvatar size="sm" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-text-primary truncate">{s.title || 'Untitled'}</p>
-                <p className="text-xs text-text-tertiary mt-0.5">{s.message_count} messages</p>
+      <div className="flex flex-col h-[calc(100vh-8rem)]">
+        {disconnectedBanner}
+        <div className="max-w-2xl mx-auto w-full pt-4 flex-1 overflow-y-auto">
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-[18px] font-semibold text-text-primary tracking-tight">
+              {fr ? 'Conversations' : 'Conversations'}
+            </h1>
+            <button onClick={startNewChat}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[12px] font-medium hover:opacity-90 transition-opacity">
+              <Plus size={13} />{fr ? 'Nouveau' : 'New Chat'}
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {sessions.length === 0 ? (
+              <div className="rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/30 p-10 text-center">
+                <p className="text-[13px] text-text-tertiary">{fr ? 'Aucune conversation' : 'No conversations yet'}</p>
               </div>
-              <button onClick={(e) => { e.stopPropagation(); handleDeleteSession(s.id); }}
-                className="p-1.5 rounded-md text-text-tertiary hover:text-danger hover:bg-danger-light opacity-0 group-hover:opacity-100 transition-all">
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ))}
+            ) : sessions.map(s => (
+              <div key={s.id}
+                className="group flex items-center gap-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800/30 px-4 py-3.5 hover:border-neutral-300 dark:hover:border-neutral-600 transition-all cursor-pointer"
+                onClick={() => loadSession(s)}>
+                <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-neutral-700 flex items-center justify-center shrink-0">
+                  <Sparkles size={14} className="text-neutral-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium text-text-primary truncate">{s.title || 'Untitled'}</p>
+                  <p className="text-[11px] text-text-tertiary mt-0.5">{s.message_count} messages</p>
+                </div>
+                <button onClick={(e) => { e.stopPropagation(); handleDeleteSession(s.id); }}
+                  className="p-1.5 rounded-lg text-text-tertiary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 opacity-0 group-hover:opacity-100 transition-all">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
-  /* ── Empty state ── */
+  /* ═══════════════════════════════════════════════════════════
+     EMPTY / IDLE STATE  — reproduces screenshot reference
+     ═══════════════════════════════════════════════════════════ */
   if (!isInConversation && !showHistory) {
-    const suggestions = fr
-      ? ['Prepare-moi pour la journee', 'Y a-t-il des problemes a regler?', 'Qui devrait faire le prochain job?', 'Resume mes clients actifs']
-      : ['Prepare me for the day', 'Any issues to address?', 'Who should handle the next job?', 'Summarize my active clients'];
-
     return (
-      <div className="flex flex-col items-center min-h-[70vh]">
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="text-center max-w-2xl pt-8 pb-10">
-          <MrLumeAvatar size="lg" className="mx-auto mb-6" />
-          <h1 className="text-3xl font-bold tracking-tight text-text-primary mb-3">Mr Lume</h1>
-          <p className="text-sm text-text-tertiary leading-relaxed max-w-md mx-auto">
-            {fr
-              ? 'Votre agent CRM intelligent. Posez des questions, obtenez des recommandations, et laissez Mr Lume analyser vos scénarios.'
-              : 'Your intelligent CRM agent. Ask questions, get recommendations, and let Mr Lume analyze your scenarios.'}
-          </p>
-        </motion.div>
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
+        {disconnectedBanner}
 
-        {/* Input */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="w-full max-w-2xl mb-8">
-          <div className="relative rounded-xl border border-outline-subtle bg-surface shadow-sm transition-all focus-within:border-outline focus-within:shadow-md">
-            <textarea ref={inputRef} value={input} onChange={autoResize} onKeyDown={handleKeyDown}
-              aria-label={fr ? 'Message pour Mr Lume' : 'Message for Mr Lume'}
-              placeholder={fr ? 'Demandez à Mr Lume...' : 'Ask Mr Lume...'} rows={1}
-              className="w-full resize-none bg-transparent px-4 py-3.5 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none" style={{ maxHeight: 160 }} />
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              {voiceEnabled && <VoiceInput onTranscript={(t) => setInput(prev => prev + t)} language={language as 'en' | 'fr'} />}
-              <button onClick={() => handleSend()} disabled={!input.trim() || isProcessing}
-                aria-label={fr ? 'Envoyer le message' : 'Send message'}
-                className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors disabled:opacity-30 disabled:pointer-events-none">
-                <Send size={16} />
+        {/* Central input card — the hero of the page */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="w-full max-w-[680px] px-4"
+        >
+          {/* Input card */}
+          <div className="relative rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800/40 shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.2)] transition-all focus-within:shadow-[0_2px_20px_rgba(0,0,0,0.08)] dark:focus-within:shadow-[0_2px_20px_rgba(0,0,0,0.3)] focus-within:border-neutral-300 dark:focus-within:border-neutral-600">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={autoResize}
+              onKeyDown={handleKeyDown}
+              aria-label={fr ? 'Demandez quelque chose...' : 'Ask me anything...'}
+              placeholder={fr ? 'Demandez quelque chose...' : 'Ask me anything...'}
+              rows={1}
+              className="w-full resize-none bg-transparent px-5 pt-5 pb-14 text-[14px] text-text-primary placeholder:text-neutral-400 dark:placeholder:text-neutral-500 focus:outline-none leading-relaxed"
+              style={{ maxHeight: 160 }}
+            />
+            {/* Bottom bar inside card */}
+            <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <button className="p-2 rounded-lg text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700/50 transition-colors" title={fr ? 'Joindre un fichier' : 'Attach file'}>
+                  <Paperclip size={16} />
+                </button>
+                {voiceEnabled && <VoiceInput onTranscript={(txt) => setInput(prev => prev + txt)} language={language as 'en' | 'fr'} />}
+              </div>
+              <button
+                onClick={() => handleSend()}
+                disabled={!input.trim() || isProcessing}
+                aria-label={fr ? 'Envoyer' : 'Send'}
+                className="w-8 h-8 rounded-full bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 flex items-center justify-center hover:opacity-80 transition-opacity disabled:opacity-20 disabled:pointer-events-none"
+              >
+                <ArrowUp size={16} strokeWidth={2.5} />
               </button>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 mt-3 justify-center">
+          {/* Suggestion pills */}
+          <div className="flex flex-wrap gap-2 mt-4 justify-center">
             {suggestions.map((s, i) => (
-              <button key={i} onClick={() => handleSend(s)}
-                className="px-3 py-1.5 rounded-lg border border-outline-subtle bg-surface text-xs font-medium text-text-secondary hover:border-outline hover:text-text-primary transition-all">
+              <button
+                key={i}
+                onClick={() => handleSend(s)}
+                className="px-3.5 py-2 rounded-full border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800/30 text-[12px] font-medium text-neutral-600 dark:text-neutral-400 hover:border-neutral-300 dark:hover:border-neutral-600 hover:text-neutral-900 dark:hover:text-neutral-200 hover:shadow-sm transition-all"
+              >
                 {s}
               </button>
             ))}
           </div>
-        </motion.div>
 
-        {sessions.length > 0 && (
-          <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
-            onClick={() => setShowHistory(true)}
-            className="flex items-center gap-2 text-xs font-medium text-text-tertiary hover:text-text-secondary transition-colors mb-10">
-            <Clock size={13} />
-            {fr ? `${sessions.length} session${sessions.length > 1 ? 's' : ''} précédente${sessions.length > 1 ? 's' : ''}` : `${sessions.length} past session${sessions.length > 1 ? 's' : ''}`}
-            <ArrowRight size={12} />
-          </motion.button>
-        )}
+          {/* Past sessions link */}
+          {sessions.length > 0 && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="flex justify-center mt-6">
+              <button
+                onClick={() => setShowHistory(true)}
+                className="flex items-center gap-2 text-[12px] font-medium text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
+              >
+                <Clock size={13} />
+                {fr ? `${sessions.length} conversation${sessions.length > 1 ? 's' : ''} précédente${sessions.length > 1 ? 's' : ''}` : `${sessions.length} past conversation${sessions.length > 1 ? 's' : ''}`}
+                <ArrowRight size={12} />
+              </button>
+            </motion.div>
+          )}
+        </motion.div>
       </div>
     );
   }
 
-  /* ── Conversation view ── */
+  /* ═══════════════════════════════════════════════════════════
+     CONVERSATION VIEW
+     ═══════════════════════════════════════════════════════════ */
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-2xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between py-3">
-        <div className="flex items-center gap-2">
-          <MrLumeAvatar size="sm" />
-          <span className="text-sm font-semibold text-text-primary">Mr Lume</span>
-          <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-[720px] mx-auto">
+      {disconnectedBanner}
+
+      {/* Compact header */}
+      <div className="flex items-center justify-between py-3 px-1">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+            <Sparkles size={14} className="text-neutral-500" />
+          </div>
+          <span className="text-[13px] font-semibold text-text-primary">Lume Agent</span>
+          {connectionStatus === 'connected' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+          {connectionStatus === 'disconnected' && <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
         </div>
-        <button onClick={startNewChat}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-text-primary text-surface text-xs font-medium hover:opacity-90 transition-opacity">
-          <Plus size={14} />{fr ? 'Nouvelle session' : 'New session'}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {sessions.length > 0 && (
+            <button onClick={() => { startNewChat(); setShowHistory(true); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-text-tertiary hover:text-text-primary hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all">
+              <Clock size={12} />
+              {fr ? 'Historique' : 'History'}
+            </button>
+          )}
+          <button onClick={startNewChat}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[11px] font-medium hover:opacity-90 transition-opacity">
+            <Plus size={12} />{fr ? 'Nouveau' : 'New'}
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 py-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto py-4 space-y-5">
         <AnimatePresence initial={false}>
           {messages.map(msg => {
-            // Scenario expansion + button to reopen graph
             if (msg.messageType === 'scenario' && msg.structuredData) {
-              const scenData = msg.structuredData as ScenarioResult;
               return (
                 <React.Fragment key={msg.id}>
-                  <ScenarioExpansion
-                    data={scenData}
-                    language={language as 'en' | 'fr'}
-                  />
-                  <div className="flex justify-start pl-10 -mt-1">
-                    <button
-                      onClick={() => { setGraphData({ scenario: scenData, question: messages.find(m => m.role === 'user')?.content || '', entities: (scenData.options || []).map(o => ({ type: 'team', label: o.label })) }); setGraphOpen(true); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-outline-subtle text-[11px] font-medium text-text-secondary hover:text-text-primary hover:border-outline transition-all"
-                    >
-                      <Network size={12} />
-                      {fr ? 'Ouvrir le graphe' : 'Open graph'}
+                  <ScenarioExpansion data={msg.structuredData as ScenarioResult} language={language as 'en' | 'fr'} />
+                  <div className="flex justify-start pl-10 -mt-2">
+                    <button onClick={() => setShowRelationGraph(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 text-[11px] font-medium text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 hover:border-neutral-300 dark:hover:border-neutral-600 transition-all">
+                      <Network size={12} />{fr ? 'Voir les relations' : 'View relations'}
                     </button>
                   </div>
                 </React.Fragment>
               );
             }
-
-            // Approval card
             if (msg.messageType === 'approval_request' && msg.structuredData) {
-              return (
-                <React.Fragment key={msg.id}>
-                  <ApprovalCard
-                    data={msg.structuredData as ApprovalRequest}
-                    language={language as 'en' | 'fr'}
-                  />
-                </React.Fragment>
-              );
+              return <ApprovalCard key={msg.id} data={msg.structuredData as ApprovalRequest} language={language as 'en' | 'fr'} />;
             }
 
-            // Regular messages
             return (
-              <motion.div key={msg.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}
+              <motion.div key={msg.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'gap-3 items-start'}`}>
-                {msg.role === 'assistant' && <MrLumeAvatar size="sm" />}
-                <div className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${
+                {msg.role === 'assistant' && (
+                  <div className="w-7 h-7 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center shrink-0 mt-0.5">
+                    <Sparkles size={13} className="text-neutral-500" />
+                  </div>
+                )}
+                <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-[13px] leading-relaxed ${
                   msg.role === 'user'
-                    ? 'bg-text-primary text-surface'
-                    : 'bg-surface-secondary text-text-primary border border-outline-subtle'
+                    ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
+                    : 'bg-neutral-50 dark:bg-neutral-800/50 text-text-primary border border-neutral-200 dark:border-neutral-700'
                 }`}>
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed">{msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}</div>
+                  <div className="whitespace-pre-wrap">{msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}</div>
                   {msg.role === 'assistant' && !msg.isStreaming && msg.content && (
-                    <div className="mt-2 pt-1.5 border-t border-outline-subtle/50">
-                      <FeedbackButtons messageId={msg.id} sessionId={sessionId} language={language as 'en' | 'fr'} />
+                    <div className="mt-2 pt-1.5 border-t border-neutral-200 dark:border-neutral-700/50">
+                      <FeedbackButtons messageId={msg.id} sessionId={sessionId} language={language as 'en' | 'fr'} responseText={msg.content} domain={(msg as any).domain} />
                     </div>
                   )}
                 </div>
@@ -481,7 +487,14 @@ export default function MrLumeChat() {
           })}
         </AnimatePresence>
 
-        {/* Thinking indicator */}
+        {/* Relationship Graph */}
+        {showRelationGraph && !isProcessing && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-neutral-200 dark:border-neutral-700 overflow-hidden shadow-sm">
+            <div style={{ height: 450 }}><RelationshipGraph /></div>
+          </motion.div>
+        )}
+
+        {/* Thinking */}
         {isProcessing && currentState && (
           <AgentThinking currentState={currentState} language={language as 'en' | 'fr'} />
         )}
@@ -489,47 +502,57 @@ export default function MrLumeChat() {
 
       {/* Input */}
       <div className="py-3">
-        <div className="relative rounded-xl border border-outline-subtle bg-surface shadow-sm transition-all focus-within:border-outline focus-within:shadow-md">
-          <textarea ref={inputRef} value={input} onChange={autoResize} onKeyDown={handleKeyDown}
-            aria-label={fr ? 'Message pour Mr Lume' : 'Message for Mr Lume'}
-            placeholder={fr ? 'Votre message...' : 'Your message...'} rows={1}
-            className="w-full resize-none bg-transparent px-4 py-3.5 pr-12 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none"
-            style={{ maxHeight: 160 }} />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            {voiceEnabled && <VoiceInput onTranscript={(t) => setInput(prev => prev + t)} language={language as 'en' | 'fr'} disabled={isProcessing} />}
-            <button onClick={() => handleSend()} disabled={!input.trim() || isProcessing}
-              aria-label={fr ? 'Envoyer le message' : 'Send message'}
-              className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors disabled:opacity-30 disabled:pointer-events-none">
-              {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+        <div className="relative rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800/40 shadow-sm transition-all focus-within:shadow-md focus-within:border-neutral-300 dark:focus-within:border-neutral-600">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={autoResize}
+            onKeyDown={handleKeyDown}
+            aria-label={fr ? 'Votre message...' : 'Your message...'}
+            placeholder={fr ? 'Votre message...' : 'Your message...'}
+            rows={1}
+            className="w-full resize-none bg-transparent px-5 pt-3.5 pb-12 text-[13px] text-text-primary placeholder:text-neutral-400 dark:placeholder:text-neutral-500 focus:outline-none"
+            style={{ maxHeight: 160 }}
+          />
+          <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              {voiceEnabled && <VoiceInput onTranscript={(txt) => setInput(prev => prev + txt)} language={language as 'en' | 'fr'} disabled={isProcessing} />}
+            </div>
+            <button
+              onClick={() => handleSend()}
+              disabled={!input.trim() || isProcessing}
+              aria-label={fr ? 'Envoyer' : 'Send'}
+              className="w-7 h-7 rounded-full bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 flex items-center justify-center hover:opacity-80 transition-opacity disabled:opacity-20 disabled:pointer-events-none"
+            >
+              {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <ArrowUp size={14} strokeWidth={2.5} />}
             </button>
           </div>
         </div>
         <div className="flex items-center justify-center gap-2 mt-2">
-          <p className="text-[10px] text-text-tertiary">
-            Mr Lume · {fr ? 'Votre agent CRM intelligent' : 'Your intelligent CRM agent'}
-          </p>
-          {graphData?.scenario && (
-            <button
-              onClick={() => setGraphOpen(true)}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-outline-subtle text-[10px] font-medium text-text-secondary hover:text-text-primary hover:border-outline transition-all"
-            >
-              <Network size={10} />
-              {fr ? 'Voir graphe' : 'View graph'}
+          <p className="text-[10px] text-neutral-400">Lume Agent</p>
+          {isInConversation && (
+            <button onClick={() => setShowRelationGraph((v) => !v)}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-neutral-200 dark:border-neutral-700 text-[10px] font-medium text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:border-neutral-300 dark:hover:border-neutral-600 transition-all">
+              <Network size={10} />{fr ? 'Graphe relations' : 'Relations graph'}
             </button>
           )}
         </div>
       </div>
 
-      {/* Prediction Graph Panel — live during analysis */}
-      <PredictionGraph
-        open={graphOpen}
-        onClose={() => setGraphOpen(false)}
-        scenarioData={graphData?.scenario || null}
-        question={graphData?.question || ''}
-        currentState={isProcessing ? currentState : 'done'}
-        crmEntities={graphData?.entities || []}
-        language={language as 'en' | 'fr'}
-      />
+      {/* Fullscreen Relationship Graph */}
+      <AnimatePresence>
+        {showRelationGraph && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[90] bg-white dark:bg-neutral-900">
+            <div className="absolute top-3 right-3 z-[91]">
+              <button onClick={() => setShowRelationGraph(false)}
+                className="px-3.5 py-2 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[12px] font-medium hover:opacity-90 transition-opacity">
+                {fr ? 'Fermer' : 'Close'}
+              </button>
+            </div>
+            <RelationshipGraph />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

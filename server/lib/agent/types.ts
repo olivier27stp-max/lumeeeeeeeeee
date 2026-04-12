@@ -20,7 +20,7 @@ export type AgentState =
 
 // ── Agent Intent ───────────────────────────────────────────
 export interface AgentIntent {
-  type: 'query' | 'action' | 'scenario_request' | 'followup' | 'chat';
+  type: 'query' | 'action' | 'scenario_request' | 'followup' | 'chat' | 'composite';
   domain?: string; // 'team_assignment' | 'pricing' | 'followup' | 'general'
   entities: Record<string, string>;
   confidence: number;
@@ -50,15 +50,23 @@ export interface AgentContext {
   // Supabase client (service role for admin ops)
   supabase: SupabaseClient;
 
-  // Model config
+  // Model config (Gemini)
   models: {
-    intent: string;    // e.g. 'llama3.2:3b' or 'llama3.2'
-    reasoning: string; // e.g. 'qwen2.5:7b'
-    scoring: string;   // e.g. 'deepseek-r1:8b'
+    intent: string;
+    reasoning: string;
+    scoring: string;
   };
 
   // Full CRM brain (loaded once at start)
   brainSummary: string;
+
+  // Org profile (detected from data)
+  orgProfile?: {
+    industry?: string;
+    tone?: string;
+    avgJobValue?: number;
+    teamCount?: number;
+  };
 
   // State data (built up as states execute)
   intent?: AgentIntent;

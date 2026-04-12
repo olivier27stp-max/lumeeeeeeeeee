@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import { Lead } from '../types';
 import Papa from 'papaparse';
+import { STAGE_LABEL_MAP, STAGE_DB_MAP, ALL_STAGE_SLUGS, type StageSlug } from './pipelineApi';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 
 export interface CreateLeadInput {
   first_name: string;
@@ -47,76 +49,14 @@ export interface EmailConflictRecord {
   email?: string | null;
 }
 
-export const LEAD_STATUSES = [
-  'new_prospect', 'no_response', 'quote_sent', 'closed_won', 'closed_lost',
-  // Legacy values kept for backward compat
-  'new', 'follow_up_1', 'follow_up_2', 'follow_up_3', 'closed', 'lost',
-] as const;
+// Re-exported from pipelineApi — single source of truth for stage definitions
+export const LEAD_STATUSES = ALL_STAGE_SLUGS;
+export type LeadStatus = StageSlug;
+export const LEAD_STATUS_LABELS: Record<string, string> = STAGE_LABEL_MAP;
 
-export type LeadStatus = (typeof LEAD_STATUSES)[number];
-
-export const LEAD_STATUS_LABELS: Record<string, string> = {
-  new_prospect: 'New Prospect',
-  no_response: 'No Response',
-  quote_sent: 'Quote Sent',
-  closed_won: 'Closed Won',
-  closed_lost: 'Closed Lost',
-  // Legacy
-  new: 'New Prospect',
-  follow_up_1: 'No Response',
-  follow_up_2: 'Quote Sent',
-  follow_up_3: 'Quote Sent',
-  closed: 'Closed Won',
-  lost: 'Closed Lost',
-};
-
-const LEAD_STATUS_MAP: Record<string, string> = {
-  'New Prospect': 'new_prospect',
-  'No Response': 'no_response',
-  'Quote Sent': 'quote_sent',
-  'Closed Won': 'closed_won',
-  'Closed Lost': 'closed_lost',
-  // Legacy mappings
-  New: 'new_prospect',
-  'Follow-up 1': 'no_response',
-  'Follow-up 2': 'quote_sent',
-  'Follow-up 3': 'quote_sent',
-  Closed: 'closed_won',
-  Lost: 'closed_lost',
-  Contacted: 'no_response',
-  'Estimate Sent': 'quote_sent',
-  'Follow-Up': 'no_response',
-  Won: 'closed_won',
-  Archived: 'closed_lost',
-  Lead: 'new_prospect',
-  Qualified: 'new_prospect',
-  Proposal: 'no_response',
-  Negotiation: 'quote_sent',
-};
-
-const DB_TO_UI_STATUS: Record<string, string> = {
-  new_prospect: 'New Prospect',
-  no_response: 'No Response',
-  quote_sent: 'Quote Sent',
-  closed_won: 'Closed Won',
-  closed_lost: 'Closed Lost',
-  // Legacy → new display
-  new: 'New Prospect',
-  follow_up_1: 'No Response',
-  follow_up_2: 'Quote Sent',
-  follow_up_3: 'Quote Sent',
-  closed: 'Closed Won',
-  lost: 'Closed Lost',
-  contacted: 'No Response',
-  estimate_sent: 'Quote Sent',
-  follow_up: 'No Response',
-  won: 'Closed Won',
-  archived: 'Closed Lost',
-  qualified: 'New Prospect',
-  lead: 'New Prospect',
-  proposal: 'No Response',
-  negotiation: 'Quote Sent',
-};
+// Use single source of truth from pipelineApi
+const LEAD_STATUS_MAP = STAGE_DB_MAP;
+const DB_TO_UI_STATUS: Record<string, string> = STAGE_LABEL_MAP;
 
 function toDbStatus(value?: string): string {
   const raw = String(value || '').trim();
@@ -252,9 +192,13 @@ export async function findEmailConflict(email: string): Promise<EmailConflictRec
   const normalized = String(email || '').trim().toLowerCase();
   if (!normalized) return null;
 
+  // Defense-in-depth: always scope to current org (RLS also enforces)
+  const orgId = await getCurrentOrgIdOrThrow();
+
   const { data: leadData, error: leadError } = await supabase
     .from('leads_active')
     .select('id,first_name,last_name,email')
+    .eq('org_id', orgId)
     .ilike('email', normalized)
     .limit(1)
     .maybeSingle();
@@ -270,8 +214,10 @@ export async function findEmailConflict(email: string): Promise<EmailConflictRec
   }
 
   const { data: clientData, error: clientError } = await supabase
-    .from('clients_active')
+    .from('clients')
     .select('id,first_name,last_name,email')
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
     .ilike('email', normalized)
     .limit(1)
     .maybeSingle();

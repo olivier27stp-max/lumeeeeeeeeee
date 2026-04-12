@@ -423,7 +423,7 @@ function FlowMetadataView() {
 
       {/* Linked entities */}
       <div className="space-y-2 border-b border-[#2a2a2a] px-4 py-4">
-        <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[#666]">
+        <h4 className="text-xs font-medium uppercase tracking-wider text-[#666]">
           Linked Entities
         </h4>
         <LinkedEntity
@@ -448,7 +448,7 @@ function FlowMetadataView() {
 
       {/* Estimated credits */}
       <div className="space-y-1 border-b border-[#2a2a2a] px-4 py-4">
-        <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[#666]">
+        <h4 className="text-xs font-medium uppercase tracking-wider text-[#666]">
           Estimated Credits
         </h4>
         <div className="flex items-center gap-2">
@@ -463,7 +463,7 @@ function FlowMetadataView() {
       {/* Validation warnings */}
       {validationWarnings.length > 0 && (
         <div className="space-y-1.5 border-b border-[#2a2a2a] px-4 py-3">
-          <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[#666]">
+          <h4 className="mb-1 text-xs font-medium uppercase tracking-wider text-[#666]">
             Validation
           </h4>
           {validationWarnings.map((w, i) => (
@@ -661,7 +661,7 @@ function NodeInspectorView() {
       {/* Validation warnings for this node */}
       {nodeWarnings.length > 0 && (
         <div className="space-y-1.5 border-b border-[#2a2a2a] px-4 py-3">
-          <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[#666]">
+          <h4 className="mb-1 text-xs font-medium uppercase tracking-wider text-[#666]">
             Validation
           </h4>
           {nodeWarnings.map((w, i) => (

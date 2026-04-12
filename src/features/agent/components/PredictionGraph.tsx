@@ -30,7 +30,7 @@ function SignalNode({ data }: { data: { label: string; active: boolean; done: bo
       >
         <motion.div
           className={`w-3 h-3 rounded-full transition-colors ${
-            data.done ? 'bg-green-400' : data.active ? 'bg-text-primary' : 'bg-surface-tertiary'
+            data.done ? 'bg-green-400' : data.active ? 'bg-primary' : 'bg-surface-tertiary'
           }`}
           animate={data.active ? { scale: [1, 1.4, 1], opacity: [1, 0.6, 1] } : {}}
           transition={data.active ? { duration: 1.2, repeat: Infinity } : {}}
@@ -63,11 +63,11 @@ function CheckNode({ data }: { data: { label: string; icon: string; active: bool
         }`}
       >
         <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
-          data.done ? 'bg-green-100 dark:bg-green-900/40' : data.active ? 'bg-text-primary text-surface' : 'bg-surface-tertiary'
+          data.done ? 'bg-green-100 dark:bg-green-900/40' : data.active ? 'bg-primary text-white' : 'bg-surface-tertiary'
         }`}>
           {data.done ? <CheckCircle2 size={12} className="text-green-500" /> : (
             <motion.div animate={data.active ? { rotate: 360 } : {}} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}>
-              <Icon size={12} className={data.active ? 'text-surface' : 'text-text-tertiary'} />
+              <Icon size={12} className={data.active ? 'text-white' : 'text-text-tertiary'} />
             </motion.div>
           )}
         </div>
@@ -84,10 +84,10 @@ function CheckNode({ data }: { data: { label: string; icon: string; active: bool
 function PandaNode({ data }: { data: { active: boolean } }) {
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} className="!bg-text-primary !w-2 !h-2" />
-      <Handle type="source" position={Position.Right} className="!bg-text-primary !w-2 !h-2" />
-      <Handle type="source" position={Position.Top} className="!bg-text-primary !w-2 !h-2" id="top" />
-      <Handle type="source" position={Position.Bottom} className="!bg-text-primary !w-2 !h-2" id="bottom" />
+      <Handle type="target" position={Position.Left} className="!bg-primary !w-2 !h-2" />
+      <Handle type="source" position={Position.Right} className="!bg-primary !w-2 !h-2" />
+      <Handle type="source" position={Position.Top} className="!bg-primary !w-2 !h-2" id="top" />
+      <Handle type="source" position={Position.Bottom} className="!bg-primary !w-2 !h-2" id="bottom" />
       <motion.div
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
@@ -182,7 +182,7 @@ function ScenarioBranchNode({ data }: { data: { option: ScenarioOption; revealed
         ))}
         <div className="mt-1.5 flex items-center gap-1">
           <div className="flex-1 h-0.5 rounded-full bg-surface-tertiary overflow-hidden">
-            <motion.div className="h-full rounded-full bg-text-primary" initial={{ width: 0 }}
+            <motion.div className="h-full rounded-full bg-primary" initial={{ width: 0 }}
               animate={{ width: `${option.confidence * 100}%` }} transition={{ duration: 0.8, delay: 0.3 }} />
           </div>
           <span className="text-[7px] text-text-tertiary tabular-nums">{Math.round(option.confidence * 100)}%</span>
@@ -197,7 +197,7 @@ function RecommendationNode({ data }: { data: { label: string; score: number; vi
   if (!data.visible) return null;
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} className="!bg-text-primary !w-2 !h-2" />
+      <Handle type="target" position={Position.Left} className="!bg-primary !w-2 !h-2" />
       <motion.div
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
@@ -229,7 +229,8 @@ const nodeTypes = {
 
 const STATE_TO_LAYER: Record<string, number> = {
   understand: 1, fetch_context: 2, check_memory: 2,
-  decide: 3, scenario_engine: 4, recommend: 5, done: 5,
+  decide: 3, scenario_engine: 4, recommend: 5,
+  await_approval: 5, execute: 6, log: 6, done: 6, error: 6,
 };
 
 function buildLiveGraph(
@@ -298,7 +299,7 @@ function buildLiveGraph(
   checks.forEach(c => {
     edges.push({
       id: `e-${c.id}-panda`, source: c.id, target: 'panda', animated: layer === 3,
-      style: { stroke: layer >= 3 ? '#171717' : '#d4d4d4', strokeWidth: layer >= 3 ? 2 : 1 },
+      style: { stroke: layer >= 3 ? 'var(--color-primary)' : 'var(--color-outline)', strokeWidth: layer >= 3 ? 2 : 1 },
     });
   });
 
@@ -308,7 +309,7 @@ function buildLiveGraph(
       id: 'check-decide', type: 'check', position: { x: 400, y: 380 }, draggable: true,
       data: { label: 'Decision', icon: 'Target', active: currentState === 'decide', done: layer > 3 },
     });
-    edges.push({ id: 'e-panda-decide', source: 'panda', target: 'check-decide', sourceHandle: 'bottom', style: { stroke: '#171717', strokeWidth: 1.5 } });
+    edges.push({ id: 'e-panda-decide', source: 'panda', target: 'check-decide', sourceHandle: 'bottom', style: { stroke: 'var(--color-primary)', strokeWidth: 1.5 } });
   }
 
   // ── Layer 4: Scenario branches ──
@@ -325,7 +326,7 @@ function buildLiveGraph(
         id: `e-panda-${id}`, source: 'panda', target: id,
         animated: i < revealedScenarios && !showRecommendation,
         style: {
-          stroke: option.isWinner && showRecommendation ? '#171717' : '#d4d4d4',
+          stroke: option.isWinner && showRecommendation ? 'var(--color-primary)' : 'var(--color-outline)',
           strokeWidth: option.isWinner && showRecommendation ? 2.5 : 1.5,
           opacity: showRecommendation && !option.isWinner ? 0.3 : 1,
         },
@@ -344,7 +345,7 @@ function buildLiveGraph(
       const winnerId = `scenario-${scenarios.indexOf(winner)}`;
       edges.push({
         id: 'e-winner-rec', source: winnerId, target: 'recommendation',
-        animated: true, style: { stroke: '#171717', strokeWidth: 2.5 },
+        animated: true, style: { stroke: 'var(--color-primary)', strokeWidth: 2.5 },
       });
     }
   }
@@ -363,7 +364,7 @@ function GraphLegend({ fr }: { fr: boolean }) {
     { color: 'bg-orange-400', label: fr ? 'Equipe' : 'Team' },
     { color: 'bg-purple-400', label: fr ? 'Devis' : 'Quote' },
     { color: 'bg-surface-tertiary', label: 'Signal' },
-    { color: 'bg-text-primary', label: fr ? 'Scenario' : 'Scenario' },
+    { color: 'bg-primary', label: fr ? 'Scenario' : 'Scenario' },
   ];
 
   return (

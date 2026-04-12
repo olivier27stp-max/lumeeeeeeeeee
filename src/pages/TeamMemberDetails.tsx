@@ -69,18 +69,14 @@ interface MemberData {
 const ROLE_CONFIG: Record<TeamRole, { label_en: string; label_fr: string; icon: typeof Crown; color: string; badge: string }> = {
   owner:      { label_en: 'Account Owner', label_fr: 'Propriétaire',     icon: Crown,       color: 'text-text-secondary',  badge: 'bg-surface-tertiary text-text-secondary border-outline-subtle' },
   admin:      { label_en: 'Admin',         label_fr: 'Administrateur',   icon: ShieldCheck, color: 'text-primary',    badge: 'bg-primary/10 text-primary border-primary/20' },
-  sales_rep:  { label_en: 'Sales Rep',     label_fr: 'Représentant',     icon: ShieldCheck, color: 'text-text-secondary',  badge: 'bg-blue-50 text-blue-600 border-blue-200' },
+  sales_rep:  { label_en: 'Sales Rep',     label_fr: 'Représentant',     icon: ShieldCheck, color: 'text-text-secondary',  badge: 'bg-surface-secondary text-text-secondary border-outline' },
   technician: { label_en: 'Technician',    label_fr: 'Technicien',       icon: Wrench,      color: 'text-text-secondary',  badge: 'bg-surface-tertiary text-text-secondary border-outline-subtle' },
+  manager:    { label_en: 'Manager',       label_fr: 'Gestionnaire',     icon: ShieldCheck, color: 'text-primary',    badge: 'bg-primary/10 text-primary border-primary/20' },
+  support:    { label_en: 'Support',       label_fr: 'Support',          icon: ShieldCheck, color: 'text-text-secondary',  badge: 'bg-green-50 text-green-600 border-green-200' },
+  viewer:     { label_en: 'Viewer',        label_fr: 'Observateur',      icon: User,        color: 'text-text-secondary',  badge: 'bg-surface-tertiary text-text-secondary border-outline-subtle' },
 };
 
-// ── Demo data fallback ───────────────────────────────────────────────
-const DEMO_MEMBERS: Record<string, MemberData> = {
-  'tm-1': { id: 'tm-1', first_name: 'Olivier', last_name: 'St-Pierre', email: 'olivier@lume.crm', phone: '+1 (514) 555-0100', role: 'owner', status: 'active', avatar_url: null, street1: '1234 Rue Principale', street2: '', city: 'Montréal', province: 'QC', postal_code: 'H2X 1Y4', country: 'Canada', labour_cost_hourly: 45, working_hours: getDefaultSchedule(), permissions: getDefaultPermissions('owner'), communication_preferences: DEFAULT_COMMUNICATION_PREFS, created_at: '2025-06-01T10:00:00Z' },
-  'tm-2': { id: 'tm-2', first_name: 'Alex', last_name: 'Johnson', email: 'alex@lume.crm', phone: '+1 (514) 555-0201', role: 'admin', status: 'active', avatar_url: null, street1: '', street2: '', city: '', province: '', postal_code: '', country: '', labour_cost_hourly: 35, working_hours: getDefaultSchedule(), permissions: getDefaultPermissions('admin'), communication_preferences: DEFAULT_COMMUNICATION_PREFS, created_at: '2025-09-15T10:00:00Z' },
-  'tm-3': { id: 'tm-3', first_name: 'Maria', last_name: 'Garcia', email: 'maria@lume.crm', phone: '+1 (514) 555-0302', role: 'technician', status: 'active', avatar_url: null, street1: '', street2: '', city: '', province: '', postal_code: '', country: '', labour_cost_hourly: 22, working_hours: getDefaultSchedule(), permissions: getDefaultPermissions('technician'), communication_preferences: DEFAULT_COMMUNICATION_PREFS, created_at: '2025-11-01T10:00:00Z' },
-  'tm-4': { id: 'tm-4', first_name: 'David', last_name: 'Chen', email: 'david@lume.crm', phone: '+1 (514) 555-0403', role: 'technician', status: 'active', avatar_url: null, street1: '', street2: '', city: '', province: '', postal_code: '', country: '', labour_cost_hourly: 18, working_hours: getDefaultSchedule(), permissions: getDefaultPermissions('technician'), communication_preferences: DEFAULT_COMMUNICATION_PREFS, created_at: '2026-01-10T10:00:00Z' },
-  'tm-5': { id: 'tm-5', first_name: 'Sophie', last_name: 'Martin', email: 'sophie@lume.crm', phone: '+1 (514) 555-0504', role: 'admin', status: 'inactive', avatar_url: null, street1: '', street2: '', city: '', province: '', postal_code: '', country: '', labour_cost_hourly: 30, working_hours: getDefaultSchedule(), permissions: getDefaultPermissions('admin'), communication_preferences: { ...DEFAULT_COMMUNICATION_PREFS, surveys: false }, created_at: '2025-08-20T10:00:00Z' },
-};
+// No demo fallback — all data must come from DB
 
 // ── Time options helper ──────────────────────────────────────────────
 function generateTimeOptions(): string[] {
@@ -96,7 +92,7 @@ const TIME_OPTIONS = generateTimeOptions();
 
 // ── Main Component ───────────────────────────────────────────────────
 export default function TeamMemberDetails() {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const navigate = useNavigate();
   const { memberId } = useParams<{ memberId: string }>();
   const isFr = language === 'fr';
@@ -157,15 +153,9 @@ export default function TeamMemberDetails() {
         });
         if (data.avatar_url) setAvatarPreview(data.avatar_url);
       } else {
-        // Fallback: demo data (only if DB has no record for this ID)
-        const demo = DEMO_MEMBERS[memberId];
-        if (demo) {
-          setForm({ ...demo });
-        } else {
-          toast.error(t.teamMember.memberNotFound);
-          navigate('/settings/team');
-          return;
-        }
+        toast.error(t.teamMember.memberNotFound);
+        navigate('/settings/team');
+        return;
       }
       setLoading(false);
     }
@@ -326,7 +316,7 @@ export default function TeamMemberDetails() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       <PageHeader
         title={fullName}
         subtitle={isFr ? roleCfg.label_fr : roleCfg.label_en}

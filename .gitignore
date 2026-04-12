@@ -4,5 +4,25 @@ dist/
 coverage/
 .DS_Store
 *.log
+
+# ── Environment & secrets ──
 .env*
 !.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+credentials.json
+service-account*.json
+
+# ── Security ──
+*.sqlite
+*.db
+.secret*
+
+# ── IDE ──
+.idea/
+.vscode/settings.json
+*.swp
+*.swo

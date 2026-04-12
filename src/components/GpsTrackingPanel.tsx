@@ -52,7 +52,7 @@ export default function GpsTrackingPanel({ teamId, requireGps = false, className
     : null;
 
   return (
-    <div className={cn('rounded-2xl border border-outline-subtle bg-white p-4 space-y-3', className)}>
+    <div className={cn('rounded-2xl border border-outline-subtle bg-surface-card p-4 space-y-3', className)}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">

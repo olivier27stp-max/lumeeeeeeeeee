@@ -251,7 +251,7 @@ export default function OnboardingTour({ steps, tourKey, onComplete, onSkip }: O
             )}
             <button
               onClick={handleNext}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-medium bg-text-primary text-surface hover:opacity-90 transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-medium bg-primary text-white hover:opacity-90 transition-colors"
             >
               {isLast ? 'Get started' : 'Next'}
               {!isLast && <ChevronRight className="w-3.5 h-3.5" />}

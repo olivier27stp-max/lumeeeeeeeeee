@@ -11,7 +11,7 @@ import { formatDate } from '../lib/utils';
 import { cn } from '../lib/utils';
 import {
   duplicateInvoice, formatMoneyFromCents, getCompanySettings, getInvoiceById,
-  getInvoiceRowUiStatus, listVisualTemplates, markInvoicePaidManually,
+  getInvoiceRowUiStatus, markInvoicePaidManually,
   sendInvoice, toClientDisplayName, voidInvoice,
 } from '../lib/invoicesApi';
 import InvoicePaymentModal from '../components/InvoicePaymentModal';
@@ -23,7 +23,6 @@ import ActivityTimeline from '../components/ActivityTimeline';
 import RequestPaymentModal from '../components/RequestPaymentModal';
 import InvoiceRenderer from '../components/invoice/InvoiceRenderer';
 import { buildRenderData } from '../components/invoice/buildRenderData';
-import type { InvoiceLayoutType } from '../components/invoice/types';
 
 export default function InvoiceDetails() {
   const { t, language } = useTranslation();
@@ -40,7 +39,7 @@ export default function InvoiceDetails() {
   const [showVisualPreview, setShowVisualPreview] = useState(false);
 
   const companyQuery = useQuery({ queryKey: ['companySettings'], queryFn: getCompanySettings });
-  const templatesQuery = useQuery({ queryKey: ['visualTemplates'], queryFn: listVisualTemplates });
+  // Visual templates removed — single fixed invoice layout
 
   const detailsQuery = useQuery({
     queryKey: ['invoiceDetails', invoiceId],
@@ -76,12 +75,10 @@ export default function InvoiceDetails() {
   const isVoid = invoice.status === 'void';
   const isPaid = invoice.status === 'paid';
 
-  // Build render data for visual preview
-  const tpl = templatesQuery.data?.find((t) => t.id === (invoice as any).template_id);
-  const previewLayout: InvoiceLayoutType = (tpl?.layout_type as InvoiceLayoutType) || 'classic';
+  // Build render data for visual preview (fixed layout, company branding)
   const renderData = useMemo(
-    () => buildRenderData(detailsQuery.data!, companyQuery.data, tpl?.branding),
-    [detailsQuery.data, companyQuery.data, tpl],
+    () => buildRenderData(detailsQuery.data!, companyQuery.data),
+    [detailsQuery.data, companyQuery.data],
   );
 
   function invalidateAll() {
@@ -404,11 +401,8 @@ export default function InvoiceDetails() {
                         next.setMonth(next.getMonth() + 1);
                         updateData.next_recurrence_date = next.toISOString().slice(0, 10);
                       }
-                      const { error } = await supabase
-                        .from('invoices')
-                        .update(updateData)
-                        .eq('id', invoice.id);
-                      if (error) throw error;
+                      const { updateInvoiceRecurrence } = await import('../lib/invoicesApi');
+                      await updateInvoiceRecurrence(invoice.id, updateData);
                       queryClient.invalidateQueries({ queryKey: ['invoiceDetails', invoiceId] });
                       toast.success(checked
                         ? (t.invoiceDetails.recurringEnabled)
@@ -421,7 +415,7 @@ export default function InvoiceDetails() {
                   }}
                   className="sr-only peer"
                 />
-                <div className="w-9 h-5 bg-surface-tertiary rounded-full peer peer-checked:bg-primary transition-colors after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
+                <div className="w-9 h-5 bg-surface-tertiary rounded-full peer peer-checked:bg-primary transition-colors after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-surface-card after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
               </label>
             </div>
 
@@ -543,11 +537,11 @@ export default function InvoiceDetails() {
       </section>
 
       {/* Visual Invoice Preview */}
-      {showVisualPreview && (
+      {showVisualPreview && renderData && (
         <section className="section-card overflow-hidden">
           <div className="bg-gray-100 p-6">
-            <div className="mx-auto max-w-[600px] rounded-xl bg-white p-8 shadow-lg">
-              <InvoiceRenderer data={renderData} layout={previewLayout} />
+            <div className="mx-auto max-w-[600px] rounded-xl bg-surface-card p-8 shadow-lg">
+              <InvoiceRenderer data={renderData} />
             </div>
           </div>
         </section>

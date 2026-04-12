@@ -18,24 +18,24 @@ export default function FilterBar({
   className,
 }: FilterBarProps) {
   return (
-    <div className={cn('flex flex-wrap items-center gap-2', className)}>
+    <div className={cn('flex flex-wrap items-center gap-2.5', className)}>
       {onSearchChange && (
         <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
           <input
             type="text"
             value={searchValue || ''}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={searchPlaceholder}
-            className="glass-input pl-8 pr-7 w-56"
+            className="glass-input pl-9 pr-8 w-64"
           />
           {searchValue && (
             <button
               type="button"
               onClick={() => onSearchChange('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary transition-colors"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary transition-colors"
             >
-              <X size={13} />
+              <X size={14} />
             </button>
           )}
         </div>
@@ -56,7 +56,7 @@ interface FilterSelectProps {
 export function FilterSelect({ value, onChange, options, icon, className }: FilterSelectProps) {
   return (
     <div className={cn(
-      'inline-flex items-center gap-1.5 rounded-md border border-outline bg-surface px-2.5 py-[5px]',
+      'inline-flex items-center gap-1.5 rounded-lg border border-outline bg-surface-card px-3 py-[7px] hover:border-outline-strong transition-colors',
       className
     )}>
       {icon && <span className="text-text-tertiary">{icon}</span>}
@@ -86,17 +86,17 @@ export function FilterChip({ label, active, onClick, count }: FilterChipProps) {
       type="button"
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-[5px] text-[13px] font-medium transition-colors',
+        'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-[6px] text-[13px] font-medium transition-all',
         active
-          ? 'border-text-primary bg-text-primary text-surface'
-          : 'border-outline bg-surface text-text-secondary hover:bg-surface-tertiary'
+          ? 'border-primary bg-primary text-white shadow-sm'
+          : 'border-outline bg-surface-card text-text-secondary hover:bg-surface-secondary hover:border-outline-strong'
       )}
     >
       {label}
       {count != null && (
         <span className={cn(
-          'text-[11px] min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1 font-bold',
-          active ? 'bg-surface text-text-primary' : 'bg-surface-tertiary text-text-tertiary'
+          'text-[10px] min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1 font-bold',
+          active ? 'bg-white/20 text-white' : 'bg-surface-tertiary text-text-tertiary'
         )}>
           {count}
         </span>

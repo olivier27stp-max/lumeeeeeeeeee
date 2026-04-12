@@ -34,11 +34,12 @@ router.post('/automations/events/appointment-created', validate(automationEventS
     let clientPhone = '';
     let jobName = '';
 
-    if (jobId) {
+    if (jobId && auth.orgId) {
       const { data: job } = await admin
         .from('jobs')
         .select('title, client_id')
         .eq('id', jobId)
+        .eq('org_id', auth.orgId)
         .maybeSingle();
       if (job) {
         jobName = job.title || '';
@@ -48,6 +49,7 @@ router.post('/automations/events/appointment-created', validate(automationEventS
             .from('clients')
             .select('first_name, last_name, email, phone')
             .eq('id', cid)
+            .eq('org_id', auth.orgId)
             .maybeSingle();
           if (client) {
             clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim();
@@ -129,6 +131,7 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
       .from('jobs')
       .select('title, client_id, status')
       .eq('id', jobId)
+      .eq('org_id', auth.orgId)
       .maybeSingle();
 
     if (!job) return res.status(404).json({ error: 'Job not found' });
@@ -142,6 +145,7 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
         .from('clients')
         .select('first_name, last_name, email, phone')
         .eq('id', job.client_id)
+        .eq('org_id', auth.orgId)
         .maybeSingle();
       if (client) {
         clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim();
@@ -186,10 +190,10 @@ router.post('/automations/events/deal-stage-changed', validate(automationEventSc
     let clientPhone = '';
     let leadName = '';
 
-    if (leadId) {
+    if (leadId && auth.orgId) {
       const { data: lead } = await admin
         .from('leads').select('first_name, last_name, email, phone, client_id')
-        .eq('id', leadId).maybeSingle();
+        .eq('id', leadId).eq('org_id', auth.orgId).maybeSingle();
       if (lead) {
         leadName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
         clientEmail = lead.email || '';
@@ -197,7 +201,7 @@ router.post('/automations/events/deal-stage-changed', validate(automationEventSc
         if (lead.client_id) {
           const { data: client } = await admin
             .from('clients').select('first_name, last_name, email, phone')
-            .eq('id', lead.client_id).maybeSingle();
+            .eq('id', lead.client_id).eq('org_id', auth.orgId).maybeSingle();
           if (client) {
             clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim();
             clientEmail = client.email || clientEmail;
@@ -269,6 +273,133 @@ router.post('/automations/events/quote-approved', validate(automationEventSchema
     });
     return res.json({ ok: true });
   } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /automations/events/invoice-paid ──
+// Called when an invoice is manually marked as paid
+router.post('/automations/events/invoice-paid', validate(automationEventSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const { invoiceId, clientId } = req.body;
+    if (!invoiceId) return res.status(400).json({ error: 'invoiceId is required' });
+
+    const admin = getServiceClient();
+    const { data: inv } = await admin
+      .from('invoices')
+      .select('invoice_number, client_id, job_id, total_cents')
+      .eq('id', invoiceId)
+      .eq('org_id', auth.orgId)
+      .maybeSingle();
+
+    let clientName = '';
+    let clientEmail = '';
+    let clientPhone = '';
+    const cid = clientId || inv?.client_id;
+    if (cid) {
+      const { data: client } = await admin
+        .from('clients')
+        .select('first_name, last_name, email, phone')
+        .eq('id', cid)
+        .eq('org_id', auth.orgId)
+        .maybeSingle();
+      if (client) {
+        clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim();
+        clientEmail = client.email || '';
+        clientPhone = client.phone || '';
+      }
+    }
+
+    await eventBus.emit('invoice.paid', {
+      orgId: auth.orgId,
+      entityType: 'invoice',
+      entityId: invoiceId,
+      actorId: auth.user.id,
+      metadata: {
+        invoice_number: inv?.invoice_number || '',
+        client_id: cid || null,
+        client_name: clientName,
+        client_email: clientEmail,
+        client_phone: clientPhone,
+        total_cents: inv?.total_cents || 0,
+      },
+    });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[automation-events] invoice.paid error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /automations/events/lead-created ──
+router.post('/automations/events/lead-created', validate(automationEventSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const { leadId } = req.body;
+    if (!leadId) return res.status(400).json({ error: 'leadId is required' });
+
+    const admin = getServiceClient();
+    const { data: lead } = await admin
+      .from('leads')
+      .select('first_name, last_name, email, phone, status')
+      .eq('id', leadId)
+      .eq('org_id', auth.orgId)
+      .maybeSingle();
+
+    await eventBus.emit('lead.created', {
+      orgId: auth.orgId,
+      entityType: 'lead',
+      entityId: leadId,
+      actorId: auth.user.id,
+      metadata: {
+        lead_name: lead ? `${lead.first_name || ''} ${lead.last_name || ''}`.trim() : '',
+        email: lead?.email || '',
+        phone: lead?.phone || '',
+        status: lead?.status || 'new',
+      },
+    });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[automation-events] lead.created error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /automations/events/lead-status-changed ──
+router.post('/automations/events/lead-status-changed', validate(automationEventSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const { leadId, oldStatus, newStatus } = req.body;
+    if (!leadId) return res.status(400).json({ error: 'leadId is required' });
+
+    const admin = getServiceClient();
+    const { data: lead } = await admin
+      .from('leads')
+      .select('first_name, last_name, email, phone')
+      .eq('id', leadId)
+      .eq('org_id', auth.orgId)
+      .maybeSingle();
+
+    await eventBus.emit('lead.status_changed', {
+      orgId: auth.orgId,
+      entityType: 'lead',
+      entityId: leadId,
+      actorId: auth.user.id,
+      metadata: {
+        old_status: oldStatus || null,
+        new_status: newStatus || null,
+        lead_name: lead ? `${lead.first_name || ''} ${lead.last_name || ''}`.trim() : '',
+        email: lead?.email || '',
+        phone: lead?.phone || '',
+      },
+    });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[automation-events] lead.status_changed error:', err.message);
     return res.status(500).json({ error: err.message });
   }
 });

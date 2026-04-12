@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import {
-  type GpsProviderConfig, type GpsProvider, type DeviceMapping, type ExternalDevice,
+  type GpsProviderConfig, type GpsProvider, type DeviceMapping, type ExternalDevice, type TraccarConfig, type Life360Config,
   getGpsProviders, saveGpsProvider, disconnectGpsProvider, updateSyncStatus,
   traccarFetchDevices, traccarTestConnection,
   life360FetchCircles, life360TestConnection,
@@ -83,7 +83,7 @@ export default function LocationServices() {
       }
 
       // Save provider
-      await saveGpsProvider(formProvider, formFields);
+      await saveGpsProvider(formProvider, formFields as unknown as TraccarConfig | Life360Config);
       setTestResult({ ok: true, msg: 'Connected successfully!' });
       setFormProvider(null);
       setFormFields({});

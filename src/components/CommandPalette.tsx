@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, Plus, Users, Contact, Briefcase, FileText, ClipboardList,
-  Calendar, Kanban, Settings, MessageSquare, ArrowRight,
+  Calendar, Settings, MessageSquare, ArrowRight,
   CreditCard, TrendingUp, StickyNote, Zap, Receipt, UsersRound, CalendarDays,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -50,6 +50,7 @@ const ENTITY_SECTION_LABELS: Record<SearchEntityType, { en: string; fr: string }
 };
 
 export default function CommandPalette({ open, onClose, language }: CommandPaletteProps) {
+  const { t } = useTranslation();
   const fr = language === 'fr';
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
@@ -58,11 +59,22 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  // Search history (localStorage)
+  const [searchHistory] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('lume-search-history') || '[]').slice(0, 5); } catch { return []; }
+  });
+  const saveToHistory = (q: string) => {
+    if (!q.trim() || q.length < 3) return;
+    try {
+      const prev: string[] = JSON.parse(localStorage.getItem('lume-search-history') || '[]');
+      const updated = [q, ...prev.filter(h => h !== q)].slice(0, 5);
+      localStorage.setItem('lume-search-history', JSON.stringify(updated));
+    } catch {}
+  };
+
   // Navigation commands
   const navCommands = useMemo((): CommandItem[] => [
     { id: 'nav-dashboard', label: t.commandPalette.dashboard, icon: Search, action: () => navigate('/dashboard'), section: t.commandPalette.navigation, keywords: 'home accueil' },
-    { id: 'nav-leads', label: t.clientDetails.quotes, icon: FileText, action: () => navigate('/leads'), section: t.commandPalette.navigation, keywords: 'prospects quotes devis' },
-    { id: 'nav-pipeline', label: 'Pipeline', icon: Kanban, action: () => navigate('/pipeline'), section: t.commandPalette.navigation, keywords: 'deals kanban' },
     { id: 'nav-clients', label: 'Clients', icon: Users, action: () => navigate('/clients'), section: t.commandPalette.navigation, keywords: 'customers' },
     { id: 'nav-jobs', label: 'Jobs', icon: Briefcase, action: () => navigate('/jobs'), section: t.commandPalette.navigation, keywords: 'travaux' },
     { id: 'nav-calendar', label: t.commandPalette.calendar, icon: Calendar, action: () => navigate('/calendar'), section: t.commandPalette.navigation, keywords: 'schedule horaire' },
@@ -72,17 +84,21 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
     { id: 'nav-messages', label: 'Messages', icon: MessageSquare, action: () => navigate('/messages'), section: t.commandPalette.navigation, keywords: 'sms text' },
     { id: 'nav-insights', label: 'Insights', icon: TrendingUp, action: () => navigate('/insights'), section: t.commandPalette.navigation, keywords: 'analytics stats' },
     { id: 'nav-notes', label: 'Notes', icon: StickyNote, action: () => navigate('/notes'), section: t.commandPalette.navigation, keywords: 'boards whiteboard' },
-    { id: 'nav-workflows', label: 'Workflows', icon: Zap, action: () => navigate('/workflows'), section: t.commandPalette.navigation, keywords: 'automations' },
+    { id: 'nav-automations', label: 'Automations', icon: Zap, action: () => navigate('/automations'), section: t.commandPalette.navigation, keywords: 'automations workflows' },
     { id: 'nav-settings', label: t.commandPalette.settings, icon: Settings, action: () => navigate('/settings'), section: t.commandPalette.navigation },
   ], [fr, navigate]);
 
   const actionCommands = useMemo((): CommandItem[] => [
-    { id: 'act-new-lead', label: t.commandPalette.createQuote, icon: Plus, action: () => { navigate('/leads'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-lead')), 300); }, section: t.automations.actions, keywords: 'add new prospect quote devis' },
+    { id: 'act-new-quote', label: t.commandPalette.createQuote, icon: Plus, action: () => { navigate('/quotes'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-quote')), 300); }, section: t.automations.actions, keywords: 'add new prospect quote devis estimate' },
     { id: 'act-new-client', label: t.commandPalette.createClient, icon: Plus, action: () => { navigate('/clients'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-client')), 300); }, section: t.automations.actions, keywords: 'add new customer' },
     { id: 'act-new-job', label: t.commandPalette.createJob, icon: Plus, action: () => { navigate('/jobs'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-job')), 300); }, section: t.automations.actions, keywords: 'add new travail' },
     { id: 'act-new-invoice', label: t.commandPalette.createInvoice, icon: Plus, action: () => { navigate('/invoices'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-invoice')), 300); }, section: t.automations.actions, keywords: 'add new bill' },
-    { id: 'act-new-quote', label: fr ? 'Creer un devis' : 'Create quote', icon: Plus, action: () => { navigate('/quotes'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-quote')), 300); }, section: t.automations.actions, keywords: 'add new estimate' },
-    { id: 'act-new-deal', label: t.commandPalette.createDeal, icon: Plus, action: () => { navigate('/pipeline'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-deal')), 300); }, section: t.automations.actions, keywords: 'add new' },
+    // Smart filters
+    { id: 'filter-jobs-late', label: fr ? 'Jobs en retard' : 'Late jobs', icon: Briefcase, action: () => navigate('/jobs'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'overdue late retard' },
+    { id: 'filter-jobs-today', label: fr ? 'Jobs aujourd\'hui' : 'Jobs today', icon: Calendar, action: () => navigate('/calendar'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'today schedule' },
+    { id: 'filter-invoices-overdue', label: fr ? 'Factures en retard' : 'Overdue invoices', icon: ClipboardList, action: () => navigate('/invoices?status=past_due'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'unpaid late overdue impayé' },
+    { id: 'filter-invoices-draft', label: fr ? 'Factures brouillon' : 'Draft invoices', icon: ClipboardList, action: () => navigate('/invoices?status=draft'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'draft brouillon unsent' },
+    { id: 'filter-quotes-pending', label: fr ? 'Devis en attente' : 'Pending quotes', icon: FileText, action: () => navigate('/quotes'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'pending waiting attente' },
   ], [fr, navigate]);
 
   // Global search via shared API
@@ -119,7 +135,13 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
   // Filter commands by query
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    if (!q) return [...actionCommands, ...navCommands];
+    if (!q) {
+      const historyItems: CommandItem[] = searchHistory.map((h, i) => ({
+        id: `history-${i}`, label: h, icon: Search, section: fr ? 'Recherches récentes' : 'Recent Searches',
+        action: () => setQuery(h),
+      }));
+      return [...historyItems, ...actionCommands, ...navCommands];
+    }
 
     const match = (item: CommandItem) => {
       return item.label.toLowerCase().includes(q) ||
@@ -166,11 +188,11 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const item = filtered[selectedIndex];
-      if (item) { item.action(); onClose(); }
+      if (item) { if (query.trim()) saveToHistory(query.trim()); item.action(); onClose(); }
     } else if (e.key === 'Escape') {
       onClose();
     }
-  }, [filtered, selectedIndex, onClose]);
+  }, [filtered, selectedIndex, onClose, query]);
 
   useEffect(() => {
     const el = listRef.current?.querySelector(`[data-index="${selectedIndex}"]`);

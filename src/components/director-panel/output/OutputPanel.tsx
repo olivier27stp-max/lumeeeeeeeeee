@@ -436,7 +436,7 @@ function CostsTab() {
       </div>
 
       {/* Per-node breakdown */}
-      <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#666]">
+      <h4 className="mb-2 text-xs font-medium uppercase tracking-wider text-[#666]">
         Per-step breakdown
       </h4>
       {nodes.length === 0 ? (

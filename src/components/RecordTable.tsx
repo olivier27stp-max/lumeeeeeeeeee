@@ -70,11 +70,11 @@ export default function RecordTable<T extends { id: string }>({
   );
 
   return (
-    <div className="rounded-xl border border-border/60 bg-white overflow-hidden">
+    <div className="section-card">
       {/* Batch action bar */}
       {selectable && selectedIds.size > 0 && batchActions && (
-        <div className="flex items-center gap-3 border-b border-border bg-surface-secondary/80 px-4 py-2">
-          <span className="text-xs font-medium text-text-secondary">
+        <div className="flex items-center gap-3 border-b border-border-light bg-primary/5 px-5 py-3">
+          <span className="text-xs font-semibold text-primary">
             {selectedIds.size} selected
           </span>
           <div className="flex items-center gap-1.5">
@@ -84,10 +84,10 @@ export default function RecordTable<T extends { id: string }>({
                 type="button"
                 onClick={() => action.onClick(Array.from(selectedIds))}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                  'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
                   action.variant === 'danger'
-                    ? 'text-red-700 hover:bg-red-50'
-                    : 'text-text-primary hover:bg-surface-tertiary'
+                    ? 'text-danger hover:bg-danger-light'
+                    : 'text-text-primary hover:bg-surface-secondary'
                 )}
               >
                 {action.icon}
@@ -98,7 +98,7 @@ export default function RecordTable<T extends { id: string }>({
           <button
             type="button"
             onClick={() => setSelectedIds(new Set())}
-            className="ml-auto text-xs text-text-secondary hover:text-text-primary"
+            className="ml-auto text-xs font-medium text-text-tertiary hover:text-text-primary"
           >
             Clear
           </button>
@@ -108,25 +108,25 @@ export default function RecordTable<T extends { id: string }>({
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
-            <tr className="border-b border-border">
+            <tr className="border-b border-border-light">
               {selectable && (
-                <th className="w-10 px-3 py-2.5">
+                <th className="w-10 px-5 py-3.5">
                   <button
                     type="button"
                     onClick={toggleAll}
                     className={cn(
-                      'flex h-4 w-4 items-center justify-center rounded border transition-colors',
+                      'flex h-[18px] w-[18px] items-center justify-center rounded-md border-[1.5px] transition-all',
                       allSelected
-                        ? 'border-text-primary bg-text-primary text-white'
+                        ? 'border-primary bg-primary text-white'
                         : someSelected
-                          ? 'border-border bg-surface-tertiary'
-                          : 'border-border hover:border-border'
+                          ? 'border-primary/40 bg-primary/10'
+                          : 'border-outline hover:border-outline-strong'
                     )}
                   >
                     {allSelected ? (
-                      <Check size={10} strokeWidth={3} />
+                      <Check size={11} strokeWidth={3} />
                     ) : someSelected ? (
-                      <Minus size={10} strokeWidth={3} />
+                      <Minus size={11} strokeWidth={3} className="text-primary" />
                     ) : null}
                   </button>
                 </th>
@@ -135,7 +135,7 @@ export default function RecordTable<T extends { id: string }>({
                 <th
                   key={col.key}
                   className={cn(
-                    'px-3 py-2.5 text-[11px] font-medium uppercase tracking-wider text-text-secondary',
+                    'px-5 py-3.5 text-xs font-medium text-text-tertiary',
                     col.sortable && 'cursor-pointer select-none hover:text-text-primary'
                   )}
                   style={col.width ? { width: col.width } : undefined}
@@ -154,11 +154,11 @@ export default function RecordTable<T extends { id: string }>({
           <tbody>
             {loading &&
               Array.from({ length: 5 }).map((_, idx) => (
-                <tr key={`skeleton-${idx}`} className="border-b border-border">
-                  {selectable && <td className="px-3 py-3"><div className="h-4 w-4 rounded bg-surface-tertiary" /></td>}
+                <tr key={`skeleton-${idx}`} className="border-b border-border-light/60">
+                  {selectable && <td className="px-5 py-4"><div className="h-[18px] w-[18px] rounded-md bg-surface-secondary" /></td>}
                   {columns.map((col) => (
-                    <td key={col.key} className="px-3 py-3">
-                      <div className="h-4 w-24 rounded bg-surface-tertiary animate-pulse" />
+                    <td key={col.key} className="px-5 py-4">
+                      <div className="h-4 w-24 rounded-md bg-surface-secondary animate-pulse" />
                     </td>
                   ))}
                 </tr>
@@ -167,7 +167,7 @@ export default function RecordTable<T extends { id: string }>({
               <tr>
                 <td
                   colSpan={columns.length + (selectable ? 1 : 0)}
-                  className="px-3 py-12 text-center text-sm text-text-tertiary"
+                  className="px-5 py-16 text-center text-sm text-text-tertiary"
                 >
                   {emptyMessage}
                 </td>
@@ -181,15 +181,15 @@ export default function RecordTable<T extends { id: string }>({
                     key={row.id}
                     onClick={() => onRowClick?.(row)}
                     className={cn(
-                      'border-b border-border transition-colors',
+                      'border-b border-border-light/60 transition-colors',
                       onRowClick && 'cursor-pointer',
                       isSelected
-                        ? 'bg-surface-tertiary/40'
-                        : 'hover:bg-surface-secondary/60'
+                        ? 'bg-primary/[0.04]'
+                        : 'hover:bg-surface-secondary dark:hover:bg-surface-secondary/50'
                     )}
                   >
                     {selectable && (
-                      <td className="px-3 py-2.5">
+                      <td className="px-5 py-3.5">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -197,18 +197,18 @@ export default function RecordTable<T extends { id: string }>({
                             toggleRow(row.id);
                           }}
                           className={cn(
-                            'flex h-4 w-4 items-center justify-center rounded border transition-colors',
+                            'flex h-[18px] w-[18px] items-center justify-center rounded-md border-[1.5px] transition-all',
                             isSelected
-                              ? 'border-text-primary bg-text-primary text-white'
-                              : 'border-border hover:border-border'
+                              ? 'border-primary bg-primary text-white'
+                              : 'border-outline hover:border-outline-strong'
                           )}
                         >
-                          {isSelected && <Check size={10} strokeWidth={3} />}
+                          {isSelected && <Check size={11} strokeWidth={3} />}
                         </button>
                       </td>
                     )}
                     {columns.map((col) => (
-                      <td key={col.key} className="px-3 py-2.5 text-sm text-text-primary">
+                      <td key={col.key} className="px-5 py-3.5 text-[13px] text-text-primary">
                         {col.render(row)}
                       </td>
                     ))}

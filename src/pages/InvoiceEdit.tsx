@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ArrowLeft, GripVertical, Plus, Save, Send, Trash2, Eye, X,
+  ArrowLeft, Plus, Save, Send, Trash2, Eye, X,
 } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,8 +12,8 @@ import {
   getCompanySettings,
   getInvoiceById,
   getJobLineItems,
-  listVisualTemplates,
   saveInvoiceDraft,
+  updateInvoiceFields,
   searchActiveClients,
   sendInvoice,
   type InvoiceDetail,
@@ -21,12 +21,11 @@ import {
 } from '../lib/invoicesApi';
 import { calculateInvoiceTotals, lineTotal } from '../lib/invoiceCalc';
 import InvoiceRenderer from '../components/invoice/InvoiceRenderer';
-import InvoiceTemplatePicker from '../components/invoice/InvoiceTemplatePicker';
 import { buildRenderData } from '../components/invoice/buildRenderData';
-import type { InvoiceLayoutType } from '../components/invoice/types';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import { resolveTaxes, calculateTaxes, type TaxConfig } from '../lib/taxApi';
 
 // ── Line item form ──
 interface LineForm {
@@ -79,9 +78,27 @@ export default function InvoiceEdit() {
   const [notes, setNotes] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
   const [taxDollars, setTaxDollars] = useState(0);
+  const [taxAutoMode, setTaxAutoMode] = useState(true);
+  const [resolvedTaxes, setResolvedTaxes] = useState<TaxConfig[]>([]);
   const [discountDollars, setDiscountDollars] = useState(0);
   const [lines, setLines] = useState<LineForm[]>([emptyLine()]);
-  const [layout, setLayout] = useState<InvoiceLayoutType>('classic');
+  const [dirty, setDirty] = useState(false);
+
+  // Warn on unsaved changes — mark dirty on any form field change
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+
+  // Track changes to mark form as dirty — skip initial hydration
+  const hydrated = React.useRef(false);
+  useEffect(() => {
+    if (!draftId) return;
+    if (!hydrated.current) { hydrated.current = true; return; }
+    setDirty(true);
+  }, [subject, dueDate, notes, internalNotes, discountDollars, taxDollars, lines]);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
@@ -99,10 +116,7 @@ export default function InvoiceEdit() {
     queryFn: getCompanySettings,
   });
 
-  const templatesQuery = useQuery({
-    queryKey: ['visualTemplates'],
-    queryFn: listVisualTemplates,
-  });
+  // Visual templates removed — single fixed invoice layout
 
   // Client search
   useEffect(() => {
@@ -133,6 +147,7 @@ export default function InvoiceEdit() {
     setNotes((invoice as any).notes || '');
     setInternalNotes((invoice as any).internal_notes || '');
     setTaxDollars(invoice.tax_cents / 100);
+    if (invoice.tax_cents > 0) setTaxAutoMode(false); // Existing invoice has manual tax
     setDiscountDollars(((invoice as any).discount_cents || 0) / 100);
     setClientName(client ? `${client.first_name || ''} ${client.last_name || ''}`.trim() : invoice.client_name);
     setClientEmail(client?.email || '');
@@ -151,13 +166,9 @@ export default function InvoiceEdit() {
           }))
         : [emptyLine()],
     );
-    // Template
+    // Template ID (legacy, kept for data compat)
     const tplId = (invoice as any).template_id;
-    if (tplId) {
-      setTemplateId(tplId);
-      const tpl = templatesQuery.data?.find((t) => t.id === tplId);
-      if (tpl?.layout_type) setLayout(tpl.layout_type as InvoiceLayoutType);
-    }
+    if (tplId) setTemplateId(tplId);
   }, [detailQuery.data]);
 
   // ── Prefill from job ──
@@ -190,6 +201,24 @@ export default function InvoiceEdit() {
         .filter((l) => l.description && l.qty > 0),
     [lines],
   );
+
+  // ── Auto-resolve taxes when client changes ──
+  useEffect(() => {
+    if (!taxAutoMode) return;
+    resolveTaxes(clientId || null).then(({ taxes }) => {
+      setResolvedTaxes(taxes);
+    }).catch(() => {});
+  }, [clientId, taxAutoMode]);
+
+  // Auto-calculate tax from resolved rates
+  useEffect(() => {
+    if (!taxAutoMode || resolvedTaxes.length === 0) return;
+    const subtotal = normalizedItems.reduce((s, i) => s + i.qty * i.unit_price_cents, 0);
+    const disc = Math.max(0, Math.round(discountDollars * 100));
+    const breakdown = calculateTaxes(subtotal, disc, resolvedTaxes);
+    const autoTax = breakdown.reduce((s, t) => s + t.amount_cents, 0);
+    setTaxDollars(autoTax / 100);
+  }, [normalizedItems, discountDollars, resolvedTaxes, taxAutoMode]);
 
   const taxCents = Math.max(0, Math.round(taxDollars * 100));
   const discountCents = Math.max(0, Math.round(discountDollars * 100));
@@ -235,27 +264,35 @@ export default function InvoiceEdit() {
         subject: subject.trim() || null,
         dueDate: dueDate || null,
         taxCents,
-        items: lines
-          .filter((l) => l.included && l.description.trim())
-          .map((l, i) => ({
+        items: (() => {
+          const filtered = lines
+            .map((l, origIdx) => ({ ...l, origIdx }))
+            .filter((l) => l.included && l.description.trim() && (Number.isFinite(l.qty) ? l.qty : 0) > 0);
+          if (filtered.length === 0) throw new Error(language === 'fr' ? 'Au moins un item valide requis' : 'At least one valid line item required');
+          return filtered;
+        })()
+          .map((l) => ({
             description: l.description.trim(),
-            qty: Number.isFinite(l.qty) ? l.qty : 0,
-            unit_price_cents: Math.round((Number.isFinite(l.unitPrice) ? l.unitPrice : 0) * 100),
+            qty: Math.max(0, Number.isFinite(l.qty) ? l.qty : 0),
+            unit_price_cents: Math.max(0, Math.round((Number.isFinite(l.unitPrice) ? l.unitPrice : 0) * 100)),
             title: l.title.trim() || undefined,
-            sort_order: i + 1,
+            sort_order: l.origIdx + 1,
             source_type: l.source_type || undefined,
             source_id: l.source_id || undefined,
           } as any)),
       });
 
-      // Update extra fields that rpc_save_invoice_draft handles
-      // (notes, internal_notes, discount_cents, template_id are in the enhanced RPC)
+      // Persist template selection
+      if (templateId) {
+        await updateInvoiceFields(id!, { template_id: templateId });
+      }
 
       queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
       queryClient.invalidateQueries({ queryKey: ['invoicesKpis30d'] });
       queryClient.invalidateQueries({ queryKey: ['invoiceDetails', id] });
       queryClient.invalidateQueries({ queryKey: ['invoiceEdit', id] });
 
+      setDirty(false);
       toast.success(t.invoiceEdit.invoiceSaved);
 
       if (isNew && id) {
@@ -300,7 +337,6 @@ export default function InvoiceEdit() {
   // ── Build preview data ──
   const previewData = useMemo(() => {
     const company = companyQuery.data;
-    const tpl = templatesQuery.data?.find((t) => t.layout_type === layout);
     return buildRenderData(
       {
         invoice: {
@@ -346,11 +382,10 @@ export default function InvoiceEdit() {
           })),
       },
       company,
-      tpl?.branding,
     );
   }, [
     clientId, clientName, clientEmail, clientPhone, subject, dueDate, notes,
-    lines, totals, layout, companyQuery.data, templatesQuery.data, detailQuery.data,
+    lines, totals, companyQuery.data, detailQuery.data,
   ]);
 
   const fmt = (cents: number) => formatMoneyFromCents(cents, 'CAD');
@@ -633,23 +668,15 @@ export default function InvoiceEdit() {
               </div>
             </div>
 
-            {/* Template Picker */}
-            <InvoiceTemplatePicker
-              selectedLayout={layout}
-              onSelect={(l, id) => {
-                setLayout(l);
-                if (id) setTemplateId(id);
-              }}
-              templates={templatesQuery.data}
-            />
+            {/* Invoice uses fixed layout — no template picker */}
           </div>
         </div>
 
         {/* RIGHT: Live Preview */}
         {showPreview && (
           <div className="w-[45%] overflow-y-auto border-l border-border bg-gray-100 p-6">
-            <div className="mx-auto max-w-[600px] rounded-xl bg-white p-8 shadow-lg">
-              <InvoiceRenderer data={previewData} layout={layout} />
+            <div className="mx-auto max-w-[600px] rounded-xl bg-surface-card p-8 shadow-lg">
+              <InvoiceRenderer data={previewData} />
             </div>
           </div>
         )}

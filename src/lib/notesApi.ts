@@ -5,6 +5,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 import type {
   Note, NoteFile, NoteTag, NoteHistoryEntry,
   NoteChecklistItem, NoteColor, NoteEntityType,
@@ -90,19 +91,12 @@ export async function createNote(note: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  const { data: membership } = await supabase
-    .from('memberships')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single();
-
-  if (!membership?.org_id) throw new Error('No organization');
+  const orgId = await getCurrentOrgIdOrThrow();
 
   const { data, error } = await supabase
     .from('notes')
     .insert({
-      org_id: membership.org_id,
+      org_id: orgId,
       created_by: user.id,
       content: note.content,
       pinned: note.pinned ?? false,
@@ -135,6 +129,11 @@ export async function updateNote(id: string, updates: Partial<Pick<Note,
 }
 
 export async function deleteNote(id: string): Promise<void> {
+  // Cascade: delete dependents before the note itself
+  await supabase.from('notes_checklist').delete().eq('note_id', id);
+  await supabase.from('notes_tags').delete().eq('note_id', id);
+  await supabase.from('notes_files').delete().eq('note_id', id);
+
   const { error } = await supabase
     .from('notes')
     .delete()
@@ -154,8 +153,13 @@ export async function togglePin(id: string, pinned: boolean): Promise<void> {
 
 // ─── Files ────────────────────────────────────────────────────
 
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
+const BLOCKED_EXTENSIONS = new Set(['exe', 'bat', 'cmd', 'sh', 'php', 'js', 'vbs', 'ps1', 'msi', 'dll', 'scr']);
+
 export async function uploadNoteFile(noteId: string, file: File): Promise<NoteFile> {
-  const ext = file.name.split('.').pop() ?? 'bin';
+  if (file.size > MAX_FILE_SIZE) throw new Error(`File too large (max ${MAX_FILE_SIZE / 1024 / 1024}MB)`);
+  const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase();
+  if (BLOCKED_EXTENSIONS.has(ext)) throw new Error(`File type .${ext} is not allowed`);
   const path = `notes/${noteId}/${crypto.randomUUID()}.${ext}`;
 
   const { error: uploadError } = await supabase.storage
@@ -314,19 +318,12 @@ export async function fetchOrgMembers(): Promise<{ id: string; email: string; fu
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
 
-  const { data: membership } = await supabase
-    .from('memberships')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single();
-
-  if (!membership?.org_id) return [];
+  const orgId = await getCurrentOrgIdOrThrow();
 
   const { data, error } = await supabase
     .from('memberships')
     .select('user_id')
-    .eq('org_id', membership.org_id);
+    .eq('org_id', orgId);
 
   if (error || !data) return [];
 

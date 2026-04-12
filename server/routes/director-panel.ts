@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { Router, Request, Response } from 'express';
-import { buildSupabaseWithAuth, getServiceClient, resolveOrgId } from '../lib/supabase';
+import { buildSupabaseWithAuth, getServiceClient, resolveOrgId, requireAuthedClient } from '../lib/supabase';
 
 const router = Router();
 
@@ -166,6 +166,8 @@ router.post('/director-panel/storage/ensure-bucket', async (req: Request, res: R
 
 router.post('/director-panel/storage/ensure-training-bucket', async (req: Request, res: Response) => {
   try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
     const admin = getServiceClient();
     const { data: buckets } = await admin.storage.listBuckets();
     const exists = buckets?.some((b: any) => b.name === 'director-assets');

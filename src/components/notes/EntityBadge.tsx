@@ -8,8 +8,8 @@ import type { EntityType } from '../../types/noteBoard';
 const entityMeta: Record<EntityType, { icon: React.ElementType; label: string; className: string }> = {
   lead:        { icon: Contact,      label: 'Lead',        className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
   client:      { icon: Users,        label: 'Client',      className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
-  job:         { icon: Briefcase,    label: 'Job',         className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
-  invoice:     { icon: FileText,     label: 'Invoice',     className: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' },
+  job:         { icon: Briefcase,    label: 'Job',         className: 'bg-surface-secondary text-text-secondary' },
+  invoice:     { icon: FileText,     label: 'Invoice',     className: 'bg-surface-secondary text-text-secondary' },
   payment:     { icon: CreditCard,   label: 'Payment',     className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' },
   team_member: { icon: UserCircle2,  label: 'Team Member', className: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300' },
 };

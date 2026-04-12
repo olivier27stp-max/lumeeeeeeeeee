@@ -42,7 +42,7 @@ export default function CommunicationsTimeline({ jobId, clientId, refreshKey }: 
     <div className="rounded-xl border border-outline bg-surface overflow-hidden">
       <div className="px-5 py-3.5 border-b border-outline-subtle">
         <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-          <div className="icon-tile icon-tile-sm icon-tile-purple">
+          <div className="icon-tile icon-tile-sm icon-tile-blue">
             <MessageSquare size={13} strokeWidth={2} />
           </div>
           Communications
@@ -88,7 +88,7 @@ function CommRow({ message }: { message: CommunicationMessage; key?: string }) {
   return (
     <div className="rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-start gap-3">
       {/* Icon */}
-      <div className="icon-tile icon-tile-sm icon-tile-purple flex-shrink-0 mt-0.5">
+      <div className="icon-tile icon-tile-sm icon-tile-blue flex-shrink-0 mt-0.5">
         <Icon size={13} strokeWidth={2} />
       </div>
 

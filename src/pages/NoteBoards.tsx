@@ -29,8 +29,8 @@ const boardTypeIcons: Record<BoardType, React.ElementType> = {
 };
 
 const boardTypeColors: Record<BoardType, string> = {
-  freeform: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  meeting: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+  freeform: 'bg-surface-secondary text-text-secondary',
+  meeting: 'bg-surface-secondary text-text-secondary',
   brainstorm: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
   project_plan: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
   retrospective: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
@@ -151,7 +151,6 @@ export default function NoteBoards() {
         <div className="mt-12">
           <EmptyState
             icon={StickyNote}
-            iconColor="blue"
             title={search
               ? (t.noteBoards.noBoardsFound)
               : (t.noteBoards.noBoardsYet)
@@ -310,12 +309,12 @@ export default function NoteBoards() {
                     className={cn(
                       'flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center transition-all',
                       newType === type
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                        ? 'border-primary bg-primary/5'
                         : 'border-outline hover:border-outline-subtle hover:bg-surface-secondary'
                     )}
                   >
-                    <Icon size={18} className={newType === type ? 'text-blue-600' : 'text-text-tertiary'} />
-                    <span className={cn('text-[11px] font-medium', newType === type ? 'text-blue-700 dark:text-blue-300' : 'text-text-secondary')}>
+                    <Icon size={18} className={newType === type ? 'text-text-primary' : 'text-text-tertiary'} />
+                    <span className={cn('text-[11px] font-medium', newType === type ? 'text-text-primary' : 'text-text-secondary')}>
                       {language === 'fr' ? meta.labelFr : meta.label}
                     </span>
                   </button>

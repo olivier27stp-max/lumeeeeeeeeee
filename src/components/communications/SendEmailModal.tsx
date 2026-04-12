@@ -258,7 +258,7 @@ export default function SendEmailModal({
             >
               <span className="text-text-primary font-medium">Job attachments</span>
               <span className="flex items-center gap-1.5 text-text-tertiary">
-                <span className="bg-surface-tertiary text-text-secondary text-[11px] font-semibold rounded-full w-5 h-5 inline-flex items-center justify-center">0</span>
+                <span className="bg-surface-tertiary text-text-secondary text-xs font-medium rounded-full w-5 h-5 inline-flex items-center justify-center">0</span>
                 {jobAttOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </span>
             </button>
@@ -273,7 +273,7 @@ export default function SendEmailModal({
             >
               <span className="text-text-primary font-medium">Client attachments</span>
               <span className="flex items-center gap-1.5 text-text-tertiary">
-                <span className="bg-surface-tertiary text-text-secondary text-[11px] font-semibold rounded-full w-5 h-5 inline-flex items-center justify-center">0</span>
+                <span className="bg-surface-tertiary text-text-secondary text-xs font-medium rounded-full w-5 h-5 inline-flex items-center justify-center">0</span>
                 {clientAttOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </span>
             </button>

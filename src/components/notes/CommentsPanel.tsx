@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import { X, Send, CheckCircle2, MessageCircle, AtSign } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 export interface BoardComment {
   id: string;
@@ -35,6 +35,7 @@ function CommentsPanel({
   comments, selectedItemId, currentUserId, currentUserName,
   language, onAddComment, onResolve, onDelete, onClose,
 }: CommentsPanelProps) {
+  const { t } = useTranslation();
   const fr = language === 'fr';
   const [newComment, setNewComment] = useState('');
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -88,7 +89,7 @@ function CommentsPanel({
             className={cn(
               'px-2 py-0.5 rounded-md text-[10px] font-medium transition-colors',
               filter === f
-                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                ? 'bg-primary/10 text-text-primary'
                 : 'text-text-tertiary hover:bg-surface-secondary',
             )}
           >
@@ -111,7 +112,7 @@ function CommentsPanel({
               {/* Main comment */}
               <div className="bg-surface-secondary rounded-lg p-2">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-semibold text-text-primary">{comment.user_name}</span>
+                  <span className="text-xs font-medium text-text-primary">{comment.user_name}</span>
                   <span className="text-[9px] text-text-tertiary">
                     {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
                   </span>
@@ -120,7 +121,7 @@ function CommentsPanel({
                 <div className="flex items-center gap-2 mt-1.5">
                   <button
                     onClick={() => setReplyTo(comment.id)}
-                    className="text-[10px] text-blue-500 hover:text-blue-600 font-medium"
+                    className="text-[10px] text-text-secondary hover:text-text-primary font-medium"
                   >
                     {t.noteCanvas.reply}
                   </button>

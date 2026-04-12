@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 import type { WorkflowPreset } from './workflowPresets';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -88,18 +89,6 @@ export interface WorkflowLog {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
-async function getOrgId(): Promise<string> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
-  const { data } = await supabase
-    .from('memberships')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single();
-  if (!data) throw new Error('No organization found');
-  return data.org_id;
-}
 
 // ─── Trigger definitions ────────────────────────────────────────
 export const TRIGGER_DEFS: Record<TriggerType, { label: string; labelFr: string; icon: string; category: string }> = {
@@ -145,7 +134,7 @@ export const ACTION_DEFS: Record<ActionType, { label: string; labelFr: string; i
 // ─── CRUD ───────────────────────────────────────────────────────
 
 export async function getWorkflows(): Promise<Workflow[]> {
-  const orgId = await getOrgId();
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('workflows')
     .select('*')
@@ -170,7 +159,7 @@ export async function createWorkflow(
   triggerType: TriggerType,
   opts?: { preset_id?: string; category?: string; icon?: string; description?: string; status?: WorkflowStatus }
 ): Promise<Workflow> {
-  const orgId = await getOrgId();
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data: { user } } = await supabase.auth.getUser();
   const { data, error } = await supabase
     .from('workflows')
@@ -340,7 +329,7 @@ export async function getRunLogs(runId: string): Promise<WorkflowLog[]> {
 // ─── Execution Engine ───────────────────────────────────────────
 
 export async function executeWorkflow(workflowId: string, triggerData: Record<string, any> = {}): Promise<WorkflowRun> {
-  const orgId = await getOrgId();
+  const orgId = await getCurrentOrgIdOrThrow();
   const startTime = Date.now();
 
   const { data: run, error: runError } = await supabase

@@ -17,8 +17,9 @@ import {
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
-import { PageHeader } from '../components/ui';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useTranslation } from '../i18n';
+import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import PermissionGate from '../components/PermissionGate';
 import {
   fetchConversations,
@@ -43,6 +44,7 @@ function NewConversationModal({
   onSend: (phone: string, message: string, clientId?: string, clientName?: string) => Promise<void>;
   language: string;
 }) {
+  const { t } = useTranslation();
   const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -63,9 +65,11 @@ function NewConversationModal({
   useEffect(() => {
     if (clientSearch.length < 2) { setClients([]); return; }
     const timeout = setTimeout(async () => {
+      const orgId = await getCurrentOrgIdOrThrow();
       const { data } = await supabase
         .from('clients')
         .select('id, first_name, last_name, phone')
+        .eq('org_id', orgId)
         .or(`first_name.ilike.%${clientSearch}%,last_name.ilike.%${clientSearch}%,phone.ilike.%${clientSearch}%`)
         .limit(8);
       setClients(data || []);
@@ -123,7 +127,7 @@ function NewConversationModal({
               value={clientSearch}
               onChange={(e) => { setClientSearch(e.target.value); setSelectedClient(null); }}
               placeholder={t.messaging.nameOrPhone}
-              className="input-field"
+              className="glass-input w-full"
             />
             {clients.length > 0 && !selectedClient && (
               <div className="mt-1 border border-outline rounded-xl overflow-hidden bg-surface max-h-40 overflow-y-auto">
@@ -165,7 +169,7 @@ function NewConversationModal({
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="+1 (819) 388-9150"
-                className="input-field"
+                className="glass-input w-full"
               />
             </div>
           )}
@@ -178,19 +182,19 @@ function NewConversationModal({
               onChange={(e) => setMessage(e.target.value)}
               rows={3}
               placeholder={t.messaging.typeYourMessage}
-              className="input-field resize-none"
+              className="glass-input w-full resize-none"
             />
           </div>
         </div>
 
         <div className="px-5 py-4 border-t border-outline flex justify-end gap-2">
-          <button onClick={onClose} className="btn-secondary text-[13px] px-4 py-2">
+          <button onClick={onClose} className="glass-button text-[13px] px-4 py-2">
             {t.advancedNotes.cancel}
           </button>
           <button
             onClick={handleSend}
             disabled={sending || (!phone && !selectedClient?.phone) || !message.trim()}
-            className="btn-primary text-[13px] px-4 py-2 flex items-center gap-2 disabled:opacity-50"
+            className="glass-button-primary text-[13px] px-4 py-2 flex items-center gap-2 disabled:opacity-50"
           >
             <Send size={13} />
             {sending ? (t.invoiceDetails.sending) : (t.invoices.send)}
@@ -412,29 +416,29 @@ export default function Messages() {
   }
 
   return (
-    <PermissionGate permission="automations.manage_email_sms">
+    <PermissionGate permission="automations.update">
     <>
-      <PageHeader
-        icon={MessageSquare}
-        title={t.messaging.messages}
-        subtitle={t.messaging.twowaySmsMessaging}
-        iconColor="cyan"
-      >
-        <button onClick={() => setShowNewModal(true)} className="btn-primary text-[13px] px-4 py-2 flex items-center gap-2">
-          <Plus size={14} />
-          {t.messaging.newMessage}
-        </button>
-      </PageHeader>
+      {/* ── Full-height messaging layout matching reference ── */}
+      <div className="bg-surface rounded-2xl border border-border overflow-hidden flex" style={{ height: 'calc(100vh - 180px)' }}>
 
-      {/* Main messaging layout */}
-      <div className="mt-4 bg-surface border border-outline rounded-2xl overflow-hidden flex" style={{ height: 'calc(100vh - 200px)' }}>
-        {/* ── Left: Conversation List ──────────────────────────── */}
+        {/* ── Left: Conversation Sidebar ── */}
         <div className={cn(
-          "w-[340px] border-r border-outline flex flex-col shrink-0",
-          selectedConvo ? "hidden md:flex" : "flex w-full md:w-[340px]"
+          "w-[300px] border-r border-border flex flex-col shrink-0 bg-surface",
+          selectedConvo ? "hidden md:flex" : "flex w-full md:w-[300px]"
         )}>
+          {/* Header: Chats + New button */}
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
+            <h2 className="text-[20px] font-bold text-text-primary">{t.messaging.messages}</h2>
+            <button
+              onClick={() => setShowNewModal(true)}
+              className="w-[30px] h-[30px] rounded-full border border-border flex items-center justify-center hover:bg-surface-secondary transition-colors"
+            >
+              <Plus size={16} className="text-text-secondary" />
+            </button>
+          </div>
+
           {/* Search */}
-          <div className="p-3 border-b border-outline">
+          <div className="px-4 pb-3">
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
               <input
@@ -442,133 +446,115 @@ export default function Messages() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t.messaging.searchConversations}
-                className="input-field pl-9 text-[13px]"
+                className="w-full h-[36px] pl-9 pr-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-border"
               />
             </div>
           </div>
 
-          {/* Conversations */}
+          {/* Conversations list */}
           <div className="flex-1 overflow-y-auto">
             {loadingConvos ? (
               <div className="p-6 text-center">
-                <div className="w-5 h-5 border-2 border-outline-subtle border-t-text-primary rounded-full animate-spin mx-auto" />
+                <div className="w-5 h-5 border-2 border-border border-t-text-primary rounded-full animate-spin mx-auto" />
               </div>
             ) : filteredConvos.length === 0 ? (
               <div className="p-6 text-center text-text-tertiary text-[13px]">
-                {searchQuery
-                  ? (t.messaging.noResultsFound)
-                  : (t.messaging.noConversationsYet)}
+                {searchQuery ? t.messaging.noResultsFound : t.messaging.noConversationsYet}
                 {!searchQuery && (
                   <button
                     onClick={() => setShowNewModal(true)}
-                    className="mt-3 text-primary font-semibold hover:underline block mx-auto"
+                    className="mt-3 text-text-primary font-semibold hover:underline block mx-auto"
                   >
                     {t.messaging.sendYourFirstMessage}
                   </button>
                 )}
               </div>
             ) : (
-              filteredConvos.map((convo) => (
-                <button
-                  key={convo.id}
-                  onClick={() => setSelectedConvo(convo)}
-                  className={cn(
-                    "w-full text-left px-4 py-3 border-b border-outline/50 hover:bg-surface-tertiary transition-colors",
-                    selectedConvo?.id === convo.id && "bg-primary/5 border-l-2 border-l-primary"
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={cn(
-                      "w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-                      convo.unread_count > 0 ? "bg-primary text-white" : "bg-surface-tertiary text-text-tertiary"
-                    )}>
-                      <User size={16} />
-                    </div>
+              filteredConvos.map((convo) => {
+                const hasUnread = (convo.unread_count || 0) > 0;
+                const isActive = selectedConvo?.id === convo.id;
+                const displayName = convo.client_name || formatPhoneDisplay(convo.phone_number);
+
+                return (
+                  <button
+                    key={convo.id}
+                    onClick={() => setSelectedConvo(convo)}
+                    className={cn(
+                      'w-full flex items-center gap-3 px-4 py-[12px] transition-colors text-left',
+                      isActive ? 'bg-surface-secondary' : 'bg-surface hover:bg-surface-secondary'
+                    )}
+                  >
+                    {/* Avatar — uses client_id so it matches the Clients tab */}
+                    <UnifiedAvatar id={convo.client_id || convo.id} name={displayName} size={40} />
+
+                    {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <span className={cn(
-                          "text-[13px] truncate",
-                          convo.unread_count > 0 ? "font-bold text-text-primary" : "font-semibold text-text-primary"
+                          'text-[14px] truncate leading-tight',
+                          hasUnread ? 'font-bold text-text-primary' : 'font-semibold text-text-primary'
                         )}>
-                          {convo.client_name || formatPhoneDisplay(convo.phone_number)}
+                          {displayName}
                         </span>
-                        <span className="text-[11px] text-text-tertiary shrink-0">
+                        <span className="text-[12px] text-text-tertiary shrink-0 leading-tight">
                           {formatMessageTime(convo.last_message_at)}
                         </span>
                       </div>
-                      {convo.client_name && (
-                        <p className="text-[11px] text-text-tertiary">
-                          {formatPhoneDisplay(convo.phone_number)}
-                        </p>
-                      )}
-                      <div className="flex items-center justify-between gap-2 mt-0.5">
-                        <p className={cn(
-                          "text-[12px] truncate",
-                          convo.unread_count > 0 ? "text-text-primary font-medium" : "text-text-tertiary"
-                        )}>
-                          {convo.last_message_text || '—'}
-                        </p>
-                        {convo.unread_count > 0 && (
-                          <span className="bg-primary text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+
+                      <div className="flex items-center justify-between gap-2 mt-[3px]">
+                        <div className="flex items-center gap-1 min-w-0 flex-1">
+                          <CheckCheck size={14} className="text-text-tertiary shrink-0" />
+                          <p className={cn(
+                            'text-[13px] truncate leading-tight',
+                            hasUnread ? 'text-text-secondary font-medium' : 'text-text-secondary'
+                          )}>
+                            {convo.last_message_text || '—'}
+                          </p>
+                        </div>
+
+                        {hasUnread && (
+                          <span className="bg-[#22C55E] text-white text-[11px] font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-[6px] shrink-0">
                             {convo.unread_count}
                           </span>
                         )}
                       </div>
                     </div>
-                  </div>
-                </button>
-              ))
+                  </button>
+                );
+              })
             )}
           </div>
-
-          {/* Unread count footer */}
-          {totalUnread > 0 && (
-            <div className="px-4 py-2 border-t border-outline bg-primary/5 text-[12px] font-semibold text-primary">
-              {totalUnread} {t.messaging.unread}
-            </div>
-          )}
         </div>
 
-        {/* ── Right: Conversation Thread ──────────────────────── */}
+        {/* ── Right: Conversation Thread or Empty State ── */}
         <div className={cn(
-          "flex-1 flex flex-col",
+          "flex-1 flex flex-col bg-surface",
           !selectedConvo ? "hidden md:flex" : "flex"
         )}>
           {!selectedConvo ? (
-            // Empty state
-            <div className="flex-1 flex items-center justify-center text-center p-8">
-              <div>
-                <div className="w-16 h-16 rounded-2xl bg-surface-tertiary flex items-center justify-center mx-auto mb-4">
-                  <MessageSquare size={28} className="text-text-tertiary" />
-                </div>
-                <h3 className="text-[15px] font-bold text-text-primary mb-1">
-                  {t.messaging.selectAConversation}
-                </h3>
-                <p className="text-[13px] text-text-tertiary max-w-xs">
-                  {language === 'fr'
-                    ? 'Choisissez une conversation ou envoyez un nouveau message.'
-                    : 'Choose a conversation or send a new message.'}
-                </p>
+            /* Empty state — centered illustration */
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <img src="https://api.dicebear.com/9.x/notionists/svg?seed=messages-empty&size=300&backgroundColor=transparent" alt="" width={200} height={200} className="mx-auto" />
+                <p className="mt-4 text-[14px] text-text-tertiary">{language === 'fr' ? 'Sélectionnez une conversation' : 'Select a conversation'}</p>
               </div>
             </div>
           ) : (
             <>
               {/* Thread header */}
-              <div className="px-4 py-3 border-b border-outline flex items-center gap-3 bg-surface">
+              <div className="px-4 py-3 border-b border-border flex items-center gap-3 bg-surface shrink-0">
                 <button
                   onClick={() => setSelectedConvo(null)}
-                  className="md:hidden p-1 rounded-lg hover:bg-surface-tertiary text-text-tertiary"
+                  className="md:hidden p-1 rounded-lg hover:bg-surface-secondary text-text-secondary"
                 >
                   <ArrowLeft size={18} />
                 </button>
-                <div className="w-9 h-9 rounded-full bg-surface-tertiary flex items-center justify-center">
-                  <User size={16} className="text-text-tertiary" />
-                </div>
+                <UnifiedAvatar id={selectedConvo.client_id || selectedConvo.id} name={selectedConvo.client_name || formatPhoneDisplay(selectedConvo.phone_number)} size={36} />
                 <div className="flex-1 min-w-0">
                   <h3 className="text-[14px] font-bold text-text-primary truncate">
                     {selectedConvo.client_name || formatPhoneDisplay(selectedConvo.phone_number)}
                   </h3>
-                  <p className="text-[11px] text-text-tertiary flex items-center gap-1">
+                  <p className="text-[11px] text-text-secondary flex items-center gap-1">
                     <Phone size={10} />
                     {formatPhoneDisplay(selectedConvo.phone_number)}
                   </p>
@@ -576,10 +562,10 @@ export default function Messages() {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-1 bg-surface-secondary/50">
+              <div className="flex-1 overflow-y-auto p-4 space-y-1">
                 {loadingMessages ? (
                   <div className="flex items-center justify-center py-12">
-                    <div className="w-5 h-5 border-2 border-outline-subtle border-t-text-primary rounded-full animate-spin" />
+                    <div className="w-5 h-5 border-2 border-border border-t-text-primary rounded-full animate-spin" />
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="text-center py-12 text-text-tertiary text-[13px]">
@@ -588,45 +574,27 @@ export default function Messages() {
                 ) : (
                   groupedMessages.map((group, gIdx) => (
                     <div key={gIdx}>
-                      {/* Date separator */}
                       <div className="flex items-center justify-center my-4">
-                        <span className="text-[11px] text-text-tertiary bg-surface-secondary px-3 py-1 rounded-full font-medium">
+                        <span className="text-[11px] text-text-secondary bg-surface px-3 py-1 rounded-full font-medium border border-border">
                           {formatDateSeparator(group.date)}
                         </span>
                       </div>
-                      {/* Messages in group */}
                       {group.messages.map((msg) => (
-                        <div
-                          key={msg.id}
-                          className={cn(
-                            "flex mb-2",
-                            msg.direction === 'outbound' ? "justify-end" : "justify-start"
-                          )}
-                        >
-                          <div
-                            className={cn(
-                              "max-w-[75%] rounded-2xl px-4 py-2.5",
-                              msg.direction === 'outbound'
-                                ? "bg-primary text-white rounded-br-md"
-                                : "bg-surface border border-outline text-text-primary rounded-bl-md"
-                            )}
-                          >
+                        <div key={msg.id} className={cn("flex mb-2", msg.direction === 'outbound' ? "justify-end" : "justify-start")}>
+                          <div className={cn(
+                            "max-w-[75%] rounded-2xl px-4 py-2.5",
+                            msg.direction === 'outbound'
+                              ? "bg-primary text-white rounded-br-md"
+                              : "bg-surface border border-border text-text-primary rounded-bl-md"
+                          )}>
                             <p className="text-[13px] leading-relaxed whitespace-pre-wrap break-words">
                               {msg.message_text}
                             </p>
-                            <div className={cn(
-                              "flex items-center gap-1 mt-1",
-                              msg.direction === 'outbound' ? "justify-end" : "justify-start"
-                            )}>
-                              <span className={cn(
-                                "text-[10px]",
-                                msg.direction === 'outbound' ? "text-white/60" : "text-text-tertiary"
-                              )}>
+                            <div className={cn("flex items-center gap-1 mt-1", msg.direction === 'outbound' ? "justify-end" : "justify-start")}>
+                              <span className={cn("text-[10px]", msg.direction === 'outbound' ? "text-white/50" : "text-text-tertiary")}>
                                 {formatFullTime(msg.created_at)}
                               </span>
-                              {msg.direction === 'outbound' && (
-                                <MessageStatusIcon status={msg.status} />
-                              )}
+                              {msg.direction === 'outbound' && <MessageStatusIcon status={msg.status} />}
                             </div>
                           </div>
                         </div>
@@ -638,7 +606,7 @@ export default function Messages() {
               </div>
 
               {/* Message input */}
-              <div className="px-4 py-3 border-t border-outline bg-surface">
+              <div className="px-4 py-3 border-t border-border bg-surface shrink-0">
                 <div className="flex items-end gap-2">
                   <textarea
                     ref={inputRef}
@@ -647,7 +615,7 @@ export default function Messages() {
                     onKeyDown={handleKeyDown}
                     rows={1}
                     placeholder={t.messaging.typeAMessage}
-                    className="input-field flex-1 resize-none text-[13px] min-h-[40px] max-h-[120px]"
+                    className="flex-1 resize-none text-[13px] min-h-[40px] max-h-[120px] px-3 py-2.5 rounded-lg bg-surface-secondary border-0 text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-border"
                     style={{ height: 'auto', overflow: 'auto' }}
                     onInput={(e) => {
                       const target = e.target as HTMLTextAreaElement;
@@ -661,16 +629,13 @@ export default function Messages() {
                     className={cn(
                       "p-2.5 rounded-xl transition-all shrink-0",
                       newMessage.trim() && !sending
-                        ? "bg-primary text-white hover:bg-primary/90"
-                        : "bg-surface-tertiary text-text-tertiary"
+                        ? "bg-primary text-white hover:bg-primary-hover"
+                        : "bg-surface-secondary text-text-tertiary"
                     )}
                   >
                     <Send size={16} />
                   </button>
                 </div>
-                <p className="text-[10px] text-text-tertiary mt-1.5">
-                  {t.messaging.enterToSendShiftenterForNewLine}
-                </p>
               </div>
             </>
           )}

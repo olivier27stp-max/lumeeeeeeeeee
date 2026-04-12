@@ -67,7 +67,7 @@ export default function ConnectOnboarding() {
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                className="glass-button bg-text-primary text-surface hover:bg-neutral-800 inline-flex items-center gap-2"
+                className="glass-button bg-primary text-white hover:bg-neutral-800 inline-flex items-center gap-2"
                 onClick={handleActivate}
                 disabled={creating || statusQuery.isLoading}
               >

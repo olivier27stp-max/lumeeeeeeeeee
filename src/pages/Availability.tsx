@@ -309,11 +309,11 @@ export default function Availability() {
     }
   }
 
-  const selectedTeam = teams.find((t) => t.id === selectedTeamId);
+  const selectedTeam = teams.find((tm) => tm.id === selectedTeamId);
 
   // ── Render ──
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       <PageHeader title={t.availability.title} subtitle={t.availability.subtitle}>
         <button type="button" onClick={() => { teamsQuery.refetch(); slotsQuery.refetch(); }} className="glass-button inline-flex items-center gap-1.5">
           <RefreshCw size={14} /> {t.common.refresh}
@@ -483,7 +483,7 @@ export default function Availability() {
                                 <button
                                   type="button"
                                   onClick={() => deleteWeeklyMut.mutate(s.id)}
-                                  className="absolute -top-1 -right-1 p-0.5 rounded-full bg-white border border-outline text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                                  className="absolute -top-1 -right-1 p-0.5 rounded-full bg-surface-card border border-outline text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
                                 >
                                   <X size={8} />
                                 </button>

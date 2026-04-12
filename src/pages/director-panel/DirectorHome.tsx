@@ -214,7 +214,7 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
             className={cn(
               'px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors',
               libraryTab === 'workflow'
-                ? 'bg-text-primary text-surface'
+                ? 'bg-primary text-white'
                 : 'text-text-tertiary hover:text-text-primary'
             )}
           >
@@ -225,7 +225,7 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
             className={cn(
               'px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors',
               libraryTab === 'generations'
-                ? 'bg-text-primary text-surface'
+                ? 'bg-primary text-white'
                 : 'text-text-tertiary hover:text-text-primary'
             )}
           >
@@ -265,7 +265,7 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
                       loading="lazy"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                    <span className="absolute bottom-2 left-2.5 text-[11px] font-semibold text-white drop-shadow-lg">
+                    <span className="absolute bottom-2 left-2.5 text-xs font-medium text-white drop-shadow-lg">
                       {tpl.title}
                     </span>
                   </div>

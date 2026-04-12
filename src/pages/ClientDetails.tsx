@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useRecentItems } from '../hooks/useRecentItems';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
@@ -31,13 +32,17 @@ import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { getClientById, updateClient, listClientJobs, softDeleteClient } from '../lib/clientsApi';
 import type { ClientRecord } from '../lib/clientsApi';
 import { supabase } from '../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
+import { getInvoiceRowUiStatus } from '../lib/invoicesApi';
 import { StatusBadge, Skeleton } from '../components/ui';
 import { useTranslation } from '../i18n';
 import ActivityTimeline from '../components/ActivityTimeline';
 import { useDropZone } from '../hooks/useDropZone';
 import { useJobModalController } from '../contexts/JobModalController';
+import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
 import QuoteDetailsModal from '../components/quotes/QuoteDetailsModal';
+import SpecificNotes from '../components/SpecificNotes';
 import { getQuoteById, formatQuoteMoney, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, type QuoteDetail, type Quote } from '../lib/quotesApi';
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -79,10 +84,12 @@ interface PaymentRecord {
 interface ScheduleEvent {
   id: string;
   title: string;
-  start_time: string;
-  end_time?: string;
+  start_at: string;
+  end_at?: string;
   job_id?: string;
-  assigned_to?: string;
+  job_title?: string;
+  team_id?: string;
+  status?: string;
   created_at: string;
 }
 
@@ -138,7 +145,7 @@ function copyToClipboard(text: string) {
 }
 
 // ─── Tabs ────────────────────────────────────────────────────────────
-type OverviewTab = 'active' | 'completed' | 'quotes' | 'jobs' | 'invoices' | 'leads';
+type OverviewTab = 'active' | 'completed' | 'quotes' | 'jobs' | 'invoices' | 'leads' | 'specific_notes';
 
 // ─── Skeleton ────────────────────────────────────────────────────────
 function DetailPageSkeleton() {
@@ -173,6 +180,7 @@ export default function ClientDetails() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
 
+  const { updateLabel: updateRecentLabel } = useRecentItems();
   const [client, setClient] = useState<ClientRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -238,6 +246,7 @@ export default function ClientDetails() {
     setLoading(true);
     setError(null);
     try {
+      const orgId = await getCurrentOrgIdOrThrow();
       const [clientData, jobsData] = await Promise.all([
         getClientById(clientId),
         listClientJobs(clientId),
@@ -250,6 +259,7 @@ export default function ClientDetails() {
       }
 
       setClient(clientData);
+      updateRecentLabel(`/clients/${id}`, `${clientData.first_name} ${clientData.last_name}`.trim());
       setJobs((jobsData || []) as JobRecord[]);
       setNotes((clientData as any).notes || '');
 
@@ -257,6 +267,7 @@ export default function ClientDetails() {
       const { data: invoiceData } = await supabase
         .from('invoices')
         .select('*')
+        .eq('org_id', orgId)
         .eq('client_id', clientId)
         .order('created_at', { ascending: false });
       setInvoices((invoiceData || []) as InvoiceRecord[]);
@@ -274,13 +285,24 @@ export default function ClientDetails() {
         setPayments([]);
       }
 
-      // Fetch schedule events
-      const { data: eventData } = await supabase
-        .from('schedule_events')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('start_time', { ascending: true });
-      setScheduleEvents((eventData || []) as ScheduleEvent[]);
+      // Fetch schedule events via client's jobs
+      const clientJobIds = (jobsData || []).map((j: any) => j.id).filter(Boolean);
+      if (clientJobIds.length > 0) {
+        const { data: eventData } = await supabase
+          .from('schedule_events')
+          .select('id, job_id, start_at, end_at, team_id, status, created_at, job:jobs!schedule_events_job_id_fkey(title)')
+          .eq('org_id', orgId)
+          .in('job_id', clientJobIds)
+          .is('deleted_at', null)
+          .order('start_at', { ascending: true });
+        setScheduleEvents((eventData || []).map((e: any) => ({
+          ...e,
+          title: e.job?.title || 'Event',
+          job_title: e.job?.title || null,
+        })) as ScheduleEvent[]);
+      } else {
+        setScheduleEvents([]);
+      }
 
       // Fetch associated leads
       const { data: leadData } = await supabase
@@ -294,6 +316,7 @@ export default function ClientDetails() {
       const { data: quotesData } = await supabase
         .from('quotes')
         .select('id, quote_number, title, status, total_cents, currency, created_at')
+        .eq('org_id', orgId)
         .eq('client_id', clientId)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
@@ -359,7 +382,7 @@ export default function ClientDetails() {
   const handleRemoveTag = async (tag: string) => {
     if (!client) return;
     const previous = tags;
-    setTags((prev) => prev.filter((t) => t !== tag));
+    setTags((prev) => prev.filter((tg) => tg !== tag));
     try {
       await supabase.from('client_tags').delete().eq('client_id', client.id).eq('tag', tag);
     } catch {
@@ -394,8 +417,8 @@ export default function ClientDetails() {
   const totalPaid = payments.reduce((acc, p) => acc + (p.amount_cents || 0), 0) / 100;
   const currentBalance = totalInvoiced - totalPaid;
 
-  const upcomingEvents = scheduleEvents.filter((e) => new Date(e.start_time) >= new Date());
-  const pastEvents = scheduleEvents.filter((e) => new Date(e.start_time) < new Date());
+  const upcomingEvents = scheduleEvents.filter((e) => new Date(e.start_at) >= new Date());
+  const pastEvents = scheduleEvents.filter((e) => new Date(e.start_at) < new Date());
 
   function getInitials(first: string, last: string) {
     return ((first?.[0] || '') + (last?.[0] || '')).toUpperCase() || '?';
@@ -442,7 +465,8 @@ export default function ClientDetails() {
     { key: 'jobs', label: t.clients.jobs, count: jobs.length },
     { key: 'invoices', label: t.nav.invoices, count: invoices.length },
     { key: 'quotes', label: t.clientDetails.quotes, count: realQuotes.length },
-    { key: 'leads', label: t.clientDetails.quotes, count: leads.length },
+    { key: 'leads', label: language === 'fr' ? 'Prospects' : 'Leads', count: leads.length },
+    { key: 'specific_notes', label: 'Notes spécifiques', count: 0 },
   ];
 
   // ─── Job row renderer (reused across tabs) ─────────────────────
@@ -452,7 +476,7 @@ export default function ClientDetails() {
         onClick={() => navigate(`/jobs/${job.id}`)}
         className="flex items-center gap-3 flex-1 text-left"
       >
-        <div className="icon-tile icon-tile-sm icon-tile-blue">
+        <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary">
           <Briefcase size={13} strokeWidth={2} />
         </div>
         <div>
@@ -499,19 +523,19 @@ export default function ClientDetails() {
 
   return (
     <div className="space-y-5">
-      {/* Back navigation */}
-      <button onClick={() => navigate('/clients')} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-text-secondary hover:text-text-primary transition-colors">
-        <ArrowLeft size={14} /> {t.clients.title}
-      </button>
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-1.5 text-[12px]">
+        <button onClick={() => navigate('/clients')} className="text-text-tertiary hover:text-text-primary transition-colors">{t.clients.title}</button>
+        <span className="text-text-tertiary">/</span>
+        <span className="text-text-primary font-medium">{client?.first_name} {client?.last_name}</span>
+      </nav>
 
       {/* ═══ HEADER ═══ */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-text-primary text-surface flex items-center justify-center text-[18px] font-bold">
-            {getInitials(client.first_name, client.last_name)}
-          </div>
+          <UnifiedAvatar id={client.id} name={`${client.first_name || ''} ${client.last_name || ''}`.trim()} size={56} />
           <div>
-            <h1 className="text-[22px] font-extrabold text-text-primary leading-tight">{fullName}</h1>
+            <h1 className="text-[22px] font-bold text-text-primary leading-tight">{fullName}</h1>
             <div className="flex items-center gap-2 mt-0.5">
               {client.company && <span className="text-[13px] text-text-secondary">{client.company}</span>}
               <StatusBadge status={client.status} />
@@ -522,24 +546,24 @@ export default function ClientDetails() {
         {/* Action buttons */}
         <div className="flex items-center gap-2">
           {client.phone && (
-            <a href={`tel:${client.phone}`} className="glass-button inline-flex items-center gap-1.5" title="Call">
+            <a href={`tel:${client.phone}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title="Call">
               <Phone size={14} /> Call
             </a>
           )}
           {client.email && (
-            <a href={`mailto:${client.email}`} className="glass-button inline-flex items-center gap-1.5" title="Email">
+            <a href={`mailto:${client.email}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title="Email">
               <Mail size={14} /> Email
             </a>
           )}
           {client.phone && (
-            <a href={`sms:${client.phone}`} className="glass-button inline-flex items-center gap-1.5" title="SMS">
+            <a href={`sms:${client.phone}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title="SMS">
               <Send size={14} /> SMS
             </a>
           )}
 
           <button
             onClick={() => setIsQuoteCreateOpen(true)}
-            className="glass-button inline-flex items-center gap-1.5"
+            className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors"
           >
             <FileText size={14} /> New Quote
           </button>
@@ -551,29 +575,29 @@ export default function ClientDetails() {
               },
               onCreated: () => { if (id) loadAllData(id); },
             })}
-            className="glass-button-primary inline-flex items-center gap-1.5"
+            className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary text-white rounded-md text-[13px] font-medium hover:bg-primary-hover transition-colors"
           >
             <Plus size={14} /> New Job
           </button>
 
           {/* More dropdown */}
           <div className="relative">
-            <button onClick={() => setShowActionMenu(!showActionMenu)} className="glass-button inline-flex items-center gap-1">
-              <MoreHorizontal size={14} />
+            <button onClick={() => setShowActionMenu(!showActionMenu)} className="inline-flex items-center gap-1 h-9 px-2.5 bg-surface border border-outline rounded-md text-text-secondary hover:bg-surface-secondary transition-colors">
+              <MoreHorizontal size={16} />
             </button>
             {showActionMenu && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowActionMenu(false)} />
-                <div className="absolute right-0 top-full mt-1 z-50 w-44 rounded-lg border border-outline bg-surface shadow-lg py-1">
+                <div className="absolute right-0 top-full mt-1 z-50 w-44 bg-surface border border-outline rounded-md shadow-lg py-1">
                   <button
                     onClick={() => { navigate(`/clients/${client.id}/edit`); setShowActionMenu(false); }}
-                    className="w-full px-3 py-2 text-[13px] text-text-primary hover:bg-surface-secondary flex items-center gap-2 text-left"
+                    className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
                   >
                     <Edit2 size={13} /> {t.common.edit}
                   </button>
                   <button
                     onClick={handleArchive}
-                    className="w-full px-3 py-2 text-[13px] text-danger hover:bg-surface-secondary flex items-center gap-2 text-left"
+                    className="w-full px-3 py-2 text-[13px] text-danger hover:bg-danger-light flex items-center gap-2 text-left transition-colors"
                   >
                     <Archive size={13} /> {t.clients.archive}
                   </button>
@@ -584,7 +608,7 @@ export default function ClientDetails() {
                         navigator.clipboard.writeText(url).then(() => toast.success(t.clientDetails.portalLinkCopied));
                         setShowActionMenu(false);
                       }}
-                      className="w-full px-3 py-2 text-[13px] text-text-primary hover:bg-surface-secondary flex items-center gap-2 text-left"
+                      className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
                     >
                       <ExternalLink size={13} /> {t.clientDetails.copyPortalLink}
                     </button>
@@ -597,18 +621,18 @@ export default function ClientDetails() {
       </div>
 
       {/* ═══ TWO COLUMN LAYOUT ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5 items-start">
         {/* ──── LEFT COLUMN ──── */}
-        <div className="space-y-5">
+        <div className="space-y-5 min-w-0">
           {/* Properties Section */}
-          <div className="rounded-xl border border-outline bg-surface">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
+          <div className="rounded-md border border-outline bg-surface">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <div className="icon-tile icon-tile-sm icon-tile-blue"><MapPin size={13} strokeWidth={2} /></div>
+                <MapPin size={15} className="text-text-secondary" />
                 Properties
               </h2>
               <button
-                className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1"
+                className="inline-flex items-center gap-1 h-7 px-2.5 bg-surface border border-outline rounded-md text-[12px] text-text-primary hover:bg-surface-secondary transition-colors"
                 onClick={() => {
                   const addr = prompt(t.clientDetails.propertyAddress);
                   if (addr && client) {
@@ -624,16 +648,15 @@ export default function ClientDetails() {
             </div>
             <div className="p-5">
               {fullAddress ? (
-                <div className="flex items-start gap-3 rounded-lg border border-outline-subtle bg-surface-secondary p-3.5">
-                  {/* Clickable map icon → Google Maps */}
+                <div className="flex items-start gap-3 rounded-md border border-outline bg-surface-secondary p-3.5">
                   <a
                     href={buildGoogleMapsUrl(client)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="icon-tile icon-tile-sm icon-tile-blue mt-0.5 hover:scale-110 transition-transform cursor-pointer"
+                    className="mt-0.5 text-text-secondary hover:text-text-primary transition-colors"
                     title="Open in Google Maps"
                   >
-                    <MapPin size={13} strokeWidth={2} />
+                    <MapPin size={15} />
                   </a>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-text-primary">
@@ -644,22 +667,12 @@ export default function ClientDetails() {
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <a
-                      href={buildGoogleMapsDirectionsUrl(client)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="glass-button !text-[11px] !px-2 !py-1 inline-flex items-center gap-1"
-                      title="Get directions"
-                    >
+                    <a href={buildGoogleMapsDirectionsUrl(client)} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 h-6 px-2 bg-surface border border-outline rounded text-[11px] text-text-secondary hover:bg-surface-secondary transition-colors" title="Get directions">
                       <Navigation size={11} /> Directions
                     </a>
-                    <a
-                      href={buildGoogleMapsUrl(client)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="glass-button !text-[11px] !px-2 !py-1 inline-flex items-center gap-1"
-                      title="View on map"
-                    >
+                    <a href={buildGoogleMapsUrl(client)} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 h-6 px-2 bg-surface border border-outline rounded text-[11px] text-text-secondary hover:bg-surface-secondary transition-colors" title="View on map">
                       <ExternalLink size={11} /> Map
                     </a>
                   </div>
@@ -671,17 +684,17 @@ export default function ClientDetails() {
           </div>
 
           {/* Contacts Section */}
-          <div className="rounded-xl border border-outline bg-surface">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
+          <div className="rounded-xl border border-outline bg-surface-card">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <div className="icon-tile icon-tile-sm icon-tile-blue"><User size={13} strokeWidth={2} /></div>
+                <User size={14} className="text-text-tertiary" />
                 Contacts
               </h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-border">
+                  <tr className="border-b border-outline/60">
                     <th className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.name}</th>
                     <th className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Role</th>
                     <th className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.phone}</th>
@@ -689,28 +702,30 @@ export default function ClientDetails() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-border-light">
-                    <td className="px-5 py-3 text-[13px] font-semibold text-text-primary">{fullName}</td>
-                    <td className="px-5 py-3 text-[13px] text-text-secondary">Primary</td>
-                    <td className="px-5 py-3 text-[13px] text-text-secondary">
+                  <tr className="hover:bg-surface-secondary/50 transition-colors">
+                    <td className="px-5 py-3 text-[13px] font-medium text-text-primary">{fullName}</td>
+                    <td className="px-5 py-3">
+                      <span className="inline-flex items-center rounded-full bg-primary/10 text-primary text-[11px] font-semibold px-2.5 py-0.5">Primary</span>
+                    </td>
+                    <td className="px-5 py-3 text-[13px] text-text-primary">
                       {client.phone ? (
                         <span className="inline-flex items-center gap-1.5">
                           <a href={`tel:${client.phone}`} className="text-primary hover:underline">{client.phone}</a>
-                          <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary" title="Copy">
+                          <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
                             <Copy size={11} />
                           </button>
                         </span>
-                      ) : '—'}
+                      ) : <span className="text-text-tertiary">—</span>}
                     </td>
-                    <td className="px-5 py-3 text-[13px] text-text-secondary">
+                    <td className="px-5 py-3 text-[13px] text-text-primary">
                       {client.email ? (
                         <span className="inline-flex items-center gap-1.5">
                           <a href={`mailto:${client.email}`} className="text-primary hover:underline">{client.email}</a>
-                          <button onClick={() => copyToClipboard(client.email!)} className="text-text-tertiary hover:text-text-primary" title="Copy">
+                          <button onClick={() => copyToClipboard(client.email!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
                             <Copy size={11} />
                           </button>
                         </span>
-                      ) : '—'}
+                      ) : <span className="text-text-tertiary">—</span>}
                     </td>
                   </tr>
                 </tbody>
@@ -719,8 +734,8 @@ export default function ClientDetails() {
           </div>
 
           {/* Overview Section with Tabs */}
-          <div className="rounded-xl border border-outline bg-surface">
-            <div className="px-5 pt-3.5 border-b border-outline-subtle">
+          <div className="rounded-md border border-outline bg-surface">
+            <div className="px-5 pt-3.5 border-b border-outline">
               <div className="flex items-center gap-1 overflow-x-auto">
                 {overviewTabs.map((tab) => (
                   <button
@@ -729,7 +744,7 @@ export default function ClientDetails() {
                     className={cn(
                       'px-3 py-2.5 text-[13px] font-semibold border-b-2 transition-colors -mb-[1.5px] whitespace-nowrap',
                       activeTab === tab.key
-                        ? 'border-text-primary text-text-primary'
+                        ? 'border-primary text-text-primary'
                         : 'border-transparent text-text-tertiary hover:text-text-secondary'
                     )}
                   >
@@ -783,14 +798,14 @@ export default function ClientDetails() {
                       className="w-full rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between text-left hover:border-primary/30 transition-colors group"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="icon-tile icon-tile-sm icon-tile-blue"><FileText size={13} strokeWidth={2} /></div>
+                        <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><FileText size={13} strokeWidth={2} /></div>
                         <div>
                           <div className="flex items-center gap-2">
                             {inv.invoice_number && <span className="text-[11px] font-bold text-text-tertiary">#{inv.invoice_number}</span>}
                             <p className="text-[13px] font-semibold text-text-primary group-hover:text-primary transition-colors">
                               {inv.subject || 'Invoice'}
                             </p>
-                            <StatusBadge status={inv.status} />
+                            <StatusBadge status={getInvoiceRowUiStatus(inv as any)} />
                           </div>
                           <span className="text-[12px] text-text-tertiary">
                             {inv.due_date ? `Due ${formatDate(inv.due_date)}` : formatDate(inv.created_at)}
@@ -799,11 +814,11 @@ export default function ClientDetails() {
                       </div>
                       <div className="text-right">
                         <p className="text-[13px] font-semibold text-text-primary tabular-nums">
-                          {formatCurrency(Math.round((inv.total_cents || 0) / 100))}
+                          {formatCurrency(Math.round(inv.total_cents || 0) / 100)}
                         </p>
                         {inv.balance_cents > 0 && (
                           <p className="text-[11px] text-warning font-medium tabular-nums">
-                            {formatCurrency(Math.round(inv.balance_cents / 100))} due
+                            {formatCurrency(Math.round(inv.balance_cents) / 100)} due
                           </p>
                         )}
                       </div>
@@ -818,7 +833,7 @@ export default function ClientDetails() {
                   <div className="flex justify-end mb-2">
                     <button
                       onClick={() => setIsQuoteCreateOpen(true)}
-                      className="glass-button-primary text-[12px] inline-flex items-center gap-1 px-2.5 py-1"
+                      className="inline-flex items-center gap-1 h-7 px-2.5 bg-primary text-white rounded-md text-[12px] font-medium hover:bg-primary-hover transition-colors text-[12px] inline-flex items-center gap-1 px-2.5 py-1"
                     >
                       <Plus size={12} /> New Quote
                     </button>
@@ -837,7 +852,7 @@ export default function ClientDetails() {
                       className="w-full rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between text-left hover:border-primary/30 transition-colors group"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="icon-tile icon-tile-sm icon-tile-blue"><FileText size={13} strokeWidth={2} /></div>
+                        <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><FileText size={13} strokeWidth={2} /></div>
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] font-bold text-text-tertiary">#{q.quote_number}</span>
@@ -873,7 +888,7 @@ export default function ClientDetails() {
                       className="w-full rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between text-left hover:border-primary/30 transition-colors group"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="icon-tile icon-tile-sm icon-tile-purple"><Contact size={13} strokeWidth={2} /></div>
+                        <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><Contact size={13} strokeWidth={2} /></div>
                         <div>
                           <div className="flex items-center gap-2">
                             <p className="text-[13px] font-semibold text-text-primary group-hover:text-primary transition-colors">
@@ -896,14 +911,19 @@ export default function ClientDetails() {
                   ))}
                 </div>
               )}
+
+              {/* Specific Notes Tab */}
+              {activeTab === 'specific_notes' && (
+                <SpecificNotes entityType="client" entityId={id!} mode="tab" />
+              )}
             </div>
           </div>
 
           {/* Schedule Section */}
-          <div className="rounded-xl border border-outline bg-surface">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
+          <div className="rounded-md border border-outline bg-surface">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <div className="icon-tile icon-tile-sm icon-tile-blue"><Calendar size={13} strokeWidth={2} /></div>
+                <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><Calendar size={13} strokeWidth={2} /></div>
                 {t.nav.calendar}
               </h2>
             </div>
@@ -911,21 +931,21 @@ export default function ClientDetails() {
               {/* Upcoming */}
               {upcomingEvents.length > 0 && (
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Upcoming</p>
+                  <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">Upcoming</p>
                   <div className="space-y-2">
                     {upcomingEvents.slice(0, 5).map((event) => (
                       <div key={event.id} className="flex items-center gap-3 rounded-lg border border-outline-subtle bg-surface-secondary p-3">
-                        <div className="icon-tile icon-tile-sm icon-tile-blue"><Clock size={13} strokeWidth={2} /></div>
+                        <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><Clock size={13} strokeWidth={2} /></div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[13px] font-semibold text-text-primary truncate">{event.title}</p>
                           <p className="text-[12px] text-text-tertiary">
-                            {formatDate(event.start_time)} {formatTime(event.start_time)}
-                            {event.end_time && ` — ${formatTime(event.end_time)}`}
+                            {formatDate(event.start_at)} {formatTime(event.start_at)}
+                            {event.end_at && ` — ${formatTime(event.end_at)}`}
                           </p>
-                          {event.assigned_to && (
-                            <p className="text-[11px] text-text-tertiary flex items-center gap-1 mt-0.5">
-                              <User size={10} /> {event.assigned_to}
-                            </p>
+                          {event.status && (
+                            <span className="inline-flex items-center rounded-full bg-primary/10 text-primary text-[10px] font-semibold px-2 py-0.5 mt-0.5">
+                              {event.status}
+                            </span>
                           )}
                         </div>
                       </div>
@@ -937,15 +957,15 @@ export default function ClientDetails() {
               {/* Past */}
               {pastEvents.length > 0 && (
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Past</p>
+                  <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">Past</p>
                   <div className="space-y-2">
                     {pastEvents.slice(-3).reverse().map((event) => (
                       <div key={event.id} className="flex items-center gap-3 rounded-lg border border-outline-subtle bg-surface-secondary/50 p-3 opacity-70">
-                        <div className="icon-tile icon-tile-sm icon-tile-gray"><CheckCircle2 size={13} strokeWidth={2} /></div>
+                        <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-tertiary"><CheckCircle2 size={13} strokeWidth={2} /></div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[13px] font-medium text-text-secondary truncate">{event.title}</p>
                           <p className="text-[12px] text-text-tertiary">
-                            {formatDate(event.start_time)} {formatTime(event.start_time)}
+                            {formatDate(event.start_at)} {formatTime(event.start_at)}
                           </p>
                         </div>
                       </div>
@@ -962,101 +982,97 @@ export default function ClientDetails() {
         </div>
 
         {/* ──── RIGHT SIDEBAR ──── */}
-        <div className="space-y-5">
+        <div className="space-y-5 lg:sticky lg:top-5 self-start">
           {/* Contact Info */}
-          <div className="rounded-xl border border-outline bg-surface">
-            <div className="px-5 py-3.5 border-b border-outline-subtle">
-              <h2 className="text-[13px] font-semibold text-text-primary">Contact Information</h2>
+          <div className="rounded-xl border border-outline bg-surface-card">
+            <div className="px-5 py-3 border-b border-outline">
+              <h2 className="text-[13px] font-semibold text-text-primary">{language === 'fr' ? 'Informations de contact' : 'Contact Information'}</h2>
             </div>
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-5">
               {/* Phone */}
-              <div className="flex items-center gap-3">
-                <div className="icon-tile icon-tile-sm icon-tile-blue"><Phone size={13} strokeWidth={2} /></div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.common.phone}</p>
-                  {client.phone ? (
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <a href={`tel:${client.phone}`} className="text-[13px] font-semibold text-primary hover:underline">{client.phone}</a>
-                      <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary" title="Copy phone">
-                        <Copy size={11} />
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-[13px] text-text-tertiary font-normal mt-0.5">{t.common.noPhone}</p>
-                  )}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Phone size={12} className="text-text-tertiary" />
+                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{t.common.phone}</p>
                 </div>
+                {client.phone ? (
+                  <div className="flex items-center gap-2 pl-5">
+                    <a href={`tel:${client.phone}`} className="text-[13px] font-medium text-text-primary hover:text-primary transition-colors">{client.phone}</a>
+                    <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
+                      <Copy size={11} />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-text-tertiary pl-5">{t.common.noPhone}</p>
+                )}
               </div>
               {/* Email */}
-              <div className="flex items-center gap-3">
-                <div className="icon-tile icon-tile-sm icon-tile-blue"><Mail size={13} strokeWidth={2} /></div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.common.email}</p>
-                  {client.email ? (
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <a href={`mailto:${client.email}`} className="text-[13px] font-semibold text-primary hover:underline truncate">{client.email}</a>
-                      <button onClick={() => copyToClipboard(client.email!)} className="text-text-tertiary hover:text-text-primary flex-shrink-0" title="Copy email">
-                        <Copy size={11} />
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-[13px] text-text-tertiary font-normal mt-0.5">{t.common.noEmail}</p>
-                  )}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Mail size={12} className="text-text-tertiary" />
+                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{t.common.email}</p>
                 </div>
+                {client.email ? (
+                  <div className="flex items-center gap-2 pl-5 min-w-0">
+                    <a href={`mailto:${client.email}`} className="text-[13px] font-medium text-text-primary hover:text-primary transition-colors truncate">{client.email}</a>
+                    <button onClick={() => copyToClipboard(client.email!)} className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0" title="Copy">
+                      <Copy size={11} />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-text-tertiary pl-5">{t.common.noEmail}</p>
+                )}
               </div>
-              {/* Address with map link */}
+              {/* Address */}
               {fullAddress && (
-                <div className="flex items-center gap-3">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <MapPin size={12} className="text-text-tertiary" />
+                    <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Adresse' : 'Address'}</p>
+                  </div>
                   <a
                     href={buildGoogleMapsUrl(client)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="icon-tile icon-tile-sm icon-tile-blue hover:scale-110 transition-transform"
-                    title="Open in Google Maps"
+                    className="text-[13px] font-medium text-text-primary hover:text-primary transition-colors pl-5 block"
                   >
-                    <MapPin size={13} strokeWidth={2} />
+                    {fullAddress}
                   </a>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Address</p>
-                    <a
-                      href={buildGoogleMapsUrl(client)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[13px] font-semibold text-primary hover:underline mt-0.5 block"
-                    >
-                      {fullAddress}
-                    </a>
-                  </div>
                 </div>
               )}
               {/* Lead source */}
-              <div className="flex items-center gap-3">
-                <div className="icon-tile icon-tile-sm icon-tile-blue"><User size={13} strokeWidth={2} /></div>
-                <div>
-                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Lead Source</p>
-                  <p className="text-[13px] font-semibold text-text-primary mt-0.5">
-                    {leads[0]?.source || <span className="text-text-tertiary font-normal">Not specified</span>}
-                  </p>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <User size={12} className="text-text-tertiary" />
+                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Source du lead' : 'Lead Source'}</p>
                 </div>
+                <p className="text-[13px] font-medium text-text-primary pl-5">
+                  {leads[0]?.source || <span className="text-text-tertiary font-normal">{language === 'fr' ? 'Non spécifié' : 'Not specified'}</span>}
+                </p>
               </div>
-              <div className="pt-2 border-t border-outline-subtle">
-                <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Client since</p>
-                <p className="text-[13px] font-semibold text-text-primary mt-0.5">{formatDate(client.created_at)}</p>
+              {/* Client since */}
+              <div className="pt-3 border-t border-outline/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <Calendar size={12} className="text-text-tertiary" />
+                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Client depuis' : 'Client Since'}</p>
+                </div>
+                <p className="text-[13px] font-medium text-text-primary pl-5">{formatDate(client.created_at)}</p>
               </div>
             </div>
           </div>
 
           {/* Notes Section */}
-          <div className="rounded-xl border border-outline bg-surface">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
+          <div className="rounded-md border border-outline bg-surface">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <div className="icon-tile icon-tile-sm icon-tile-blue"><StickyNote size={13} strokeWidth={2} /></div>
+                <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><StickyNote size={13} strokeWidth={2} /></div>
                 Notes
               </h2>
               {notesEdited && (
                 <button
                   onClick={handleSaveNotes}
                   disabled={notesSaving}
-                  className="glass-button-primary !text-[12px] !px-2.5 !py-1"
+                  className="inline-flex items-center gap-1 h-7 px-2.5 bg-primary text-white rounded-md text-[12px] font-medium hover:bg-primary-hover transition-colors !text-[12px] !px-2.5 !py-1"
                 >
                   {notesSaving ? 'Saving...' : 'Save'}
                 </button>
@@ -1075,13 +1091,13 @@ export default function ClientDetails() {
           </div>
 
           {/* Tags Section */}
-          <div className="rounded-xl border border-outline bg-surface">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
+          <div className="rounded-md border border-outline bg-surface">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <div className="icon-tile icon-tile-sm icon-tile-blue"><Tag size={13} strokeWidth={2} /></div>
+                <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><Tag size={13} strokeWidth={2} /></div>
                 Tags
               </h2>
-              <button onClick={() => setShowTagInput(true)} className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1">
+              <button onClick={() => setShowTagInput(true)} className="inline-flex items-center gap-1 h-7 px-2.5 bg-surface border border-outline rounded-md text-[12px] text-text-primary hover:bg-surface-secondary transition-colors !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1">
                 <Plus size={12} /> New Tag
               </button>
             </div>
@@ -1100,8 +1116,8 @@ export default function ClientDetails() {
                     className="glass-input text-[13px] flex-1"
                     autoFocus
                   />
-                  <button onClick={handleAddTag} className="glass-button-primary !text-[12px] !px-2.5 !py-1">Add</button>
-                  <button onClick={() => { setShowTagInput(false); setNewTag(''); }} className="glass-button !text-[12px] !px-2.5 !py-1"><X size={12} /></button>
+                  <button onClick={handleAddTag} className="inline-flex items-center gap-1 h-7 px-2.5 bg-primary text-white rounded-md text-[12px] font-medium hover:bg-primary-hover transition-colors !text-[12px] !px-2.5 !py-1">Add</button>
+                  <button onClick={() => { setShowTagInput(false); setNewTag(''); }} className="inline-flex items-center gap-1 h-7 px-2.5 bg-surface border border-outline rounded-md text-[12px] text-text-primary hover:bg-surface-secondary transition-colors !text-[12px] !px-2.5 !py-1"><X size={12} /></button>
                 </div>
               )}
               {tags.length === 0 && !showTagInput ? (
@@ -1123,10 +1139,10 @@ export default function ClientDetails() {
           </div>
 
           {/* Billing History */}
-          <div className="rounded-xl border border-outline bg-surface">
-            <div className="px-5 py-3.5 border-b border-outline-subtle">
+          <div className="rounded-md border border-outline bg-surface">
+            <div className="px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <div className="icon-tile icon-tile-sm icon-tile-blue"><DollarSign size={13} strokeWidth={2} /></div>
+                <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><DollarSign size={13} strokeWidth={2} /></div>
                 Billing History
               </h2>
             </div>

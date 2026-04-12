@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 
 export interface DateSlotRecord {
   id: string;
@@ -46,9 +47,7 @@ export async function listDateSlots(
 /** Create a new date slot. Replaces existing duplicate if present. */
 export async function createDateSlot(input: DateSlotInput): Promise<DateSlotRecord> {
   // Resolve org_id
-  const { data: orgId, error: orgError } = await supabase.rpc('current_org_id');
-  if (orgError) throw orgError;
-  if (!orgId) throw new Error('No organization context found.');
+  const orgId = await getCurrentOrgIdOrThrow();
 
   // Remove existing duplicate to avoid unique constraint violation
   await supabase
@@ -117,9 +116,7 @@ export async function bulkCreateDateSlots(
   endTime: string,
   status: 'available' | 'blocked' = 'available',
 ): Promise<DateSlotRecord[]> {
-  const { data: orgId, error: orgError } = await supabase.rpc('current_org_id');
-  if (orgError) throw orgError;
-  if (!orgId) throw new Error('No organization context found.');
+  const orgId = await getCurrentOrgIdOrThrow();
 
   // Delete existing slots for these dates first to avoid duplicates
   for (const d of dates) {

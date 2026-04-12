@@ -32,10 +32,10 @@ async function getCompanyInfo(orgId: string): Promise<CompanyInfo> {
     const admin = getServiceClient();
     const { data } = await admin
       .from('company_settings')
-      .select('company_name, company_logo_url, company_email, company_phone')
+      .select('company_name, logo_url, email, phone')
       .eq('org_id', orgId)
       .maybeSingle();
-    if (data) return { company_name: data.company_name, company_logo_url: data.company_logo_url, email: data.company_email, phone: data.company_phone };
+    if (data) return { company_name: data.company_name, company_logo_url: data.logo_url, email: data.email, phone: data.phone };
 
     // Fallback to org_billing_settings
     const { data: billing } = await admin
@@ -90,14 +90,14 @@ function buildPaymentEmailHtml(params: {
     A payment of <strong>${params.amountFormatted}</strong> is requested for invoice <strong>${params.invoiceNumber}</strong>.
   </p>
   <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">
-    <tr><td style="background-color:#2563eb;border-radius:6px;padding:14px 32px;">
+    <tr><td style="background-color:#1f2937;border-radius:6px;padding:14px 32px;">
       <a href="${params.paymentUrl}" style="color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;display:inline-block;">
         Pay ${params.amountFormatted}
       </a>
     </td></tr>
   </table>
   <p style="margin:0;font-size:13px;color:#9ca3af;text-align:center;">
-    Or copy this link: <a href="${params.paymentUrl}" style="color:#2563eb;word-break:break-all;">${params.paymentUrl}</a>
+    Or copy this link: <a href="${params.paymentUrl}" style="color:#374151;word-break:break-all;">${params.paymentUrl}</a>
   </p>
 </td></tr>
 <tr><td style="padding:20px 32px;background-color:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">

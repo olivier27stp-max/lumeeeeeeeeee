@@ -80,7 +80,7 @@ export default function AgentThinking({ currentState, language }: AgentThinkingP
           {/* Progress bar */}
           <div className="w-full h-1 rounded-full bg-surface-tertiary mb-4 overflow-hidden">
             <motion.div
-              className="h-full rounded-full bg-text-primary"
+              className="h-full rounded-full bg-primary"
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
@@ -115,7 +115,7 @@ export default function AgentThinking({ currentState, language }: AgentThinkingP
                     {/* Step indicator */}
                     <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${
                       status === 'active'
-                        ? 'bg-text-primary text-surface shadow-sm'
+                        ? 'bg-primary text-white shadow-sm'
                         : status === 'done'
                           ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400'
                           : 'bg-surface-tertiary text-text-tertiary'
@@ -151,7 +151,7 @@ export default function AgentThinking({ currentState, language }: AgentThinkingP
                         {[0, 1, 2].map(j => (
                           <motion.div
                             key={j}
-                            className="w-1 h-1 rounded-full bg-text-primary"
+                            className="w-1 h-1 rounded-full bg-primary"
                             animate={{ opacity: [0.2, 1, 0.2] }}
                             transition={{ duration: 0.8, repeat: Infinity, delay: j * 0.15 }}
                           />

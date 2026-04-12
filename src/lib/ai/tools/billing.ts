@@ -15,7 +15,7 @@ export const billingTools: ToolDefinition[] = [
     label: 'Invoice Summary',
     description: 'Get a complete summary of all invoices: total revenue, paid, open, past due, draft counts and amounts.',
     category: 'read',
-    requiredPermissions: ['invoices.view'],
+    requiredPermissions: ['invoices.read'],
     parameters: [],
     execute: async () => {
       try {
@@ -99,7 +99,7 @@ export const billingTools: ToolDefinition[] = [
     label: 'Revenue Analytics',
     description: 'Get revenue data for today, this week, this month, and this year. Only counts paid invoices.',
     category: 'read',
-    requiredPermissions: ['invoices.view'],
+    requiredPermissions: ['invoices.read'],
     parameters: [],
     execute: async () => {
       try {
@@ -187,7 +187,7 @@ export const billingTools: ToolDefinition[] = [
     label: 'Top Paying Clients',
     description: 'Get the top paying clients ranked by total paid amount. Returns top 10 by default.',
     category: 'read',
-    requiredPermissions: ['invoices.view'],
+    requiredPermissions: ['invoices.read'],
     parameters: [
       { name: 'limit', type: 'number', description: 'Number of clients to return (default 10, max 25)', required: false, default: 10 },
     ],
@@ -222,8 +222,9 @@ export const billingTools: ToolDefinition[] = [
         // Fetch client names
         const clientIds = sorted.map(([id]) => id);
         const { data: clients } = await supabase
-          .from('clients_active')
+          .from('clients')
           .select('id, first_name, last_name, company, email')
+          .is('deleted_at', null)
           .in('id', clientIds);
 
         const clientMap: Record<string, { name: string; email: string | null }> = {};
@@ -258,7 +259,7 @@ export const billingTools: ToolDefinition[] = [
     label: 'Invoices by Status',
     description: 'Get a list of invoices filtered by status (draft, open, paid, past_due). Returns up to 20 most recent.',
     category: 'read',
-    requiredPermissions: ['invoices.view'],
+    requiredPermissions: ['invoices.read'],
     parameters: [
       { name: 'status', type: 'string', description: 'Status to filter by', required: true, enum: ['draft', 'open', 'paid', 'past_due'] },
       { name: 'limit', type: 'number', description: 'Max results (default 20)', required: false, default: 20 },
@@ -292,8 +293,9 @@ export const billingTools: ToolDefinition[] = [
         // Fetch client names
         const clientIds = [...new Set((data || []).map((i: any) => i.client_id).filter(Boolean))];
         const { data: clients } = await supabase
-          .from('clients_active')
+          .from('clients')
           .select('id, first_name, last_name, company')
+          .is('deleted_at', null)
           .in('id', clientIds.length > 0 ? clientIds : ['00000000-0000-0000-0000-000000000000']);
 
         const nameMap: Record<string, string> = {};
@@ -329,7 +331,7 @@ export const billingTools: ToolDefinition[] = [
     label: 'Average Invoice Value',
     description: 'Get the average invoice value overall and for the last 30 days.',
     category: 'read',
-    requiredPermissions: ['invoices.view'],
+    requiredPermissions: ['invoices.read'],
     parameters: [],
     execute: async () => {
       try {
@@ -381,7 +383,7 @@ export const billingTools: ToolDefinition[] = [
     label: 'Invoices This Week',
     description: 'Get all invoices created or paid this week.',
     category: 'read',
-    requiredPermissions: ['invoices.view'],
+    requiredPermissions: ['invoices.read'],
     parameters: [],
     execute: async () => {
       try {
@@ -400,8 +402,9 @@ export const billingTools: ToolDefinition[] = [
 
         const clientIds = [...new Set((data || []).map((i: any) => i.client_id).filter(Boolean))];
         const { data: clients } = await supabase
-          .from('clients_active')
+          .from('clients')
           .select('id, first_name, last_name, company')
+          .is('deleted_at', null)
           .in('id', clientIds.length > 0 ? clientIds : ['00000000-0000-0000-0000-000000000000']);
 
         const nameMap: Record<string, string> = {};
@@ -448,7 +451,7 @@ export const billingTools: ToolDefinition[] = [
     label: 'Payment Analytics',
     description: 'Get payment statistics: total collected, methods breakdown, recent payments.',
     category: 'read',
-    requiredPermissions: ['invoices.view'],
+    requiredPermissions: ['invoices.read'],
     parameters: [
       { name: 'period', type: 'string', description: 'Time period', required: false, enum: ['30d', 'this_month', 'this_year', 'all'], default: '30d' },
     ],
