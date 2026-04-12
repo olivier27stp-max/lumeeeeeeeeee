@@ -252,6 +252,9 @@ export default function App() {
 
   useEffect(() => {
     if (!user) { setPendingQuotes(0); setOverdueInvoices(0); return; }
+    // Skip financial badge counts for financially restricted roles (technician)
+    // Financial badge counts are skipped for technicians (no financial access)
+    // Role check deferred to AuthenticatedApp — here we just load counts
     const load = async () => {
       // Resolve org_id for tenant scoping
       const { data: mem } = await supabase.from('memberships').select('org_id').eq('user_id', user.id).limit(1).maybeSingle();
@@ -573,7 +576,7 @@ function AuthenticatedApp({
       items: [
         { id: 'clients', label: t.nav.clients, icon: Users, path: '/clients', tileColor: 'blue', requiredPermission: 'clients.read' },
         { id: 'quotes', label: language === 'fr' ? 'Devis' : 'Quotes', icon: ClipboardList, path: '/quotes', tileColor: 'blue', requiredPermission: 'quotes.read' },
-        { id: 'invoices', label: t.nav.invoices, icon: FileText, path: '/invoices', tileColor: 'blue', requiredPermission: 'invoices.read' },
+        { id: 'invoices', label: t.nav.invoices, icon: FileText, path: '/invoices', tileColor: 'blue', requiredPermission: 'financial.view_invoices' },
         { id: 'jobs', label: t.nav.jobs, icon: Briefcase, path: '/jobs', tileColor: 'blue', requiredPermission: 'jobs.read' },
       ],
     },
@@ -582,7 +585,7 @@ function AuthenticatedApp({
       items: [
         { id: 'schedule', label: t.nav.calendar, icon: CalendarIcon, path: '/calendar', tileColor: 'blue', requiredPermission: 'calendar.read' },
         { id: 'messages', label: t.nav.messages, icon: MessageSquare, path: '/messages', tileColor: 'blue', requiredPermission: 'messages.read' },
-        { id: 'payments', label: t.nav.payments, icon: CreditCard, path: '/payments', tileColor: 'blue', requiredPermission: 'payments.read' },
+        { id: 'payments', label: t.nav.payments, icon: CreditCard, path: '/payments', tileColor: 'blue', requiredPermission: 'financial.view_payments' },
         { id: 'timesheets', label: t.nav.timesheets, icon: Timer, path: '/timesheets', tileColor: 'blue', requiredPermission: 'timesheets.read' },
         { id: 'courses', label: t.courses?.title || 'Courses', icon: GraduationCap, path: '/courses', tileColor: 'blue' },
       ],
@@ -593,8 +596,8 @@ function AuthenticatedApp({
         { id: 'd2d-dashboard', label: 'Dashboard D2D', icon: LayoutDashboard, path: '/d2d-dashboard', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
         { id: 'field-sales', label: t.nav.fieldSales, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
         { id: 'd2d-pipeline', label: 'Pipeline', icon: GitBranch, path: '/d2d-pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
-        { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'reports.read' },
-        { id: 'commissions', label: t.nav.commissions, icon: DollarSign, path: '/commissions', tileColor: 'blue', requiredPermission: 'reports.read' },
+        { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'financial.view_reports' },
+        { id: 'commissions', label: t.nav.commissions, icon: DollarSign, path: '/commissions', tileColor: 'blue', requiredPermission: 'financial.view_reports' },
         { id: 'fill', label: language === 'fr' ? 'Fil interne' : 'Team Feed', icon: MessageSquare, path: '/fill', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
       ],
     },
@@ -607,7 +610,7 @@ function AuthenticatedApp({
 
   // "More" section — collapsed by default
   const moreNavItems: NavItem[] = ([
-    { id: 'insights', label: language === 'fr' ? 'Statistiques' : 'Statistics', icon: TrendingUp, path: '/insights', tileColor: 'blue' as const, requiredPermission: 'reports.read' as PermissionKey },
+    { id: 'insights', label: language === 'fr' ? 'Statistiques' : 'Statistics', icon: TrendingUp, path: '/insights', tileColor: 'blue' as const, requiredPermission: 'financial.view_analytics' as PermissionKey },
     { id: 'tasks', label: language === 'fr' ? 'Tâches' : 'Tasks', icon: ClipboardList, path: '/tasks', tileColor: 'blue' as const, requiredPermission: 'leads.read' as PermissionKey },
     { id: 'automations', label: t.workflows?.title || 'Automations', icon: Zap, path: '/automations', tileColor: 'blue' as const, requiredPermission: 'automations.read' as PermissionKey },
     { id: 'marketplace', label: 'Marketplace', icon: Store, path: '/settings/marketplace', tileColor: 'blue' as const, requiredPermission: 'integrations.read' as PermissionKey },

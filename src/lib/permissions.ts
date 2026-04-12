@@ -6,9 +6,9 @@
 
 // ── Roles ───────────────────────────────────────────────────────────
 
-export type TeamRole = 'owner' | 'admin' | 'manager' | 'sales_rep' | 'technician' | 'support' | 'viewer';
+export type TeamRole = 'owner' | 'admin' | 'manager' | 'sales_rep' | 'technician';
 
-export const ALL_ROLES: TeamRole[] = ['owner', 'admin', 'manager', 'sales_rep', 'technician', 'support', 'viewer'];
+export const ALL_ROLES: TeamRole[] = ['owner', 'admin', 'manager', 'sales_rep', 'technician'];
 
 export const ROLE_LABELS: Record<TeamRole, { en: string; fr: string }> = {
   owner:      { en: 'Owner',      fr: 'Propriétaire' },
@@ -16,24 +16,21 @@ export const ROLE_LABELS: Record<TeamRole, { en: string; fr: string }> = {
   manager:    { en: 'Manager',    fr: 'Gestionnaire' },
   sales_rep:  { en: 'Sales Rep',  fr: 'Représentant' },
   technician: { en: 'Technician', fr: 'Technicien' },
-  support:    { en: 'Support',    fr: 'Support' },
-  viewer:     { en: 'Viewer',     fr: 'Lecteur' },
 };
 
 /** Roles that can be assigned via invitation (not owner) */
-export const ASSIGNABLE_ROLES: TeamRole[] = ['admin', 'manager', 'sales_rep', 'technician', 'support', 'viewer'];
+export const ASSIGNABLE_ROLES: TeamRole[] = ['admin', 'manager', 'sales_rep', 'technician'];
 
 // ── Scopes ──────────────────────────────────────────────────────────
 
-export type Scope = 'self' | 'assigned' | 'team' | 'department' | 'company';
+export type Scope = 'self' | 'assigned' | 'team' | 'company';
 
-export const ALL_SCOPES: Scope[] = ['self', 'assigned', 'team', 'department', 'company'];
+export const ALL_SCOPES: Scope[] = ['self', 'assigned', 'team', 'company'];
 
 export const SCOPE_LABELS: Record<Scope, { en: string; fr: string }> = {
   self:       { en: 'Own data only',   fr: 'Ses données seulement' },
   assigned:   { en: 'Assigned only',   fr: 'Assigné seulement' },
   team:       { en: 'Team',            fr: 'Équipe' },
-  department: { en: 'Department',      fr: 'Département' },
   company:    { en: 'Entire company',  fr: 'Toute la compagnie' },
 };
 
@@ -44,8 +41,6 @@ export const DEFAULT_SCOPE: Record<TeamRole, Scope> = {
   manager:    'team',
   sales_rep:  'self',
   technician: 'assigned',
-  support:    'company',
-  viewer:     'company',
 };
 
 // ── Permission Keys ─────────────────────────────────────────────────
@@ -60,7 +55,7 @@ export const PERMISSION_KEYS = [
   // Jobs
   'jobs.create', 'jobs.read', 'jobs.update', 'jobs.delete', 'jobs.assign', 'jobs.complete',
   // Invoices
-  'invoices.create', 'invoices.read', 'invoices.update', 'invoices.delete',
+  'invoices.create', 'invoices.read', 'invoices.update', 'invoices.delete', 'invoices.send',
   // Payments
   'payments.read', 'payments.create', 'payments.refund',
   // Messages
@@ -79,8 +74,8 @@ export const PERMISSION_KEYS = [
   'automations.read', 'automations.update',
   // Integrations
   'integrations.read', 'integrations.update',
-  // Reports
-  'reports.read',
+  // Reports & Analytics
+  'reports.read', 'analytics.view',
   // Team
   'team.read', 'team.update',
   // GPS
@@ -89,10 +84,115 @@ export const PERMISSION_KEYS = [
   'timesheets.read', 'timesheets.update',
   // AI
   'ai.use', 'ai.review', 'ai.admin',
+  // ── Financial (field-level) ──
+  'financial.view_pricing',   // See prices, totals, subtotals on jobs/quotes/invoices
+  'financial.view_invoices',  // Access invoices module entirely
+  'financial.view_payments',  // Access payments module
+  'financial.view_reports',   // Access reports, commissions, leaderboard
+  'financial.view_analytics', // Access insights, KPIs, revenue widgets
+  'financial.view_margins',   // See cost, margin, profit data
+  'financial.export_data',    // Export CSV, PDF with financial data
+  // Search
+  'search.global',            // Full global search (technicians get restricted)
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
 export type PermissionsMap = Record<PermissionKey, boolean>;
+
+// ── Financial Permission Helpers ────────────────────────────────────
+
+/** All permission keys in the financial category */
+export const FINANCIAL_PERMISSION_KEYS: PermissionKey[] = [
+  'financial.view_pricing',
+  'financial.view_invoices',
+  'financial.view_payments',
+  'financial.view_reports',
+  'financial.view_analytics',
+  'financial.view_margins',
+  'financial.export_data',
+  'invoices.create', 'invoices.read', 'invoices.update', 'invoices.delete', 'invoices.send',
+  'payments.read', 'payments.create', 'payments.refund',
+  'reports.read', 'analytics.view',
+];
+
+/** Entity types that contain financial data */
+export const FINANCIAL_ENTITY_TYPES = ['invoice', 'invoices', 'payment', 'payments', 'quote', 'quotes'] as const;
+
+/** Check if a role is financially restricted (no financial data at all) */
+export function isFinanciallyRestricted(role: TeamRole): boolean {
+  return role === 'technician';
+}
+
+/** Check if a user has any financial viewing permission */
+export function hasAnyFinancialAccess(permissions: PermissionsMap | null | undefined, role?: TeamRole): boolean {
+  if (role === 'owner' || role === 'admin') return true;
+  if (!permissions) return false;
+  return FINANCIAL_PERMISSION_KEYS.some(k => permissions[k] === true);
+}
+
+// ── Field-Level Masking ─────────────────────────────────────────────
+
+export interface FieldMaskRule {
+  permission: PermissionKey;
+  mask: null; // null = strip the field entirely
+}
+
+/**
+ * Fields that must be masked/stripped based on permissions.
+ * Key format: "table.column"
+ * When a user lacks the required permission, the field value is set to null.
+ */
+export const FIELD_MASKING_RULES: Record<string, FieldMaskRule> = {
+  // Jobs
+  'jobs.total_cents':       { permission: 'financial.view_pricing', mask: null },
+  'jobs.total':             { permission: 'financial.view_pricing', mask: null },
+  'jobs.subtotal':          { permission: 'financial.view_pricing', mask: null },
+  'jobs.subtotal_cents':    { permission: 'financial.view_pricing', mask: null },
+  'jobs.tax_total':         { permission: 'financial.view_pricing', mask: null },
+  'jobs.tax_lines':         { permission: 'financial.view_pricing', mask: null },
+  'jobs.cost_cents':        { permission: 'financial.view_margins', mask: null },
+  'jobs.unit_price_cents':  { permission: 'financial.view_pricing', mask: null },
+  // Line items
+  'line_items.unit_price_cents': { permission: 'financial.view_pricing', mask: null },
+  'line_items.cost_cents':       { permission: 'financial.view_margins', mask: null },
+  'line_items.total_cents':      { permission: 'financial.view_pricing', mask: null },
+  // Quotes
+  'quotes.total_cents':     { permission: 'financial.view_pricing', mask: null },
+  'quotes.subtotal_cents':  { permission: 'financial.view_pricing', mask: null },
+  'quotes.tax_cents':       { permission: 'financial.view_pricing', mask: null },
+  'quotes.total':           { permission: 'financial.view_pricing', mask: null },
+  // Invoices
+  'invoices.total_cents':   { permission: 'financial.view_invoices', mask: null },
+  'invoices.balance_cents': { permission: 'financial.view_invoices', mask: null },
+  'invoices.subtotal_cents':{ permission: 'financial.view_invoices', mask: null },
+  'invoices.tax_cents':     { permission: 'financial.view_invoices', mask: null },
+  // Search results
+  'search.amountCents':     { permission: 'financial.view_pricing', mask: null },
+};
+
+/**
+ * Strip financial fields from a data object based on user permissions.
+ * Works on both single objects and arrays.
+ */
+export function stripFinancialFields<T extends Record<string, any>>(
+  data: T,
+  tableName: string,
+  permissions: PermissionsMap | null | undefined,
+  role?: TeamRole,
+): T {
+  if (role === 'owner') return data;
+  if (!permissions) return data;
+
+  const result = { ...data };
+  for (const [ruleKey, rule] of Object.entries(FIELD_MASKING_RULES)) {
+    const [table, field] = ruleKey.split('.');
+    if (table !== tableName) continue;
+    if (field in result && !hasPermission(permissions, rule.permission, role)) {
+      (result as any)[field] = null;
+    }
+  }
+  return result;
+}
 
 // ── Permission Groups (UI display) ─────────────────────────────────
 
@@ -140,7 +240,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'jobs.create', label_en: 'Create jobs', label_fr: 'Créer des travaux' },
       { key: 'jobs.read', label_en: 'View jobs', label_fr: 'Voir les travaux' },
       { key: 'jobs.update', label_en: 'Edit jobs', label_fr: 'Modifier les travaux' },
-      { key: 'jobs.delete', label_en: 'Delete jobs', label_fr: 'Supprimer les travaux' },
+      { key: 'jobs.delete', label_en: 'Delete jobs', label_fr: 'Supprimer des travaux' },
       { key: 'jobs.assign', label_en: 'Assign jobs', label_fr: 'Assigner des travaux' },
       { key: 'jobs.complete', label_en: 'Complete jobs', label_fr: 'Compléter des travaux' },
     ],
@@ -152,6 +252,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'invoices.read', label_en: 'View invoices', label_fr: 'Voir les factures' },
       { key: 'invoices.update', label_en: 'Edit invoices', label_fr: 'Modifier les factures' },
       { key: 'invoices.delete', label_en: 'Delete invoices', label_fr: 'Supprimer les factures' },
+      { key: 'invoices.send', label_en: 'Send invoices', label_fr: 'Envoyer les factures' },
     ],
   },
   {
@@ -160,6 +261,18 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'payments.read', label_en: 'View payments', label_fr: 'Voir les paiements' },
       { key: 'payments.create', label_en: 'Create payments', label_fr: 'Créer des paiements' },
       { key: 'payments.refund', label_en: 'Refund payments', label_fr: 'Rembourser des paiements' },
+    ],
+  },
+  {
+    key: 'financial', label_en: 'Financial Access', label_fr: 'Accès financier',
+    permissions: [
+      { key: 'financial.view_pricing', label_en: 'View pricing & totals', label_fr: 'Voir les prix et totaux' },
+      { key: 'financial.view_invoices', label_en: 'Access invoices module', label_fr: 'Accéder aux factures' },
+      { key: 'financial.view_payments', label_en: 'Access payments module', label_fr: 'Accéder aux paiements' },
+      { key: 'financial.view_reports', label_en: 'View reports & commissions', label_fr: 'Voir rapports et commissions' },
+      { key: 'financial.view_analytics', label_en: 'View analytics & KPIs', label_fr: 'Voir analytiques et KPIs' },
+      { key: 'financial.view_margins', label_en: 'View margins & profits', label_fr: 'Voir marges et profits' },
+      { key: 'financial.export_data', label_en: 'Export financial data', label_fr: 'Exporter données financières' },
     ],
   },
   {
@@ -216,9 +329,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
-    key: 'reports', label_en: 'Reports', label_fr: 'Rapports',
+    key: 'reports', label_en: 'Reports & Analytics', label_fr: 'Rapports & Analytiques',
     permissions: [
       { key: 'reports.read', label_en: 'View reports', label_fr: 'Voir les rapports' },
+      { key: 'analytics.view', label_en: 'View analytics', label_fr: 'Voir les analytiques' },
+    ],
+  },
+  {
+    key: 'search', label_en: 'Search', label_fr: 'Recherche',
+    permissions: [
+      { key: 'search.global', label_en: 'Full global search', label_fr: 'Recherche globale complète' },
     ],
   },
   {
@@ -271,6 +391,16 @@ function pick(keys: PermissionKey[]): PermissionsMap {
   return map;
 }
 
+// ── PERMISSION MATRIX ──────────────────────────────────────────────
+//
+// OWNER       → Full access to everything
+// ADMIN       → Full operational + financial, no users.delete
+// SALES_REP   → Sales workflow, quotes with pricing, no analytics/margins/settings
+// TECHNICIAN  → Field-only: assigned jobs, schedule, timesheets, notes
+//               ZERO financial access (no invoices, no pricing, no margins,
+//               no payments, no reports, no analytics, no exports)
+// ────────────────────────────────────────────────────────────────────
+
 export const ROLE_PRESETS: Record<TeamRole, PermissionsMap> = {
   owner: allTrue(),
 
@@ -279,64 +409,68 @@ export const ROLE_PRESETS: Record<TeamRole, PermissionsMap> = {
     'users.delete': false, // Cannot delete owner
   },
 
-  manager: pick([
-    'clients.create', 'clients.read', 'clients.update',
-    'leads.create', 'leads.read', 'leads.update', 'leads.assign',
-    'quotes.create', 'quotes.read', 'quotes.update', 'quotes.send', 'quotes.approve',
-    'jobs.create', 'jobs.read', 'jobs.update', 'jobs.assign', 'jobs.complete',
-    'invoices.create', 'invoices.read', 'invoices.update',
-    'messages.read', 'messages.send',
-    'calendar.read', 'calendar.update',
-    'map.access',
-    'door_to_door.access', 'door_to_door.edit', 'door_to_door.convert',
-    'team.read', 'team.update',
-    'gps.read',
-    'timesheets.read', 'timesheets.update',
-    'ai.use', 'ai.review',
-    'settings.read',
-  ]),
+  manager: {
+    ...allTrue(),
+    'users.delete': false,
+  },
 
   sales_rep: pick([
+    // Clients & Leads
     'clients.create', 'clients.read', 'clients.update',
     'leads.create', 'leads.read', 'leads.update',
+    // Quotes (with pricing)
     'quotes.create', 'quotes.read', 'quotes.update', 'quotes.send',
+    // Jobs (read only, no financial fields)
     'jobs.read',
+    // Messages
     'messages.read', 'messages.send',
+    // Calendar
     'calendar.read', 'calendar.update',
+    // Map & D2D
     'map.access',
     'door_to_door.access', 'door_to_door.edit', 'door_to_door.convert',
+    // AI
     'ai.use',
+    // Settings (read only)
     'settings.read',
+    // Financial — sales_rep can see pricing on quotes
+    'financial.view_pricing',
+    // Search
+    'search.global',
+    // Timesheets (own)
+    'timesheets.read',
   ]),
 
   technician: pick([
+    // Clients (read only for job context)
     'clients.read',
+    // Jobs (assigned only — update for notes/photos/checklists, complete)
     'jobs.read', 'jobs.update', 'jobs.complete',
+    // Calendar (own schedule)
     'calendar.read', 'calendar.update',
+    // Messages
     'messages.read', 'messages.send',
+    // Timesheets (own)
     'timesheets.read', 'timesheets.update',
+    // GPS
     'gps.read',
+    // Settings (read for app config)
     'settings.read',
-  ]),
-
-  support: pick([
-    'clients.create', 'clients.read', 'clients.update',
-    'leads.read',
-    'quotes.read',
-    'jobs.read',
-    'invoices.read',
-    'messages.read', 'messages.send',
-    'calendar.read', 'calendar.update',
-    'timesheets.read',
+    // AI (basic use)
     'ai.use',
-    'settings.read',
-  ]),
-
-  viewer: pick([
-    'clients.read',
-    'quotes.read',
-    'jobs.read',
-    'calendar.read',
+    // ── ZERO financial permissions ──
+    // financial.view_pricing    = false
+    // financial.view_invoices   = false
+    // financial.view_payments   = false
+    // financial.view_reports    = false
+    // financial.view_analytics  = false
+    // financial.view_margins    = false
+    // financial.export_data     = false
+    // invoices.*                = false
+    // payments.*                = false
+    // reports.read              = false
+    // analytics.view            = false
+    // search.global             = false (restricted search only)
   ]),
 };
 
@@ -353,12 +487,21 @@ export function getDefaultScope(role: TeamRole): Scope {
 /**
  * Merge role defaults with user-specific overrides.
  * Overrides take precedence over role defaults.
+ *
+ * IMPORTANT: For technician role, financial permissions can NEVER be
+ * overridden to true. This is a hard security boundary.
  */
 export function resolvePermissions(role: TeamRole, overrides?: Record<string, boolean> | null): PermissionsMap {
   const base = getDefaultPermissions(role);
   if (!overrides) return base;
   for (const [key, val] of Object.entries(overrides)) {
-    if (key in base) (base as any)[key] = val;
+    if (key in base) {
+      // Hard block: technician can never gain financial permissions
+      if (role === 'technician' && FINANCIAL_PERMISSION_KEYS.includes(key as PermissionKey) && val === true) {
+        continue;
+      }
+      (base as any)[key] = val;
+    }
   }
   return base;
 }
@@ -392,8 +535,6 @@ export function checkScope(
 ): boolean {
   switch (userScope) {
     case 'company': return true;
-    case 'department':
-      return !resource.department_id || resource.department_id === userDeptId;
     case 'team':
       return !resource.team_id || resource.team_id === userTeamId;
     case 'assigned':
@@ -449,6 +590,24 @@ export function canManageTeam(p: PermissionsMap | null | undefined) { return has
 export function canManagePermissions(p: PermissionsMap | null | undefined) { return hasPermission(p, 'users.update_role'); }
 export function canViewTimesheets(p: PermissionsMap | null | undefined) { return hasPermission(p, 'timesheets.read'); }
 export function canEditSettings(p: PermissionsMap | null | undefined) { return hasPermission(p, 'settings.update'); }
+
+// ── Deprecated Role Mapping ─────────────────────────────────────────
+// Used only during migration to remap old roles to new ones.
+
+export const DEPRECATED_ROLE_MAPPING: Record<string, TeamRole> = {
+  manager: 'admin',
+  support: 'sales_rep',
+  viewer: 'sales_rep',
+};
+
+/**
+ * Map a potentially deprecated role to the new 4-role system.
+ * Returns the role unchanged if it's already valid.
+ */
+export function normalizeRole(role: string): TeamRole {
+  if (ALL_ROLES.includes(role as TeamRole)) return role as TeamRole;
+  return DEPRECATED_ROLE_MAPPING[role] ?? 'sales_rep';
+}
 
 // ── Communication Preferences ───────────────────────────────────────
 

@@ -12,6 +12,8 @@ import { fetchQuoteKpis, formatQuoteMoney } from '../lib/quotesApi';
 import { useJobModalController } from '../contexts/JobModalController';
 import { getLeaderboard } from '../lib/leaderboardApi';
 import { getAllActiveSessions } from '../lib/fieldSessionsApi';
+import { usePermissions } from '../hooks/usePermissions';
+import { hasPermission } from '../lib/permissions';
 
 /* ═══ Shared dark panel ═══ */
 const darkPanel = 'rounded-2xl bg-surface-card border border-border shadow-card';
@@ -24,6 +26,11 @@ export default function Dashboard() {
   const [refreshTick, setRefreshTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const { openJobModal } = useJobModalController();
+  const permsCtx = usePermissions();
+  const canSeeFinancials = permsCtx.role === 'owner' || permsCtx.role === 'admin' ||
+    hasPermission(permsCtx.permissions, 'financial.view_analytics', permsCtx.role ?? undefined);
+  const canSeePricing = permsCtx.role === 'owner' || permsCtx.role === 'admin' ||
+    hasPermission(permsCtx.permissions, 'financial.view_pricing', permsCtx.role ?? undefined);
 
   const { data, loading, isOffline, refresh: refreshData } = useOfflineCache<DashboardData>(
     'dashboard', getDashboardData, [refreshTick],
@@ -109,15 +116,27 @@ export default function Dashboard() {
 
       {/* ═══ HERO KPI CARDS — Colorful gradient cards ═══ */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <ColorKpiCard
-          gradient="from-emerald-500 to-teal-600"
-          glow="shadow-[0_8px_30px_rgba(16,185,129,0.25)]"
-          label={t.dashboard.totalRevenue}
-          value={formatCurrency(data.performance?.revenue?.today ?? 0)}
-          sub={t.dashboard.today}
-          icon={DollarSign}
-          onClick={() => navigate('/insights')}
-        />
+        {canSeeFinancials ? (
+          <ColorKpiCard
+            gradient="from-emerald-500 to-teal-600"
+            glow="shadow-[0_8px_30px_rgba(16,185,129,0.25)]"
+            label={t.dashboard.totalRevenue}
+            value={formatCurrency(data.performance?.revenue?.today ?? 0)}
+            sub={t.dashboard.today}
+            icon={DollarSign}
+            onClick={() => navigate('/insights')}
+          />
+        ) : (
+          <ColorKpiCard
+            gradient="from-emerald-500 to-teal-600"
+            glow="shadow-[0_8px_30px_rgba(16,185,129,0.25)]"
+            label={fr ? 'Jobs terminés' : 'Completed Jobs'}
+            value={String(data.performance?.todayJobs ?? 0)}
+            sub={t.dashboard.today}
+            icon={Briefcase}
+            onClick={() => navigate('/jobs')}
+          />
+        )}
         <ColorKpiCard
           gradient="from-gray-700 to-gray-800"
           glow="shadow-[0_8px_30px_rgba(100,116,139,0.25)]"
@@ -138,9 +157,9 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* ═══ SECONDARY ROW — 3 compact stat cards ═══ */}
+      {/* ═══ SECONDARY ROW — compact stat cards ═══ */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <MiniStat label={t.dashboard.outstanding} value={formatCurrency(overdueAmt)} warn={hasOverdue} onClick={() => navigate('/invoices')} />
+        {canSeeFinancials && <MiniStat label={t.dashboard.outstanding} value={formatCurrency(overdueAmt)} warn={hasOverdue} onClick={() => navigate('/invoices')} />}
         <MiniStat label={t.dashboard.newLeads} value={String(data.performance?.newLeadsToday ?? 0)} onClick={() => navigate('/quotes')} />
         <MiniStat label={t.dashboard.upcomingAppointments} value={String(data.appointments?.total ?? 0)} onClick={() => navigate('/calendar')} />
         {pendingQuotes > 0 && <MiniStat label={t.dashboard.pendingQuotes} value={String(pendingQuotes)} onClick={() => navigate('/quotes')} />}

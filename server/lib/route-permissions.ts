@@ -45,35 +45,35 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'POST /api/quotes/send-email': 'quotes.send',
   'POST /api/quotes/send-sms': 'quotes.send',
   'POST /api/quotes/convert-to-job': 'jobs.create',
-  'POST /api/quotes/convert-to-invoice': 'invoices.create',
+  'POST /api/quotes/convert-to-invoice': 'financial.view_invoices',
 
   // ── Jobs ──
   'POST /api/jobs/assign-team': 'jobs.assign',
-  'GET /api/jobs/search-for-invoice': 'jobs.read',
+  'GET /api/jobs/search-for-invoice': 'financial.view_invoices',
   'POST /api/geocode-job': 'jobs.update',
   'POST /api/geocode-batch': 'jobs.update',
 
   // ── Invoices ──
-  'POST /api/invoices/from-job': 'invoices.create',
+  'POST /api/invoices/from-job': 'financial.view_invoices',
 
-  // ── Payments ──
-  'GET /api/payments/settings': 'settings.read',
+  // ── Payments ── (require financial.view_payments for technician block)
+  'GET /api/payments/settings': 'financial.view_payments',
   'POST /api/payments/keys': 'settings.update',
   'POST /api/payments/settings': 'settings.update',
-  'GET /api/payments/payouts/summary': 'payments.read',
-  'GET /api/payments/payouts/list': 'payments.read',
-  'GET /api/payments/payouts/detail': 'payments.read',
-  'POST /api/payments/payouts/email-csv': 'payments.read',
-  'GET /api/payments/providers/status': 'settings.read',
+  'GET /api/payments/payouts/summary': 'financial.view_payments',
+  'GET /api/payments/payouts/list': 'financial.view_payments',
+  'GET /api/payments/payouts/detail': 'financial.view_payments',
+  'POST /api/payments/payouts/email-csv': 'financial.export_data',
+  'GET /api/payments/providers/status': 'financial.view_payments',
   'POST /api/payments/providers/settings': 'settings.update',
-  'POST /api/payments/stripe/create-intent': 'payments.create',
-  'GET /api/payments/stripe/transactions': 'payments.read',
-  'GET /api/payments/stripe/balance': 'payments.read',
-  'POST /api/payments/paypal/create-order': 'payments.create',
-  'POST /api/payments/paypal/capture-order': 'payments.create',
-  'POST /api/payments/refund': 'payments.refund',
-  'POST /api/payment-requests/create': 'payments.create',
-  'POST /api/payment-requests/resend': 'payments.create',
+  'POST /api/payments/stripe/create-intent': 'financial.view_payments',
+  'GET /api/payments/stripe/transactions': 'financial.view_payments',
+  'GET /api/payments/stripe/balance': 'financial.view_payments',
+  'POST /api/payments/paypal/create-order': 'financial.view_payments',
+  'POST /api/payments/paypal/capture-order': 'financial.view_payments',
+  'POST /api/payments/refund': 'financial.view_payments',
+  'POST /api/payment-requests/create': 'financial.view_payments',
+  'POST /api/payment-requests/resend': 'financial.view_payments',
 
   // ── Messages ──
   'POST /api/messages/send': 'messages.send',
@@ -87,7 +87,7 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'POST /api/communications/provision-sms': 'integrations.update',
 
   // ── Emails ──
-  'POST /api/emails/send-invoice': 'messages.send',
+  'POST /api/emails/send-invoice': 'financial.view_invoices',
   'POST /api/emails/send-quote': 'messages.send',
   'POST /api/emails/send-custom': 'messages.send',
 
@@ -95,11 +95,11 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'GET /api/automations/test': 'automations.read',
   'POST /api/automations/events/appointment-created': 'automations.update',
   'POST /api/automations/events/appointment-cancelled': 'automations.update',
-  'POST /api/automations/events/job-completed': 'automations.update',
+  'POST /api/automations/events/job-completed': 'jobs.complete',
   'POST /api/automations/events/deal-stage-changed': 'automations.update',
   'POST /api/automations/events/quote-sent': 'automations.update',
   'POST /api/automations/events/quote-approved': 'automations.update',
-  'POST /api/automations/events/invoice-paid': 'automations.update',
+  'POST /api/automations/events/invoice-paid': 'financial.view_invoices',
   'POST /api/automations/events/lead-created': 'automations.update',
   'POST /api/automations/events/lead-status-changed': 'automations.update',
 
@@ -141,7 +141,7 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'PUT /api/features/:feature': 'settings.update',
 
   // ── Billing ──
-  'GET /api/billing/current': 'settings.read',
+  'GET /api/billing/current': 'financial.view_payments',
   'POST /api/billing/onboarding': 'settings.update',
   'POST /api/billing/subscribe': 'settings.update',
   'POST /api/billing/cancel': 'settings.update',
@@ -151,17 +151,17 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'POST /api/connect/create-account': 'settings.update',
   'POST /api/connect/create-onboarding-link': 'settings.update',
   'POST /api/connect/refresh-onboarding-link': 'settings.update',
-  'GET /api/connect/account-status': 'settings.read',
+  'GET /api/connect/account-status': 'financial.view_payments',
 
-  // ── Commissions ──
-  'GET /api/commissions': 'reports.read',
-  'POST /api/commissions/calculate': 'reports.read',
+  // ── Commissions ── (financial: reports)
+  'GET /api/commissions': 'financial.view_reports',
+  'POST /api/commissions/calculate': 'financial.view_reports',
   'POST /api/commissions/:id/approve': 'team.update',
   'POST /api/commissions/:id/reverse': 'team.update',
-  'GET /api/commissions/rules': 'settings.read',
+  'GET /api/commissions/rules': 'financial.view_reports',
   'POST /api/commissions/rules': 'settings.update',
   'PUT /api/commissions/rules/:id': 'settings.update',
-  'GET /api/commissions/payroll-preview': 'reports.read',
+  'GET /api/commissions/payroll-preview': 'financial.view_reports',
 
   // ── Integrations ──
   'GET /api/integrations': 'integrations.read',
@@ -181,27 +181,27 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'PUT /api/quote-templates/:id': 'settings.update',
   'DELETE /api/quote-templates/:id': 'settings.update',
 
-  // ── Taxes ──
-  'GET /api/taxes': 'settings.read',
-  'GET /api/taxes/resolve': 'settings.read',
+  // ── Taxes ── (financial: pricing)
+  'GET /api/taxes': 'financial.view_pricing',
+  'GET /api/taxes/resolve': 'financial.view_pricing',
   'POST /api/taxes/setup': 'settings.update',
   'POST /api/taxes/config': 'settings.update',
   'PUT /api/taxes/config/:id': 'settings.update',
   'DELETE /api/taxes/group/:id': 'settings.update',
 
-  // ── Reports ──
-  'GET /api/leaderboard': 'reports.read',
-  'GET /api/leaderboard/rep/:userId': 'reports.read',
-  'GET /api/leaderboard/realtime/:userId': 'reports.read',
-  'GET /api/scheduled-reports': 'reports.read',
-  'POST /api/scheduled-reports': 'reports.read',
-  'PUT /api/scheduled-reports/:id': 'reports.read',
-  'DELETE /api/scheduled-reports/:id': 'reports.read',
-  'POST /api/scheduled-reports/:id/send-now': 'reports.read',
-  'GET /api/goals': 'reports.read',
+  // ── Reports ── (financial: reports/analytics)
+  'GET /api/leaderboard': 'financial.view_reports',
+  'GET /api/leaderboard/rep/:userId': 'financial.view_reports',
+  'GET /api/leaderboard/realtime/:userId': 'financial.view_reports',
+  'GET /api/scheduled-reports': 'financial.view_reports',
+  'POST /api/scheduled-reports': 'financial.view_reports',
+  'PUT /api/scheduled-reports/:id': 'financial.view_reports',
+  'DELETE /api/scheduled-reports/:id': 'financial.view_reports',
+  'POST /api/scheduled-reports/:id/send-now': 'financial.view_reports',
+  'GET /api/goals': 'financial.view_reports',
   'POST /api/goals': 'settings.update',
   'DELETE /api/goals/:id': 'settings.update',
-  'GET /api/goals/progress': 'reports.read',
+  'GET /api/goals/progress': 'financial.view_reports',
 
   // ── Gamification ──
   'GET /api/gamification/badges': 'reports.read',
@@ -239,9 +239,9 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'PUT /api/field-sales/territories/:id': 'door_to_door.edit',
   'DELETE /api/field-sales/territories/:id': 'door_to_door.edit',
   'GET /api/field-sales/pins': 'door_to_door.access',
-  'GET /api/field-sales/stats': 'reports.read',
-  'GET /api/field-sales/stats/daily': 'reports.read',
-  'GET /api/field-sales/stats/leaderboard': 'reports.read',
+  'GET /api/field-sales/stats': 'financial.view_reports',
+  'GET /api/field-sales/stats/daily': 'financial.view_reports',
+  'GET /api/field-sales/stats/leaderboard': 'financial.view_reports',
   'GET /api/field-sales/reps': 'team.read',
   'POST /api/field-sales/reps': 'team.update',
   'PUT /api/field-sales/reps/:id': 'team.update',
@@ -274,7 +274,7 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'DELETE /api/security/api-keys/:id': 'settings.update',
   'GET /api/security/sessions': 'settings.read',
   'POST /api/security/sessions/invalidate-all': 'settings.update',
-  'GET /api/security/export-log': 'settings.read',
+  'GET /api/security/export-log': 'financial.export_data',
   'POST /api/security/check-password': 'settings.read',
 
   // ── Audit Log ──

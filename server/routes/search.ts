@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedClient } from '../lib/supabase';
+import { getUserContext, isFinanciallyRestricted, hasPermission, stripFinancialFields, filterFinancialEntities } from '../lib/rbac';
 import {
   sanitizeQuery,
   clampInt,
@@ -228,7 +229,21 @@ async function handleSuggestions(req: import('express').Request, res: import('ex
     enrichClientNames(expandedItems, clientNameMap);
 
     // Merge: direct results first, then expanded
-    const allItems = [...mapped, ...expandedItems];
+    let allItems = [...mapped, ...expandedItems];
+
+    // ── RBAC: Filter financial entities for restricted roles ──
+    const ctx = req.userContext || await getUserContext(client, auth.user.id, orgId);
+    if (ctx) {
+      // Remove invoice/payment entities if user lacks financial access
+      allItems = filterFinancialEntities(ctx, allItems);
+      // Strip financial fields (amountCents) from remaining items
+      if (isFinanciallyRestricted(ctx)) {
+        allItems = allItems.map(item => {
+          if ('amountCents' in item) return { ...item, amountCents: null };
+          return item;
+        });
+      }
+    }
 
     // Group results
     const grouped = { ...emptyGrouped };
@@ -277,6 +292,13 @@ router.get('/search/results', async (req, res) => {
     if (countError) throw countError;
 
     const counts = parseCountRows((countRows || []) as Array<{ entity_type: SearchEntityType; total: number }>);
+
+    // ── RBAC: Zero out financial entity counts for restricted roles ──
+    const ctx = req.userContext || await getUserContext(client, auth.user.id, orgId);
+    if (ctx && isFinanciallyRestricted(ctx)) {
+      counts.invoices = 0;
+      counts.all = Object.values(counts).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0);
+    }
 
     if (tab === 'all') {
       const pages: Record<EntityGroupKey, number> = {} as any;

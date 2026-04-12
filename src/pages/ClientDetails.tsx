@@ -625,7 +625,7 @@ export default function ClientDetails() {
         {/* ──── LEFT COLUMN ──── */}
         <div className="space-y-5 min-w-0">
           {/* Properties Section */}
-          <div className="rounded-md border border-outline bg-surface">
+          <div className="rounded-xl border border-outline bg-surface-card">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <MapPin size={15} className="text-text-secondary" />
@@ -648,7 +648,7 @@ export default function ClientDetails() {
             </div>
             <div className="p-5">
               {fullAddress ? (
-                <div className="flex items-start gap-3 rounded-md border border-outline bg-surface-secondary p-3.5">
+                <div className="flex items-start gap-3 rounded-lg border border-outline bg-surface-secondary p-3.5">
                   <a
                     href={buildGoogleMapsUrl(client)}
                     target="_blank"
@@ -734,7 +734,7 @@ export default function ClientDetails() {
           </div>
 
           {/* Overview Section with Tabs */}
-          <div className="rounded-md border border-outline bg-surface">
+          <div className="rounded-xl border border-outline bg-surface-card">
             <div className="px-5 pt-3.5 border-b border-outline">
               <div className="flex items-center gap-1 overflow-x-auto">
                 {overviewTabs.map((tab) => (
@@ -920,7 +920,7 @@ export default function ClientDetails() {
           </div>
 
           {/* Schedule Section */}
-          <div className="rounded-md border border-outline bg-surface">
+          <div className="rounded-xl border border-outline bg-surface-card">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><Calendar size={13} strokeWidth={2} /></div>
@@ -961,7 +961,7 @@ export default function ClientDetails() {
                   <div className="space-y-2">
                     {pastEvents.slice(-3).reverse().map((event) => (
                       <div key={event.id} className="flex items-center gap-3 rounded-lg border border-outline-subtle bg-surface-secondary/50 p-3 opacity-70">
-                        <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-tertiary"><CheckCircle2 size={13} strokeWidth={2} /></div>
+                        <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><CheckCircle2 size={13} strokeWidth={2} /></div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[13px] font-medium text-text-secondary truncate">{event.title}</p>
                           <p className="text-[12px] text-text-tertiary">
@@ -979,10 +979,13 @@ export default function ClientDetails() {
               )}
             </div>
           </div>
+
+          {/* Activity Timeline — inside left column for proper alignment */}
+          <ActivityTimeline entityType="client" entityId={id!} />
         </div>
 
         {/* ──── RIGHT SIDEBAR ──── */}
-        <div className="space-y-5 lg:sticky lg:top-5 self-start">
+        <div className="space-y-5 lg:sticky lg:top-5">
           {/* Contact Info */}
           <div className="rounded-xl border border-outline bg-surface-card">
             <div className="px-5 py-3 border-b border-outline">
@@ -1062,7 +1065,7 @@ export default function ClientDetails() {
           </div>
 
           {/* Notes Section */}
-          <div className="rounded-md border border-outline bg-surface">
+          <div className="rounded-xl border border-outline bg-surface-card">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><StickyNote size={13} strokeWidth={2} /></div>
@@ -1091,7 +1094,7 @@ export default function ClientDetails() {
           </div>
 
           {/* Tags Section */}
-          <div className="rounded-md border border-outline bg-surface">
+          <div className="rounded-xl border border-outline bg-surface-card">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><Tag size={13} strokeWidth={2} /></div>
@@ -1139,7 +1142,7 @@ export default function ClientDetails() {
           </div>
 
           {/* Billing History */}
-          <div className="rounded-md border border-outline bg-surface">
+          <div className="rounded-xl border border-outline bg-surface-card">
             <div className="px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><DollarSign size={13} strokeWidth={2} /></div>
@@ -1215,8 +1218,6 @@ export default function ClientDetails() {
           </div>
         </div>
       </div>
-
-      <ActivityTimeline entityType="client" entityId={id!} />
 
       {/* Quote Create Modal */}
       {isQuoteCreateOpen && client && (

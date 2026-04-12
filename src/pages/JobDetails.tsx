@@ -42,6 +42,8 @@ import { getRecurrenceRule, createRecurrenceRule, deactivateRecurrenceRule, type
 import SendSmsModal from '../components/communications/SendSmsModal';
 import SendEmailModal from '../components/communications/SendEmailModal';
 import CommunicationsTimeline from '../components/communications/CommunicationsTimeline';
+import { usePermissions } from '../hooks/usePermissions';
+import { hasPermission } from '../lib/permissions';
 import SpecificNotes from '../components/SpecificNotes';
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -79,6 +81,13 @@ export default function JobDetails() {
   const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
   const { openJobModal } = useJobModalController();
+  const permsCtx = usePermissions();
+  const canSeePricing = permsCtx.role === 'owner' || permsCtx.role === 'admin' ||
+    hasPermission(permsCtx.permissions, 'financial.view_pricing', permsCtx.role ?? undefined);
+  const canSeeInvoices = permsCtx.role === 'owner' || permsCtx.role === 'admin' ||
+    hasPermission(permsCtx.permissions, 'financial.view_invoices', permsCtx.role ?? undefined);
+  const canSeeMargins = permsCtx.role === 'owner' || permsCtx.role === 'admin' ||
+    hasPermission(permsCtx.permissions, 'financial.view_margins', permsCtx.role ?? undefined);
 
   const { updateLabel: updateRecentLabel } = useRecentItems();
   const [job, setJob] = useState<Job | null>(null);
@@ -438,7 +447,7 @@ export default function JobDetails() {
                 disabled={isClosing}
                 className="px-3 py-1.5 rounded-lg bg-primary text-white text-[12px] font-semibold hover:opacity-90 transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                <CheckCircle2 size={13} /> {isClosing ? 'Processing...' : 'Complete & Invoice'}
+                <CheckCircle2 size={13} /> {isClosing ? 'Processing...' : (canSeeInvoices ? 'Complete & Invoice' : 'Complete')}
               </button>
             )}
 
@@ -458,7 +467,7 @@ export default function JobDetails() {
                     <DropdownItem icon={<Send size={13} />} label="Send Follow-up" onClick={() => { setEmailMode('followup'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
                     <DropdownItem icon={<Mail size={13} />} label="Send Email" onClick={() => { setEmailMode('generic'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
                     <div className="border-t border-border my-1" />
-                    <DropdownItem icon={<FileText size={13} />} label={isCreatingInvoice ? 'Creating...' : 'Create Invoice'} onClick={handleCreateInvoice} disabled={isCreatingInvoice} />
+                    {canSeeInvoices && <DropdownItem icon={<FileText size={13} />} label={isCreatingInvoice ? 'Creating...' : 'Create Invoice'} onClick={handleCreateInvoice} disabled={isCreatingInvoice} />}
                     <DropdownItem icon={<Copy size={13} />} label="Clone Job" onClick={() => {
                       setMoreActionsOpen(false);
                       openJobModal({
@@ -604,7 +613,8 @@ export default function JobDetails() {
 
         {/* ═══ PROFITABILITY + LINE ITEMS ═══ */}
         <div className="rounded-xl border border-outline bg-surface overflow-hidden">
-          {/* Profitability toggle */}
+          {/* Profitability toggle — hidden for roles without margin access */}
+          {canSeeMargins && (
           <div className="px-5 py-3.5 border-b border-outline-subtle">
             <button
               onClick={() => setShowProfitability(!showProfitability)}
@@ -653,6 +663,7 @@ export default function JobDetails() {
               )}
             </AnimatePresence>
           </div>
+          )}
 
           {/* Line Items */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">

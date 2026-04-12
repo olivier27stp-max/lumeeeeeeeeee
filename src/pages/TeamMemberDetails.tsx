@@ -66,7 +66,7 @@ interface MemberData {
   created_at: string;
 }
 
-const ROLE_CONFIG: Record<TeamRole, { label_en: string; label_fr: string; icon: typeof Crown; color: string; badge: string }> = {
+const ROLE_CONFIG: Record<string, { label_en: string; label_fr: string; icon: typeof Crown; color: string; badge: string }> = {
   owner:      { label_en: 'Account Owner', label_fr: 'Propriétaire',     icon: Crown,       color: 'text-text-secondary',  badge: 'bg-surface-tertiary text-text-secondary border-outline-subtle' },
   admin:      { label_en: 'Admin',         label_fr: 'Administrateur',   icon: ShieldCheck, color: 'text-primary',    badge: 'bg-primary/10 text-primary border-primary/20' },
   sales_rep:  { label_en: 'Sales Rep',     label_fr: 'Représentant',     icon: ShieldCheck, color: 'text-text-secondary',  badge: 'bg-surface-secondary text-text-secondary border-outline' },

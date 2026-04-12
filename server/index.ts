@@ -336,10 +336,6 @@ app.post('/api/workflows/execute-action', async (req, res) => {
   }
 });
 
-// ── Serve static frontend (production) ──
-const distPath = path.resolve(__dirname, '..', 'dist');
-app.use(express.static(distPath));
-
 // SPA fallback — serve index.html with CSP nonce for inline styles
 import crypto from 'crypto';
 import fs from 'fs';
