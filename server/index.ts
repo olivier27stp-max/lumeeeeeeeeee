@@ -98,9 +98,9 @@ app.use((_req, res, next) => {
         ? "script-src 'self' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com"
         // unsafe-eval required for Vite HMR in dev only; unsafe-inline scoped to dev
         : "script-src 'self' 'unsafe-eval' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com http://localhost:*",
-      process.env.NODE_ENV === 'production' ? "style-src 'self'" : "style-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: https: blob:",
-      "font-src 'self' data:",
+      "font-src 'self' data: https://fonts.gstatic.com",
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://api.stripe.com https://fal.run https://queue.fal.run https://api.paypal.com",
       "frame-src https://js.stripe.com https://www.paypal.com",
       "media-src 'self' https: blob:",
