@@ -687,6 +687,37 @@ export async function getCompanySettings() {
   };
 }
 
+/** Fetch applied tax breakdown for an invoice (from applied_taxes audit table) */
+export async function getInvoiceAppliedTaxes(invoiceId: string): Promise<Array<{ name: string; rate: number; amount_cents: number; registration_number?: string | null }>> {
+  const { data, error } = await supabase
+    .from('applied_taxes')
+    .select('name, rate, amount_cents, is_compound, sort_order, tax_config_id')
+    .eq('document_type', 'invoice')
+    .eq('document_id', invoiceId)
+    .order('sort_order');
+  if (error || !data || data.length === 0) return [];
+
+  // Fetch registration numbers from tax_configs for each applied tax
+  const configIds = data.map((t: any) => t.tax_config_id).filter(Boolean);
+  let regNumMap = new Map<string, string>();
+  if (configIds.length > 0) {
+    const { data: configs } = await supabase
+      .from('tax_configs')
+      .select('id, registration_number')
+      .in('id', configIds);
+    for (const c of configs || []) {
+      if (c.registration_number) regNumMap.set(c.id, c.registration_number);
+    }
+  }
+
+  return data.map((t: any) => ({
+    name: t.name,
+    rate: Number(t.rate),
+    amount_cents: t.amount_cents,
+    registration_number: (t.tax_config_id && regNumMap.get(t.tax_config_id)) || null,
+  }));
+}
+
 export async function listInvoiceTemplates() {
   const { data, error } = await supabase
     .from('invoice_templates')

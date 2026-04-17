@@ -28,6 +28,18 @@ export function validate<T extends ZodSchema>(schema: T) {
 const optionalString = z.string().trim().optional().nullable();
 const optionalOrgId = z.string().uuid().optional().nullable();
 
+// ─── Password policy (server-side enforcement) ───────────────────────────────
+
+export const passwordSchema = z
+  .string()
+  .min(10, 'Password must be at least 10 characters.')
+  .refine((p) => /[A-Z]/.test(p) && /[a-z]/.test(p) && /[0-9]/.test(p), {
+    message: 'Password must contain uppercase, lowercase, and a number.',
+  })
+  .refine((p) => /[^a-zA-Z0-9]/.test(p), {
+    message: 'Password must contain at least one special character.',
+  });
+
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
 export const createLeadSchema = z.object({
@@ -37,7 +49,7 @@ export const createLeadSchema = z.object({
   title: optionalString,
   notes: optionalString,
   address: optionalString,
-  value: z.number().optional().default(0),
+  value: z.number().min(0, 'Value cannot be negative.').max(999_999_999, 'Value too large.').optional().default(0),
   orgId: optionalOrgId,
 });
 
@@ -303,3 +315,65 @@ export const publicFormSubmissionSchema = z.object({
   custom_responses: z.record(z.string(), z.any()).optional().default({}),
   notes: optionalString,
 });
+
+// ─── AI / Agent ─────────────────────────────────────────────────
+
+export const agentChatSchema = z.object({
+  message: z.string().trim().min(1, 'Message is required.').max(10_000, 'Message too long.'),
+  sessionId: optionalString,
+  context: z.any().optional(),
+}).passthrough();
+
+export const aiChatSchema = z.object({
+  messages: z.array(z.object({
+    role: z.enum(['user', 'assistant', 'system']),
+    content: z.string().max(50_000, 'Message content too long.'),
+  })).min(1, 'At least one message is required.'),
+  model: optionalString,
+}).passthrough();
+
+// ─── Goals ──────────────────────────────────────────────────────
+
+export const createGoalSchema = z.object({
+  title: z.string().trim().min(1, 'title is required.'),
+  target_value: z.number().min(0).max(999_999_999),
+  metric_type: z.string().trim().min(1, 'metric_type is required.'),
+  period: z.string().trim().optional(),
+}).passthrough();
+
+// ─── Feature Flags ──────────────────────────────────────────────
+
+export const updateFeatureFlagSchema = z.object({
+  enabled: z.boolean(),
+}).passthrough();
+
+// ─── Billing ────────────────────────────────────────────────────
+
+export const billingSubscribeSchema = z.object({
+  planId: z.string().trim().min(1, 'planId is required.'),
+  promoCode: optionalString,
+}).passthrough();
+
+// ─── Commissions ────────────────────────────────────────────────
+
+export const commissionActionSchema = z.object({
+  id: z.string().trim().optional(),
+}).passthrough();
+
+// ─── Director Panel ─────────────────────────────────────────────
+
+export const directorExecuteSchema = z.object({
+  providerId: z.string().trim().min(1, 'providerId is required.'),
+  params: z.record(z.string(), z.any()).optional(),
+}).passthrough();
+
+// ─── Generic passthrough schemas for loose validation ───────────
+
+/** Validates that a request body is a non-empty object (catches nulls, arrays, primitives) */
+export const nonEmptyBodySchema = z.object({}).passthrough()
+  .refine(obj => Object.keys(obj).length > 0, 'Request body cannot be empty.');
+
+/** Validates that an ID field is present */
+export const idRequiredSchema = z.object({
+  id: z.string().trim().min(1, 'id is required.'),
+}).passthrough();

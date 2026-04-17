@@ -39,10 +39,20 @@ export default function AcceptInvitation() {
     })();
   }, [token]);
 
+  // Password policy checks (mirror server-side validation)
+  const passwordErrors: string[] = [];
+  if (password && password.length < 10) passwordErrors.push('Min. 10 characters');
+  if (password && (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)))
+    passwordErrors.push('Uppercase, lowercase & number required');
+  if (password && !/[^a-zA-Z0-9]/.test(password)) passwordErrors.push('Special character required');
+  const passwordValid = password.length >= 10
+    && /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password)
+    && /[^a-zA-Z0-9]/.test(password);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim()) return;
-    if (password.length < 8) return;
+    if (!passwordValid) return;
     if (password !== confirmPassword) return;
 
     setSubmitting(true);
@@ -148,11 +158,18 @@ export default function AcceptInvitation() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="glass-input w-full !pl-9"
-                    placeholder="Min. 8 characters"
+                    placeholder="Min. 10 characters"
                     required
-                    minLength={8}
+                    minLength={10}
                   />
                 </div>
+                {password && passwordErrors.length > 0 && (
+                  <div className="mt-1 space-y-0.5">
+                    {passwordErrors.map((err) => (
+                      <p key={err} className="text-[11px] text-danger">{err}</p>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Confirm Password */}
@@ -179,7 +196,7 @@ export default function AcceptInvitation() {
 
               <button
                 type="submit"
-                disabled={submitting || !fullName.trim() || password.length < 8 || password !== confirmPassword}
+                disabled={submitting || !fullName.trim() || !passwordValid || password !== confirmPassword}
                 className="glass-button-primary w-full !py-3 !text-[13px] inline-flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {submitting ? (

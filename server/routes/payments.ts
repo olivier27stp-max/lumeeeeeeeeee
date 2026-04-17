@@ -49,6 +49,7 @@ import {
   updatePaymentRequestStatus as updatePayReqStatus,
 } from '../lib/stripe-connect';
 import { logSecurityEvent, extractIP } from '../lib/security';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -255,6 +256,17 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           .eq('stripe_account_id', connectAccountId);
       }
 
+      // ── Handle checkout.session.completed (billing subscription activation) ──
+      if (event.type === 'checkout.session.completed') {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const meta = session.metadata || {};
+
+        // Only process sessions with our billing metadata (plan_slug present)
+        if (meta.plan_slug && session.payment_status === 'paid') {
+          await handleCheckoutSessionCompleted(session, meta);
+        }
+      }
+
       // Mark webhook event as processed
       if (webhookEventId) {
         await markWebhookEventProcessed(webhookEventId, 'processed');
@@ -312,7 +324,7 @@ router.get('/payments/settings', async (req, res) => {
         warning: 'Payments settings schema is not fully applied yet.',
       });
     }
-    return res.status(500).json({ error: error?.message || 'Unable to load payment settings.' });
+    return sendSafeError(res, error, 'Unable to load payment settings.', '[payments/settings/get]');
   }
 });
 
@@ -343,7 +355,7 @@ router.post('/payments/keys', validate(paymentKeysSchema), async (req, res) => {
 
     return res.json({ ok: true, provider: result.provider, keysPresent: result.keysPresent });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Unable to save payment keys.' });
+    return sendSafeError(res, error, 'Unable to save payment keys.', '[payments/keys]');
   }
 });
 
@@ -375,7 +387,7 @@ router.post('/payments/settings', validate(paymentSettingsSchema), async (req, r
           body: req.body,
         });
       } catch (error: any) {
-        return res.status(400).json({ error: error?.message || 'Unable to save provider keys.' });
+        return sendSafeError(res, error, 'Unable to save provider keys.', '[payments/save-keys]');
       }
     } else if (action === 'toggle_enabled') {
       if (provider !== 'stripe' && provider !== 'paypal') {
@@ -443,7 +455,7 @@ router.post('/payments/settings', validate(paymentSettingsSchema), async (req, r
     const settings = await getPaymentProviderSettings(auth.client, requestedOrgId);
     return res.json({ settings });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Unable to update payment settings.' });
+    return sendSafeError(res, error, 'Unable to update payment settings.', '[payments/settings/update]');
   }
 });
 
@@ -473,8 +485,7 @@ router.get('/payments/payouts/summary', async (req, res) => {
     const summary = await buildPayPalPayoutSummary(requestedOrgId);
     return res.json(summary);
   } catch (error: any) {
-    const status = Number(error?.status || 500);
-    return res.status(status).json({ error: error?.message || 'Unable to load payout summary.' });
+    return sendSafeError(res, error, 'Unable to load payout summary.', '[payments/payouts/summary]');
   }
 });
 
@@ -522,8 +533,7 @@ router.get('/payments/payouts/list', async (req, res) => {
     });
     return res.json(list);
   } catch (error: any) {
-    const status = Number(error?.status || 500);
-    return res.status(status).json({ error: error?.message || 'Unable to load payouts list.' });
+    return sendSafeError(res, error, 'Unable to load payouts list.', '[payments/payouts/list]');
   }
 });
 
@@ -559,8 +569,7 @@ router.get('/payments/payouts/detail', async (req, res) => {
     });
     return res.json(detail);
   } catch (error: any) {
-    const status = Number(error?.status || 500);
-    return res.status(status).json({ error: error?.message || 'Unable to load payout detail.' });
+    return sendSafeError(res, error, 'Unable to load payout detail.', '[payments/payouts/detail]');
   }
 });
 
@@ -636,8 +645,7 @@ router.post('/payments/payouts/email-csv', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="payouts-${provider}-${new Date().toISOString().slice(0, 10)}.csv"`);
     return res.status(200).send(csv);
   } catch (error: any) {
-    const status = Number(error?.status || 500);
-    return res.status(status).json({ error: error?.message || 'Unable to export payouts CSV.' });
+    return sendSafeError(res, error, 'Unable to export payouts CSV.', '[payments/payouts/email-csv]');
   }
 });
 
@@ -670,7 +678,7 @@ router.get('/payments/providers/status', async (req, res) => {
       },
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Unable to load provider status.' });
+    return sendSafeError(res, error, 'Unable to load provider status.', '[payments/providers/status]');
   }
 });
 
@@ -717,7 +725,7 @@ router.post('/payments/providers/settings', validate(providerSettingsSchema), as
     const updated = await getPaymentProviderSettings(auth.client, requestedOrgId);
     return res.json({ settings: updated });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Unable to update provider settings.' });
+    return sendSafeError(res, error, 'Unable to update provider settings.', '[payments/providers/settings]');
   }
 });
 
@@ -775,7 +783,7 @@ router.post('/payments/stripe/create-intent', validate(stripeCreateIntentSchema)
       publishable_key: secrets.stripe_publishable_key,
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Unable to create Stripe payment intent.' });
+    return sendSafeError(res, error, 'Unable to create Stripe payment intent.', '[payments/stripe/create-intent]');
   }
 });
 
@@ -827,7 +835,7 @@ router.get('/payments/stripe/transactions', async (req, res) => {
       total_count: transactions.length,
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Unable to fetch Stripe transactions.' });
+    return sendSafeError(res, error, 'Unable to fetch Stripe transactions.', '[payments/stripe/transactions]');
   }
 });
 
@@ -852,7 +860,7 @@ router.get('/payments/stripe/balance', async (req, res) => {
       pending: balance.pending.map((b) => ({ amount: b.amount, currency: b.currency.toUpperCase() })),
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Unable to fetch Stripe balance.' });
+    return sendSafeError(res, error, 'Unable to fetch Stripe balance.', '[payments/stripe/balance]');
   }
 });
 
@@ -922,7 +930,7 @@ router.post('/payments/paypal/create-order', validate(paypalCreateOrderSchema), 
       currency,
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Unable to create PayPal order.' });
+    return sendSafeError(res, error, 'Unable to create PayPal order.', '[payments/paypal/create-order]');
   }
 });
 
@@ -980,7 +988,7 @@ router.post('/payments/paypal/capture-order', validate(paypalCaptureOrderSchema)
     const result = await createOrUpdatePayPalPaymentFromCapture({ capture, orderId, orderData: captureBody, eventId: null });
     return res.json({ ok: true, payment_id: result.id });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Unable to capture PayPal order.' });
+    return sendSafeError(res, error, 'Unable to capture PayPal order.', '[payments/paypal/capture-order]');
   }
 });
 
@@ -1007,7 +1015,7 @@ router.post('/webhooks/paypal', async (req, res) => {
 
     return res.json({ received: true });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'PayPal webhook handling failed.' });
+    return sendSafeError(res, error, 'PayPal webhook handling failed.', '[payments/webhooks/paypal]');
   }
 });
 
@@ -1122,8 +1130,204 @@ router.post('/payments/refund', async (req, res) => {
       full_refund: isFullRefund,
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to process refund.' });
+    return sendSafeError(res, error, 'Failed to process refund.', '[payments/refund]');
   }
 });
+
+// ── Billing checkout.session.completed handler ──────────────────────────────
+// This is the ONLY place where billing subscriptions are activated after payment.
+// It creates the user account, org, subscription, and sends the receipt email.
+
+async function handleCheckoutSessionCompleted(
+  session: Stripe.Checkout.Session,
+  meta: Record<string, string>,
+) {
+  const admin = getServiceClient();
+  const sessionId = session.id;
+
+  // ── 1. Idempotency: check if this session was already processed ──
+  const { data: existing } = await admin
+    .from('processed_checkout_sessions')
+    .select('id')
+    .eq('stripe_checkout_session_id', sessionId)
+    .maybeSingle();
+
+  if (existing) {
+    console.log(`[webhook/checkout] Session ${sessionId} already processed, skipping`);
+    return;
+  }
+
+  const userEmail = meta.email || '';
+  const fullName = meta.full_name || '';
+  const companyName = meta.company_name || '';
+  const planId = meta.plan_id || '';
+  const planSlug = meta.plan_slug || '';
+  const interval = (meta.interval || 'monthly') as 'monthly' | 'yearly';
+  const currency = (meta.currency || 'CAD').toUpperCase();
+  const promoCode = meta.promo_code || null;
+
+  if (!userEmail || !planId) {
+    console.error('[webhook/checkout] Missing email or plan_id in session metadata');
+    return;
+  }
+
+  // ── 2. Get the plan ──
+  const { data: plan } = await admin.from('plans').select('*').eq('id', planId).maybeSingle();
+  if (!plan) {
+    console.error(`[webhook/checkout] Plan ${planId} not found`);
+    return;
+  }
+
+  // ── 3. Create or find user account ──
+  let userId: string;
+  const { data: existingUsers } = await admin.auth.admin.listUsers();
+  const existingUser = existingUsers?.users.find((u: any) => u.email === userEmail);
+
+  if (existingUser) {
+    userId = existingUser.id;
+    // Confirm email if not already confirmed
+    if (!existingUser.email_confirmed_at) {
+      await (admin.auth.admin as any).updateUserById(userId, { email_confirm: true });
+    }
+  } else {
+    // Create new user with confirmed email (they paid, so we trust the email)
+    const { data: newUser, error: createErr } = await admin.auth.admin.createUser({
+      email: userEmail,
+      email_confirm: true,
+      user_metadata: { full_name: fullName },
+    });
+    if (createErr) {
+      console.error('[webhook/checkout] Failed to create user:', createErr.message);
+      return;
+    }
+    userId = newUser.user.id;
+  }
+
+  // ── 4. Create or find org + membership ──
+  let orgId: string;
+  const { data: existingMem } = await admin
+    .from('memberships')
+    .select('org_id')
+    .eq('user_id', userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingMem) {
+    orgId = existingMem.org_id;
+  } else {
+    const { data: newOrg } = await admin
+      .from('orgs')
+      .insert({ name: companyName || userEmail.split('@')[0], created_by: userId })
+      .select('id')
+      .single();
+    if (!newOrg) {
+      console.error('[webhook/checkout] Failed to create org');
+      return;
+    }
+    orgId = newOrg.id;
+    await admin.from('memberships').insert({ user_id: userId, org_id: orgId, role: 'owner' });
+  }
+
+  // ── 5. Cancel any existing active subscriptions for this org ──
+  const now = new Date();
+  try {
+    await admin
+      .from('subscriptions')
+      .update({ status: 'canceled', canceled_at: now.toISOString() })
+      .eq('org_id', orgId)
+      .eq('status', 'active');
+  } catch {}
+
+  // ── 6. Create subscription ──
+  const periodEnd = new Date(now);
+  if (interval === 'yearly') periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+  else periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+  const amountCents = session.amount_total || 0;
+
+  const { data: subscription, error: subError } = await admin
+    .from('subscriptions')
+    .insert({
+      org_id: orgId,
+      user_id: userId,
+      plan_id: plan.id,
+      status: 'active',
+      interval,
+      currency,
+      amount_cents: amountCents,
+      promo_code: promoCode,
+      current_period_start: now.toISOString(),
+      current_period_end: periodEnd.toISOString(),
+      stripe_checkout_session_id: sessionId,
+      stripe_payment_intent_id: typeof session.payment_intent === 'string' ? session.payment_intent : null,
+      payment_confirmed_at: now.toISOString(),
+    })
+    .select('*')
+    .single();
+
+  if (subError) {
+    console.error('[webhook/checkout] Failed to create subscription:', subError.message);
+    return;
+  }
+
+  // ── 7. Update billing profile ──
+  try {
+    await admin.from('billing_profiles').upsert({
+      org_id: orgId,
+      billing_email: userEmail,
+      company_name: companyName,
+      full_name: fullName,
+      stripe_customer_id: typeof session.customer === 'string' ? session.customer : null,
+      currency,
+    }, { onConflict: 'org_id' });
+  } catch {}
+
+  // ── 8. Mark onboarding done ──
+  try {
+    await admin.from('profiles').update({ onboarding_done: true }).eq('id', userId);
+  } catch {}
+
+  // ── 9. Record processed session (idempotency) ──
+  try {
+    await admin.from('processed_checkout_sessions').insert({
+      stripe_checkout_session_id: sessionId,
+      org_id: orgId,
+      user_id: userId,
+      subscription_id: subscription.id,
+      status: 'processed',
+    });
+  } catch (dedupErr: any) {
+    // Unique constraint = already processed concurrently — safe to ignore
+    if (dedupErr?.code === '23505') return;
+    console.error('[webhook/checkout] Failed to record processed session:', dedupErr.message);
+  }
+
+  // ── 10. Send receipt email (async, never blocks) ──
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  try {
+    const { sendPaymentReceipt } = await import('../lib/billing-email');
+    await sendPaymentReceipt({
+      orgId,
+      subscriptionId: subscription.id,
+      recipientEmail: userEmail,
+      companyName: companyName || 'Your company',
+      planName: plan.name,
+      interval,
+      amountCents,
+      currency,
+      taxes: null,
+      stripePaymentIntentId: typeof session.payment_intent === 'string' ? session.payment_intent : null,
+      stripeCheckoutSessionId: sessionId,
+      paymentDate: now,
+      dashboardUrl: frontendUrl,
+      billingUrl: `${frontendUrl}/settings/billing`,
+    });
+  } catch (emailErr: any) {
+    // Receipt email failure must NEVER fail the subscription activation
+    console.error('[webhook/checkout] Receipt email error (non-blocking):', emailErr.message);
+  }
+
+  console.log(`[webhook/checkout] Subscription activated for ${userEmail} — plan: ${plan.name}, org: ${orgId}`);
+}
 
 export default router;

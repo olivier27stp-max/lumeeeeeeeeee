@@ -37,6 +37,7 @@ import {
   GitBranch,
   Shield,
   UserCog,
+  Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -90,8 +91,12 @@ const QuoteMeasure = React.lazy(() => import('./pages/QuoteMeasure'));
 import TaxSettings from './pages/TaxSettings';
 import OAuthCallback from './pages/OAuthCallback';
 import DispatchMap from './pages/DispatchMap';
-import BillingCheckout from './pages/BillingCheckout';
+// BillingCheckout removed — all checkout goes through /checkout (CheckoutFlow)
+import OnboardingFlow from './pages/OnboardingFlow';
+import CheckoutSuccess from './pages/CheckoutSuccess';
 import AcceptInvitation from './pages/AcceptInvitation';
+import Register from './pages/Register';
+import VerifyEmail from './pages/VerifyEmail';
 import ReferFriend from './pages/ReferFriend';
 import MrLumePage from './features/agent/components/MrLumeChat';
 import Messages from './pages/Messages';
@@ -114,7 +119,6 @@ import PublicPayment from './pages/PublicPayment';
 import Leaderboard from './pages/Leaderboard';
 import Commissions from './pages/Commissions';
 import SocialFeed from './pages/SocialFeed';
-import Fill from './pages/Fill';
 import RepProfile from './pages/RepProfile';
 import FieldSales from './pages/FieldSales';
 import D2DMap from './pages/D2DMap';
@@ -127,6 +131,8 @@ import D2DOnboarding from './pages/D2DOnboarding';
 import SettingsRoles from './pages/SettingsRoles';
 import SettingsUsers from './pages/SettingsUsers';
 import PermissionGate from './components/PermissionGate';
+import ModuleGate from './components/ModuleGate';
+import { useModuleAccess } from './hooks/useModuleAccess';
 import type { PermissionKey } from './lib/permissions';
 import { hasPermission } from './lib/permissions';
 import { usePermissions } from './hooks/usePermissions';
@@ -137,6 +143,8 @@ import CommandPalette from './components/CommandPalette';
 import DevRoleSwitcher from './components/DevRoleSwitcher';
 import { CompanyProvider, useCompany } from './contexts/CompanyContext';
 import { CompanySelectorPage, CompanySwitcher, NoCompanyState } from './components/CompanySelector';
+import { useSessionTimeout } from './hooks/useSessionTimeout';
+import { usePlatformOwner } from './hooks/usePlatformOwner';
 
 // Marketing landing pages — from Lume-Landing-page-officielle repo
 import MarketingLayout from './components/marketing/MarketingLayout';
@@ -147,6 +155,9 @@ import MarketingIndustries from './pages/marketing/Industries';
 import MarketingIndustryDetail from './pages/marketing/IndustryDetail';
 import MarketingPricing from './pages/marketing/Pricing';
 import MarketingContact from './pages/marketing/Contact';
+
+// Platform Admin — lazy loaded, owner-only
+const PlatformAdmin = React.lazy(() => import('./pages/PlatformAdmin'));
 
 // Director Panel — lazy loaded
 const DirectorHome = React.lazy(() => import('./pages/director-panel/DirectorHome'));
@@ -185,10 +196,20 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
   return <div className="max-w-[1400px] mx-auto px-6 lg:px-10 py-8">{children}</div>;
 }
 
+/** Wrapper that resolves orgId from CompanyContext before rendering OnboardingWizard */
+function OnboardingWizardWrapper({ userId, language, onComplete }: { userId: string; language: string; onComplete: () => void }) {
+  const { currentOrgId, loading } = useCompany();
+  if (loading) return <div className="h-screen w-screen flex items-center justify-center bg-surface"><div className="animate-pulse text-text-muted text-sm">Loading...</div></div>;
+  return <OnboardingWizard userId={userId} orgId={currentOrgId || ''} language={language} onComplete={onComplete} />;
+}
+
 export default function App() {
   const { t, language } = useTranslation();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Auto-signout after 30 min of inactivity
+  useSessionTimeout(user?.id || null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const sidebarExpanded = isSidebarOpen || isSidebarHovered;
@@ -203,6 +224,7 @@ export default function App() {
   // helpOpen state removed — ? button navigates to Lume Agent
   const [activityOpen, setActivityOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [hasSubscription, setHasSubscription] = useState<boolean | null>(null); // null = checking
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [showMoreNav, setShowMoreNav] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -334,11 +356,41 @@ export default function App() {
   }, []);
 
   // Check if user needs onboarding — only for brand new sign-ups
+  // Also ensures every user has an org + membership (auto-provision on first login)
   useEffect(() => {
     if (!user || onboardingChecked) return;
     (async () => {
       try {
-        // Check if onboarding is done
+        // 1. Ensure user has at least one membership (auto-provision org if missing)
+        const { data: mem } = await supabase
+          .from('memberships')
+          .select('org_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (!mem) {
+          // No membership — this is a brand new user who signed up via email/password or Google.
+          // Create an org + membership for them so the rest of the app works.
+          try {
+            const { data: newOrg } = await supabase
+              .from('orgs')
+              .insert({ name: user.email?.split('@')[0] || 'My Workspace', created_by: user.id })
+              .select('id')
+              .single();
+
+            if (newOrg) {
+              await supabase
+                .from('memberships')
+                .insert({ user_id: user.id, org_id: newOrg.id, role: 'owner' });
+              console.log('[App] Auto-provisioned org', newOrg.id, 'for user', user.id);
+            }
+          } catch (provErr: any) {
+            console.warn('[App] Failed to auto-provision org:', provErr?.message);
+          }
+        }
+
+        // 2. Check if onboarding is done
         const { data: profile } = await supabase
           .from('profiles')
           .select('onboarding_done')
@@ -364,6 +416,28 @@ export default function App() {
     })();
   }, [user, onboardingChecked]);
 
+  // Check if user has an active subscription — redirect to /checkout if not
+  useEffect(() => {
+    if (!user || !onboardingChecked || showOnboarding) { setHasSubscription(null); return; }
+    (async () => {
+      try {
+        const { data: mem } = await supabase.from('memberships').select('org_id').eq('user_id', user.id).limit(1).maybeSingle();
+        if (!mem) { setHasSubscription(false); return; }
+        const { data: sub } = await supabase
+          .from('subscriptions')
+          .select('id, status')
+          .eq('org_id', mem.org_id)
+          .in('status', ['active', 'trialing'])
+          .limit(1)
+          .maybeSingle();
+        setHasSubscription(!!sub);
+      } catch {
+        // If subscriptions table doesn't exist, treat as having a subscription (don't block)
+        setHasSubscription(true);
+      }
+    })();
+  }, [user, onboardingChecked, showOnboarding]);
+
   if (loading) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-surface">
@@ -377,6 +451,14 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  // Public checkout — accessible with or without auth
+  if (location.pathname === '/checkout/success') {
+    return <CheckoutSuccess />;
+  }
+  if (location.pathname === '/checkout') {
+    return <OnboardingFlow />;
   }
 
   // Public pages (no auth required)
@@ -440,6 +522,8 @@ export default function App() {
     return (
       <Routes>
         <Route path="/auth" element={<Auth onBack={() => setView('landing')} />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route element={<MarketingLayout />}>
           <Route index element={<MarketingHome />} />
           <Route path="features" element={<MarketingFeatures />} />
@@ -454,16 +538,38 @@ export default function App() {
     );
   }
 
-  // Show onboarding wizard for new users
+  // ── Subscription guard ──
+  // User is logged in but has no active subscription.
+  // They can see: landing, marketing pages, checkout, auth pages.
+  // Any app page (dashboard, settings, etc.) redirects to landing.
+  if (user && hasSubscription === false) {
+    return (
+      <Routes>
+        <Route path="/checkout/success" element={<CheckoutSuccess />} />
+        <Route path="/checkout" element={<OnboardingFlow />} />
+        <Route path="/auth" element={<Auth onBack={() => setView('landing')} />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route element={<MarketingLayout />}>
+          <Route index element={<MarketingHome />} />
+          <Route path="features" element={<MarketingFeatures />} />
+          <Route path="solutions" element={<MarketingSolutions />} />
+          <Route path="industries" element={<MarketingIndustries />} />
+          <Route path="industries/:slug" element={<MarketingIndustryDetail />} />
+          <Route path="pricing" element={<MarketingPricing />} />
+          <Route path="contact" element={<MarketingContact />} />
+        </Route>
+        {/* Any unknown/app route → back to landing */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    );
+  }
+
+  // Show onboarding wizard for new users (only AFTER they have a subscription)
   if (showOnboarding && user) {
     return (
       <CompanyProvider userId={user.id}>
-        <OnboardingWizard
-          userId={user.id}
-          orgId=""
-          language={language}
-          onComplete={() => setShowOnboarding(false)}
-        />
+        <OnboardingWizardWrapper userId={user.id} language={language} onComplete={() => setShowOnboarding(false)} />
       </CompanyProvider>
     );
   }
@@ -529,6 +635,8 @@ function AuthenticatedApp({
   const { current, companies, loading: companyLoading, isMultiCompany, hasNoCompany, currentOrgId } = useCompany();
   // usePermissions MUST be called inside CompanyProvider to get correct data
   const permsCtx = usePermissions();
+  const isPlatformOwner = usePlatformOwner();
+  const venteModule = useModuleAccess('module_vente');
 
   // Still loading company memberships
   if (companyLoading) {
@@ -578,28 +686,32 @@ function AuthenticatedApp({
         { id: 'quotes', label: language === 'fr' ? 'Devis' : 'Quotes', icon: ClipboardList, path: '/quotes', tileColor: 'blue', requiredPermission: 'quotes.read' },
         { id: 'invoices', label: t.nav.invoices, icon: FileText, path: '/invoices', tileColor: 'blue', requiredPermission: 'financial.view_invoices' },
         { id: 'jobs', label: t.nav.jobs, icon: Briefcase, path: '/jobs', tileColor: 'blue', requiredPermission: 'jobs.read' },
+        { id: 'schedule', label: t.nav.calendar, icon: CalendarIcon, path: '/calendar', tileColor: 'blue', requiredPermission: 'calendar.read' },
       ],
     },
     {
       label: language === 'fr' ? 'Outils' : 'Tools',
       items: [
-        { id: 'schedule', label: t.nav.calendar, icon: CalendarIcon, path: '/calendar', tileColor: 'blue', requiredPermission: 'calendar.read' },
         { id: 'messages', label: t.nav.messages, icon: MessageSquare, path: '/messages', tileColor: 'blue', requiredPermission: 'messages.read' },
-        { id: 'payments', label: t.nav.payments, icon: CreditCard, path: '/payments', tileColor: 'blue', requiredPermission: 'financial.view_payments' },
         { id: 'timesheets', label: t.nav.timesheets, icon: Timer, path: '/timesheets', tileColor: 'blue', requiredPermission: 'timesheets.read' },
         { id: 'courses', label: t.courses?.title || 'Courses', icon: GraduationCap, path: '/courses', tileColor: 'blue' },
+        { id: 'payments', label: t.nav.payments, icon: CreditCard, path: '/payments', tileColor: 'blue', requiredPermission: 'financial.view_payments' },
+        ...(isPlatformOwner ? [{ id: 'platform-admin', label: 'Platform Admin', icon: Shield, path: '/platform-admin', tileColor: 'blue' as const }] : []),
       ],
     },
     {
       label: t.nav.d2d,
-      items: [
-        { id: 'd2d-dashboard', label: 'Dashboard D2D', icon: LayoutDashboard, path: '/d2d-dashboard', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
-        { id: 'field-sales', label: t.nav.fieldSales, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
-        { id: 'd2d-pipeline', label: 'Pipeline', icon: GitBranch, path: '/d2d-pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
-        { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'financial.view_reports' },
-        { id: 'commissions', label: t.nav.commissions, icon: DollarSign, path: '/commissions', tileColor: 'blue', requiredPermission: 'financial.view_reports' },
-        { id: 'fill', label: language === 'fr' ? 'Fil interne' : 'Team Feed', icon: MessageSquare, path: '/fill', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
-      ],
+      items: venteModule.isEnabled
+        ? [
+            { id: 'd2d-dashboard', label: t.nav.venteDashboard, icon: LayoutDashboard, path: '/d2d-dashboard', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
+            { id: 'field-sales', label: t.nav.venteMap, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
+            { id: 'd2d-pipeline', label: t.nav.ventePipeline, icon: GitBranch, path: '/d2d-pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
+            { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'financial.view_reports' },
+            { id: 'commissions', label: t.nav.commissions, icon: DollarSign, path: '/commissions', tileColor: 'blue', requiredPermission: 'financial.view_reports' },
+          ]
+        : [
+            { id: 'vente-locked', label: t.nav.d2d, icon: Lock, path: '/d2d-dashboard', tileColor: 'blue' },
+          ],
     },
   ] as NavSection[];
 
@@ -951,7 +1063,7 @@ function AuthenticatedApp({
                     <Route path="/leads" element={<Navigate to="/quotes" replace />} />
                     <Route path="/pipeline" element={<Navigate to="/dashboard" replace />} />
                     <Route path="/clients" element={<Gated permission="clients.read"><div className="px-8 py-6"><Clients /></div></Gated>} />
-                    <Route path="/clients/:id" element={<Gated permission="clients.read"><PageWrapper><ClientDetails /></PageWrapper></Gated>} />
+                    <Route path="/clients/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><ClientDetails /></div></Gated>} />
                     <Route path="/jobs" element={<Gated permission="jobs.read"><div className="px-8 py-6"><Jobs /></div></Gated>} />
                     <Route path="/jobs/:id" element={<Gated permission="jobs.read"><PageWrapper><JobDetails /></PageWrapper></Gated>} />
                     <Route path="/calendar" element={<Gated permission="calendar.read"><Schedule /></Gated>} />
@@ -989,18 +1101,16 @@ function AuthenticatedApp({
                     <Route path="/settings/team/:memberId" element={<Gated permission="team.read"><PageWrapper><TeamMemberDetails /></PageWrapper></Gated>} />
                     {/* Dispatch: NO PageWrapper — full-bleed */}
                     <Route path="/dispatch" element={<Gated permission="map.access"><DispatchMap /></Gated>} />
-                    {/* Field Sales / D2D */}
-                    <Route path="/field-sales" element={<Gated permission="door_to_door.access"><D2DMap /></Gated>} />
-                    <Route path="/d2d-dashboard" element={<Gated permission="door_to_door.access"><PageWrapper><D2DDashboard /></PageWrapper></Gated>} />
-                    <Route path="/d2d-pipeline" element={<Gated permission="door_to_door.access"><D2DPipeline /></Gated>} />
-                    <Route path="/leaderboard" element={<Gated permission="reports.read"><PageWrapper><Leaderboard /></PageWrapper></Gated>} />
-                    <Route path="/commissions" element={<Gated permission="reports.read"><PageWrapper><Commissions /></PageWrapper></Gated>} />
-                    <Route path="/feed" element={<Navigate to="/fill" replace />} />
-                    <Route path="/fill" element={<Gated anyPermission={['door_to_door.access', 'clients.create']}><PageWrapper><Fill /></PageWrapper></Gated>} />
-                    <Route path="/d2d-reports" element={<Gated permission="door_to_door.access"><PageWrapper><D2DReports /></PageWrapper></Gated>} />
-                    <Route path="/d2d-settings/general" element={<Gated permission="settings.update"><PageWrapper><D2DSettingsGeneral /></PageWrapper></Gated>} />
-                    <Route path="/d2d-settings/teams" element={<Gated permission="settings.update"><PageWrapper><D2DSettingsTeams /></PageWrapper></Gated>} />
-                    <Route path="/d2d-onboarding" element={<Gated permission="door_to_door.access"><D2DOnboarding /></Gated>} />
+                    {/* Vente (ex-D2D) — gated by module activation */}
+                    <Route path="/field-sales" element={<Gated permission="door_to_door.access"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DMap /></ModuleGate></Gated>} />
+                    <Route path="/d2d-dashboard" element={<ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DDashboard /></PageWrapper></ModuleGate>} />
+                    <Route path="/d2d-pipeline" element={<Gated permission="door_to_door.access"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DPipeline /></ModuleGate></Gated>} />
+                    <Route path="/leaderboard" element={<Gated permission="reports.read"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Leaderboard /></PageWrapper></ModuleGate></Gated>} />
+                    <Route path="/commissions" element={<Gated permission="reports.read"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Commissions /></PageWrapper></ModuleGate></Gated>} />
+                    <Route path="/d2d-reports" element={<Gated permission="door_to_door.access"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DReports /></PageWrapper></ModuleGate></Gated>} />
+                    <Route path="/d2d-settings/general" element={<Gated permission="settings.update"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DSettingsGeneral /></PageWrapper></ModuleGate></Gated>} />
+                    <Route path="/d2d-settings/teams" element={<Gated permission="settings.update"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DSettingsTeams /></PageWrapper></ModuleGate></Gated>} />
+                    <Route path="/d2d-onboarding" element={<Gated permission="door_to_door.access"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DOnboarding /></ModuleGate></Gated>} />
                     <Route path="/settings/team/:memberId/profile" element={<Gated permission="team.read"><RepProfile /></Gated>} />
                     <Route path="/reps/:id" element={<Gated permission="team.read"><RepProfile /></Gated>} />
                     <Route path="/settings/marketplace" element={<Gated permission="integrations.read"><PageWrapper><AppMarketplace /></PageWrapper></Gated>} />
@@ -1010,7 +1120,7 @@ function AuthenticatedApp({
                     <Route path="/settings/roles" element={<Gated permission="users.update_role"><PageWrapper><SettingsRoles /></PageWrapper></Gated>} />
                     <Route path="/settings/users" element={<Gated permission="users.invite"><PageWrapper><SettingsUsers /></PageWrapper></Gated>} />
                     <Route path="/apps/callback" element={<Gated permission="integrations.update"><OAuthCallback /></Gated>} />
-                    <Route path="/settings/billing/checkout" element={<Gated permission="settings.update"><PageWrapper><BillingCheckout /></PageWrapper></Gated>} />
+                    {/* BillingCheckout removed — upgrade goes through /checkout */}
                     <Route path="/settings/referrals" element={<Gated permission="settings.read"><PageWrapper><ReferFriend /></PageWrapper></Gated>} />
                     {/* Memory Graph — LIA Brain Visualization */}
                     <Route path="/memory-graph" element={<Gated permission="ai.admin"><React.Suspense fallback={null}><MemoryGraphPage /></React.Suspense></Gated>} />
@@ -1025,6 +1135,8 @@ function AuthenticatedApp({
                       <Route path="styles" element={<React.Suspense fallback={null}><DirectorStyles /></React.Suspense>} />
                       <Route path="training" element={<React.Suspense fallback={null}><DirectorTraining /></React.Suspense>} />
                     </Route>
+                    {/* Platform Admin — owner-only, server enforces auth */}
+                    <Route path="/platform-admin" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><PlatformAdmin /></PageWrapper></React.Suspense> : <Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Routes>
             </ErrorBoundary>

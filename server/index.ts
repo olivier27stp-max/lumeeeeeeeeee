@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Import config (initializes dotenv, validates env vars)
-import { supabaseUrl, supabaseServiceRoleKey, twilioClient, twilioPhoneNumber, resendApiKey } from './lib/config';
+import { supabaseUrl, supabaseServiceRoleKey, twilioClient, twilioPhoneNumber, getBaseUrl } from './lib/config';
 
 // ── Validate environment at startup ──
 import { validateEnvironment } from './lib/env-validation';
@@ -64,11 +64,16 @@ import commissionsRouter from './routes/commissions';
 import gamificationRouter from './routes/gamification';
 import fieldSessionsRouter from './routes/field-sessions';
 import memoryGraphRouter from './routes/memory-graph';
+import platformAdminRouter from './routes/platform-admin';
+import authRouter from './routes/auth';
 
 // Security engine
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, extractIP } from './lib/security';
 import { redisRateLimit } from './lib/rate-limiter';
 import { rbacMiddleware } from './lib/route-permissions';
+import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
+import { auditRequestMiddleware } from './lib/audit-middleware';
+// PII response middleware removed — PII is stored plaintext, protected by Supabase encryption at rest + RLS
 
 const app = express();
 
@@ -91,7 +96,8 @@ app.use((_req, res, next) => {
       "default-src 'self'",
       process.env.NODE_ENV === 'production'
         ? "script-src 'self' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com"
-        : "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com http://localhost:*",
+        // unsafe-eval required for Vite HMR in dev only; unsafe-inline scoped to dev
+        : "script-src 'self' 'unsafe-eval' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com http://localhost:*",
       process.env.NODE_ENV === 'production' ? "style-src 'self'" : "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https: blob:",
       "font-src 'self' data:",
@@ -117,10 +123,15 @@ app.use(cors({
     if (!origin) return callback(null, true);
     // In production, only allow configured frontend
     if (frontendUrl && origin === frontendUrl) return callback(null, true);
-    // In development, allow localhost variants
-    if (process.env.NODE_ENV !== 'production' && (
-      origin.includes('localhost') || origin.includes('127.0.0.1')
-    )) return callback(null, true);
+    // In development, allow known localhost origins (strict match prevents localhost.evil.com)
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        const parsed = new URL(origin);
+        if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+          return callback(null, true);
+        }
+      } catch {}
+    }
     // Block everything else
     console.warn(`[CORS] Blocked origin: ${origin}`);
     callback(new Error('Not allowed by CORS'));
@@ -185,6 +196,11 @@ app.use(express.urlencoded({ extended: false })); // For Twilio webhook form dat
 // ── Security middleware (after body parsing so sanitization can inspect bodies) ──
 applySecurityMiddleware(app);
 
+// ── Audit logging (after security middleware, captures requestId) ──
+app.use(auditRequestMiddleware());
+
+// PII stored as plaintext — protected by Supabase encryption at rest (AES-256) + RLS org_id isolation
+
 // ── Rate limiters for sensitive endpoints ──
 const smsLimiter = rateLimit({ windowMs: 60_000, max: 10, keyFn: (req) => `sms:${req.headers.authorization?.slice(-20) || req.ip}` });
 const emailLimiter = rateLimit({ windowMs: 60_000, max: 10, keyFn: (req) => `email:${req.headers.authorization?.slice(-20) || req.ip}` });
@@ -193,9 +209,11 @@ const quoteLimiter = rateLimit({ windowMs: 60_000, max: 30 }); // per IP
 const leadCreateLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `lead:${req.headers.authorization?.slice(-20) || req.ip}` });
 
 // ── Rate limiters for public/sensitive endpoints ──
-const publicPayLimiter = rateLimit({ windowMs: 60_000, max: 15 }); // per IP — public payment page
-const portalLimiter = rateLimit({ windowMs: 60_000, max: 20 }); // per IP — client portal
+const publicPayLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — public payment page (tighter)
+const portalLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — client portal (tighter to prevent token brute-force)
 const quoteLimiterStrict = rateLimit({ windowMs: 60_000, max: 15 }); // per IP — quote track-view
+const aiChatLimiter = rateLimit({ windowMs: 60_000, max: 10, keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || req.ip}` }); // AI endpoints — expensive
+const automationLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `auto:${req.headers.authorization?.slice(-20) || req.ip}` });
 
 // ── Apply rate limiters to specific paths ──
 // In-memory limiters (always active)
@@ -207,12 +225,32 @@ app.use('/api/pay', publicPayLimiter);
 app.use('/api/portal', portalLimiter);
 app.use('/api/quotes', quoteLimiterStrict);
 
+// ── AI/Agent rate limiters (expensive API calls) ──
+app.use('/api/agent/chat', aiChatLimiter);
+app.use('/api/ai/chat', aiChatLimiter);
+app.use('/api/ai/chat/stream', aiChatLimiter);
+app.use('/api/director-panel/providers/execute', aiChatLimiter);
+
+// ── Automation event rate limiters ──
+app.use('/api/automations/events', automationLimiter);
+
 // Redis-backed persistent rate limiters (when Upstash is configured)
 app.use('/api/messages/send', redisRateLimit({ preset: 'strict', keyFn: (req) => `sms:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
 app.use('/api/emails', redisRateLimit({ preset: 'strict', keyFn: (req) => `email:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
 app.use('/api/payments', redisRateLimit({ preset: 'standard', keyFn: (req) => `pay:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
 app.use('/api/pay', redisRateLimit({ preset: 'public' }));
-app.use('/api/portal', redisRateLimit({ preset: 'public' }));
+app.use('/api/portal', redisRateLimit({ preset: 'auth' }));
+// Public form submissions — tight rate limit to prevent abuse
+app.use('/api/public/form', redisRateLimit({ preset: 'auth' }));
+// Survey submissions — prevent ballot stuffing
+app.use('/api/survey', redisRateLimit({ preset: 'auth' }));
+// AI endpoints — persistent rate limiting for expensive calls
+app.use('/api/agent/chat', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
+app.use('/api/ai/chat', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
+app.use('/api/director-panel/providers/execute', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai-director:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
+
+// ── MFA enforcement for admin/owner on sensitive endpoints ──
+app.use(mfaEnforcementMiddleware());
 
 // ── RBAC permission enforcement (before route handlers) ──
 app.use(rbacMiddleware());
@@ -239,6 +277,7 @@ const directorProviderLimiter = rateLimit({ windowMs: 60_000, max: 20, keyFn: (r
 app.use('/api/director-panel/providers', directorProviderLimiter);
 app.use('/api', directorPanelRouter);
 app.use('/api', featureFlagsRouter);
+app.use('/api', authRouter);
 app.use('/api', scheduledReportsRouter);
 app.use('/api', goalsRouter);
 app.use('/api', auditLogRouter);
@@ -275,6 +314,15 @@ app.use('/api', gamificationRouter);
 app.use('/api', fieldSessionsRouter);
 app.use('/api', memoryGraphRouter);
 
+// Platform admin — tightly rate limited, owner-only routes enforce auth internally
+const platformAdminLimiter = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `platform:${req.headers.authorization?.slice(-20) || req.ip}` });
+app.use('/api/platform-admin', platformAdminLimiter);
+app.use('/api', platformAdminRouter);
+
+// CSP violation reports — public endpoint, tight limit to prevent log flooding
+const cspReportLimiter = rateLimit({ windowMs: 60_000, max: 20 }); // per IP
+app.use('/api/security/csp-report', cspReportLimiter);
+
 // Security dashboard — tightly rate limited, admin-only routes enforce auth internally
 const securityLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `security:${req.headers.authorization?.slice(-20) || req.ip}` });
 app.use('/api/security', securityLimiter);
@@ -303,8 +351,7 @@ app.post('/api/workflows/execute-action', async (req, res) => {
       entityType: context?.entityType || 'workflow',
       entityId: context?.entityId || '',
       twilio: null as any,
-      resendApiKey: process.env.RESEND_API_KEY || '',
-      baseUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+      baseUrl: getBaseUrl(),
     };
 
     // Try to init twilio if available
@@ -372,22 +419,42 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
 });
 
-// Global error handler — sanitized for production (no stack traces, no internal details)
+// Global error handler — sanitized for ALL environments (no stack traces, no DB details)
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error('[server] unhandled error:', err?.message || err);
 
   if (!res.headersSent) {
     const status = err?.status || 500;
 
-    // In production, never expose internal error details
-    if (process.env.NODE_ENV === 'production' && status >= 500) {
+    // NEVER expose internal error details in 5xx responses — even in dev.
+    // DB errors (Postgres codes), stack traces, and internal messages can reveal
+    // schema details, query patterns, or server internals to attackers.
+    if (status >= 500) {
       res.status(status).json({ error: 'Internal server error' });
     } else {
-      // In development, show message but never stack traces via API
-      res.status(status).json({ error: err?.message || 'Internal server error' });
+      // 4xx errors: show a safe message but strip any DB-internal details
+      const safeMessage = sanitizeErrorMessage(err?.message || 'Request failed');
+      res.status(status).json({ error: safeMessage });
     }
   }
 });
+
+/** Strip database-internal details from error messages before sending to client */
+function sanitizeErrorMessage(msg: string): string {
+  // Strip PostgreSQL error details
+  if (/\b(PGRES|PG_|pg_|relation|constraint|violates|duplicate key|column|schema|row-level security)\b/i.test(msg)) {
+    return 'Request failed due to a data constraint.';
+  }
+  // Strip SQL-looking content
+  if (/\b(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|JOIN|INDEX)\b/.test(msg)) {
+    return 'Request failed.';
+  }
+  // Strip stack-trace-looking content
+  if (msg.includes('at ') && msg.includes('.ts:')) {
+    return 'An unexpected error occurred.';
+  }
+  return msg;
+}
 
 // ── Validate encryption key at startup ──
 const encKeyRaw = process.env.PAYMENTS_ENCRYPTION_KEY || '';
@@ -422,8 +489,12 @@ app.listen(port, '0.0.0.0', () => {
     initAutomationEngine({
       supabase: serviceClient,
       twilio: twilioClient && twilioPhoneNumber ? { client: twilioClient, phoneNumber: twilioPhoneNumber } : null,
-      resendApiKey: resendApiKey || '',
-      baseUrl: process.env.FRONTEND_URL || `http://localhost:${port}`,
+      baseUrl: getBaseUrl(),
+    });
+
+    // D2D Pipeline sync — auto-update pipeline stages on CRM events
+    import('./lib/d2d-pipeline-listener').then(({ initD2DPipelineListeners }) => {
+      initD2DPipelineListeners();
     });
   }
 

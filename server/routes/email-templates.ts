@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { validate, emailTemplateSchema } from '../lib/validation';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -34,8 +35,7 @@ router.get('/email-templates', async (req, res) => {
     if (error) throw error;
     return res.json(data || []);
   } catch (error: any) {
-    console.error('[email-templates] GET list failed:', error.message);
-    return res.status(500).json({ error: error?.message || 'Failed to load email templates' });
+    return sendSafeError(res, error, 'Failed to load email templates.', '[email-templates/list]');
   }
 });
 
@@ -60,8 +60,7 @@ router.get('/email-templates/:id', async (req, res) => {
 
     return res.json(data);
   } catch (error: any) {
-    console.error('[email-templates] GET single failed:', error.message);
-    return res.status(500).json({ error: error?.message || 'Failed to load email template' });
+    return sendSafeError(res, error, 'Failed to load email template.', '[email-templates/get]');
   }
 });
 
@@ -104,8 +103,7 @@ router.post('/email-templates', validate(emailTemplateSchema), async (req, res) 
 
     return res.status(201).json(data);
   } catch (error: any) {
-    console.error('[email-templates] POST create failed:', error.message);
-    return res.status(500).json({ error: error?.message || 'Failed to create email template' });
+    return sendSafeError(res, error, 'Failed to create email template.', '[email-templates/create]');
   }
 });
 
@@ -151,8 +149,7 @@ router.put('/email-templates/:id', validate(emailTemplateSchema), async (req, re
 
     return res.json(data);
   } catch (error: any) {
-    console.error('[email-templates] PUT update failed:', error.message);
-    return res.status(500).json({ error: error?.message || 'Failed to update email template' });
+    return sendSafeError(res, error, 'Failed to update email template.', '[email-templates/update]');
   }
 });
 
@@ -198,8 +195,7 @@ router.post('/email-templates/:id/duplicate', async (req, res) => {
 
     return res.status(201).json(data);
   } catch (error: any) {
-    console.error('[email-templates] POST duplicate failed:', error.message);
-    return res.status(500).json({ error: error?.message || 'Failed to duplicate email template' });
+    return sendSafeError(res, error, 'Failed to duplicate email template.', '[email-templates/duplicate]');
   }
 });
 
@@ -244,8 +240,7 @@ router.post('/email-templates/:id/set-default', async (req, res) => {
 
     return res.json(data);
   } catch (error: any) {
-    console.error('[email-templates] POST set-default failed:', error.message);
-    return res.status(500).json({ error: error?.message || 'Failed to set default email template' });
+    return sendSafeError(res, error, 'Failed to set default email template.', '[email-templates/set-default]');
   }
 });
 
@@ -268,8 +263,7 @@ router.delete('/email-templates/:id', async (req, res) => {
 
     return res.json({ ok: true });
   } catch (error: any) {
-    console.error('[email-templates] DELETE failed:', error.message);
-    return res.status(500).json({ error: error?.message || 'Failed to delete email template' });
+    return sendSafeError(res, error, 'Failed to delete email template.', '[email-templates/delete]');
   }
 });
 

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 import { scoreAllTerritories, scoreAllPins, getCompanyProfile } from '../lib/field-sales/scoring-engine';
 import { getScheduleRecommendations } from '../lib/field-sales/scheduling-engine';
 import { getFollowUpRecommendations } from '../lib/field-sales/followup-engine';
@@ -94,7 +95,7 @@ router.get('/houses', async (req: Request, res: Response) => {
     }
 
     const { data: houses, error, count } = await query;
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
 
     // Geo-radius filter (post-query, Supabase free tier has no PostGIS)
     let result = houses ?? [];
@@ -111,7 +112,7 @@ router.get('/houses', async (req: Request, res: Response) => {
 
     return res.json({ data: result, total: count, page: pageNum, limit: limitNum });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -188,7 +189,7 @@ router.get('/houses/:id', async (req: Request, res: Response) => {
 
     return res.json({ ...house, events: events ?? [], pin, score, next_action, closed_by_name });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -209,16 +210,10 @@ router.post('/houses', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'address, lat and lng are required' });
   }
 
-  // CRM-linked statuses require customer info to create a proper client
-  const clientCreationStatuses = ['lead', 'sale', 'quote_sent'];
-  if (clientCreationStatuses.includes(status || '')) {
-    if (!customer_name?.trim()) {
-      return res.status(400).json({ error: 'Customer name is required for lead/sale/quote pins' });
-    }
-    if (!customer_phone?.trim() && !customer_email?.trim()) {
-      return res.status(400).json({ error: 'Phone or email is required to create a client' });
-    }
-  }
+  // CRM-linked statuses: customer info is optional for quick pin drops on the map.
+  // A client will only be auto-created if customer_name AND (phone or email) are provided.
+  // Otherwise the pin is created without a client link — rep can fill in details later via edit.
+  const hasCustomerInfo = customer_name?.trim() && (customer_phone?.trim() || customer_email?.trim());
 
   try {
     const addressNorm = String(address).toLowerCase().trim();
@@ -234,10 +229,10 @@ router.post('/houses', async (req: Request, res: Response) => {
       (h: any) => haversineMetres(lat, lng, h.lat, h.lng) <= 50
     );
 
-    // Auto-create client only for statuses that represent a real CRM contact (lead or sale)
+    // Auto-create client only when full customer info is provided AND status is CRM-linked
     const clientCreationStatuses = ['lead', 'sale', 'quote_sent'];
     let clientId: string | null = null;
-    if (customer_name?.trim() && clientCreationStatuses.includes(status || '')) {
+    if (hasCustomerInfo && clientCreationStatuses.includes(status || '')) {
       const nameParts = String(customer_name).trim().split(/\s+/);
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ') || '';
@@ -319,7 +314,7 @@ router.post('/houses', async (req: Request, res: Response) => {
       .select()
       .single();
 
-    if (hErr) return res.status(500).json({ error: hErr.message });
+    if (hErr) return sendSafeError(res, hErr, 'Field sales operation failed.', '[field-sales]');
 
     // Create initial pin
     const pinStatus = status || 'unknown';
@@ -378,7 +373,7 @@ router.post('/houses', async (req: Request, res: Response) => {
 
     return res.status(201).json({ ...house, pin, client_id: clientId });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -421,10 +416,10 @@ router.put('/houses/:id', async (req: Request, res: Response) => {
       .select()
       .single();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     return res.json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -446,18 +441,30 @@ router.delete('/houses/:id', async (req: Request, res: Response) => {
       .eq('id', req.params.id)
       .eq('org_id', auth.orgId);
 
-    if (hErr) return res.status(500).json({ error: hErr.message });
+    if (hErr) return sendSafeError(res, hErr, 'Field sales operation failed.', '[field-sales]');
 
     // Delete associated pin (scoped to org for safety)
-    await admin
+    const { error: pinErr, count: pinCount } = await admin
       .from('field_pins')
       .delete()
       .eq('house_id', req.params.id)
       .eq('org_id', auth.orgId);
 
+    if (pinErr) {
+      console.error('[field-sales] Pin delete failed:', pinErr.message);
+    }
+
+    // Also try without org_id filter as fallback (in case pin has different org_id)
+    if (!pinCount || pinCount === 0) {
+      await admin
+        .from('field_pins')
+        .delete()
+        .eq('house_id', req.params.id);
+    }
+
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -517,7 +524,7 @@ router.post('/houses/:id/link', async (req: Request, res: Response) => {
 
     return res.json({ success: true, entity_type, entity_id });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -565,7 +572,7 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
       .select()
       .single();
 
-    if (eErr) return res.status(500).json({ error: eErr.message });
+    if (eErr) return sendSafeError(res, eErr, 'Failed to create event.', '[field-sales/events]');
 
     // Derive new status
     const newStatus = EVENT_STATUS_MAP[event_type] ?? house.current_status;
@@ -606,7 +613,7 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
       // Determine role
       const { data: membership } = await admin.from('memberships')
         .select('role').eq('user_id', auth.user.id).eq('org_id', auth.orgId).maybeSingle();
-      houseUpdate.closed_by_role = (membership?.role === 'owner' || membership?.role === 'admin') ? 'manager' : 'rep';
+      houseUpdate.closed_by_role = (membership?.role === 'owner' || membership?.role === 'admin') ? 'admin' : 'rep';
     }
 
     await admin
@@ -697,7 +704,7 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
 
     return res.status(201).json(event);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -724,7 +731,7 @@ router.delete('/events/:eventId', async (req: Request, res: Response) => {
 
     return res.status(200).json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -747,10 +754,10 @@ router.get('/territories', async (req: Request, res: Response) => {
       .is('deleted_at', null)
       .order('name');
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     return res.json(data ?? []);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -779,10 +786,10 @@ router.post('/territories', async (req: Request, res: Response) => {
       .select()
       .single();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     return res.status(201).json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -813,10 +820,10 @@ router.put('/territories/:id', async (req: Request, res: Response) => {
       .select()
       .single();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     return res.json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -838,10 +845,10 @@ router.delete('/territories/:id', async (req: Request, res: Response) => {
       .eq('id', req.params.id)
       .eq('org_id', auth.orgId);
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -869,7 +876,7 @@ router.get('/stats', async (req: Request, res: Response) => {
     if (to) statsQuery = statsQuery.lte('date', to);
 
     const { data: statsRows, error: sErr } = await statsQuery;
-    if (sErr) return res.status(500).json({ error: sErr.message });
+    if (sErr) return sendSafeError(res, sErr, 'Failed to fetch stats.', '[field-sales/stats]');
 
     // Aggregate
     const totals = (statsRows ?? []).reduce(
@@ -907,7 +914,7 @@ router.get('/stats', async (req: Request, res: Response) => {
 
     return res.json({ totals, conversion_rate: parseFloat(conversion_rate), status_counts: statusCounts });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -936,10 +943,10 @@ router.get('/stats/daily', async (req: Request, res: Response) => {
     if (to) query = query.lte('date', to);
 
     const { data, error } = await query;
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     return res.json(data ?? []);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -969,7 +976,7 @@ router.get('/stats/leaderboard', async (req: Request, res: Response) => {
     if (to) query = query.lte('date', to);
 
     const { data: rows, error } = await query;
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
 
     // Aggregate by user
     const byUser: Record<string, number> = {};
@@ -1002,7 +1009,7 @@ router.get('/stats/leaderboard', async (req: Request, res: Response) => {
 
     return res.json(leaderboard);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -1024,7 +1031,7 @@ router.get('/settings', async (req: Request, res: Response) => {
       .eq('org_id', auth.orgId)
       .maybeSingle();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
 
     // Return defaults if no record exists yet
     if (!data) {
@@ -1045,7 +1052,7 @@ router.get('/settings', async (req: Request, res: Response) => {
 
     return res.json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -1085,10 +1092,10 @@ router.put('/settings', async (req: Request, res: Response) => {
       .select()
       .single();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     return res.json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -1107,12 +1114,14 @@ router.get('/pins', async (req: Request, res: Response) => {
     
 
     // Pins — join with house_profiles for coords + metadata + rep for filtering
+    // Filter out soft-deleted houses to prevent ghost pins from appearing
     const { data: pins, error } = await admin
       .from('field_pins')
-      .select('id, house_id, status, has_note, pin_color, field_house_profiles!inner(lat, lng, address, metadata, current_status, client_id, assigned_user_id, territory_id)')
-      .eq('org_id', auth.orgId);
+      .select('id, house_id, status, has_note, pin_color, field_house_profiles!inner(lat, lng, address, metadata, current_status, client_id, assigned_user_id, territory_id, deleted_at)')
+      .eq('org_id', auth.orgId)
+      .is('field_house_profiles.deleted_at', null);
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
 
     // Get latest note for each house that has_note
     const houseIdsWithNotes = (pins ?? []).filter((p: any) => p.has_note).map((p: any) => p.house_id);
@@ -1155,7 +1164,7 @@ router.get('/pins', async (req: Request, res: Response) => {
 
     return res.json(result);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -1171,9 +1180,9 @@ router.get('/reps', async (req: Request, res: Response) => {
   try {
     const { data, error } = await admin.from('field_sales_reps')
       .select('*').eq('org_id', auth.orgId).eq('is_active', true).order('display_name');
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     return res.json(data ?? []);
-  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]'); }
 });
 
 // POST /reps — create rep
@@ -1187,9 +1196,9 @@ router.post('/reps', async (req: Request, res: Response) => {
     const { data, error } = await admin.from('field_sales_reps')
       .insert({ org_id: auth.orgId, user_id, display_name, role: role || 'sales_rep', avatar_url: avatar_url || null })
       .select().single();
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     return res.status(201).json(data);
-  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]'); }
 });
 
 // PUT /reps/:id — update rep
@@ -1203,9 +1212,9 @@ router.put('/reps/:id', async (req: Request, res: Response) => {
   try {
     const { data, error } = await admin.from('field_sales_reps')
       .update(updates).eq('id', req.params.id).eq('org_id', auth.orgId).select().single();
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     return res.json(data);
-  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]'); }
 });
 
 // DELETE /reps/:id — deactivate rep
@@ -1218,7 +1227,7 @@ router.delete('/reps/:id', async (req: Request, res: Response) => {
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('id', req.params.id).eq('org_id', auth.orgId);
     return res.json({ ok: true });
-  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]'); }
 });
 
 // GET /teams — list teams
@@ -1230,9 +1239,9 @@ router.get('/teams', async (req: Request, res: Response) => {
     const { data, error } = await admin.from('field_sales_teams')
       .select('*, field_sales_team_members(rep_id, field_sales_reps(id, display_name))')
       .eq('org_id', auth.orgId).eq('is_active', true).order('name');
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     return res.json(data ?? []);
-  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]'); }
 });
 
 // POST /teams — create team
@@ -1246,14 +1255,14 @@ router.post('/teams', async (req: Request, res: Response) => {
     const { data: team, error } = await admin.from('field_sales_teams')
       .insert({ org_id: auth.orgId, name, leader_id: leader_id || null, color: color || '#6366f1' })
       .select().single();
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     // Add members
     if (member_ids?.length) {
       await admin.from('field_sales_team_members')
         .insert(member_ids.map((rid: string) => ({ team_id: team.id, rep_id: rid })));
     }
     return res.status(201).json(team);
-  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]'); }
 });
 
 // ===========================================================================
@@ -1325,7 +1334,7 @@ router.get('/ai/territory/recommendations', async (req: Request, res: Response) 
       generated_at: new Date().toISOString(),
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -1354,7 +1363,7 @@ router.post('/ai/schedule/recommendations', async (req: Request, res: Response) 
       generated_at: new Date().toISOString(),
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -1381,7 +1390,7 @@ router.get('/ai/follow-ups', async (req: Request, res: Response) => {
       generated_at: new Date().toISOString(),
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -1410,7 +1419,7 @@ router.get('/ai/daily-plan', async (req: Request, res: Response) => {
 
     return res.json(plan);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -1429,7 +1438,7 @@ router.get('/ai/territory-assignments', async (req: Request, res: Response) => {
       generated_at: new Date().toISOString(),
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -1447,7 +1456,7 @@ router.post('/ai/recalculate', async (req: Request, res: Response) => {
     await scoreAllPins(admin, auth.orgId, profile);
     return res.json({ success: true, recalculated_at: new Date().toISOString() });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -1481,7 +1490,7 @@ router.post('/auto-pin', async (req: Request, res: Response) => {
 
     return res.status(201).json(result);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -1524,7 +1533,7 @@ router.get('/operating-profile', async (req: Request, res: Response) => {
     }
     return res.json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
 });
 
@@ -1556,10 +1565,136 @@ router.put('/operating-profile', async (req: Request, res: Response) => {
       .select()
       .single();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     return res.json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// D2D PIPELINE ENDPOINTS
+// ---------------------------------------------------------------------------
+
+// GET /field-sales/pipeline — fetch all pipeline deals for D2D Kanban
+router.get('/pipeline', async (req: Request, res: Response) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  const admin = getServiceClient();
+
+  try {
+    const repFilter = req.query.rep_id as string | undefined;
+
+    let query = admin
+      .from('pipeline_deals')
+      .select(`
+        id, org_id, stage, title, value, notes, created_at, updated_at,
+        lead_id, client_id, job_id, quote_id, pin_id, rep_id, source,
+        d2d_status, lost_reason, lost_at,
+        leads(id, first_name, last_name, email, phone, status, created_by),
+        clients(id, first_name, last_name, company, email, phone)
+      `)
+      .eq('org_id', auth.orgId)
+      .is('deleted_at', null)
+      .order('updated_at', { ascending: false });
+
+    if (repFilter && repFilter !== 'all') {
+      query = query.eq('rep_id', repFilter);
+    }
+
+    const { data, error } = await query;
+    if (error) return sendSafeError(res, error, 'Failed to load pipeline.', '[field-sales/pipeline]');
+
+    // Fetch rep names + creator names for display
+    const allUserIds = [...new Set([
+      ...(data || []).map((d: any) => d.rep_id).filter(Boolean),
+      ...(data || []).map((d: any) => d.leads?.created_by).filter(Boolean),
+    ])];
+    let userNameMap: Record<string, string> = {};
+    if (allUserIds.length > 0) {
+      const { data: members } = await admin
+        .from('memberships')
+        .select('user_id, full_name')
+        .eq('org_id', auth.orgId)
+        .in('user_id', allUserIds);
+      for (const m of members || []) {
+        if (m.user_id && m.full_name) userNameMap[m.user_id] = m.full_name;
+      }
+    }
+
+    // Enrich deals with rep name + creator name
+    const enriched = (data || []).map((deal: any) => ({
+      ...deal,
+      rep_name: deal.rep_id ? (userNameMap[deal.rep_id] || null) : null,
+      created_by_id: deal.leads?.created_by || null,
+      created_by_name: deal.leads?.created_by ? (userNameMap[deal.leads.created_by] || null) : null,
+      lead_name: deal.leads
+        ? `${deal.leads.first_name || ''} ${deal.leads.last_name || ''}`.trim()
+        : deal.clients
+          ? `${deal.clients.first_name || ''} ${deal.clients.last_name || ''}`.trim()
+          : deal.title || 'Unnamed',
+      lead_email: deal.leads?.email || deal.clients?.email || null,
+      lead_phone: deal.leads?.phone || deal.clients?.phone || null,
+    }));
+
+    return res.json(enriched);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Failed to load pipeline.', '[field-sales/pipeline]');
+  }
+});
+
+// PUT /field-sales/pipeline/:id — update a deal (stage, status, lost_reason)
+router.put('/pipeline/:id', async (req: Request, res: Response) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  const admin = getServiceClient();
+
+  try {
+    const { stage, d2d_status, lost_reason, rep_id } = req.body;
+    const updates: Record<string, any> = { updated_at: new Date().toISOString() };
+
+    if (stage) updates.stage = stage;
+    if (d2d_status !== undefined) updates.d2d_status = d2d_status;
+    if (lost_reason !== undefined) updates.lost_reason = lost_reason;
+    if (rep_id !== undefined) updates.rep_id = rep_id;
+
+    if (stage === 'Lost') {
+      updates.lost_at = new Date().toISOString();
+    }
+
+    const { data, error } = await admin
+      .from('pipeline_deals')
+      .update(updates)
+      .eq('id', req.params.id)
+      .eq('org_id', auth.orgId)
+      .select()
+      .maybeSingle();
+
+    if (error) return sendSafeError(res, error, 'Failed to update deal.', '[field-sales/pipeline]');
+    return res.json(data);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Failed to update deal.', '[field-sales/pipeline]');
+  }
+});
+
+// GET /field-sales/pipeline/reps — list all reps for filter dropdown
+router.get('/pipeline/reps', async (req: Request, res: Response) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  const admin = getServiceClient();
+
+  try {
+    const { data, error } = await admin
+      .from('memberships')
+      .select('user_id, full_name, role, avatar_url')
+      .eq('org_id', auth.orgId)
+      .eq('status', 'active')
+      .in('role', ['owner', 'admin', 'sales_rep', 'technician', 'team_lead']);
+
+    if (error) return sendSafeError(res, error, 'Failed to load reps.', '[field-sales/pipeline]');
+    return res.json(data || []);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Failed to load reps.', '[field-sales/pipeline]');
   }
 });
 

@@ -5,6 +5,7 @@ import BatchMessageModal from '../components/BatchMessageModal';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
+import { displayEmail, displayPhone } from '../lib/piiSanitizer';
 import {
   createClient,
   createClientWithDuplicateHandling,
@@ -595,14 +596,13 @@ export default function Clients() {
 
       {/* ── TABLE ── */}
       <div className="border border-[var(--color-outline)] rounded-md bg-surface">
-        <div className="grid" style={{ gridTemplateColumns: '40px 1fr 1fr 1fr 1fr 1fr 120px 48px' }}>
+        <div className="grid" style={{ gridTemplateColumns: '40px 1.2fr 1fr 1fr 1.2fr 120px 48px' }}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-[var(--color-outline)] flex items-center"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="rounded-[3px] border-[var(--color-outline)] w-4 h-4 accent-[var(--color-text-primary)] cursor-pointer" /></div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Nom' : 'Name'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Entreprise' : 'Company'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Téléphone' : 'Phone'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">Email {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Ville' : 'City'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</span></div>
           <div className="py-3 border-b border-[var(--color-outline)]" />
 
@@ -614,7 +614,6 @@ export default function Clients() {
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-28 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-16 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-14 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
               <div className="py-3 border-b border-[var(--color-surface-tertiary)]" />
             </React.Fragment>
@@ -622,7 +621,7 @@ export default function Clients() {
 
           {/* EMPTY */}
           {!loading && displayItems.length === 0 && (
-            <div className="col-span-8 py-20 text-center text-[14px] text-[var(--color-text-tertiary)]">{t.clients.noClientsFound}</div>
+            <div className="col-span-7 py-20 text-center text-[14px] text-[var(--color-text-tertiary)]">{t.clients.noClientsFound}</div>
           )}
 
           {/* ROWS */}
@@ -641,9 +640,8 @@ export default function Clients() {
                   </div>
                 </div>
                 <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] truncate">{item.company || '—'}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] tabular-nums truncate">{item.phone || '—'}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] truncate">{item.email || '—'}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] truncate">{item.city || '—'}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] tabular-nums truncate">{displayPhone(item.phone)}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] truncate">{displayEmail(item.email)}</span></div>
                 <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}><Badge status={item.status} /></div>
                 <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`}>
                   <button className="p-1 rounded text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-tertiary)] transition-colors" onClick={e => { e.stopPropagation(); setActionMenuId(actionMenuId === item.id ? null : item.id); }}>
@@ -867,7 +865,7 @@ export default function Clients() {
                       <p className="text-[13px] font-semibold text-text-primary">
                         {client.first_name} {client.last_name}
                       </p>
-                      <p className="text-xs text-text-muted">{client.email || t.common.noEmail} — {formatDate(client.created_at)}</p>
+                      <p className="text-xs text-text-muted">{displayEmail(client.email) === '—' ? t.common.noEmail : displayEmail(client.email)} — {formatDate(client.created_at)}</p>
                     </div>
                   ))}
                 </div>

@@ -128,7 +128,7 @@ export default function Header() {
           </Link>
           <Link
             to="/contact"
-            className="inline-flex items-center gap-2 bg-text-primary text-surface px-5 py-2.5 rounded-lg text-sm font-medium hover:opacity-85 transition-opacity group"
+            className="inline-flex items-center gap-2 bg-[#3FAF97] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#1F5F4F] transition-colors group"
           >
             Book a demo
             <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
@@ -215,7 +215,7 @@ export default function Header() {
                 </Link>
                 <Link
                   to="/contact"
-                  className="block w-full text-center bg-text-primary text-surface px-5 py-3 rounded-lg text-sm font-medium"
+                  className="block w-full text-center bg-[#3FAF97] text-white px-5 py-3 rounded-lg text-sm font-medium hover:bg-[#1F5F4F] transition-colors"
                 >
                   Book a demo
                 </Link>

@@ -174,7 +174,8 @@ function AddressAutocompleteInner({
           onBlur={() => setFocused(false)}
           className={cn('glass-input w-full pl-9', className)}
           placeholder={placeholder || t.address.placeholder}
-          autoComplete="off"
+          autoComplete="new-password"
+          name="address-search-no-autofill"
         />
         {isLoading && hasKey && (
           <Loader2 size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-text-tertiary" />

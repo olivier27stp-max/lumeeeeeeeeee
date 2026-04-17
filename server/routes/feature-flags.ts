@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
+import { validate, updateFeatureFlagSchema } from '../lib/validation';
 
 const router = Router();
 
@@ -15,7 +17,7 @@ router.get('/features', async (req, res) => {
       .eq('org_id', auth.orgId);
 
     if (error) {
-      return res.status(500).json({ error: error.message });
+      return sendSafeError(res, error, 'Failed to fetch features.', '[features]');
     }
 
     // Return as a map for easy frontend consumption
@@ -26,12 +28,12 @@ router.get('/features', async (req, res) => {
 
     return res.json({ flags });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to fetch features' });
+    return sendSafeError(res, err, 'Failed to fetch features.', '[features]');
   }
 });
 
 // PUT /api/features/:feature — toggle a feature flag (owner/admin only)
-router.put('/features/:feature', async (req, res) => {
+router.put('/features/:feature', validate(updateFeatureFlagSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
@@ -66,12 +68,12 @@ router.put('/features/:feature', async (req, res) => {
       .single();
 
     if (error) {
-      return res.status(500).json({ error: error.message });
+      return sendSafeError(res, error, 'Failed to update feature.', '[features]');
     }
 
     return res.json({ ok: true, flag: data });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to update feature' });
+    return sendSafeError(res, err, 'Failed to update feature.', '[features]');
   }
 });
 

@@ -417,17 +417,17 @@ export default function Features() {
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link
-                to="/contact"
+                to="/pricing"
                 className="inline-flex items-center gap-2 bg-white text-text-primary px-8 py-4 rounded-xl text-sm font-bold hover:bg-white/90 transition-colors group"
               >
-                Book a demo
+                Start Now
                 <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
               </Link>
               <Link
                 to="/contact"
-                className="inline-flex items-center gap-2 bg-[#3FAF97] text-white px-8 py-4 rounded-xl text-sm font-bold hover:bg-[#1F5F4F] transition-colors"
+                className="inline-flex items-center gap-2 border-2 border-white/30 text-white px-8 py-4 rounded-xl text-sm font-bold hover:border-white/50 transition-colors"
               >
-                Free trial
+                Book a Demo
               </Link>
             </div>
           </motion.div>

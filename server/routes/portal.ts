@@ -1,16 +1,32 @@
 /* Client Portal API — public endpoint for clients to view their data */
 
 import { Router } from 'express';
+import crypto from 'crypto';
 import { getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
+
+/**
+ * Constant-time string comparison to prevent timing attacks.
+ * If an attacker can measure response time differences between
+ * valid-prefix vs invalid tokens, they can brute-force tokens.
+ */
+function timingSafeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 // GET /api/portal/:token — fetch client portal data (public, no auth)
 router.get('/portal/:token', async (req, res) => {
   try {
     const { token } = req.params;
-    if (!token || token.length < 20) {
-      return res.status(400).json({ error: 'Invalid token' });
+
+    // Validate token format: must be 32+ chars, alphanumeric/hex only
+    if (!token || token.length < 32 || !/^[a-zA-Z0-9_-]+$/.test(token)) {
+      // Add small random delay to prevent timing-based token length guessing
+      await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
+      return res.status(404).json({ error: 'Not found' });
     }
 
     const serviceClient = getServiceClient();
@@ -18,13 +34,18 @@ router.get('/portal/:token', async (req, res) => {
     // Find client by portal_token (stored in clients table)
     const { data: client, error: clientErr } = await serviceClient
       .from('clients')
-      .select('id, first_name, last_name, company, email, org_id')
+      .select('id, first_name, last_name, company, email, org_id, portal_token')
       .eq('portal_token', token)
       .is('deleted_at', null)
       .maybeSingle();
 
-    if (clientErr || !client) {
-      return res.status(404).json({ error: 'Portal not found' });
+    // Use constant-time comparison to verify token match
+    // (the DB query finds by token, but we double-check to mitigate DB-level timing)
+    if (clientErr || !client || !client.portal_token || !timingSafeCompare(token, client.portal_token)) {
+      // Same delay whether token is invalid or not found — prevents enumeration
+      await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
+      // Generic "not found" — don't reveal if token format was valid
+      return res.status(404).json({ error: 'Not found' });
     }
 
     // Fetch company info
@@ -103,8 +124,7 @@ router.get('/portal/:token', async (req, res) => {
       })),
     });
   } catch (error: any) {
-    console.error('Portal API error:', error);
-    return res.status(500).json({ error: 'Failed to load portal' });
+    return sendSafeError(res, error, 'Failed to load portal', '[portal]');
   }
 });
 

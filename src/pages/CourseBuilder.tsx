@@ -14,7 +14,8 @@ import {
   getCourse, createCourse, updateCourse, deleteCourse,
   createModule, updateModule, deleteModule, reorderModules,
   createLesson, updateLesson, deleteLesson, duplicateLesson, reorderLessons,
-  type CourseFull, type CourseModule, type CourseLesson,
+  getOrgMembers,
+  type CourseFull, type CourseModule, type CourseLesson, type OrgMember,
 } from '../lib/coursesApi';
 import { uploadFile, STORAGE_BUCKETS } from '../lib/storage';
 import {
@@ -142,6 +143,12 @@ export default function CourseBuilder() {
   const [lessonSaving, setLessonSaving] = useState(false);
   const [coverUploading, setCoverUploading] = useState(false);
 
+  // Audience targeting
+  const [targetRoles, setTargetRoles] = useState<string[]>([]);
+  const [targetUserIds, setTargetUserIds] = useState<string[]>([]);
+  const [orgMembers, setOrgMembers] = useState<OrgMember[]>([]);
+  const [showAudiencePanel, setShowAudiencePanel] = useState(false);
+
   // Inline rename
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
   const [editingModuleTitle, setEditingModuleTitle] = useState('');
@@ -155,6 +162,9 @@ export default function CourseBuilder() {
 
   // ── Load ──
   useEffect(() => {
+    // Load org members for audience targeting
+    getOrgMembers().then(setOrgMembers).catch(() => {});
+
     if (!id) { setLoading(false); return; }
     (async () => {
       setLoading(true);
@@ -167,6 +177,8 @@ export default function CourseBuilder() {
         setCourseStatus(data.status);
         setModules(data.modules);
         setExpandedModules(new Set(data.modules.map(m => m.id)));
+        setTargetRoles(data.target_roles || []);
+        setTargetUserIds(data.target_user_ids || []);
       } catch (err: any) { toast.error(err?.message || t.courses.failedLoad); }
       finally { setLoading(false); }
     })();
@@ -187,25 +199,37 @@ export default function CourseBuilder() {
   useEffect(() => { if (editingModuleId) moduleInputRef.current?.focus(); }, [editingModuleId]);
 
   // ── Auto-save course meta (debounce 2s) ──
+  // Use refs to avoid stale closures and prevent upload-triggered saves from racing
+  const courseFieldsRef = useRef({ title, description, coverImage, courseStatus, targetRoles, targetUserIds });
+  courseFieldsRef.current = { title, description, coverImage, courseStatus, targetRoles, targetUserIds };
+  const isUploadingRef = useRef(false);
+
   useEffect(() => {
-    if (!courseId) return; // Don't auto-save if not created yet
+    if (!courseId || isUploadingRef.current) return; // Don't auto-save during upload
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
+      const f = courseFieldsRef.current;
       try {
-        await updateCourse(courseId, { title, description, cover_image: coverImage || null, status: courseStatus });
+        const autoSavePayload: Record<string, any> = { title: f.title, description: f.description, cover_image: f.coverImage || null, status: f.courseStatus };
+        if (f.targetRoles.length > 0) autoSavePayload.target_roles = f.targetRoles;
+        if (f.targetUserIds.length > 0) autoSavePayload.target_user_ids = f.targetUserIds;
+        await updateCourse(courseId, autoSavePayload);
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
       } catch { /* silent auto-save */ }
     }, 2000);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-  }, [title, description, coverImage, courseId]);
+  }, [title, description, coverImage, courseStatus, courseId, targetRoles, targetUserIds]);
 
   // ── Ensure course exists ──
   const ensureCourseId = async (): Promise<string | null> => {
     if (courseId) return courseId;
     setSaving(true);
     try {
-      const created = await createCourse({ title: title || (fr ? 'Sans titre' : 'Untitled'), description, cover_image: coverImage || null, status: courseStatus });
+      const createPayload: Record<string, any> = { title: title || (fr ? 'Sans titre' : 'Untitled'), description, cover_image: coverImage || null, status: courseStatus };
+      if (targetRoles.length > 0) createPayload.target_roles = targetRoles;
+      if (targetUserIds.length > 0) createPayload.target_user_ids = targetUserIds;
+      const created = await createCourse(createPayload as any);
       setCourseId(created.id);
       toast.success(t.courses.courseCreated);
       window.history.replaceState(null, '', `/courses/${created.id}/edit`);
@@ -219,7 +243,12 @@ export default function CourseBuilder() {
     setSaving(true);
     try {
       if (!courseId) { await ensureCourseId(); }
-      else { await updateCourse(courseId, { title, description, cover_image: coverImage || null, status: courseStatus }); }
+      else {
+        const savePayload: Record<string, any> = { title, description, cover_image: coverImage || null, status: courseStatus };
+        if (targetRoles.length > 0) savePayload.target_roles = targetRoles;
+        if (targetUserIds.length > 0) savePayload.target_user_ids = targetUserIds;
+        await updateCourse(courseId, savePayload);
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err: any) { toast.error(err?.message || t.courses.failedUpdate); }
@@ -241,13 +270,26 @@ export default function CourseBuilder() {
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Reset file input so same file can be re-selected
+    e.target.value = '';
     setCoverUploading(true);
+    isUploadingRef.current = true;
+    // Cancel any pending auto-save to prevent race condition
+    if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
     try {
       const ext = file.name.split('.').pop();
       const result = await uploadFile(STORAGE_BUCKETS.ATTACHMENTS, `courses/${Date.now()}.${ext}`, file);
       setCoverImage(result.url);
+      // Immediately save the cover image if course exists, to avoid relying on auto-save
+      if (courseId) {
+        const f = courseFieldsRef.current;
+        await updateCourse(courseId, { title: f.title, description: f.description, cover_image: result.url, status: f.courseStatus });
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+      toast.success(fr ? 'Image mise à jour' : 'Cover image updated');
     } catch (err: any) { toast.error(err?.message || 'Upload failed'); }
-    finally { setCoverUploading(false); }
+    finally { setCoverUploading(false); isUploadingRef.current = false; }
   };
 
   // ════════════════════════════════════════════
@@ -392,22 +434,25 @@ export default function CourseBuilder() {
   // ── Uploads ──
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
+    e.target.value = '';
     try {
       const ext = file.name.split('.').pop();
       const result = await uploadFile(STORAGE_BUCKETS.ATTACHMENTS, `courses/videos/${Date.now()}.${ext}`, file);
       setLessonVideoUrl(result.url);
-      // PDF uploads also use this handler — set type based on extension
       if (ext === 'pdf') setLessonContentType('pdf');
       else setLessonContentType('video');
+      toast.success(fr ? 'Fichier téléchargé' : 'File uploaded');
     } catch (err: any) { toast.error(err?.message || 'Upload failed'); }
   };
 
   const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
+    e.target.value = '';
     try {
       const ext = file.name.split('.').pop();
       const result = await uploadFile(STORAGE_BUCKETS.ATTACHMENTS, `courses/attachments/${Date.now()}.${ext}`, file);
       setLessonAttachments(prev => [...prev, { name: file.name, url: result.url, type: ext || 'file' }]);
+      toast.success(fr ? 'Pièce jointe ajoutée' : 'Attachment added');
     } catch (err: any) { toast.error(err?.message || 'Upload failed'); }
   };
 
@@ -709,6 +754,144 @@ export default function CourseBuilder() {
                 <button onClick={togglePublish} className={cn('px-3 py-1 rounded-lg text-[12px] font-semibold uppercase tracking-wide transition-colors', courseStatus === 'published' ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning')}>
                   {courseStatus === 'published' ? t.courses.published : t.courses.draft}
                 </button>
+              </div>
+
+              {/* ── Audience Targeting ── */}
+              <div className="bg-surface-card rounded-2xl border border-outline/30 overflow-hidden">
+                <button
+                  onClick={() => setShowAudiencePanel(!showAudiencePanel)}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-secondary/30 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Users size={15} className="text-text-muted" />
+                    <div className="text-left">
+                      <p className="text-sm font-medium text-text-primary">{fr ? 'Audience cible' : 'Target Audience'}</p>
+                      <p className="text-[11px] text-text-muted">
+                        {targetRoles.length === 0 && targetUserIds.length === 0
+                          ? (fr ? 'Tout le monde' : 'Everyone')
+                          : `${targetRoles.length} ${fr ? 'rôle(s)' : 'role(s)'}, ${targetUserIds.length} ${fr ? 'utilisateur(s)' : 'user(s)'}`
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronDown size={14} className={cn('text-text-muted transition-transform', showAudiencePanel && 'rotate-180')} />
+                </button>
+
+                <AnimatePresence>
+                  {showAudiencePanel && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="overflow-hidden border-t border-outline/20"
+                    >
+                      <div className="px-4 py-4 space-y-4">
+                        {/* Role-based targeting */}
+                        <div>
+                          <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2 block">
+                            {fr ? 'Rôles ciblés' : 'Target Roles'}
+                          </label>
+                          <div className="flex flex-wrap gap-2">
+                            {[
+                              { key: 'sales_rep', label: fr ? 'Représentant' : 'Sales Rep' },
+                              { key: 'technician', label: fr ? 'Technicien' : 'Technician' },
+                              { key: 'admin', label: 'Admin' },
+                              { key: 'member', label: fr ? 'Membre' : 'Member' },
+                            ].map(({ key, label }) => (
+                              <button
+                                key={key}
+                                onClick={() => setTargetRoles(prev =>
+                                  prev.includes(key) ? prev.filter(r => r !== key) : [...prev, key]
+                                )}
+                                className={cn(
+                                  'px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border',
+                                  targetRoles.includes(key)
+                                    ? 'bg-primary/10 border-primary/30 text-primary'
+                                    : 'bg-surface-secondary border-transparent text-text-secondary hover:border-outline-strong'
+                                )}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          {targetRoles.length === 0 && (
+                            <p className="text-[10px] text-text-muted mt-1.5">
+                              {fr ? 'Aucun filtre de rôle — visible par tous les rôles' : 'No role filter — visible to all roles'}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* User-specific targeting */}
+                        <div>
+                          <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2 block">
+                            {fr ? 'Utilisateurs spécifiques' : 'Specific Users'}
+                          </label>
+                          {orgMembers.length > 0 ? (
+                            <div className="max-h-[200px] overflow-y-auto space-y-1 rounded-xl border border-outline/30 p-2">
+                              {orgMembers
+                                .filter(m => m.role !== 'owner') // Owner always has access
+                                .map(member => (
+                                <button
+                                  key={member.user_id}
+                                  onClick={() => setTargetUserIds(prev =>
+                                    prev.includes(member.user_id) ? prev.filter(id => id !== member.user_id) : [...prev, member.user_id]
+                                  )}
+                                  className={cn(
+                                    'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-colors text-left',
+                                    targetUserIds.includes(member.user_id)
+                                      ? 'bg-primary/8 border border-primary/20'
+                                      : 'hover:bg-surface-secondary border border-transparent'
+                                  )}
+                                >
+                                  <div className="w-7 h-7 rounded-full bg-surface-tertiary flex items-center justify-center shrink-0 overflow-hidden">
+                                    {member.avatar_url ? (
+                                      <img src={member.avatar_url} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                      <span className="text-[10px] font-bold text-text-muted">
+                                        {(member.full_name || '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[12px] font-medium text-text-primary truncate">{member.full_name || 'Unknown'}</p>
+                                    <p className="text-[10px] text-text-muted capitalize">{member.role}</p>
+                                  </div>
+                                  {targetUserIds.includes(member.user_id) && (
+                                    <Check size={14} className="text-primary shrink-0" />
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-text-muted">{fr ? 'Chargement...' : 'Loading...'}</p>
+                          )}
+                        </div>
+
+                        {/* Summary */}
+                        {(targetRoles.length > 0 || targetUserIds.length > 0) && (
+                          <div className="flex items-center justify-between pt-2 border-t border-outline/20">
+                            <p className="text-[11px] text-text-muted">
+                              {fr ? 'Formation ciblée pour' : 'Course targeted to'}:{' '}
+                              <span className="text-text-primary font-medium">
+                                {[
+                                  ...targetRoles.map(r => r === 'sales_rep' ? (fr ? 'Représentants' : 'Sales Reps') : r === 'technician' ? (fr ? 'Techniciens' : 'Technicians') : r),
+                                  ...targetUserIds.map(uid => orgMembers.find(m => m.user_id === uid)?.full_name || uid.slice(0, 8)),
+                                ].join(', ')}
+                              </span>
+                            </p>
+                            <button
+                              onClick={() => { setTargetRoles([]); setTargetUserIds([]); }}
+                              className="text-[11px] text-danger hover:underline"
+                            >
+                              {fr ? 'Réinitialiser' : 'Reset'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Delete */}

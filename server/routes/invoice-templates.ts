@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { validate, invoiceTemplateSchema } from '../lib/validation';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -28,8 +29,7 @@ router.get('/invoice-templates', async (req, res) => {
     if (error) throw error;
     return res.json(data || []);
   } catch (error: any) {
-    console.error('[invoice-templates] GET list failed:', error.message);
-    return res.status(500).json({ error: error?.message || 'Failed to load invoice templates' });
+    return sendSafeError(res, error, 'Failed to load invoice templates.', '[invoice-templates/list]');
   }
 });
 
@@ -89,8 +89,7 @@ router.post('/invoice-templates', validate(invoiceTemplateSchema), async (req, r
 
     return res.status(201).json(data);
   } catch (error: any) {
-    console.error('[invoice-templates] POST create failed:', error.message);
-    return res.status(500).json({ error: error?.message || 'Failed to create invoice template' });
+    return sendSafeError(res, error, 'Failed to create invoice template.', '[invoice-templates/create]');
   }
 });
 
@@ -154,8 +153,7 @@ router.put('/invoice-templates/:id', validate(invoiceTemplateSchema), async (req
 
     return res.json(data);
   } catch (error: any) {
-    console.error('[invoice-templates] PUT update failed:', error.message);
-    return res.status(500).json({ error: error?.message || 'Failed to update invoice template' });
+    return sendSafeError(res, error, 'Failed to update invoice template.', '[invoice-templates/update]');
   }
 });
 
@@ -207,8 +205,7 @@ router.post('/invoice-templates/:id/duplicate', async (req, res) => {
 
     return res.status(201).json(data);
   } catch (error: any) {
-    console.error('[invoice-templates] POST duplicate failed:', error.message);
-    return res.status(500).json({ error: error?.message || 'Failed to duplicate invoice template' });
+    return sendSafeError(res, error, 'Failed to duplicate invoice template.', '[invoice-templates/duplicate]');
   }
 });
 
@@ -243,8 +240,7 @@ router.post('/invoice-templates/:id/set-default', async (req, res) => {
 
     return res.json(data);
   } catch (error: any) {
-    console.error('[invoice-templates] POST set-default failed:', error.message);
-    return res.status(500).json({ error: error?.message || 'Failed to set default template' });
+    return sendSafeError(res, error, 'Failed to set default template.', '[invoice-templates/set-default]');
   }
 });
 
@@ -280,8 +276,7 @@ router.delete('/invoice-templates/:id', async (req, res) => {
 
     return res.json({ ok: true });
   } catch (error: any) {
-    console.error('[invoice-templates] DELETE failed:', error.message);
-    return res.status(500).json({ error: error?.message || 'Failed to delete invoice template' });
+    return sendSafeError(res, error, 'Failed to delete invoice template.', '[invoice-templates/delete]');
   }
 });
 

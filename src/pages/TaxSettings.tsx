@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import {
-  listTaxes, setupTaxPreset, updateTaxConfig, deleteTaxGroup, setDefaultTaxGroup, createTaxConfig,
+  listTaxes, setupTaxPreset, updateTaxConfig, deleteTaxGroup, setDefaultTaxGroup, createTaxConfig, updateTaxRegistrationNumber,
   type TaxConfig, type TaxGroup, type TaxGroupItem, type TaxPreset,
 } from '../lib/taxApi';
 
@@ -28,6 +28,8 @@ export default function TaxSettings() {
   const [editRate, setEditRate] = useState('');
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [editingRegNumId, setEditingRegNumId] = useState<string | null>(null);
+  const [editRegNum, setEditRegNum] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -101,6 +103,15 @@ export default function TaxSettings() {
       setConfigs(prev => prev.map(c => c.id === config.id ? { ...c, name: editName.trim() } : c));
       setEditingNameId(null);
       toast.success('Name updated');
+    } catch (err: any) { toast.error(err.message); }
+  };
+
+  const handleSaveRegNum = async (config: TaxConfig) => {
+    try {
+      await updateTaxRegistrationNumber(config.id, editRegNum.trim());
+      setConfigs(prev => prev.map(c => c.id === config.id ? { ...c, registration_number: editRegNum.trim() || null } : c));
+      setEditingRegNumId(null);
+      toast.success('Registration number updated');
     } catch (err: any) { toast.error(err.message); }
   };
 
@@ -221,54 +232,75 @@ export default function TaxSettings() {
                   {/* Tax lines */}
                   <div className="divide-y divide-outline/30">
                     {taxes.map(tax => (
-                      <div key={tax.id} className="px-5 py-3 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <button onClick={() => handleToggleTax(tax)}
-                            className={cn('w-8 h-[18px] rounded-full transition-colors relative', tax.is_active ? 'bg-primary' : 'bg-surface-tertiary')}>
-                            <span className={cn('absolute top-[2px] w-[14px] h-[14px] rounded-full bg-surface-card transition-all shadow-sm', tax.is_active ? 'left-[17px]' : 'left-[2px]')} />
-                          </button>
-                          <div className="flex items-center gap-1.5">
-                            {editingNameId === tax.id ? (
-                              <div className="flex items-center gap-1">
-                                <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
-                                  className="glass-input w-28 text-[12px]" autoFocus
-                                  onKeyDown={e => { if (e.key === 'Enter') handleSaveName(tax); if (e.key === 'Escape') setEditingNameId(null); }} />
-                                <button onClick={() => handleSaveName(tax)} className="p-0.5 text-primary"><Check size={12} /></button>
-                                <button onClick={() => setEditingNameId(null)} className="p-0.5 text-text-tertiary"><X size={12} /></button>
+                      <div key={tax.id} className="px-5 py-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <button onClick={() => handleToggleTax(tax)}
+                              className={cn('w-8 h-[18px] rounded-full transition-colors relative', tax.is_active ? 'bg-primary' : 'bg-surface-tertiary')}>
+                              <span className={cn('absolute top-[2px] w-[14px] h-[14px] rounded-full bg-surface-card transition-all shadow-sm', tax.is_active ? 'left-[17px]' : 'left-[2px]')} />
+                            </button>
+                            <div className="flex items-center gap-1.5">
+                              {editingNameId === tax.id ? (
+                                <div className="flex items-center gap-1">
+                                  <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                                    className="glass-input w-28 text-[12px]" autoFocus
+                                    onKeyDown={e => { if (e.key === 'Enter') handleSaveName(tax); if (e.key === 'Escape') setEditingNameId(null); }} />
+                                  <button onClick={() => handleSaveName(tax)} className="p-0.5 text-primary"><Check size={12} /></button>
+                                  <button onClick={() => setEditingNameId(null)} className="p-0.5 text-text-tertiary"><X size={12} /></button>
+                                </div>
+                              ) : (
+                                <button onClick={() => { setEditingNameId(tax.id); setEditName(tax.name); }}
+                                  className={cn('text-[13px] font-medium group flex items-center gap-1', tax.is_active ? 'text-text-primary' : 'text-text-tertiary line-through')}>
+                                  {tax.name}
+                                  <Pencil size={10} className="opacity-0 group-hover:opacity-100 text-text-tertiary" />
+                                </button>
+                              )}
+                              {tax.is_compound && <span className="text-[10px] text-text-tertiary">(compound)</span>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {editingId === tax.id ? (
+                              <div className="flex items-center gap-1.5">
+                                <input type="number" step="0.001" value={editRate}
+                                  onChange={e => setEditRate(e.target.value)}
+                                  className="glass-input w-20 text-[12px] text-right" autoFocus
+                                  onKeyDown={e => { if (e.key === 'Enter') handleSaveRate(tax); if (e.key === 'Escape') setEditingId(null); }} />
+                                <span className="text-[12px] text-text-tertiary">%</span>
+                                <button onClick={() => handleSaveRate(tax)} className="p-1 text-primary hover:text-primary/80"><Check size={13} /></button>
+                                <button onClick={() => setEditingId(null)} className="p-1 text-text-tertiary hover:text-text-primary"><X size={13} /></button>
                               </div>
                             ) : (
-                              <button onClick={() => { setEditingNameId(tax.id); setEditName(tax.name); }}
-                                className={cn('text-[13px] font-medium group flex items-center gap-1', tax.is_active ? 'text-text-primary' : 'text-text-tertiary line-through')}>
-                                {tax.name}
-                                <Pencil size={10} className="opacity-0 group-hover:opacity-100 text-text-tertiary" />
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => { setEditingId(tax.id); setEditRate(String(tax.rate)); }}
+                                  className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-text-primary transition-colors group">
+                                  <span className="tabular-nums font-medium">{tax.rate}%</span>
+                                  <Pencil size={11} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </button>
+                                <button onClick={() => handleDeleteTax(tax)}
+                                  className="p-1 text-text-tertiary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                                  <Trash2 size={11} />
+                                </button>
+                              </div>
                             )}
-                            {tax.is_compound && <span className="text-[10px] text-text-tertiary">(compound)</span>}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {editingId === tax.id ? (
+                        {/* Registration number */}
+                        <div className="ml-11 mt-1">
+                          {editingRegNumId === tax.id ? (
                             <div className="flex items-center gap-1.5">
-                              <input type="number" step="0.001" value={editRate}
-                                onChange={e => setEditRate(e.target.value)}
-                                className="glass-input w-20 text-[12px] text-right" autoFocus
-                                onKeyDown={e => { if (e.key === 'Enter') handleSaveRate(tax); if (e.key === 'Escape') setEditingId(null); }} />
-                              <span className="text-[12px] text-text-tertiary">%</span>
-                              <button onClick={() => handleSaveRate(tax)} className="p-1 text-primary hover:text-primary/80"><Check size={13} /></button>
-                              <button onClick={() => setEditingId(null)} className="p-1 text-text-tertiary hover:text-text-primary"><X size={13} /></button>
+                              <input type="text" value={editRegNum} onChange={e => setEditRegNum(e.target.value)}
+                                className="glass-input w-52 text-[11px]" placeholder="Registration number" autoFocus
+                                onKeyDown={e => { if (e.key === 'Enter') handleSaveRegNum(tax); if (e.key === 'Escape') setEditingRegNumId(null); }} />
+                              <button onClick={() => handleSaveRegNum(tax)} className="p-0.5 text-primary"><Check size={11} /></button>
+                              <button onClick={() => setEditingRegNumId(null)} className="p-0.5 text-text-tertiary"><X size={11} /></button>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => { setEditingId(tax.id); setEditRate(String(tax.rate)); }}
-                                className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-text-primary transition-colors group">
-                                <span className="tabular-nums font-medium">{tax.rate}%</span>
-                                <Pencil size={11} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </button>
-                              <button onClick={() => handleDeleteTax(tax)}
-                                className="p-1 text-text-tertiary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
-                                <Trash2 size={11} />
-                              </button>
-                            </div>
+                            <button onClick={() => { setEditingRegNumId(tax.id); setEditRegNum(tax.registration_number || ''); }}
+                              className="text-[11px] text-text-tertiary hover:text-text-secondary transition-colors flex items-center gap-1 group">
+                              {tax.registration_number
+                                ? <><span>No: {tax.registration_number}</span><Pencil size={9} className="opacity-0 group-hover:opacity-100" /></>
+                                : <><Plus size={9} /><span>Add registration number</span></>}
+                            </button>
                           )}
                         </div>
                       </div>

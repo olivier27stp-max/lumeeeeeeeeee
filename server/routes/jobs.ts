@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireAuthedClient, getServiceClient, isOrgMember } from '../lib/supabase';
 import { validate, assignJobToTeamSchema } from '../lib/validation';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = express.Router();
 
@@ -64,11 +65,7 @@ router.post('/jobs/assign-team', validate(assignJobToTeamSchema), async (req, re
 
     return res.status(200).json({ ok: true, jobId, teamId });
   } catch (error: any) {
-    console.error('job_assign_team_failed', {
-      code: String(error?.code || ''),
-      message: String(error?.message || 'unknown'),
-    });
-    return res.status(500).json({ error: error?.message || 'Unable to assign job to team.' });
+    return sendSafeError(res, error, 'Unable to assign job to team.', '[jobs/assign-team]');
   }
 });
 
@@ -98,14 +95,11 @@ router.get('/jobs/search-for-invoice', async (req, res) => {
     }
 
     const { data, error } = await query;
-    if (error) {
-      console.error('[jobs] search-for-invoice error:', error.message);
-      return res.status(500).json({ error: error.message });
-    }
+    if (error) throw error;
 
     return res.json({ jobs: data || [] });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to search jobs' });
+    return sendSafeError(res, error, 'Failed to search jobs.', '[jobs/search-for-invoice]');
   }
 });
 
@@ -139,10 +133,7 @@ router.get('/clients/search', async (req, res) => {
     }
 
     const { data, error, count } = await query;
-    if (error) {
-      console.error('[clients] search error:', error.message);
-      return res.status(500).json({ error: error.message });
-    }
+    if (error) throw error;
 
     const items = (data || []).map((c: any) => ({
       id: c.id,
@@ -153,7 +144,7 @@ router.get('/clients/search', async (req, res) => {
 
     return res.json({ items, total: count || 0 });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to search clients' });
+    return sendSafeError(res, error, 'Failed to search clients.', '[clients/search]');
   }
 });
 
@@ -177,13 +168,10 @@ router.post('/clients/by-ids', async (req, res) => {
       .is('deleted_at', null)
       .in('id', ids);
 
-    if (error) {
-      console.error('[clients] by-ids error:', error.message);
-      return res.status(500).json({ error: error.message });
-    }
+    if (error) throw error;
     return res.json({ clients: data || [] });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to fetch clients' });
+    return sendSafeError(res, error, 'Failed to fetch clients.', '[clients/by-ids]');
   }
 });
 

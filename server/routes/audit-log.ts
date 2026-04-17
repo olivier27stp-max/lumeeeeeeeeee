@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -25,7 +26,7 @@ router.get('/audit-log', async (req, res) => {
     if (error) throw error;
     return res.json({ data: data || [], total: count || 0, page, limit });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Failed to fetch audit log.', '[audit-log]');
   }
 });
 

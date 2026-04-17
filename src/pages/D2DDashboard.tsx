@@ -82,9 +82,14 @@ const fallbackRepStats = [
   },
 ];
 
-const pipelineStages: { name: string; color: string; value: string; count: number }[] = [];
-
-const todaySchedule: { time: string; title: string; status: string }[] = [];
+const PIPELINE_STATUS_META: Record<string, { label: string; color: string; order: number }> = {
+  lead: { label: 'Leads', color: '#3B82F6', order: 1 },
+  callback: { label: 'Callbacks', color: '#F59E0B', order: 2 },
+  quote_sent: { label: 'Quotes Sent', color: '#8B5CF6', order: 3 },
+  sale: { label: 'Sales', color: '#10B981', order: 4 },
+  not_interested: { label: 'Not Interested', color: '#6B7280', order: 5 },
+  no_answer: { label: 'No Answer', color: '#9CA3AF', order: 6 },
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -119,7 +124,7 @@ function LoadingState() {
 
 export default function D2DDashboard() {
   const { role, userId, loading: permLoading } = usePermissions();
-  const isManager = role === 'owner' || role === 'admin' || role === 'manager';
+  const isManager = role === 'owner' || role === 'admin';
 
   if (permLoading) {
     return <LoadingState />;
@@ -141,6 +146,7 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<{ name: string; color: string; value: string; count: number }[]>([]);
   const [useFallback, setUseFallback] = useState(false);
 
   useEffect(() => {
@@ -148,12 +154,13 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
 
     async function fetchData() {
       try {
-        // Fetch user name and leaderboard in parallel
-        const [profileResult, lbResult] = await Promise.allSettled([
+        // Fetch user name, leaderboard, and pipeline in parallel
+        const [profileResult, lbResult, pipelineResult] = await Promise.allSettled([
           userId
             ? supabase.from('profiles').select('full_name').eq('id', userId).maybeSingle()
             : Promise.resolve(null),
           getLeaderboard('daily'),
+          supabase.from('field_pins').select('status'),
         ]);
 
         if (cancelled) return;
@@ -171,6 +178,27 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
           setLeaderboard(lbResult.value);
         } else {
           setUseFallback(true);
+        }
+
+        // Build pipeline from field_pins status counts
+        if (pipelineResult.status === 'fulfilled') {
+          const pins = (pipelineResult.value as any)?.data || [];
+          const counts: Record<string, number> = {};
+          for (const pin of pins) {
+            if (pin.status) counts[pin.status] = (counts[pin.status] || 0) + 1;
+          }
+          const stages = Object.entries(counts)
+            .filter(([s]) => PIPELINE_STATUS_META[s])
+            .map(([s, count]) => ({
+              name: PIPELINE_STATUS_META[s].label,
+              color: PIPELINE_STATUS_META[s].color,
+              value: String(count),
+              count,
+              _order: PIPELINE_STATUS_META[s].order,
+            }))
+            .sort((a, b) => a._order - b._order)
+            .map(({ _order, ...rest }) => rest);
+          setPipelineStages(stages);
         }
       } catch {
         if (!cancelled) setUseFallback(true);
@@ -322,6 +350,9 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
+              {pipelineStages.length === 0 && (
+                <p className="text-[13px] text-text-muted py-4 text-center">No pipeline data yet</p>
+              )}
               {pipelineStages.map((stage, i) => (
                 <div
                   key={i}
@@ -355,6 +386,8 @@ function RepDashboard({ userId }: { userId: string | null }) {
   const [userName, setUserName] = useState('');
   const [stats, setStats] = useState<RepPerformanceDetail | null>(null);
   const [rank, setRank] = useState<number | null>(null);
+  const [todaySchedule, setTodaySchedule] = useState<{ time: string; title: string; status: string }[]>([]);
+  const [hasActiveSession, setHasActiveSession] = useState(false);
   const [useFallback, setUseFallback] = useState(false);
 
   useEffect(() => {
@@ -367,11 +400,28 @@ function RepDashboard({ userId }: { userId: string | null }) {
         return;
       }
 
+      const today = new Date().toISOString().slice(0, 10);
+      const dayStart = `${today}T00:00:00`;
+      const dayEnd = `${today}T23:59:59`;
+
       try {
-        const [profileResult, statsResult, lbResult] = await Promise.allSettled([
+        const [profileResult, statsResult, lbResult, scheduleResult, sessionResult] = await Promise.allSettled([
           supabase.from('profiles').select('full_name').eq('id', userId).maybeSingle(),
           getRealtimeStats(userId),
           getLeaderboard('daily'),
+          supabase
+            .from('schedule_events')
+            .select('start_at, end_at, status, job:jobs!inner(title)')
+            .gte('start_at', dayStart)
+            .lte('start_at', dayEnd)
+            .is('deleted_at', null)
+            .order('start_at'),
+          supabase
+            .from('field_daily_stats')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('date', today)
+            .maybeSingle(),
         ]);
 
         if (cancelled) return;
@@ -392,6 +442,26 @@ function RepDashboard({ userId }: { userId: string | null }) {
         if (lbResult.status === 'fulfilled' && lbResult.value) {
           const entry = lbResult.value.find((e) => e.user_id === userId);
           if (entry) setRank(entry.rank);
+        }
+
+        // Extract today's schedule
+        if (scheduleResult.status === 'fulfilled') {
+          const events = (scheduleResult.value as any)?.data || [];
+          setTodaySchedule(events.map((ev: any) => {
+            const start = new Date(ev.start_at);
+            const end = new Date(ev.end_at);
+            const timeStr = `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+            return {
+              time: timeStr,
+              title: ev.job?.title || 'Job',
+              status: ev.status === 'completed' ? 'completed' : 'scheduled',
+            };
+          }));
+        }
+
+        // Check active field session
+        if (sessionResult.status === 'fulfilled') {
+          setHasActiveSession(!!(sessionResult.value as any)?.data?.id);
         }
       } catch {
         if (!cancelled) setUseFallback(true);
@@ -450,9 +520,9 @@ function RepDashboard({ userId }: { userId: string | null }) {
             You are ranked <span className="font-medium text-text-primary">#{rankDisplay}</span> today. Keep pushing!
           </p>
         </div>
-        <Badge variant="success" className="px-2 py-0.5 text-[11px]">
+        <Badge variant={hasActiveSession ? 'success' : 'secondary'} className="px-2 py-0.5 text-[11px]">
           <Zap className="mr-1 h-3 w-3" />
-          Session Active
+          {hasActiveSession ? 'Session Active' : 'No Session'}
         </Badge>
       </div>
 
@@ -474,6 +544,9 @@ function RepDashboard({ userId }: { userId: string | null }) {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
+              {todaySchedule.length === 0 && (
+                <p className="text-[13px] text-text-muted py-4 text-center">No jobs scheduled today</p>
+              )}
               {todaySchedule.map((item, i) => (
                 <div
                   key={i}

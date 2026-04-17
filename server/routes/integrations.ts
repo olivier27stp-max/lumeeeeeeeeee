@@ -7,6 +7,7 @@ import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
 import { registerAllProviders } from '../lib/integrations/providers';
 import { getProvider, getAllProviders } from '../lib/integrations/registry';
+import { getBaseUrl } from '../lib/config';
 import {
   listConnections,
   getConnection,
@@ -118,14 +119,14 @@ router.get('/integrations/:appId/callback', async (req, res) => {
     if (oauthError) {
       // Provider returned an error (user denied, etc.)
       res.redirect(
-        `${process.env.FRONTEND_URL || 'http://localhost:5173'}/apps/callback?error=${encodeURIComponent(String(error_description || oauthError))}&app=${req.params.appId}`,
+        `${getBaseUrl()}/apps/callback?error=${encodeURIComponent(String(error_description || oauthError))}&app=${req.params.appId}`,
       );
       return;
     }
 
     if (!code || !state) {
       res.redirect(
-        `${process.env.FRONTEND_URL || 'http://localhost:5173'}/apps/callback?error=${encodeURIComponent('Missing code or state parameter')}&app=${req.params.appId}`,
+        `${getBaseUrl()}/apps/callback?error=${encodeURIComponent('Missing code or state parameter')}&app=${req.params.appId}`,
       );
       return;
     }
@@ -139,14 +140,14 @@ router.get('/integrations/:appId/callback', async (req, res) => {
       callbackBaseUrl,
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = getBaseUrl();
     if (result.success) {
       res.redirect(`${frontendUrl}/apps/callback?success=true&app=${req.params.appId}`);
     } else {
       res.redirect(`${frontendUrl}/apps/callback?error=${encodeURIComponent(result.error || 'Connection failed')}&app=${req.params.appId}`);
     }
   } catch (err) {
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = getBaseUrl();
     res.redirect(`${frontendUrl}/apps/callback?error=${encodeURIComponent('Unexpected error during OAuth callback')}&app=${req.params.appId}`);
   }
 });

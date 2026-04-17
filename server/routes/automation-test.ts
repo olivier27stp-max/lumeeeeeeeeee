@@ -267,14 +267,14 @@ router.get('/automations/test', async (req, res) => {
         : 'Twilio not configured — SMS actions will fail gracefully',
     });
 
-    // ── 10. Verify Resend config ──
-    const hasResend = !!process.env.RESEND_API_KEY;
+    // ── 10. Verify SMTP config ──
+    const hasSmtp = !!(process.env.SMTP_USER && process.env.SMTP_PASS);
     results.push({
-      name: 'Resend email configured',
-      passed: hasResend,
-      details: hasResend
-        ? `API key present (${process.env.RESEND_API_KEY?.slice(0, 8)}...)`
-        : 'Resend not configured — email actions will fail gracefully',
+      name: 'SMTP email configured',
+      passed: hasSmtp,
+      details: hasSmtp
+        ? `SMTP user: ${process.env.SMTP_USER}`
+        : 'SMTP not configured — email actions will fail gracefully',
     });
 
     // ── Summary ──

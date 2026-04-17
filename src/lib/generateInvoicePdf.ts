@@ -9,6 +9,13 @@ export interface PdfCompanyInfo {
   company_address?: string | null;
 }
 
+export interface PdfTaxLine {
+  name: string;
+  rate: number;
+  amount_cents: number;
+  registration_number?: string | null;
+}
+
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '--';
   const d = new Date(iso);
@@ -30,7 +37,7 @@ function statusLabel(status: string): string {
 /**
  * Generate and trigger download of a professional invoice PDF.
  */
-export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyInfo | null): void {
+export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyInfo | null, taxBreakdown?: PdfTaxLine[] | null): void {
   const { invoice, client, items } = detail;
   const currency = invoice.currency || 'CAD';
   const fmt = (cents: number) => formatMoneyFromCents(cents, currency);
@@ -184,7 +191,14 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
   if (discountCents > 0) {
     totalsRows.push(['Discount', `-${fmt(discountCents)}`]);
   }
-  totalsRows.push(['Tax', fmt(invoice.tax_cents)]);
+  // Show individual taxes if breakdown available, otherwise single total
+  if (taxBreakdown && taxBreakdown.length > 0) {
+    for (const tax of taxBreakdown) {
+      totalsRows.push([`${tax.name} (${tax.rate}%)`, fmt(tax.amount_cents)]);
+    }
+  } else {
+    totalsRows.push(['Tax', fmt(invoice.tax_cents)]);
+  }
 
   doc.setFontSize(9);
   for (const [label, value] of totalsRows) {
@@ -238,6 +252,23 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
     doc.setTextColor(60, 60, 60);
     const noteLines = doc.splitTextToSize(invoiceNotes, contentW);
     doc.text(noteLines, marginL, y);
+  }
+
+  // ── Tax Registration Numbers ────────────────────────────────────
+  const regNums = (taxBreakdown || []).filter(t => t.registration_number);
+  if (regNums.length > 0) {
+    y += 20;
+    if (y > doc.internal.pageSize.getHeight() - 80) {
+      doc.addPage();
+      y = 50;
+    }
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(140, 140, 140);
+    for (const tax of regNums) {
+      doc.text(`${tax.name} No: ${tax.registration_number}`, marginL, y);
+      y += 11;
+    }
   }
 
   // ── Footer ──────────────────────────────────────────────────────

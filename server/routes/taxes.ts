@@ -264,11 +264,12 @@ router.put('/taxes/config/:id', async (req, res) => {
     if (!auth) return;
     const admin = getServiceClient();
 
-    const { name, rate, is_active } = req.body;
+    const { name, rate, is_active, registration_number } = req.body;
     const update: Record<string, any> = { updated_at: new Date().toISOString() };
     if (name !== undefined) update.name = name;
     if (rate !== undefined) update.rate = rate;
     if (is_active !== undefined) update.is_active = is_active;
+    if (registration_number !== undefined) update.registration_number = registration_number || null;
 
     const { data, error } = await admin.from('tax_configs').update(update)
       .eq('id', req.params.id).eq('org_id', auth.orgId).select('*').single();

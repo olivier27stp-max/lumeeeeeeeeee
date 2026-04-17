@@ -9,6 +9,7 @@ import {
   type QuoteLineItemInput, type QuoteSectionInput, type QuoteDetail,
 } from '../../lib/quotesApi';
 import { createLeadScoped, fetchLeadsScoped } from '../../lib/leadsApi';
+import AddressAutocomplete, { type StructuredAddress } from '../AddressAutocomplete';
 import ServicePicker from '../ServicePicker';
 import type { PredefinedService } from '../../lib/servicesApi';
 import type { Lead, QuotePreset } from '../../types';
@@ -59,6 +60,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
   const [leadEmail, setLeadEmail] = useState('');
   const [leadPhone, setLeadPhone] = useState('');
   const [leadAddress, setLeadAddress] = useState('');
+  const [leadAddressSearch, setLeadAddressSearch] = useState('');
   const [leadCompany, setLeadCompany] = useState('');
 
   // ── Quote fields ──
@@ -108,7 +110,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
     setError(null); setSaving(false);
     setContactMode('new'); setSelectedLeadId('');
     setLeadFirstName(''); setLeadLastName(''); setLeadEmail('');
-    setLeadPhone(''); setLeadAddress(''); setLeadCompany('');
+    setLeadPhone(''); setLeadAddress(''); setLeadAddressSearch(''); setLeadCompany('');
     setLineItems([emptyLine()]); setNotes('');
     setDiscountType(''); setDiscountValue('');
     setAddedServiceIds(new Set()); setJobLineItems([]);
@@ -427,7 +429,21 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                         <input type="tel" value={leadPhone} onChange={e => setLeadPhone(e.target.value)} className={inputCls} placeholder="(514) 555-1234" /></div>
                     </div>
                     <div><label className={cn(labelCls, 'flex items-center gap-1')}><MapPin size={11} className="text-text-tertiary" /> Address</label>
-                      <input value={leadAddress} onChange={e => setLeadAddress(e.target.value)} className={inputCls} placeholder="123 Main St, Montreal, QC" /></div>
+                      <AddressAutocomplete
+                        value={leadAddressSearch}
+                        onChange={setLeadAddressSearch}
+                        onSelect={(addr: StructuredAddress) => {
+                          const line1 = [addr.street_number, addr.street_name].filter(Boolean).join(' ').trim();
+                          setLeadAddress(line1 || addr.formatted_address);
+                          setLeadAddressSearch(addr.formatted_address);
+                        }}
+                        className="mt-1.5"
+                        placeholder="Start typing an address..."
+                      />
+                      {leadAddress && leadAddress !== leadAddressSearch && (
+                        <p className="mt-1 text-xs text-text-secondary">Address: {leadAddress}</p>
+                      )}
+                    </div>
                   </>
                 ) : (
                   <div className="space-y-4">

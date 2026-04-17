@@ -32,6 +32,7 @@ export default function CrmWorkspace() {
   const [search, setSearch] = useState('');
   const [leadPage, setLeadPage] = useState(1);
 
+
   // Data
   const { data: dash, loading } = useOfflineCache<DashboardData>('dashboard', getDashboardData, []);
   const { data: quoteKpis } = useQuery({ queryKey: ['crm-kpi-q'], queryFn: fetchQuoteKpis, staleTime: 30_000 });
@@ -84,11 +85,6 @@ export default function CrmWorkspace() {
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-[18px] font-bold text-text-primary">CRM Dashboard</h1>
         <div className="flex items-center gap-2">
-          <button className="inline-flex items-center gap-2 h-9 px-3 bg-surface-card border border-border rounded-lg text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">
-            <Calendar size={14} className="text-text-secondary" />
-            {new Date().toLocaleDateString(fr ? 'fr-CA' : 'en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
-            <ChevronDown size={14} className="text-text-muted" />
-          </button>
           <button
             onClick={() => {
               const csvRows = leads.map(q => [q.quote_number, getQuoteName(q), q.status, q.total_cents / 100, q.created_at?.slice(0, 10)].join(','));
@@ -232,8 +228,8 @@ export default function CrmWorkspace() {
         <div className="bg-surface-card border border-border rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
             <div>
-              <h3 className="text-[15px] font-semibold text-text-primary">{fr ? 'Tâches' : 'Tasks'}</h3>
-              <p className="text-[12px] text-text-muted mt-0.5">{fr ? 'Gérez vos tâches à venir.' : 'Track and manage your upcoming tasks.'}</p>
+              <h3 className="text-[15px] font-semibold text-text-primary">Jobs</h3>
+              <p className="text-[12px] text-text-muted mt-0.5">{fr ? 'Gérez vos jobs à venir.' : 'Track and manage your upcoming jobs.'}</p>
             </div>
             <button onClick={() => navigate('/calendar')} className="inline-flex items-center gap-1.5 h-8 px-3 bg-surface-card border border-border rounded-lg text-[12px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">
               <Plus size={13} /> {fr ? 'Ajouter' : 'Add Task'}

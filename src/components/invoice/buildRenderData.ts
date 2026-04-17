@@ -1,5 +1,5 @@
 import type { InvoiceDetail } from '../../lib/invoicesApi';
-import type { InvoiceRenderData } from './types';
+import type { InvoiceRenderData, InvoiceTaxLine } from './types';
 
 /**
  * Convert an InvoiceDetail + company settings into InvoiceRenderData
@@ -15,6 +15,7 @@ export function buildRenderData(
     company_logo_url?: string | null;
   } | null,
   branding?: { primary_color?: string; accent_color?: string } | null,
+  taxBreakdown?: InvoiceTaxLine[] | null,
 ): InvoiceRenderData {
   const inv = detail.invoice;
   const client = detail.client;
@@ -35,6 +36,8 @@ export function buildRenderData(
     total_cents: inv.total_cents,
     paid_cents: inv.paid_cents,
     balance_cents: inv.balance_cents,
+
+    tax_breakdown: taxBreakdown || [],
 
     client_name: client
       ? `${client.first_name || ''} ${client.last_name || ''}`.trim() || inv.client_name

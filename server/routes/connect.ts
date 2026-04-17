@@ -8,6 +8,7 @@ import {
   getConnectedAccount,
 } from '../lib/stripe-connect';
 import { validate, createConnectedAccountSchema } from '../lib/validation';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -27,7 +28,7 @@ router.post('/connect/create-account', validate(createConnectedAccountSchema), a
 
     return res.json({ account });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to create connected account.' });
+    return sendSafeError(res, error, 'Failed to create connected account.', '[connect/create-account]');
   }
 });
 
@@ -49,7 +50,7 @@ router.post('/connect/create-onboarding-link', async (req, res) => {
     const link = await createOnboardingLink(orgId, returnUrl, refreshUrl);
     return res.json(link);
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to create onboarding link.' });
+    return sendSafeError(res, error, 'Failed to create onboarding link.', '[connect/create-onboarding-link]');
   }
 });
 
@@ -71,7 +72,7 @@ router.post('/connect/refresh-onboarding-link', async (req, res) => {
     const link = await createOnboardingLink(orgId, returnUrl, refreshUrl);
     return res.json(link);
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to refresh onboarding link.' });
+    return sendSafeError(res, error, 'Failed to refresh onboarding link.', '[connect/refresh-onboarding-link]');
   }
 });
 
@@ -98,7 +99,7 @@ router.get('/connect/account-status', async (req, res) => {
     if (error?.message?.includes('STRIPE_SECRET_KEY')) {
       return res.json({ connected: false, account: null, warning: 'Stripe is not configured on the server.' });
     }
-    return res.status(500).json({ error: error?.message || 'Failed to fetch account status.' });
+    return sendSafeError(res, error, 'Failed to fetch account status.', '[connect/account-status]');
   }
 });
 

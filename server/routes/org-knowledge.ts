@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -25,7 +26,7 @@ router.get('/', async (req: Request, res: Response) => {
   const { data, error } = await query;
 
   if (error) {
-    return res.status(500).json({ error: error.message });
+    return sendSafeError(res, error, 'Failed to fetch knowledge entries.', '[org-knowledge]');
   }
 
   return res.json({ data });
@@ -66,7 +67,7 @@ router.post('/', async (req: Request, res: Response) => {
     .single();
 
   if (error) {
-    return res.status(500).json({ error: error.message });
+    return sendSafeError(res, error, 'Failed to save knowledge entry.', '[org-knowledge]');
   }
 
   return res.json({ data });
@@ -87,7 +88,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     .eq('org_id', auth.orgId);
 
   if (error) {
-    return res.status(500).json({ error: error.message });
+    return sendSafeError(res, error, 'Failed to delete knowledge entry.', '[org-knowledge]');
   }
 
   return res.json({ success: true });
@@ -126,7 +127,7 @@ router.post('/bulk', async (req: Request, res: Response) => {
     .select();
 
   if (error) {
-    return res.status(500).json({ error: error.message });
+    return sendSafeError(res, error, 'Failed to bulk save knowledge entries.', '[org-knowledge/bulk]');
   }
 
   return res.json({ data });

@@ -11,7 +11,6 @@ export interface ActionContext {
   entityType: string;
   entityId: string;
   twilio: { client: any; phoneNumber: string } | null;
-  resendApiKey: string;
   baseUrl: string;
 }
 
@@ -194,26 +193,16 @@ export async function executeSendEmail(
   const subject = resolveTemplate(config.subject, vars);
   const body = resolveTemplate(config.body, vars);
 
-  if (!ctx.resendApiKey) return { success: false, error: 'Resend API key not configured' };
-
   try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${ctx.resendApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: `${vars.company_name || 'Lume CRM'} <onboarding@resend.dev>`,
-        to: [to],
-        subject,
-        html: body,
-      }),
+    const { sendEmail, isMailerConfigured } = await import('../mailer');
+    if (!isMailerConfigured()) return { success: false, error: 'SMTP not configured' };
+
+    const result = await sendEmail({
+      to,
+      subject,
+      html: body,
     });
-    if (!response.ok) {
-      const err = await response.text();
-      return { success: false, error: `Resend error: ${err}` };
-    }
+    if (!result.sent) return { success: false, error: result.error || 'Send failed' };
     return { success: true, data: { to, subject } };
   } catch (err: any) {
     return { success: false, error: err.message };

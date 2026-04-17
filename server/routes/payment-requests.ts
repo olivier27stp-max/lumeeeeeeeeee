@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { Resend } from 'resend';
+import { sendSafeError } from '../lib/error-handler';
 import { requireAuthedClient, isOrgMember, getServiceClient } from '../lib/supabase';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
-import { resendApiKey, emailFrom, twilioClient, twilioPhoneNumber } from '../lib/config';
+import { emailFrom, twilioClient, twilioPhoneNumber } from '../lib/config';
+import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { getInvoiceForOrg } from '../lib/payments';
 import {
   getConnectedAccount,
@@ -128,13 +129,12 @@ async function sendPaymentEmail(params: {
   paymentUrl: string;
   orgId: string;
 }) {
-  if (!resendApiKey) return { sent: false, reason: 'Resend not configured' };
+  if (!isMailerConfigured()) return { sent: false, reason: 'SMTP not configured' };
 
   const company = await getCompanyInfo(params.orgId);
-  const resend = new Resend(resendApiKey);
   const amountFormatted = formatCurrency(params.amountCents, params.currency);
 
-  const { data, error } = await resend.emails.send({
+  const result = await sendEmail({
     from: emailFrom,
     to: params.clientEmail,
     subject: `Payment request — ${amountFormatted} for ${params.invoiceNumber}`,
@@ -147,8 +147,8 @@ async function sendPaymentEmail(params: {
     }),
   });
 
-  if (error) return { sent: false, reason: error.message };
-  return { sent: true, emailId: data?.id || null };
+  if (!result.sent) return { sent: false, reason: result.error || 'Send failed' };
+  return { sent: true, emailId: result.messageId || null };
 }
 
 // ── Send SMS notification ──
@@ -267,7 +267,7 @@ router.post('/payment-requests/create', validate(createPaymentRequestSchema), as
       notifications,
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to create payment request.' });
+    return sendSafeError(res, error, 'Failed to create payment request.', '[payment-requests/create]');
   }
 });
 
@@ -335,7 +335,7 @@ router.post('/payment-requests/resend', async (req, res) => {
       notifications,
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to resend payment request.' });
+    return sendSafeError(res, error, 'Failed to resend payment request.', '[payment-requests/resend]');
   }
 });
 
@@ -355,7 +355,7 @@ router.get('/payment-requests/:id/status', async (req, res) => {
 
     return res.json({ payment_requests: requests });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to fetch payment request status.' });
+    return sendSafeError(res, error, 'Failed to fetch payment request status.', '[payment-requests/status]');
   }
 });
 

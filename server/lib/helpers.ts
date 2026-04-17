@@ -114,6 +114,21 @@ export function parseOrgId(input: unknown) {
   return value;
 }
 
+/**
+ * Resolve org ID with defense-in-depth:
+ * - If client provides orgId AND it differs from auth.orgId, log it for audit
+ * - Always requires isOrgMember check downstream, but this centralizes the logic
+ * - Returns the resolved orgId (client-provided if valid UUID, else auth.orgId)
+ */
+export function resolveRequestOrgId(clientOrgId: unknown, authOrgId: string): string {
+  const parsed = parseOrgId(clientOrgId);
+  if (!parsed || parsed === authOrgId) return authOrgId;
+  // Client is requesting a different org — this is allowed for multi-org users
+  // but should be logged for security audit trail
+  console.info('[security] org_id_override', { requested: parsed, auth: authOrgId });
+  return parsed;
+}
+
 export function mapSearchRows(rows: SearchRow[] | null | undefined) {
   return (rows || [])
     .filter((row) => row?.entity_id && row?.entity_type && row?.title)

@@ -10,7 +10,7 @@ import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import {
   getCourses, deleteCourse, duplicateCourse,
-  getProgressSummary,
+  getProgressSummary, getCurrentUserRole,
   type Course, type ProgressSummary,
 } from '../lib/coursesApi';
 import { EmptyState } from '../components/ui';
@@ -38,6 +38,8 @@ export default function Courses() {
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const isAdminOrOwner = userRole === 'owner' || userRole === 'admin';
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(searchQuery), 350);
@@ -62,6 +64,7 @@ export default function Courses() {
   };
 
   useEffect(() => { void loadCourses(); }, [debouncedQuery, statusFilter]);
+  useEffect(() => { getCurrentUserRole().then(setUserRole).catch(() => {}); }, []);
 
   const handleDelete = async () => {
     if (!courseToDelete || isDeleting) return;
@@ -116,13 +119,15 @@ export default function Courses() {
               : `${courses.length} course${courses.length !== 1 ? 's' : ''} available`}
           </p>
         </div>
-        <button
-          onClick={() => navigate('/courses/new')}
-          className="glass-button-primary flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold"
-        >
-          <Plus size={16} strokeWidth={2.5} />
-          {t.courses.createCourse}
-        </button>
+        {isAdminOrOwner && (
+          <button
+            onClick={() => navigate('/courses/new')}
+            className="glass-button-primary flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold"
+          >
+            <Plus size={16} strokeWidth={2.5} />
+            {t.courses.createCourse}
+          </button>
+        )}
       </div>
 
       {/* ─── Search + Filters bar ─── */}
@@ -289,23 +294,29 @@ export default function Courses() {
                           className="absolute right-0 top-9 w-48 bg-surface-elevated border border-outline/40 rounded-xl shadow-dropdown py-1.5 z-50"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <button onClick={() => { navigate(`/courses/${course.id}/edit`); setMenuOpen(null); }}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors">
-                            <Pencil size={13} className="text-text-muted" /> {t.courses.editCourse}
-                          </button>
+                          {isAdminOrOwner && (
+                            <button onClick={() => { navigate(`/courses/${course.id}/edit`); setMenuOpen(null); }}
+                              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors">
+                              <Pencil size={13} className="text-text-muted" /> {t.courses.editCourse}
+                            </button>
+                          )}
                           <button onClick={() => { navigate(`/courses/${course.id}`); setMenuOpen(null); }}
                             className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors">
-                            <Eye size={13} className="text-text-muted" /> {t.courses.preview}
+                            <Eye size={13} className="text-text-muted" /> {fr ? 'Voir' : 'View'}
                           </button>
-                          <button onClick={() => { handleDuplicate(course); setMenuOpen(null); }}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors">
-                            <Copy size={13} className="text-text-muted" /> {t.courses.duplicateCourse}
-                          </button>
-                          <div className="border-t border-outline/20 my-1" />
-                          <button onClick={() => { setCourseToDelete(course); setMenuOpen(null); }}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-danger hover:bg-danger-light transition-colors">
-                            <Trash2 size={13} /> {t.courses.deleteCourse}
-                          </button>
+                          {isAdminOrOwner && (
+                            <>
+                              <button onClick={() => { handleDuplicate(course); setMenuOpen(null); }}
+                                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors">
+                                <Copy size={13} className="text-text-muted" /> {t.courses.duplicateCourse}
+                              </button>
+                              <div className="border-t border-outline/20 my-1" />
+                              <button onClick={() => { setCourseToDelete(course); setMenuOpen(null); }}
+                                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-danger hover:bg-danger-light transition-colors">
+                                <Trash2 size={13} /> {t.courses.deleteCourse}
+                              </button>
+                            </>
+                          )}
                         </motion.div>
                       )}
                     </AnimatePresence>

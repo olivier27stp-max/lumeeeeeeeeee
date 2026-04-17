@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 import {
   startSession,
   endSession,
@@ -34,7 +35,7 @@ router.post('/field-sessions/start', async (req, res) => {
     });
     res.json(session);
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    return sendSafeError(res, err, 'Failed to start session.', '[field-sessions/start]');
   }
 });
 
@@ -53,7 +54,7 @@ router.post('/field-sessions/:id/end', async (req, res) => {
     const session = await endSession(sc, auth.orgId, req.params.id, latitude, longitude);
     res.json(session);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field session operation failed.', '[field-sessions]');
   }
 });
 
@@ -67,7 +68,7 @@ router.post('/field-sessions/:id/pause', async (req, res) => {
     const session = await pauseSession(sc, auth.orgId, req.params.id);
     res.json(session);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field session operation failed.', '[field-sessions]');
   }
 });
 
@@ -81,7 +82,7 @@ router.post('/field-sessions/:id/resume', async (req, res) => {
     const session = await resumeSession(sc, auth.orgId, req.params.id);
     res.json(session);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field session operation failed.', '[field-sessions]');
   }
 });
 
@@ -100,7 +101,7 @@ router.post('/field-sessions/:id/gps', async (req, res) => {
     const point = await recordGpsPoint(sc, req.params.id, auth.user.id, lat, lng, accuracy ?? null);
     res.json(point);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field session operation failed.', '[field-sessions]');
   }
 });
 
@@ -114,7 +115,7 @@ router.get('/field-sessions/:id/trail', async (req, res) => {
     const trail = await getGpsTrail(sc, req.params.id);
     res.json(trail);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field session operation failed.', '[field-sessions]');
   }
 });
 
@@ -128,7 +129,7 @@ router.get('/field-sessions/active', async (req, res) => {
     const session = await getActiveSession(sc, auth.orgId, auth.user.id);
     res.json(session);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field session operation failed.', '[field-sessions]');
   }
 });
 
@@ -142,7 +143,7 @@ router.get('/field-sessions/active/all', async (req, res) => {
     const sessions = await getActiveSessions(sc, auth.orgId);
     res.json(sessions);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field session operation failed.', '[field-sessions]');
   }
 });
 
@@ -164,7 +165,7 @@ router.get('/field-sessions/history', async (req, res) => {
     const sessions = await getSessionHistory(sc, auth.orgId, userId, { from, to });
     res.json(sessions);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Field session operation failed.', '[field-sessions]');
   }
 });
 

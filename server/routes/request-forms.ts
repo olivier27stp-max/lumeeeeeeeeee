@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 import { validate, upsertRequestFormSchema, publicFormSubmissionSchema } from '../lib/validation';
 import { ensureClientForLead } from '../lib/leadClientSync';
 import { eventBus } from '../lib/eventBus';
@@ -22,8 +23,7 @@ router.get('/request-forms', async (req, res) => {
     if (error) throw error;
     return res.json({ form: data });
   } catch (err: any) {
-    console.error('[request-forms] get failed:', err.message);
-    return res.status(500).json({ error: err.message || 'Unable to fetch form.' });
+    return sendSafeError(res, err, 'Unable to fetch form.', '[request-forms]');
   }
 });
 
@@ -77,8 +77,7 @@ router.post('/request-forms', validate(upsertRequestFormSchema), async (req, res
 
     return res.json({ form });
   } catch (err: any) {
-    console.error('[request-forms] upsert failed:', err.message);
-    return res.status(500).json({ error: err.message || 'Unable to save form.' });
+    return sendSafeError(res, err, 'Unable to save form.', '[request-forms]');
   }
 });
 
@@ -114,8 +113,7 @@ router.post('/request-forms/regenerate-key', async (req, res) => {
     if (error) throw error;
     return res.json({ api_key: data.api_key });
   } catch (err: any) {
-    console.error('[request-forms] regenerate-key failed:', err.message);
-    return res.status(500).json({ error: err.message || 'Unable to regenerate key.' });
+    return sendSafeError(res, err, 'Unable to regenerate key.', '[request-forms]');
   }
 });
 
@@ -136,8 +134,7 @@ router.get('/request-forms/submissions', async (req, res) => {
     if (error) throw error;
     return res.json({ submissions: data || [] });
   } catch (err: any) {
-    console.error('[request-forms] list submissions failed:', err.message);
-    return res.status(500).json({ error: err.message || 'Unable to fetch submissions.' });
+    return sendSafeError(res, err, 'Unable to fetch submissions.', '[request-forms]');
   }
 });
 

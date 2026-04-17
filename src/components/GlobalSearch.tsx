@@ -20,6 +20,8 @@ import {
 } from '../lib/searchParsing';
 import { escapeRegExp, getSearchEntityLabel, getSearchItemHref } from '../lib/searchHelpers';
 import { useTranslation } from '../i18n';
+import { usePermissions } from '../hooks/usePermissions';
+import { hasPermission, isFinanciallyRestricted } from '../lib/permissions';
 
 // ── Types ──
 
@@ -181,6 +183,10 @@ export default function GlobalSearch() {
   const fr = language === 'fr';
   const navigate = useNavigate();
   const listboxId = useId();
+  const permsCtx = usePermissions();
+  const financiallyRestricted = permsCtx.role ? isFinanciallyRestricted(permsCtx.role) : false;
+  const canSeeInvoices = permsCtx.role === 'owner' || permsCtx.role === 'admin' ||
+    hasPermission(permsCtx.permissions, 'financial.view_invoices', permsCtx.role ?? undefined);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -255,9 +261,11 @@ export default function GlobalSearch() {
     // Quick actions when query matches
     if (normalizedQuery.length >= 1) {
       const q = normalizedQuery.toLowerCase();
-      const matchedActions = QUICK_ACTIONS.filter((a) =>
-        a.label.toLowerCase().includes(q) || a.labelFr.toLowerCase().includes(q) || a.keywords.includes(q)
-      ).slice(0, 4);
+      const matchedActions = QUICK_ACTIONS.filter((a) => {
+        // Filter out invoice/payment quick actions for financially restricted roles
+        if (!canSeeInvoices && (a.id === 'qa-new-invoice' || a.id === 'qa-invoices')) return false;
+        return a.label.toLowerCase().includes(q) || a.labelFr.toLowerCase().includes(q) || a.keywords.includes(q);
+      }).slice(0, 4);
 
       if (matchedActions.length > 0) {
         const actionItems: SuggestionAction[] = matchedActions.map((a) => ({
@@ -298,8 +306,11 @@ export default function GlobalSearch() {
       all.push(...cmdItems);
     }
 
-    // Entity results grouped by type
+    // Entity results grouped by type (filter financial entities for restricted roles)
     for (const groupKey of ENTITY_DISPLAY_ORDER) {
+      // Skip invoice/payment groups for financially restricted users
+      if (financiallyRestricted && (groupKey === 'invoices' || groupKey === 'quotes')) continue;
+
       const groupItems = groupedSuggestions[groupKey];
       if (!groupItems || groupItems.length === 0) continue;
 
@@ -311,7 +322,8 @@ export default function GlobalSearch() {
         subtitle: entity.subtitle,
         destination: getSearchItemHref(entity.type, entity.id),
         status: entity.status,
-        amountCents: entity.amountCents,
+        // Strip amounts for financially restricted users
+        amountCents: financiallyRestricted ? null : entity.amountCents,
         currency: entity.currency,
         date: entity.date,
         clientName: entity.clientName,

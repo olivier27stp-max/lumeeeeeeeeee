@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { validate } from '../lib/validation';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = express.Router();
 
@@ -87,8 +88,7 @@ router.post('/tracking/start', validate(startSessionSchema), async (req, res) =>
 
     return res.json({ session });
   } catch (error: any) {
-    console.error('tracking_start_failed', error?.message);
-    return res.status(500).json({ error: error?.message || 'Failed to start tracking session.' });
+    return sendSafeError(res, error, 'Failed to start tracking session.', '[tracking/start]');
   }
 });
 
@@ -125,8 +125,7 @@ router.post('/tracking/stop', validate(stopSessionSchema), async (req, res) => {
 
     return res.json({ ok: true });
   } catch (error: any) {
-    console.error('tracking_stop_failed', error?.message);
-    return res.status(500).json({ error: error?.message || 'Failed to stop tracking session.' });
+    return sendSafeError(res, error, 'Failed to stop tracking session.', '[tracking/stop]');
   }
 });
 
@@ -191,8 +190,7 @@ router.post('/tracking/point', validate(recordPointSchema), async (req, res) => 
 
     return res.json({ ok: true });
   } catch (error: any) {
-    console.error('tracking_point_failed', error?.message);
-    return res.status(500).json({ error: error?.message || 'Failed to record position.' });
+    return sendSafeError(res, error, 'Failed to record position.', '[tracking/point]');
   }
 });
 
@@ -257,8 +255,7 @@ router.post('/tracking/points-batch', validate(batchPointsSchema), async (req, r
 
     return res.json({ ok: true, count: rows.length });
   } catch (error: any) {
-    console.error('tracking_batch_failed', error?.message);
-    return res.status(500).json({ error: error?.message || 'Failed to record batch.' });
+    return sendSafeError(res, error, 'Failed to record batch.', '[tracking/points-batch]');
   }
 });
 
@@ -284,7 +281,7 @@ router.post('/tracking/event', async (req, res) => {
 
     return res.json({ ok: true });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to log event.' });
+    return sendSafeError(res, error, 'Failed to log event.', '[tracking/event]');
   }
 });
 

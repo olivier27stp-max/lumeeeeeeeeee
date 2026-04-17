@@ -32,6 +32,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import { useTranslation } from '../i18n';
 import type { TranslationKeys } from '../i18n';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { displayEmail, displayPhone } from '../lib/piiSanitizer';
 
 type KanbanColumnProps = {
   stage: PipelineStageName;
@@ -117,7 +118,7 @@ const DealCard: React.FC<{ deal: PipelineDeal; onClick: () => void; onDelete: ()
 
       {/* Contact — compact */}
       <p className="text-[11px] text-text-tertiary mt-1 truncate">
-        {deal.lead?.phone || deal.lead?.email || ''}
+        {displayPhone(deal.lead?.phone) !== '—' ? displayPhone(deal.lead?.phone) : displayEmail(deal.lead?.email) !== '—' ? displayEmail(deal.lead?.email) : ''}
       </p>
 
       {/* Price + status */}
@@ -826,8 +827,8 @@ export default function Pipeline() {
               <section className="space-y-3 section-card p-4">
                 <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary">{t.pipeline.lead}</h3>
                 <p className="text-[13px] text-text-primary">{selected.lead ? `${selected.lead.first_name} ${selected.lead.last_name}` : t.pipeline.unknownLead}</p>
-                <p className="text-[13px] text-text-secondary">{selected.lead?.email || t.common.noEmail}</p>
-                <p className="text-[13px] text-text-secondary">{selected.lead?.phone || t.common.noPhone}</p>
+                <p className="text-[13px] text-text-secondary">{displayEmail(selected.lead?.email) !== '—' ? displayEmail(selected.lead?.email) : t.common.noEmail}</p>
+                <p className="text-[13px] text-text-secondary">{displayPhone(selected.lead?.phone) !== '—' ? displayPhone(selected.lead?.phone) : t.common.noPhone}</p>
                 <div className="flex gap-2">
                   {selected.lead_id && (
                     <button type="button" className="glass-button text-text-primary" onClick={() => navigate('/quotes')}>

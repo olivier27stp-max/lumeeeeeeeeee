@@ -446,7 +446,7 @@ function BillingTab({ navigate, isFr, t }: { navigate: (path: string) => void; i
               <button
                 key={plan.id}
                 onClick={() => {
-                  if (!isCurrent) navigate(`/settings/billing/checkout?plan=${plan.slug}&interval=monthly`);
+                  if (!isCurrent) navigate(`/checkout?plan=${plan.slug}&interval=monthly`);
                 }}
                 className={cn(
                   'w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left',
@@ -578,7 +578,7 @@ export default function Settings() {
         { id: 'manage-team',        label: isFr ? 'Gérer l\'équipe' : 'Manage Team',       icon: Users, link: '/settings/team' },
         { id: 'roles',              label: isFr ? 'Rôles & Permissions' : 'Roles & Permissions', icon: Shield, link: '/settings/roles' },
         { id: 'users',              label: isFr ? 'Utilisateurs' : 'Users',                 icon: Users, link: '/settings/users' },
-        { id: 'd2d-config',         label: 'Config D2D',                                     icon: MapPin, link: '/d2d-settings/general' },
+        { id: 'd2d-config',         label: isFr ? 'Config Vente' : 'Sales Config',             icon: MapPin, link: '/d2d-settings/general' },
         { id: 'schedule',           label: t.settings.schedule,                   icon: Users },
         { id: 'location',           label: t.settings.locationServices, icon: MapPin },
       ],

@@ -2,9 +2,9 @@
    Scheduled Reports — Cron job that sends insights via email
    ═══════════════════════════════════════════════════════════════ */
 
-import { Resend } from 'resend';
 import { getServiceClient } from './supabase';
-import { resendApiKey, emailFrom } from './config';
+import { emailFrom } from './config';
+import { sendEmail, isMailerConfigured } from './mailer';
 
 function fmtMoney(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents || 0) / 100);
@@ -159,10 +159,9 @@ export async function sendScheduledReport(reportId: string): Promise<void> {
   const data = await gatherReportData(report.org_id, from, to);
   const html = buildEmailHtml(data);
 
-  if (!resendApiKey) throw new Error('RESEND_API_KEY not configured');
-  const resend = new Resend(resendApiKey);
+  if (!isMailerConfigured()) throw new Error('SMTP not configured');
 
-  await resend.emails.send({
+  await sendEmail({
     from: emailFrom,
     to: report.recipient_email,
     subject: `Lume CRM — ${report.frequency === 'daily' ? 'Daily' : report.frequency === 'weekly' ? 'Weekly' : 'Monthly'} Insights Report`,

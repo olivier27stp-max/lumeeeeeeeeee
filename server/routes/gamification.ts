@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 import {
   getBadges,
   createBadge,
@@ -30,7 +31,7 @@ router.get('/gamification/badges', async (req, res) => {
     const badges = await getBadges(sc, auth.orgId);
     res.json(badges);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');
   }
 });
 
@@ -51,7 +52,7 @@ router.post('/gamification/badges', async (req, res) => {
     });
     res.json(badge);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');
   }
 });
 
@@ -65,7 +66,7 @@ router.get('/gamification/badges/rep/:userId', async (req, res) => {
     const badges = await getRepBadges(sc, auth.orgId, req.params.userId);
     res.json(badges);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');
   }
 });
 
@@ -81,7 +82,7 @@ router.get('/gamification/challenges', async (req, res) => {
     const challenges = await getActiveChallenges(sc, auth.orgId);
     res.json(challenges);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');
   }
 });
 
@@ -104,7 +105,7 @@ router.post('/gamification/challenges', async (req, res) => {
     });
     res.json(challenge);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');
   }
 });
 
@@ -118,7 +119,7 @@ router.post('/gamification/challenges/:id/join', async (req, res) => {
     const participant = await joinChallenge(sc, req.params.id, auth.user.id);
     res.json(participant);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');
   }
 });
 
@@ -134,7 +135,7 @@ router.get('/gamification/battles', async (req, res) => {
     const battles = await getActiveBattles(sc, auth.orgId);
     res.json(battles);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');
   }
 });
 
@@ -158,7 +159,7 @@ router.post('/gamification/battles', async (req, res) => {
     });
     res.json(battle);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');
   }
 });
 
@@ -183,7 +184,7 @@ router.get('/gamification/feed', async (req, res) => {
     });
     res.json(posts);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');
   }
 });
 
@@ -205,7 +206,7 @@ router.post('/gamification/feed', async (req, res) => {
     });
     res.json(post);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');
   }
 });
 
@@ -224,7 +225,7 @@ router.post('/gamification/feed/:id/react', async (req, res) => {
     const reaction = await addReaction(sc, req.params.id, auth.user.id, emoji);
     res.json(reaction);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');
   }
 });
 
@@ -238,7 +239,7 @@ router.delete('/gamification/feed/:id/react', async (req, res) => {
     await removeReaction(sc, req.params.id, auth.user.id);
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');
   }
 });
 
@@ -257,7 +258,7 @@ router.post('/gamification/feed/:id/comment', async (req, res) => {
     const comment = await addComment(sc, req.params.id, auth.user.id, body);
     res.json(comment);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');
   }
 });
 

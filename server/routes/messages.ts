@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 import { getServiceClient } from '../lib/supabase';
 import { twilioClient, twilioPhoneNumber, twilioAuthToken, Twilio } from '../lib/config';
 import { normalizeE164, findOrCreateConversation, resolvePublicBaseUrl } from '../lib/helpers';
@@ -58,8 +59,7 @@ router.post('/messages/send', validate(messageSendSchema), async (req, res) => {
 
     return res.json(message);
   } catch (error: any) {
-    console.error('SMS send error:', error);
-    return res.status(500).json({ error: error?.message || 'Failed to send SMS.' });
+    return sendSafeError(res, error, 'Failed to send SMS.', '[messages/send]');
   }
 });
 
@@ -323,7 +323,7 @@ router.post('/messages/inbound', (req, res) => {
           });
       }
 
-      console.log('[SMS Inbound] Processed OK:', { from: normalizedPhone, conversation_id: conversation.id });
+      console.log('[SMS Inbound] Processed OK:', { from: normalizedPhone?.slice(-4) ? `***${normalizedPhone.slice(-4)}` : 'unknown', conversation_id: conversation.id });
     } catch (error: any) {
       console.error('[SMS Inbound] Background processing error:', error?.message || error);
     }

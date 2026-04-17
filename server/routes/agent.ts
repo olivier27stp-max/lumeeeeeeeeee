@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { runAgent } from '../lib/agent/index';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -110,7 +111,7 @@ router.post('/agent/chat', async (req, res) => {
     }
   } catch (err: any) {
     console.error('[agent/chat] Error:', err?.message);
-    sendEvent({ type: 'error', error: err?.message || 'Agent error' });
+    sendEvent({ type: 'error', error: 'An error occurred while processing your request.' });
   } finally {
     clearInterval(keepAlive);
     if (!clientDisconnected) {
@@ -210,8 +211,7 @@ router.post('/agent/approve', async (req, res) => {
 
     return res.json({ ok: true, status: 'approved', result });
   } catch (err: any) {
-    console.error('[agent/approve] Error:', err?.message);
-    return res.status(500).json({ error: err?.message || 'Approval failed' });
+    return sendSafeError(res, err, 'Approval failed.', '[agent/approve]');
   }
 });
 
@@ -230,10 +230,10 @@ router.get('/agent/sessions', async (req, res) => {
       .order('last_message_at', { ascending: false, nullsFirst: false })
       .limit(limit);
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Failed to list sessions.', '[agent/sessions]');
     return res.json({ sessions: data || [] });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Failed to list sessions.', '[agent/sessions]');
   }
 });
 
@@ -249,10 +249,10 @@ router.get('/agent/sessions/:id', async (req, res) => {
       .eq('org_id', auth.orgId)
       .order('created_at', { ascending: true });
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Failed to load messages.', '[agent/sessions/:id]');
     return res.json({ messages: messages || [] });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Failed to load messages.', '[agent/sessions/:id]');
   }
 });
 
@@ -267,10 +267,10 @@ router.delete('/agent/sessions/:id', async (req, res) => {
       .eq('id', req.params.id)
       .eq('org_id', auth.orgId);
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return sendSafeError(res, error, 'Failed to delete session.', '[agent/sessions/delete]');
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Failed to delete session.', '[agent/sessions/delete]');
   }
 });
 
@@ -297,7 +297,7 @@ router.post('/agent/feedback', async (req, res) => {
 
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Failed to save feedback.', '[agent/feedback]');
   }
 });
 

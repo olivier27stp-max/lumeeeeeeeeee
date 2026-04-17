@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import SpecificNotes from '../components/SpecificNotes';
 import { format } from 'date-fns';
 import { useTranslation } from '../i18n';
+import { displayEmail, displayPhone, displayAddress } from '../lib/piiSanitizer';
 
 type EditMode = null | 'title' | 'intro' | 'lineItems' | 'disclaimer' | 'notes' | 'deposit';
 
@@ -286,9 +287,9 @@ export default function QuoteDetails() {
           <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-5">
             <div className="section-card p-5 space-y-2">
               <p className="font-semibold text-text-primary text-[15px]">{entityName}</p>
-              {entityAddress && <><p className="text-[11px] text-text-tertiary uppercase tracking-wider font-medium">Property Address</p><p className="text-[13px] text-text-secondary">{entityAddress}</p></>}
-              {entityPhone && <p className="text-[13px] text-text-secondary">{entityPhone}</p>}
-              {entityEmail && <a href={`mailto:${entityEmail}`} className="text-[13px] text-primary hover:underline block">{entityEmail}</a>}
+              {entityAddress && <><p className="text-[11px] text-text-tertiary uppercase tracking-wider font-medium">Property Address</p><p className="text-[13px] text-text-secondary">{displayAddress(entityAddress)}</p></>}
+              {entityPhone && <p className="text-[13px] text-text-secondary">{displayPhone(entityPhone)}</p>}
+              {entityEmail && <a href={`mailto:${entityEmail}`} className="text-[13px] text-primary hover:underline block">{displayEmail(entityEmail)}</a>}
             </div>
             <div className="space-y-3 pt-1">
               <div className="flex justify-between text-[13px] border-b border-outline pb-2.5">

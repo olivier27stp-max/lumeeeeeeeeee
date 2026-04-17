@@ -282,6 +282,32 @@ export default function InvoiceEdit() {
           } as any)),
       });
 
+      // Persist applied taxes breakdown for invoice display
+      if (taxAutoMode && resolvedTaxes.length > 0) {
+        try {
+          const subtotal = normalizedItems.reduce((s, i) => s + i.qty * i.unit_price_cents, 0);
+          const disc = Math.max(0, Math.round(discountDollars * 100));
+          const breakdown = calculateTaxes(subtotal, disc, resolvedTaxes);
+          // Delete old applied taxes for this invoice
+          await supabase.from('applied_taxes').delete().eq('document_type', 'invoice').eq('document_id', id!);
+          // Insert new
+          if (breakdown.length > 0) {
+            await supabase.from('applied_taxes').insert(
+              breakdown.map((t, idx) => ({
+                document_type: 'invoice' as const,
+                document_id: id!,
+                tax_config_id: resolvedTaxes.find(rt => rt.name === t.name)?.id || null,
+                name: t.name,
+                rate: t.rate,
+                amount_cents: t.amount_cents,
+                is_compound: resolvedTaxes.find(rt => rt.name === t.name)?.is_compound || false,
+                sort_order: idx,
+              }))
+            );
+          }
+        } catch { /* non-critical — invoice still saves */ }
+      }
+
       // Persist template selection
       if (templateId) {
         await updateInvoiceFields(id!, { template_id: templateId });
@@ -425,7 +451,7 @@ export default function InvoiceEdit() {
                 className="w-full rounded-xl border border-outline-subtle bg-surface px-4 py-3 text-left transition hover:bg-surface-secondary"
               >
                 <p className="text-sm font-semibold text-text-primary">{c.name}</p>
-                <p className="text-xs text-text-secondary">{c.email || 'No email'}</p>
+                <p className="text-xs text-text-secondary">{(!c.email || c.email.startsWith('enc:')) ? 'No email' : c.email}</p>
               </button>
             ))}
             {!clientsQuery.isLoading && (clientsQuery.data?.items || []).length === 0 && (

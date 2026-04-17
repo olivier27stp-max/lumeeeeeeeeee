@@ -27,7 +27,6 @@ interface AutomationRule {
 interface EngineConfig {
   supabase: SupabaseClient;
   twilio: { client: any; phoneNumber: string } | null;
-  resendApiKey: string;
   baseUrl: string;
 }
 
@@ -86,7 +85,7 @@ async function executeRuleActions(
     entityType: event.entityType,
     entityId: event.entityId,
     twilio: config.twilio,
-    resendApiKey: config.resendApiKey,
+
     baseUrl: config.baseUrl,
   };
 
@@ -388,7 +387,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         entityType: task.entity_type,
         entityId: task.entity_id,
         twilio: engineConfig.twilio,
-        resendApiKey: engineConfig.resendApiKey,
+
         baseUrl: engineConfig.baseUrl,
       };
 

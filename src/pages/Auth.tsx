@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { motion } from 'motion/react';
-import { Mail, Lock, ArrowRight, Github } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { useNavigate } from 'react-router-dom';
 import MfaChallenge from '../components/auth/MfaChallenge';
 
 interface AuthProps {
@@ -11,11 +12,12 @@ interface AuthProps {
 }
 
 export default function Auth({ onBack }: AuthProps) {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   // MFA challenge state
@@ -27,36 +29,19 @@ export default function Auth({ onBack }: AuthProps) {
     setMessage(null);
 
     try {
-      if (isSignUp) {
-        // Enforce password policy client-side
-        if (password.length < 10) {
-          throw new Error('Password must be at least 10 characters.');
-        }
-        if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-          throw new Error('Password must contain uppercase, lowercase, and a number.');
-        }
-        if (!/[^a-zA-Z0-9]/.test(password)) {
-          throw new Error('Password must contain at least one special character.');
-        }
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
 
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        setMessage({ type: 'success', text: t.auth.checkEmail });
-      } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+      // Check if user has MFA enrolled — if so, show challenge
+      const { data: factorsData } = await supabase.auth.mfa.listFactors();
+      const verifiedFactors = factorsData?.totp?.filter(f => f.status === 'verified') || [];
 
-        // Check if user has MFA enrolled — if so, show challenge
-        const { data: factorsData } = await supabase.auth.mfa.listFactors();
-        const verifiedFactors = factorsData?.totp?.filter(f => f.status === 'verified') || [];
-
-        if (verifiedFactors.length > 0) {
-          // User has MFA — show challenge screen
-          setMfaFactorId(verifiedFactors[0].id);
-          return;
-        }
-        // No MFA — login completes normally via Supabase session
+      if (verifiedFactors.length > 0) {
+        // User has MFA — show challenge screen
+        setMfaFactorId(verifiedFactors[0].id);
+        return;
       }
+      // No MFA — login completes normally via Supabase session
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
     } finally {
@@ -120,7 +105,7 @@ export default function Auth({ onBack }: AuthProps) {
             </div>
             <h1 className="text-3xl font-extralight tracking-widest">LUME</h1>
             <p className="text-gray-500 font-light text-sm">
-              {isSignUp ? t.auth.createWorkspace : t.auth.welcomeBack}
+              {t.auth.welcomeBack}
             </p>
           </div>
 
@@ -145,13 +130,20 @@ export default function Auth({ onBack }: AuthProps) {
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="glass-input w-full pl-10"
+                  className="glass-input w-full pl-10 pr-10"
                   placeholder={t.auth.passwordPlaceholder}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 
@@ -173,7 +165,7 @@ export default function Auth({ onBack }: AuthProps) {
               disabled={loading}
               className="glass-button-primary w-full flex items-center justify-center gap-2 group"
             >
-              {loading ? t.auth.processing : isSignUp ? t.auth.createAccount : t.auth.signIn}
+              {loading ? t.auth.processing : t.auth.signIn}
               {!loading && <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />}
             </button>
           </form>
@@ -217,39 +209,37 @@ export default function Auth({ onBack }: AuthProps) {
 
           <div className="text-center space-y-2">
             <button
-              onClick={() => setIsSignUp(!isSignUp)}
+              onClick={() => navigate('/register')}
               className="text-xs text-gray-500 hover:text-black transition-colors font-light"
             >
-              {isSignUp ? `${t.auth.alreadyHaveAccount} ${t.auth.signIn}` : `${t.auth.dontHaveAccount} ${t.auth.signUp}`}
+              {t.auth.dontHaveAccount} {t.auth.signUp}
             </button>
-            {!isSignUp && (
-              <div>
-                <button
-                  onClick={async () => {
-                    if (!email.trim()) {
-                      setMessage({ type: 'error', text: t.auth.enterYourEmailToResetPassword });
-                      return;
-                    }
-                    setLoading(true);
-                    try {
-                      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                        redirectTo: `${window.location.origin}/settings`,
-                      });
-                      if (error) throw error;
-                      setMessage({ type: 'success', text: t.auth.passwordResetLinkSentToYourEmail });
-                    } catch (err: any) {
-                      setMessage({ type: 'error', text: err.message });
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                  disabled={loading}
-                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors font-light underline"
-                >
-                  {t.auth.forgotPassword}
-                </button>
-              </div>
-            )}
+            <div>
+              <button
+                onClick={async () => {
+                  if (!email.trim()) {
+                    setMessage({ type: 'error', text: t.auth.enterYourEmailToResetPassword });
+                    return;
+                  }
+                  setLoading(true);
+                  try {
+                    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                      redirectTo: `${window.location.origin}/settings`,
+                    });
+                    if (error) throw error;
+                    setMessage({ type: 'success', text: t.auth.passwordResetLinkSentToYourEmail });
+                  } catch (err: any) {
+                    setMessage({ type: 'error', text: err.message });
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                disabled={loading}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors font-light underline"
+              >
+                {t.auth.forgotPassword}
+              </button>
+            </div>
           </div>
         </motion.div>
       </div>

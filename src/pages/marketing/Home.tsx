@@ -41,17 +41,11 @@ function Hero() {
             className="mt-8 flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-3"
           >
             <Link
-              to="/contact"
-              className="inline-flex items-center gap-2 bg-text-primary text-surface px-7 py-3.5 rounded-xl text-sm font-bold hover:opacity-85 transition-opacity group"
+              to="/pricing"
+              className="inline-flex items-center gap-2 bg-[#3FAF97] text-white px-7 py-3.5 rounded-xl text-sm font-bold hover:bg-[#1F5F4F] transition-colors group"
             >
-              Book a demo
+              Start Now
               <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
-            </Link>
-            <Link
-              to="/contact"
-              className="inline-flex items-center gap-2 bg-[#3FAF97] text-white px-7 py-3.5 rounded-xl text-sm font-bold hover:bg-[#1F5F4F] transition-colors"
-            >
-              Free trial
             </Link>
           </motion.div>
         </div>
@@ -837,6 +831,36 @@ function FeatureBlocks() {
   );
 }
 
+/* ─── MIDDLE CTA ─── */
+function MiddleCTA() {
+  return (
+    <section className="py-24 md:py-32 px-6">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        className="max-w-3xl mx-auto text-center"
+      >
+        <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.1] text-text-primary">
+          Ready to scale your business?
+        </h2>
+        <p className="mt-4 text-lg text-text-tertiary font-light">
+          Join hundreds of service companies already using Lume to automate their operations.
+        </p>
+        <div className="mt-8">
+          <Link
+            to="/pricing"
+            className="inline-flex items-center gap-2 bg-text-primary text-surface px-8 py-4 rounded-xl text-sm font-bold hover:opacity-85 transition-opacity group"
+          >
+            Start Now
+            <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        </div>
+      </motion.div>
+    </section>
+  );
+}
+
 /* ─── PAGE ─── */
 export default function Home() {
   return (
@@ -846,6 +870,7 @@ export default function Home() {
       <Testimonial />
       <IndustriesGrid />
       <FeatureBlocks />
+      <MiddleCTA />
     </>
   );
 }

@@ -20,6 +20,9 @@ RUN npm run build
 FROM node:20-alpine AS production
 WORKDIR /app
 
+# Create non-root user for security (prevents container escape → root access)
+RUN addgroup -g 1001 lume && adduser -D -u 1001 -G lume lume
+
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
@@ -36,7 +39,12 @@ COPY src/lib/paypalClient.ts ./src/lib/paypalClient.ts
 # Install tsx for running TypeScript server
 RUN npx tsx --version || npm i -g tsx
 
-EXPOSE 3001 5173
+# Set ownership and switch to non-root user
+RUN chown -R lume:lume /app
+USER lume
+
+# Only expose the API port (frontend is served by the same Express server in production)
+EXPOSE 3001
 
 # Serve static frontend + API server
 CMD ["npx", "tsx", "server/index.ts"]

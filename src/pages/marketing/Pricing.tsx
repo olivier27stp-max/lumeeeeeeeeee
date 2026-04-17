@@ -1,11 +1,12 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Check, ArrowRight, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 const PLANS = [
   {
-    name: 'Ignite',
+    name: 'Minimum',
+    slug: 'starter',
     users: 'Includes 3 users',
     originalPrice: 150,
     price: 105,
@@ -19,11 +20,12 @@ const PLANS = [
       'Mobile access',
       'Basic reporting',
     ],
-    cta: 'Start Free Trial',
+    cta: 'Start Now',
     featured: false,
   },
   {
     name: 'Scale',
+    slug: 'pro',
     users: 'Includes 10 users',
     originalPrice: 340,
     price: 240,
@@ -31,7 +33,7 @@ const PLANS = [
     desc: 'Built for growing teams that want to automate and scale faster.',
     promoNote: 'For 3 months, then $340/mo',
     features: [
-      'Everything in Ignite',
+      'Everything in Minimum',
       'Track employee timesheets',
       'Automate quote and invoice follow-ups',
       'Access quote templates',
@@ -39,11 +41,12 @@ const PLANS = [
       'Track employee performance',
       'AI assistant',
     ],
-    cta: 'Start Free Trial',
+    cta: 'Start Now',
     featured: true,
   },
   {
-    name: 'AutoPilot',
+    name: 'Autopilot',
+    slug: 'autopilot',
     users: 'Includes 20 users',
     originalPrice: 495,
     price: 360,
@@ -54,7 +57,7 @@ const PLANS = [
       'Premium support',
       'Built for large teams',
     ],
-    cta: 'Start Free Trial',
+    cta: 'Start Now',
     featured: false,
   },
 ];
@@ -62,13 +65,14 @@ const PLANS = [
 const FAQS = [
   { q: 'Is there a commitment?', a: 'Monthly plans have no commitment — cancel anytime. Annual plans are a one-year commitment, billed upfront at a 15% discount.' },
   { q: 'Can I switch plans?', a: 'Yes. You can upgrade or downgrade at any time. Changes take effect on the next billing cycle.' },
-  { q: 'Is there a free trial?', a: 'Yes! Every plan comes with a 14-day free trial. No credit card required.' },
+  { q: 'Can I see a demo first?', a: 'Yes! Book a demo with our team and we\'ll walk you through the platform live.' },
   { q: 'How does billing work?', a: 'Billing is monthly by credit card. You receive a detailed invoice each month.' },
   { q: 'Is onboarding included?', a: 'Yes. All plans include guided onboarding. AutoPilot includes dedicated onboarding with a specialist.' },
 ];
 
-export default function Pricing() {
+export default function Pricing({ authenticated }: { authenticated?: boolean }) {
   const [annual, setAnnual] = useState(true);
+  const navigate = useNavigate();
   return (
     <div style={{ backgroundColor: '#fafaf8', backgroundImage: 'url("/paper-texture.png")', backgroundRepeat: 'repeat', backgroundSize: '300px 300px' }}>
       {/* Hero */}
@@ -87,9 +91,9 @@ export default function Pricing() {
             transition={{ delay: 0.05 }}
             className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-[-0.03em] leading-[1.08] text-text-primary"
           >
-            See how it works, try Lume
+            Simple pricing,
             <br />
-            <span className="relative inline-block font-extrabold">for free<svg className="absolute -bottom-1 left-0 w-full text-[#3FAF97]" height="6" viewBox="0 0 120 8" fill="none" preserveAspectRatio="none"><path d="M2 5.5C12 2.5 22 7 32 4S52 1 62 4.5S82 7.5 92 4S112 2 118 5" stroke="currentColor" strokeWidth="4" strokeLinecap="round" fill="none" /></svg></span> now
+            <span className="relative inline-block font-extrabold">no surprises<svg className="absolute -bottom-1 left-0 w-full text-[#3FAF97]" height="6" viewBox="0 0 120 8" fill="none" preserveAspectRatio="none"><path d="M2 5.5C12 2.5 22 7 32 4S52 1 62 4.5S82 7.5 92 4S112 2 118 5" stroke="currentColor" strokeWidth="4" strokeLinecap="round" fill="none" /></svg></span>
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 16 }}
@@ -97,7 +101,7 @@ export default function Pricing() {
             transition={{ delay: 0.15 }}
             className="mt-5 text-lg font-normal text-text-secondary max-w-2xl mx-auto leading-relaxed"
           >
-            Just try it, no credit card required
+            Choose the plan that fits your team
           </motion.p>
         </div>
       </section>
@@ -197,17 +201,31 @@ export default function Pricing() {
 
                 {/* CTA */}
                 <div className="mt-8">
-                  <Link
-                    to="/contact"
-                    className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
-                      plan.featured
-                        ? 'bg-[#1F5F4F] text-white hover:bg-[#174a3d]'
-                        : 'bg-text-primary text-white hover:opacity-90'
-                    }`}
-                  >
-                    {plan.cta}
-                    <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                  </Link>
+                  {authenticated ? (
+                    <button
+                      onClick={() => navigate(`/checkout?plan=${plan.slug}&interval=${annual ? 'annual' : 'monthly'}`)}
+                      className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
+                        plan.featured
+                          ? 'bg-[#1F5F4F] text-white hover:bg-[#174a3d]'
+                          : 'bg-text-primary text-white hover:opacity-90'
+                      }`}
+                    >
+                      {plan.cta}
+                      <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                    </button>
+                  ) : (
+                    <Link
+                      to={`/checkout?plan=${plan.slug}&interval=${annual ? 'annual' : 'monthly'}`}
+                      className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
+                        plan.featured
+                          ? 'bg-[#1F5F4F] text-white hover:bg-[#174a3d]'
+                          : 'bg-text-primary text-white hover:opacity-90'
+                      }`}
+                    >
+                      {plan.cta}
+                      <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                    </Link>
+                  )}
                 </div>
               </motion.div>
             ))}

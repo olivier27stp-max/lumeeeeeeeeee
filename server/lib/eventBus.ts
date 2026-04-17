@@ -29,6 +29,7 @@ export type CRMEventType =
   | 'appointment.cancelled'
   | 'job.created'
   | 'job.completed'
+  | 'job.ready_for_invoicing'  // Emitted when technician completes a job — triggers admin/LIA invoicing
   | 'invoice.created'
   | 'invoice.sent'
   | 'invoice.paid'
@@ -67,6 +68,7 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'appointment.cancelled': 'appointment_cancelled',
   'job.created': 'job_created',
   'job.completed': 'job_completed',
+  'job.ready_for_invoicing': 'job_ready_for_invoicing',
   'invoice.created': 'invoice_created',
   'invoice.sent': 'invoice_sent',
   'invoice.paid': 'invoice_paid',

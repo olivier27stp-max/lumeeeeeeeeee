@@ -11,6 +11,7 @@
 
 import { Router } from 'express';
 import { requireAuthedClient, isOrgAdminOrOwner, getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 import { extractIP, logSecurityEvent } from '../lib/security';
 import { createApiKey, revokeApiKey } from '../lib/api-keys';
 
@@ -66,7 +67,7 @@ router.get('/security/alerts', async (req, res) => {
 
     return res.json({ data: data || [], total: count || 0, page, limit });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to fetch alerts.' });
+    return sendSafeError(res, err, 'Failed to fetch alerts.', '[security/alerts]');
   }
 });
 
@@ -97,7 +98,7 @@ router.post('/security/alerts/:id/acknowledge', async (req, res) => {
 
     return res.json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to acknowledge alert.' });
+    return sendSafeError(res, err, 'Failed to acknowledge alert.', '[security/alerts/ack]');
   }
 });
 
@@ -131,7 +132,7 @@ router.get('/security/events', async (req, res) => {
 
     return res.json({ data: data || [], total: count || 0, page, limit });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to fetch events.' });
+    return sendSafeError(res, err, 'Failed to fetch events.', '[security/events]');
   }
 });
 
@@ -165,7 +166,7 @@ router.get('/security/login-history', async (req, res) => {
 
     return res.json({ data: data || [], total: count || 0, page, limit });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to fetch login history.' });
+    return sendSafeError(res, err, 'Failed to fetch login history.', '[security/login-history]');
   }
 });
 
@@ -188,7 +189,7 @@ router.get('/security/blocked-ips', async (req, res) => {
     if (error) throw error;
     return res.json(data || []);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to fetch blocked IPs.' });
+    return sendSafeError(res, err, 'Failed to fetch blocked IPs.', '[security/blocked-ips]');
   }
 });
 
@@ -239,7 +240,7 @@ router.post('/security/block-ip', async (req, res) => {
 
     return res.json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to block IP.' });
+    return sendSafeError(res, err, 'Failed to block IP.', '[security/block-ip]');
   }
 });
 
@@ -262,7 +263,7 @@ router.delete('/security/block-ip/:id', async (req, res) => {
     if (error) throw error;
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to unblock IP.' });
+    return sendSafeError(res, err, 'Failed to unblock IP.', '[security/unblock-ip]');
   }
 });
 
@@ -319,7 +320,7 @@ router.get('/security/summary', async (req, res) => {
       critical_events_7d: criticalEvents7d.count || 0,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to fetch summary.' });
+    return sendSafeError(res, err, 'Failed to fetch summary.', '[security/summary]');
   }
 });
 
@@ -354,7 +355,7 @@ router.post('/security/api-keys', async (req, res) => {
       warning: 'Save this key now. It will not be shown again.',
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to create API key.' });
+    return sendSafeError(res, err, 'Failed to create API key.', '[security/api-keys]');
   }
 });
 
@@ -377,7 +378,7 @@ router.get('/security/api-keys', async (req, res) => {
     if (error) throw error;
     return res.json(data || []);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to list API keys.' });
+    return sendSafeError(res, err, 'Failed to list API keys.', '[security/api-keys]');
   }
 });
 
@@ -393,7 +394,7 @@ router.delete('/security/api-keys/:id', async (req, res) => {
     await revokeApiKey(req.params.id, auth.orgId, auth.user.id);
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to revoke API key.' });
+    return sendSafeError(res, err, 'Failed to revoke API key.', '[security/api-keys/revoke]');
   }
 });
 
@@ -417,7 +418,7 @@ router.get('/security/sessions', async (req, res) => {
     if (error) throw error;
     return res.json(data || []);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to fetch sessions.' });
+    return sendSafeError(res, err, 'Failed to fetch sessions.', '[security/sessions]');
   }
 });
 
@@ -438,7 +439,7 @@ router.post('/security/sessions/invalidate-all', async (req, res) => {
 
     return res.json({ ok: true, invalidated: data || 0 });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to invalidate sessions.' });
+    return sendSafeError(res, err, 'Failed to invalidate sessions.', '[security/sessions/invalidate]');
   }
 });
 
@@ -449,18 +450,24 @@ router.post('/security/sessions/invalidate-all', async (req, res) => {
 router.post('/security/csp-report', (req, res) => {
   try {
     const report = req.body?.['csp-report'] || req.body;
-    if (report) {
+    if (report && typeof report === 'object') {
+      // Validate + truncate fields to prevent log flooding via oversized payloads
+      const safeStr = (v: unknown, max = 500) => {
+        const s = String(v || '').slice(0, max);
+        return s || undefined;
+      };
+
       logSecurityEvent({
         event_type: 'csp_violation',
-        severity: 'medium',
+        severity: 'low',
         source: 'api',
         ip_address: extractIP(req),
-        user_agent: req.headers['user-agent'],
+        user_agent: String(req.headers['user-agent'] || '').slice(0, 200),
         details: {
-          blocked_uri: report['blocked-uri'] || report.blockedURL,
-          violated_directive: report['violated-directive'] || report.effectiveDirective,
-          document_uri: report['document-uri'] || report.documentURL,
-          source_file: report['source-file'] || report.sourceFile,
+          blocked_uri: safeStr(report['blocked-uri'] || report.blockedURL, 200),
+          violated_directive: safeStr(report['violated-directive'] || report.effectiveDirective, 100),
+          document_uri: safeStr(report['document-uri'] || report.documentURL, 200),
+          source_file: safeStr(report['source-file'] || report.sourceFile, 200),
         },
       });
     }
@@ -494,7 +501,7 @@ router.get('/security/export-log', async (req, res) => {
     if (error) throw error;
     return res.json({ data: data || [], total: count || 0, page, limit });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to fetch export log.' });
+    return sendSafeError(res, err, 'Failed to fetch export log.', '[security/export-log]');
   }
 });
 
@@ -513,7 +520,7 @@ router.post('/security/check-password', async (req, res) => {
     if (error) throw error;
     return res.json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Password check failed.' });
+    return sendSafeError(res, err, 'Password check failed.', '[security/check-password]');
   }
 });
 

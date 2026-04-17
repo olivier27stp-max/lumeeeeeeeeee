@@ -13,6 +13,7 @@ import {
   convertQuoteToJob, duplicateQuote, deleteQuote,
 } from '../../lib/quotesApi';
 import { toast } from 'sonner';
+import { displayEmail, displayPhone, displayAddress } from '../../lib/piiSanitizer';
 import SpecificNotes from '../SpecificNotes';
 import { format } from 'date-fns';
 
@@ -211,18 +212,18 @@ export default function QuoteDetailsModal({
                 {entityAddress && (
                   <div className="flex items-start gap-2 text-xs text-text-tertiary">
                     <MapPin size={12} className="mt-0.5 shrink-0" />
-                    <span>{entityAddress}</span>
+                    <span>{displayAddress(entityAddress)}</span>
                   </div>
                 )}
                 {entityPhone && (
                   <div className="flex items-center gap-2 text-xs text-text-tertiary">
-                    <PhoneIcon size={12} /> {entityPhone}
+                    <PhoneIcon size={12} /> {displayPhone(entityPhone)}
                   </div>
                 )}
                 {entityEmail && (
                   <div className="flex items-center gap-2 text-xs text-text-primary">
                     <MailIcon size={12} />
-                    <a href={`mailto:${entityEmail}`}>{entityEmail}</a>
+                    <a href={`mailto:${entityEmail}`}>{displayEmail(entityEmail)}</a>
                   </div>
                 )}
               </div>

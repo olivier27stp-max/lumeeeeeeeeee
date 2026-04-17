@@ -21,6 +21,7 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useTranslation } from '../i18n';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import PermissionGate from '../components/PermissionGate';
+import { displayPhone } from '../lib/piiSanitizer';
 import {
   fetchConversations,
   fetchMessages,
@@ -142,7 +143,7 @@ function NewConversationModal({
                     }}
                   >
                     <span className="font-medium text-text-primary">{c.first_name} {c.last_name}</span>
-                    <span className="text-text-tertiary">{c.phone ? formatPhoneDisplay(c.phone) : '—'}</span>
+                    <span className="text-text-tertiary">{displayPhone(c.phone) !== '—' ? formatPhoneDisplay(c.phone!) : '—'}</span>
                   </button>
                 ))}
               </div>

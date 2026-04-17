@@ -37,6 +37,7 @@ import { getInvoiceRowUiStatus } from '../lib/invoicesApi';
 import { StatusBadge, Skeleton } from '../components/ui';
 import { useTranslation } from '../i18n';
 import ActivityTimeline from '../components/ActivityTimeline';
+import { displayEmail, displayPhone, displayAddress } from '../lib/piiSanitizer';
 import { useDropZone } from '../hooks/useDropZone';
 import { useJobModalController } from '../contexts/JobModalController';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
@@ -150,22 +151,22 @@ type OverviewTab = 'active' | 'completed' | 'quotes' | 'jobs' | 'invoices' | 'le
 // ─── Skeleton ────────────────────────────────────────────────────────
 function DetailPageSkeleton() {
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <Skeleton className="h-5 w-32" />
-      <div className="flex items-center gap-4">
-        <Skeleton className="h-14 w-14 rounded-full" />
-        <div className="space-y-2">
-          <Skeleton className="h-7 w-56" />
-          <Skeleton className="h-4 w-36" />
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-x-6 gap-y-6">
+        <div className="lg:col-span-2 flex items-center gap-4">
+          <Skeleton className="h-14 w-14 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-56" />
+            <Skeleton className="h-4 w-36" />
+          </div>
         </div>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5">
-        <div className="space-y-5">
+        <div className="space-y-6">
           <div className="section-card p-5 space-y-3"><Skeleton className="h-5 w-28" /><Skeleton className="h-16 w-full" /></div>
           <div className="section-card p-5 space-y-3"><Skeleton className="h-5 w-28" /><Skeleton className="h-24 w-full" /></div>
           <div className="section-card p-5 space-y-3"><Skeleton className="h-5 w-28" /><Skeleton className="h-40 w-full" /></div>
         </div>
-        <div className="space-y-5">
+        <div className="space-y-6">
           <div className="section-card p-5 space-y-3"><Skeleton className="h-5 w-28" /><Skeleton className="h-20 w-full" /></div>
           <div className="section-card p-5 space-y-3"><Skeleton className="h-5 w-28" /><Skeleton className="h-12 w-full" /></div>
         </div>
@@ -522,7 +523,7 @@ export default function ClientDetails() {
   );
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-[12px]">
         <button onClick={() => navigate('/clients')} className="text-text-tertiary hover:text-text-primary transition-colors">{t.clients.title}</button>
@@ -530,102 +531,105 @@ export default function ClientDetails() {
         <span className="text-text-primary font-medium">{client?.first_name} {client?.last_name}</span>
       </nav>
 
-      {/* ═══ HEADER ═══ */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-4">
-          <UnifiedAvatar id={client.id} name={`${client.first_name || ''} ${client.last_name || ''}`.trim()} size={56} />
-          <div>
-            <h1 className="text-[22px] font-bold text-text-primary leading-tight">{fullName}</h1>
-            <div className="flex items-center gap-2 mt-0.5">
-              {client.company && <span className="text-[13px] text-text-secondary">{client.company}</span>}
-              <StatusBadge status={client.status} />
+      {/* ═══ UNIFIED GRID — header + content share the same column structure ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-x-6 gap-y-6 items-start">
+
+        {/* ──── HEADER CARD: spans full grid width ──── */}
+        <div className="lg:col-span-2 section-card px-5 py-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <UnifiedAvatar id={client.id} name={`${client.first_name || ''} ${client.last_name || ''}`.trim()} size={40} />
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <h1 className="text-[20px] font-bold text-text-primary leading-tight">{fullName}</h1>
+                  <StatusBadge status={client.status} />
+                </div>
+                {client.company && <p className="text-[13px] text-text-secondary mt-0.5">{client.company}</p>}
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {client.phone && (
+                <a href={`tel:${client.phone}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title="Call">
+                  <Phone size={14} /> Call
+                </a>
+              )}
+              {client.email && (
+                <a href={`mailto:${client.email}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title="Email">
+                  <Mail size={14} /> Email
+                </a>
+              )}
+              {client.phone && (
+                <a href={`sms:${client.phone}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title="SMS">
+                  <Send size={14} /> SMS
+                </a>
+              )}
+
+              <button
+                onClick={() => setIsQuoteCreateOpen(true)}
+                className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors"
+              >
+                <FileText size={14} /> New Quote
+              </button>
+              <button
+                onClick={() => openJobModal({
+                  initialValues: {
+                    client_id: client.id,
+                    property_address: fullAddress || null,
+                  },
+                  onCreated: () => { if (id) loadAllData(id); },
+                })}
+                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary text-white rounded-md text-[13px] font-medium hover:bg-primary-hover transition-colors"
+              >
+                <Plus size={14} /> New Job
+              </button>
+
+              {/* More dropdown */}
+              <div className="relative">
+                <button onClick={() => setShowActionMenu(!showActionMenu)} className="inline-flex items-center gap-1 h-9 px-2.5 bg-surface border border-outline rounded-md text-text-secondary hover:bg-surface-secondary transition-colors">
+                  <MoreHorizontal size={16} />
+                </button>
+                {showActionMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowActionMenu(false)} />
+                    <div className="absolute right-0 top-full mt-1 z-50 w-44 bg-surface border border-outline rounded-md shadow-lg py-1">
+                      <button
+                        onClick={() => { navigate(`/clients/${client.id}/edit`); setShowActionMenu(false); }}
+                        className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
+                      >
+                        <Edit2 size={13} /> {t.common.edit}
+                      </button>
+                      <button
+                        onClick={handleArchive}
+                        className="w-full px-3 py-2 text-[13px] text-danger hover:bg-danger-light flex items-center gap-2 text-left transition-colors"
+                      >
+                        <Archive size={13} /> {t.clients.archive}
+                      </button>
+                      {(client as any).portal_token && (
+                        <button
+                          onClick={() => {
+                            const url = `${window.location.origin}/portal/${(client as any).portal_token}`;
+                            navigator.clipboard.writeText(url).then(() => toast.success(t.clientDetails.portalLinkCopied));
+                            setShowActionMenu(false);
+                          }}
+                          className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
+                        >
+                          <ExternalLink size={13} /> {t.clientDetails.copyPortalLink}
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-2">
-          {client.phone && (
-            <a href={`tel:${client.phone}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title="Call">
-              <Phone size={14} /> Call
-            </a>
-          )}
-          {client.email && (
-            <a href={`mailto:${client.email}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title="Email">
-              <Mail size={14} /> Email
-            </a>
-          )}
-          {client.phone && (
-            <a href={`sms:${client.phone}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title="SMS">
-              <Send size={14} /> SMS
-            </a>
-          )}
-
-          <button
-            onClick={() => setIsQuoteCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors"
-          >
-            <FileText size={14} /> New Quote
-          </button>
-          <button
-            onClick={() => openJobModal({
-              initialValues: {
-                client_id: client.id,
-                property_address: fullAddress || null,
-              },
-              onCreated: () => { if (id) loadAllData(id); },
-            })}
-            className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary text-white rounded-md text-[13px] font-medium hover:bg-primary-hover transition-colors"
-          >
-            <Plus size={14} /> New Job
-          </button>
-
-          {/* More dropdown */}
-          <div className="relative">
-            <button onClick={() => setShowActionMenu(!showActionMenu)} className="inline-flex items-center gap-1 h-9 px-2.5 bg-surface border border-outline rounded-md text-text-secondary hover:bg-surface-secondary transition-colors">
-              <MoreHorizontal size={16} />
-            </button>
-            {showActionMenu && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowActionMenu(false)} />
-                <div className="absolute right-0 top-full mt-1 z-50 w-44 bg-surface border border-outline rounded-md shadow-lg py-1">
-                  <button
-                    onClick={() => { navigate(`/clients/${client.id}/edit`); setShowActionMenu(false); }}
-                    className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
-                  >
-                    <Edit2 size={13} /> {t.common.edit}
-                  </button>
-                  <button
-                    onClick={handleArchive}
-                    className="w-full px-3 py-2 text-[13px] text-danger hover:bg-danger-light flex items-center gap-2 text-left transition-colors"
-                  >
-                    <Archive size={13} /> {t.clients.archive}
-                  </button>
-                  {(client as any).portal_token && (
-                    <button
-                      onClick={() => {
-                        const url = `${window.location.origin}/portal/${(client as any).portal_token}`;
-                        navigator.clipboard.writeText(url).then(() => toast.success(t.clientDetails.portalLinkCopied));
-                        setShowActionMenu(false);
-                      }}
-                      className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
-                    >
-                      <ExternalLink size={13} /> {t.clientDetails.copyPortalLink}
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ═══ TWO COLUMN LAYOUT ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5 items-start">
         {/* ──── LEFT COLUMN ──── */}
-        <div className="space-y-5 min-w-0">
+        <div className="space-y-6 min-w-0">
           {/* Properties Section */}
-          <div className="rounded-xl border border-outline bg-surface-card">
+          <div className="section-card">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <MapPin size={15} className="text-text-secondary" />
@@ -660,7 +664,7 @@ export default function ClientDetails() {
                   </a>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-text-primary">
-                      {client.address || [client.street_number, client.street_name].filter(Boolean).join(' ') || 'Address'}
+                      {displayAddress(client.address || [client.street_number, client.street_name].filter(Boolean).join(' ') || 'Address')}
                     </p>
                     <p className="text-[12px] text-text-tertiary mt-0.5">
                       {[client.city, client.province, client.postal_code].filter(Boolean).join(', ')}
@@ -684,57 +688,48 @@ export default function ClientDetails() {
           </div>
 
           {/* Contacts Section */}
-          <div className="rounded-xl border border-outline bg-surface-card">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-outline">
+          <div className="section-card">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <User size={14} className="text-text-tertiary" />
                 Contacts
               </h2>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-outline/60">
-                    <th className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.name}</th>
-                    <th className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Role</th>
-                    <th className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.phone}</th>
-                    <th className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.email}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="hover:bg-surface-secondary/50 transition-colors">
-                    <td className="px-5 py-3 text-[13px] font-medium text-text-primary">{fullName}</td>
-                    <td className="px-5 py-3">
-                      <span className="inline-flex items-center rounded-full bg-primary/10 text-primary text-[11px] font-semibold px-2.5 py-0.5">Primary</span>
-                    </td>
-                    <td className="px-5 py-3 text-[13px] text-text-primary">
-                      {client.phone ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <a href={`tel:${client.phone}`} className="text-primary hover:underline">{client.phone}</a>
-                          <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
-                            <Copy size={11} />
-                          </button>
-                        </span>
-                      ) : <span className="text-text-tertiary">—</span>}
-                    </td>
-                    <td className="px-5 py-3 text-[13px] text-text-primary">
-                      {client.email ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <a href={`mailto:${client.email}`} className="text-primary hover:underline">{client.email}</a>
-                          <button onClick={() => copyToClipboard(client.email!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
-                            <Copy size={11} />
-                          </button>
-                        </span>
-                      ) : <span className="text-text-tertiary">—</span>}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <div className="p-5">
+              <div className="flex items-center gap-3 rounded-lg border border-outline bg-surface-secondary p-4">
+                <UnifiedAvatar id={client.id} name={`${client.first_name || ''} ${client.last_name || ''}`.trim()} size={36} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[13px] font-semibold text-text-primary">{fullName}</p>
+                    <span className="inline-flex items-center rounded-full bg-primary/10 text-primary text-[11px] font-semibold px-2.5 py-0.5">Primary</span>
+                  </div>
+                  <div className="flex items-center gap-4 mt-1.5">
+                    {client.phone ? (
+                      <span className="inline-flex items-center gap-1.5 text-[13px] text-text-secondary">
+                        <Phone size={12} className="text-text-tertiary" />
+                        <a href={`tel:${client.phone}`} className="hover:text-primary transition-colors">{displayPhone(client.phone)}</a>
+                        <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
+                          <Copy size={11} />
+                        </button>
+                      </span>
+                    ) : null}
+                    {client.email ? (
+                      <span className="inline-flex items-center gap-1.5 text-[13px] text-text-secondary">
+                        <Mail size={12} className="text-text-tertiary" />
+                        <a href={`mailto:${client.email}`} className="hover:text-primary transition-colors">{displayEmail(client.email)}</a>
+                        <button onClick={() => copyToClipboard(client.email!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
+                          <Copy size={11} />
+                        </button>
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Overview Section with Tabs */}
-          <div className="rounded-xl border border-outline bg-surface-card">
+          <div className="section-card">
             <div className="px-5 pt-3.5 border-b border-outline">
               <div className="flex items-center gap-1 overflow-x-auto">
                 {overviewTabs.map((tab) => (
@@ -920,10 +915,10 @@ export default function ClientDetails() {
           </div>
 
           {/* Schedule Section */}
-          <div className="rounded-xl border border-outline bg-surface-card">
+          <div className="section-card">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><Calendar size={13} strokeWidth={2} /></div>
+                <Calendar size={15} className="text-text-secondary" />
                 {t.nav.calendar}
               </h2>
             </div>
@@ -985,10 +980,10 @@ export default function ClientDetails() {
         </div>
 
         {/* ──── RIGHT SIDEBAR ──── */}
-        <div className="space-y-5 lg:sticky lg:top-5">
+        <div className="space-y-6 lg:sticky lg:top-5">
           {/* Contact Info */}
-          <div className="rounded-xl border border-outline bg-surface-card">
-            <div className="px-5 py-3 border-b border-outline">
+          <div className="section-card">
+            <div className="px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary">{language === 'fr' ? 'Informations de contact' : 'Contact Information'}</h2>
             </div>
             <div className="p-5 space-y-5">
@@ -1000,7 +995,7 @@ export default function ClientDetails() {
                 </div>
                 {client.phone ? (
                   <div className="flex items-center gap-2 pl-5">
-                    <a href={`tel:${client.phone}`} className="text-[13px] font-medium text-text-primary hover:text-primary transition-colors">{client.phone}</a>
+                    <a href={`tel:${client.phone}`} className="text-[13px] font-medium text-text-primary hover:text-primary transition-colors">{displayPhone(client.phone)}</a>
                     <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
                       <Copy size={11} />
                     </button>
@@ -1017,7 +1012,7 @@ export default function ClientDetails() {
                 </div>
                 {client.email ? (
                   <div className="flex items-center gap-2 pl-5 min-w-0">
-                    <a href={`mailto:${client.email}`} className="text-[13px] font-medium text-text-primary hover:text-primary transition-colors truncate">{client.email}</a>
+                    <a href={`mailto:${client.email}`} className="text-[13px] font-medium text-text-primary hover:text-primary transition-colors truncate">{displayEmail(client.email)}</a>
                     <button onClick={() => copyToClipboard(client.email!)} className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0" title="Copy">
                       <Copy size={11} />
                     </button>
@@ -1065,17 +1060,17 @@ export default function ClientDetails() {
           </div>
 
           {/* Notes Section */}
-          <div className="rounded-xl border border-outline bg-surface-card">
+          <div className="section-card">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><StickyNote size={13} strokeWidth={2} /></div>
+                <StickyNote size={15} className="text-text-secondary" />
                 Notes
               </h2>
               {notesEdited && (
                 <button
                   onClick={handleSaveNotes}
                   disabled={notesSaving}
-                  className="inline-flex items-center gap-1 h-7 px-2.5 bg-primary text-white rounded-md text-[12px] font-medium hover:bg-primary-hover transition-colors !text-[12px] !px-2.5 !py-1"
+                  className="inline-flex items-center gap-1 h-7 px-2.5 bg-primary text-white rounded-md text-[12px] font-medium hover:bg-primary-hover transition-colors"
                 >
                   {notesSaving ? 'Saving...' : 'Save'}
                 </button>
@@ -1094,13 +1089,13 @@ export default function ClientDetails() {
           </div>
 
           {/* Tags Section */}
-          <div className="rounded-xl border border-outline bg-surface-card">
+          <div className="section-card">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><Tag size={13} strokeWidth={2} /></div>
+                <Tag size={15} className="text-text-secondary" />
                 Tags
               </h2>
-              <button onClick={() => setShowTagInput(true)} className="inline-flex items-center gap-1 h-7 px-2.5 bg-surface border border-outline rounded-md text-[12px] text-text-primary hover:bg-surface-secondary transition-colors !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1">
+              <button onClick={() => setShowTagInput(true)} className="inline-flex items-center gap-1 h-7 px-2.5 bg-surface border border-outline rounded-md text-[12px] text-text-primary hover:bg-surface-secondary transition-colors">
                 <Plus size={12} /> New Tag
               </button>
             </div>
@@ -1142,10 +1137,10 @@ export default function ClientDetails() {
           </div>
 
           {/* Billing History */}
-          <div className="rounded-xl border border-outline bg-surface-card">
+          <div className="section-card">
             <div className="px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><DollarSign size={13} strokeWidth={2} /></div>
+                <DollarSign size={15} className="text-text-secondary" />
                 Billing History
               </h2>
             </div>

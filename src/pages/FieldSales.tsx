@@ -812,6 +812,8 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
     try {
       const { deleteHouse } = await import('../lib/fieldSalesApi');
       await deleteHouse(house.id);
+      // Invalidate pin cache so deleted pin doesn't come back from localStorage
+      try { localStorage.removeItem('lume:field-pins'); } catch {}
       toast.success('Pin deleted');
       onDeleted();
     } catch (err: any) {
@@ -873,7 +875,7 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 420, opacity: 0 }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      className="fixed right-0 top-0 bottom-0 w-[400px] bg-surface border-l border-outline z-[1000] flex flex-col shadow-2xl"
+      className="fixed right-0 top-0 bottom-0 w-[400px] bg-surface border-l border-outline z-[1010] flex flex-col shadow-2xl"
     >
       {/* Header */}
       <div className="p-4 border-b border-outline">
@@ -1174,6 +1176,7 @@ export default function FieldSales() {
 
   // User location
   const [userLocation, setUserLocation] = useState<L.LatLngTuple | null>(null);
+  const [showUserLocation, setShowUserLocation] = useState(false);
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -1232,6 +1235,8 @@ export default function FieldSales() {
   // AI Suggestions handler
   const handleAISuggestions = useCallback(async () => {
     if (showAIPanel) { setShowAIPanel(false); return; }
+    setSelectedHouse(null);
+    setSelectedTerritory(null);
     setAiLoading(true);
     setShowAIPanel(true);
     try {
@@ -1285,23 +1290,16 @@ export default function FieldSales() {
     import('../lib/fieldSalesApi').then(({ listReps }) => listReps().then(setReps).catch(() => {}));
     supabase.auth.getUser().then(({ data }) => { if (data.user) setCurrentUserId(data.user.id); });
   }, []);
-  // Debounced pin loading — avoids excessive API calls on pan/zoom + offline cache
+  // Debounced pin loading — avoids excessive API calls on pan/zoom
   useEffect(() => {
     if (!bounds) return;
-    const timer = setTimeout(async () => {
-      await loadPins();
-      // Cache pins for offline
-      try { localStorage.setItem('lume:field-pins', JSON.stringify(pins)); } catch {}
-    }, 300);
+    const timer = setTimeout(() => { loadPins(); }, 300);
     return () => clearTimeout(timer);
   }, [bounds]);
 
-  // Load cached pins on mount (offline fallback)
+  // Clear stale pin cache on mount — prevents deleted pins from reappearing
   useEffect(() => {
-    try {
-      const cached = localStorage.getItem('lume:field-pins');
-      if (cached && pins.length === 0) setPins(JSON.parse(cached));
-    } catch {}
+    try { localStorage.removeItem('lume:field-pins'); } catch {}
   }, []);
 
   // Live reps — fetch + realtime subscription
@@ -1533,10 +1531,11 @@ export default function FieldSales() {
     }
   }, [stats, pins, territories, fr]);
 
-  // Select house
+  // Select house — close other panels to prevent overlap
   const handlePinClick = useCallback(async (houseId: string) => {
     try {
       const detail = await fetchFieldHouseDetail(houseId);
+      setSelectedTerritory(null);
       setSelectedHouse(detail);
     } catch (err: any) {
       toast.error('Failed to load house details');
@@ -1554,12 +1553,17 @@ export default function FieldSales() {
     } catch { /* silent */ }
   }, [selectedHouse, loadPins, loadStats]);
 
-  // Handle map click based on mode — only open pin creation if nothing else is open
+  // Handle map click based on mode
   const handleMapClick = useCallback((latlng: L.LatLng) => {
     if (mode === 'territory') {
       setTerritoryPoints((prev) => [...prev, latlng]);
-    } else if (!pendingPinLatlng && !selectedHouse) {
+    } else if (mode === 'pin' && !pendingPinLatlng && !selectedHouse) {
+      // Only open pin creation modal in explicit 'pin' mode — never in 'view' mode
       setPendingPinLatlng(latlng);
+    } else if (mode === 'view') {
+      // In view mode, clicking empty map area closes any open panels
+      setSelectedHouse(null);
+      setSelectedTerritory(null);
     }
   }, [mode, pendingPinLatlng, selectedHouse]);
 
@@ -1659,7 +1663,7 @@ export default function FieldSales() {
           <MapBoundsTracker onBoundsChange={setBounds} />
           <MapClickHandler mode={mode} onMapClick={handleMapClick} />
           {flyTarget && <FlyTo lat={flyTarget.lat} lng={flyTarget.lng} />}
-          {userLocation && <UserLocationMarker position={userLocation} />}
+          {userLocation && showUserLocation && <UserLocationMarker position={userLocation} />}
           {userLocation && <CenterOnUser position={userLocation} />}
           {showHeatmap && <HeatmapLayer points={heatmapPoints} />}
 
@@ -1699,6 +1703,7 @@ export default function FieldSales() {
                 <Polygon key={ter.id} positions={positions}
                   pathOptions={{ color: ter.color || '#6366f1', weight: isSel ? 3 : 2, fillOpacity: isSel ? 0.15 : 0.08, opacity: isSel ? 0.8 : 0.5 }}
                   eventHandlers={{ click: () => {
+                    setSelectedHouse(null);
                     setSelectedTerritory(ter);
                     // Load territory stats
                     fetchFieldStats({ territory_id: ter.id }).then(s => setTerritoryStats({ id: ter.id, name: ter.name, ...s })).catch(() => {});
@@ -1805,6 +1810,13 @@ export default function FieldSales() {
               showLiveReps ? 'bg-green-500/15 text-green-400' : 'bg-surface-secondary text-text-secondary hover:bg-surface-tertiary')}>
             <Users size={11} /> Live
           </button>
+          {userLocation && (
+            <button onClick={() => setShowUserLocation(!showUserLocation)}
+              className={cn('px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors flex items-center gap-1.5',
+                showUserLocation ? 'bg-blue-500/15 text-blue-400' : 'bg-surface-secondary text-text-secondary hover:bg-surface-tertiary')}>
+              <MapPin size={11} /> GPS
+            </button>
+          )}
           {routeRepId && (
             <button onClick={() => { setRoutePoints([]); setRouteRepId(null); }}
               className="px-2.5 py-1 rounded-lg text-[10px] font-medium bg-amber-500/15 text-amber-400 flex items-center gap-1.5">
@@ -2009,6 +2021,7 @@ export default function FieldSales() {
                           const avgLng = coords.reduce((s: number, c: number[]) => s + c[0], 0) / coords.length;
                           setFlyTarget({ lat: avgLat, lng: avgLng });
                         }
+                        setSelectedHouse(null);
                         setSelectedTerritory(ter);
                         fetchFieldStats({ territory_id: ter.id }).then(s => setTerritoryStats({ id: ter.id, name: ter.name, ...s })).catch(() => {});
                       }
@@ -2205,7 +2218,14 @@ export default function FieldSales() {
     <AnimatePresence>
       {selectedHouse && (
         <HouseDrawer house={selectedHouse} onClose={() => setSelectedHouse(null)} onRefresh={refreshHouse}
-          onDeleted={() => { setSelectedHouse(null); loadPins(); loadStats(); }}
+          onDeleted={() => {
+            // Optimistic: remove pin from state immediately so it disappears from the map
+            const deletedId = selectedHouse?.id;
+            if (deletedId) setPins(prev => prev.filter(p => p.house_id !== deletedId && p.id !== deletedId));
+            setSelectedHouse(null);
+            loadPins();
+            loadStats();
+          }}
           onOpenJob={(addr, clientId) => {
             openJobModal({
               initialValues: { property_address: addr, client_id: clientId || null },

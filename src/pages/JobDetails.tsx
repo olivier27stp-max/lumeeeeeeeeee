@@ -45,6 +45,7 @@ import CommunicationsTimeline from '../components/communications/CommunicationsT
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
 import SpecificNotes from '../components/SpecificNotes';
+import { displayEmail, displayPhone } from '../lib/piiSanitizer';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface ScheduleEvent {
@@ -580,13 +581,13 @@ export default function JobDetails() {
                   {clientInfo?.phone && (
                     <a href={`tel:${clientInfo.phone}`} className="flex items-center gap-2 text-[13px] text-text-primary hover:text-text-secondary transition-colors">
                       <Phone size={13} className="text-text-tertiary" />
-                      {clientInfo.phone}
+                      {displayPhone(clientInfo.phone)}
                     </a>
                   )}
                   {clientInfo?.email && (
                     <a href={`mailto:${clientInfo.email}`} className="flex items-center gap-2 text-[13px] text-text-primary hover:underline">
                       <Mail size={13} className="text-text-tertiary" />
-                      {clientInfo.email}
+                      {displayEmail(clientInfo.email)}
                     </a>
                   )}
                   {!clientInfo?.phone && !clientInfo?.email && (
@@ -688,9 +689,9 @@ export default function JobDetails() {
                     <tr className="border-b border-border">
                       <th className="px-0 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">Product / Service</th>
                       <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-center w-24">Quantity</th>
-                      <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">Cost</th>
-                      <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">Price</th>
-                      <th className="px-0 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">Total</th>
+                      {canSeeMargins && <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">Cost</th>}
+                      {canSeePricing && <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">Price</th>}
+                      {canSeePricing && <th className="px-0 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">Total</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -702,9 +703,9 @@ export default function JobDetails() {
                             <span className="text-[13px] font-semibold text-text-primary">{item.name}</span>
                           </td>
                           <td className="px-3 py-3 text-[13px] text-text-secondary text-center tabular-nums">{item.qty}</td>
-                          <td className="px-3 py-3 text-[13px] text-text-secondary text-right tabular-nums">{formatCents((item as any).cost_cents || 0)}</td>
-                          <td className="px-3 py-3 text-[13px] text-text-secondary text-right tabular-nums">{formatCents(item.unit_price_cents)}</td>
-                          <td className="py-3 text-[13px] text-text-primary font-semibold text-right tabular-nums">{formatCents(lineTotalCents)}</td>
+                          {canSeeMargins && <td className="px-3 py-3 text-[13px] text-text-secondary text-right tabular-nums">{formatCents((item as any).cost_cents || 0)}</td>}
+                          {canSeePricing && <td className="px-3 py-3 text-[13px] text-text-secondary text-right tabular-nums">{formatCents(item.unit_price_cents)}</td>}
+                          {canSeePricing && <td className="py-3 text-[13px] text-text-primary font-semibold text-right tabular-nums">{formatCents(lineTotalCents)}</td>}
                         </tr>
                       );
                     })}
@@ -713,8 +714,8 @@ export default function JobDetails() {
               </div>
             )}
 
-            {/* Totals */}
-            {lineItems.length > 0 && (
+            {/* Totals — hidden without pricing access */}
+            {canSeePricing && lineItems.length > 0 && (
               <div className="border-t border-border pt-4 mt-2 flex justify-end">
                 <div className="w-60 space-y-1.5">
                   <div className="flex justify-between text-[13px]">
@@ -799,8 +800,8 @@ export default function JobDetails() {
           </div>
         </div>
 
-        {/* ═══ INVOICES ═══ */}
-        <div className="rounded-xl border border-outline bg-surface overflow-hidden">
+        {/* ═══ INVOICES — hidden for financially restricted roles ═══ */}
+        {canSeeInvoices && <div className="rounded-xl border border-outline bg-surface overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
             <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
               <div className="icon-tile icon-tile-sm icon-tile-blue">
@@ -902,7 +903,7 @@ export default function JobDetails() {
               <p className="text-[13px] text-text-tertiary py-4 text-center">No reminders configured</p>
             )}
           </div>
-        </div>
+        </div>}
 
         {/* ═══ NOTES ═══ */}
         {job.notes && (

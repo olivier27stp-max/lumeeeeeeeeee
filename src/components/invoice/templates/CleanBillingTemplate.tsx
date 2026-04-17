@@ -118,7 +118,16 @@ export default function CleanBillingTemplate({ data }: { data: InvoiceRenderData
           <div className="w-64 text-[12px]">
             <div className="flex justify-between py-1.5"><span className="text-[#9ca3af]">Subtotal</span><span className="tabular-nums">{fmt(data.subtotal_cents)}</span></div>
             {data.discount_cents > 0 && <div className="flex justify-between py-1.5 text-[#dc2626]"><span>Discount</span><span className="tabular-nums">-{fmt(data.discount_cents)}</span></div>}
-            <div className="flex justify-between py-1.5"><span className="text-[#9ca3af]">Tax</span><span className="tabular-nums">{fmt(data.tax_cents)}</span></div>
+            {data.tax_breakdown && data.tax_breakdown.length > 0 ? (
+              data.tax_breakdown.map((tax, i) => (
+                <div key={i} className="flex justify-between py-1">
+                  <span className="text-[#9ca3af]">{tax.name} ({tax.rate}%)</span>
+                  <span className="tabular-nums">{fmt(tax.amount_cents)}</span>
+                </div>
+              ))
+            ) : (
+              <div className="flex justify-between py-1.5"><span className="text-[#9ca3af]">Tax</span><span className="tabular-nums">{fmt(data.tax_cents)}</span></div>
+            )}
             <div className="flex justify-between pt-2.5 mt-1 border-t border-[#e5e7eb] text-[14px] font-semibold"><span>Total</span><span className="tabular-nums">{fmt(data.total_cents)}</span></div>
             {data.paid_cents > 0 && <div className="flex justify-between py-1.5 text-[#15803d]"><span>Paid</span><span className="tabular-nums">{fmt(data.paid_cents)}</span></div>}
             {data.balance_cents > 0 && data.balance_cents !== data.total_cents && (
@@ -135,8 +144,19 @@ export default function CleanBillingTemplate({ data }: { data: InvoiceRenderData
           </div>
         )}
 
+        {/* ── Tax Registration Numbers ── */}
+        {data.tax_breakdown && data.tax_breakdown.some(t => t.registration_number) && (
+          <div className="mt-6 border-t border-[#f3f4f6] pt-4">
+            <div className="text-[10px] text-[#9ca3af] space-y-0.5">
+              {data.tax_breakdown.filter(t => t.registration_number).map((tax, i) => (
+                <p key={i}>{tax.name} No: {tax.registration_number}</p>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── Footer ── */}
-        <div className="mt-10 border-t border-[#f3f4f6] pt-5 text-center">
+        <div className="mt-6 border-t border-[#f3f4f6] pt-5 text-center">
           <p className="text-[10px] text-[#d1d5db]">{data.company_name}</p>
         </div>
       </div>

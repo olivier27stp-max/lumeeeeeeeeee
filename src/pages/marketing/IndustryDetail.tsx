@@ -150,7 +150,7 @@ export default function IndustryDetail() {
               {industry.description}
             </p>
             <Link
-              to="/contact"
+              to="/pricing"
               className="mt-8 inline-flex items-center gap-2 px-8 py-3.5 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90 group"
               style={{ background: 'linear-gradient(135deg, #3FAF97 0%, #1F5F4F 100%)' }}
             >

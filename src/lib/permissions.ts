@@ -6,20 +6,19 @@
 
 // ── Roles ───────────────────────────────────────────────────────────
 
-export type TeamRole = 'owner' | 'admin' | 'manager' | 'sales_rep' | 'technician';
+export type TeamRole = 'owner' | 'admin' | 'sales_rep' | 'technician';
 
-export const ALL_ROLES: TeamRole[] = ['owner', 'admin', 'manager', 'sales_rep', 'technician'];
+export const ALL_ROLES: TeamRole[] = ['owner', 'admin', 'sales_rep', 'technician'];
 
 export const ROLE_LABELS: Record<TeamRole, { en: string; fr: string }> = {
   owner:      { en: 'Owner',      fr: 'Propriétaire' },
   admin:      { en: 'Admin',      fr: 'Administrateur' },
-  manager:    { en: 'Manager',    fr: 'Gestionnaire' },
   sales_rep:  { en: 'Sales Rep',  fr: 'Représentant' },
   technician: { en: 'Technician', fr: 'Technicien' },
 };
 
 /** Roles that can be assigned via invitation (not owner) */
-export const ASSIGNABLE_ROLES: TeamRole[] = ['admin', 'manager', 'sales_rep', 'technician'];
+export const ASSIGNABLE_ROLES: TeamRole[] = ['admin', 'sales_rep', 'technician'];
 
 // ── Scopes ──────────────────────────────────────────────────────────
 
@@ -38,7 +37,6 @@ export const SCOPE_LABELS: Record<Scope, { en: string; fr: string }> = {
 export const DEFAULT_SCOPE: Record<TeamRole, Scope> = {
   owner:      'company',
   admin:      'company',
-  manager:    'team',
   sales_rep:  'self',
   technician: 'assigned',
 };
@@ -64,7 +62,7 @@ export const PERMISSION_KEYS = [
   'calendar.read', 'calendar.update',
   // Map
   'map.access',
-  // Door-to-Door
+  // Sales (Vente)
   'door_to_door.access', 'door_to_door.edit', 'door_to_door.convert',
   // Users
   'users.invite', 'users.update_role', 'users.disable', 'users.delete',
@@ -290,12 +288,12 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
-    key: 'map_d2d', label_en: 'Map & Door-to-Door', label_fr: 'Carte & Porte-à-porte',
+    key: 'map_d2d', label_en: 'Map & Sales', label_fr: 'Carte & Vente',
     permissions: [
       { key: 'map.access', label_en: 'Access map', label_fr: 'Accéder à la carte' },
-      { key: 'door_to_door.access', label_en: 'Access D2D', label_fr: 'Accéder au D2D' },
-      { key: 'door_to_door.edit', label_en: 'Edit D2D pins', label_fr: 'Modifier les pins D2D' },
-      { key: 'door_to_door.convert', label_en: 'Convert D2D pins', label_fr: 'Convertir les pins D2D' },
+      { key: 'door_to_door.access', label_en: 'Access Sales module', label_fr: 'Accéder au module Vente' },
+      { key: 'door_to_door.edit', label_en: 'Edit sales pins', label_fr: 'Modifier les pins de vente' },
+      { key: 'door_to_door.convert', label_en: 'Convert sales pins', label_fr: 'Convertir les pins de vente' },
     ],
   },
   {
@@ -407,11 +405,6 @@ export const ROLE_PRESETS: Record<TeamRole, PermissionsMap> = {
   admin: {
     ...allTrue(),
     'users.delete': false, // Cannot delete owner
-  },
-
-  manager: {
-    ...allTrue(),
-    'users.delete': false,
   },
 
   sales_rep: pick([

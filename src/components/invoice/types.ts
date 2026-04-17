@@ -33,12 +33,22 @@ export interface InvoiceRenderData {
   company_address: string | null;
   company_logo_url: string | null;
 
+  // Tax breakdown (individual taxes with optional registration numbers)
+  tax_breakdown: InvoiceTaxLine[];
+
   // Items
   items: InvoiceRenderItem[];
 
   // Branding
   primary_color: string;
   accent_color: string;
+}
+
+export interface InvoiceTaxLine {
+  name: string;
+  rate: number;
+  amount_cents: number;
+  registration_number?: string | null;
 }
 
 export interface InvoiceRenderItem {

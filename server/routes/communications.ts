@@ -1,19 +1,19 @@
 import { Router } from 'express';
-import { Resend } from 'resend';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
-import { twilioClient, twilioPhoneNumber, resendApiKey, emailFrom } from '../lib/config';
+import { twilioClient, twilioPhoneNumber, emailFrom } from '../lib/config';
+import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { normalizeE164, findOrCreateConversation } from '../lib/helpers';
 import { provisionSmsNumber, getOrgSmsChannel } from '../lib/twilioProvisioning';
 import { validate, sendSmsSchema } from '../lib/validation';
-import { sanitizeText, sanitizeHtml, logSecurityEvent, checkAnomalies, extractIP } from '../lib/security';
+import { sanitizeText, sanitizeHtml, sanitizeMessageContent, stripCRLF, logSecurityEvent, checkAnomalies, extractIP } from '../lib/security';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
 // ── Helpers ──
 
-function getResend() {
-  if (!resendApiKey) throw Object.assign(new Error('Email provider not configured.'), { status: 503 });
-  return new Resend(resendApiKey);
+function ensureMailer() {
+  if (!isMailerConfigured()) throw Object.assign(new Error('SMTP not configured.'), { status: 503 });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -32,7 +32,8 @@ router.post('/communications/send-sms', validate(sendSmsSchema), async (req, res
     }
 
     const { to, body: rawBody, client_id, job_id } = req.body;
-    const body = sanitizeText(rawBody);
+    // Sanitize + strip CRLF to prevent SMS header injection
+    const body = stripCRLF(sanitizeText(rawBody));
 
     const normalizedTo = normalizeE164(to);
     const serviceClient = getServiceClient();
@@ -96,14 +97,13 @@ router.post('/communications/send-sms', validate(sendSmsSchema), async (req, res
       status: 'sent',
     });
   } catch (error: any) {
-    console.error('Communications SMS error:', error);
-    return res.status(500).json({ error: error?.message || 'Failed to send SMS.' });
+    return sendSafeError(res, error, 'Failed to send SMS.', '[communications/send-sms]');
   }
 });
 
 // ═══════════════════════════════════════════════════════════════
 // POST /api/communications/send-email
-// Sends email via Resend, logs to communication_messages
+// Sends email via SMTP, logs to communication_messages
 // ═══════════════════════════════════════════════════════════════
 
 router.post('/communications/send-email', async (req, res) => {
@@ -120,25 +120,28 @@ router.post('/communications/send-email', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email address.' });
     }
 
-    const resend = getResend();
+    ensureMailer();
     const serviceClient = getServiceClient();
 
     // Resolve sender identity: user email or org default
     const senderReplyTo = reply_to || user.email || undefined;
 
+    // Sanitize subject (strip CRLF to prevent email header injection) and body
+    const safeSubject = stripCRLF(subject);
     const safeBodyHtml = body_html ? sanitizeHtml(body_html) : null;
     const htmlContent = safeBodyHtml || `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;white-space:pre-wrap;">${sanitizeText(body || '').replace(/\n/g, '<br/>')}</div>`;
 
-    // Send via Resend
-    const result = await resend.emails.send({
+    // Send via SMTP
+    const result = await sendEmail({
       from: emailFrom,
-      to: [to],
+      to,
       replyTo: senderReplyTo,
-      subject,
+      subject: safeSubject,
       html: htmlContent,
     });
 
-    const providerId = (result.data as any)?.id || null;
+    if (!result.sent) throw new Error(result.error || 'Email send failed');
+    const providerId = result.messageId || null;
 
     // Log to communication_messages
     const { data: commMsg, error: commErr } = await serviceClient
@@ -172,8 +175,7 @@ router.post('/communications/send-email', async (req, res) => {
       status: 'sent',
     });
   } catch (error: any) {
-    console.error('Communications email error:', error);
-    return res.status(500).json({ error: error?.message || 'Failed to send email.' });
+    return sendSafeError(res, error, 'Failed to send email.', '[communications/send-email]');
   }
 });
 
@@ -207,8 +209,7 @@ router.get('/communications/messages', async (req, res) => {
 
     return res.json(data || []);
   } catch (error: any) {
-    console.error('Communications list error:', error);
-    return res.status(500).json({ error: error?.message || 'Failed to fetch communications.' });
+    return sendSafeError(res, error, 'Failed to fetch communications.', '[communications/messages]');
   }
 });
 
@@ -234,7 +235,7 @@ router.get('/communications/channels', async (req, res) => {
     if (error) throw error;
     return res.json(data || []);
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to fetch channels.' });
+    return sendSafeError(res, error, 'Failed to fetch channels.', '[communications/channels]');
   }
 });
 
@@ -259,7 +260,7 @@ router.get('/communications/settings', async (req, res) => {
     if (error) throw error;
     return res.json(data || { sms_enabled: false, email_enabled: true });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to fetch settings.' });
+    return sendSafeError(res, error, 'Failed to fetch settings.', '[communications/settings]');
   }
 });
 
@@ -283,8 +284,7 @@ router.post('/communications/provision-sms', async (req, res) => {
 
     return res.json(result);
   } catch (error: any) {
-    console.error('SMS provisioning error:', error);
-    return res.status(500).json({ error: error?.message || 'Failed to provision SMS number.' });
+    return sendSafeError(res, error, 'Failed to provision SMS number.', '[communications/provision-sms]');
   }
 });
 

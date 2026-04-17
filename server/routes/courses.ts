@@ -1,24 +1,35 @@
 import express from 'express';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = express.Router();
 
 // ── Auto-migrate: ensure tables exist on first request ──
 let tablesReady = false;
+let hasTargetingColumns = false;
+
+async function checkTargetingColumns() {
+  if (hasTargetingColumns) return;
+  const admin = getServiceClient();
+  const { error } = await admin.from('courses').select('target_roles').limit(1);
+  hasTargetingColumns = !error;
+  if (!hasTargetingColumns) {
+    console.log('[courses] target_roles column not found — audience targeting features disabled until migration is applied.');
+    console.log('[courses] Apply: supabase/migrations/20260412100000_courses_audience_targeting.sql');
+  }
+}
 
 async function ensureTables() {
   if (tablesReady) return;
   const admin = getServiceClient();
   const { error } = await admin.from('courses').select('id').limit(1);
-  if (!error) { tablesReady = true; return; }
+  if (!error) { tablesReady = true; await checkTargetingColumns(); return; }
   if (error.code !== 'PGRST205' && error.code !== '42P01' && !error.message.includes('schema cache') && !error.message.includes('relation') ) {
-    // Some other error (auth, network, etc.) — don't block, let queries fail naturally
     console.warn('[courses] ensureTables check returned unexpected error:', error.code, error.message);
     tablesReady = true;
     return;
   }
 
-  // Tables don't exist — try via DATABASE_URL if available
   console.log('[courses] Tables not found, attempting auto-migration...');
   const dbUrl = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL;
   if (dbUrl) {
@@ -43,14 +54,12 @@ async function ensureTables() {
     }
   }
 
-  // No DATABASE_URL — log warning but don't crash. Return empty data gracefully.
   console.warn(
     '[courses] Tables not found and no DATABASE_URL set. Apply migration manually:\n' +
     '  1. Supabase Dashboard > SQL Editor\n' +
     '  2. Paste: supabase/migrations/20260403100000_courses_module.sql\n' +
     '  3. Run'
   );
-  // Mark as ready so we don't retry every request — queries will fail with descriptive DB errors
   tablesReady = true;
 }
 
@@ -59,28 +68,119 @@ async function ensureTables() {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isUUID(v: string | undefined): boolean { return !!v && UUID_RE.test(v); }
 
+/** Check if user is org admin/owner */
 async function requireAdmin(req: express.Request, res: express.Response) {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return null;
   const isAdmin = await isOrgAdminOrOwner(auth.client, auth.user.id, auth.orgId);
   if (!isAdmin) {
-    res.status(403).json({ error: 'Admin access required.' });
+    // Log for debugging
+    const svc = getServiceClient();
+    const { data: membership } = await svc.from('memberships').select('role').eq('org_id', auth.orgId).eq('user_id', auth.user.id).maybeSingle();
+    console.warn(`[courses] requireAdmin denied: userId=${auth.user.id}, orgId=${auth.orgId}, role=${membership?.role || 'NOT_FOUND'}`);
+    res.status(403).json({ error: `Admin access required. Your role: ${membership?.role || 'unknown'}` });
     return null;
   }
   return auth;
+}
+
+/** Check if user can edit a specific course (admin/owner OR creator) */
+async function canEditCourse(userId: string, orgId: string, courseId: string): Promise<boolean> {
+  const admin = getServiceClient();
+  // Check if admin/owner
+  const { data: member } = await admin
+    .from('memberships')
+    .select('role')
+    .eq('org_id', orgId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (member && (member.role === 'owner' || member.role === 'admin')) return true;
+
+  // Check if creator
+  const { data: course } = await admin
+    .from('courses')
+    .select('created_by')
+    .eq('id', courseId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  return course?.created_by === userId;
+}
+
+/** Check if user can edit — returns auth or sends 403 */
+async function requireEditor(req: express.Request, res: express.Response, courseId: string) {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return null;
+  const allowed = await canEditCourse(auth.user.id, auth.orgId, courseId);
+  if (!allowed) {
+    res.status(403).json({ error: 'You do not have permission to edit this course.' });
+    return null;
+  }
+  return auth;
+}
+
+/** Check if user can view a course based on audience targeting */
+async function canViewCourse(userId: string, orgId: string, course: any): Promise<boolean> {
+  const admin = getServiceClient();
+
+  // Admin/owner can see everything
+  const { data: member } = await admin
+    .from('memberships')
+    .select('role')
+    .eq('org_id', orgId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (!member) return false;
+  if (member.role === 'owner' || member.role === 'admin') return true;
+
+  // Creator can always see their own course
+  if (course.created_by === userId) return true;
+
+  // Check visibility mode
+  if (course.visibility === 'all') {
+    // If target_roles is set, filter by role
+    const targetRoles: string[] = course.target_roles || [];
+    if (targetRoles.length > 0 && !targetRoles.includes(member.role)) {
+      // Role doesn't match, but check target_user_ids
+      const targetUserIds: string[] = course.target_user_ids || [];
+      if (targetUserIds.length > 0 && targetUserIds.includes(userId)) return true;
+      if (targetRoles.length > 0) return false; // Has role restriction and user doesn't match
+    }
+    return true; // visibility=all and no role restriction (or role matches)
+  }
+
+  // visibility === 'assigned'
+  // Check target_user_ids
+  const targetUserIds: string[] = course.target_user_ids || [];
+  if (targetUserIds.includes(userId)) return true;
+
+  // Check target_roles
+  const targetRoles: string[] = course.target_roles || [];
+  if (targetRoles.length > 0 && targetRoles.includes(member.role)) return true;
+
+  // Check course_assignments table
+  const { data: assignment } = await admin
+    .from('course_assignments')
+    .select('id')
+    .eq('course_id', course.id)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  return !!assignment;
 }
 
 // ════════════════════════════════════════════════════════════════
 // COURSES CRUD
 // ════════════════════════════════════════════════════════════════
 
-/** GET /api/courses — list courses for the org */
+/** GET /api/courses — list courses for the org (filtered by audience) */
 router.get('/courses', async (req, res) => {
   try {
     await ensureTables();
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
-    console.log('[courses] GET /courses orgId=', auth.orgId, 'userId=', auth.user.id);
     if (!auth.orgId || !isUUID(auth.orgId)) return res.status(403).json({ error: 'No valid organization context.' });
     const admin = getServiceClient();
     const { status, q } = req.query as { status?: string; q?: string };
@@ -98,8 +198,41 @@ router.get('/courses', async (req, res) => {
     const { data, error } = await query;
     if (error) throw error;
 
+    // Get user's role for audience filtering
+    const { data: member } = await admin
+      .from('memberships')
+      .select('role')
+      .eq('org_id', auth.orgId)
+      .eq('user_id', auth.user.id)
+      .maybeSingle();
+
+    const userRole = member?.role || 'member';
+    const isAdminOrOwner = userRole === 'owner' || userRole === 'admin';
+
+    // Filter courses by audience targeting (admin/owner see all)
+    const visibleCourses = isAdminOrOwner
+      ? (data || [])
+      : (data || []).filter((c: any) => {
+          // Creator can always see their course
+          if (c.created_by === auth.user.id) return true;
+
+          // Draft courses are only visible to admins/owners/creator
+          if (c.status === 'draft') return false;
+
+          const targetRoles: string[] = c.target_roles || [];
+          const targetUserIds: string[] = c.target_user_ids || [];
+          const hasTargeting = targetRoles.length > 0 || targetUserIds.length > 0;
+
+          if (c.visibility === 'all' && !hasTargeting) return true;
+          if (targetUserIds.includes(auth.user.id)) return true;
+          if (targetRoles.length > 0 && targetRoles.includes(userRole)) return true;
+          if (!hasTargeting && c.visibility === 'all') return true;
+
+          return false;
+        });
+
     // Attach module/lesson counts
-    const courseIds = (data || []).map((c: any) => c.id);
+    const courseIds = visibleCourses.map((c: any) => c.id);
     if (courseIds.length === 0) return res.json([]);
 
     const { data: modules } = await admin
@@ -124,7 +257,7 @@ router.get('/courses', async (req, res) => {
       lessonByModule[l.module_id].push(l);
     }
 
-    const enriched = (data || []).map((c: any) => {
+    const enriched = visibleCourses.map((c: any) => {
       const mIds = moduleByCourse[c.id] || [];
       let lessonCount = 0;
       let totalMin = 0;
@@ -138,8 +271,46 @@ router.get('/courses', async (req, res) => {
 
     return res.json(enriched);
   } catch (err: any) {
-    console.error('courses_list_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to list courses.' });
+    return sendSafeError(res, err, 'Failed to list courses.', '[courses/list]');
+  }
+});
+
+/** GET /api/courses/my-role — get current user's org role */
+router.get('/courses/my-role', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+
+    const { data } = await admin
+      .from('memberships')
+      .select('role')
+      .eq('org_id', auth.orgId)
+      .eq('user_id', auth.user.id)
+      .maybeSingle();
+
+    return res.json({ role: data?.role || null });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Failed to get role.', '[courses/my-role]');
+  }
+});
+
+/** GET /api/courses/org-members — list org members for audience targeting */
+router.get('/courses/org-members', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+
+    const { data, error } = await admin
+      .from('memberships')
+      .select('user_id, role, full_name, avatar_url')
+      .eq('org_id', auth.orgId);
+    if (error) throw error;
+
+    return res.json(data || []);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Failed to get org members.', '[courses/org-members]');
   }
 });
 
@@ -156,28 +327,43 @@ router.get('/courses/progress/summary', async (req, res) => {
       .eq('user_id', auth.user.id);
     if (error) throw error;
 
-    const summary: Record<string, { total: number; completed: number; last_viewed: string | null }> = {};
-    for (const p of data || []) {
-      if (!summary[p.course_id]) summary[p.course_id] = { total: 0, completed: 0, last_viewed: null };
-      summary[p.course_id].total++;
-      if (p.completed) summary[p.course_id].completed++;
-      if (!summary[p.course_id].last_viewed || p.last_viewed > summary[p.course_id].last_viewed!) {
-        summary[p.course_id].last_viewed = p.last_viewed;
-      }
+    if (!data || data.length === 0) return res.json({});
+
+    // Get total lesson counts per course
+    const courseIds = [...new Set(data.map((r: any) => r.course_id))];
+    const summary: Record<string, number> = {};
+
+    for (const cid of courseIds) {
+      const { data: modules } = await admin
+        .from('course_modules')
+        .select('id')
+        .eq('course_id', cid);
+
+      if (!modules || modules.length === 0) continue;
+
+      const { count } = await admin
+        .from('course_lessons')
+        .select('id', { count: 'exact', head: true })
+        .in('module_id', modules.map((m: any) => m.id));
+
+      const total = count || 0;
+      if (total === 0) continue;
+
+      const completed = data.filter((r: any) => r.course_id === cid && r.completed).length;
+      summary[cid] = Math.round((completed / total) * 100);
     }
+
     return res.json(summary);
   } catch (err: any) {
-    console.error('progress_summary_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to get progress summary.' });
+    return sendSafeError(res, err, 'Failed to get progress summary.', '[courses/progress-summary]');
   }
 });
 
-/** GET /api/courses/:id — full course with modules, lessons */
+/** GET /api/courses/:id — full course with modules, lessons + can_edit flag */
 router.get('/courses/:id', async (req, res) => {
   try {
-    console.log('[courses] GET /courses/:id called with id=', req.params.id);
+    await ensureTables();
     if (!isUUID(req.params.id)) {
-      console.warn('[courses] Invalid course ID received:', req.params.id, '— URL:', req.originalUrl);
       return res.status(400).json({ error: 'Invalid course ID.' });
     }
     const auth = await requireAuthedClient(req, res);
@@ -194,6 +380,13 @@ router.get('/courses/:id', async (req, res) => {
     if (error) throw error;
     if (!course) return res.status(404).json({ error: 'Course not found.' });
 
+    // Check if user can view this course
+    const canView = await canViewCourse(auth.user.id, auth.orgId, course);
+    if (!canView) return res.status(403).json({ error: 'You do not have access to this course.' });
+
+    // Check if user can edit this course
+    const canEdit = await canEditCourse(auth.user.id, auth.orgId, course.id);
+
     const { data: modules } = await admin
       .from('course_modules')
       .select('*')
@@ -205,7 +398,6 @@ router.get('/courses/:id', async (req, res) => {
       ? await admin.from('course_lessons').select('*').in('module_id', moduleIds).order('sort_order', { ascending: true })
       : { data: [] };
 
-    // Attach lessons to modules
     const lessonsByModule: Record<string, any[]> = {};
     for (const l of lessons || []) {
       if (!lessonsByModule[l.module_id]) lessonsByModule[l.module_id] = [];
@@ -216,60 +408,71 @@ router.get('/courses/:id', async (req, res) => {
       lessons: lessonsByModule[m.id] || [],
     }));
 
-    // Get assignments
     const { data: assignments } = await admin
       .from('course_assignments')
       .select('*')
       .eq('course_id', course.id);
 
-    return res.json({ ...course, modules: enrichedModules, assignments: assignments || [] });
+    return res.json({ ...course, modules: enrichedModules, assignments: assignments || [], can_edit: canEdit });
   } catch (err: any) {
-    console.error('course_get_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to get course.' });
+    return sendSafeError(res, err, 'Failed to get course.', '[courses/get]');
   }
 });
 
-/** POST /api/courses — create course (admin only) */
+/** POST /api/courses — create course (admin/owner/any authorized role) */
 router.post('/courses', async (req, res) => {
   try {
+    await ensureTables();
     const auth = await requireAdmin(req, res);
     if (!auth) return;
     const admin = getServiceClient();
 
-    const { title, description, cover_image, status } = req.body;
+    const { title, description, cover_image, status, target_roles, target_user_ids } = req.body;
+    const insertData: Record<string, any> = {
+      org_id: auth.orgId,
+      title: title || '',
+      description: description || '',
+      cover_image: cover_image || null,
+      status: status || 'draft',
+      created_by: auth.user.id,
+    };
+    // Only include audience targeting fields if columns exist in DB
+    if (hasTargetingColumns) {
+      if (target_roles && target_roles.length > 0) insertData.target_roles = target_roles;
+      if (target_user_ids && target_user_ids.length > 0) insertData.target_user_ids = target_user_ids;
+    }
+
     const { data, error } = await admin
       .from('courses')
-      .insert({
-        org_id: auth.orgId,
-        title: title || '',
-        description: description || '',
-        cover_image: cover_image || null,
-        status: status || 'draft',
-        created_by: auth.user.id,
-      })
+      .insert(insertData)
       .select()
       .single();
     if (error) throw error;
     return res.status(201).json(data);
   } catch (err: any) {
-    console.error('course_create_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to create course.' });
+    return sendSafeError(res, err, 'Failed to create course.', '[courses/create]');
   }
 });
 
-/** PATCH /api/courses/:id — update course (admin only) */
+/** PATCH /api/courses/:id — update course (admin/owner/creator) */
 router.patch('/courses/:id', async (req, res) => {
   try {
-    const auth = await requireAdmin(req, res);
+    const auth = await requireEditor(req, res, req.params.id);
     if (!auth) return;
     const admin = getServiceClient();
 
-    const { title, description, cover_image, status } = req.body;
+    const { title, description, cover_image, status, category, visibility, target_roles, target_user_ids } = req.body;
     const updates: Record<string, any> = { updated_at: new Date().toISOString() };
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
     if (cover_image !== undefined) updates.cover_image = cover_image;
     if (status !== undefined) updates.status = status;
+    if (category !== undefined) updates.category = category;
+    if (visibility !== undefined) updates.visibility = visibility;
+    if (hasTargetingColumns) {
+      if (target_roles !== undefined) updates.target_roles = target_roles;
+      if (target_user_ids !== undefined) updates.target_user_ids = target_user_ids;
+    }
 
     const { data, error } = await admin
       .from('courses')
@@ -281,8 +484,7 @@ router.patch('/courses/:id', async (req, res) => {
     if (error) throw error;
     return res.json(data);
   } catch (err: any) {
-    console.error('course_update_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to update course.' });
+    return sendSafeError(res, err, 'Failed to update course.', '[courses/update]');
   }
 });
 
@@ -293,16 +495,18 @@ router.delete('/courses/:id', async (req, res) => {
     if (!auth) return;
     const admin = getServiceClient();
 
-    const { error } = await admin
+    const { data, error } = await admin
       .from('courses')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', req.params.id)
-      .eq('org_id', auth.orgId);
+      .eq('org_id', auth.orgId)
+      .select('id')
+      .maybeSingle();
     if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Course not found.' });
     return res.json({ ok: true });
   } catch (err: any) {
-    console.error('course_delete_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to delete course.' });
+    return sendSafeError(res, err, 'Failed to delete course.', '[courses/delete]');
   }
 });
 
@@ -313,7 +517,6 @@ router.post('/courses/:id/duplicate', async (req, res) => {
     if (!auth) return;
     const admin = getServiceClient();
 
-    // Fetch original
     const { data: original, error: fetchErr } = await admin
       .from('courses')
       .select('*')
@@ -324,7 +527,6 @@ router.post('/courses/:id/duplicate', async (req, res) => {
     if (fetchErr) throw fetchErr;
     if (!original) return res.status(404).json({ error: 'Course not found.' });
 
-    // Create copy
     const { data: newCourse, error: insertErr } = await admin
       .from('courses')
       .insert({
@@ -333,13 +535,15 @@ router.post('/courses/:id/duplicate', async (req, res) => {
         description: original.description,
         cover_image: original.cover_image,
         status: 'draft',
+        category: original.category,
         created_by: auth.user.id,
+        ...(hasTargetingColumns && original.target_roles?.length ? { target_roles: original.target_roles } : {}),
+        ...(hasTargetingColumns && original.target_user_ids?.length ? { target_user_ids: original.target_user_ids } : {}),
       })
       .select()
       .single();
     if (insertErr) throw insertErr;
 
-    // Duplicate modules + lessons
     const { data: modules } = await admin
       .from('course_modules')
       .select('*')
@@ -377,28 +581,25 @@ router.post('/courses/:id/duplicate', async (req, res) => {
 
     return res.status(201).json(newCourse);
   } catch (err: any) {
-    console.error('course_duplicate_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to duplicate course.' });
+    return sendSafeError(res, err, 'Failed to duplicate course.', '[courses/duplicate]');
   }
 });
 
 // ════════════════════════════════════════════════════════════════
-// MODULES CRUD
+// MODULES CRUD (editor permission — admin/owner/creator)
 // ════════════════════════════════════════════════════════════════
 
 /** POST /api/courses/:courseId/modules */
 router.post('/courses/:courseId/modules', async (req, res) => {
   try {
-    const auth = await requireAdmin(req, res);
+    const auth = await requireEditor(req, res, req.params.courseId);
     if (!auth) return;
     const admin = getServiceClient();
 
-    // Verify course ownership
     const { data: course } = await admin
       .from('courses').select('id').eq('id', req.params.courseId).eq('org_id', auth.orgId).is('deleted_at', null).maybeSingle();
     if (!course) return res.status(404).json({ error: 'Course not found.' });
 
-    // Get next sort order
     const { data: existing } = await admin
       .from('course_modules').select('sort_order').eq('course_id', course.id).order('sort_order', { ascending: false }).limit(1);
     const nextOrder = (existing?.[0]?.sort_order ?? -1) + 1;
@@ -411,27 +612,30 @@ router.post('/courses/:courseId/modules', async (req, res) => {
     if (error) throw error;
     return res.status(201).json(data);
   } catch (err: any) {
-    console.error('module_create_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to create module.' });
+    return sendSafeError(res, err, 'Failed to create module.', '[courses/modules/create]');
   }
 });
 
 /** PATCH /api/courses/modules/:id */
 router.patch('/courses/modules/:id', async (req, res) => {
   try {
-    const auth = await requireAdmin(req, res);
+    const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
+
+    const { data: mod } = await admin.from('course_modules').select('id, course_id').eq('id', req.params.id).maybeSingle();
+    if (!mod) return res.status(404).json({ error: 'Module not found.' });
+
+    // Check edit permission on parent course
+    const allowed = await canEditCourse(auth.user.id, auth.orgId, mod.course_id);
+    if (!allowed) return res.status(403).json({ error: 'You do not have permission to edit this course.' });
+
+    const { data: course } = await admin.from('courses').select('org_id').eq('id', mod.course_id).maybeSingle();
+    if (!course || course.org_id !== auth.orgId) return res.status(403).json({ error: 'Forbidden.' });
 
     const updates: Record<string, any> = { updated_at: new Date().toISOString() };
     if (req.body.title !== undefined) updates.title = req.body.title;
     if (req.body.sort_order !== undefined) updates.sort_order = req.body.sort_order;
-
-    // Verify module belongs to org via parent course
-    const { data: mod } = await admin.from('course_modules').select('id, course_id').eq('id', req.params.id).maybeSingle();
-    if (!mod) return res.status(404).json({ error: 'Module not found.' });
-    const { data: course } = await admin.from('courses').select('org_id').eq('id', mod.course_id).maybeSingle();
-    if (!course || course.org_id !== auth.orgId) return res.status(403).json({ error: 'Forbidden.' });
 
     const { data, error } = await admin
       .from('course_modules')
@@ -442,21 +646,23 @@ router.patch('/courses/modules/:id', async (req, res) => {
     if (error) throw error;
     return res.json(data);
   } catch (err: any) {
-    console.error('module_update_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to update module.' });
+    return sendSafeError(res, err, 'Failed to update module.', '[courses/modules/update]');
   }
 });
 
 /** DELETE /api/courses/modules/:id */
 router.delete('/courses/modules/:id', async (req, res) => {
   try {
-    const auth = await requireAdmin(req, res);
+    const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
 
-    // Verify module belongs to org via parent course
     const { data: mod } = await admin.from('course_modules').select('id, course_id').eq('id', req.params.id).maybeSingle();
     if (!mod) return res.status(404).json({ error: 'Module not found.' });
+
+    const allowed = await canEditCourse(auth.user.id, auth.orgId, mod.course_id);
+    if (!allowed) return res.status(403).json({ error: 'You do not have permission to edit this course.' });
+
     const { data: course } = await admin.from('courses').select('org_id').eq('id', mod.course_id).maybeSingle();
     if (!course || course.org_id !== auth.orgId) return res.status(403).json({ error: 'Forbidden.' });
 
@@ -464,26 +670,24 @@ router.delete('/courses/modules/:id', async (req, res) => {
     if (error) throw error;
     return res.json({ ok: true });
   } catch (err: any) {
-    console.error('module_delete_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to delete module.' });
+    return sendSafeError(res, err, 'Failed to delete module.', '[courses/modules/delete]');
   }
 });
 
 /** PUT /api/courses/:courseId/modules/reorder */
 router.put('/courses/:courseId/modules/reorder', async (req, res) => {
   try {
-    const auth = await requireAdmin(req, res);
+    const auth = await requireEditor(req, res, req.params.courseId);
     if (!auth) return;
     const admin = getServiceClient();
-    const { order } = req.body as { order: string[] }; // array of module IDs
+    const { order } = req.body as { order: string[] };
 
     for (let i = 0; i < order.length; i++) {
       await admin.from('course_modules').update({ sort_order: i }).eq('id', order[i]);
     }
     return res.json({ ok: true });
   } catch (err: any) {
-    console.error('module_reorder_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to reorder modules.' });
+    return sendSafeError(res, err, 'Failed to reorder modules.', '[courses/modules/reorder]');
   }
 });
 
@@ -491,14 +695,34 @@ router.put('/courses/:courseId/modules/reorder', async (req, res) => {
 // LESSONS CRUD
 // ════════════════════════════════════════════════════════════════
 
+/** Helper to get courseId from moduleId */
+async function getCourseIdFromModule(moduleId: string): Promise<string | null> {
+  const admin = getServiceClient();
+  const { data } = await admin.from('course_modules').select('course_id').eq('id', moduleId).maybeSingle();
+  return data?.course_id || null;
+}
+
+/** Helper to get courseId from lessonId */
+async function getCourseIdFromLesson(lessonId: string): Promise<string | null> {
+  const admin = getServiceClient();
+  const { data: lesson } = await admin.from('course_lessons').select('module_id').eq('id', lessonId).maybeSingle();
+  if (!lesson) return null;
+  return getCourseIdFromModule(lesson.module_id);
+}
+
 /** POST /api/courses/modules/:moduleId/lessons */
 router.post('/courses/modules/:moduleId/lessons', async (req, res) => {
   try {
-    const auth = await requireAdmin(req, res);
+    const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
 
-    // Get next sort order
+    const courseId = await getCourseIdFromModule(req.params.moduleId);
+    if (!courseId) return res.status(404).json({ error: 'Module not found.' });
+
+    const allowed = await canEditCourse(auth.user.id, auth.orgId, courseId);
+    if (!allowed) return res.status(403).json({ error: 'You do not have permission to edit this course.' });
+
     const { data: existing } = await admin
       .from('course_lessons').select('sort_order').eq('module_id', req.params.moduleId)
       .order('sort_order', { ascending: false }).limit(1);
@@ -523,17 +747,22 @@ router.post('/courses/modules/:moduleId/lessons', async (req, res) => {
     if (error) throw error;
     return res.status(201).json(data);
   } catch (err: any) {
-    console.error('lesson_create_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to create lesson.' });
+    return sendSafeError(res, err, 'Failed to create lesson.', '[courses/lessons/create]');
   }
 });
 
 /** PATCH /api/courses/lessons/:id */
 router.patch('/courses/lessons/:id', async (req, res) => {
   try {
-    const auth = await requireAdmin(req, res);
+    const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
+
+    const courseId = await getCourseIdFromLesson(req.params.id);
+    if (!courseId) return res.status(404).json({ error: 'Lesson not found.' });
+
+    const allowed = await canEditCourse(auth.user.id, auth.orgId, courseId);
+    if (!allowed) return res.status(403).json({ error: 'You do not have permission to edit this course.' });
 
     const updates: Record<string, any> = { updated_at: new Date().toISOString() };
     const fields = ['title', 'content_type', 'video_url', 'embed_url', 'text_content', 'attachments', 'duration_min', 'sort_order'];
@@ -550,41 +779,43 @@ router.patch('/courses/lessons/:id', async (req, res) => {
     if (error) throw error;
     return res.json(data);
   } catch (err: any) {
-    console.error('lesson_update_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to update lesson.' });
+    return sendSafeError(res, err, 'Failed to update lesson.', '[courses/lessons/update]');
   }
 });
 
 /** DELETE /api/courses/lessons/:id */
 router.delete('/courses/lessons/:id', async (req, res) => {
   try {
-    const auth = await requireAdmin(req, res);
+    const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
 
-    // Verify lesson belongs to org via module → course chain
-    const { data: lesson } = await admin.from('course_lessons').select('id, module_id').eq('id', req.params.id).maybeSingle();
-    if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
-    const { data: mod } = await admin.from('course_modules').select('course_id').eq('id', lesson.module_id).maybeSingle();
-    if (!mod) return res.status(404).json({ error: 'Module not found.' });
-    const { data: course } = await admin.from('courses').select('org_id').eq('id', mod.course_id).maybeSingle();
-    if (!course || course.org_id !== auth.orgId) return res.status(403).json({ error: 'Forbidden.' });
+    const courseId = await getCourseIdFromLesson(req.params.id);
+    if (!courseId) return res.status(404).json({ error: 'Lesson not found.' });
+
+    const allowed = await canEditCourse(auth.user.id, auth.orgId, courseId);
+    if (!allowed) return res.status(403).json({ error: 'You do not have permission to edit this course.' });
 
     const { error } = await admin.from('course_lessons').delete().eq('id', req.params.id);
     if (error) throw error;
     return res.json({ ok: true });
   } catch (err: any) {
-    console.error('lesson_delete_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to delete lesson.' });
+    return sendSafeError(res, err, 'Failed to delete lesson.', '[courses/lessons/delete]');
   }
 });
 
 /** POST /api/courses/lessons/:id/duplicate */
 router.post('/courses/lessons/:id/duplicate', async (req, res) => {
   try {
-    const auth = await requireAdmin(req, res);
+    const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
+
+    const courseId = await getCourseIdFromLesson(req.params.id);
+    if (!courseId) return res.status(404).json({ error: 'Lesson not found.' });
+
+    const allowed = await canEditCourse(auth.user.id, auth.orgId, courseId);
+    if (!allowed) return res.status(403).json({ error: 'You do not have permission to edit this course.' });
 
     const { data: original, error: fetchErr } = await admin
       .from('course_lessons').select('*').eq('id', req.params.id).maybeSingle();
@@ -614,26 +845,30 @@ router.post('/courses/lessons/:id/duplicate', async (req, res) => {
     if (error) throw error;
     return res.status(201).json(data);
   } catch (err: any) {
-    console.error('lesson_duplicate_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to duplicate lesson.' });
+    return sendSafeError(res, err, 'Failed to duplicate lesson.', '[courses/lessons/duplicate]');
   }
 });
 
 /** PUT /api/courses/modules/:moduleId/lessons/reorder */
 router.put('/courses/modules/:moduleId/lessons/reorder', async (req, res) => {
   try {
-    const auth = await requireAdmin(req, res);
+    const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
-    const { order } = req.body as { order: string[] };
 
+    const courseId = await getCourseIdFromModule(req.params.moduleId);
+    if (!courseId) return res.status(404).json({ error: 'Module not found.' });
+
+    const allowed = await canEditCourse(auth.user.id, auth.orgId, courseId);
+    if (!allowed) return res.status(403).json({ error: 'You do not have permission to edit this course.' });
+
+    const { order } = req.body as { order: string[] };
     for (let i = 0; i < order.length; i++) {
       await admin.from('course_lessons').update({ sort_order: i }).eq('id', order[i]);
     }
     return res.json({ ok: true });
   } catch (err: any) {
-    console.error('lesson_reorder_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to reorder lessons.' });
+    return sendSafeError(res, err, 'Failed to reorder lessons.', '[courses/lessons/reorder]');
   }
 });
 
@@ -664,8 +899,7 @@ router.post('/courses/:id/assign', async (req, res) => {
     }
     return res.json({ ok: true });
   } catch (err: any) {
-    console.error('course_assign_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to assign course.' });
+    return sendSafeError(res, err, 'Failed to assign course.', '[courses/assign]');
   }
 });
 
@@ -680,8 +914,7 @@ router.delete('/courses/assignments/:id', async (req, res) => {
     if (error) throw error;
     return res.json({ ok: true });
   } catch (err: any) {
-    console.error('course_unassign_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to unassign.' });
+    return sendSafeError(res, err, 'Failed to unassign.', '[courses/unassign]');
   }
 });
 
@@ -704,8 +937,7 @@ router.get('/courses/:id/progress', async (req, res) => {
     if (error) throw error;
     return res.json(data || []);
   } catch (err: any) {
-    console.error('progress_get_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to get progress.' });
+    return sendSafeError(res, err, 'Failed to get progress.', '[courses/progress/get]');
   }
 });
 
@@ -734,8 +966,70 @@ router.post('/courses/progress', async (req, res) => {
     if (error) throw error;
     return res.json(data);
   } catch (err: any) {
-    console.error('progress_update_failed', err?.message);
-    return res.status(500).json({ error: err?.message || 'Failed to update progress.' });
+    return sendSafeError(res, err, 'Failed to update progress.', '[courses/progress/update]');
+  }
+});
+
+/** GET /api/courses/:id/team-progress — admin view of team progress */
+router.get('/courses/:id/team-progress', async (req, res) => {
+  try {
+    const auth = await requireAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+
+    const courseId = req.params.id;
+
+    // Get total lesson count
+    const { data: modules } = await admin
+      .from('course_modules')
+      .select('id')
+      .eq('course_id', courseId);
+
+    if (!modules || modules.length === 0) return res.json([]);
+
+    const { count: totalLessons } = await admin
+      .from('course_lessons')
+      .select('id', { count: 'exact', head: true })
+      .in('module_id', modules.map((m: any) => m.id));
+
+    if (!totalLessons) return res.json([]);
+
+    // Get all progress rows
+    const { data: progressRows, error: progErr } = await admin
+      .from('course_progress')
+      .select('user_id, lesson_id, completed, last_viewed')
+      .eq('course_id', courseId);
+    if (progErr) throw progErr;
+
+    // Get org members
+    const { data: members, error: memErr } = await admin
+      .from('memberships')
+      .select('user_id, full_name, avatar_url')
+      .eq('org_id', auth.orgId);
+    if (memErr) throw memErr;
+
+    const result = (members || []).map((m: any) => {
+      const userRows = (progressRows || []).filter((r: any) => r.user_id === m.user_id);
+      const completedCount = userRows.filter((r: any) => r.completed).length;
+      const lastActivity = userRows.length > 0
+        ? userRows.reduce((latest: string | null, r: any) => (!latest || r.last_viewed > latest) ? r.last_viewed : latest, null)
+        : null;
+
+      return {
+        user_id: m.user_id,
+        full_name: m.full_name || 'Unknown',
+        avatar_url: m.avatar_url,
+        completed_count: completedCount,
+        total_lessons: totalLessons,
+        percentage: Math.round((completedCount / totalLessons) * 100),
+        last_activity: lastActivity,
+      };
+    });
+
+    result.sort((a: any, b: any) => b.percentage - a.percentage);
+    return res.json(result);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Failed to get team progress.', '[courses/team-progress]');
   }
 });
 

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 import { geminiHealthCheck, geminiChat, geminiStream } from '../lib/gemini';
+import { validate, aiChatSchema } from '../lib/validation';
 
 const router = Router();
 
@@ -11,12 +13,12 @@ router.get('/ai/health', async (_req, res) => {
     const hasKey = Boolean(process.env.GEMINI_API_KEY);
     return res.json({ ok: hasKey, models: hasKey ? ['gemini-2.5-flash'] : [] });
   } catch (err: any) {
-    return res.status(500).json({ ok: false, error: err?.message });
+    return sendSafeError(res, err, 'Health check failed.', '[ai/health]');
   }
 });
 
 // POST /api/ai/chat — Non-streaming Gemini call
-router.post('/ai/chat', async (req, res) => {
+router.post('/ai/chat', validate(aiChatSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
@@ -36,12 +38,12 @@ router.post('/ai/chat', async (req, res) => {
 
     return res.json({ message: { content: result.content }, done: true });
   } catch (err: any) {
-    return res.status(502).json({ error: err?.message || 'Gemini call failed' });
+    return sendSafeError(res, err, 'Gemini call failed.', '[ai/chat]');
   }
 });
 
 // POST /api/ai/chat/stream — Streaming Gemini call via SSE
-router.post('/ai/chat/stream', async (req, res) => {
+router.post('/ai/chat/stream', validate(aiChatSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
@@ -78,10 +80,10 @@ router.post('/ai/chat/stream', async (req, res) => {
     res.end();
   } catch (err: any) {
     if (res.headersSent) {
-      res.write(`data: ${JSON.stringify({ type: 'error', error: err?.message || 'Stream failed' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'error', error: 'Stream failed.' })}\n\n`);
       res.end();
     } else {
-      res.status(502).json({ error: err?.message || 'Gemini stream failed' });
+      return sendSafeError(res, err, 'Gemini stream failed.', '[ai/chat/stream]');
     }
   }
 });

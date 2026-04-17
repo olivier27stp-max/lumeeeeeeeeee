@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
+import { validate, createGoalSchema } from '../lib/validation';
 
 const router = Router();
 
@@ -15,12 +17,12 @@ router.get('/goals', async (req, res) => {
     if (error) throw error;
     return res.json(data || []);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Goals operation failed.', '[goals]');
   }
 });
 
 // POST /api/goals — create
-router.post('/goals', async (req, res) => {
+router.post('/goals', validate(createGoalSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
@@ -35,7 +37,7 @@ router.post('/goals', async (req, res) => {
     if (error) throw error;
     return res.status(201).json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Goals operation failed.', '[goals]');
   }
 });
 
@@ -48,7 +50,7 @@ router.delete('/goals/:id', async (req, res) => {
     await admin.from('goals').delete().eq('id', req.params.id).eq('org_id', auth.orgId);
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Goals operation failed.', '[goals]');
   }
 });
 
@@ -98,7 +100,7 @@ router.get('/goals/progress', async (req, res) => {
 
     return res.json(results);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Goals operation failed.', '[goals]');
   }
 });
 

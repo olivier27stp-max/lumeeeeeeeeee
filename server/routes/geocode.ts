@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 import { consumeGeocodeQuota, normalizeAddress, geocodeAddress } from '../lib/helpers';
 import { validate, geocodeJobSchema } from '../lib/validation';
 
@@ -74,7 +75,7 @@ router.post('/geocode-job', validate(geocodeJobSchema), async (req, res) => {
       longitude: geocoded.longitude,
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Geocoding failed' });
+    return sendSafeError(res, error, 'Geocoding failed.', '[geocode-job]');
   }
 });
 
@@ -137,7 +138,7 @@ router.post('/geocode-batch', async (req, res) => {
 
     return res.status(200).json({ ok: true, processed: pending.length, succeeded, failed });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Batch geocoding failed' });
+    return sendSafeError(res, error, 'Batch geocoding failed.', '[geocode-batch]');
   }
 });
 

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { sendSafeError } from '../lib/error-handler';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedClient } from '../lib/supabase';
 import { getUserContext, isFinanciallyRestricted, hasPermission, stripFinancialFields, filterFinancialEntities } from '../lib/rbac';
@@ -257,7 +258,7 @@ async function handleSuggestions(req: import('express').Request, res: import('ex
 
     return res.json({ query: q, items, grouped });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Search suggestion request failed.' });
+    return sendSafeError(res, error, 'Search suggestion request failed.', '[search/suggestions]');
   }
 }
 
@@ -335,7 +336,7 @@ router.get('/search/results', async (req, res) => {
 
     return res.json({ query: q, tab, counts, groups });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Search results request failed.' });
+    return sendSafeError(res, error, 'Search results request failed.', '[search/results]');
   }
 });
 

@@ -11,4 +11,17 @@ if (!supabaseAnonKey || supabaseAnonKey.includes('placeholder')) {
   throw new Error('Missing VITE_SUPABASE_ANON_KEY — check your .env.local file.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    // Automatically refresh tokens before they expire
+    autoRefreshToken: true,
+    // Persist session to localStorage (default, but explicit for security review)
+    persistSession: true,
+    // Detect session from URL (for OAuth redirects, password reset)
+    detectSessionInUrl: true,
+    // Storage key for session data
+    storageKey: 'lume-auth-token',
+    // Flow type: PKCE is more secure than implicit for SPAs
+    flowType: 'pkce',
+  },
+});

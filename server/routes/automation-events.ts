@@ -154,6 +154,11 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
       }
     }
 
+    // Check if actor is a technician — if so, emit job.ready_for_invoicing
+    // and notify owner/admin for invoicing instead of auto-invoicing
+    const userCtx = req.userContext;
+    const isTechnician = userCtx?.role === 'technician';
+
     await eventBus.emit('job.completed', {
       orgId: auth.orgId,
       entityType: 'job',
@@ -165,8 +170,54 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
         client_name: clientName,
         client_email: clientEmail,
         client_phone: clientPhone,
+        completed_by_technician: isTechnician,
       },
     });
+
+    // When a technician completes a job, emit a separate event for invoicing
+    // and create a notification for owner/admin to handle the invoice
+    if (isTechnician) {
+      await eventBus.emit('job.ready_for_invoicing', {
+        orgId: auth.orgId,
+        entityType: 'job',
+        entityId: jobId,
+        actorId: auth.user.id,
+        metadata: {
+          job_name: job.title || '',
+          client_id: job.client_id || null,
+          client_name: clientName,
+          client_email: clientEmail,
+          client_phone: clientPhone,
+          technician_id: auth.user.id,
+        },
+      });
+
+      // Create notification for all owner/admin members
+      try {
+        const { data: admins } = await admin
+          .from('memberships')
+          .select('user_id')
+          .eq('org_id', auth.orgId)
+          .eq('status', 'active')
+          .in('role', ['owner', 'admin']);
+
+        if (admins && admins.length > 0) {
+          const notifications = admins.map((m: { user_id: string }) => ({
+            org_id: auth.orgId,
+            user_id: m.user_id,
+            type: 'job_ready_for_invoicing',
+            title: `Job ready for invoicing: ${job.title || 'Untitled'}`,
+            body: `${clientName || 'A job'} has been completed by a technician and is ready for invoicing.`,
+            entity_type: 'job',
+            entity_id: jobId,
+            read: false,
+          }));
+          await admin.from('notifications').insert(notifications);
+        }
+      } catch (notifErr: any) {
+        console.error('[automation-events] notification insert failed:', notifErr.message);
+      }
+    }
 
     return res.json({ ok: true });
   } catch (err: any) {

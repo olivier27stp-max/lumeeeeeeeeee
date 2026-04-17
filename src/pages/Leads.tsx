@@ -21,6 +21,7 @@ import { PageHeader, StatCard, EmptyState } from '../components/ui';
 import { useTranslation } from '../i18n';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import QuickActions from '../components/QuickActions';
+import { displayEmail } from '../lib/piiSanitizer';
 import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
 import QuoteDetailsModal from '../components/quotes/QuoteDetailsModal';
 import PresetSelectModal from '../components/quotes/PresetSelectModal';
@@ -686,7 +687,7 @@ export default function Leads() {
               <div className="p-5">
                 <h3 className="text-[15px] font-semibold text-text-primary">{t.leads.emailConflictTitle}</h3>
                 <p className="mt-2 text-[13px] text-text-secondary">
-                  {t.leads.emailConflictMsg} <span className="font-medium text-text-primary">{emailConflict.email}</span>
+                  {t.leads.emailConflictMsg} <span className="font-medium text-text-primary">{displayEmail(emailConflict.email)}</span>
                 </p>
                 <p className="mt-1 text-xs text-text-tertiary">
                   {emailConflict.first_name || ''} {emailConflict.last_name || ''}
@@ -828,7 +829,7 @@ export default function Leads() {
                       </div>
                       <div className="flex items-center gap-3 text-[13px] text-text-secondary">
                         <Mail size={14} className="text-text-tertiary shrink-0" />
-                        {selectedLead.email || t.common.noEmail}
+                        {displayEmail(selectedLead.email) !== '—' ? displayEmail(selectedLead.email) : t.common.noEmail}
                       </div>
                     </div>
 

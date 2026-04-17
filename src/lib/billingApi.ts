@@ -80,10 +80,10 @@ export interface SubscribeInput {
   plan_slug: string;
   interval: 'monthly' | 'yearly';
   currency: 'USD' | 'CAD';
+  payment_method_id?: string;
   promo_code?: string;
   referral_code?: string;
   billing_email?: string;
-  card_name?: string;
   company_name?: string;
   country?: string;
   postal_code?: string;
@@ -149,4 +149,75 @@ export async function validatePromoCode(code: string): Promise<{
   if (!res.ok) return null;
   const data = await res.json();
   return data.promo;
+}
+
+// ── Email verification check ────────────────────────────────────
+
+export async function checkEmailVerified(): Promise<{
+  verified: boolean;
+  email: string | null;
+}> {
+  const res = await fetch(`${API_BASE}/billing/email-verified`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) return { verified: false, email: null };
+  return res.json();
+}
+
+// ── Checkout confirmation (polling) ─────────────────────────────
+
+export interface CheckoutStatus {
+  status: 'pending' | 'processing' | 'confirmed';
+  email?: string;
+  userId?: string;
+  subscriptionId?: string;
+  message?: string;
+}
+
+export async function confirmCheckout(sessionId: string): Promise<CheckoutStatus> {
+  const res = await fetch(`${API_BASE}/billing/confirm-checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+  const data = await res.json();
+  if (res.status === 202) {
+    return { status: data.status || 'processing', email: data.email, message: data.message };
+  }
+  if (!res.ok) throw new Error(data.error || 'Checkout confirmation failed');
+  return data;
+}
+
+// ── Receipt management ──────────────────────────────────────────
+
+export async function resendReceipt(subscriptionId: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${API_BASE}/billing/resend-receipt`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ subscription_id: subscriptionId }),
+  });
+  const data = await res.json();
+  if (!res.ok) return { ok: false, error: data.error };
+  return { ok: true };
+}
+
+export interface ReceiptLogEntry {
+  id: string;
+  recipient_email: string;
+  email_type: string;
+  plan_name: string | null;
+  amount_cents: number;
+  currency: string;
+  status: string;
+  sent_at: string | null;
+  created_at: string;
+}
+
+export async function fetchReceiptHistory(): Promise<ReceiptLogEntry[]> {
+  const res = await fetch(`${API_BASE}/billing/receipt-history`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.receipts || [];
 }

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -20,7 +21,7 @@ router.get('/notifications', async (req, res) => {
     if (error) throw error;
     return res.json(data || []);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to fetch notifications' });
+    return sendSafeError(res, err, 'Failed to fetch notifications.', '[notifications]');
   }
 });
 
@@ -40,7 +41,7 @@ router.get('/notifications/unread-count', async (req, res) => {
     if (error) throw error;
     return res.json({ count: count || 0 });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to count' });
+    return sendSafeError(res, err, 'Failed to count notifications.', '[notifications/unread-count]');
   }
 });
 
@@ -59,7 +60,7 @@ router.post('/notifications/read', async (req, res) => {
     }
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to mark as read' });
+    return sendSafeError(res, err, 'Failed to mark as read.', '[notifications/read]');
   }
 });
 
@@ -77,7 +78,7 @@ router.delete('/notifications/:id', async (req, res) => {
 
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Failed to dismiss notification.', '[notifications/delete]');
   }
 });
 

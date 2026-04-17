@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { BriefcaseBusiness, Calendar, ChevronDown, Clock3, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, BriefcaseBusiness, Calendar, ChevronDown, Clock3, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn, formatCurrency } from '../lib/utils';
 import { listClients, createClient } from '../lib/clientsApi';
@@ -8,6 +8,7 @@ import { getSuggestedJobNumber, listSalespeople } from '../lib/jobsApi';
 import { resolveClientIdForLead } from '../lib/leadsApi';
 import { listTeams } from '../lib/teamsApi';
 import TeamSuggestions from './TeamSuggestions';
+import type { TeamSuggestion } from '../lib/teamSuggestionsApi';
 import { Job } from '../types';
 import ServicePicker from './ServicePicker';
 import type { PredefinedService } from '../lib/servicesApi';
@@ -224,7 +225,7 @@ export default function NewJobModal({
   const [newClientPhone, setNewClientPhone] = useState('');
   const [leadId, setLeadId] = useState<string | null>(null);
   const [teamSelection, setTeamSelection] = useState('');
-  const [showTeamSuggestions, setShowTeamSuggestions] = useState(false);
+  const [teamSuggestions, setTeamSuggestions] = useState<TeamSuggestion[]>([]);
   const [clients, setClients] = useState<Array<{ id: string; label: string; address: string | null; street_number: string | null; street_name: string | null; city: string | null; province: string | null; postal_code: string | null; country: string | null; latitude: number | null; longitude: number | null }>>([]);
   const [jobNumber, setJobNumber] = useState('');
   const [salespersonId, setSalespersonId] = useState('');
@@ -520,7 +521,7 @@ export default function NewJobModal({
     setNewClientEmail('');
     setNewClientPhone('');
     setTeamSelection('');
-    setShowTeamSuggestions(false);
+    setTeamSuggestions([]);
     setJobNumber('');
     setSalespersonId('');
     setJobType('one_off');
@@ -610,6 +611,39 @@ export default function NewJobModal({
     setAddedServiceIds((prev) => { const n = new Set(prev); n.delete(serviceId); return n; });
   };
 
+  // ── Team availability conflict detection ──
+  const selectedTeamSuggestion = useMemo(() => {
+    if (!teamSelection || teamSelection === UNASSIGNED_TEAM_VALUE) return null;
+    return teamSuggestions.find(s => s.team_id === teamSelection) || null;
+  }, [teamSelection, teamSuggestions]);
+
+  const teamConflictWarning = useMemo((): string | null => {
+    if (!selectedTeamSuggestion) return null;
+    const { status, availability_windows, reasons } = selectedTeamSuggestion;
+
+    if (status === 'unavailable') {
+      return t.teamSuggestions.teamUnavailableDay;
+    }
+    if (status === 'busy') {
+      return t.teamSuggestions.teamFullyBooked;
+    }
+    if (status === 'partially_available' && startTime && endTime) {
+      // Check if the selected time fits in any available window
+      const reqStart = parseInt(startTime.split(':')[0]) * 60 + parseInt(startTime.split(':')[1]);
+      const reqEnd = parseInt(endTime.split(':')[0]) * 60 + parseInt(endTime.split(':')[1]);
+      const fits = availability_windows.some(w => {
+        const wStart = parseInt(w.start.split(':')[0]) * 60 + parseInt(w.start.split(':')[1]);
+        const wEnd = parseInt(w.end.split(':')[0]) * 60 + parseInt(w.end.split(':')[1]);
+        return reqStart >= wStart && reqEnd <= wEnd;
+      });
+      if (!fits) {
+        const windows = availability_windows.map(w => `${w.start}-${w.end}`).join(', ');
+        return `${t.teamSuggestions.teamConflictSlot} ${t.teamSuggestions.availableWindows}: ${windows}`;
+      }
+    }
+    return null;
+  }, [selectedTeamSuggestion, startTime, endTime, t]);
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setInlineError(null);
@@ -644,6 +678,23 @@ export default function NewJobModal({
     if (!teamSelection) {
       setInlineError(t.modals.teamRequired);
       return;
+    }
+
+    // Block scheduling on unavailable/busy team
+    if (selectedTeamSuggestion && teamSelection !== UNASSIGNED_TEAM_VALUE) {
+      const { status } = selectedTeamSuggestion;
+      if (status === 'unavailable') {
+        setInlineError(t.teamSuggestions.teamUnavailableDay);
+        return;
+      }
+      if (status === 'busy') {
+        setInlineError(t.teamSuggestions.teamFullyBooked);
+        return;
+      }
+      if (teamConflictWarning && status === 'partially_available') {
+        setInlineError(teamConflictWarning);
+        return;
+      }
     }
 
     if (!addressLine1.trim()) {
@@ -856,8 +907,7 @@ export default function NewJobModal({
                   <label className="text-xs font-medium text-text-tertiary">{t.modals.assignTeam}</label>
                   <select
                     value={teamSelection}
-                    onChange={(event) => { setTeamSelection(event.target.value); setShowTeamSuggestions(true); }}
-                    onFocus={() => setShowTeamSuggestions(true)}
+                    onChange={(event) => setTeamSelection(event.target.value)}
                     className="glass-input w-full"
                     required
                   >
@@ -875,17 +925,23 @@ export default function NewJobModal({
                   {teamsQuery.isError ? (
                     <p className="text-[11px] text-danger">{t.modals.couldNotLoadTeamsMsg}</p>
                   ) : null}
-                  {/* Team suggestions — only shown after user interacts with team select */}
-                  {showTeamSuggestions && (
-                    <TeamSuggestions
-                      date={startDate}
-                      startTime={startTime}
-                      endTime={endTime}
-                      address={addressLine1 || selectedClient?.address || prefilledAddress || undefined}
-                      onSelectTeam={(id) => setTeamSelection(id)}
-                      selectedTeamId={teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection || null}
-                      compact
-                    />
+                  {/* Team availability — always visible when a date is set */}
+                  <TeamSuggestions
+                    date={startDate}
+                    startTime={startTime}
+                    endTime={endTime}
+                    address={addressLine1 || selectedClient?.address || prefilledAddress || undefined}
+                    onSelectTeam={(id) => setTeamSelection(id)}
+                    onSuggestionsLoaded={setTeamSuggestions}
+                    selectedTeamId={teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection || null}
+                    compact
+                  />
+                  {/* Conflict warning */}
+                  {teamConflictWarning && (
+                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-[12px] text-amber-800">
+                      <AlertTriangle size={14} className="shrink-0 mt-0.5 text-amber-600" />
+                      <span>{teamConflictWarning}</span>
+                    </div>
                   )}
                 </div>
 

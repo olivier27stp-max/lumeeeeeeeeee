@@ -58,6 +58,7 @@ export default function CourseView() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [teamProgress, setTeamProgress] = useState<TeamMemberProgress[]>([]);
   const [showTeamProgress, setShowTeamProgress] = useState(false);
+  const canEdit = course?.can_edit ?? false;
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -169,9 +170,11 @@ export default function CourseView() {
         <button onClick={() => navigate('/courses')} className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors">
           <ArrowLeft size={16} /> {t.courses.backToCourses}
         </button>
-        <button onClick={() => navigate(`/courses/${id}/edit`)} className="glass-button flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px]">
-          <Pencil size={13} /> {t.courses.editCourse}
-        </button>
+        {canEdit && (
+          <button onClick={() => navigate(`/courses/${id}/edit`)} className="glass-button flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px]">
+            <Pencil size={13} /> {t.courses.editCourse}
+          </button>
+        )}
       </div>
 
       {/* ── Title ── */}

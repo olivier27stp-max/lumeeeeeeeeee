@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -65,10 +66,11 @@ router.post('/team-suggestions', async (req, res) => {
     const targetDate = new Date(date + 'T00:00:00');
     const weekday = targetDate.getDay(); // 0=Sun, 6=Sat
 
-    // ── 1. Fetch active teams ──
+    // ── 1. Fetch active teams (org-scoped) ──
     const { data: teams } = await client
       .from('teams')
       .select('id, name, color_hex, description, is_active')
+      .eq('org_id', orgId)
       .eq('is_active', true)
       .is('deleted_at', null)
       .order('name');
@@ -94,12 +96,13 @@ router.post('/team-suggestions', async (req, res) => {
       .in('team_id', teamIds)
       .eq('slot_date', date);
 
-    // ── 4. Fetch scheduled events for this date ──
+    // ── 4. Fetch scheduled events for this date (org-scoped) ──
     const dayStart = `${date}T00:00:00`;
     const dayEnd = `${date}T23:59:59`;
     const { data: events } = await client
       .from('schedule_events')
       .select('id, team_id, start_at, end_at, job_id, notes, job:jobs!inner(id, title, property_address, latitude, longitude, client_name, status)')
+      .eq('org_id', orgId)
       .in('team_id', teamIds)
       .gte('start_at', dayStart)
       .lte('start_at', dayEnd)
@@ -449,8 +452,7 @@ router.post('/team-suggestions', async (req, res) => {
       },
     });
   } catch (error: any) {
-    console.error('team_suggestions_failed', error);
-    return res.status(500).json({ error: error?.message || 'Failed to get team suggestions.' });
+    return sendSafeError(res, error, 'Failed to get team suggestions.', '[team-suggestions]');
   }
 });
 

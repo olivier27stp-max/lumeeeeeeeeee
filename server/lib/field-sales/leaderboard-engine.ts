@@ -70,8 +70,32 @@ export async function getLeaderboard(
     (members ?? []).map((m) => [m.user_id, m])
   );
 
+  // Fetch previous period for trend calculation
+  const prevDate = new Date(date || new Date());
+  if (period === 'daily') prevDate.setDate(prevDate.getDate() - 1);
+  else if (period === 'weekly') prevDate.setDate(prevDate.getDate() - 7);
+  else prevDate.setMonth(prevDate.getMonth() - 1);
+  const prevRange = periodRange(period, prevDate);
+
+  const { data: prevData } = await supabase
+    .from('fs_rep_stat_snapshots')
+    .select('user_id, revenue')
+    .eq('org_id', orgId)
+    .eq('period', period)
+    .gte('period_start', prevRange.start)
+    .lte('period_start', prevRange.end);
+
+  const prevRevenueMap = new Map<string, number>();
+  for (const row of prevData ?? []) {
+    prevRevenueMap.set(row.user_id, (prevRevenueMap.get(row.user_id) || 0) + Number(row.revenue));
+  }
+
   let entries = (data ?? []).map((row, index) => {
     const member = memberMap.get(row.user_id);
+    const prevRevenue = prevRevenueMap.get(row.user_id) || 0;
+    const trend = prevRevenue > 0
+      ? Math.round(((Number(row.revenue) - prevRevenue) / prevRevenue) * 100)
+      : Number(row.revenue) > 0 ? 100 : 0;
     return {
       rank: index + 1,
       user_id: row.user_id,
@@ -82,7 +106,7 @@ export async function getLeaderboard(
       revenue: row.revenue,
       doors_knocked: row.doors_knocked,
       conversion_rate: row.conversion_rate,
-      trend: 0,
+      trend,
     };
   });
 
@@ -172,7 +196,7 @@ export async function calculateRepStats(
     .from('field_house_events')
     .select('*')
     .eq('org_id', orgId)
-    .eq('created_by', userId)
+    .eq('user_id', userId)
     .gte('created_at', dayStart)
     .lte('created_at', dayEnd);
 

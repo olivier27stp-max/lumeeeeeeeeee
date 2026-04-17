@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { validate } from '../lib/validation';
+import { validate, passwordSchema } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
+import { getBaseUrl } from '../lib/config';
 
 const router = Router();
 
@@ -10,18 +11,17 @@ const router = Router();
 
 const inviteSchema = z.object({
   email: z.string().trim().email('Valid email is required.'),
-  role: z.enum(['admin', 'manager', 'sales_rep', 'technician', 'support', 'viewer'], {
-    error: 'Role must be admin, manager, sales_rep, technician, support, or viewer.',
+  role: z.enum(['admin', 'sales_rep', 'technician'], {
+    error: 'Role must be admin, sales_rep, or technician.',
   }),
-  scope: z.enum(['self', 'assigned', 'team', 'department', 'company'], { error: 'Invalid scope.' }).optional(),
+  scope: z.enum(['self', 'assigned', 'team', 'company'], { error: 'Invalid scope.' }).optional(),
   team_id: z.string().uuid().nullable().optional(),
-  department_id: z.string().uuid().nullable().optional(),
   custom_permissions: z.record(z.string(), z.boolean()).optional(),
 });
 
 const acceptInviteSchema = z.object({
   token: z.string().trim().min(1, 'Token is required.'),
-  password: z.string().min(8, 'Password must be at least 8 characters.'),
+  password: passwordSchema,
   full_name: z.string().trim().min(1, 'Full name is required.'),
 });
 
@@ -35,12 +35,11 @@ const revokeInviteSchema = z.object({
 
 const updateMemberRoleSchema = z.object({
   memberId: z.string().uuid('Invalid member ID.'),
-  role: z.enum(['admin', 'manager', 'sales_rep', 'technician', 'support', 'viewer'], {
-    error: 'Role must be admin, manager, sales_rep, technician, support, or viewer.',
+  role: z.enum(['admin', 'sales_rep', 'technician'], {
+    error: 'Role must be admin, sales_rep, or technician.',
   }),
-  scope: z.enum(['self', 'assigned', 'team', 'department', 'company'], { error: 'Invalid scope.' }).optional(),
+  scope: z.enum(['self', 'assigned', 'team', 'company'], { error: 'Invalid scope.' }).optional(),
   team_id: z.string().uuid().nullable().optional(),
-  department_id: z.string().uuid().nullable().optional(),
   custom_permissions: z.record(z.string(), z.boolean()).optional(),
 });
 
@@ -192,17 +191,14 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
       .maybeSingle();
 
     const orgName = org?.name || 'Your organization';
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const baseUrl = getBaseUrl();
     const inviteLink = `${baseUrl}/invite/${token}`;
 
-    // Send invitation email via Resend
-    const resendApiKey = process.env.RESEND_API_KEY;
-    if (resendApiKey) {
-      try {
-        const { Resend } = await import('resend');
-        const resend = new Resend(resendApiKey);
-        await resend.emails.send({
-          from: 'Lume CRM <noreply@lume.crm>',
+    // Send invitation email via SMTP
+    try {
+      const { sendEmail, isMailerConfigured } = await import('../lib/mailer');
+      if (isMailerConfigured()) {
+        await sendEmail({
           to: email,
           subject: `You've been invited to join ${orgName} on Lume CRM`,
           html: `
@@ -220,10 +216,10 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
             </div>
           `,
         });
-      } catch (emailErr: any) {
-        console.error('[invitations/send] email error:', emailErr.message);
-        // Don't fail the invitation if email fails
       }
+    } catch (emailErr: any) {
+      console.error('[invitations/send] email error:', emailErr.message);
+      // Don't fail the invitation if email fails
     }
 
     return res.json({
@@ -468,16 +464,12 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
       .eq('id', auth.orgId)
       .maybeSingle();
 
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const baseUrl = getBaseUrl();
     const inviteLink = `${baseUrl}/invite/${newToken}`;
-    const resendApiKey = process.env.RESEND_API_KEY;
-
-    if (resendApiKey) {
-      try {
-        const { Resend } = await import('resend');
-        const resend = new Resend(resendApiKey);
-        await resend.emails.send({
-          from: 'Lume CRM <noreply@lume.crm>',
+    try {
+      const { sendEmail, isMailerConfigured } = await import('../lib/mailer');
+      if (isMailerConfigured()) {
+        await sendEmail({
           to: invitation.email,
           subject: `Reminder: You've been invited to ${org?.name || 'an organization'} on Lume CRM`,
           html: `
@@ -493,8 +485,8 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
             </div>
           `,
         });
-      } catch {}
-    }
+      }
+    } catch {}
 
     return res.json({ message: 'Invitation resent.', invite_link: inviteLink });
   } catch (err: any) {

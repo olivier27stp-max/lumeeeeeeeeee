@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { Resend } from 'resend';
 import { requireAuthedClient, isOrgMember, getServiceClient } from '../lib/supabase';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
-import { resendApiKey, emailFrom } from '../lib/config';
+import { emailFrom } from '../lib/config';
+import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import {
   validate,
   sendInvoiceEmailSchema,
@@ -11,6 +11,7 @@ import {
 } from '../lib/validation';
 import { eventBus } from '../lib/eventBus';
 import { isOrgAdminOrOwner } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -24,9 +25,8 @@ function sanitizeHtml(html: string): string {
 
 // ── Helpers ──
 
-function getResend() {
-  if (!resendApiKey) throw Object.assign(new Error('Resend API key is not configured.'), { status: 503 });
-  return new Resend(resendApiKey);
+function ensureMailer() {
+  if (!isMailerConfigured()) throw Object.assign(new Error('SMTP is not configured.'), { status: 503 });
 }
 
 function formatCurrency(cents: number, currency = 'CAD') {
@@ -44,6 +44,7 @@ interface CompanyInfo {
   company_phone?: string | null;
   company_address?: string | null;
   company_logo_url?: string | null;
+  tax_registration_lines?: string[];
 }
 
 async function getCompanySettings(orgId: string): Promise<CompanyInfo> {
@@ -56,12 +57,28 @@ async function getCompanySettings(orgId: string): Promise<CompanyInfo> {
       .maybeSingle();
     if (!data) return {};
     const address = [data.street1, data.city, data.province, data.postal_code].filter(Boolean).join(', ') || null;
+
+    // Fetch tax registration numbers from active tax configs
+    let taxLines: string[] = [];
+    try {
+      const { data: taxes } = await serviceClient
+        .from('tax_configs')
+        .select('name, registration_number')
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .not('registration_number', 'is', null);
+      taxLines = (taxes || [])
+        .filter((t: any) => t.registration_number)
+        .map((t: any) => `${t.name} No: ${t.registration_number}`);
+    } catch { /* registration_number column may not exist yet */ }
+
     return {
       company_name: data.company_name || null,
       company_email: data.email || null,
       company_phone: data.phone || null,
       company_address: address,
       company_logo_url: data.logo_url || null,
+      tax_registration_lines: taxLines,
     };
   } catch {
     return {};
@@ -109,6 +126,7 @@ ${bodyHtml}
 Sent via <strong>LUME</strong>${company.company_name ? ` on behalf of ${company.company_name}` : ''}
 </p>
 ${company.company_phone ? `<p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">${company.company_phone}</p>` : ''}
+${(company.tax_registration_lines || []).length > 0 ? `<p style="margin:6px 0 0;font-size:11px;color:#b0b0b0;">${company.tax_registration_lines!.join(' &middot; ')}</p>` : ''}
 </td>
 </tr>
 
@@ -229,15 +247,15 @@ ${viewUrl ? `
 </p>`;
     }
 
-    const resend = getResend();
-    const { data: emailResult, error: emailError } = await resend.emails.send({
+    ensureMailer();
+    const emailResult = await sendEmail({
       from: emailFrom,
       to: clientData.email,
       subject: emailSubject,
       html: buildEmailLayout(company, bodyHtml),
     });
 
-    if (emailError) throw new Error(emailError.message);
+    if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
 
     // Update invoice status to sent (also set issued_at if not already set)
     const now = new Date().toISOString();
@@ -284,10 +302,9 @@ ${viewUrl ? `
       metadata: { invoice_number: invoice.invoice_number, client_name: clientName },
     });
 
-    return res.json({ ok: true, emailId: emailResult?.id || null });
+    return res.json({ ok: true, emailId: emailResult?.messageId || null });
   } catch (error: any) {
-    const status = Number(error?.status || 500);
-    return res.status(status).json({ error: error?.message || 'Failed to send invoice email.' });
+    return sendSafeError(res, error, 'Failed to send invoice email.', '[emails/send-invoice]');
   }
 });
 
@@ -365,15 +382,15 @@ ${viewUrl ? `
   If you have any questions or would like to proceed, please reply to this email or contact us directly.
 </p>`;
 
-    const resend = getResend();
-    const { data: emailResult, error: emailError } = await resend.emails.send({
+    ensureMailer();
+    const emailResult = await sendEmail({
       from: emailFrom,
       to: clientData.email,
       subject: `Quote ${quote.invoice_number || ''} — ${amountStr}`,
       html: buildEmailLayout(company, bodyHtml),
     });
 
-    if (emailError) throw new Error(emailError.message);
+    if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
 
     // Update status to sent
     await client.from('invoices').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', invoiceId);
@@ -387,10 +404,9 @@ ${viewUrl ? `
       metadata: { invoice_number: (quote as any).invoice_number },
     });
 
-    return res.json({ ok: true, emailId: emailResult?.id || null });
+    return res.json({ ok: true, emailId: emailResult?.messageId || null });
   } catch (error: any) {
-    const status = Number(error?.status || 500);
-    return res.status(status).json({ error: error?.message || 'Failed to send quote email.' });
+    return sendSafeError(res, error, 'Failed to send quote email.', '[emails/send-quote]');
   }
 });
 
@@ -411,20 +427,19 @@ router.post('/emails/send-custom', validate(sendCustomEmailSchema), async (req, 
     const { to, subject, html } = req.body;
     const company = await getCompanySettings(auth.orgId);
 
-    const resend = getResend();
-    const { data: emailResult, error: emailError } = await resend.emails.send({
+    ensureMailer();
+    const emailResult = await sendEmail({
       from: emailFrom,
       to,
       subject: sanitizeHtml(subject),
       html: buildEmailLayout(company, sanitizeHtml(html)),
     });
 
-    if (emailError) throw new Error(emailError.message);
+    if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
 
-    return res.json({ ok: true, emailId: emailResult?.id || null });
+    return res.json({ ok: true, emailId: emailResult?.messageId || null });
   } catch (error: any) {
-    const status = Number(error?.status || 500);
-    return res.status(status).json({ error: error?.message || 'Failed to send email.' });
+    return sendSafeError(res, error, 'Failed to send email.', '[emails/send-custom]');
   }
 });
 

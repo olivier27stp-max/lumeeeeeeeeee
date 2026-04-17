@@ -292,7 +292,7 @@ export default function Dashboard() {
       {/* Map */}
       <CRMMapCard defaultRange="today" heightClassName="h-[320px]" onOpenJob={id => navigate(`/jobs/${id}`)} />
 
-      {/* ═══ D2D WIDGETS — Leaderboard + Active Sessions ═══ */}
+      {/* ═══ Sales / Vente WIDGETS — Leaderboard + Active Sessions ═══ */}
       <LeaderboardWidget navigate={navigate} fr={fr} />
     </div>
   );

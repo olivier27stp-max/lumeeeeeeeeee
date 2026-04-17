@@ -16,6 +16,8 @@ import {
 } from '../lib/globalSearchApi';
 import { getSearchItemHref } from '../lib/searchHelpers';
 import { useTranslation } from '../i18n';
+import { usePermissions } from '../hooks/usePermissions';
+import { hasPermission, isFinanciallyRestricted } from '../lib/permissions';
 
 interface CommandItem {
   id: string;
@@ -53,6 +55,14 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
   const { t } = useTranslation();
   const fr = language === 'fr';
   const navigate = useNavigate();
+  const permsCtx = usePermissions();
+  const financiallyRestricted = permsCtx.role ? isFinanciallyRestricted(permsCtx.role) : false;
+  const canSeeInvoices = permsCtx.role === 'owner' || permsCtx.role === 'admin' ||
+    hasPermission(permsCtx.permissions, 'financial.view_invoices', permsCtx.role ?? undefined);
+  const canSeePayments = permsCtx.role === 'owner' || permsCtx.role === 'admin' ||
+    hasPermission(permsCtx.permissions, 'financial.view_payments', permsCtx.role ?? undefined);
+  const canSeeAnalytics = permsCtx.role === 'owner' || permsCtx.role === 'admin' ||
+    hasPermission(permsCtx.permissions, 'financial.view_analytics', permsCtx.role ?? undefined);
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [searchResults, setSearchResults] = useState<CommandItem[]>([]);
@@ -73,33 +83,41 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
   };
 
   // Navigation commands
-  const navCommands = useMemo((): CommandItem[] => [
-    { id: 'nav-dashboard', label: t.commandPalette.dashboard, icon: Search, action: () => navigate('/dashboard'), section: t.commandPalette.navigation, keywords: 'home accueil' },
-    { id: 'nav-clients', label: 'Clients', icon: Users, action: () => navigate('/clients'), section: t.commandPalette.navigation, keywords: 'customers' },
-    { id: 'nav-jobs', label: 'Jobs', icon: Briefcase, action: () => navigate('/jobs'), section: t.commandPalette.navigation, keywords: 'travaux' },
-    { id: 'nav-calendar', label: t.commandPalette.calendar, icon: Calendar, action: () => navigate('/calendar'), section: t.commandPalette.navigation, keywords: 'schedule horaire' },
-    { id: 'nav-invoices', label: t.commandPalette.invoices, icon: FileText, action: () => navigate('/invoices'), section: t.commandPalette.navigation, keywords: 'bills' },
-    { id: 'nav-quotes', label: t.clientDetails.quotes, icon: FileText, action: () => navigate('/quotes'), section: t.commandPalette.navigation, keywords: 'estimates' },
-    { id: 'nav-payments', label: t.commandPalette.payments, icon: CreditCard, action: () => navigate('/payments'), section: t.commandPalette.navigation },
-    { id: 'nav-messages', label: 'Messages', icon: MessageSquare, action: () => navigate('/messages'), section: t.commandPalette.navigation, keywords: 'sms text' },
-    { id: 'nav-insights', label: 'Insights', icon: TrendingUp, action: () => navigate('/insights'), section: t.commandPalette.navigation, keywords: 'analytics stats' },
-    { id: 'nav-notes', label: 'Notes', icon: StickyNote, action: () => navigate('/notes'), section: t.commandPalette.navigation, keywords: 'boards whiteboard' },
-    { id: 'nav-automations', label: 'Automations', icon: Zap, action: () => navigate('/automations'), section: t.commandPalette.navigation, keywords: 'automations workflows' },
-    { id: 'nav-settings', label: t.commandPalette.settings, icon: Settings, action: () => navigate('/settings'), section: t.commandPalette.navigation },
-  ], [fr, navigate]);
+  const navCommands = useMemo((): CommandItem[] => {
+    const cmds: CommandItem[] = [
+      { id: 'nav-dashboard', label: t.commandPalette.dashboard, icon: Search, action: () => navigate('/dashboard'), section: t.commandPalette.navigation, keywords: 'home accueil' },
+      { id: 'nav-clients', label: 'Clients', icon: Users, action: () => navigate('/clients'), section: t.commandPalette.navigation, keywords: 'customers' },
+      { id: 'nav-jobs', label: 'Jobs', icon: Briefcase, action: () => navigate('/jobs'), section: t.commandPalette.navigation, keywords: 'travaux' },
+      { id: 'nav-calendar', label: t.commandPalette.calendar, icon: Calendar, action: () => navigate('/calendar'), section: t.commandPalette.navigation, keywords: 'schedule horaire' },
+      ...(canSeeInvoices ? [{ id: 'nav-invoices', label: t.commandPalette.invoices, icon: FileText, action: () => navigate('/invoices'), section: t.commandPalette.navigation, keywords: 'bills' }] : []),
+      { id: 'nav-quotes', label: t.clientDetails.quotes, icon: FileText, action: () => navigate('/quotes'), section: t.commandPalette.navigation, keywords: 'estimates' },
+      ...(canSeePayments ? [{ id: 'nav-payments', label: t.commandPalette.payments, icon: CreditCard, action: () => navigate('/payments'), section: t.commandPalette.navigation }] : []),
+      { id: 'nav-messages', label: 'Messages', icon: MessageSquare, action: () => navigate('/messages'), section: t.commandPalette.navigation, keywords: 'sms text' },
+      ...(canSeeAnalytics ? [{ id: 'nav-insights', label: 'Insights', icon: TrendingUp, action: () => navigate('/insights'), section: t.commandPalette.navigation, keywords: 'analytics stats' }] : []),
+      { id: 'nav-notes', label: 'Notes', icon: StickyNote, action: () => navigate('/notes'), section: t.commandPalette.navigation, keywords: 'boards whiteboard' },
+      { id: 'nav-automations', label: 'Automations', icon: Zap, action: () => navigate('/automations'), section: t.commandPalette.navigation, keywords: 'automations workflows' },
+      { id: 'nav-settings', label: t.commandPalette.settings, icon: Settings, action: () => navigate('/settings'), section: t.commandPalette.navigation },
+    ];
+    return cmds;
+  }, [fr, navigate, canSeeInvoices, canSeePayments, canSeeAnalytics]);
 
-  const actionCommands = useMemo((): CommandItem[] => [
-    { id: 'act-new-quote', label: t.commandPalette.createQuote, icon: Plus, action: () => { navigate('/quotes'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-quote')), 300); }, section: t.automations.actions, keywords: 'add new prospect quote devis estimate' },
-    { id: 'act-new-client', label: t.commandPalette.createClient, icon: Plus, action: () => { navigate('/clients'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-client')), 300); }, section: t.automations.actions, keywords: 'add new customer' },
-    { id: 'act-new-job', label: t.commandPalette.createJob, icon: Plus, action: () => { navigate('/jobs'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-job')), 300); }, section: t.automations.actions, keywords: 'add new travail' },
-    { id: 'act-new-invoice', label: t.commandPalette.createInvoice, icon: Plus, action: () => { navigate('/invoices'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-invoice')), 300); }, section: t.automations.actions, keywords: 'add new bill' },
-    // Smart filters
-    { id: 'filter-jobs-late', label: fr ? 'Jobs en retard' : 'Late jobs', icon: Briefcase, action: () => navigate('/jobs'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'overdue late retard' },
-    { id: 'filter-jobs-today', label: fr ? 'Jobs aujourd\'hui' : 'Jobs today', icon: Calendar, action: () => navigate('/calendar'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'today schedule' },
-    { id: 'filter-invoices-overdue', label: fr ? 'Factures en retard' : 'Overdue invoices', icon: ClipboardList, action: () => navigate('/invoices?status=past_due'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'unpaid late overdue impayé' },
-    { id: 'filter-invoices-draft', label: fr ? 'Factures brouillon' : 'Draft invoices', icon: ClipboardList, action: () => navigate('/invoices?status=draft'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'draft brouillon unsent' },
-    { id: 'filter-quotes-pending', label: fr ? 'Devis en attente' : 'Pending quotes', icon: FileText, action: () => navigate('/quotes'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'pending waiting attente' },
-  ], [fr, navigate]);
+  const actionCommands = useMemo((): CommandItem[] => {
+    const cmds: CommandItem[] = [
+      { id: 'act-new-quote', label: t.commandPalette.createQuote, icon: Plus, action: () => { navigate('/quotes'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-quote')), 300); }, section: t.automations.actions, keywords: 'add new prospect quote devis estimate' },
+      { id: 'act-new-client', label: t.commandPalette.createClient, icon: Plus, action: () => { navigate('/clients'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-client')), 300); }, section: t.automations.actions, keywords: 'add new customer' },
+      { id: 'act-new-job', label: t.commandPalette.createJob, icon: Plus, action: () => { navigate('/jobs'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-job')), 300); }, section: t.automations.actions, keywords: 'add new travail' },
+      ...(canSeeInvoices ? [{ id: 'act-new-invoice', label: t.commandPalette.createInvoice, icon: Plus, action: () => { navigate('/invoices'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-invoice')), 300); }, section: t.automations.actions, keywords: 'add new bill' }] : []),
+      // Smart filters
+      { id: 'filter-jobs-late', label: fr ? 'Jobs en retard' : 'Late jobs', icon: Briefcase, action: () => navigate('/jobs'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'overdue late retard' },
+      { id: 'filter-jobs-today', label: fr ? 'Jobs aujourd\'hui' : 'Jobs today', icon: Calendar, action: () => navigate('/calendar'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'today schedule' },
+      ...(canSeeInvoices ? [
+        { id: 'filter-invoices-overdue', label: fr ? 'Factures en retard' : 'Overdue invoices', icon: ClipboardList, action: () => navigate('/invoices?status=past_due'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'unpaid late overdue impayé' },
+        { id: 'filter-invoices-draft', label: fr ? 'Factures brouillon' : 'Draft invoices', icon: ClipboardList, action: () => navigate('/invoices?status=draft'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'draft brouillon unsent' },
+      ] : []),
+      { id: 'filter-quotes-pending', label: fr ? 'Devis en attente' : 'Pending quotes', icon: FileText, action: () => navigate('/quotes'), section: fr ? 'Filtres rapides' : 'Quick Filters', keywords: 'pending waiting attente' },
+    ];
+    return cmds;
+  }, [fr, navigate, canSeeInvoices]);
 
   // Global search via shared API
   useEffect(() => {

@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { Resend } from 'resend';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
-import { resendApiKey, emailFrom, twilioClient, twilioPhoneNumber } from '../lib/config';
+import { emailFrom, twilioClient, twilioPhoneNumber, getBaseUrl } from '../lib/config';
+import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
 import { eventBus } from '../lib/eventBus';
 import { getConnectedAccount, createDestinationPaymentIntent, getPlatformStripe } from '../lib/stripe-connect';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -86,11 +87,10 @@ quoteRedirectRouter.get('/q/:token', async (req, res) => {
     }
 
     // Redirect to frontend quote view page
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = getBaseUrl();
     return res.redirect(`${frontendUrl}/quote/${token}`);
   } catch (error: any) {
-    console.error('Quote view tracking error:', error);
-    return res.status(500).send('Something went wrong');
+    return sendSafeError(res, error, 'Something went wrong.', '[quotes/view-redirect]');
   }
 });
 
@@ -167,8 +167,7 @@ router.post('/quotes/:id/track-view', async (req, res) => {
 
     return res.json({ tracked: true, first_view: isFirstView });
   } catch (error: any) {
-    console.error('Track view error:', error);
-    return res.status(500).json({ error: 'Failed to track view' });
+    return sendSafeError(res, error, 'Failed to track view.', '[quotes/track-view]');
   }
 });
 
@@ -203,8 +202,7 @@ router.post('/quotes/send-email', async (req, res) => {
 
     if (!recipientEmail) return res.status(400).json({ error: 'No email address available for this lead/client.' });
 
-    if (!resendApiKey) return res.status(503).json({ error: 'Email provider not configured.' });
-    const resend = new Resend(resendApiKey);
+    if (!isMailerConfigured()) return res.status(503).json({ error: 'SMTP not configured.' });
 
     // Get company info with branding
     const { data: company } = await admin
@@ -259,8 +257,8 @@ router.post('/quotes/send-email', async (req, res) => {
       </div>
     `;
 
-    await resend.emails.send({
-      from: emailFrom || `${companyName} <onboarding@resend.dev>`,
+    await sendEmail({
+      from: emailFrom,
       to: recipientEmail,
       subject: finalSubject,
       html: emailHtml,
@@ -322,8 +320,7 @@ router.post('/quotes/send-email', async (req, res) => {
 
     return res.json({ ok: true, channel: 'email', recipient: recipientEmail });
   } catch (error: any) {
-    console.error('quote_send_email_failed', error);
-    return res.status(500).json({ error: error?.message || 'Failed to send quote email.' });
+    return sendSafeError(res, error, 'Failed to send quote email.', '[quotes/send-email]');
   }
 });
 
@@ -436,8 +433,7 @@ router.post('/quotes/send-sms', async (req, res) => {
 
     return res.json({ ok: true, channel: 'sms', recipient: recipientPhone });
   } catch (error: any) {
-    console.error('quote_send_sms_failed', error?.message || error, error?.code, error?.status);
-    return res.status(500).json({ error: error?.message || 'Failed to send quote SMS.' });
+    return sendSafeError(res, error, 'Failed to send quote SMS.', '[quotes/send-sms]');
   }
 });
 
@@ -527,8 +523,7 @@ router.post('/quotes/convert-to-job', async (req, res) => {
 
     return res.json({ ok: true, jobId, quoteId });
   } catch (error: any) {
-    console.error('quote_convert_failed', error);
-    return res.status(500).json({ error: error?.message || 'Failed to convert quote.' });
+    return sendSafeError(res, error, 'Failed to convert quote.', '[quotes/convert-to-job]');
   }
 });
 
@@ -638,8 +633,7 @@ router.get('/quotes/public/:token', async (req, res) => {
       signature,
     });
   } catch (error: any) {
-    console.error('public_quote_fetch_failed', error);
-    return res.status(500).json({ error: error?.message || 'Failed to load quote.' });
+    return sendSafeError(res, error, 'Failed to load quote.', '[quotes/public/get]');
   }
 });
 
@@ -777,8 +771,7 @@ router.post('/quotes/public/accept', async (req, res) => {
 
     return res.json({ ok: true, status: 'approved' });
   } catch (error: any) {
-    console.error('quote_accept_failed', error);
-    return res.status(500).json({ error: error?.message || 'Failed to accept quote.' });
+    return sendSafeError(res, error, 'Failed to accept quote.', '[quotes/public/accept]');
   }
 });
 
@@ -823,7 +816,7 @@ router.get('/quotes/public/signature', async (req, res) => {
       signed_at: sig.uploaded_at || quote.approved_at,
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to load signature.' });
+    return sendSafeError(res, error, 'Failed to load signature.', '[quotes/public/signature]');
   }
 });
 
@@ -955,8 +948,7 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
 
     return res.status(503).json({ error: 'No payment provider is configured.' });
   } catch (error: any) {
-    console.error('quote_deposit_intent_failed', error);
-    return res.status(500).json({ error: error?.message || 'Failed to create deposit payment.' });
+    return sendSafeError(res, error, 'Failed to create deposit payment.', '[quotes/public/deposit-intent]');
   }
 });
 
@@ -1052,8 +1044,7 @@ router.post('/quotes/public/deposit-confirm', async (req, res) => {
 
     return res.json({ ok: true, status: 'paid' });
   } catch (error: any) {
-    console.error('quote_deposit_confirm_failed', error);
-    return res.status(500).json({ error: error?.message || 'Failed to confirm deposit payment.' });
+    return sendSafeError(res, error, 'Failed to confirm deposit payment.', '[quotes/public/deposit-confirm]');
   }
 });
 
@@ -1134,8 +1125,7 @@ router.post('/quotes/public/decline', async (req, res) => {
 
     return res.json({ ok: true, status: 'declined' });
   } catch (error: any) {
-    console.error('quote_decline_failed', error);
-    return res.status(500).json({ error: error?.message || 'Failed to decline quote.' });
+    return sendSafeError(res, error, 'Failed to decline quote.', '[quotes/public/decline]');
   }
 });
 
@@ -1221,8 +1211,7 @@ router.post('/quotes/convert-to-invoice', async (req, res) => {
 
     return res.json({ ok: true, invoiceId, quoteId });
   } catch (error: any) {
-    console.error('quote_to_invoice_failed', error);
-    return res.status(500).json({ error: error?.message || 'Failed to convert quote to invoice.' });
+    return sendSafeError(res, error, 'Failed to convert quote to invoice.', '[quotes/convert-to-invoice]');
   }
 });
 

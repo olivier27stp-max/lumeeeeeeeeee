@@ -39,9 +39,8 @@ export async function createApiKey(params: {
       key_prefix: keyPrefix,
       scopes: params.scopes || ['read'],
       rate_limit_per_minute: params.rateLimitPerMinute || 60,
-      expires_at: params.expiresInDays
-        ? new Date(Date.now() + params.expiresInDays * 86400_000).toISOString()
-        : null,
+      // Default 90-day expiry if not specified — prevents stale keys
+      expires_at: new Date(Date.now() + (params.expiresInDays || 90) * 86400_000).toISOString(),
     })
     .select('id')
     .single();
@@ -74,7 +73,7 @@ export async function validateApiKey(rawKey: string): Promise<{
 
   const { data, error } = await admin
     .from('api_keys')
-    .select('id, org_id, scopes, rate_limit_per_minute, expires_at')
+    .select('id, org_id, scopes, rate_limit_per_minute, expires_at, last_used_at')
     .eq('key_hash', keyHash)
     .eq('revoked', false)
     .single();
@@ -82,7 +81,32 @@ export async function validateApiKey(rawKey: string): Promise<{
   if (error || !data) return null;
 
   // Check expiry
-  if (data.expires_at && new Date(data.expires_at) < new Date()) return null;
+  if (data.expires_at && new Date(data.expires_at) < new Date()) {
+    logSecurityEvent({
+      org_id: data.org_id,
+      event_type: 'api_key_expired',
+      severity: 'info',
+      source: 'api',
+      details: { key_id: data.id, expired_at: data.expires_at },
+    });
+    return null;
+  }
+
+  // Auto-revoke keys unused for 60+ days
+  if (data.last_used_at) {
+    const daysSinceUse = (Date.now() - new Date(data.last_used_at).getTime()) / 86400_000;
+    if (daysSinceUse > 60) {
+      admin.from('api_keys').update({ revoked: true, revoked_at: new Date().toISOString() }).eq('id', data.id).then(() => {});
+      logSecurityEvent({
+        org_id: data.org_id,
+        event_type: 'api_key_auto_revoked_inactive',
+        severity: 'medium',
+        source: 'system',
+        details: { key_id: data.id, days_inactive: Math.round(daysSinceUse) },
+      });
+      return null;
+    }
+  }
 
   // Update last used
   admin

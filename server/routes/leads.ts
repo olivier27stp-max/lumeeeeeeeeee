@@ -4,6 +4,7 @@ import { parseOrgId, ensureLeadInPipeline } from '../lib/helpers';
 import { validate, createLeadSchema, softDeleteLeadSchema, softDeleteClientSchema, softDeleteDealSchema, invoiceFromJobSchema, updateLeadStatusSchema, convertLeadToJobSchema } from '../lib/validation';
 import { eventBus } from '../lib/eventBus';
 import { ensureClientForLead, resolveClientIdForLead, promoteClientFromLead } from '../lib/leadClientSync';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -133,6 +134,7 @@ router.post('/leads/create', validate(createLeadSchema), async (req, res) => {
       .eq('id', leadId)
       .maybeSingle();
     if (leadError) throw leadError;
+    // PII decryption handled automatically by piiDecryptResponseMiddleware
 
     // eslint-disable-next-line no-console
     console.info('lead_create_result', {
@@ -159,15 +161,7 @@ router.post('/leads/create', validate(createLeadSchema), async (req, res) => {
       job_id: null,
     });
   } catch (error: any) {
-    // eslint-disable-next-line no-console
-    console.error('lead_create_failed', {
-      code: String(error?.code || ''),
-      message: String(error?.message || 'unknown'),
-    });
-    const code = String(error?.code || '');
-    if (code === '42501') return res.status(403).json({ error: error?.message || 'Forbidden.' });
-    if (code === '23514' || code === '23505' || code === '22023') return res.status(400).json({ error: error?.message || 'Invalid lead payload.' });
-    return res.status(500).json({ error: error?.message || 'Unable to create lead.' });
+    return sendSafeError(res, error, 'Unable to create lead.', '[leads/create]');
   }
 });
 
@@ -226,16 +220,7 @@ router.post('/leads/soft-delete', validate(softDeleteLeadSchema), async (req, re
 
     return res.status(200).json({ ok: true });
   } catch (error: any) {
-    // eslint-disable-next-line no-console
-    console.error('lead_soft_delete_failed', {
-      code: String(error?.code || ''),
-      message: String(error?.message || 'unknown'),
-    });
-    const code = String(error?.code || '');
-    if (code === '42501') return res.status(403).json({ error: error?.message || 'Forbidden.' });
-    if (code === 'P0002') return res.status(404).json({ error: error?.message || 'Lead not found.' });
-    if (code === '23514') return res.status(409).json({ error: error?.message || 'Lead state is invalid for delete.' });
-    return res.status(500).json({ error: error?.message || 'Unable to delete lead.' });
+    return sendSafeError(res, error, 'Unable to delete lead.', '[leads/soft-delete]');
   }
 });
 
@@ -283,9 +268,7 @@ router.post('/deals/soft-delete', validate(softDeleteDealSchema), async (req, re
 
     return res.status(200).json({ ok: true, deal_deleted: true, lead_deleted: leadDeleted });
   } catch (error: any) {
-    // eslint-disable-next-line no-console
-    console.error('deal_soft_delete_failed', { message: error?.message || 'unknown' });
-    return res.status(500).json({ error: error?.message || 'Unable to delete deal.' });
+    return sendSafeError(res, error, 'Unable to delete deal.', '[deals/soft-delete]');
   }
 });
 
@@ -349,8 +332,7 @@ router.post('/clients/soft-delete', validate(softDeleteClientSchema), async (req
       other_rows: (invoicesRes.data ?? []).length + (quotesRes.data ?? []).length,
     });
   } catch (error: any) {
-    console.error('client_soft_delete_failed', { code: String(error?.code || ''), message: String(error?.message || 'unknown') });
-    return res.status(500).json({ error: error?.message || 'Unable to delete client.' });
+    return sendSafeError(res, error, 'Unable to delete client.', '[clients/soft-delete]');
   }
 });
 
@@ -405,12 +387,7 @@ router.post('/invoices/from-job', validate(invoiceFromJobSchema), async (req, re
       status,
     });
   } catch (error: any) {
-    const code = String(error?.code || '');
-    if (code === '42501') return res.status(403).json({ error: error?.message || 'Forbidden.' });
-    if (code === 'P0002') return res.status(404).json({ error: error?.message || 'Job not found.' });
-    if (code === '23514') return res.status(400).json({ error: error?.message || 'Job must be linked to a client.' });
-    if (code === '23505') return res.status(409).json({ error: 'An active invoice already exists for this job.' });
-    return res.status(500).json({ error: error?.message || 'Unable to create invoice from job.' });
+    return sendSafeError(res, error, 'Unable to create invoice from job.', '[invoices/from-job]');
   }
 });
 
@@ -478,8 +455,7 @@ router.post('/leads/update-status', validate(updateLeadStatusSchema), async (req
 
     return res.json({ ok: true, lead: updated, status: newStatus, changed: true });
   } catch (error: any) {
-    console.error('lead_status_update_failed', { code: error?.code, message: error?.message });
-    return res.status(500).json({ error: error?.message || 'Unable to update lead status.' });
+    return sendSafeError(res, error, 'Unable to update lead status.', '[leads/update-status]');
   }
 });
 
@@ -608,8 +584,7 @@ router.post('/leads/convert-to-job', validate(convertLeadToJobSchema), async (re
       job_title: job.title,
     });
   } catch (error: any) {
-    console.error('lead_convert_failed', { code: error?.code, message: error?.message });
-    return res.status(500).json({ error: error?.message || 'Unable to convert lead.' });
+    return sendSafeError(res, error, 'Unable to convert lead.', '[leads/convert-to-job]');
   }
 });
 
@@ -626,8 +601,7 @@ router.post('/leads/resolve-client', async (req, res) => {
     const clientId = await resolveClientIdForLead(getServiceClient(), leadId);
     return res.json({ ok: true, clientId });
   } catch (error: any) {
-    console.error('lead_resolve_client_failed', { code: error?.code, message: error?.message });
-    return res.status(500).json({ error: error?.message || 'Unable to resolve client.' });
+    return sendSafeError(res, error, 'Unable to resolve client.', '[leads/resolve-client]');
   }
 });
 

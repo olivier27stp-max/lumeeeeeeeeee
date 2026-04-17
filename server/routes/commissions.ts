@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 import {
   getCommissionEntries,
   calculateCommission,
@@ -32,7 +33,7 @@ router.get('/commissions', async (req, res) => {
     });
     res.json(entries);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }
 });
 
@@ -51,7 +52,7 @@ router.post('/commissions/calculate', async (req, res) => {
     const entry = await calculateCommission(sc, auth.orgId, leadId, repUserId);
     res.json(entry);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }
 });
 
@@ -65,7 +66,7 @@ router.post('/commissions/:id/approve', async (req, res) => {
     const entry = await approveCommission(sc, auth.orgId, req.params.id, auth.user.id);
     res.json(entry);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }
 });
 
@@ -81,7 +82,7 @@ router.post('/commissions/:id/reverse', async (req, res) => {
     const entry = await reverseCommission(sc, auth.orgId, req.params.id, reason);
     res.json(entry);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }
 });
 
@@ -95,7 +96,7 @@ router.get('/commissions/rules', async (req, res) => {
     const rules = await getCommissionRules(sc, auth.orgId);
     res.json(rules);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }
 });
 
@@ -116,7 +117,7 @@ router.post('/commissions/rules', async (req, res) => {
     });
     res.json(rule);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }
 });
 
@@ -130,7 +131,7 @@ router.put('/commissions/rules/:id', async (req, res) => {
     const rule = await updateCommissionRule(sc, auth.orgId, req.params.id, req.body);
     res.json(rule);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }
 });
 
@@ -152,7 +153,7 @@ router.get('/commissions/payroll-preview', async (req, res) => {
     const preview = await getPayrollPreview(sc, auth.orgId, userId, from, to);
     res.json(preview);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }
 });
 

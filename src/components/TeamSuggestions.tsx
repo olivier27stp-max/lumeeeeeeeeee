@@ -12,6 +12,7 @@ interface TeamSuggestionsProps {
   longitude?: number;
   serviceType?: string;
   onSelectTeam: (teamId: string) => void;
+  onSuggestionsLoaded?: (suggestions: TeamSuggestion[]) => void;
   selectedTeamId?: string | null;
   compact?: boolean;
 }
@@ -32,6 +33,7 @@ export default function TeamSuggestions({
   longitude,
   serviceType,
   onSelectTeam,
+  onSuggestionsLoaded,
   selectedTeamId,
   compact = false,
 }: TeamSuggestionsProps) {
@@ -71,7 +73,10 @@ export default function TeamSuggestions({
     const timer = setTimeout(() => {
       getTeamSuggestions(params)
         .then(res => {
-          if (!cancelled) setSuggestions(res.suggestions);
+          if (!cancelled) {
+            setSuggestions(res.suggestions);
+            onSuggestionsLoaded?.(res.suggestions);
+          }
         })
         .catch(err => {
           if (!cancelled) setError(err?.message || t.teamSuggestions.failedLoad);

@@ -38,6 +38,7 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
+import { displayEmail } from '../lib/piiSanitizer';
 // InvoiceTemplate type removed — no more invoice template system
 
 const PAGE_SIZE = 20;
@@ -613,7 +614,7 @@ export default function Invoices() {
                         <div className="min-w-0">
                           <span className="text-[14px] text-text-primary truncate block">{row.client_name || '—'}</span>
                           {client?.email && (
-                            <span className="text-[11px] text-text-muted truncate block">{client.email}</span>
+                            <span className="text-[11px] text-text-muted truncate block">{displayEmail(client.email)}</span>
                           )}
                         </div>
                       </div>

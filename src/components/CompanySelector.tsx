@@ -210,11 +210,8 @@ function getRoleLabel(role: string, fr: boolean): string {
   const labels: Record<string, { en: string; fr: string }> = {
     owner: { en: 'Owner', fr: 'Propriétaire' },
     admin: { en: 'Admin', fr: 'Administrateur' },
-    manager: { en: 'Manager', fr: 'Gestionnaire' },
     sales_rep: { en: 'Sales Rep', fr: 'Représentant' },
     technician: { en: 'Technician', fr: 'Technicien' },
-    support: { en: 'Support', fr: 'Support' },
-    viewer: { en: 'Viewer', fr: 'Lecteur' },
   };
   const entry = labels[role];
   return entry ? (fr ? entry.fr : entry.en) : role;

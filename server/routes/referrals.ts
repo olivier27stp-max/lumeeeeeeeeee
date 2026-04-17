@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { getBaseUrl } from '../lib/config';
 
 const router = Router();
 
@@ -46,7 +47,7 @@ router.get('/referrals/me', async (req, res) => {
       }
     }
 
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const baseUrl = getBaseUrl();
     const referralLink = `${baseUrl}/signup?ref=${code}`;
 
     return res.json({ code, referral_link: referralLink });
@@ -69,6 +70,7 @@ router.get('/referrals/history', async (req, res) => {
       .from('referrals')
       .select('*')
       .eq('referrer_user_id', auth.user.id)
+      .eq('referrer_org_id', auth.orgId)
       .neq('referred_email', '')
       .order('created_at', { ascending: false });
 

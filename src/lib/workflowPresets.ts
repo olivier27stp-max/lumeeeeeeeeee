@@ -118,7 +118,7 @@ export const WORKFLOW_PRESETS: WorkflowPreset[] = [
       { id: 'n2', node_type: 'action', action_type: 'send_email', label: 'Send Payment Reminder', config: { subject: 'Payment Reminder - Invoice #{invoice_number}', body: 'Hi {client_name}, this is a friendly reminder that invoice #{invoice_number} for {invoice_amount} is now overdue. Please submit payment at your earliest convenience.' }, position_x: 250, position_y: 120 },
       { id: 'n3', node_type: 'delay', label: 'Wait 7 Days', config: { delay_value: 7, delay_unit: 'days' }, position_x: 250, position_y: 240 },
       { id: 'n4', node_type: 'condition', label: 'Still Unpaid?', config: { conditions: [{ field: 'invoice_status', operator: 'equals', value: 'overdue' }], operator: 'AND' }, position_x: 250, position_y: 360 },
-      { id: 'n5', node_type: 'action', action_type: 'create_task', label: 'Escalate Internally', config: { title: 'Follow up on overdue invoice #{invoice_number}', assignee: 'manager' }, position_x: 250, position_y: 480 },
+      { id: 'n5', node_type: 'action', action_type: 'create_task', label: 'Escalate Internally', config: { title: 'Follow up on overdue invoice #{invoice_number}', assignee: 'admin' }, position_x: 250, position_y: 480 },
     ],
     edges: [
       { source: 'n1', target: 'n2' },
@@ -160,7 +160,7 @@ export const WORKFLOW_PRESETS: WorkflowPreset[] = [
       { id: 'n2', node_type: 'delay', label: 'Wait 4 Hours', config: { delay_value: 4, delay_unit: 'hours' }, position_x: 250, position_y: 120 },
       { id: 'n3', node_type: 'condition', label: 'No Response Yet?', config: { conditions: [{ field: 'lead_contacted', operator: 'equals', value: false }], operator: 'AND' }, position_x: 250, position_y: 240 },
       { id: 'n4', node_type: 'action', action_type: 'send_notification', label: 'Alert Team', config: { title: 'Missed lead!', body: 'Lead {client_name} has had no response for 4 hours.' }, position_x: 120, position_y: 370 },
-      { id: 'n5', node_type: 'action', action_type: 'assign_user', label: 'Assign Escalation', config: { user_id: '', assignment_rule: 'manager' }, position_x: 380, position_y: 370 },
+      { id: 'n5', node_type: 'action', action_type: 'assign_user', label: 'Assign Escalation', config: { user_id: '', assignment_rule: 'admin' }, position_x: 380, position_y: 370 },
     ],
     edges: [
       { source: 'n1', target: 'n2' },

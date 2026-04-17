@@ -4,6 +4,7 @@
 
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 import {
   recordOutcome,
   recordCorrection,
@@ -36,7 +37,7 @@ router.post('/agent/outcome', async (req, res) => {
 
     return res.status(201).json({ id });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Training operation failed.', '[agent-training]');
   }
 });
 
@@ -62,7 +63,7 @@ router.post('/agent/correction', async (req, res) => {
 
     return res.status(201).json({ id });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Training operation failed.', '[agent-training]');
   }
 });
 
@@ -82,7 +83,7 @@ router.post('/agent/feedback-train', async (req, res) => {
 
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Training operation failed.', '[agent-training]');
   }
 });
 
@@ -96,7 +97,7 @@ router.get('/agent/calibration', async (req, res) => {
     const data = await getAllCalibration(admin, auth.orgId);
     return res.json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Training operation failed.', '[agent-training]');
   }
 });
 
@@ -110,7 +111,7 @@ router.get('/agent/user-prefs', async (req, res) => {
     const prefs = await getUserPrefs(admin, auth.orgId, auth.user.id);
     return res.json(prefs || { preferred_detail_level: 'medium', preferred_tone: 'professional', approval_rate: 0 });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message });
+    return sendSafeError(res, err, 'Training operation failed.', '[agent-training]');
   }
 });
 

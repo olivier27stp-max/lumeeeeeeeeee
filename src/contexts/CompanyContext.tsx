@@ -60,8 +60,14 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
   const queryClient = useQueryClient();
   const [companies, setCompanies] = useState<CompanyMembership[]>([]);
   const [activeOrgId, setActiveOrgId] = useState<string | null>(() => {
-    // Restore last active org from localStorage
-    try { return localStorage.getItem(STORAGE_KEY); } catch { return null; }
+    // Restore last active org from localStorage — validate UUID format
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saved)) {
+        return saved;
+      }
+      return null;
+    } catch { return null; }
   });
   const [loading, setLoading] = useState(true);
 
@@ -129,7 +135,7 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
       const mapped: CompanyMembership[] = memberships
         .filter((m: any) => m.status === 'active')
         .map((m: any) => {
-          let role = (m.role || 'viewer') as TeamRole;
+          let role = (m.role || 'sales_rep') as TeamRole;
           let scope = (m.scope || getDefaultScope(role)) as Scope;
           let permissions: PermissionsMap;
 
@@ -194,6 +200,12 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
 
   // ── Switch company ──────────────────────────────────────────────────
   const switchCompany = useCallback((orgId: string) => {
+    // Validate UUID format to prevent XSS-driven localStorage poisoning
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)) {
+      console.warn('[CompanyContext] Invalid orgId format', orgId);
+      return;
+    }
+
     const target = companies.find((c) => c.orgId === orgId);
     if (!target) {
       console.warn('[CompanyContext] Cannot switch to org', orgId, '— not a member');

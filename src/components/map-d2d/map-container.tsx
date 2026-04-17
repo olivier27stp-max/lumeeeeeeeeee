@@ -11,25 +11,8 @@ import {
 import { type ZoneData, getZoneColor } from './zone-types';
 import { getRepAvatar } from '../../lib/constants/avatars';
 
-// LocalStorage cache for pins and zones persistence
-async function getCachedMapPins<T>(): Promise<T[] | null> {
-  try {
-    const raw = localStorage.getItem('d2d-map-pins');
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-async function cacheMapPins(pins: any): Promise<void> {
-  try { localStorage.setItem('d2d-map-pins', JSON.stringify(pins)); } catch {}
-}
-async function getCachedMapZones<T>(): Promise<T[] | null> {
-  try {
-    const raw = localStorage.getItem('d2d-map-zones');
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-async function cacheMapZones(zones: any): Promise<void> {
-  try { localStorage.setItem('d2d-map-zones', JSON.stringify(zones)); } catch {}
-}
+// LocalStorage caching removed — was causing ghost pins (deleted pins reappearing).
+// Pins and zones are loaded fresh from the API on each page load.
 
 // Inline type (replaces @/types/lume import)
 // LumeCreateResponse removed — CRM actions via callbacks
@@ -101,17 +84,37 @@ export interface MapContainerProps {
   onPinClosedWon?: (pin: LeadPinData) => void;
   /** Called when a pin is set to appointment — should open the Quote modal */
   onPinAppointment?: (pin: LeadPinData) => void;
+  /** Initial pins to render (loaded from API by parent) */
+  initialPins?: LeadPinData[];
+  /** Called when a new pin is created on the map */
+  onPinCreated?: (pin: LeadPinData) => void;
+  /** Called when a pin is deleted */
+  onPinDeleted?: (pinId: string) => void;
+  /** Called when a pin is edited */
+  onPinUpdated?: (pin: LeadPinData) => void;
+  /** Live rep positions (loaded from API by parent) */
+  liveReps?: Array<{ user_id: string; user_name: string | null; latitude: number; longitude: number; tracking_status: string; speed_mps: number | null; team_name: string | null; team_color: string | null }>;
 }
 
-export function MapContainer({ onPinClosedWon, onPinAppointment }: MapContainerProps = {}) {
+export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, onPinCreated, onPinDeleted, onPinUpdated, liveReps: liveRepsProp }: MapContainerProps = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
 
-  // Stable refs for CRM callbacks (avoids stale closure in map click handler)
+  // Stable refs for callbacks (avoids stale closure in map click handler)
   const onPinClosedWonRef = useRef(onPinClosedWon);
   onPinClosedWonRef.current = onPinClosedWon;
   const onPinAppointmentRef = useRef(onPinAppointment);
   onPinAppointmentRef.current = onPinAppointment;
+  const onPinCreatedRef = useRef(onPinCreated);
+  onPinCreatedRef.current = onPinCreated;
+  const onPinDeletedRef = useRef(onPinDeleted);
+  onPinDeletedRef.current = onPinDeleted;
+  const onPinUpdatedRef = useRef(onPinUpdated);
+  onPinUpdatedRef.current = onPinUpdated;
+
+  // Single GPS marker — useRef so cleanup always finds it
+  const gpsMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const gpsWatchRef = useRef<number | null>(null);
 
   // Markers stored in a plain Map — never in React state
   const markersRef = useRef(new Map<string, {
@@ -279,13 +282,12 @@ export function MapContainer({ onPinClosedWon, onPinAppointment }: MapContainerP
   // Persistence
   // ---------------------------------------------------------------------------
   function savePins() {
-    const pins: LeadPinData[] = [];
-    markersRef.current.forEach(({ pin }) => pins.push(pin));
-    cacheMapPins(pins).catch(() => {});
+    // Pin caching disabled — was causing ghost pins after deletion.
+    // Pins are loaded fresh from the API on each page load.
   }
 
   function saveZones() {
-    cacheMapZones(zonesRef.current).catch(() => {});
+    // Zone caching disabled — same ghost issue as pins
   }
 
   // ---------------------------------------------------------------------------
@@ -413,7 +415,8 @@ export function MapContainer({ onPinClosedWon, onPinAppointment }: MapContainerP
     if (rec.noteMarker) rec.noteMarker.remove();
     markersRef.current.delete(id);
     bump();
-    savePins();
+    // Notify parent to delete from DB
+    onPinDeletedRef.current?.(id);
   }
 
   function placePin(map: mapboxgl.Map, pin: LeadPinData) {
@@ -529,41 +532,22 @@ export function MapContainer({ onPinClosedWon, onPinAppointment }: MapContainerP
 
       map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
       map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'bottom-right');
-      const geo = new mapboxgl.GeolocateControl({
-        positionOptions: { enableHighAccuracy: true },
-        trackUserLocation: true,
-        showUserHeading: true,
-        showAccuracyCircle: true,
-      });
-      map.addControl(geo, 'bottom-right');
-
-      // Activate geolocation tracking without flying away from current center
-      map.on('load', () => { geo.trigger(); });
+      // GeolocateControl removed — it created a duplicate GPS dot.
+      // Map is already centered on user position via getCurrentPosition in the init flow.
+      // A manual "re-center" button is added in the UI instead.
       map.addControl(new mapboxgl.ScaleControl({ maxWidth: 100 }), 'bottom-left');
 
       map.on('load', () => {
         mapRef.current = map;
         setMapReady(true);
 
-        // Load saved pins from cache (no demo data)
-        getCachedMapPins<LeadPinData>().then((saved) => {
-          if (saved?.length) {
-            // Filter out old demo pins (ids starting with 'p')
-            const realPins = saved.filter((pin) => !pin.id.match(/^p\d+$/));
-            realPins.forEach((pin) => placePin(map, pin));
-          }
-        }).catch(() => {});
+        // Clear any stale caches
+        try { localStorage.removeItem('d2d-map-pins'); localStorage.removeItem('d2d-map-zones'); } catch {}
 
-        // Load saved zones from cache (filter out old demo zones)
-        getCachedMapZones<ZoneData>().then((saved) => {
-          if (saved?.length) {
-            const realZones = saved.filter((z) => !z.id.match(/^z\d+$/));
-            zonesRef.current = realZones;
-          } else {
-            zonesRef.current = [];
-          }
-          renderZonesOnMap(); bump();
-        }).catch(() => {});
+        // Load initial pins from API (passed via props)
+        if (initialPins?.length) {
+          initialPins.forEach((pin) => placePin(map, pin));
+        }
 
         // Zone hover tooltip
         map.on('mousemove', (e) => {
@@ -601,6 +585,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment }: MapContainerP
             containerRef.current!.dataset.mapMode = 'view';
             map.getCanvas().style.cursor = '';
             setMode('view');
+            // Reverse geocode for address, then notify parent to persist + trigger CRM flow
             fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&language=fr&limit=1`)
               .then((r) => r.json())
               .then((data) => {
@@ -609,9 +594,18 @@ export function MapContainer({ onPinClosedWon, onPinAppointment }: MapContainerP
                 if (rec) {
                   rec.pin.name = place?.text || 'Nouveau lead';
                   rec.pin.address = place?.place_name || pin.address;
-                  savePins();
                 }
-              }).catch(() => {});
+                const finalPin = rec?.pin || pin;
+                // Save pin to DB
+                onPinCreatedRef.current?.(finalPin);
+                // Trigger CRM flow based on pin status
+                if (finalPin.status === 'closed_won') onPinClosedWonRef.current?.(finalPin);
+                if (finalPin.status === 'appointment') onPinAppointmentRef.current?.(finalPin);
+              }).catch(() => {
+                onPinCreatedRef.current?.(pin);
+                if (pin.status === 'closed_won') onPinClosedWonRef.current?.(pin);
+                if (pin.status === 'appointment') onPinAppointmentRef.current?.(pin);
+              });
             return;
           }
 
@@ -631,20 +625,67 @@ export function MapContainer({ onPinClosedWon, onPinAppointment }: MapContainerP
       return map;
     }
 
-    // Init map immediately, then jump to user location when available
-    const mapInstance = initMap(fallback, 14);
+    function placeGpsDot(map: mapboxgl.Map, lng: number, lat: number) {
+      // Always remove previous first — guarantees exactly 1 dot
+      if (gpsMarkerRef.current) { gpsMarkerRef.current.remove(); gpsMarkerRef.current = null; }
 
+      const el = document.createElement('div');
+      el.innerHTML = `
+        <div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center">
+          <div style="position:absolute;inset:0;border-radius:50%;background:rgba(99,102,241,0.25);animation:gpsPulse 2s ease-out infinite"></div>
+          <div style="width:14px;height:14px;border-radius:50%;background:#6366f1;border:2.5px solid white;box-shadow:0 1px 6px rgba(0,0,0,0.4)"></div>
+        </div>
+      `;
+      gpsMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([lng, lat])
+        .addTo(map);
+    }
+
+    // Inject GPS pulse animation once
+    if (!document.getElementById('gps-pulse-style')) {
+      const s = document.createElement('style');
+      s.id = 'gps-pulse-style';
+      s.textContent = '@keyframes gpsPulse{0%{transform:scale(.8);opacity:1}100%{transform:scale(2.2);opacity:0}}';
+      document.head.appendChild(s);
+    }
+
+    // Cleanup any previous GPS watch from HMR re-mount
+    if (gpsWatchRef.current != null) {
+      navigator.geolocation.clearWatch(gpsWatchRef.current);
+      gpsWatchRef.current = null;
+    }
+    if (gpsMarkerRef.current) {
+      gpsMarkerRef.current.remove();
+      gpsMarkerRef.current = null;
+    }
+
+    // Init map centered on user GPS position
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          mapInstance?.jumpTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 17 });
+          const map = initMap([pos.coords.longitude, pos.coords.latitude], 17);
+          if (map) {
+            map.on('load', () => placeGpsDot(map, pos.coords.longitude, pos.coords.latitude));
+          }
+          // Live GPS updates — moves the single dot, never creates a second
+          gpsWatchRef.current = navigator.geolocation.watchPosition(
+            (p) => { if (mapRef.current) placeGpsDot(mapRef.current, p.coords.longitude, p.coords.latitude); },
+            () => {},
+            { enableHighAccuracy: true }
+          );
         },
-        () => {},
-        { enableHighAccuracy: true, timeout: 8000 },
+        () => { initMap(fallback, 14); },
+        { enableHighAccuracy: true, timeout: 5000 },
       );
+    } else {
+      initMap(fallback, 14);
     }
 
-    return () => { if (mapInstance) mapInstance.remove(); mapRef.current = null; };
+    return () => {
+      if (gpsWatchRef.current != null) { navigator.geolocation.clearWatch(gpsWatchRef.current); gpsWatchRef.current = null; }
+      if (gpsMarkerRef.current) { gpsMarkerRef.current.remove(); gpsMarkerRef.current = null; }
+      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // mapReady is used by other effects below
@@ -681,34 +722,39 @@ export function MapContainer({ onPinClosedWon, onPinAppointment }: MapContainerP
       return;
     }
 
-    // Add/update rep markers
-    SIMULATED_REP_POSITIONS.forEach((rep) => {
-      if (repMarkersRef.current.has(rep.id)) {
-        repMarkersRef.current.get(rep.id)!.setLngLat([rep.lng, rep.lat]);
+    // Add/update rep markers from live API data
+    const reps = liveRepsProp || [];
+    reps.forEach((rep) => {
+      const repKey = rep.user_id;
+      if (repMarkersRef.current.has(repKey)) {
+        repMarkersRef.current.get(repKey)!.setLngLat([rep.longitude, rep.latitude]);
         return;
       }
 
-      const avatarUrl = getRepAvatar(rep.name) || '';
+      const name = rep.user_name || 'Rep';
+      const initial = name.charAt(0).toUpperCase();
+      const color = rep.team_color || '#6366f1';
+      const statusDot = rep.tracking_status === 'active' ? '#22c55e' : '#f59e0b';
       const el = document.createElement('div');
       el.innerHTML = `
         <div style="position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;">
           <div style="position:relative;">
-            <div style="position:absolute;inset:-3px;border-radius:50%;background:rgba(99,102,241,0.25);animation:rep-pulse 2s ease-out infinite;"></div>
-            <img src="${avatarUrl}" alt="${rep.name}" style="width:36px;height:36px;border-radius:50%;border:3px solid #6366f1;object-fit:cover;position:relative;z-index:1;box-shadow:0 2px 8px rgba(0,0,0,0.4);" />
-            <div style="position:absolute;bottom:-1px;right:-1px;width:10px;height:10px;border-radius:50%;background:#22c55e;border:2px solid white;z-index:2;"></div>
+            <div style="position:absolute;inset:-3px;border-radius:50%;background:${color}40;animation:rep-pulse 2s ease-out infinite;"></div>
+            <div style="width:36px;height:36px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:white;position:relative;z-index:1;">${initial}</div>
+            <div style="position:absolute;bottom:-1px;right:-1px;width:10px;height:10px;border-radius:50%;background:${statusDot};border:2px solid white;z-index:2;"></div>
           </div>
           <div style="margin-top:4px;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:2px 8px;white-space:nowrap;">
-            <p style="font-size:10px;font-weight:700;color:white;margin:0;line-height:1.3;">${rep.name}</p>
-            <p style="font-size:8px;color:rgba(255,255,255,0.5);margin:0;line-height:1.3;">${rep.status}</p>
+            <p style="font-size:10px;font-weight:700;color:white;margin:0;line-height:1.3;">${name}</p>
+            <p style="font-size:8px;color:rgba(255,255,255,0.5);margin:0;line-height:1.3;">${rep.team_name || ''} · ${rep.tracking_status}</p>
           </div>
         </div>
       `;
 
       const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
-        .setLngLat([rep.lng, rep.lat])
+        .setLngLat([rep.longitude, rep.latitude])
         .addTo(map);
 
-      repMarkersRef.current.set(rep.id, marker);
+      repMarkersRef.current.set(repKey, marker);
     });
 
     // Inject pulse animation if not present
@@ -725,20 +771,14 @@ export function MapContainer({ onPinClosedWon, onPinAppointment }: MapContainerP
     };
   }, [showReps, mapReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Simulate rep movement every 5s
+  // Update rep positions when liveRepsProp changes (parent polls API)
   useEffect(() => {
-    if (!showReps || !mapRef.current) return;
-    const interval = setInterval(() => {
-      SIMULATED_REP_POSITIONS.forEach((rep) => {
-        // Small random movement
-        rep.lat += (Math.random() - 0.5) * 0.001;
-        rep.lng += (Math.random() - 0.5) * 0.001;
-        const marker = repMarkersRef.current.get(rep.id);
-        if (marker) marker.setLngLat([rep.lng, rep.lat]);
-      });
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [showReps, mapReady]);
+    if (!showReps || !mapRef.current || !liveRepsProp?.length) return;
+    liveRepsProp.forEach((rep) => {
+      const marker = repMarkersRef.current.get(rep.user_id);
+      if (marker) marker.setLngLat([rep.longitude, rep.latitude]);
+    });
+  }, [liveRepsProp, showReps]);
 
   // ---------------------------------------------------------------------------
   // Drawing zone preview
@@ -837,10 +877,15 @@ export function MapContainer({ onPinClosedWon, onPinAppointment }: MapContainerP
     const prevStatus = editingPin.status;
     const newStatus = editStatus;
     const statusChanged = prevStatus !== newStatus;
-    removePin(editingPin.id);
+    // Remove old marker (don't trigger onPinDeleted — this is an update, not a delete)
+    const rec = markersRef.current.get(editingPin.id);
+    if (rec) { rec.marker.remove(); if (rec.noteMarker) rec.noteMarker.remove(); markersRef.current.delete(editingPin.id); }
     const updated: LeadPinData = { ...editingPin, name: editName, phone: editPhone, email: editEmail, status: newStatus, note: editNote };
     placePin(mapRef.current, updated);
     setEditingPin(null);
+
+    // Notify parent to persist the update
+    onPinUpdatedRef.current?.(updated);
 
     // Trigger CRM action if status changed to a CRM-linked status
     if (statusChanged || (!updated.job_id && newStatus === 'closed_won') || (!updated.quote_id && newStatus === 'appointment')) {
@@ -929,7 +974,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment }: MapContainerP
     isDraggingRef.current = false;
   }
   function handleBulkDelete() {
-    selectedPinIds.forEach((id) => removePin(id));
+    selectedPinIds.forEach((id) => removePin(id)); // each removePin calls onPinDeleted
     exitSelectMode();
   }
 
@@ -985,6 +1030,28 @@ export function MapContainer({ onPinClosedWon, onPinAppointment }: MapContainerP
 
       {/* Selection rectangle overlay */}
       <div ref={selectBoxRef} className="pointer-events-none absolute z-20 rounded border-2 border-red-400/60 bg-red-500/15" style={{ display: 'none' }} />
+
+      {/* Custom GPS re-center button (replaces Mapbox GeolocateControl to avoid duplicate dot) */}
+      {!showTokenMsg && (
+        <button
+          onClick={() => {
+            if (!navigator.geolocation) return;
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                mapRef.current?.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 17, duration: 1000 });
+              },
+              () => {},
+              { enableHighAccuracy: true, timeout: 5000 }
+            );
+          }}
+          className="pointer-events-auto absolute bottom-20 right-3 z-10 flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-white/10 bg-black/70 text-white/60 shadow-xl backdrop-blur-xl transition-all hover:bg-white/15 hover:text-white"
+          title="Centrer sur ma position"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" /><path d="M12 2v4m0 12v4m-10-10h4m12 0h4" />
+          </svg>
+        </button>
+      )}
 
       {/* No token */}
       {showTokenMsg && (
@@ -1275,7 +1342,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment }: MapContainerP
                         {showReps && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
                       </span>
                       <span className="text-[12px] font-medium">Voir les représentants</span>
-                      <span className="ml-auto text-[10px] font-medium text-emerald-400/60">{SIMULATED_REP_POSITIONS.length} en ligne</span>
+                      <span className="ml-auto text-[10px] font-medium text-emerald-400/60">{liveRepsProp?.length || 0} en ligne</span>
                     </button>
                   </div>
                 </div>

@@ -11,7 +11,7 @@ import { formatDate } from '../lib/utils';
 import { cn } from '../lib/utils';
 import {
   duplicateInvoice, formatMoneyFromCents, getCompanySettings, getInvoiceById,
-  getInvoiceRowUiStatus, markInvoicePaidManually,
+  getInvoiceRowUiStatus, getInvoiceAppliedTaxes, markInvoicePaidManually,
   sendInvoice, toClientDisplayName, voidInvoice,
 } from '../lib/invoicesApi';
 import InvoicePaymentModal from '../components/InvoicePaymentModal';
@@ -23,6 +23,7 @@ import ActivityTimeline from '../components/ActivityTimeline';
 import RequestPaymentModal from '../components/RequestPaymentModal';
 import InvoiceRenderer from '../components/invoice/InvoiceRenderer';
 import { buildRenderData } from '../components/invoice/buildRenderData';
+import { displayEmail, displayPhone } from '../lib/piiSanitizer';
 
 export default function InvoiceDetails() {
   const { t, language } = useTranslation();
@@ -44,6 +45,12 @@ export default function InvoiceDetails() {
   const detailsQuery = useQuery({
     queryKey: ['invoiceDetails', invoiceId],
     queryFn: () => getInvoiceById(invoiceId),
+    enabled: !!invoiceId,
+  });
+
+  const appliedTaxesQuery = useQuery({
+    queryKey: ['invoiceAppliedTaxes', invoiceId],
+    queryFn: () => getInvoiceAppliedTaxes(invoiceId),
     enabled: !!invoiceId,
   });
 
@@ -75,10 +82,10 @@ export default function InvoiceDetails() {
   const isVoid = invoice.status === 'void';
   const isPaid = invoice.status === 'paid';
 
-  // Build render data for visual preview (fixed layout, company branding)
+  // Build render data for visual preview (fixed layout, company branding, tax breakdown)
   const renderData = useMemo(
-    () => buildRenderData(detailsQuery.data!, companyQuery.data),
-    [detailsQuery.data, companyQuery.data],
+    () => buildRenderData(detailsQuery.data!, companyQuery.data, null, appliedTaxesQuery.data || null),
+    [detailsQuery.data, companyQuery.data, appliedTaxesQuery.data],
   );
 
   function invalidateAll() {
@@ -191,7 +198,7 @@ export default function InvoiceDetails() {
               className="glass-button inline-flex items-center gap-1.5 text-[12px]"
               onClick={() => {
                 try {
-                  downloadInvoicePdf(detailsQuery.data!, companyQuery.data);
+                  downloadInvoicePdf(detailsQuery.data!, companyQuery.data, appliedTaxesQuery.data || null);
                   toast.success(t.invoiceDetails.pdfDownloaded);
                 } catch {
                   toast.error(t.invoiceDetails.failedToGeneratePdf);
@@ -314,8 +321,8 @@ export default function InvoiceDetails() {
             <p className="text-[13px] font-bold text-text-primary">
               {client ? toClientDisplayName(client) : invoice.client_name}
             </p>
-            <p className="text-[13px] text-text-secondary">{client?.email || t.common.noEmail}</p>
-            <p className="text-[13px] text-text-secondary">{client?.phone || t.common.noPhone}</p>
+            <p className="text-[13px] text-text-secondary">{displayEmail(client?.email) !== '—' ? displayEmail(client?.email) : t.common.noEmail}</p>
+            <p className="text-[13px] text-text-secondary">{displayPhone(client?.phone) !== '—' ? displayPhone(client?.phone) : t.common.noPhone}</p>
           </div>
           <div className="space-y-1">
             <p className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">{t.invoiceDetails.dates}</p>

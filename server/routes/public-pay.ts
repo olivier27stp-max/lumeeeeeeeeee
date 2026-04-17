@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 import {
   getPaymentRequestByToken,
   getConnectedAccount,
@@ -56,6 +57,11 @@ router.get('/pay/:publicToken', async (req, res) => {
       return res.status(404).json({ error: 'Invoice not found.' });
     }
 
+    // Cross-org safety: verify the invoice belongs to the same org as the payment request
+    if (invoice.org_id !== paymentRequest.org_id) {
+      return res.status(403).json({ error: 'Payment request mismatch.' });
+    }
+
     // Double-check: if invoice is fully paid, mark request as paid
     if (Number(invoice.balance_cents || 0) <= 0 || invoice.status === 'paid') {
       await updatePaymentRequestStatus(paymentRequest.id, 'paid');
@@ -81,9 +87,9 @@ router.get('/pay/:publicToken', async (req, res) => {
       .eq('invoice_id', invoice.id)
       .order('created_at', { ascending: true });
 
-    // Fetch org billing settings for branding
+    // Fetch company settings for branding (single source of truth)
     const { data: orgSettings } = await admin
-      .from('org_billing_settings')
+      .from('company_settings')
       .select('company_name, logo_url, email, phone')
       .eq('org_id', paymentRequest.org_id)
       .maybeSingle();
@@ -116,7 +122,7 @@ router.get('/pay/:publicToken', async (req, res) => {
       },
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to load payment page.' });
+    return sendSafeError(res, error, 'Failed to load payment page.', '[public-pay/get]');
   }
 });
 
@@ -171,8 +177,24 @@ router.post('/pay/:publicToken/create-payment-intent', async (req, res) => {
       return res.status(503).json({ error: 'This business is not yet ready to accept payments.' });
     }
 
-    // Verify invoice balance server-side (NEVER trust client)
+    // Atomic lock: mark this payment request as "processing" to prevent concurrent PI creation.
+    // If another request is already processing, this update will match 0 rows.
     const admin = getServiceClient();
+    const { data: lockResult, error: lockErr } = await admin
+      .from('payment_requests')
+      .update({ status: 'processing' })
+      .eq('id', paymentRequest.id)
+      .eq('status', 'pending')
+      .is('stripe_payment_intent_id', null)
+      .select('id')
+      .maybeSingle();
+
+    if (lockErr || !lockResult) {
+      // Another request is already creating a PI, or status changed — retry will get existing PI
+      return res.status(409).json({ error: 'Payment is already being processed. Please wait and retry.' });
+    }
+
+    // Verify invoice balance server-side (NEVER trust client)
     const { data: invoice } = await admin
       .from('invoices')
       .select('id, balance_cents, currency, client_id, org_id')
@@ -182,6 +204,13 @@ router.post('/pay/:publicToken/create-payment-intent', async (req, res) => {
     if (!invoice || Number(invoice.balance_cents || 0) <= 0) {
       await updatePaymentRequestStatus(paymentRequest.id, 'paid');
       return res.status(400).json({ error: 'Invoice has no remaining balance.' });
+    }
+
+    // Cross-org safety: verify invoice belongs to the same org
+    if (invoice.org_id !== paymentRequest.org_id) {
+      // Revert lock
+      await admin.from('payment_requests').update({ status: 'pending' }).eq('id', paymentRequest.id);
+      return res.status(403).json({ error: 'Payment request mismatch.' });
     }
 
     const amountCents = Number(invoice.balance_cents);
@@ -214,7 +243,7 @@ router.post('/pay/:publicToken/create-payment-intent', async (req, res) => {
       publishable_key: process.env.STRIPE_PUBLISHABLE_KEY || '',
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || 'Failed to create payment intent.' });
+    return sendSafeError(res, error, 'Failed to create payment intent.', '[public-pay/create-pi]');
   }
 });
 

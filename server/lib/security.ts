@@ -316,6 +316,31 @@ export function sanitizeHtml(input: string): string {
 }
 
 /**
+ * Strip CRLF sequences from text that will be used in SMS/email headers.
+ * Prevents header injection attacks (e.g., injecting extra email headers via \r\n).
+ */
+export function stripCRLF(input: string): string {
+  if (!input) return '';
+  return input.replace(/[\r\n]+/g, ' ').trim();
+}
+
+/**
+ * Sanitize SMS/email body content — strip CRLF from subject lines
+ * and dangerous protocol handlers from bodies.
+ */
+export function sanitizeMessageContent(subject: string, body: string): { subject: string; body: string } {
+  return {
+    subject: stripCRLF(subject),
+    body: body
+      // Remove null bytes
+      .replace(/\0/g, '')
+      // Remove javascript: protocol
+      .replace(/javascript\s*:/gi, '')
+      .trim(),
+  };
+}
+
+/**
  * Validate that a string doesn't contain SQL injection patterns.
  * Defense-in-depth: Supabase uses parameterized queries, but this catches
  * edge cases where raw values might be interpolated.
@@ -335,40 +360,71 @@ export function containsSQLInjection(input: string): boolean {
 }
 
 /**
- * Sanitization middleware — applies to all request bodies
+ * Sanitization middleware — applies to all request bodies.
+ * Strips dangerous content AND logs security events for SQL injection attempts.
  */
 export function sanitizeRequestBody() {
-  return (req: Request, _res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     if (req.body && typeof req.body === 'object') {
-      sanitizeObject(req.body);
+      const result = sanitizeObject(req.body, req);
+      if (result.blocked) {
+        return res.status(400).json({ error: 'Request blocked: potentially malicious input detected.' });
+      }
     }
     next();
   };
 }
 
-function sanitizeObject(obj: Record<string, any>, depth = 0): void {
-  if (depth > 10) return; // Prevent infinite recursion
+function sanitizeObject(obj: Record<string, any>, req?: Request, depth = 0): { blocked: boolean } {
+  if (depth > 10) return { blocked: false }; // Prevent infinite recursion
 
   for (const [key, value] of Object.entries(obj)) {
     if (typeof value === 'string') {
-      // Don't sanitize HTML fields (they have their own sanitization)
+      // Don't sanitize HTML fields (they have their own sanitization via DOMPurify)
       if (key === 'html' || key === 'body_html' || key === 'content') continue;
       // Don't sanitize password fields
       if (key.includes('password') || key.includes('secret') || key.includes('token')) continue;
 
-      // Detect and log SQL injection attempts
+      // Detect SQL injection — log and BLOCK the request
       if (containsSQLInjection(value)) {
         logSecurityEvent({
           event_type: 'sql_injection_attempt',
           severity: 'critical',
           source: 'api',
-          details: { field: key, value_preview: value.slice(0, 100) },
+          ip_address: req ? extractIP(req) : undefined,
+          details: { field: key, value_preview: value.slice(0, 100), path: req?.path },
         });
+        // Auto-block repeat offenders
+        if (req) {
+          autoBlockIP(extractIP(req), 'sql_injection_attempt', 60).catch(() => {});
+        }
+        return { blocked: true };
+      }
+
+      // Strip dangerous patterns from text fields (XSS prevention)
+      // Don't modify the value for fields that are expected to contain special chars
+      if (!key.includes('email') && !key.includes('url') && !key.includes('address')) {
+        obj[key] = value
+          // Remove null bytes
+          .replace(/\0/g, '')
+          // Remove javascript: protocol
+          .replace(/javascript\s*:/gi, '')
+          // Remove data: URIs that could execute (keep data:image)
+          .replace(/data\s*:\s*(?!image\/)[^;,]*/gi, '');
       }
     } else if (value && typeof value === 'object' && !Array.isArray(value)) {
-      sanitizeObject(value, depth + 1);
+      const result = sanitizeObject(value, req, depth + 1);
+      if (result.blocked) return result;
+    } else if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item && typeof item === 'object') {
+          const result = sanitizeObject(item, req, depth + 1);
+          if (result.blocked) return result;
+        }
+      }
     }
   }
+  return { blocked: false };
 }
 
 // ============================================================================

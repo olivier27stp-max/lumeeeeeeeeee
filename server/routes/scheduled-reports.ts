@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { sendScheduledReport } from '../lib/scheduled-reports';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.get('/scheduled-reports', async (req, res) => {
     if (error) throw error;
     return res.json(data || []);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to list reports' });
+    return sendSafeError(res, err, 'Failed to list reports.', '[scheduled-reports]');
   }
 });
 
@@ -42,7 +43,7 @@ router.post('/scheduled-reports', async (req, res) => {
     if (error) throw error;
     return res.status(201).json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to create report' });
+    return sendSafeError(res, err, 'Failed to create report.', '[scheduled-reports]');
   }
 });
 
@@ -69,7 +70,7 @@ router.put('/scheduled-reports/:id', async (req, res) => {
     if (error) throw error;
     return res.json(data);
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to update report' });
+    return sendSafeError(res, err, 'Failed to update report.', '[scheduled-reports]');
   }
 });
 
@@ -86,7 +87,7 @@ router.delete('/scheduled-reports/:id', async (req, res) => {
     if (error) throw error;
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to delete report' });
+    return sendSafeError(res, err, 'Failed to delete report.', '[scheduled-reports]');
   }
 });
 
@@ -98,7 +99,7 @@ router.post('/scheduled-reports/:id/send-now', async (req, res) => {
     await sendScheduledReport(req.params.id);
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to send report' });
+    return sendSafeError(res, err, 'Failed to send report.', '[scheduled-reports]');
   }
 });
 

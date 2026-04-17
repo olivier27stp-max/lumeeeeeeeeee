@@ -33,8 +33,12 @@ const optionalEnvSchema = z.object({
   // Stripe
   STRIPE_SECRET_KEY: z.string().optional()
     .refine(v => !v || v.startsWith('sk_'), 'STRIPE_SECRET_KEY must start with sk_'),
+  STRIPE_PUBLISHABLE_KEY: z.string().optional()
+    .refine(v => !v || v.startsWith('pk_'), 'STRIPE_PUBLISHABLE_KEY must start with pk_'),
   STRIPE_WEBHOOK_SECRET: z.string().optional()
     .refine(v => !v || v.startsWith('whsec_'), 'STRIPE_WEBHOOK_SECRET must start with whsec_'),
+  STRIPE_CONNECT_WEBHOOK_SECRET: z.string().optional()
+    .refine(v => !v || v.startsWith('whsec_'), 'STRIPE_CONNECT_WEBHOOK_SECRET must start with whsec_'),
 
   // Twilio
   TWILIO_ACCOUNT_SID: z.string().optional()
@@ -44,16 +48,41 @@ const optionalEnvSchema = z.object({
   TWILIO_PHONE_NUMBER: z.string().optional()
     .refine(v => !v || /^\+[1-9]\d{1,14}$/.test(v), 'TWILIO_PHONE_NUMBER must be E.164 format'),
 
-  // Resend
-  RESEND_API_KEY: z.string().optional()
-    .refine(v => !v || v.startsWith('re_'), 'RESEND_API_KEY must start with re_'),
+  // SMTP (Gmail)
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional(),
+
+  // Gemini AI
+  GEMINI_API_KEY: z.string().optional()
+    .refine(v => !v || v.startsWith('AIza'), 'GEMINI_API_KEY must start with AIza'),
+
+  // FAL AI
+  FAL_API_KEY: z.string().optional()
+    .refine(v => !v || v.includes(':'), 'FAL_API_KEY must contain a colon separator'),
 
   // Payments encryption
   PAYMENTS_ENCRYPTION_KEY: z.string().optional(),
 
+  // PII encryption
+  PII_ENCRYPTION_KEY: z.string().optional(),
+
+  // Upstash Redis
+  UPSTASH_REDIS_REST_URL: z.string().optional()
+    .refine(v => !v || v.startsWith('https://'), 'UPSTASH_REDIS_REST_URL must use HTTPS'),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional()
+    .refine(v => !v || v.length >= 20, 'UPSTASH_REDIS_REST_TOKEN is too short'),
+
   // App
+  NODE_ENV: z.enum(['production', 'development', 'staging', 'test']).optional(),
   FRONTEND_URL: z.string().optional(),
-  API_PORT: z.string().optional(),
+  API_PORT: z.string().optional()
+    .refine(v => !v || /^\d+$/.test(v), 'API_PORT must be a number'),
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).optional(),
+
+  // Platform admin
+  PLATFORM_OWNER_ID: z.string().uuid('PLATFORM_OWNER_ID must be a valid UUID').optional(),
 });
 
 // ============================================================================
@@ -96,15 +125,18 @@ function runSecurityChecks(): ValidationResult {
     }
   }
 
-  // 3. Validate encryption key length if present
-  if (process.env.PAYMENTS_ENCRYPTION_KEY) {
-    try {
-      const keyBuf = Buffer.from(process.env.PAYMENTS_ENCRYPTION_KEY, 'base64');
-      if (keyBuf.length !== 32) {
-        errors.push(`PAYMENTS_ENCRYPTION_KEY must be exactly 32 bytes (got ${keyBuf.length})`);
+  // 3. Validate encryption key lengths if present
+  for (const keyName of ['PAYMENTS_ENCRYPTION_KEY', 'PII_ENCRYPTION_KEY', 'PAYMENTS_ENCRYPTION_KEY_PREVIOUS']) {
+    const keyVal = process.env[keyName];
+    if (keyVal) {
+      try {
+        const keyBuf = Buffer.from(keyVal, 'base64');
+        if (keyBuf.length !== 32) {
+          errors.push(`${keyName} must be exactly 32 bytes (got ${keyBuf.length})`);
+        }
+      } catch {
+        errors.push(`${keyName} is not valid base64`);
       }
-    } catch {
-      errors.push('PAYMENTS_ENCRYPTION_KEY is not valid base64');
     }
   }
 

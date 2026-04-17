@@ -24,6 +24,7 @@ export interface TaxConfig {
   is_compound: boolean;
   is_active: boolean;
   sort_order: number;
+  registration_number?: string | null;
 }
 
 export interface TaxGroup {
@@ -131,7 +132,7 @@ export async function setDefaultTaxGroup(id: string): Promise<TaxGroup> {
 }
 
 /** Calculate tax amounts given subtotal and resolved taxes */
-export function calculateTaxes(subtotalCents: number, discountCents: number, taxes: TaxConfig[]): Array<{ name: string; rate: number; amount_cents: number }> {
+export function calculateTaxes(subtotalCents: number, discountCents: number, taxes: TaxConfig[]): Array<{ name: string; rate: number; amount_cents: number; registration_number?: string | null }> {
   const base = subtotalCents - discountCents;
   if (base <= 0 || taxes.length === 0) return [];
 
@@ -141,6 +142,14 @@ export function calculateTaxes(subtotalCents: number, discountCents: number, tax
       ? Math.round((t.is_compound ? runningBase : base) * t.rate / 100)
       : Math.round(t.rate * 100);
     if (t.is_compound) runningBase += amount;
-    return { name: t.name, rate: t.rate, amount_cents: amount };
+    return { name: t.name, rate: t.rate, amount_cents: amount, registration_number: t.registration_number || null };
   });
+}
+
+export async function updateTaxRegistrationNumber(id: string, registration_number: string): Promise<TaxConfig> {
+  const h = await headers();
+  const res = await fetch(`${API}/taxes/config/${id}`, { method: 'PUT', headers: h, body: JSON.stringify({ registration_number }) });
+  const body = await jsonOrEmpty(res);
+  if (!res.ok) throw new Error(body?.error || 'Failed');
+  return body.config;
 }
