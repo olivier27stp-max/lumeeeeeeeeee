@@ -7,12 +7,7 @@ import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib
 const router = Router();
 
 // ── Stripe client ──
-const allEnvKeys = Object.keys(process.env).filter(k => k.includes('STRIPE') || k.includes('stripe'));
-console.log(`[billing] ENV keys containing STRIPE: ${JSON.stringify(allEnvKeys)}`);
-console.log(`[billing] Total env vars count: ${Object.keys(process.env).length}`);
-const stripeKey = process.env.STRIPE_SECRET_KEY;
-console.log(`[billing] STRIPE_SECRET_KEY present: ${!!stripeKey}, starts with: ${stripeKey ? stripeKey.substring(0, 8) + '...' : 'N/A'}`);
-const stripe = stripeKey ? new Stripe(stripeKey) : null;
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 // ─── Validation schemas ──────────────────────────────────────────
 
