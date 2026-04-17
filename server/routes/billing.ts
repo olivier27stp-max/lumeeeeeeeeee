@@ -7,7 +7,9 @@ import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib
 const router = Router();
 
 // ── Stripe client ──
-const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const stripeKey = process.env.STRIPE_SECRET_KEY;
+console.log(`[billing] STRIPE_SECRET_KEY present: ${!!stripeKey}, starts with: ${stripeKey ? stripeKey.substring(0, 8) + '...' : 'N/A'}`);
+const stripe = stripeKey ? new Stripe(stripeKey) : null;
 
 // ─── Validation schemas ──────────────────────────────────────────
 
