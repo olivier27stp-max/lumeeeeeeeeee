@@ -417,8 +417,15 @@ export default function App() {
   }, [user, onboardingChecked]);
 
   // Check if user has an active subscription — redirect to /checkout if not
+  // Platform owners/admins bypass subscription check
+  const BYPASS_EMAILS = ['willhebert30@gmail.com', 'beatsafterimage@gmail.com'];
   useEffect(() => {
     if (!user || !onboardingChecked || showOnboarding) { setHasSubscription(null); return; }
+    // Bypass for platform owners
+    if (user.email && BYPASS_EMAILS.includes(user.email.toLowerCase())) {
+      setHasSubscription(true);
+      return;
+    }
     (async () => {
       try {
         const { data: mem } = await supabase.from('memberships').select('org_id').eq('user_id', user.id).limit(1).maybeSingle();
