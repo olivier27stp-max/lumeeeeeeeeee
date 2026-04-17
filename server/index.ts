@@ -393,23 +393,10 @@ try { indexHtmlTemplate = fs.readFileSync(path.join(distPath, 'index.html'), 'ut
 app.get('*', (_req, res, next) => {
   if (_req.path.startsWith('/api')) return next();
 
-  // Generate per-request nonce for CSP
-  const nonce = crypto.randomBytes(16).toString('base64');
-
-  // Update CSP header with nonce
-  const currentCsp = res.getHeader('Content-Security-Policy')?.toString() || '';
-  res.setHeader(
-    'Content-Security-Policy',
-    currentCsp.includes("'unsafe-inline'")
-      ? currentCsp.replace("style-src 'self' 'unsafe-inline'", `style-src 'self' 'nonce-${nonce}' 'unsafe-inline'`)
-      : currentCsp.replace("style-src 'self'", `style-src 'self' 'nonce-${nonce}'`)
-  );
-
+  // Serve index.html — no nonce injection needed since we use 'unsafe-inline' for styles
+  // (React/Tailwind/Framer Motion generate dynamic inline styles that can't have nonces)
   if (indexHtmlTemplate) {
-    const html = indexHtmlTemplate
-      .replace(/<script/g, `<script nonce="${nonce}"`)
-      .replace(/<style/g, `<style nonce="${nonce}"`);
-    res.type('html').send(html);
+    res.type('html').send(indexHtmlTemplate);
   } else {
     res.sendFile(path.join(distPath, 'index.html'));
   }
