@@ -1038,7 +1038,6 @@ const fr: TranslationKeys = {
         features: [
           'Tout dans Pro',
           'Assistant IA (LIA)',
-          'Director Panel — studio créatif IA',
           'Planification intelligente & disponibilité',
           'Automatisations avancées',
           'Accès API & intégrations',

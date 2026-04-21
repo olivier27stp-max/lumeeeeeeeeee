@@ -165,18 +165,6 @@ import MarketingContact from './pages/marketing/Contact';
 // Platform Admin — lazy loaded, owner-only
 const PlatformAdmin = React.lazy(() => import('./pages/PlatformAdmin'));
 
-// Director Panel — lazy loaded
-const DirectorHome = React.lazy(() => import('./pages/director-panel/DirectorHome'));
-const DirectorFlows = React.lazy(() => import('./pages/director-panel/DirectorFlows'));
-const FlowEditor = React.lazy(() => import('./pages/director-panel/FlowEditor'));
-const DirectorTemplates = React.lazy(() => import('./pages/director-panel/DirectorTemplates'));
-const DirectorAssets = React.lazy(() => import('./pages/director-panel/DirectorAssets'));
-const DirectorRuns = React.lazy(() => import('./pages/director-panel/DirectorRuns'));
-const DirectorSettings = React.lazy(() => import('./pages/director-panel/DirectorSettings'));
-const DirectorStyles = React.lazy(() => import('./pages/director-panel/DirectorStyles'));
-const DirectorTraining = React.lazy(() => import('./pages/director-panel/DirectorTraining'));
-const DirectorLayout = React.lazy(() => import('./pages/director-panel/DirectorLayout'));
-
 type NavItem = {
   id: string;
   label: string;
@@ -506,19 +494,6 @@ export default function App() {
       <Routes>
         <Route path="/invite/:token" element={<AcceptInvitation />} />
       </Routes>
-    );
-  }
-
-  // Director Panel flow editor — full screen, no sidebar
-  if (user && location.pathname.match(/^\/director-panel\/flows\/.+/)) {
-    return (
-      <ErrorBoundary>
-        <React.Suspense fallback={<div className="h-screen w-screen bg-[#111]" />}>
-          <Routes>
-            <Route path="/director-panel/flows/:flowId" element={<FlowEditor />} />
-          </Routes>
-        </React.Suspense>
-      </ErrorBoundary>
     );
   }
 
@@ -1164,18 +1139,7 @@ function AuthenticatedApp({
                     <Route path="/settings/referrals" element={<Gated permission="settings.read"><PageWrapper><ReferFriend /></PageWrapper></Gated>} />
                     {/* Memory Graph — LIA Brain Visualization */}
                     <Route path="/memory-graph" element={<Gated permission="ai.admin"><React.Suspense fallback={null}><MemoryGraphPage /></React.Suspense></Gated>} />
-                    {/* Director Panel routes */}
-                    <Route path="/director-panel" element={<Gated permission="ai.admin"><React.Suspense fallback={null}><DirectorLayout /></React.Suspense></Gated>}>
-                      <Route index element={<React.Suspense fallback={null}><DirectorHome orgId={currentOrgId || ''} /></React.Suspense>} />
-                      <Route path="flows" element={<React.Suspense fallback={null}><DirectorFlows orgId={currentOrgId || ''} /></React.Suspense>} />
-                      <Route path="templates" element={<React.Suspense fallback={null}><DirectorTemplates /></React.Suspense>} />
-                      <Route path="assets" element={<React.Suspense fallback={null}><DirectorAssets /></React.Suspense>} />
-                      <Route path="runs" element={<React.Suspense fallback={null}><DirectorRuns orgId={currentOrgId || ''} /></React.Suspense>} />
-                      <Route path="settings" element={<React.Suspense fallback={null}><DirectorSettings /></React.Suspense>} />
-                      <Route path="styles" element={<React.Suspense fallback={null}><DirectorStyles /></React.Suspense>} />
-                      <Route path="training" element={<React.Suspense fallback={null}><DirectorTraining /></React.Suspense>} />
-                    </Route>
-                    {/* Platform Admin — owner-only, server enforces auth */}
+{/* Platform Admin — owner-only, server enforces auth */}
                     <Route path="/platform-admin" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><PlatformAdmin /></PageWrapper></React.Suspense> : <Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
                   </Routes>

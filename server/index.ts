@@ -38,7 +38,6 @@ import portalRouter from './routes/portal';
 import connectRouter from './routes/connect';
 import paymentRequestsRouter from './routes/payment-requests';
 import publicPayRouter from './routes/public-pay';
-import directorPanelRouter from './routes/director-panel';
 import teamSuggestionsRouter from './routes/team-suggestions';
 import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
@@ -107,7 +106,7 @@ app.use((_req, res, next) => {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: https: blob:",
       "font-src 'self' data: https://fonts.gstatic.com",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://api.stripe.com https://fal.run https://queue.fal.run https://api.paypal.com",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://api.stripe.com https://api.paypal.com",
       "frame-src https://js.stripe.com https://www.paypal.com",
       "media-src 'self' https: blob:",
       "object-src 'none'",
@@ -241,7 +240,6 @@ app.use('/api/quotes', quoteLimiterStrict);
 app.use('/api/agent/chat', aiChatLimiter);
 app.use('/api/ai/chat', aiChatLimiter);
 app.use('/api/ai/chat/stream', aiChatLimiter);
-app.use('/api/director-panel/providers/execute', aiChatLimiter);
 
 // ── Automation event rate limiters ──
 app.use('/api/automations/events', automationLimiter);
@@ -264,7 +262,6 @@ app.use('/api/incidents', redisRateLimit({ preset: 'standard', keyFn: (req) => `
 // AI endpoints — persistent rate limiting for expensive calls
 app.use('/api/agent/chat', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
 app.use('/api/ai/chat', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
-app.use('/api/director-panel/providers/execute', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai-director:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
 
 // ── MFA enforcement for admin/owner on sensitive endpoints ──
 app.use(mfaEnforcementMiddleware());
@@ -290,9 +287,6 @@ app.use('/api', portalRouter);
 app.use('/api', connectRouter);
 app.use('/api', paymentRequestsRouter);
 app.use('/api', publicPayRouter);
-const directorProviderLimiter = rateLimit({ windowMs: 60_000, max: 20, keyFn: (req) => `director:${req.headers.authorization?.slice(-20) || req.ip}` });
-app.use('/api/director-panel/providers', directorProviderLimiter);
-app.use('/api', directorPanelRouter);
 app.use('/api', featureFlagsRouter);
 app.use('/api', authRouter);
 app.use('/api', dsrRouter);

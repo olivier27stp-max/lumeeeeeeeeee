@@ -11,7 +11,6 @@ import { billingTools } from './billing';
 import { scheduleTools } from './schedule';
 import { dashboardTools } from './dashboard';
 import { leadTools } from './leads';
-import { directorTools } from './director';
 import { searchTools } from './search';
 
 /**
@@ -25,6 +24,5 @@ export function registerAllTools(): void {
   toolRegistry.registerAll(scheduleTools);
   toolRegistry.registerAll(dashboardTools);
   toolRegistry.registerAll(leadTools);
-  toolRegistry.registerAll(directorTools);
   toolRegistry.registerAll(searchTools);
 }

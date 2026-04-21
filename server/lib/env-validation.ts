@@ -58,10 +58,6 @@ const optionalEnvSchema = z.object({
   GEMINI_API_KEY: z.string().optional()
     .refine(v => !v || v.startsWith('AIza'), 'GEMINI_API_KEY must start with AIza'),
 
-  // FAL AI
-  FAL_API_KEY: z.string().optional()
-    .refine(v => !v || v.includes(':'), 'FAL_API_KEY must contain a colon separator'),
-
   // Payments encryption
   PAYMENTS_ENCRYPTION_KEY: z.string().optional(),
 

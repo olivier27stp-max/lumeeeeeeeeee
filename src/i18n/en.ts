@@ -1037,7 +1037,6 @@ const en = {
         features: [
           'Everything in Pro',
           'AI Assistant (LIA)',
-          'Director Panel — AI creative studio',
           'Smart scheduling & availability',
           'Advanced automations',
           'API access & integrations',

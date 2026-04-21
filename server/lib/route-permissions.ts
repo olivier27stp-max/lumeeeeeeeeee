@@ -118,16 +118,6 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'GET /api/agent/user-prefs': 'ai.use',
   'POST /api/team-suggestions': 'ai.use',
 
-  // ── Director Panel ──
-  'POST /api/director-panel/providers/execute': 'ai.admin',
-  'POST /api/director-panel/storage/ensure-bucket': 'ai.admin',
-  'POST /api/director-panel/storage/ensure-training-bucket': 'ai.admin',
-  'POST /api/director-panel/assets/save': 'ai.admin',
-  'GET /api/director-panel/credits': 'ai.admin',
-  'POST /api/director-panel/training/start': 'ai.admin',
-  'GET /api/director-panel/training/status/:trainingId': 'ai.admin',
-  'GET /api/director-panel/proxy-image': 'ai.admin',
-
   // ── Invitations / Team ──
   'GET /api/invitations/list': 'team.read',
   'POST /api/invitations/send': 'users.invite',
