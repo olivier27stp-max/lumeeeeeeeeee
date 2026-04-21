@@ -50,7 +50,7 @@ async function getCompanyInfo(orgId: string): Promise<CompanyInfo> {
   }
 }
 
-async function getClientContact(clientId: string | null) {
+async function getClientContact(clientId: string | null, orgId: string) {
   if (!clientId) return null;
   try {
     const admin = getServiceClient();
@@ -58,6 +58,7 @@ async function getClientContact(clientId: string | null) {
       .from('clients')
       .select('id, first_name, last_name, email, phone')
       .eq('id', clientId)
+      .eq('org_id', orgId)
       .maybeSingle();
     return data;
   } catch {
@@ -231,7 +232,7 @@ router.post('/payment-requests/create', validate(createPaymentRequestSchema), as
 
     // ── Send notifications ──
     const notifications: { email?: any; sms?: any } = {};
-    const client = await getClientContact(invoice.client_id);
+    const client = await getClientContact(invoice.client_id, orgId);
     const clientName = client ? [client.first_name, client.last_name].filter(Boolean).join(' ') || 'Client' : 'Client';
 
     if ((sendVia === 'email' || sendVia === 'both') && client?.email) {
@@ -302,7 +303,7 @@ router.post('/payment-requests/resend', async (req, res) => {
     const invoice = await getInvoiceForOrg(auth.client, orgId, invoiceId);
 
     if (invoice) {
-      const client = await getClientContact(invoice.client_id);
+      const client = await getClientContact(invoice.client_id, orgId);
       const clientName = client ? [client.first_name, client.last_name].filter(Boolean).join(' ') || 'Client' : 'Client';
 
       if ((sendVia === 'email' || sendVia === 'both') && client?.email) {

@@ -189,6 +189,7 @@ router.post('/quotes/send-email', async (req, res) => {
       .from('quotes')
       .select('*, leads(first_name, last_name, email, phone), clients(first_name, last_name, email, phone)')
       .eq('id', quoteId)
+      .eq('org_id', auth.orgId)
       .single();
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
 
@@ -270,7 +271,7 @@ router.post('/quotes/send-email', async (req, res) => {
       last_sent_channel: 'email',
       status: 'sent',
       updated_at: new Date().toISOString(),
-    }).eq('id', quoteId);
+    }).eq('id', quoteId).eq('org_id', auth.orgId);
 
     // Log send
     await admin.from('quote_send_log').insert({
@@ -448,7 +449,7 @@ router.post('/quotes/convert-to-job', async (req, res) => {
 
     const admin = getServiceClient();
     const { data: quote, error: qErr } = await admin
-      .from('quotes').select('*').eq('id', quoteId).single();
+      .from('quotes').select('*').eq('id', quoteId).eq('org_id', auth.orgId).single();
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
 
     if (quote.status === 'converted') return res.status(400).json({ error: 'Quote already converted.' });
@@ -503,7 +504,7 @@ router.post('/quotes/convert-to-job', async (req, res) => {
       deposit_type: quote.deposit_type || null,
       deposit_value: quote.deposit_value || null,
       require_payment_method: quote.require_payment_method || false,
-    }).eq('id', jobId);
+    }).eq('id', jobId).eq('org_id', auth.orgId);
 
     // Update quote status to converted
     await admin.from('quotes').update({
@@ -511,7 +512,7 @@ router.post('/quotes/convert-to-job', async (req, res) => {
       converted_at: new Date().toISOString(),
       job_id: jobId,
       updated_at: new Date().toISOString(),
-    }).eq('id', quoteId);
+    }).eq('id', quoteId).eq('org_id', auth.orgId);
 
     await admin.from('quote_status_history').insert({
       quote_id: quoteId,
@@ -1143,7 +1144,7 @@ router.post('/quotes/convert-to-invoice', async (req, res) => {
 
     const admin = getServiceClient();
     const { data: quote, error: qErr } = await admin
-      .from('quotes').select('*').eq('id', quoteId).single();
+      .from('quotes').select('*').eq('id', quoteId).eq('org_id', auth.orgId).single();
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
 
     if (!['approved', 'sent', 'awaiting_response', 'action_required'].includes(quote.status)) {
@@ -1192,14 +1193,14 @@ router.post('/quotes/convert-to-invoice', async (req, res) => {
       total_cents: quote.total_cents,
       balance_cents: quote.total_cents,
       notes: quote.notes,
-    }).eq('id', invoiceId);
+    }).eq('id', invoiceId).eq('org_id', auth.orgId);
 
     // Mark quote as converted
     await admin.from('quotes').update({
       status: 'converted',
       converted_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    }).eq('id', quoteId);
+    }).eq('id', quoteId).eq('org_id', auth.orgId);
 
     await admin.from('quote_status_history').insert({
       quote_id: quoteId,
