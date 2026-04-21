@@ -11,8 +11,11 @@ export async function initSentryClient(): Promise<void> {
   const dsn = import.meta.env.VITE_SENTRY_DSN;
   if (!dsn) return;
   try {
-    // @ts-ignore — optional dep, install with: npm i @sentry/react
-    sentryReact = await import(/* @vite-ignore */ '@sentry/react');
+    // Package name hidden from Vite dep scanner — only resolved at runtime
+    // when VITE_SENTRY_DSN is set. Install with: npm i @sentry/react
+    const pkg = ['@sentry', 'react'].join('/');
+    // @ts-ignore — optional dep
+    sentryReact = await import(/* @vite-ignore */ pkg);
     sentryReact.init({
       dsn,
       environment: import.meta.env.MODE,

@@ -73,12 +73,12 @@ async function main() {
   cleanup.push(async () => admin.auth.admin.deleteUser(userB.data.user.id));
 
   // Create 2 orgs
-  const orgA = await admin.from('orgs').insert({ name: PREFIX + 'orgA', slug: PREFIX + 'a' }).select('id').single();
+  const orgA = await admin.from('orgs').insert({ name: PREFIX + 'orgA' }).select('id').single();
   if (orgA.error) throw orgA.error;
   ok('org A created: ' + orgA.data.id);
   cleanup.push(async () => admin.from('orgs').delete().eq('id', orgA.data.id));
 
-  const orgB = await admin.from('orgs').insert({ name: PREFIX + 'orgB', slug: PREFIX + 'b' }).select('id').single();
+  const orgB = await admin.from('orgs').insert({ name: PREFIX + 'orgB' }).select('id').single();
   if (orgB.error) throw orgB.error;
   ok('org B created: ' + orgB.data.id);
   cleanup.push(async () => admin.from('orgs').delete().eq('id', orgB.data.id));
@@ -93,6 +93,7 @@ async function main() {
   // Seed: 1 client in each org
   const clA = await admin.from('clients').insert({
     org_id: orgA.data.id, first_name: 'Alice', last_name: 'A', email: 'alice@a.test', status: 'active',
+    created_by: userA.data.user.id,
   }).select('id').single();
   if (clA.error) throw clA.error;
   info('orgA client: ' + clA.data.id);
@@ -100,6 +101,7 @@ async function main() {
 
   const clB = await admin.from('clients').insert({
     org_id: orgB.data.id, first_name: 'Bob', last_name: 'B', email: 'bob@b.test', status: 'active',
+    created_by: userB.data.user.id,
   }).select('id').single();
   if (clB.error) throw clB.error;
   info('orgB client: ' + clB.data.id);
@@ -143,13 +145,16 @@ async function main() {
   } else fail('search failed', r2.status + ' ' + JSON.stringify(r2.body));
 
   logStep('Test 3: Cross-org leak — A queries B client by UUID');
-  // Try to fetch B's client directly via POST /clients/by-ids
   const r3 = await http('POST', '/api/clients/by-ids', tokenA, { ids: [clB.data.id] });
   if (r3.status === 200) {
-    const found = (r3.body.items || r3.body || []).some(c => c.id === clB.data.id);
-    if (!found) ok('RLS blocks cross-org fetch by ID');
+    const arr = Array.isArray(r3.body) ? r3.body
+      : Array.isArray(r3.body?.items) ? r3.body.items
+      : Array.isArray(r3.body?.clients) ? r3.body.clients
+      : [];
+    const found = arr.some(c => c?.id === clB.data.id);
+    if (!found) ok('RLS blocks cross-org fetch by ID (response=' + JSON.stringify(r3.body).slice(0, 80) + ')');
     else fail('LEAK: A got B client by ID', JSON.stringify(r3.body));
-  } else info('by-ids returned ' + r3.status + ' (may be protected differently)');
+  } else info('by-ids returned ' + r3.status + ' (may be protected differently): ' + JSON.stringify(r3.body).slice(0, 120));
 
   logStep('Test 4: Auth middleware — missing Bearer token');
   const r4 = await http('GET', '/api/clients/search?q=x', null);

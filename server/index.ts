@@ -48,9 +48,6 @@ import featureFlagsRouter from './routes/feature-flags';
 import scheduledReportsRouter from './routes/scheduled-reports';
 import goalsRouter from './routes/goals';
 import auditLogRouter from './routes/audit-log';
-import aiProxyRouter from './routes/ai-proxy';
-import agentRouter from './routes/agent';
-import agentTrainingRouter from './routes/agent-training';
 import orgKnowledgeRouter from './routes/org-knowledge';
 import invitationsRouter from './routes/invitations';
 import billingRouter from './routes/billing';
@@ -62,7 +59,6 @@ import leaderboardRouter from './routes/leaderboard';
 import commissionsRouter from './routes/commissions';
 import gamificationRouter from './routes/gamification';
 import fieldSessionsRouter from './routes/field-sessions';
-import memoryGraphRouter from './routes/memory-graph';
 import platformAdminRouter from './routes/platform-admin';
 import authRouter from './routes/auth';
 import dsrRouter from './routes/dsr';
@@ -236,11 +232,6 @@ app.use('/api/pay', rateLimit({
 app.use('/api/portal', portalLimiter);
 app.use('/api/quotes', quoteLimiterStrict);
 
-// ── AI/Agent rate limiters (expensive API calls) ──
-app.use('/api/agent/chat', aiChatLimiter);
-app.use('/api/ai/chat', aiChatLimiter);
-app.use('/api/ai/chat/stream', aiChatLimiter);
-
 // ── Automation event rate limiters ──
 app.use('/api/automations/events', automationLimiter);
 
@@ -259,10 +250,6 @@ app.use('/api/dsr', redisRateLimit({ preset: 'strict', keyFn: (req) => `dsr:${re
 // Incidents — strict (failed-login needs to fit brute-force detection window)
 app.use('/api/incidents/failed-login', redisRateLimit({ preset: 'auth' }));
 app.use('/api/incidents', redisRateLimit({ preset: 'standard', keyFn: (req) => `inc:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
-// AI endpoints — persistent rate limiting for expensive calls
-app.use('/api/agent/chat', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
-app.use('/api/ai/chat', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
-
 // ── MFA enforcement for admin/owner on sensitive endpoints ──
 app.use(mfaEnforcementMiddleware());
 
@@ -295,11 +282,6 @@ app.use('/api', incidentsRouter);
 app.use('/api', scheduledReportsRouter);
 app.use('/api', goalsRouter);
 app.use('/api', auditLogRouter);
-app.use('/api', aiProxyRouter);
-const agentLimiter = rateLimit({ windowMs: 60_000, max: 20, keyFn: (req) => `agent:${req.headers.authorization?.slice(-20) || req.ip}` });
-app.use('/api/agent', agentLimiter);
-app.use('/api', agentRouter);
-app.use('/api', agentTrainingRouter);
 app.use('/api', orgKnowledgeRouter);
 
 // Quote redirect at root level (/q/:token), API routes under /api — rate limited.
@@ -337,7 +319,6 @@ app.use('/api', leaderboardRouter);
 app.use('/api', commissionsRouter);
 app.use('/api', gamificationRouter);
 app.use('/api', fieldSessionsRouter);
-app.use('/api', memoryGraphRouter);
 
 // Platform admin — tightly rate limited, owner-only routes enforce auth internally
 const platformAdminLimiter = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `platform:${req.headers.authorization?.slice(-20) || req.ip}` });
