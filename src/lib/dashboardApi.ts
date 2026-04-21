@@ -143,7 +143,8 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   let jobsQuery = supabase
     .from('jobs_active')
-    .select('id,client_id,client_name,status,total_amount,total_cents,updated_at');
+    .select('id,client_id,client_name,status,total_amount,total_cents,updated_at')
+    .eq('org_id', orgId);
 
   let todayEventsQuery = supabase
     .from('schedule_events')
@@ -171,6 +172,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   let revenueJobsQuery = supabase
     .from('jobs_active')
     .select('id,status,total_amount,total_cents,updated_at')
+    .eq('org_id', orgId)
     .gte('updated_at', dayStart)
     .lte('updated_at', dayEnd);
 

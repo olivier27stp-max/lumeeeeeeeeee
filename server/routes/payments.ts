@@ -1,8 +1,16 @@
 import { Router } from 'express';
 import express from 'express';
 import Stripe from 'stripe';
+import { z } from 'zod';
 import { requireAuthedClient, isOrgMember, isOrgAdminOrOwner, getServiceClient } from '../lib/supabase';
 import { parseOrgId, clampInt, resolvePublicBaseUrl } from '../lib/helpers';
+
+// Refund input validation
+const refundSchema = z.object({
+  paymentId: z.string().uuid('Invalid paymentId.'),
+  amountCents: z.number().int().positive().max(100_000_000).optional(),
+  reason: z.string().trim().max(500).optional(),
+});
 import { stripeWebhookSecret, stripeWebhookClient, supabaseServiceRoleKey, paypalWebhookId, paypalEnv } from '../lib/config';
 import {
   validate,
@@ -1030,11 +1038,13 @@ router.post('/payments/refund', async (req, res) => {
     const canManage = await isOrgAdminOrOwner(auth.client, auth.user.id, orgId);
     if (!canManage) return res.status(403).json({ error: 'Only owner/admin can issue refunds.' });
 
-    const paymentId = String(req.body?.paymentId || '').trim();
-    if (!paymentId) return res.status(400).json({ error: 'Missing paymentId.' });
-
-    const refundAmountCents = req.body?.amountCents ? Math.round(Number(req.body.amountCents)) : null; // null = full refund
-    const reason = String(req.body?.reason || '').trim() || undefined;
+    const parsedBody = refundSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json({ error: 'Invalid request body.', issues: parsedBody.error.issues.map(i => i.message) });
+    }
+    const { paymentId, amountCents, reason: reasonInput } = parsedBody.data;
+    const refundAmountCents = amountCents ?? null; // null = full refund
+    const reason = reasonInput || undefined;
 
     // Fetch the payment
     const admin = getServiceClient();

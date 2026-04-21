@@ -146,6 +146,7 @@ function formatStatusLabel(value: string | null | undefined): string {
     .join(' ');
 }
 
+/** Normalize a status value for WRITES (insert/update). Always returns a valid lifecycle state. */
 function normalizeStatusValue(status: string): string {
   const normalized = status.trim().toLowerCase().replace(/\s+/g, '_');
   if (!normalized) return 'draft';
@@ -163,6 +164,18 @@ function normalizeStatusValue(status: string): string {
   if (normalized === 'requires_invoicing') return 'completed';
 
   return 'draft';
+}
+
+/** Normalize for READS/FILTERS. Returns null if the value is a UI-derived state that cannot map 1:1 to a DB value.
+ * Callers must skip the `.eq('status', …)` filter when this returns null. */
+function normalizeStatusForFilter(status: string): string | null {
+  const normalized = status.trim().toLowerCase().replace(/\s+/g, '_');
+  if (!normalized) return null;
+  if (['scheduled', 'in_progress', 'completed', 'cancelled', 'draft'].includes(normalized)) return normalized;
+  if (normalized === 'canceled') return 'cancelled';
+  if (normalized === 'closed' || normalized === 'done') return 'completed';
+  // UI-derived states without a direct DB column match — don't filter
+  return null;
 }
 
 function normalizeAddressValue(address: string | null | undefined): string {
@@ -300,8 +313,9 @@ function applyTableFilters(request: any, query: JobsQuery) {
       const plus30 = new Date(Date.now() + 30 * 86400000).toISOString();
       builder = builder.gte('scheduled_at', now).lte('scheduled_at', plus30);
     } else {
-      // Direct DB status match
-      builder = builder.eq('status', normalizeStatusValue(status));
+      // Direct DB status match — skip filter if the requested value cannot map to a DB state
+      const dbStatus = normalizeStatusForFilter(status);
+      if (dbStatus !== null) builder = builder.eq('status', dbStatus);
     }
   }
   if (jobType && jobType !== 'All') builder = builder.eq('job_type', jobType);
@@ -332,29 +346,44 @@ export async function getJobs(query: JobsQuery): Promise<JobsResult> {
 }
 
 export async function getJobsKpis(params: { status?: string; jobType?: string; q?: string }): Promise<JobsKpis> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const now = new Date();
   const plus30 = new Date(now.getTime() + 30 * 86400000);
   const minus30 = new Date(now.getTime() - 30 * 86400000);
   const minus60 = new Date(now.getTime() - 60 * 86400000);
+  const nowIso = now.toISOString();
+  const plus30Iso = plus30.toISOString();
+  const minus30Iso = minus30.toISOString();
+  const minus60Iso = minus60.toISOString();
 
-  let request = supabase.from('jobs_active').select('id,status,scheduled_at,requires_invoicing').limit(5000);
-  request = applyTableFilters(request, params);
+  // Parallel targeted count queries — each scoped by org_id + only metadata fetched.
+  const base = () => supabase.from('jobs_active').select('*', { count: 'exact', head: true }).eq('org_id', orgId);
 
-  const { data, error } = await request;
-  if (error) throw error;
-  const rawRows = data || [];
-  const jobs = rawRows.map((row: any) => mapJob(row));
+  const [
+    endingWithin30Res, lateRes, requiresInvoicingRes, actionRequiredRes,
+    unscheduledRes, recentVisitsRes, prevRecentVisitsRes,
+    visitsScheduledRes, prevVisitsScheduledRes,
+  ] = await Promise.all([
+    base().gte('scheduled_at', nowIso).lte('scheduled_at', plus30Iso),
+    base().eq('status', 'scheduled').lt('scheduled_at', nowIso),
+    base().eq('status', 'completed').eq('requires_invoicing', true),
+    base().eq('status', 'scheduled').lt('scheduled_at', minus30Iso),
+    base().or('scheduled_at.is.null,status.eq.draft'),
+    base().gte('scheduled_at', minus30Iso).lte('scheduled_at', nowIso),
+    base().gte('scheduled_at', minus60Iso).lt('scheduled_at', minus30Iso),
+    base().gte('scheduled_at', nowIso).lte('scheduled_at', plus30Iso),
+    base().gte('scheduled_at', minus30Iso).lt('scheduled_at', nowIso),
+  ]);
 
-  const endingWithin30 = jobs.filter((j) => j.scheduled_at && new Date(j.scheduled_at) >= now && new Date(j.scheduled_at) <= plus30).length;
-  // Derive virtual KPI statuses from real DB fields
-  const late = rawRows.filter((r: any) => r.status === 'scheduled' && r.scheduled_at && new Date(r.scheduled_at) < now).length;
-  const requiresInvoicing = rawRows.filter((r: any) => r.status === 'completed' && r.requires_invoicing).length;
-  const actionRequired = rawRows.filter((r: any) => r.status === 'scheduled' && r.scheduled_at && new Date(r.scheduled_at) < minus30).length;
-  const unscheduled = rawRows.filter((r: any) => !r.scheduled_at || r.status === 'draft').length;
-  const recentVisits = jobs.filter((j) => j.scheduled_at && new Date(j.scheduled_at) >= minus30 && new Date(j.scheduled_at) <= now).length;
-  const prevRecentVisits = jobs.filter((j) => j.scheduled_at && new Date(j.scheduled_at) >= minus60 && new Date(j.scheduled_at) < minus30).length;
-  const visitsScheduled = jobs.filter((j) => j.scheduled_at && new Date(j.scheduled_at) >= now && new Date(j.scheduled_at) <= plus30).length;
-  const prevVisitsScheduled = jobs.filter((j) => j.scheduled_at && new Date(j.scheduled_at) >= minus30 && new Date(j.scheduled_at) < now).length;
+  const endingWithin30 = endingWithin30Res.count || 0;
+  const late = lateRes.count || 0;
+  const requiresInvoicing = requiresInvoicingRes.count || 0;
+  const actionRequired = actionRequiredRes.count || 0;
+  const unscheduled = unscheduledRes.count || 0;
+  const recentVisits = recentVisitsRes.count || 0;
+  const prevRecentVisits = prevRecentVisitsRes.count || 0;
+  const visitsScheduled = visitsScheduledRes.count || 0;
+  const prevVisitsScheduled = prevVisitsScheduledRes.count || 0;
 
   return {
     ending_within_30: endingWithin30,
@@ -370,7 +399,13 @@ export async function getJobsKpis(params: { status?: string; jobType?: string; q
 }
 
 export async function getJobTypes(): Promise<string[]> {
-  const { data, error } = await supabase.from('jobs_active').select('job_type').not('job_type', 'is', null).limit(500);
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase
+    .from('jobs_active')
+    .select('job_type')
+    .eq('org_id', orgId)
+    .not('job_type', 'is', null)
+    .limit(500);
   if (error) throw error;
   const types = new Set<string>();
   (data || []).forEach((row: { job_type: string | null }) => {

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { emailFrom, twilioClient, twilioPhoneNumber, getBaseUrl } from '../lib/config';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
@@ -8,6 +9,21 @@ import { getConnectedAccount, createDestinationPaymentIntent, getPlatformStripe 
 import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
+
+// ─── Public endpoint Zod schemas ──────────────────────────────
+const viewTokenRegex = /^[a-zA-Z0-9_-]{16,128}$/;
+const publicAcceptSchema = z.object({
+  view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
+  signer_name: z.string().trim().min(1).max(120),
+  signature_data: z.string().max(500_000), // data URL, cap ~500KB
+});
+const publicDepositIntentSchema = z.object({
+  view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
+});
+const publicDepositConfirmSchema = z.object({
+  view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
+  payment_intent_id: z.string().trim().min(1).max(200),
+});
 
 // Separate router for root-level quote redirect (/q/:token)
 export const quoteRedirectRouter = Router();
@@ -644,9 +660,11 @@ router.get('/quotes/public/:token', async (req, res) => {
 
 router.post('/quotes/public/accept', async (req, res) => {
   try {
-    const { view_token, signer_name, signature_data } = req.body;
-    if (!view_token) return res.status(400).json({ error: 'view_token is required.' });
-    if (!signer_name || !signature_data) return res.status(400).json({ error: 'Signature and name are required.' });
+    const parsed = publicAcceptSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid request body.', issues: parsed.error.issues.map(i => i.message) });
+    }
+    const { view_token, signer_name, signature_data } = parsed.data;
 
     const admin = getServiceClient();
     const { data: quote, error: qErr } = await admin
@@ -824,8 +842,11 @@ router.get('/quotes/public/signature', async (req, res) => {
 // ── Public: Create Stripe payment intent for quote deposit ──
 router.post('/quotes/public/deposit-intent', async (req, res) => {
   try {
-    const { view_token } = req.body;
-    if (!view_token) return res.status(400).json({ error: 'view_token is required.' });
+    const parsed = publicDepositIntentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid request body.', issues: parsed.error.issues.map(i => i.message) });
+    }
+    const { view_token } = parsed.data;
 
     const admin = getServiceClient();
     const { data: quote, error: qErr } = await admin
@@ -956,10 +977,11 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
 // ── Public: Confirm deposit payment (called after Stripe confirmPayment succeeds) ──
 router.post('/quotes/public/deposit-confirm', async (req, res) => {
   try {
-    const { view_token, payment_intent_id } = req.body;
-    if (!view_token || !payment_intent_id) {
-      return res.status(400).json({ error: 'view_token and payment_intent_id are required.' });
+    const parsed = publicDepositConfirmSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid request body.', issues: parsed.error.issues.map(i => i.message) });
     }
+    const { view_token, payment_intent_id } = parsed.data;
 
     const admin = getServiceClient();
     const { data: quote, error: qErr } = await admin

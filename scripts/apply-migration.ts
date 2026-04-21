@@ -5,12 +5,18 @@ import pg from 'pg';
 const { Client } = pg;
 
 async function run() {
+  const password = process.env.SUPABASE_DB_PASSWORD;
+  if (!password) {
+    console.error('SUPABASE_DB_PASSWORD env var is required. Set it in .env.local or export it before running.');
+    process.exit(1);
+  }
+
   const client = new Client({
-    host: 'db.bbzcuzqfgsdvjsymfwmr.supabase.co',
-    port: 5432,
-    database: 'postgres',
-    user: 'postgres',
-    password: 'u47kiisowilly123',
+    host: process.env.SUPABASE_DB_HOST || 'db.bbzcuzqfgsdvjsymfwmr.supabase.co',
+    port: Number(process.env.SUPABASE_DB_PORT || 5432),
+    database: process.env.SUPABASE_DB_NAME || 'postgres',
+    user: process.env.SUPABASE_DB_USER || 'postgres',
+    password,
     ssl: { rejectUnauthorized: false },
   });
 
