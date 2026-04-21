@@ -130,7 +130,7 @@ router.post('/director-panel/providers/execute', async (req: Request, res: Respo
     });
   } catch (err: any) {
     console.error('[director-panel] Provider execution error:', err);
-    return res.status(500).json({ error: err.message || 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -154,13 +154,13 @@ router.post('/director-panel/storage/ensure-bucket', async (req: Request, res: R
         allowedMimeTypes: ['image/*', 'video/*'],
       });
       if (error && !error.message?.includes('already exists')) {
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: 'Internal server error' });
       }
     }
 
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -178,12 +178,12 @@ router.post('/director-panel/storage/ensure-training-bucket', async (req: Reques
         allowedMimeTypes: ['image/*'],
       });
       if (error && !error.message?.includes('already exists')) {
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: 'Internal server error' });
       }
     }
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -244,7 +244,7 @@ router.post('/director-panel/assets/save', async (req: Request, res: Response) =
       });
 
     if (error) {
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: 'Internal server error' });
     }
 
     const { data: urlData } = admin.storage
@@ -257,7 +257,7 @@ router.post('/director-panel/assets/save', async (req: Request, res: Response) =
       metadata,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -281,7 +281,7 @@ router.get('/director-panel/credits', async (req: Request, res: Response) => {
 
     return res.json(data || { org_id: orgId, credits_balance: 0 });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -729,7 +729,7 @@ router.post('/director-panel/training/start', async (req: Request, res: Response
     return res.json({ training_id: trainingId, status: 'training' });
   } catch (err: any) {
     console.error('[director-panel] Training start error:', err);
-    return res.status(500).json({ error: err.message || 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -793,7 +793,7 @@ router.get('/director-panel/training/status/:trainingId', async (req: Request, r
 
     return res.json({ status, progress, model_id: modelId, error });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -827,7 +827,7 @@ router.get('/director-panel/proxy-image', async (req: Request, res: Response) =>
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(buffer);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
