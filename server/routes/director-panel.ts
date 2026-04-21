@@ -1,8 +1,32 @@
 import crypto from 'crypto';
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { buildSupabaseWithAuth, getServiceClient, resolveOrgId, requireAuthedClient } from '../lib/supabase';
 
 const router = Router();
+
+const providerExecuteSchema = z.object({
+  provider: z.string().trim().min(1).max(50),
+  model: z.string().trim().min(1).max(200),
+  params: z.record(z.string(), z.unknown()).optional(),
+  inputs: z.record(z.string(), z.unknown()).optional(),
+});
+const assetSaveSchema = z.object({
+  url: z.string().url().max(2000),
+  filename: z.string().trim().max(300).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  flowId: z.string().trim().max(200).optional().nullable(),
+  runId: z.string().trim().max(200).optional().nullable(),
+});
+const trainingStartSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  trigger_word: z.string().trim().min(1).max(100),
+  base_model: z.string().trim().max(100).optional().nullable(),
+  steps: z.number().int().min(100).max(5000).optional(),
+  images: z.array(z.object({
+    url: z.string().url().max(2000),
+  })).min(1).max(50),
+});
 
 // ─── Provider execution proxy ────────────────────────────────────────────────
 // The frontend NEVER calls providers directly. All requests go through here.
@@ -51,10 +75,11 @@ router.post('/director-panel/providers/execute', async (req: Request, res: Respo
     const orgId = await resolveOrgId(client);
     if (!orgId) return res.status(403).json({ error: 'No org found' });
 
-    const { provider, model: rawModel, params, inputs } = req.body;
-    if (!provider || !rawModel) {
-      return res.status(400).json({ error: 'Missing provider or model' });
+    const parsed = providerExecuteSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues.map(i => i.message).join('; ') });
     }
+    const { provider, model: rawModel, params, inputs } = parsed.data;
 
     // Normalize model ID: try exact match, then with dots, then with hyphens
     const model = resolveModelId(rawModel);
@@ -198,8 +223,11 @@ router.post('/director-panel/assets/save', async (req: Request, res: Response) =
     const orgId = await resolveOrgId(client);
     if (!orgId) return res.status(403).json({ error: 'No org found' });
 
-    const { url, filename, metadata, flowId, runId } = req.body;
-    if (!url) return res.status(400).json({ error: 'Missing url' });
+    const parsed = assetSaveSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues.map(i => i.message).join('; ') });
+    }
+    const { url, filename, metadata, flowId, runId } = parsed.data;
 
     // SSRF protection: only allow HTTPS URLs from known AI provider domains
     const ALLOWED_HOSTS = [
@@ -696,10 +724,11 @@ router.post('/director-panel/training/start', async (req: Request, res: Response
     const falApiKey = process.env.FAL_API_KEY;
     if (!falApiKey) return res.status(500).json({ error: 'FAL_API_KEY not configured' });
 
-    const { name, trigger_word, base_model, steps, images } = req.body;
-    if (!name || !trigger_word || !images?.length) {
-      return res.status(400).json({ error: 'Missing name, trigger_word, or images' });
+    const parsed = trainingStartSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues.map(i => i.message).join('; ') });
     }
+    const { name, trigger_word, base_model, steps, images } = parsed.data;
 
     // Submit training job to fal.ai — 60s timeout (queue submit should be fast)
     const trainController = new AbortController();

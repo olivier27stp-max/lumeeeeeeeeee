@@ -3,11 +3,28 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { Router } from 'express';
+import { z } from 'zod';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { runAgent } from '../lib/agent/index';
 import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
+
+const agentChatInputSchema = z.object({
+  message: z.string().trim().min(1).max(4000),
+  sessionId: z.string().trim().min(1).max(200).optional().nullable(),
+  language: z.enum(['en', 'fr']).optional(),
+});
+const agentApproveInputSchema = z.object({
+  approvalId: z.string().uuid(),
+  decision: z.enum(['approve', 'reject']),
+  note: z.string().trim().max(2000).optional().nullable(),
+});
+const agentFeedbackInputSchema = z.object({
+  messageId: z.string().uuid().optional().nullable(),
+  sessionId: z.string().trim().max(200).optional().nullable(),
+  feedback: z.enum(['up', 'down']),
+});
 
 // Feature flag check helper
 async function isAgentEnabled(orgId: string): Promise<boolean> {
@@ -31,23 +48,12 @@ router.post('/agent/chat', async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
 
-  const { message, sessionId, language } = req.body;
-
-  // Input validation
-  if (!message || typeof message !== 'string') {
-    return res.status(400).json({ error: 'message (string) is required' });
+  const parsed = agentChatInputSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues.map(i => i.message).join('; ') });
   }
-  const trimmed = message.trim();
-  if (!trimmed) {
-    return res.status(400).json({ error: 'message cannot be empty' });
-  }
-  if (trimmed.length > MAX_MESSAGE_LENGTH) {
-    return res.status(400).json({ error: `message too long (max ${MAX_MESSAGE_LENGTH} chars)` });
-  }
-  if (sessionId && typeof sessionId !== 'string') {
-    return res.status(400).json({ error: 'sessionId must be a string' });
-  }
-
+  const { message, sessionId, language } = parsed.data;
+  const trimmed = message;
   const lang = language === 'fr' ? 'fr' : 'en';
 
   // Feature flag check
@@ -126,13 +132,11 @@ router.post('/agent/approve', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
 
-    const { approvalId, decision } = req.body;
-    if (!approvalId || typeof approvalId !== 'string') {
-      return res.status(400).json({ error: 'approvalId (string) required' });
+    const parsed = agentApproveInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues.map(i => i.message).join('; ') });
     }
-    if (!['approve', 'reject'].includes(decision)) {
-      return res.status(400).json({ error: 'decision must be "approve" or "reject"' });
-    }
+    const { approvalId, decision } = parsed.data;
 
     const admin = getServiceClient();
 
@@ -280,10 +284,11 @@ router.post('/agent/feedback', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
 
-    const { messageId, sessionId, feedback } = req.body;
-    if (!feedback || !['up', 'down'].includes(feedback)) {
-      return res.status(400).json({ error: 'feedback must be "up" or "down"' });
+    const parsed = agentFeedbackInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues.map(i => i.message).join('; ') });
     }
+    const { messageId, sessionId, feedback } = parsed.data;
 
     const admin = getServiceClient();
     await admin.from('memory_events').insert({

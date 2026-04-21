@@ -222,6 +222,12 @@ app.use('/api/emails', emailLimiter);
 app.use('/api/payments', paymentLimiter);
 app.use('/api/leads/create', leadCreateLimiter);
 app.use('/api/pay', publicPayLimiter);
+// Per-token limiter — prevents brute-force via IP rotation
+app.use('/api/pay', rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  keyFn: (req) => `paytok:${(req.path.match(/\/pay\/([a-f0-9]+)/)?.[1] || '').slice(0, 80)}`,
+}));
 app.use('/api/portal', portalLimiter);
 app.use('/api/quotes', quoteLimiterStrict);
 
@@ -288,8 +294,19 @@ app.use('/api', agentRouter);
 app.use('/api', agentTrainingRouter);
 app.use('/api', orgKnowledgeRouter);
 
-// Quote redirect at root level (/q/:token), API routes under /api — rate limited
+// Quote redirect at root level (/q/:token), API routes under /api — rate limited.
+// Per-token limiter on top of IP limiter to block token brute-force via IP rotation.
+const quoteTokenLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyFn: (req) => `qtok:${(req.params?.token || req.url.split('/q/')[1] || '').slice(0, 80)}`,
+});
 app.use('/q', quoteLimiter);
+app.use('/q', quoteTokenLimiter);
+app.use('/q', redisRateLimit({
+  preset: 'public',
+  keyFn: (req) => `qtok:${(req.params?.token || req.url.split('/q/')[1] || '').slice(0, 80)}`,
+}));
 app.use('/', quoteRedirectRouter);
 app.use('/api', quotesRouter);
 const surveyLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP
@@ -485,47 +502,55 @@ app.listen(port, '0.0.0.0', () => {
     });
   }
 
-  // Automated alerts — scan every 30 minutes
-  import('./lib/alerts-engine').then(({ runAlertScan }) => {
-    setInterval(async () => {
-      try { await runAlertScan(); } catch (err: any) { console.error('[alerts] Scan error:', err?.message); }
-    }, 30 * 60 * 1000);
-    console.log('[alerts] Engine started (every 30min)');
-    // Run once on startup (delayed 10s)
-    setTimeout(() => runAlertScan().catch((e: any) => console.error('[alerts] Startup scan error:', e?.message)), 10_000);
-  });
-
-  // Scheduled reports — check every hour
-  import('./lib/scheduled-reports').then(({ processScheduledReports }) => {
-    setInterval(async () => {
-    try {
-      const sent = await processScheduledReports();
-      if (sent > 0) console.log(`[scheduled-reports] Sent ${sent} report(s)`);
-    } catch (err: any) {
-      console.error('[scheduled-reports] Cron error:', err?.message);
-    }
-    }, 60 * 60 * 1000);
-    console.log('[scheduled-reports] Cron started (hourly)');
-  });
-
-  // AI Training maintenance — every 6 hours
-  Promise.all([import('./lib/agent/training-engine'), import('./lib/supabase')]).then(([{ runTrainingMaintenance }, { getServiceClient: getSC }]) => {
-    const admin = getSC();
-    setInterval(async () => {
-      try { await runTrainingMaintenance(admin); } catch (err: any) { console.error('[training] Maintenance error:', err?.message); }
-    }, 6 * 60 * 60 * 1000);
-    console.log('[training] Maintenance job started (every 6h)');
-    // Run once on startup (delayed 30s)
-    setTimeout(() => runTrainingMaintenance(admin).catch((e: any) => console.error('[training] Startup maintenance error:', e?.message)), 30_000);
-  });
-
-  // ── Security maintenance — every 15 minutes ──
-  setInterval(() => {
-    runSecurityMaintenance().catch((err: any) => {
-      console.error('[security] Maintenance error:', err?.message);
+  // ── Cron jobs — wrapped in advisory locks so only one replica runs each tick ──
+  import('./lib/advisory-lock').then(({ withAdvisoryLock }) => {
+    // Automated alerts — scan every 30 minutes
+    import('./lib/alerts-engine').then(({ runAlertScan }) => {
+      setInterval(async () => {
+        const res = await withAdvisoryLock('alerts-engine', () => runAlertScan()).catch((e: any) => {
+          console.error('[alerts] Lock error:', e?.message); return { acquired: true };
+        });
+        if (!res.acquired) { /* another replica owns this tick */ }
+      }, 30 * 60 * 1000);
+      console.log('[alerts] Engine started (every 30min, lock-guarded)');
+      setTimeout(() => withAdvisoryLock('alerts-engine-startup', () => runAlertScan())
+        .catch((e: any) => console.error('[alerts] Startup scan error:', e?.message)), 10_000);
     });
-  }, 15 * 60 * 1000);
-  console.log('[security] Maintenance job started (every 15min)');
-  // Run once on startup (delayed 15s)
-  setTimeout(() => runSecurityMaintenance().catch((e: any) => console.error('[security] Startup maintenance error:', e?.message)), 15_000);
+
+    // Scheduled reports — check every hour
+    import('./lib/scheduled-reports').then(({ processScheduledReports }) => {
+      setInterval(async () => {
+        const res = await withAdvisoryLock('scheduled-reports', async () => {
+          const sent = await processScheduledReports();
+          if (sent > 0) console.log(`[scheduled-reports] Sent ${sent} report(s)`);
+        }).catch((e: any) => { console.error('[scheduled-reports] Lock error:', e?.message); return { acquired: true }; });
+        if (!res.acquired) { /* skipped */ }
+      }, 60 * 60 * 1000);
+      console.log('[scheduled-reports] Cron started (hourly, lock-guarded)');
+    });
+
+    // AI Training maintenance — every 6 hours
+    Promise.all([import('./lib/agent/training-engine'), import('./lib/supabase')]).then(
+      ([{ runTrainingMaintenance }, { getServiceClient: getSC }]) => {
+        const admin = getSC();
+        setInterval(async () => {
+          const res = await withAdvisoryLock('training-maintenance', () => runTrainingMaintenance(admin))
+            .catch((e: any) => { console.error('[training] Lock error:', e?.message); return { acquired: true }; });
+          if (!res.acquired) { /* skipped */ }
+        }, 6 * 60 * 60 * 1000);
+        console.log('[training] Maintenance job started (every 6h, lock-guarded)');
+        setTimeout(() => withAdvisoryLock('training-maintenance-startup', () => runTrainingMaintenance(admin))
+          .catch((e: any) => console.error('[training] Startup maintenance error:', e?.message)), 30_000);
+      }
+    );
+
+    // Security maintenance — every 15 minutes
+    setInterval(() => {
+      withAdvisoryLock('security-maintenance', () => runSecurityMaintenance())
+        .catch((err: any) => console.error('[security] Lock error:', err?.message));
+    }, 15 * 60 * 1000);
+    console.log('[security] Maintenance job started (every 15min, lock-guarded)');
+    setTimeout(() => withAdvisoryLock('security-maintenance-startup', () => runSecurityMaintenance())
+      .catch((e: any) => console.error('[security] Startup maintenance error:', e?.message)), 15_000);
+  });
 });

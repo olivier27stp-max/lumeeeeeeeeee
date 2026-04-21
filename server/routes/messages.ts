@@ -28,6 +28,20 @@ router.post('/messages/send', validate(messageSendSchema), async (req, res) => {
     const normalizedPhone = normalizeE164(phone_number);
     const serviceClient = getServiceClient();
 
+    // CASL compliance — block SMS to recipients who texted STOP
+    const { data: optOut } = await serviceClient
+      .from('sms_opt_outs')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('phone', normalizedPhone)
+      .maybeSingle();
+    if (optOut) {
+      return res.status(409).json({
+        error: 'This recipient has opted out of SMS from your organization.',
+        code: 'sms_opted_out',
+      });
+    }
+
     // Find or create conversation
     const conversation = await findOrCreateConversation(serviceClient, orgId, normalizedPhone, client_id, client_name);
 
@@ -152,6 +166,44 @@ router.post('/messages/inbound', (req, res) => {
 
   const normalizedPhone = normalizeE164(From);
   const serviceClient = getServiceClient();
+
+  // ── CASL STOP/START opt-out handling ──
+  // Must run before saving message so outbound sends are blocked immediately.
+  const bodyTrim = (Body || '').trim();
+  const stopRegex = /^(stop|arret|arrêt|unsubscribe|cancel|end|quit|désabonner|desabonner)$/i;
+  const startRegex = /^(start|unstop|reprendre|resume|yes|oui)$/i;
+  if (stopRegex.test(bodyTrim)) {
+    (async () => {
+      try {
+        // Find any org this phone has texted with — best-effort: all orgs with a conversation
+        const { data: convos } = await serviceClient
+          .from('conversations')
+          .select('org_id')
+          .eq('phone_number', normalizedPhone);
+        const orgIds = Array.from(new Set((convos || []).map((c: any) => c.org_id).filter(Boolean)));
+        for (const oid of orgIds) {
+          await serviceClient
+            .from('sms_opt_outs')
+            .upsert({ org_id: oid, phone: normalizedPhone, reason: 'client_stop' }, { onConflict: 'org_id,phone' });
+        }
+        console.log(`[SMS Inbound] Opted-out ${normalizedPhone} from ${orgIds.length} org(s)`);
+      } catch (e: any) {
+        console.error('[SMS Inbound] Opt-out handling failed:', e?.message);
+      }
+    })();
+    return;
+  }
+  if (startRegex.test(bodyTrim)) {
+    (async () => {
+      try {
+        await serviceClient.from('sms_opt_outs').delete().eq('phone', normalizedPhone);
+        console.log(`[SMS Inbound] Opt-out removed for ${normalizedPhone}`);
+      } catch (e: any) {
+        console.error('[SMS Inbound] Opt-in handling failed:', e?.message);
+      }
+    })();
+    // Fall through — saving the "START" as a regular message is fine
+  }
 
   (async () => {
     try {

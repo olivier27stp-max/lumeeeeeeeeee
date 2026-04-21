@@ -24,6 +24,13 @@ const publicDepositConfirmSchema = z.object({
   view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
   payment_intent_id: z.string().trim().min(1).max(200),
 });
+const publicDeclineSchema = z.object({
+  view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
+  reason: z.string().trim().max(2000).optional().nullable(),
+});
+const trackViewSchema = z.object({
+  viewer_fingerprint: z.string().trim().max(200).optional().nullable(),
+}).passthrough();
 
 // Separate router for root-level quote redirect (/q/:token)
 export const quoteRedirectRouter = Router();
@@ -1081,8 +1088,11 @@ router.post('/quotes/public/deposit-confirm', async (req, res) => {
 
 router.post('/quotes/public/decline', async (req, res) => {
   try {
-    const { view_token, reason } = req.body;
-    if (!view_token) return res.status(400).json({ error: 'view_token is required.' });
+    const parsed = publicDeclineSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues.map(i => i.message).join('; ') });
+    }
+    const { view_token, reason } = parsed.data;
 
     const admin = getServiceClient();
     const { data: quote, error: qErr } = await admin
