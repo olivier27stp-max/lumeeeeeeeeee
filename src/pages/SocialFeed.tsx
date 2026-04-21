@@ -1,3 +1,5 @@
+// Requires migration 20260613000000 applied. Without it, feed API returns 42P01.
+// Ported from Clostra src/app/[locale]/(dashboard)/feed/page.tsx — adapted for Vite + React Router.
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '../components/d2d/button';
 import { Avatar } from '../components/d2d/avatar';
