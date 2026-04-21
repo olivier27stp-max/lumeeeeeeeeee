@@ -504,8 +504,33 @@ Livraison attendue : validation de ce rapport par le responsable produit + déci
 - Preference center (opt-out marketing)
 - Génération PDF lisible (actuellement JSON uniquement)
 
+### 2026-04-21 — Bloc 3 UI consentement + pages légales
+
+**Implémenté :**
+- ✅ `src/lib/consentApi.ts` — client : `readStoredConsent`, `writeStoredConsent`, `submitCookieConsent`, `recordConsent`, `exportMyData`, `exportClientData`, `eraseClient`, `eraseLead`, `submitDsarRequest`
+- ✅ `src/components/CookieBanner.tsx` — bannière RGPD/Loi 25 compliant :
+  - Refus aussi simple qu'accepter (CTA symétriques)
+  - Granularité : essentials (forcé) / analytics / marketing / preferences
+  - Re-prompt tous les 13 mois ou au changement de version policy
+  - Journalisation serveur `/api/dsr/consent` si utilisateur loggué
+- ✅ `src/pages/Privacy.tsx` — politique de confidentialité template versionnée (`privacy-policy-2026-04-21`)
+- ✅ `src/pages/Terms.tsx` — CGU template versionnée
+- ✅ `src/pages/PrivacyCenter.tsx` (route `/account/privacy`) — self-service DSR :
+  - Export JSON (droit d'accès RGPD 15 / Loi 25 art. 27)
+  - Demande formelle d'effacement (DSAR avec SLA 30j)
+  - Reset des choix cookies
+- ✅ i18n en/fr — ~36 clés ajoutées sous `cookies.*` et `legal.*`
+- ✅ Routes ajoutées dans `src/App.tsx` sur les 3 layouts (non-auth, pre-subscription, app) : `/privacy`, `/terms`, `/account/privacy`
+- ✅ `<CookieBanner />` monté sur tous les layouts
+
+**À valider par un avocat avant prod :**
+- Templates `Privacy.tsx` et `Terms.tsx` contiennent des placeholders `[COMPANY LEGAL NAME]`, `[STREET ADDRESS]`, etc. — à compléter
+- Email DPO `privacy@lumecrm.ca` — à créer ou remplacer
+- Email juridique `legal@lumecrm.ca` — idem
+- Versions doc : `privacy-policy-2026-04-21`, `tos-2026-04-21`, `cookie-policy-2026-04-21` — bumper à chaque révision substantielle
+
 **Restant pour autres blocs :**
-- Bloc 3 — UI consentement (bannière cookies, preference center, pages /privacy /terms)
+- Bloc 4 — Rétention étendue (leads inactifs cron 24m, invoices 10 ans, anonymisation batch)
 - Bloc 4 — Rétention étendue (leads inactifs, invoices, anonymisation)
 - Bloc 5 — Consentement + bannière cookies + politique versionnée
 - Bloc 6 — Breach response workflow

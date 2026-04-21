@@ -60,6 +60,7 @@ import Landing from './pages/Landing';
 import { supabase } from './lib/supabase';
 import { User } from '@supabase/supabase-js';
 import Jobs from './pages/Jobs';
+import NotFound from './pages/NotFound';
 import JobDetails from './pages/JobDetails';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
@@ -764,7 +765,9 @@ function AuthenticatedApp({
     <JobModalControllerProvider>
       <Toaster
         richColors
-        position="top-right"
+        // On mobile, top-right overlaps the header / floats badly; bottom-center keeps
+        // toasts out of the way of scroll content.
+        position={typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'bottom-center' : 'top-right'}
         toastOptions={{
           className: '!rounded-lg !border !border-outline !shadow-md !text-[13px] !font-medium',
         }}
@@ -1170,7 +1173,7 @@ function AuthenticatedApp({
                     </Route>
                     {/* Platform Admin — owner-only, server enforces auth */}
                     <Route path="/platform-admin" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><PlatformAdmin /></PageWrapper></React.Suspense> : <Navigate to="/dashboard" replace />} />
-                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
                   </Routes>
             </ErrorBoundary>
           </div>
