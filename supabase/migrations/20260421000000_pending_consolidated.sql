@@ -1,3 +1,7 @@
+-- ORDER_HINT: 1/2 — timestamp collision with 20260421000000_schedule_reliability_and_availability.sql
+-- (Issue C-001, audit 2026-04-21). Apply this file BEFORE the sibling.
+-- Lexicographic order by full filename matches intended order. Do NOT rename (would break applied-migration checksums).
+
 -- Run this in Supabase Dashboard > SQL Editor
 
 -- 1. Add missing columns to company_settings

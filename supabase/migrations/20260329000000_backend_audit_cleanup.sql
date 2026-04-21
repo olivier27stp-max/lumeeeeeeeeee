@@ -1,3 +1,7 @@
+-- ORDER_HINT: 1/2 — timestamp collision with 20260329000000_communications_module.sql
+-- (Issue C-001, audit 2026-04-21). Apply this file BEFORE the sibling.
+-- Lexicographic order by full filename matches intended order. Do NOT rename (would break applied-migration checksums).
+
 -- ═══════════════════════════════════════════════════════════════
 -- Backend Audit Cleanup — 2026-03-29
 -- Fixes: duplicate triggers, missing constraints, deprecated columns,

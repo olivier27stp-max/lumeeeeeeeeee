@@ -1,3 +1,7 @@
+-- ORDER_HINT: 2/2 — timestamp collision with 20260402000000_quote_templates_v2.sql
+-- (Issue C-001, audit 2026-04-21). Apply this file AFTER the sibling.
+-- Lexicographic order by full filename matches intended order. Do NOT rename (would break applied-migration checksums).
+
 -- ═══════════════════════════════════════════════════════════════
 -- Whiteboard Features: Comments, Votes, Drawings, Permissions
 -- Safe to re-run (IF NOT EXISTS + DROP POLICY IF EXISTS)
