@@ -268,26 +268,6 @@ export default function App() {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // Sidebar counters: pending quotes + overdue invoices
-  const [pendingQuotes, setPendingQuotes] = useState(0);
-  const [overdueInvoices, setOverdueInvoices] = useState(0);
-  const { currentOrgId: badgeOrgId } = useCompany();
-
-  useEffect(() => {
-    if (!user || !badgeOrgId) { setPendingQuotes(0); setOverdueInvoices(0); return; }
-    const load = async () => {
-      const [qRes, iRes] = await Promise.all([
-        supabase.from('quotes').select('status', { count: 'exact', head: true }).eq('org_id', badgeOrgId).is('deleted_at', null).in('status', ['sent', 'awaiting_response', 'action_required']),
-        supabase.from('invoices').select('status', { count: 'exact', head: true }).eq('org_id', badgeOrgId).is('deleted_at', null).eq('status', 'sent').lt('due_date', new Date().toISOString().slice(0, 10)),
-      ]);
-      setPendingQuotes(qRes.count || 0);
-      setOverdueInvoices(iRes.count || 0);
-    };
-    load();
-    const interval = setInterval(load, 60_000);
-    return () => clearInterval(interval);
-  }, [user, badgeOrgId]);
-
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark);
     localStorage.setItem('lume-theme', isDark ? 'dark' : 'light');
@@ -410,11 +390,15 @@ export default function App() {
   }, [user, onboardingChecked]);
 
   // Check if user has an active subscription — redirect to /checkout if not
-  // Platform owners/admins bypass subscription check
-  const BYPASS_EMAILS = ['willhebert30@gmail.com', 'beatsafterimage@gmail.com'];
+  // Platform owners/admins bypass subscription check.
+  // BYPASS_EMAILS comes from env (VITE_BETA_BYPASS_EMAILS, comma-separated). Empty in prod.
+  const BYPASS_EMAILS = (import.meta.env.VITE_BETA_BYPASS_EMAILS || '')
+    .split(',')
+    .map((e: string) => e.trim().toLowerCase())
+    .filter(Boolean);
   useEffect(() => {
     if (!user || !onboardingChecked || showOnboarding) { setHasSubscription(null); return; }
-    // Bypass for platform owners
+    // Bypass for beta emails whitelisted via env
     if (user.email && BYPASS_EMAILS.includes(user.email.toLowerCase())) {
       setHasSubscription(true);
       return;
@@ -596,8 +580,6 @@ export default function App() {
       unreadSms={unreadSms}
       unreadNotifs={unreadNotifs}
       resetNotifCount={resetNotifCount}
-      pendingQuotes={pendingQuotes}
-      overdueInvoices={overdueInvoices}
       navigate={navigate}
       location={location}
     />
@@ -627,12 +609,28 @@ function AuthenticatedApp({
   unreadSms,
   unreadNotifs,
   resetNotifCount,
-  pendingQuotes,
-  overdueInvoices,
   navigate,
   location,
 }: any) {
   const { current, companies, loading: companyLoading, isMultiCompany, hasNoCompany, currentOrgId } = useCompany();
+
+  // Sidebar counters: pending quotes + overdue invoices
+  const [pendingQuotes, setPendingQuotes] = useState(0);
+  const [overdueInvoices, setOverdueInvoices] = useState(0);
+  useEffect(() => {
+    if (!user || !currentOrgId) { setPendingQuotes(0); setOverdueInvoices(0); return; }
+    const load = async () => {
+      const [qRes, iRes] = await Promise.all([
+        supabase.from('quotes').select('status', { count: 'exact', head: true }).eq('org_id', currentOrgId).is('deleted_at', null).in('status', ['sent', 'awaiting_response', 'action_required']),
+        supabase.from('invoices').select('status', { count: 'exact', head: true }).eq('org_id', currentOrgId).is('deleted_at', null).eq('status', 'sent').lt('due_date', new Date().toISOString().slice(0, 10)),
+      ]);
+      setPendingQuotes(qRes.count || 0);
+      setOverdueInvoices(iRes.count || 0);
+    };
+    load();
+    const interval = setInterval(load, 60_000);
+    return () => clearInterval(interval);
+  }, [user, currentOrgId]);
   // usePermissions MUST be called inside CompanyProvider to get correct data
   const permsCtx = usePermissions();
   const isPlatformOwner = usePlatformOwner();
