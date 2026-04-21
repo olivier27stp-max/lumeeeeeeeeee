@@ -293,6 +293,10 @@ export default function JobDetails() {
 
   const handleCloseJob = async () => {
     if (!job) return;
+    if (isClosing) return; // prevent double-click race
+    const confirmMsg = t.jobDetails?.markCompletedPrompt
+      || 'Mark this job as completed? This locks the job for edits (except via admin action).';
+    if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) return;
     setIsClosing(true);
     try {
       const updated = await updateJob(job.id, { status: 'completed' });

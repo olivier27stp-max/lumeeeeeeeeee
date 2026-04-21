@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { sendScheduledReport } from '../lib/scheduled-reports';
 import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // GET /api/scheduled-reports — list reports for org
 router.get('/scheduled-reports', async (req, res) => {

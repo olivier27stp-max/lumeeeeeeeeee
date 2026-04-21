@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { sendSafeError } from '../lib/error-handler';
 import {
   startSession,
@@ -14,6 +15,8 @@ import {
 } from '../lib/field-sales/session-engine';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // POST /api/field-sessions/start
 router.post('/field-sessions/start', async (req, res) => {

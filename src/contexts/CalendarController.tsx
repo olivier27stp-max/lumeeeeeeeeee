@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { addDays, addMonths, addWeeks, format, isValid, parseISO } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
 import { resolveCalendarDateParam } from '../lib/searchParsing';
@@ -67,30 +67,34 @@ export function CalendarControllerProvider({ children }: { children: React.React
 
   useEffect(() => {
     if (skipRef.current) { skipRef.current = false; return; }
-    const next = new URLSearchParams(searchParams);
-    next.set('date', format(selectedDate, 'yyyy-MM-dd'));
-    next.set('view', view);
-    if (!hasTeamsParam && selectedTeamIds.length === 0) next.delete('teams');
-    else if (selectedTeamIds.length === 0) next.set('teams', 'none');
-    else next.set('teams', selectedTeamIds.join(','));
-    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
-  }, [hasTeamsParam, searchParams, selectedDate, selectedTeamIds, setSearchParams, view]);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('date', format(selectedDate, 'yyyy-MM-dd'));
+      next.set('view', view);
+      if (!hasTeamsParam && selectedTeamIds.length === 0) next.delete('teams');
+      else if (selectedTeamIds.length === 0) next.set('teams', 'none');
+      else next.set('teams', selectedTeamIds.join(','));
+      // Return prev unchanged if nothing differs — prevents useSearchParams from emitting a new ref.
+      return next.toString() === prev.toString() ? prev : next;
+    }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasTeamsParam, selectedDate, selectedTeamIds, view]);
 
-  const setDate = (d: Date) => { if (isValid(d)) setSelectedDate(d); };
-  const setView = (v: CalendarUiView) => setViewState(v);
-  const setSelectedTeamIds = (ids: string[]) => { setHasTeamsParam(true); setSelectedTeamIdsState(Array.from(new Set(ids))); };
-  const toggleTeam = (id: string) => { setHasTeamsParam(true); setSelectedTeamIdsState((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]); };
-  const goToday = () => setDate(new Date());
-  const goPrev = () => setSelectedDate((p) => {
+  const setDate = useCallback((d: Date) => { if (isValid(d)) setSelectedDate(d); }, []);
+  const setView = useCallback((v: CalendarUiView) => setViewState(v), []);
+  const setSelectedTeamIds = useCallback((ids: string[]) => { setHasTeamsParam(true); setSelectedTeamIdsState(Array.from(new Set(ids))); }, []);
+  const toggleTeam = useCallback((id: string) => { setHasTeamsParam(true); setSelectedTeamIdsState((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]); }, []);
+  const goToday = useCallback(() => { setSelectedDate(new Date()); }, []);
+  const goPrev = useCallback(() => setSelectedDate((p) => {
     if (view === 'day') return addDays(p, -1);
     if (view === 'week' || view === 'agenda') return addWeeks(p, -1);
     return addMonths(p, -1);
-  });
-  const goNext = () => setSelectedDate((p) => {
+  }), [view]);
+  const goNext = useCallback(() => setSelectedDate((p) => {
     if (view === 'day') return addDays(p, 1);
     if (view === 'week' || view === 'agenda') return addWeeks(p, 1);
     return addMonths(p, 1);
-  });
+  }), [view]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const value = useMemo<CalendarControllerValue>(() => ({ selectedDate, view, selectedTeamIds, hasTeamsParam, setDate, setView, setSelectedTeamIds, toggleTeam, goToday, goPrev, goNext }), [hasTeamsParam, selectedDate, selectedTeamIds, view]);

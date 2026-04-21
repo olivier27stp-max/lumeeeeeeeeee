@@ -24,7 +24,7 @@ import { CirclePlus, ArrowUpDown, Ruler } from 'lucide-react';
 const PAGE_SIZE = 20;
 type StatusTab = 'all' | QuoteStatus;
 type QuoteSort = 'recent' | 'oldest' | 'total_desc' | 'total_asc';
-const STATUS_TABS: StatusTab[] = ['all', 'draft', 'sent', 'awaiting_response', 'approved', 'declined', 'expired', 'converted'];
+const STATUS_TABS: StatusTab[] = ['all', 'draft', 'sent', 'awaiting_response', 'action_required', 'approved', 'declined', 'expired', 'converted'];
 
 const STATUS_BADGE: Record<string, string> = {
   draft: 'badge-neutral',

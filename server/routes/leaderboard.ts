@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { getLeaderboard, getRepPerformance, calculateRepStats } from '../lib/field-sales/leaderboard-engine';
 import { getRepBadges } from '../lib/field-sales/gamification-engine';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // GET /api/leaderboard?period=daily|weekly|monthly&teamId=...
 router.get('/leaderboard', async (req, res) => {
@@ -22,7 +25,7 @@ router.get('/leaderboard', async (req, res) => {
     const entries = await getLeaderboard(sc, auth.orgId, period as 'daily' | 'weekly' | 'monthly', undefined, teamId);
     res.json(entries);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -47,7 +50,7 @@ router.get('/leaderboard/rep/:userId', async (req, res) => {
     ]);
     res.json({ performance, badges });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -61,7 +64,7 @@ router.get('/leaderboard/realtime/:userId', async (req, res) => {
     const stats = await calculateRepStats(sc, auth.orgId, req.params.userId);
     res.json(stats);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

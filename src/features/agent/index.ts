@@ -1,14 +1,5 @@
-/* Mr Lume Agent Module — Public API */
+/* Mr Lume Agent Module — Public API (vitrine mode) */
 
 export { default as MrLumeChat } from './components/MrLumeChat';
 export { useFeatureFlags } from './hooks/useFeatureFlags';
-export type {
-  AgentSession,
-  AgentMessage,
-  UIAgentMessage,
-  ScenarioOption,
-  ScenarioResult,
-  ApprovalRequest,
-  AgentSSEEvent,
-  AgentStateLabel,
-} from './types';
+export { connectExternalAgent } from './lib/agentApi';

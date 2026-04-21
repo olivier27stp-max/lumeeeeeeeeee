@@ -13,7 +13,8 @@
     "preview:5173": "vite preview --host 0.0.0.0 --port 5173",
     "build:preview:5173": "vite build && vite preview --host 0.0.0.0 --port 5173",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "db:apply": "tsx scripts/apply-sql.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -296,9 +296,6 @@ export type ChallengeType = 'daily' | 'weekly';
 export type ChallengeStatus = 'active' | 'completed' | 'cancelled';
 export type BattleType = 'rep_vs_rep' | 'team_vs_team';
 export type BattleStatus = 'pending' | 'active' | 'completed' | 'cancelled';
-export type FeedPostType = 'win' | 'milestone' | 'badge' | 'challenge' | 'battle' | 'manual';
-export type FeedVisibility = 'company' | 'team';
-export type FeedReactionEmoji = 'fire' | 'clap' | 'trophy' | 'heart';
 export type FieldSessionStatus = 'active' | 'paused' | 'completed';
 export type CheckInType = 'check_in' | 'check_out';
 export type CommissionRuleType = 'flat' | 'percentage' | 'tiered';
@@ -444,52 +441,6 @@ export interface FsBattle {
   deleted_at: string | null;
   challenger_name?: string;
   opponent_name?: string;
-}
-
-// ── Social Feed ──
-
-export interface FsFeedPost {
-  id: string;
-  org_id: string;
-  user_id: string;
-  type: FeedPostType;
-  visibility: FeedVisibility;
-  team_id: string | null;
-  title: string | null;
-  body: string | null;
-  image_url: string | null;
-  reference_type: string | null;
-  reference_id: string | null;
-  is_pinned: boolean;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
-  // Relations
-  author_name?: string;
-  author_avatar?: string | null;
-  reactions?: FsFeedReaction[];
-  comments?: FsFeedComment[];
-  reaction_counts?: Record<FeedReactionEmoji, number>;
-  my_reaction?: FeedReactionEmoji | null;
-}
-
-export interface FsFeedReaction {
-  id: string;
-  post_id: string;
-  user_id: string;
-  emoji: FeedReactionEmoji;
-  created_at: string;
-}
-
-export interface FsFeedComment {
-  id: string;
-  post_id: string;
-  user_id: string;
-  body: string;
-  created_at: string;
-  updated_at: string;
-  author_name?: string;
-  author_avatar?: string | null;
 }
 
 // ── Commissions ──

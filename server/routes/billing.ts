@@ -252,7 +252,7 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
         await stripe.paymentMethods.attach(payment_method_id, { customer: customerId });
         await stripe.customers.update(customerId, { invoice_settings: { default_payment_method: payment_method_id } });
 
-        // Create and confirm PaymentIntent
+        // Create and confirm PaymentIntent — idempotency prevents double-charge on retry
         const paymentIntent = await stripe.paymentIntents.create({
           amount: amountCents,
           currency: currency.toLowerCase(),
@@ -265,6 +265,8 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
             plan_slug,
             interval,
           },
+        }, {
+          idempotencyKey: `sub-intent-${auth.orgId}-${plan_slug}-${interval}-${payment_method_id}`,
         });
 
         if (paymentIntent.status !== 'succeeded') {
@@ -451,17 +453,22 @@ router.post('/billing/create-payment-intent', async (req, res) => {
       }, { onConflict: 'org_id' });
     }
 
+    // Idempotency bucketed per minute so retries within a burst dedupe,
+    // but distinct user-initiated attempts still succeed.
+    const bucket = Math.floor(Date.now() / 60_000);
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amount_cents,
       currency: (currency || 'CAD').toLowerCase(),
       customer: customerId,
       automatic_payment_methods: { enabled: true },
+    }, {
+      idempotencyKey: `pi-${auth.orgId}-${amount_cents}-${bucket}`,
     });
 
     return res.json({ client_secret: paymentIntent.client_secret });
   } catch (err: any) {
     console.error('[billing/create-payment-intent]', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -625,12 +632,14 @@ router.post('/billing/create-checkout-session', async (req, res) => {
       },
       success_url: `${frontendUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${frontendUrl}/checkout?plan=${plan_slug}&interval=${interval}`,
+    }, {
+      idempotencyKey: `checkout-${customer.id}-${plan.id}-${interval}-${Math.floor(Date.now() / 60_000)}`,
     });
 
     return res.json({ url: session.url });
   } catch (err: any) {
     console.error('[billing/create-checkout-session]', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -686,7 +695,7 @@ router.post('/billing/confirm-checkout', async (req, res) => {
     });
   } catch (err: any) {
     console.error('[billing/confirm-checkout]', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

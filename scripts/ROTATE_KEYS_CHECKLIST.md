@@ -31,11 +31,6 @@ or immediately if a breach is suspected.
 2. Create new API key → update `GEMINI_API_KEY` in `.env.local`
 3. Delete the old key
 
-## FAL.ai
-1. Go to https://fal.ai/dashboard/keys
-2. Create new key → update `FAL_API_KEY` in `.env.local`
-3. Delete the old key
-
 ## Google Maps
 1. Go to https://console.cloud.google.com/apis/credentials
 2. Create new API key → update `VITE_GOOGLE_MAPS_API_KEY` in `.env.local`

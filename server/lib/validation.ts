@@ -360,13 +360,6 @@ export const commissionActionSchema = z.object({
   id: z.string().trim().optional(),
 }).passthrough();
 
-// ─── Director Panel ─────────────────────────────────────────────
-
-export const directorExecuteSchema = z.object({
-  providerId: z.string().trim().min(1, 'providerId is required.'),
-  params: z.record(z.string(), z.any()).optional(),
-}).passthrough();
-
 // ─── Generic passthrough schemas for loose validation ───────────
 
 /** Validates that a request body is a non-empty object (catches nulls, arrays, primitives) */

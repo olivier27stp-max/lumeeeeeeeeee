@@ -30,21 +30,33 @@ router.get('/portal/:token', async (req, res) => {
     }
 
     const serviceClient = getServiceClient();
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-    // Find client by portal_token (stored in clients table)
-    const { data: client, error: clientErr } = await serviceClient
+    // Prefer hash lookup (new path) — falls back to plaintext during migration window.
+    // Both paths then enforce expires_at + revoked_at.
+    let { data: client, error: clientErr } = await serviceClient
       .from('clients')
-      .select('id, first_name, last_name, company, email, org_id, portal_token')
-      .eq('portal_token', token)
+      .select('id, first_name, last_name, company, email, org_id, portal_token, portal_token_hash, portal_token_expires_at, portal_token_revoked_at')
+      .eq('portal_token_hash', tokenHash)
       .is('deleted_at', null)
       .maybeSingle();
 
-    // Use constant-time comparison to verify token match
-    // (the DB query finds by token, but we double-check to mitigate DB-level timing)
-    if (clientErr || !client || !client.portal_token || !timingSafeCompare(token, client.portal_token)) {
-      // Same delay whether token is invalid or not found — prevents enumeration
+    if (!client) {
+      // Fallback for tokens not yet backfilled to hash
+      ({ data: client, error: clientErr } = await serviceClient
+        .from('clients')
+        .select('id, first_name, last_name, company, email, org_id, portal_token, portal_token_hash, portal_token_expires_at, portal_token_revoked_at')
+        .eq('portal_token', token)
+        .is('deleted_at', null)
+        .maybeSingle());
+    }
+
+    // Constant-time compare + expiry + revocation checks
+    const tokenOk = client?.portal_token && timingSafeCompare(token, client.portal_token);
+    const notExpired = !client?.portal_token_expires_at || new Date(client.portal_token_expires_at) > new Date();
+    const notRevoked = !client?.portal_token_revoked_at;
+    if (clientErr || !client || !tokenOk || !notExpired || !notRevoked) {
       await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
-      // Generic "not found" — don't reveal if token format was valid
       return res.status(404).json({ error: 'Not found' });
     }
 

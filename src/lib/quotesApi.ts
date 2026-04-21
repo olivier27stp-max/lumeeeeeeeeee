@@ -664,10 +664,10 @@ export async function fetchQuoteKpis(): Promise<{
 
     const [leadsRes, clientsRes] = await Promise.all([
       leadIds.length > 0
-        ? supabase.from('leads').select('id, deleted_at').in('id', leadIds)
+        ? supabase.from('leads').select('id, deleted_at').eq('org_id', orgId).in('id', leadIds)
         : Promise.resolve({ data: [] }),
       clientIds.length > 0
-        ? supabase.from('clients').select('id, deleted_at').in('id', clientIds)
+        ? supabase.from('clients').select('id, deleted_at').eq('org_id', orgId).in('id', clientIds)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -710,10 +710,10 @@ export async function fetchPendingQuotes(): Promise<Array<Quote & { lead_name?: 
 
   const [leadsRes, clientsRes] = await Promise.all([
     leadIds.length > 0
-      ? supabase.from('leads').select('id, first_name, last_name, deleted_at').in('id', leadIds)
+      ? supabase.from('leads').select('id, first_name, last_name, deleted_at').eq('org_id', orgId).in('id', leadIds)
       : Promise.resolve({ data: [] }),
     clientIds.length > 0
-      ? supabase.from('clients').select('id, company, first_name, last_name, deleted_at').in('id', clientIds)
+      ? supabase.from('clients').select('id, company, first_name, last_name, deleted_at').eq('org_id', orgId).in('id', clientIds)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -763,10 +763,10 @@ export async function fetchAllQuotesWithContext(): Promise<Array<Quote & { lead_
   // Fetch leads and clients in parallel
   const [leadsRes, clientsRes] = await Promise.all([
     leadIds.length > 0
-      ? supabase.from('leads').select('id, first_name, last_name, deleted_at').in('id', leadIds)
+      ? supabase.from('leads').select('id, first_name, last_name, deleted_at').eq('org_id', orgId).in('id', leadIds)
       : Promise.resolve({ data: [] }),
     clientIds.length > 0
-      ? supabase.from('clients').select('id, company, first_name, last_name, deleted_at').in('id', clientIds)
+      ? supabase.from('clients').select('id, company, first_name, last_name, deleted_at').eq('org_id', orgId).in('id', clientIds)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -807,10 +807,12 @@ export async function fetchLeadJobLineItems(leadId: string): Promise<Array<{
   job_id: string;
   job_title: string;
 }>> {
-  // Find jobs linked to this lead
+  const orgId = await getCurrentOrgIdOrThrow();
+  // Find jobs linked to this lead — scope by org to prevent cross-tenant fetch by ID
   const { data: jobs } = await supabase
     .from('jobs')
     .select('id, title')
+    .eq('org_id', orgId)
     .eq('lead_id', leadId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -824,6 +826,7 @@ export async function fetchLeadJobLineItems(leadId: string): Promise<Array<{
   const { data: items } = await supabase
     .from('job_line_items')
     .select('name, qty, unit_price_cents, total_cents, job_id')
+    .eq('org_id', orgId)
     .in('job_id', jobIds);
 
   if (!items) return [];

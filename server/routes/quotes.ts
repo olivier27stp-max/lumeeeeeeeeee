@@ -24,6 +24,13 @@ const publicDepositConfirmSchema = z.object({
   view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
   payment_intent_id: z.string().trim().min(1).max(200),
 });
+const publicDeclineSchema = z.object({
+  view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
+  reason: z.string().trim().max(2000).optional().nullable(),
+});
+const trackViewSchema = z.object({
+  viewer_fingerprint: z.string().trim().max(200).optional().nullable(),
+}).passthrough();
 
 // Separate router for root-level quote redirect (/q/:token)
 export const quoteRedirectRouter = Router();
@@ -926,6 +933,10 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
       .eq('org_id', quote.org_id)
       .maybeSingle();
 
+    // Idempotency key scopes the retry window per minute
+    const idemBucket = Math.floor(Date.now() / 60_000);
+    const depositIdempotencyKey = `quote-deposit-${quote.id}-${depositCents}-${idemBucket}`;
+
     if (orgSecrets?.stripe_secret_key_enc?.startsWith('sk_') && orgSecrets?.stripe_publishable_key) {
       const Stripe = (await import('stripe')).default;
       const orgStripe = new Stripe(orgSecrets.stripe_secret_key_enc);
@@ -934,6 +945,8 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
         currency,
         payment_method_types: ['card'],
         metadata: paymentMetadata,
+      }, {
+        idempotencyKey: depositIdempotencyKey,
       });
 
       return res.json({
@@ -957,6 +970,8 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
         currency,
         payment_method_types: ['card'],
         metadata: paymentMetadata,
+      }, {
+        idempotencyKey: depositIdempotencyKey,
       });
 
       return res.json({
@@ -1073,8 +1088,11 @@ router.post('/quotes/public/deposit-confirm', async (req, res) => {
 
 router.post('/quotes/public/decline', async (req, res) => {
   try {
-    const { view_token, reason } = req.body;
-    if (!view_token) return res.status(400).json({ error: 'view_token is required.' });
+    const parsed = publicDeclineSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues.map(i => i.message).join('; ') });
+    }
+    const { view_token, reason } = parsed.data;
 
     const admin = getServiceClient();
     const { data: quote, error: qErr } = await admin
@@ -1188,32 +1206,40 @@ router.post('/quotes/convert-to-invoice', async (req, res) => {
     const invoiceId = String(invoiceRow?.id || '');
     if (!invoiceId) throw new Error('Invoice created but id is missing.');
 
-    // Copy quote line items to invoice items
+    // Copy quote line items to invoice items. Optional items are excluded —
+    // only items the client actually accepted end up on the invoice.
     const { data: quoteItems } = await admin
       .from('quote_line_items').select('*').eq('quote_id', quoteId)
       .eq('item_type', 'service').order('sort_order');
 
+    let copiedSubtotalCents = 0;
     if (quoteItems && quoteItems.length > 0) {
-      const invoiceItems = quoteItems
-        .filter((item: any) => !item.is_optional)
-        .map((item: any) => ({
-          invoice_id: invoiceId,
-          description: item.name + (item.description ? ` — ${item.description}` : ''),
-          qty: Number(item.quantity) || 1,
-          unit_price_cents: item.unit_price_cents,
-          line_total_cents: item.total_cents,
-        }));
+      const copiable = quoteItems.filter((item: any) => !item.is_optional);
+      const invoiceItems = copiable.map((item: any) => ({
+        invoice_id: invoiceId,
+        description: item.name + (item.description ? ` — ${item.description}` : ''),
+        qty: Number(item.quantity) || 1,
+        unit_price_cents: item.unit_price_cents,
+        line_total_cents: item.total_cents,
+      }));
+      copiedSubtotalCents = copiable.reduce((s: number, i: any) => s + Number(i.total_cents || 0), 0);
       if (invoiceItems.length > 0) {
         await admin.from('invoice_items').insert(invoiceItems);
       }
     }
 
-    // Update invoice totals
+    // Recompute invoice totals from the actually-copied items so excluded
+    // optional items don't inflate the amount due.
+    const taxRate = Number(quote.tax_cents || 0) / Math.max(1, Number(quote.subtotal_cents || 1));
+    const effectiveSubtotal = copiedSubtotalCents || quote.subtotal_cents;
+    const effectiveTax = Math.round(effectiveSubtotal * taxRate);
+    const effectiveTotal = effectiveSubtotal + effectiveTax;
+
     await admin.from('invoices').update({
-      subtotal_cents: quote.subtotal_cents,
-      tax_cents: quote.tax_cents,
-      total_cents: quote.total_cents,
-      balance_cents: quote.total_cents,
+      subtotal_cents: effectiveSubtotal,
+      tax_cents: effectiveTax,
+      total_cents: effectiveTotal,
+      balance_cents: effectiveTotal,
       notes: quote.notes,
     }).eq('id', invoiceId).eq('org_id', auth.orgId);
 

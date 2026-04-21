@@ -38,7 +38,6 @@ import portalRouter from './routes/portal';
 import connectRouter from './routes/connect';
 import paymentRequestsRouter from './routes/payment-requests';
 import publicPayRouter from './routes/public-pay';
-import directorPanelRouter from './routes/director-panel';
 import teamSuggestionsRouter from './routes/team-suggestions';
 import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
@@ -49,10 +48,8 @@ import featureFlagsRouter from './routes/feature-flags';
 import scheduledReportsRouter from './routes/scheduled-reports';
 import goalsRouter from './routes/goals';
 import auditLogRouter from './routes/audit-log';
-import aiProxyRouter from './routes/ai-proxy';
-import agentRouter from './routes/agent';
-import agentTrainingRouter from './routes/agent-training';
 import orgKnowledgeRouter from './routes/org-knowledge';
+import agentAuthRouter from './routes/agent-auth';
 import invitationsRouter from './routes/invitations';
 import billingRouter from './routes/billing';
 import referralsRouter from './routes/referrals';
@@ -63,9 +60,11 @@ import leaderboardRouter from './routes/leaderboard';
 import commissionsRouter from './routes/commissions';
 import gamificationRouter from './routes/gamification';
 import fieldSessionsRouter from './routes/field-sessions';
-import memoryGraphRouter from './routes/memory-graph';
 import platformAdminRouter from './routes/platform-admin';
 import authRouter from './routes/auth';
+import dsrRouter from './routes/dsr';
+import teamComplianceRouter from './routes/team-compliance';
+import incidentsRouter from './routes/incidents';
 
 // Security engine
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, extractIP } from './lib/security';
@@ -73,9 +72,12 @@ import { redisRateLimit } from './lib/rate-limiter';
 import { rbacMiddleware } from './lib/route-permissions';
 import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
 import { auditRequestMiddleware } from './lib/audit-middleware';
-// PII response middleware removed — PII is stored plaintext, protected by Supabase encryption at rest + RLS
+import { initSentry, attachSentryErrorHandler } from './lib/sentry';
 
 const app = express();
+
+// ── Sentry (no-op if SENTRY_DSN not set) ──
+initSentry(app);
 
 // ── Security headers (hardened) ──
 app.use((_req, res, next) => {
@@ -101,7 +103,7 @@ app.use((_req, res, next) => {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: https: blob:",
       "font-src 'self' data: https://fonts.gstatic.com",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://api.stripe.com https://fal.run https://queue.fal.run https://api.paypal.com",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://api.stripe.com https://api.paypal.com",
       "frame-src https://js.stripe.com https://www.paypal.com",
       "media-src 'self' https: blob:",
       "object-src 'none'",
@@ -212,7 +214,6 @@ const leadCreateLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) =>
 const publicPayLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — public payment page (tighter)
 const portalLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — client portal (tighter to prevent token brute-force)
 const quoteLimiterStrict = rateLimit({ windowMs: 60_000, max: 15 }); // per IP — quote track-view
-const aiChatLimiter = rateLimit({ windowMs: 60_000, max: 10, keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || req.ip}` }); // AI endpoints — expensive
 const automationLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `auto:${req.headers.authorization?.slice(-20) || req.ip}` });
 
 // ── Apply rate limiters to specific paths ──
@@ -222,14 +223,14 @@ app.use('/api/emails', emailLimiter);
 app.use('/api/payments', paymentLimiter);
 app.use('/api/leads/create', leadCreateLimiter);
 app.use('/api/pay', publicPayLimiter);
+// Per-token limiter — prevents brute-force via IP rotation
+app.use('/api/pay', rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  keyFn: (req) => `paytok:${(req.path.match(/\/pay\/([a-f0-9]+)/)?.[1] || '').slice(0, 80)}`,
+}));
 app.use('/api/portal', portalLimiter);
 app.use('/api/quotes', quoteLimiterStrict);
-
-// ── AI/Agent rate limiters (expensive API calls) ──
-app.use('/api/agent/chat', aiChatLimiter);
-app.use('/api/ai/chat', aiChatLimiter);
-app.use('/api/ai/chat/stream', aiChatLimiter);
-app.use('/api/director-panel/providers/execute', aiChatLimiter);
 
 // ── Automation event rate limiters ──
 app.use('/api/automations/events', automationLimiter);
@@ -244,11 +245,11 @@ app.use('/api/portal', redisRateLimit({ preset: 'auth' }));
 app.use('/api/public/form', redisRateLimit({ preset: 'auth' }));
 // Survey submissions — prevent ballot stuffing
 app.use('/api/survey', redisRateLimit({ preset: 'auth' }));
-// AI endpoints — persistent rate limiting for expensive calls
-app.use('/api/agent/chat', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
-app.use('/api/ai/chat', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
-app.use('/api/director-panel/providers/execute', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai-director:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
-
+// DSR endpoints — tight rate limit (compliance-sensitive + expensive export)
+app.use('/api/dsr', redisRateLimit({ preset: 'strict', keyFn: (req) => `dsr:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
+// Incidents — strict (failed-login needs to fit brute-force detection window)
+app.use('/api/incidents/failed-login', redisRateLimit({ preset: 'auth' }));
+app.use('/api/incidents', redisRateLimit({ preset: 'standard', keyFn: (req) => `inc:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
 // ── MFA enforcement for admin/owner on sensitive endpoints ──
 app.use(mfaEnforcementMiddleware());
 
@@ -273,23 +274,31 @@ app.use('/api', portalRouter);
 app.use('/api', connectRouter);
 app.use('/api', paymentRequestsRouter);
 app.use('/api', publicPayRouter);
-const directorProviderLimiter = rateLimit({ windowMs: 60_000, max: 20, keyFn: (req) => `director:${req.headers.authorization?.slice(-20) || req.ip}` });
-app.use('/api/director-panel/providers', directorProviderLimiter);
-app.use('/api', directorPanelRouter);
 app.use('/api', featureFlagsRouter);
 app.use('/api', authRouter);
+app.use('/api', dsrRouter);
+app.use('/api', teamComplianceRouter);
+app.use('/api', incidentsRouter);
 app.use('/api', scheduledReportsRouter);
 app.use('/api', goalsRouter);
 app.use('/api', auditLogRouter);
-app.use('/api', aiProxyRouter);
-const agentLimiter = rateLimit({ windowMs: 60_000, max: 20, keyFn: (req) => `agent:${req.headers.authorization?.slice(-20) || req.ip}` });
-app.use('/api/agent', agentLimiter);
-app.use('/api', agentRouter);
-app.use('/api', agentTrainingRouter);
 app.use('/api', orgKnowledgeRouter);
+// External agent auth (API-key → short-lived JWT) + webhook — owns its auth
+app.use('/api', agentAuthRouter);
 
-// Quote redirect at root level (/q/:token), API routes under /api — rate limited
+// Quote redirect at root level (/q/:token), API routes under /api — rate limited.
+// Per-token limiter on top of IP limiter to block token brute-force via IP rotation.
+const quoteTokenLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyFn: (req) => `qtok:${(req.params?.token || req.url.split('/q/')[1] || '').slice(0, 80)}`,
+});
 app.use('/q', quoteLimiter);
+app.use('/q', quoteTokenLimiter);
+app.use('/q', redisRateLimit({
+  preset: 'public',
+  keyFn: (req) => `qtok:${(req.params?.token || req.url.split('/q/')[1] || '').slice(0, 80)}`,
+}));
 app.use('/', quoteRedirectRouter);
 app.use('/api', quotesRouter);
 const surveyLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP
@@ -312,7 +321,6 @@ app.use('/api', leaderboardRouter);
 app.use('/api', commissionsRouter);
 app.use('/api', gamificationRouter);
 app.use('/api', fieldSessionsRouter);
-app.use('/api', memoryGraphRouter);
 
 // Platform admin — tightly rate limited, owner-only routes enforce auth internally
 const platformAdminLimiter = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `platform:${req.headers.authorization?.slice(-20) || req.ip}` });
@@ -456,6 +464,9 @@ if (encKeyRaw) {
   }
 }
 
+// ── Sentry error handler must be BEFORE any other error middleware ──
+attachSentryErrorHandler(app);
+
 app.listen(port, '0.0.0.0', () => {
   console.log(`API listening on 0.0.0.0:${port}`);
 
@@ -485,47 +496,40 @@ app.listen(port, '0.0.0.0', () => {
     });
   }
 
-  // Automated alerts — scan every 30 minutes
-  import('./lib/alerts-engine').then(({ runAlertScan }) => {
-    setInterval(async () => {
-      try { await runAlertScan(); } catch (err: any) { console.error('[alerts] Scan error:', err?.message); }
-    }, 30 * 60 * 1000);
-    console.log('[alerts] Engine started (every 30min)');
-    // Run once on startup (delayed 10s)
-    setTimeout(() => runAlertScan().catch((e: any) => console.error('[alerts] Startup scan error:', e?.message)), 10_000);
-  });
-
-  // Scheduled reports — check every hour
-  import('./lib/scheduled-reports').then(({ processScheduledReports }) => {
-    setInterval(async () => {
-    try {
-      const sent = await processScheduledReports();
-      if (sent > 0) console.log(`[scheduled-reports] Sent ${sent} report(s)`);
-    } catch (err: any) {
-      console.error('[scheduled-reports] Cron error:', err?.message);
-    }
-    }, 60 * 60 * 1000);
-    console.log('[scheduled-reports] Cron started (hourly)');
-  });
-
-  // AI Training maintenance — every 6 hours
-  Promise.all([import('./lib/agent/training-engine'), import('./lib/supabase')]).then(([{ runTrainingMaintenance }, { getServiceClient: getSC }]) => {
-    const admin = getSC();
-    setInterval(async () => {
-      try { await runTrainingMaintenance(admin); } catch (err: any) { console.error('[training] Maintenance error:', err?.message); }
-    }, 6 * 60 * 60 * 1000);
-    console.log('[training] Maintenance job started (every 6h)');
-    // Run once on startup (delayed 30s)
-    setTimeout(() => runTrainingMaintenance(admin).catch((e: any) => console.error('[training] Startup maintenance error:', e?.message)), 30_000);
-  });
-
-  // ── Security maintenance — every 15 minutes ──
-  setInterval(() => {
-    runSecurityMaintenance().catch((err: any) => {
-      console.error('[security] Maintenance error:', err?.message);
+  // ── Cron jobs — wrapped in advisory locks so only one replica runs each tick ──
+  import('./lib/advisory-lock').then(({ withAdvisoryLock }) => {
+    // Automated alerts — scan every 30 minutes
+    import('./lib/alerts-engine').then(({ runAlertScan }) => {
+      setInterval(async () => {
+        const res = await withAdvisoryLock('alerts-engine', () => runAlertScan()).catch((e: any) => {
+          console.error('[alerts] Lock error:', e?.message); return { acquired: true };
+        });
+        if (!res.acquired) { /* another replica owns this tick */ }
+      }, 30 * 60 * 1000);
+      console.log('[alerts] Engine started (every 30min, lock-guarded)');
+      setTimeout(() => withAdvisoryLock('alerts-engine-startup', () => runAlertScan())
+        .catch((e: any) => console.error('[alerts] Startup scan error:', e?.message)), 10_000);
     });
-  }, 15 * 60 * 1000);
-  console.log('[security] Maintenance job started (every 15min)');
-  // Run once on startup (delayed 15s)
-  setTimeout(() => runSecurityMaintenance().catch((e: any) => console.error('[security] Startup maintenance error:', e?.message)), 15_000);
+
+    // Scheduled reports — check every hour
+    import('./lib/scheduled-reports').then(({ processScheduledReports }) => {
+      setInterval(async () => {
+        const res = await withAdvisoryLock('scheduled-reports', async () => {
+          const sent = await processScheduledReports();
+          if (sent > 0) console.log(`[scheduled-reports] Sent ${sent} report(s)`);
+        }).catch((e: any) => { console.error('[scheduled-reports] Lock error:', e?.message); return { acquired: true }; });
+        if (!res.acquired) { /* skipped */ }
+      }, 60 * 60 * 1000);
+      console.log('[scheduled-reports] Cron started (hourly, lock-guarded)');
+    });
+
+    // Security maintenance — every 15 minutes
+    setInterval(() => {
+      withAdvisoryLock('security-maintenance', () => runSecurityMaintenance())
+        .catch((err: any) => console.error('[security] Lock error:', err?.message));
+    }, 15 * 60 * 1000);
+    console.log('[security] Maintenance job started (every 15min, lock-guarded)');
+    setTimeout(() => withAdvisoryLock('security-maintenance-startup', () => runSecurityMaintenance())
+      .catch((e: any) => console.error('[security] Startup maintenance error:', e?.message)), 15_000);
+  });
 });

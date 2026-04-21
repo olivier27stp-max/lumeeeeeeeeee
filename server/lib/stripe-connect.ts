@@ -123,9 +123,16 @@ export async function createDestinationPaymentIntent(params: {
   currency: string;
   connectedAccountId: string;
   metadata: Record<string, string>;
+  idempotencyKey?: string;
 }) {
   const stripe = getPlatformStripe();
   const applicationFee = calculateApplicationFee(params.amountCents);
+
+  // Fallback idempotency key derives from stable metadata if caller didn't pass one.
+  // Bucketed per minute — retry within 60s dedupes, distinct user attempts succeed.
+  const idemKey =
+    params.idempotencyKey ||
+    `dest-${params.connectedAccountId}-${params.metadata.entity_type || 'charge'}-${params.metadata.quote_id || params.metadata.invoice_id || 'x'}-${params.amountCents}-${Math.floor(Date.now() / 60_000)}`;
 
   const intent = await stripe.paymentIntents.create({
     amount: params.amountCents,
@@ -136,6 +143,8 @@ export async function createDestinationPaymentIntent(params: {
       destination: params.connectedAccountId,
     },
     metadata: params.metadata,
+  }, {
+    idempotencyKey: idemKey,
   });
 
   return {

@@ -1,3 +1,7 @@
+-- ORDER_HINT: 1/2 — timestamp collision with 20260401100000_fix_quote_followup_trigger.sql
+-- (Issue C-001, audit 2026-04-21). Apply this file BEFORE the sibling.
+-- Lexicographic order by full filename matches intended order. Do NOT rename (would break applied-migration checksums).
+
 /* ═══════════════════════════════════════════════════════════════
    Fix — Broken trigger on jobs table
 

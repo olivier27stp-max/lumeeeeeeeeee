@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { scoreAllTerritories, scoreAllPins, getCompanyProfile } from '../lib/field-sales/scoring-engine';
 import { getScheduleRecommendations } from '../lib/field-sales/scheduling-engine';
 import { getFollowUpRecommendations } from '../lib/field-sales/followup-engine';
@@ -9,6 +10,9 @@ import { getAssignmentRecommendations } from '../lib/field-sales/territory-assig
 import { autoCreateOrMergePin } from '../lib/field-sales/auto-pin';
 
 const router = Router();
+// Global guards for this router — size cap + type-check of common fields
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 const STATUS_COLORS: Record<string, string> = {
   unknown: '#6b7280', no_answer: '#9ca3af', not_interested: '#ef4444',

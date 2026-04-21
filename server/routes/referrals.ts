@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { getBaseUrl } from '../lib/config';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // ─── GET /referrals/me — Get or create user's referral code ─────
 

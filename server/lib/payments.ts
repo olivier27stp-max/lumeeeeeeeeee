@@ -1002,8 +1002,47 @@ export async function fetchPayPalOrder(accessToken: string, orderId: string) {
   return (await response.json()) as any;
 }
 
+/**
+ * Extract org_id from a PayPal webhook body. Custom_id is set by our
+ * create-order flow to JSON.stringify({org_id, invoice_id, client_id}).
+ */
+function extractOrgIdFromPayPalBody(body: any): string | null {
+  try {
+    const resource = body?.resource || {};
+    const purchaseUnit = Array.isArray(resource.purchase_units) ? resource.purchase_units[0] : null;
+    const customId =
+      (purchaseUnit && purchaseUnit.custom_id) ||
+      resource.custom_id ||
+      resource?.supplementary_data?.related_ids?.order_id && null;
+    if (!customId) return null;
+    const parsed = JSON.parse(customId);
+    return typeof parsed?.org_id === 'string' ? parsed.org_id : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolvePayPalWebhookId(body: any): Promise<string | null> {
+  const orgId = extractOrgIdFromPayPalBody(body);
+  if (orgId) {
+    try {
+      const admin = getServiceClient();
+      const { data: provider } = await admin
+        .from('payment_providers')
+        .select('paypal_webhook_id')
+        .eq('org_id', orgId)
+        .maybeSingle();
+      if (provider?.paypal_webhook_id) return provider.paypal_webhook_id;
+    } catch (err: any) {
+      console.error('[paypal-webhook] per-org lookup failed:', err?.message);
+    }
+  }
+  return paypalWebhookId || null;
+}
+
 export async function verifyPayPalWebhookSignature(req: express.Request, body: any) {
-  if (!paypalWebhookId) return false;
+  const webhookId = await resolvePayPalWebhookId(body);
+  if (!webhookId) return false;
 
   const transmissionId = req.header('paypal-transmission-id') || '';
   const transmissionTime = req.header('paypal-transmission-time') || '';
@@ -1022,7 +1061,7 @@ export async function verifyPayPalWebhookSignature(req: express.Request, body: a
     transmission_id: transmissionId,
     transmission_sig: transmissionSig,
     transmission_time: transmissionTime,
-    webhook_id: paypalWebhookId,
+    webhook_id: webhookId,
     webhook_event: body,
   };
 

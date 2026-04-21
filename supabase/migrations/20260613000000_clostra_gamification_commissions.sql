@@ -10,7 +10,7 @@
 
 CREATE TABLE IF NOT EXISTS public.fs_badges (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id          uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id          uuid NOT NULL REFERENCES public.orgs(id) ON DELETE CASCADE,
   slug            text NOT NULL,
   name_en         text NOT NULL,
   name_fr         text NOT NULL,
@@ -53,7 +53,7 @@ CREATE POLICY "fs_badges_modify" ON public.fs_badges
 
 CREATE TABLE IF NOT EXISTS public.fs_rep_badges (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id      uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id      uuid NOT NULL REFERENCES public.orgs(id) ON DELETE CASCADE,
   user_id     uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   badge_id    uuid NOT NULL REFERENCES public.fs_badges(id) ON DELETE CASCADE,
   earned_at   timestamptz NOT NULL DEFAULT now(),
@@ -82,7 +82,7 @@ CREATE POLICY "fs_rep_badges_insert" ON public.fs_rep_badges
 
 CREATE TABLE IF NOT EXISTS public.fs_rep_stat_snapshots (
   id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id                uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id                uuid NOT NULL REFERENCES public.orgs(id) ON DELETE CASCADE,
   user_id               uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   period                text NOT NULL CHECK (period IN ('daily', 'weekly', 'monthly')),
   period_start          date NOT NULL,
@@ -130,7 +130,7 @@ CREATE POLICY "fs_rep_stat_snapshots_modify" ON public.fs_rep_stat_snapshots
 
 CREATE TABLE IF NOT EXISTS public.fs_challenges (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id            uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id            uuid NOT NULL REFERENCES public.orgs(id) ON DELETE CASCADE,
   created_by        uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name_en           text NOT NULL,
   name_fr           text NOT NULL,
@@ -213,7 +213,7 @@ CREATE POLICY "fs_challenge_participants_update" ON public.fs_challenge_particip
 
 CREATE TABLE IF NOT EXISTS public.fs_battles (
   id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id              uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id              uuid NOT NULL REFERENCES public.orgs(id) ON DELETE CASCADE,
   created_by          uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name                text NOT NULL,
   type                text NOT NULL CHECK (type IN ('rep_vs_rep', 'team_vs_team')),
@@ -261,7 +261,7 @@ CREATE POLICY "fs_battles_modify" ON public.fs_battles
 
 CREATE TABLE IF NOT EXISTS public.fs_feed_posts (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id          uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id          uuid NOT NULL REFERENCES public.orgs(id) ON DELETE CASCADE,
   user_id         uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   type            text NOT NULL CHECK (type IN ('win', 'milestone', 'badge', 'challenge', 'battle', 'manual')),
   visibility      text NOT NULL DEFAULT 'company' CHECK (visibility IN ('company', 'team')),
@@ -381,7 +381,7 @@ CREATE POLICY "fs_feed_comments_delete" ON public.fs_feed_comments
 
 CREATE TABLE IF NOT EXISTS public.fs_commission_rules (
   id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id                uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id                uuid NOT NULL REFERENCES public.orgs(id) ON DELETE CASCADE,
   name                  text NOT NULL,
   description           text,
   type                  text NOT NULL CHECK (type IN ('flat', 'percentage', 'tiered')),
@@ -423,7 +423,7 @@ CREATE POLICY "fs_commission_rules_modify" ON public.fs_commission_rules
 
 CREATE TABLE IF NOT EXISTS public.fs_commission_entries (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id          uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id          uuid NOT NULL REFERENCES public.orgs(id) ON DELETE CASCADE,
   user_id         uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   rule_id         uuid NOT NULL REFERENCES public.fs_commission_rules(id) ON DELETE RESTRICT,
   lead_id         uuid,
@@ -473,7 +473,7 @@ CREATE POLICY "fs_commission_entries_modify" ON public.fs_commission_entries
 
 CREATE TABLE IF NOT EXISTS public.fs_field_sessions (
   id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id                  uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id                  uuid NOT NULL REFERENCES public.orgs(id) ON DELETE CASCADE,
   user_id                 uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   territory_id            uuid,
   status                  text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'completed')),
@@ -552,7 +552,7 @@ CREATE POLICY "fs_gps_points_insert" ON public.fs_gps_points
 
 CREATE TABLE IF NOT EXISTS public.fs_check_in_records (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id          uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  org_id          uuid NOT NULL REFERENCES public.orgs(id) ON DELETE CASCADE,
   user_id         uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   session_id      uuid REFERENCES public.fs_field_sessions(id) ON DELETE SET NULL,
   type            text NOT NULL CHECK (type IN ('check_in', 'check_out')),

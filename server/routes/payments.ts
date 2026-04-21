@@ -910,11 +910,14 @@ router.post('/payments/paypal/create-order', validate(paypalCreateOrderSchema), 
     const amountValue = (balanceCents / 100).toFixed(2);
     const customId = JSON.stringify({ org_id: orgId, invoice_id: invoiceId, client_id: invoice.client_id || null });
 
+    // PayPal-Request-Id is PayPal's idempotency header — dedupes retries within 6h
+    const paypalRequestId = `order-${orgId}-${invoiceId}-${Math.floor(Date.now() / 60_000)}`;
     const createResponse = await fetch(`${getPayPalBaseUrl()}/v2/checkout/orders`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
+        'PayPal-Request-Id': paypalRequestId,
       },
       body: JSON.stringify({
         intent: 'CAPTURE',
@@ -975,6 +978,7 @@ router.post('/payments/paypal/capture-order', validate(paypalCaptureOrderSchema)
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
+        'PayPal-Request-Id': `capture-${orderId}`,
       },
       body: JSON.stringify({}),
     });
@@ -1087,7 +1091,9 @@ router.post('/payments/refund', async (req, res) => {
     // For destination charges, Stripe auto-reverses the transfer
     refundParams.reverse_transfer = true;
 
-    const refund = await stripe.refunds.create(refundParams);
+    // Idempotency per-payment + amount dedupes accidental double refund clicks
+    const refundIdemKey = `refund-${payment.id}-${refundAmountCents ?? 'full'}`;
+    const refund = await stripe.refunds.create(refundParams, { idempotencyKey: refundIdemKey });
 
     // Update payment record
     const isFullRefund = !refundAmountCents || refundAmountCents >= payment.amount_cents;
