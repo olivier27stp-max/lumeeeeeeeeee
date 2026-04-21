@@ -49,6 +49,7 @@ import scheduledReportsRouter from './routes/scheduled-reports';
 import goalsRouter from './routes/goals';
 import auditLogRouter from './routes/audit-log';
 import orgKnowledgeRouter from './routes/org-knowledge';
+import agentAuthRouter from './routes/agent-auth';
 import invitationsRouter from './routes/invitations';
 import billingRouter from './routes/billing';
 import referralsRouter from './routes/referrals';
@@ -282,6 +283,8 @@ app.use('/api', scheduledReportsRouter);
 app.use('/api', goalsRouter);
 app.use('/api', auditLogRouter);
 app.use('/api', orgKnowledgeRouter);
+// External agent auth (API-key → short-lived JWT) + webhook — owns its auth
+app.use('/api', agentAuthRouter);
 
 // Quote redirect at root level (/q/:token), API routes under /api — rate limited.
 // Per-token limiter on top of IP limiter to block token brute-force via IP rotation.
