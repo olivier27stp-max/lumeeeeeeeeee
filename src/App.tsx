@@ -32,7 +32,6 @@ import {
   GraduationCap,
   Trophy,
   DollarSign,
-  Newspaper,
   MapPinned,
   GitBranch,
   Shield,
@@ -124,7 +123,6 @@ import ClientPortal from './pages/ClientPortal';
 import PublicPayment from './pages/PublicPayment';
 import Leaderboard from './pages/Leaderboard';
 import Commissions from './pages/Commissions';
-import SocialFeed from './pages/SocialFeed';
 import RepProfile from './pages/RepProfile';
 import FieldSales from './pages/FieldSales';
 import D2DMap from './pages/D2DMap';
@@ -710,7 +708,6 @@ function AuthenticatedApp({
             { id: 'd2d-dashboard', label: t.nav.venteDashboard, icon: LayoutDashboard, path: '/d2d-dashboard', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
             { id: 'field-sales', label: t.nav.venteMap, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
             { id: 'd2d-pipeline', label: t.nav.ventePipeline, icon: GitBranch, path: '/d2d-pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
-            { id: 'feed', label: t.nav.feed, icon: Newspaper, path: '/feed', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
             { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'financial.view_reports' },
             { id: 'commissions', label: t.nav.commissions, icon: DollarSign, path: '/commissions', tileColor: 'blue', requiredPermission: 'financial.view_reports' },
           ]
@@ -1123,7 +1120,6 @@ function AuthenticatedApp({
                     <Route path="/leaderboard" element={<Gated permission="reports.read"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Leaderboard /></PageWrapper></ModuleGate></Gated>} />
                     <Route path="/commissions" element={<Gated permission="reports.read"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Commissions /></PageWrapper></ModuleGate></Gated>} />
                     <Route path="/d2d-reports" element={<Gated permission="door_to_door.access"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DReports /></PageWrapper></ModuleGate></Gated>} />
-                    <Route path="/feed" element={<Gated permission="door_to_door.access"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><SocialFeed /></PageWrapper></ModuleGate></Gated>} />
                     <Route path="/d2d-settings/general" element={<Gated permission="settings.update"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DSettingsGeneral /></PageWrapper></ModuleGate></Gated>} />
                     <Route path="/d2d-settings/teams" element={<Gated permission="settings.update"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DSettingsTeams /></PageWrapper></ModuleGate></Gated>} />
                     <Route path="/d2d-onboarding" element={<Gated permission="door_to_door.access"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DOnboarding /></ModuleGate></Gated>} />
