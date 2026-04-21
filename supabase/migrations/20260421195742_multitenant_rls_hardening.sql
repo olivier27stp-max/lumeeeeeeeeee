@@ -1,0 +1,24 @@
+-- ============================================================================
+-- Multi-tenant RLS hardening — Issue C-004 (audit 2026-04-21).
+--
+-- NO-OP MIGRATION. Kept for traceability only.
+--
+-- Audit of the 28 tables listed under C-004 ("sans colonne tenant — sous-ensemble
+-- vraiment risqué") found that ALL of them already have RLS enabled with
+-- policies that correctly scope via JOIN to a parent table owning org_id
+-- (or via auth.uid() for user-scoped tables).
+--
+-- Full per-table report: memory/audit_reports/multitenant_audit.md
+--
+-- Notable correction vs. original audit:
+--   - `referrals` DOES have a tenant column (`referrer_org_id`), contrary to
+--     the Phase 2 claim that "aucune colonne tenant visible". Policy in
+--     20260601000001_billing_subscriptions_referrals.sql is correct.
+--
+-- TODOs for future work (NOT blocking, not addressed here):
+--   - Consolidate quote_views policies (16 accumulated across migrations).
+--   - Perf-audit 2-hop RLS JOIN chains (note_connections → note_boards → org).
+--   - Re-run this sweep AFTER applying 20260421195740_enable_rls_exposed_tables.sql.
+-- ============================================================================
+
+select 'multitenant_rls_hardening: nothing to do — see memory/audit_reports/multitenant_audit.md' as status;
