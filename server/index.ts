@@ -76,8 +76,12 @@ import { redisRateLimit } from './lib/rate-limiter';
 import { rbacMiddleware } from './lib/route-permissions';
 import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
 import { auditRequestMiddleware } from './lib/audit-middleware';
+import { initSentry, attachSentryErrorHandler } from './lib/sentry';
 
 const app = express();
+
+// ── Sentry (no-op if SENTRY_DSN not set) ──
+initSentry(app);
 
 // ── Security headers (hardened) ──
 app.use((_req, res, next) => {
@@ -482,6 +486,9 @@ if (encKeyRaw) {
     process.exit(1);
   }
 }
+
+// ── Sentry error handler must be BEFORE any other error middleware ──
+attachSentryErrorHandler(app);
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`API listening on 0.0.0.0:${port}`);

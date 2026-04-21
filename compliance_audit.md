@@ -631,9 +631,28 @@ Livraison attendue : validation de ce rapport par le responsable produit + déci
 - ✅ `compliance_checklist.md` — checklist pré-production exhaustive (12 sections, ~70 checkbox)
 - ✅ `COMPLIANCE_README.md` — guide équipe : où trouver quoi, responsabilités, workflows, versions
 
+### 2026-04-21 — Bloc 11 Gaps résiduels comblés sans intervention utilisateur
+
+**Implémenté en autonomie :**
+- ✅ `docs/legal/efvp_supabase_us_east.md` — Template EFVP Loi 25 art. 17 pré-rempli à 80% (hébergement Supabase US-East)
+- ✅ Migration `supabase/migrations/20260625000005_email_consent.sql` :
+  - Colonnes `email_consent_at`, `email_opt_out_at`, `email_opt_out_reason` sur `clients` + `leads`
+  - Table `email_opt_outs` (parité `sms_opt_outs`)
+  - RPC `record_email_opt_out(email, org_id, reason)` + `is_email_opted_out(email, org_id)`
+- ✅ Sentry integration :
+  - `server/lib/sentry.ts` — init + error handler (no-op si DSN absent)
+  - `src/lib/sentry.ts` — init client (no-op si DSN absent, dynamic import)
+  - Wired dans `server/index.ts` (avant middlewares + avant listen) et `src/main.tsx`
+  - Redaction auth headers + breadcrumbs PII
+  - Docs d'enrollment : `docs/operations/sentry_setup.md`
+  - `.env.example` mis à jour (SENTRY_DSN, VITE_SENTRY_DSN, AI_REDACT_PII)
+- ✅ `docs/operations/sop_dsr_response.md` — SOP complet 30j SLA : workflow, templates réponse (accusé, access, erasure, refus), queries métriques DPO
+
+**TypeScript pass** ✓ (imports dynamiques Sentry, no-op sans dépendance installée)
+
 ## Bilan final
 
-**Blocs 1–10 tous livrés.** Le dispositif technique est en place pour Loi 25, LPRPDE, RGPD, CCPA.
+**Blocs 1–11 tous livrés.** Le dispositif technique est complet pour Loi 25, LPRPDE, RGPD, CCPA.
 
 **Reste à faire par l'humain (hors code) avant prod :**
 1. Désigner un DPO, créer les boîtes email `privacy@` et `legal@`
