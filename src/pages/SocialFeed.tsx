@@ -280,7 +280,13 @@ export default function D2DSocialFeed() {
   );
 
   return (
-    <div className="flex h-[calc(100vh-3rem)] relative">
+    <div className="flex flex-col h-[calc(100vh-3rem)] relative">
+      {/* Preview banner — feature requires internal_team_messaging migrations */}
+      <div className="flex items-center gap-2 bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-900">
+        <span className="font-medium">Preview</span>
+        <span>Team chat currently shows sample data. Persistence requires the internal_team_messaging migrations to be applied — see src/lib/internalMessagingApi.ts.</span>
+      </div>
+      <div className="flex flex-1 min-h-0 relative">
 
       {/* Notifications */}
       <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2">
@@ -635,6 +641,7 @@ export default function D2DSocialFeed() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
