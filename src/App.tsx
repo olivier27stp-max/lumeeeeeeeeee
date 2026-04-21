@@ -391,11 +391,12 @@ export default function App() {
 
   // Check if user has an active subscription — redirect to /checkout if not
   // Platform owners/admins bypass subscription check.
-  // BYPASS_EMAILS comes from env (VITE_BETA_BYPASS_EMAILS, comma-separated). Empty in prod.
-  const BYPASS_EMAILS = (import.meta.env.VITE_BETA_BYPASS_EMAILS || '')
+  const HARDCODED_BYPASS = ['willhebert30@gmail.com', 'beatsafterimage@gmail.com'];
+  const envBypass = (import.meta.env.VITE_BETA_BYPASS_EMAILS || '')
     .split(',')
     .map((e: string) => e.trim().toLowerCase())
     .filter(Boolean);
+  const BYPASS_EMAILS = [...HARDCODED_BYPASS, ...envBypass];
   useEffect(() => {
     if (!user || !onboardingChecked || showOnboarding) { setHasSubscription(null); return; }
     // Bypass for beta emails whitelisted via env
