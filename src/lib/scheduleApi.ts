@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 import { emitAppointmentCreated, emitAppointmentCancelled } from './automationEventsApi';
 
-export const DEFAULT_TIMEZONE = 'America/Montreal';
+export const DEFAULT_TIMEZONE = 'America/Toronto';
 const CACHE_TTL_MS = 30_000;
 
 export interface TeamRecord {
@@ -182,9 +182,11 @@ export async function listScheduleEventsRange(params: {
 }
 
 export async function listUnscheduledJobs(teamIds?: string[]): Promise<UnscheduledJobRecord[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
   let query = supabase
     .from('jobs')
     .select('id,title,status,team_id,client_name,property_address,lead_id,scheduled_at,total_cents')
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .is('scheduled_at', null)
     .in('status', ['draft', 'Draft'])

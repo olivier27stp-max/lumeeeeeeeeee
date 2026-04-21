@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { cn, formatCurrency } from '../lib/utils';
 import { GripVertical, X, Filter, ChevronDown, User, UserCheck, Phone, Mail, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -377,11 +377,14 @@ export default function D2DPipeline() {
     setActiveDeal(deals.find(d => d.id === event.active.id) || null);
   }
 
+  const dragLocksRef = useRef<Set<string>>(new Set());
   async function handleDragEnd(event: DragEndEvent) {
     setActiveDeal(null);
     const { active, over } = event;
     if (!over) return;
     const dealId = active.id as string;
+    // Per-deal lock: ignore drag end if a previous mutation is still in flight for this deal
+    if (dragLocksRef.current.has(dealId)) return;
     const deal = deals.find(d => d.id === dealId);
     if (!deal) return;
     const overDeal = deals.find(d => d.id === over.id);
@@ -392,12 +395,17 @@ export default function D2DPipeline() {
       toast.error(targetConfig.blockReason || 'Cannot move here');
       return;
     }
+    const prevStage = deal.d2dStage;
+    const prevDbStage = deal.stage;
+    dragLocksRef.current.add(dealId);
     setDeals(prev => prev.map(d => d.id === dealId ? { ...d, d2dStage: targetStage, stage: D2D_TO_DB_STAGE[targetStage] } : d));
     try {
       await updateDeal(dealId, { stage: D2D_TO_DB_STAGE[targetStage] });
     } catch (err: any) {
       toast.error(err.message);
-      setDeals(prev => prev.map(d => d.id === dealId ? { ...d, d2dStage: deal.d2dStage, stage: deal.stage } : d));
+      setDeals(prev => prev.map(d => d.id === dealId ? { ...d, d2dStage: prevStage, stage: prevDbStage } : d));
+    } finally {
+      dragLocksRef.current.delete(dealId);
     }
   }
 
@@ -437,7 +445,7 @@ export default function D2DPipeline() {
         <div>
           <h1 className="text-[18px] font-bold text-text-primary">Pipeline D2D</h1>
           <p className="text-[12px] text-text-muted mt-0.5">
-            {totalDeals} deal{totalDeals !== 1 ? 's' : ''} · {formatCurrency(totalValue * 100, 'CAD')}
+            {totalDeals} {fr ? (totalDeals !== 1 ? 'deals' : 'deal') : (totalDeals !== 1 ? 'deals' : 'deal')} · {formatCurrency(totalValue * 100, 'CAD')}
           </p>
         </div>
         <div className="flex items-center gap-2">

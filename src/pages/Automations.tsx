@@ -28,6 +28,27 @@ import {
   toggleAutomationRule,
 } from '../lib/automationRulesApi';
 
+// ── Automation name translations (for DB-seeded English names) ──
+const AUTOMATION_NAME_FR: Record<string, string> = {
+  'Lead — Welcome': 'Prospect — Bienvenue',
+  'Lead Alert — 7 Days Stale': 'Alerte prospect — 7 jours inactif',
+  'Lead Final Follow-Up — 14 Days': 'Dernier suivi prospect — 14 jours',
+  'Lead Follow-Up — 1 Day': 'Suivi prospect — 1 jour',
+  'Lead Follow-Up — 3 Days': 'Suivi prospect — 3 jours',
+  'Lost Lead Re-engagement — 90 Days': 'Réengagement prospect perdu — 90 jours',
+  'Estimate Follow-Up': "Suivi d'estimation",
+  'Quote Follow-Up — 1 Day': 'Suivi de devis — 1 jour',
+  'Quote Follow-Up — 3 Days': 'Suivi de devis — 3 jours',
+  'Quote Follow-Up — 7 Days': 'Suivi de devis — 7 jours',
+  'Quote Follow-Up — 14 Days': 'Suivi de devis — 14 jours',
+  'Quote Follow-Up — 21 Days': 'Suivi de devis — 21 jours',
+};
+
+function localizeAutomationName(name: string, lang: string): string {
+  if (lang !== 'fr') return name;
+  return AUTOMATION_NAME_FR[name] ?? name;
+}
+
 // ── Category definitions ────────────────────────────────────
 // Order matters — this defines the display order of sections
 const CATEGORY_ORDER = [
@@ -498,7 +519,7 @@ export default function Automations() {
                                   </div>
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1.5">
-                                      <span className="font-semibold text-text-primary truncate">{rule.name}</span>
+                                      <span className="font-semibold text-text-primary truncate">{localizeAutomationName(rule.name, language)}</span>
                                       {isDefault && (
                                         <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-tertiary text-text-secondary shrink-0">
                                           {t.automations.default}

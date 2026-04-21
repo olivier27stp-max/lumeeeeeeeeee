@@ -52,6 +52,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import { CrmPageHeader, CrmFilterBtn, CrmTableCard, CrmAvatar, CrmBadge } from '../components/ui/CrmTable';
 import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
 
@@ -543,7 +544,8 @@ export default function Jobs() {
           label: 'Undo',
           onClick: async () => {
             try {
-              await supabase.from('jobs').update({ deleted_at: null, updated_at: new Date().toISOString() }).eq('id', jobToDelete.id);
+              const undoOrgId = await getCurrentOrgIdOrThrow();
+              await supabase.from('jobs').update({ deleted_at: null, updated_at: new Date().toISOString() }).eq('id', jobToDelete.id).eq('org_id', undoOrgId);
               await loadJobs();
               toast.success('Job restored');
             } catch { toast.error('Failed to restore'); }
@@ -760,8 +762,9 @@ export default function Jobs() {
                 const statusMap: Record<string, string> = { complete: 'completed', in_progress: 'in_progress', schedule: 'scheduled' };
                 const newStatus = statusMap[actionId] || 'completed';
                 let updateFailed = 0;
+                const bulkOrgId = await getCurrentOrgIdOrThrow();
                 for (const jid of ids) {
-                  const { error: updateErr } = await supabase.from('jobs').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', jid);
+                  const { error: updateErr } = await supabase.from('jobs').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', jid).eq('org_id', bulkOrgId);
                   if (updateErr) updateFailed++;
                 }
                 setJobs((prev) => prev.map((j) => selectedJobIds.has(j.id) ? { ...j, status: newStatus } : j));

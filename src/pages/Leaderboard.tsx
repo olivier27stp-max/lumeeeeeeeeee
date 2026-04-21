@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '../components/d2d/card';
 import { cn } from '../lib/utils';
+import { useTranslation } from '../i18n';
 import { getRepAvatar } from '../lib/constants/avatars';
 import { getLeaderboard, getRepPerformance } from '../lib/leaderboardApi';
 import type { LeaderboardEntry, RepPerformanceDetail } from '../types';
@@ -161,6 +162,11 @@ function TrendBadge({ trend }: { trend: number }) {
 
 export default function D2DLeaderboard() {
   const navigate = useNavigate();
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const periodLabels: Record<Period, string> = fr
+    ? { daily: 'Quotidien', weekly: 'Hebdomadaire', monthly: 'Mensuel' }
+    : { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
   const [period, setPeriod] = useState<Period>('weekly');
   const [selectedRep, setSelectedRep] = useState<RepData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -229,8 +235,8 @@ export default function D2DLeaderboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-text-primary">Rankings</h2>
-          <p className="mt-1 text-sm text-text-tertiary">Team ranking</p>
+          <h2 className="text-lg font-semibold text-text-primary">{fr ? 'Classement' : 'Rankings'}</h2>
+          <p className="mt-1 text-sm text-text-tertiary">{fr ? 'Classement de l\'équipe' : 'Team ranking'}</p>
         </div>
         <div className="flex items-center rounded-lg border border-border-subtle overflow-hidden">
           {(['daily', 'weekly', 'monthly'] as Period[]).map((p) => (
@@ -242,7 +248,7 @@ export default function D2DLeaderboard() {
                 period === p ? 'bg-white text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary',
               )}
             >
-              {p}
+              {periodLabels[p]}
             </button>
           ))}
         </div>
@@ -326,7 +332,7 @@ export default function D2DLeaderboard() {
 
                   {/* Closes */}
                   <p className="relative mt-4 text-center text-sm font-semibold text-white/90">
-                    {rep.closes} closes
+                    {rep.closes} {fr ? 'ventes' : 'closes'}
                   </p>
 
                   {/* Revenue */}
@@ -372,12 +378,12 @@ export default function D2DLeaderboard() {
 
                   <div className="text-right w-16">
                     <p className="text-lg font-bold text-text-primary">{rep.closes}</p>
-                    <p className="text-[10px] text-text-muted font-medium">closes</p>
+                    <p className="text-[10px] text-text-muted font-medium">{fr ? 'ventes' : 'closes'}</p>
                   </div>
 
                   <div className="text-right w-20">
                     <p className="text-sm font-semibold text-text-secondary">${(rep.revenue / 1000).toFixed(1)}k</p>
-                    <p className="text-[10px] text-text-muted font-medium">revenue</p>
+                    <p className="text-[10px] text-text-muted font-medium">{fr ? 'revenu' : 'revenue'}</p>
                   </div>
 
                   <div className="w-14 flex justify-end">
@@ -422,7 +428,7 @@ export default function D2DLeaderboard() {
                 </div>
               ) : (
                 <>
-                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">Performance detail ({period})</h4>
+                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">{fr ? 'Détails de performance' : 'Performance detail'} ({periodLabels[period]})</h4>
                   <div className="grid grid-cols-2 gap-2">
                     {detailKPIs.map((kpi) => (
                       <div key={kpi.key} className="rounded-lg border border-border-subtle bg-surface-elevated px-3 py-3">
@@ -433,7 +439,7 @@ export default function D2DLeaderboard() {
                   </div>
 
                   <div className="mt-6">
-                    <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">Conversion rate</h4>
+                    <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">{fr ? 'Taux de conversion' : 'Conversion rate'}</h4>
                     <div className="space-y-3">
                       {funnelSteps.map((step) => (
                         <div key={step.key}>
@@ -457,7 +463,7 @@ export default function D2DLeaderboard() {
                     className="mt-6 flex items-center justify-center gap-2 rounded-xl bg-text-primary text-surface px-5 py-3 text-sm font-semibold transition-opacity hover:opacity-90"
                   >
                     <User size={16} />
-                    View Full Profile
+                    {fr ? 'Voir le profil complet' : 'View Full Profile'}
                   </Link>
                 </>
               )}

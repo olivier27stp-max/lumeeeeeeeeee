@@ -54,6 +54,15 @@ export default function InvoiceDetails() {
     enabled: !!invoiceId,
   });
 
+  // Build render data for visual preview — MUST be declared before any conditional return
+  // so hook order stays stable (React error #310 guard).
+  const renderData = useMemo(
+    () => detailsQuery.data
+      ? buildRenderData(detailsQuery.data, companyQuery.data, null, appliedTaxesQuery.data || null)
+      : null,
+    [detailsQuery.data, companyQuery.data, appliedTaxesQuery.data],
+  );
+
   if (detailsQuery.isLoading) {
     return (
       <div className="section-card p-6">
@@ -81,12 +90,6 @@ export default function InvoiceDetails() {
   const isDraft = invoice.status === 'draft';
   const isVoid = invoice.status === 'void';
   const isPaid = invoice.status === 'paid';
-
-  // Build render data for visual preview (fixed layout, company branding, tax breakdown)
-  const renderData = useMemo(
-    () => buildRenderData(detailsQuery.data!, companyQuery.data, null, appliedTaxesQuery.data || null),
-    [detailsQuery.data, companyQuery.data, appliedTaxesQuery.data],
-  );
 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: ['invoiceDetails', invoiceId] });

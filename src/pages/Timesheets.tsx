@@ -516,11 +516,11 @@ export default function Timesheets() {
   const toggleSelect = (id: string) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selectAll = () => setSelected(new Set(rows.map(r => r.id)));
   const selectNone = () => setSelected(new Set());
-  const approveEntries = async (ids: string[]) => { for (const id of ids) { await supabase.from('time_entries').update({ notes: '[APPROVED] ' + (entries.find(e => e.id === id)?.notes || '') }).eq('id', id); } toast.success(fr ? `${ids.length} approuvé(s)` : `${ids.length} approved`); loadData(); setSelected(new Set()); };
-  const forceClockOut = async (id: string) => { const now = new Date(); const ts = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`; await supabase.from('time_entries').update({ punch_out: ts, punch_out_at: now.toISOString(), status: 'completed' }).eq('id', id); toast.success(fr ? 'Punch-out forcé' : 'Forced clock-out'); loadData(); loadMySession(); };
-  const deleteEntry = async (id: string) => { const { error } = await supabase.from('time_entries').delete().eq('id', id); if (error) { toast.error(error.message); return; } toast.success(fr ? 'Entrée supprimée' : 'Entry deleted'); loadData(); loadMySession(); };
-  const saveEdit = async () => { if (!editingId) return; await supabase.from('time_entries').update({ punch_in: editPunchIn, punch_out: editPunchOut || null }).eq('id', editingId); toast.success(fr ? 'Modifié' : 'Updated'); setEditingId(null); loadData(); };
-  const saveNote = async () => { if (!noteId) return; await supabase.from('time_entries').update({ notes: noteText }).eq('id', noteId); toast.success(fr ? 'Note sauvegardée' : 'Note saved'); setNoteId(null); loadData(); };
+  const approveEntries = async (ids: string[]) => { const orgId = await getCurrentOrgIdOrThrow(); for (const id of ids) { await supabase.from('time_entries').update({ notes: '[APPROVED] ' + (entries.find(e => e.id === id)?.notes || '') }).eq('id', id).eq('org_id', orgId); } toast.success(fr ? `${ids.length} approuvé(s)` : `${ids.length} approved`); loadData(); setSelected(new Set()); };
+  const forceClockOut = async (id: string) => { const orgId = await getCurrentOrgIdOrThrow(); const now = new Date(); const ts = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`; await supabase.from('time_entries').update({ punch_out: ts, punch_out_at: now.toISOString(), status: 'completed' }).eq('id', id).eq('org_id', orgId); toast.success(fr ? 'Punch-out forcé' : 'Forced clock-out'); loadData(); loadMySession(); };
+  const deleteEntry = async (id: string) => { const orgId = await getCurrentOrgIdOrThrow(); const { error } = await supabase.from('time_entries').delete().eq('id', id).eq('org_id', orgId); if (error) { toast.error(error.message); return; } toast.success(fr ? 'Entrée supprimée' : 'Entry deleted'); loadData(); loadMySession(); };
+  const saveEdit = async () => { if (!editingId) return; const orgId = await getCurrentOrgIdOrThrow(); await supabase.from('time_entries').update({ punch_in: editPunchIn, punch_out: editPunchOut || null }).eq('id', editingId).eq('org_id', orgId); toast.success(fr ? 'Modifié' : 'Updated'); setEditingId(null); loadData(); };
+  const saveNote = async () => { if (!noteId) return; const orgId = await getCurrentOrgIdOrThrow(); await supabase.from('time_entries').update({ notes: noteText }).eq('id', noteId).eq('org_id', orgId); toast.success(fr ? 'Note sauvegardée' : 'Note saved'); setNoteId(null); loadData(); };
   const handleExport = async (ids?: string[]) => { const pool = ids ? entries.filter(e => ids.includes(e.id)) : viewEntries; exportToCsv(`timesheet-${new Date().toISOString().slice(0, 10)}.csv`, ['Employee', 'Date', 'Punch In', 'Punch Out', 'Breaks', 'Work Duration', 'Issue'], pool.map(e => [e.employee_name, e.date, e.punch_in, e.punch_out || '', formatH(calcBreak(e)), formatH(calcWork(e)), detectIssue(e, false)])); };
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -587,11 +587,12 @@ export default function Timesheets() {
     setTimerLoading(true);
     try {
       const now = new Date();
+      const orgId = await getCurrentOrgIdOrThrow();
       const { error } = await supabase.from('time_entries').update({
         punch_out: now.toTimeString().slice(0, 5),
         punch_out_at: now.toISOString(),
         status: 'completed',
-      }).eq('id', myActiveEntry.id);
+      }).eq('id', myActiveEntry.id).eq('org_id', orgId);
       if (error) throw error;
       toast.success(fr ? 'Punch Out !' : 'Punched Out!');
       setMyActiveEntry(null);
@@ -613,7 +614,8 @@ export default function Timesheets() {
       } else {
         breaks.push({ start: now, end: '' });
       }
-      const { error } = await supabase.from('time_entries').update({ breaks }).eq('id', myActiveEntry.id);
+      const orgId = await getCurrentOrgIdOrThrow();
+      const { error } = await supabase.from('time_entries').update({ breaks }).eq('id', myActiveEntry.id).eq('org_id', orgId);
       if (error) throw error;
       toast.success(onBrk ? (fr ? 'Reprise !' : 'Resumed!') : (fr ? 'En pause' : 'Paused'));
       loadMySession();

@@ -4,6 +4,7 @@ import { Avatar } from '../components/d2d/avatar';
 import { getRepAvatar } from '../lib/constants/avatars';
 import { getRepPerformance, getRealtimeStats } from '../lib/leaderboardApi';
 import { supabase } from '../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import type { RepPerformanceDetail } from '../types';
 import {
   MessageSquare,
@@ -124,10 +125,11 @@ export default function D2DRepProfile() {
     let cancelled = false;
 
     async function fetchFromApi(userId: string) {
+      const orgId = await getCurrentOrgIdOrThrow();
       // Fetch profile info, team member details, and performance in parallel
       const [profileRes, memberRes, realtimeRes] = await Promise.all([
         supabase.from('profiles').select('id, full_name, avatar_url, company_name').eq('id', userId).maybeSingle(),
-        supabase.from('team_members').select('*').eq('user_id', userId).maybeSingle(),
+        supabase.from('team_members').select('*').eq('user_id', userId).eq('org_id', orgId).maybeSingle(),
         getRealtimeStats(userId),
       ]);
 

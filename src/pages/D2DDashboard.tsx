@@ -8,7 +8,9 @@ import { cn } from '../lib/utils';
 import { getRepAvatar } from '../lib/constants/avatars';
 import { usePermissions } from '../hooks/usePermissions';
 import { supabase } from '../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { getLeaderboard, getRealtimeStats } from '../lib/leaderboardApi';
+import { useTranslation } from '../i18n';
 import type { LeaderboardEntry, RepPerformanceDetail } from '../types';
 import {
   Users,
@@ -95,12 +97,19 @@ const PIPELINE_STATUS_META: Record<string, { label: string; color: string; order
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatCurrency(amount: number): string {
-  return '$' + amount.toLocaleString('en-US', { maximumFractionDigits: 0 });
+function formatCurrency(amount: number, fr = false): string {
+  return fr
+    ? amount.toLocaleString('fr-CA', { maximumFractionDigits: 0 }) + ' $'
+    : '$' + amount.toLocaleString('en-CA', { maximumFractionDigits: 0 });
 }
 
-function getGreeting(): string {
+function getGreeting(fr = false): string {
   const hour = new Date().getHours();
+  if (fr) {
+    if (hour < 12) return 'Bonjour';
+    if (hour < 17) return 'Bon après-midi';
+    return 'Bonsoir';
+  }
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
   return 'Good evening';
@@ -143,10 +152,13 @@ export default function D2DDashboard() {
 
 function ManagerDashboard({ userId }: { userId: string | null }) {
   const navigate = useNavigate();
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [pipelineStages, setPipelineStages] = useState<{ name: string; color: string; value: string; count: number }[]>([]);
+  const [pipelineValueCents, setPipelineValueCents] = useState(0);
   const [useFallback, setUseFallback] = useState(false);
 
   useEffect(() => {
@@ -154,13 +166,15 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
 
     async function fetchData() {
       try {
+        const orgId = await getCurrentOrgIdOrThrow();
         // Fetch user name, leaderboard, and pipeline in parallel
-        const [profileResult, lbResult, pipelineResult] = await Promise.allSettled([
+        const [profileResult, lbResult, pipelineResult, dealsResult] = await Promise.allSettled([
           userId
             ? supabase.from('profiles').select('full_name').eq('id', userId).maybeSingle()
             : Promise.resolve(null),
           getLeaderboard('daily'),
-          supabase.from('field_pins').select('status'),
+          supabase.from('field_pins').select('status').eq('org_id', orgId),
+          supabase.from('pipeline_deals').select('value').eq('org_id', orgId).is('deleted_at', null).not('stage', 'in', '(closed_won,closed_lost)'),
         ]);
 
         if (cancelled) return;
@@ -177,11 +191,18 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
         if (lbResult.status === 'fulfilled' && lbResult.value) {
           setLeaderboard(lbResult.value);
         } else {
+          if (lbResult.status === 'rejected') {
+            console.error('[D2DDashboard] leaderboard fetch failed:', lbResult.reason);
+          }
           setUseFallback(true);
         }
 
         // Build pipeline from field_pins status counts
         if (pipelineResult.status === 'fulfilled') {
+          const pinsError = (pipelineResult.value as any)?.error;
+          if (pinsError) {
+            console.error('[D2DDashboard] field_pins fetch error:', pinsError);
+          }
           const pins = (pipelineResult.value as any)?.data || [];
           const counts: Record<string, number> = {};
           for (const pin of pins) {
@@ -200,7 +221,19 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
             .map(({ _order, ...rest }) => rest);
           setPipelineStages(stages);
         }
-      } catch {
+
+        // Aggregate pipeline deals value (open stages only)
+        if (dealsResult.status === 'fulfilled') {
+          const dealsErr = (dealsResult.value as any)?.error;
+          if (dealsErr) {
+            console.error('[D2DDashboard] pipeline_deals fetch error:', dealsErr);
+          }
+          const deals = (dealsResult.value as any)?.data || [];
+          const total = deals.reduce((sum: number, d: any) => sum + Number(d.value || 0), 0);
+          setPipelineValueCents(total);
+        }
+      } catch (err) {
+        console.error('[D2DDashboard] fetchData unexpected error:', err);
         if (!cancelled) setUseFallback(true);
       } finally {
         if (!cancelled) setLoading(false);
@@ -227,31 +260,31 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
     : [
         {
           icon: <Users className="h-4 w-4" strokeWidth={2.5} />,
-          label: 'Active Reps',
+          label: fr ? 'Représentants actifs' : 'Active Reps',
           value: String(activeReps),
           change: { value: '', direction: 'up' as const },
-          subtitle: 'In the field right now',
+          subtitle: fr ? 'Sur le terrain en ce moment' : 'In the field right now',
         },
         {
           icon: <Banknote className="h-4 w-4" strokeWidth={2.5} />,
-          label: 'Revenue Today',
-          value: formatCurrency(totalRevenue),
+          label: fr ? "Revenus aujourd'hui" : 'Revenue Today',
+          value: formatCurrency(totalRevenue, fr),
           change: { value: '', direction: 'up' as const },
-          subtitle: 'vs. yesterday',
+          subtitle: fr ? 'vs. hier' : 'vs. yesterday',
         },
         {
           icon: <Target className="h-4 w-4" strokeWidth={2.5} />,
-          label: 'Closes Today',
+          label: fr ? "Ventes aujourd'hui" : 'Closes Today',
           value: String(totalCloses),
           change: { value: '', direction: 'up' as const },
-          subtitle: `${avgConversion}% conversion rate`,
+          subtitle: fr ? `${avgConversion}% de conversion` : `${avgConversion}% conversion rate`,
         },
         {
           icon: <TrendingUp className="h-4 w-4" strokeWidth={2.5} />,
-          label: 'Pipeline Value',
-          value: formatCurrency(totalRevenue),
+          label: fr ? 'Valeur du pipeline' : 'Pipeline Value',
+          value: formatCurrency(pipelineValueCents / 100, fr),
           change: { value: '', direction: 'up' as const },
-          subtitle: `${totalDoors} doors knocked`,
+          subtitle: fr ? `${totalDoors} portes cognées` : `${totalDoors} doors knocked`,
         },
       ];
 
@@ -264,21 +297,25 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
         .slice(0, 3)
         .map((entry) => ({
           rep: entry.full_name,
-          deal: `${entry.closes} close${entry.closes !== 1 ? 's' : ''} today`,
-          value: formatCurrency(entry.revenue),
-          time: 'Today',
+          deal: fr
+            ? `${entry.closes} vente${entry.closes !== 1 ? 's' : ''} aujourd'hui`
+            : `${entry.closes} close${entry.closes !== 1 ? 's' : ''} today`,
+          value: formatCurrency(entry.revenue, fr),
+          time: fr ? "Aujourd'hui" : 'Today',
           userId: entry.user_id,
         }));
 
-  const displayName = userName || 'there';
+  const displayName = userName || (fr ? 'là' : 'there');
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-lg font-semibold text-text-primary">{getGreeting()}, {displayName}</h2>
+        <h2 className="text-lg font-semibold text-text-primary">{getGreeting(fr)}, {displayName}</h2>
         <p className="mt-1 text-sm text-text-tertiary">
-          Here is what is happening across your team today.
+          {fr
+            ? "Voici ce qui se passe dans votre équipe aujourd'hui."
+            : 'Here is what is happening across your team today.'}
         </p>
       </div>
 
@@ -289,8 +326,8 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
             key={stat.label}
             className="cursor-pointer transition-shadow hover:shadow-md rounded-xl"
             onClick={() => {
-              if (stat.label === 'Active Reps') navigate('/field-sales');
-              else if (stat.label === 'Pipeline Value') navigate('/d2d-pipeline');
+              if (stat.label === 'Active Reps' || stat.label === 'Représentants actifs') navigate('/field-sales');
+              else if (stat.label === 'Pipeline Value' || stat.label === 'Valeur du pipeline') navigate('/d2d-pipeline');
             }}
           >
             <StatCard {...stat} />

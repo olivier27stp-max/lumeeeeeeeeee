@@ -7,6 +7,7 @@
 import type { ToolDefinition } from '../types';
 import { supabase } from '../../supabase';
 import { formatMoneyFromCents } from '../../invoicesApi';
+import { getCurrentOrgIdOrThrow } from '../../orgApi';
 
 export const billingTools: ToolDefinition[] = [
   // ─── Invoice Summary ─────────────────────────────────────
@@ -19,9 +20,11 @@ export const billingTools: ToolDefinition[] = [
     parameters: [],
     execute: async () => {
       try {
+        const orgId = await getCurrentOrgIdOrThrow();
         const { data, error } = await supabase
           .from('invoices')
           .select('status, total_cents, balance_cents, paid_cents, due_date')
+          .eq('org_id', orgId)
           .is('deleted_at', null);
 
         if (error) throw error;
@@ -111,9 +114,11 @@ export const billingTools: ToolDefinition[] = [
         const startOfYear = new Date(now.getFullYear(), 0, 1).toISOString();
 
         // Fetch paid invoices for the year
+        const orgId = await getCurrentOrgIdOrThrow();
         const { data, error } = await supabase
           .from('invoices')
           .select('paid_at, paid_cents')
+          .eq('org_id', orgId)
           .eq('status', 'paid')
           .is('deleted_at', null)
           .gte('paid_at', startOfYear);
@@ -143,6 +148,7 @@ export const billingTools: ToolDefinition[] = [
         const { data: prevData } = await supabase
           .from('invoices')
           .select('paid_cents')
+          .eq('org_id', orgId)
           .eq('status', 'paid')
           .is('deleted_at', null)
           .gte('paid_at', prevMonthStart)
@@ -194,10 +200,12 @@ export const billingTools: ToolDefinition[] = [
     execute: async (params) => {
       try {
         const limit = Math.min(25, Math.max(1, (params.limit as number) || 10));
+        const orgId = await getCurrentOrgIdOrThrow();
 
         const { data, error } = await supabase
           .from('invoices')
           .select('client_id, paid_cents')
+          .eq('org_id', orgId)
           .eq('status', 'paid')
           .is('deleted_at', null);
 
@@ -224,6 +232,7 @@ export const billingTools: ToolDefinition[] = [
         const { data: clients } = await supabase
           .from('clients')
           .select('id, first_name, last_name, company, email')
+          .eq('org_id', orgId)
           .is('deleted_at', null)
           .in('id', clientIds);
 
@@ -268,10 +277,12 @@ export const billingTools: ToolDefinition[] = [
       try {
         const statusParam = params.status as string;
         const limit = Math.min(50, Math.max(1, (params.limit as number) || 20));
+        const orgId = await getCurrentOrgIdOrThrow();
 
         let query = supabase
           .from('invoices')
           .select('id, invoice_number, client_id, status, total_cents, balance_cents, due_date, issued_at, subject')
+          .eq('org_id', orgId)
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(limit);
@@ -295,6 +306,7 @@ export const billingTools: ToolDefinition[] = [
         const { data: clients } = await supabase
           .from('clients')
           .select('id, first_name, last_name, company')
+          .eq('org_id', orgId)
           .is('deleted_at', null)
           .in('id', clientIds.length > 0 ? clientIds : ['00000000-0000-0000-0000-000000000000']);
 
@@ -335,9 +347,11 @@ export const billingTools: ToolDefinition[] = [
     parameters: [],
     execute: async () => {
       try {
+        const orgId = await getCurrentOrgIdOrThrow();
         const { data, error } = await supabase
           .from('invoices')
           .select('total_cents, created_at')
+          .eq('org_id', orgId)
           .is('deleted_at', null)
           .neq('status', 'void');
 
@@ -391,9 +405,11 @@ export const billingTools: ToolDefinition[] = [
         const dayOfWeek = now.getDay();
         const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
 
+        const orgId = await getCurrentOrgIdOrThrow();
         const { data, error } = await supabase
           .from('invoices')
           .select('id, invoice_number, client_id, status, total_cents, balance_cents, created_at, paid_at')
+          .eq('org_id', orgId)
           .is('deleted_at', null)
           .gte('created_at', startOfWeek.toISOString())
           .order('created_at', { ascending: false });
@@ -404,6 +420,7 @@ export const billingTools: ToolDefinition[] = [
         const { data: clients } = await supabase
           .from('clients')
           .select('id, first_name, last_name, company')
+          .eq('org_id', orgId)
           .is('deleted_at', null)
           .in('id', clientIds.length > 0 ? clientIds : ['00000000-0000-0000-0000-000000000000']);
 
@@ -469,9 +486,11 @@ export const billingTools: ToolDefinition[] = [
           startDate = new Date(now.getFullYear(), 0, 1).toISOString();
         }
 
+        const orgId = await getCurrentOrgIdOrThrow();
         let query = supabase
           .from('payments')
           .select('id, amount_cents, method, status, payment_date, client_id')
+          .eq('org_id', orgId)
           .is('deleted_at', null)
           .eq('status', 'succeeded');
 

@@ -345,7 +345,8 @@ export default function ClientDetails() {
     if (!client || !notesEdited) return;
     setNotesSaving(true);
     try {
-      await supabase.from('clients').update({ notes }).eq('id', client.id);
+      const orgId = await getCurrentOrgIdOrThrow();
+      await supabase.from('clients').update({ notes }).eq('id', client.id).eq('org_id', orgId);
       toast.success('Notes saved');
       setNotesEdited(false);
     } catch {
@@ -461,13 +462,13 @@ export default function ClientDetails() {
   const fullAddress = [client.address || [client.street_number, client.street_name].filter(Boolean).join(' '), client.city, client.province, client.postal_code].filter(Boolean).join(', ');
 
   const overviewTabs: { key: OverviewTab; label: string; count: number }[] = [
-    { key: 'active', label: 'Active Work', count: activeJobs.length },
-    { key: 'completed', label: 'Completed', count: completedJobs.length },
+    { key: 'active', label: language === 'fr' ? 'Travaux actifs' : 'Active Work', count: activeJobs.length },
+    { key: 'completed', label: language === 'fr' ? 'Terminés' : 'Completed', count: completedJobs.length },
     { key: 'jobs', label: t.clients.jobs, count: jobs.length },
     { key: 'invoices', label: t.nav.invoices, count: invoices.length },
     { key: 'quotes', label: t.clientDetails.quotes, count: realQuotes.length },
     { key: 'leads', label: language === 'fr' ? 'Prospects' : 'Leads', count: leads.length },
-    { key: 'specific_notes', label: 'Notes spécifiques', count: 0 },
+    { key: 'specific_notes', label: language === 'fr' ? 'Notes spécifiques' : 'Specific Notes', count: 0 },
   ];
 
   // ─── Job row renderer (reused across tabs) ─────────────────────

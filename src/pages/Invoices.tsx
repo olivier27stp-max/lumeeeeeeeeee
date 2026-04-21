@@ -356,9 +356,11 @@ export default function Invoices() {
     try {
       await markInvoicePaidManually(row.id);
       if (row.job_id) {
+        const orgId = await getCurrentOrgIdOrThrow();
         const { error: jobErr } = await supabase.from('jobs')
           .update({ status: 'billed', updated_at: new Date().toISOString() })
           .eq('id', row.job_id)
+          .eq('org_id', orgId)
           .in('status', ['completed', 'in_progress']);
         if (jobErr) console.error('[Invoices] Failed to update job status:', jobErr.message);
       }

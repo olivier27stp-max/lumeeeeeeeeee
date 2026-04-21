@@ -349,20 +349,22 @@ export async function updatePipelineDeal(
   id: string,
   payload: Partial<{ stage: PipelineStageName; value: number; title: string; notes: string | null }>
 ): Promise<PipelineDeal> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const { stage, ...rest } = payload;
 
   if (Object.keys(rest).length > 0) {
     const { error: updateError } = await supabase
       .from('pipeline_deals')
       .update({ ...rest, updated_at: new Date().toISOString() })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('org_id', orgId);
     if (updateError) throw updateError;
   }
 
   let oldStage: string | null = null;
   if (stage !== undefined) {
     // Capture old stage for event emission
-    const { data: currentDeal } = await supabase.from('pipeline_deals').select('stage,lead_id,job_id').eq('id', id).maybeSingle();
+    const { data: currentDeal } = await supabase.from('pipeline_deals').select('stage,lead_id,job_id').eq('id', id).eq('org_id', orgId).maybeSingle();
     oldStage = currentDeal?.stage || null;
 
     const { error: stageError } = await supabase.rpc('set_deal_stage', {
@@ -390,10 +392,12 @@ export async function updatePipelineDeal(
 }
 
 export async function softDeletePipelineDeal(dealId: string): Promise<void> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const { error } = await supabase
     .from('pipeline_deals')
     .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('id', dealId)
+    .eq('org_id', orgId)
     .is('deleted_at', null);
   if (error) throw error;
 }
@@ -413,8 +417,9 @@ export async function serverDeleteDeal(dealId: string, alsoDeleteLead = false): 
 }
 
 export async function setPipelineDealStage(id: string, stage: PipelineStageName): Promise<PipelineDeal> {
+  const orgId = await getCurrentOrgIdOrThrow();
   // Capture old stage
-  const { data: currentDeal } = await supabase.from('pipeline_deals').select('stage,lead_id,job_id').eq('id', id).maybeSingle();
+  const { data: currentDeal } = await supabase.from('pipeline_deals').select('stage,lead_id,job_id').eq('id', id).eq('org_id', orgId).maybeSingle();
   const oldStage = currentDeal?.stage || null;
 
   const { error } = await supabase.rpc('set_deal_stage', {

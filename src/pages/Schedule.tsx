@@ -564,6 +564,12 @@ function ScheduleContent() {
     if (!hasTeamsParam && selectedTeamIds.length === 0) setSelectedTeamIds(teams.map((t) => t.id));
   }, [hasTeamsParam, selectedTeamIds.length, setSelectedTeamIds, teams]);
 
+  // Reset hydration when org changes so team filter re-syncs to the new org's teams
+  useEffect(() => {
+    hydratedRef.current = false;
+    setSelectedTeamIds([]);
+  }, [orgId, setSelectedTeamIds]);
+
   const allSel = teams.length > 0 && selectedTeamIds.length === teams.length;
   const noneSel = teams.length > 0 && selectedTeamIds.length === 0;
   const effTeams = useMemo(() => allSel ? [] : selectedTeamIds, [allSel, selectedTeamIds]);

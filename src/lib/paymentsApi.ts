@@ -167,8 +167,9 @@ async function fetchApiJson<T>(url: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
-export function formatMoneyFromCents(cents: number, currency = 'CAD') {
-  return new Intl.NumberFormat('en-US', {
+export function formatMoneyFromCents(cents: number, currency = 'CAD', locale?: string) {
+  const resolvedLocale = locale ?? (currency === 'CAD' ? 'en-CA' : 'en-US');
+  return new Intl.NumberFormat(resolvedLocale, {
     style: 'currency',
     currency,
     minimumFractionDigits: 2,

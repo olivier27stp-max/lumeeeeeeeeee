@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Search, Plus } from 'lucide-react';
 import ChatItem, { type ChatItemData } from './ChatItem';
 
-// TODO: Replace with real chat data from Supabase
 const MOCK_CHATS: ChatItemData[] = [];
 
 interface ChatSidebarProps {

@@ -221,7 +221,16 @@ export default function D2DMap() {
         onPinCreated={handlePinCreated}
         onPinDeleted={handlePinDeleted}
         onPinUpdated={handlePinUpdated}
-        liveReps={liveReps}
+        liveReps={liveReps.map(r => ({
+          user_id: r.user_id,
+          user_name: r.user_name ?? '',
+          latitude: r.latitude,
+          longitude: r.longitude,
+          tracking_status: r.tracking_status ?? '',
+          speed_mps: r.speed_mps ?? 0,
+          team_name: r.team_name ?? '',
+          team_color: r.team_color ?? '',
+        }))}
       />
 
       <QuoteCreateModal

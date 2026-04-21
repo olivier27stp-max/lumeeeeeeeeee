@@ -54,8 +54,18 @@ export default function OnboardingWizard({ userId, orgId: orgIdProp, language, o
   const [clientEmail, setClientEmail] = useState('');
 
   const handleSaveCompany = useCallback(async () => {
-    if (!companyName.trim()) {
+    const trimmedName = companyName.trim();
+    if (!trimmedName) {
       toast.error(fr ? 'Le nom de l\'entreprise est requis' : 'Company name is required');
+      return false;
+    }
+    if (trimmedName.length < 2) {
+      toast.error(fr ? 'Le nom doit contenir au moins 2 caractères' : 'Name must be at least 2 characters');
+      return false;
+    }
+    // Reject obvious garbage: all-consonants strings under 6 chars (e.g. "sfdvsdc")
+    if (trimmedName.length < 6 && !/[aeiouyAEIOUY]/.test(trimmedName)) {
+      toast.error(fr ? 'Veuillez entrer un nom valide' : 'Please enter a valid name');
       return false;
     }
     setSaving(true);

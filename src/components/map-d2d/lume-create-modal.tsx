@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { LeadPinData } from './lead-pin';
+import { supabase } from '../../lib/supabase';
 
 // Inlined from @/types/lume
 interface LumeCreatePayload {
@@ -94,9 +95,16 @@ export function LumeCreateModal({ pin, onSuccess, onSkip, onClose }: LumeCreateM
     setStep('submitting');
     setErrorMessage('');
 
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) {
+      setErrorMessage('Utilisateur non authentifié.');
+      setStep('error');
+      return;
+    }
+
     // Build the payload in the exact format Lume expects
     const payload: LumeCreatePayload = {
-      rep_id: 'current-rep', // TODO: replace with actual auth rep ID
+      rep_id: user.id,
       source_pin_id: pin.id,
       source_status: 'closed_won',
       customer: {

@@ -24,6 +24,7 @@ import {
 import { motion } from 'motion/react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { cn } from '../lib/utils';
 import { PageHeader, Modal } from '../components/ui';
 import { useTranslation } from '../i18n';
@@ -254,7 +255,8 @@ export default function TeamMemberDetails() {
   const handleToggleStatus = async () => {
     const newStatus = form.status === 'active' ? 'inactive' : 'active';
     try {
-      await supabase.from('team_members').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', form.id);
+      const orgId = await getCurrentOrgIdOrThrow();
+      await supabase.from('team_members').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', form.id).eq('org_id', orgId);
     } catch { /* demo fallback */ }
     update('status', newStatus);
     setShowDeactivateConfirm(false);

@@ -271,21 +271,14 @@ export default function App() {
   // Sidebar counters: pending quotes + overdue invoices
   const [pendingQuotes, setPendingQuotes] = useState(0);
   const [overdueInvoices, setOverdueInvoices] = useState(0);
+  const { currentOrgId: badgeOrgId } = useCompany();
 
   useEffect(() => {
-    if (!user) { setPendingQuotes(0); setOverdueInvoices(0); return; }
-    // Skip financial badge counts for financially restricted roles (technician)
-    // Financial badge counts are skipped for technicians (no financial access)
-    // Role check deferred to AuthenticatedApp — here we just load counts
+    if (!user || !badgeOrgId) { setPendingQuotes(0); setOverdueInvoices(0); return; }
     const load = async () => {
-      // Resolve org_id for tenant scoping
-      const { data: mem } = await supabase.from('memberships').select('org_id').eq('user_id', user.id).limit(1).maybeSingle();
-      const oid = mem?.org_id;
-      if (!oid) { setPendingQuotes(0); setOverdueInvoices(0); return; }
-
       const [qRes, iRes] = await Promise.all([
-        supabase.from('quotes').select('status', { count: 'exact', head: true }).eq('org_id', oid).is('deleted_at', null).in('status', ['sent', 'awaiting_response', 'action_required']),
-        supabase.from('invoices').select('status', { count: 'exact', head: true }).eq('org_id', oid).is('deleted_at', null).eq('status', 'sent').lt('due_date', new Date().toISOString().slice(0, 10)),
+        supabase.from('quotes').select('status', { count: 'exact', head: true }).eq('org_id', badgeOrgId).is('deleted_at', null).in('status', ['sent', 'awaiting_response', 'action_required']),
+        supabase.from('invoices').select('status', { count: 'exact', head: true }).eq('org_id', badgeOrgId).is('deleted_at', null).eq('status', 'sent').lt('due_date', new Date().toISOString().slice(0, 10)),
       ]);
       setPendingQuotes(qRes.count || 0);
       setOverdueInvoices(iRes.count || 0);
@@ -293,7 +286,7 @@ export default function App() {
     load();
     const interval = setInterval(load, 60_000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, badgeOrgId]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark);
@@ -1096,6 +1089,7 @@ function AuthenticatedApp({
                     <Route path="/automations" element={<Gated permission="automations.read"><PageWrapper><Automations /></PageWrapper></Gated>} />
                     <Route path="/tasks" element={<Gated permission="settings.read"><PageWrapper><TasksPage /></PageWrapper></Gated>} />
                     <Route path="/courses" element={<Gated permission="settings.read"><div className="px-8 py-6"><Courses /></div></Gated>} />
+                    <Route path="/training" element={<Navigate to="/courses" replace />} />
                     <Route path="/courses/new" element={<Gated permission="settings.update"><CourseBuilder /></Gated>} />
                     <Route path="/courses/:id" element={<Gated permission="settings.read"><CourseView /></Gated>} />
                     <Route path="/courses/:id/edit" element={<Gated permission="settings.update"><CourseBuilder /></Gated>} />
@@ -1104,7 +1098,9 @@ function AuthenticatedApp({
                     <Route path="/automations/hub" element={<Navigate to="/automations" replace />} />
                     <Route path="/automations/builder" element={<Navigate to="/automations" replace />} />
                     <Route path="/settings/company" element={<Gated permission="settings.update"><PageWrapper><CompanySettings /></PageWrapper></Gated>} />
+                    <Route path="/company-settings" element={<Navigate to="/settings/company" replace />} />
                     <Route path="/settings/team" element={<Gated permission="team.read"><PageWrapper><ManageTeam /></PageWrapper></Gated>} />
+                    <Route path="/manage-team" element={<Navigate to="/settings/team" replace />} />
                     <Route path="/settings/team/:memberId" element={<Gated permission="team.read"><PageWrapper><TeamMemberDetails /></PageWrapper></Gated>} />
                     {/* Dispatch: NO PageWrapper — full-bleed */}
                     <Route path="/dispatch" element={<Gated permission="map.access"><DispatchMap /></Gated>} />

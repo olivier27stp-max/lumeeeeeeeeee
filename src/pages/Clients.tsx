@@ -268,6 +268,8 @@ export default function Clients() {
       const clientsWithJobs = new Set((jobsRes.data || []).map(j => j.client_id));
       const clientsWithQuotes = new Set((quotesRes.data || []).map(q => q.client_id));
 
+      const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+      const now = Date.now();
       const enriched = res.items.map(c => {
         let computed: string;
         if (clientsWithJobs.has(c.id)) {
@@ -275,12 +277,15 @@ export default function Clients() {
         } else if (clientsWithQuotes.has(c.id)) {
           computed = 'lead';
         } else {
-          computed = 'inactive';
+          // Grace period: clients created within the last 7 days default to active
+          const createdAtMs = c.created_at ? new Date(c.created_at).getTime() : 0;
+          const isRecent = createdAtMs > 0 && (now - createdAtMs) < SEVEN_DAYS_MS;
+          computed = isRecent ? 'active' : 'inactive';
         }
 
-        // Update DB if status changed (fire-and-forget)
+        // Update DB if status changed (fire-and-forget, scoped to org)
         if (c.status !== computed) {
-          supabase.from('clients').update({ status: computed }).eq('id', c.id).then(() => {});
+          supabase.from('clients').update({ status: computed }).eq('id', c.id).eq('org_id', orgId).then(() => {});
         }
 
         return { ...c, status: computed };
