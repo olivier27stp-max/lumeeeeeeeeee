@@ -17,13 +17,9 @@
 --                                  SELECT restricted to platform admins
 -- ============================================================================
 
--- Helper: resolve current user's org_id through profiles (app-wide convention).
--- This mirrors what existing modules use for RLS (see e.g. clients, jobs).
--- If the helper already exists it's a no-op.
-create or replace function public.current_org_id() returns uuid
-language sql stable security definer set search_path = public as $$
-  select org_id from public.profiles where id = auth.uid() limit 1;
-$$;
+-- Uses the existing public.current_org_id() helper defined in
+-- 20260302210000_crm_core.sql (JWT claim + memberships lookup, NOT profiles).
+-- DO NOT redeclare it here — we would shadow the real implementation.
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- C-002 #1: applied_taxes  (no org_id — scope via document: invoices/quotes)
