@@ -52,6 +52,10 @@ import Leads from './pages/Leads';
 import Schedule from './pages/Schedule';
 import SettingsPage from './pages/Settings';
 import Auth from './pages/Auth';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
+import PrivacyCenter from './pages/PrivacyCenter';
+import { CookieBanner } from './components/CookieBanner';
 import Landing from './pages/Landing';
 import { supabase } from './lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -521,21 +525,26 @@ export default function App() {
       return <Auth onBack={() => setView('landing')} />;
     }
     return (
-      <Routes>
-        <Route path="/auth" element={<Auth onBack={() => setView('landing')} />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route element={<MarketingLayout />}>
-          <Route index element={<MarketingHome />} />
-          <Route path="features" element={<MarketingFeatures />} />
-          <Route path="solutions" element={<MarketingSolutions />} />
-          <Route path="industries" element={<MarketingIndustries />} />
-          <Route path="industries/:slug" element={<MarketingIndustryDetail />} />
-          <Route path="pricing" element={<MarketingPricing />} />
-          <Route path="contact" element={<MarketingContact />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <>
+        <CookieBanner />
+        <Routes>
+          <Route path="/auth" element={<Auth onBack={() => setView('landing')} />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route element={<MarketingLayout />}>
+            <Route index element={<MarketingHome />} />
+            <Route path="features" element={<MarketingFeatures />} />
+            <Route path="solutions" element={<MarketingSolutions />} />
+            <Route path="industries" element={<MarketingIndustries />} />
+            <Route path="industries/:slug" element={<MarketingIndustryDetail />} />
+            <Route path="pricing" element={<MarketingPricing />} />
+            <Route path="contact" element={<MarketingContact />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </>
     );
   }
 
@@ -551,6 +560,8 @@ export default function App() {
         <Route path="/auth" element={<Auth onBack={() => setView('landing')} />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
         <Route element={<MarketingLayout />}>
           <Route index element={<MarketingHome />} />
           <Route path="features" element={<MarketingFeatures />} />
@@ -758,6 +769,7 @@ function AuthenticatedApp({
           className: '!rounded-lg !border !border-outline !shadow-md !text-[13px] !font-medium',
         }}
       />
+      <CookieBanner />
       <div className="flex h-screen overflow-hidden bg-surface">
         {/* ─── Mobile sidebar overlay ─── */}
         {isSidebarOpen && (
@@ -1099,6 +1111,9 @@ function AuthenticatedApp({
                     <Route path="/payments/settings" element={<Navigate to="/settings?tab=payments" replace />} />
                     <Route path="/timesheets" element={<Gated permission="timesheets.read"><PageWrapper><Timesheets /></PageWrapper></Gated>} />
                     <Route path="/settings" element={<Gated permission="settings.read"><PageWrapper><SettingsPage /></PageWrapper></Gated>} />
+                    <Route path="/account/privacy" element={<PageWrapper><PrivacyCenter /></PageWrapper>} />
+                    <Route path="/privacy" element={<Privacy />} />
+                    <Route path="/terms" element={<Terms />} />
                     <Route path="/settings/payments" element={<Gated permission="settings.read"><PageWrapper><PaymentSettings /></PageWrapper></Gated>} />
                     <Route path="/settings/products" element={<Gated permission="settings.update"><PageWrapper><ProductsServices /></PageWrapper></Gated>} />
                     <Route path="/automations" element={<Gated permission="automations.read"><PageWrapper><Automations /></PageWrapper></Gated>} />

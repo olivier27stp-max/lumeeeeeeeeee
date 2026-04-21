@@ -560,18 +560,18 @@ export default function ClientDetails() {
             {/* Action buttons */}
             <div className="flex items-center gap-2 flex-wrap">
               {client.phone && (
-                <a href={`tel:${client.phone}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title="Call">
-                  <Phone size={14} /> Call
+                <a href={`tel:${client.phone}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title={t.clientDetails.call}>
+                  <Phone size={14} /> {t.clientDetails.call}
                 </a>
               )}
               {client.email && (
-                <a href={`mailto:${client.email}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title="Email">
-                  <Mail size={14} /> Email
+                <a href={`mailto:${client.email}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title={t.clientDetails.email}>
+                  <Mail size={14} /> {t.clientDetails.email}
                 </a>
               )}
               {client.phone && (
-                <a href={`sms:${client.phone}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title="SMS">
-                  <Send size={14} /> SMS
+                <a href={`sms:${client.phone}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title={t.clientDetails.sms}>
+                  <Send size={14} /> {t.clientDetails.sms}
                 </a>
               )}
 
@@ -579,7 +579,7 @@ export default function ClientDetails() {
                 onClick={() => setIsQuoteCreateOpen(true)}
                 className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors"
               >
-                <FileText size={14} /> New Quote
+                <FileText size={14} /> {t.clientDetails.newQuote}
               </button>
               <button
                 onClick={() => openJobModal({
@@ -591,7 +591,7 @@ export default function ClientDetails() {
                 })}
                 className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary text-white rounded-md text-[13px] font-medium hover:bg-primary-hover transition-colors"
               >
-                <Plus size={14} /> New Job
+                <Plus size={14} /> {t.clientDetails.newJob}
               </button>
 
               {/* More dropdown */}
@@ -656,7 +656,7 @@ export default function ClientDetails() {
                   }
                 }}
               >
-                <Plus size={12} /> New Property
+                <Plus size={12} /> {t.clientDetails.newProperty}
               </button>
             </div>
             <div className="p-5">
@@ -682,7 +682,7 @@ export default function ClientDetails() {
                   <div className="flex items-center gap-1.5">
                     <a href={buildGoogleMapsDirectionsUrl(client)} target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 h-6 px-2 bg-surface border border-outline rounded text-[11px] text-text-secondary hover:bg-surface-secondary transition-colors" title="Get directions">
-                      <Navigation size={11} /> Directions
+                      <Navigation size={11} /> {t.clientDetails.directions}
                     </a>
                     <a href={buildGoogleMapsUrl(client)} target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 h-6 px-2 bg-surface border border-outline rounded text-[11px] text-text-secondary hover:bg-surface-secondary transition-colors" title="View on map">
@@ -710,7 +710,7 @@ export default function ClientDetails() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-[13px] font-semibold text-text-primary">{fullName}</p>
-                    <span className="inline-flex items-center rounded-full bg-primary/10 text-primary text-[11px] font-semibold px-2.5 py-0.5">Primary</span>
+                    <span className="inline-flex items-center rounded-full bg-primary/10 text-primary text-[11px] font-semibold px-2.5 py-0.5">{t.clientDetails.primary}</span>
                   </div>
                   <div className="flex items-center gap-4 mt-1.5">
                     {client.phone ? (
@@ -767,7 +767,7 @@ export default function ClientDetails() {
               {activeTab === 'active' && (
                 <div className="space-y-2.5">
                   {activeJobs.length === 0 ? (
-                    <p className="text-[13px] text-text-tertiary py-4 text-center">No active work for this client.</p>
+                    <p className="text-[13px] text-text-tertiary py-4 text-center">{t.clientDetails.noActiveWork}</p>
                   ) : activeJobs.map(renderJobRow)}
                 </div>
               )}
@@ -776,7 +776,7 @@ export default function ClientDetails() {
               {activeTab === 'completed' && (
                 <div className="space-y-2.5">
                   {completedJobs.length === 0 ? (
-                    <p className="text-[13px] text-text-tertiary py-4 text-center">No completed jobs.</p>
+                    <p className="text-[13px] text-text-tertiary py-4 text-center">{t.clientDetails.noCompletedJobs}</p>
                   ) : completedJobs.map(renderJobRow)}
                 </div>
               )}
@@ -794,7 +794,7 @@ export default function ClientDetails() {
               {activeTab === 'invoices' && (
                 <div className="space-y-2.5">
                   {invoices.length === 0 ? (
-                    <p className="text-[13px] text-text-tertiary py-4 text-center">No invoices for this client.</p>
+                    <p className="text-[13px] text-text-tertiary py-4 text-center">{t.clientDetails.noInvoices}</p>
                   ) : invoices.map((inv) => (
                     <button
                       key={inv.id}
@@ -843,7 +843,7 @@ export default function ClientDetails() {
                     </button>
                   </div>
                   {realQuotes.length === 0 ? (
-                    <p className="text-[13px] text-text-tertiary py-4 text-center">No quotes for this client.</p>
+                    <p className="text-[13px] text-text-tertiary py-4 text-center">{t.clientDetails.noQuotes}</p>
                   ) : realQuotes.map((q) => (
                     <button
                       key={q.id}
@@ -851,7 +851,7 @@ export default function ClientDetails() {
                         try {
                           const detail = await getQuoteById(q.id);
                           if (detail) { setQuoteDetail(detail); setIsQuoteDetailsOpen(true); }
-                        } catch { toast.error('Failed to load quote'); }
+                        } catch { toast.error(t.clientDetails.failedLoadQuote); }
                       }}
                       className="w-full rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between text-left hover:border-primary/30 transition-colors group"
                     >
@@ -935,7 +935,7 @@ export default function ClientDetails() {
               {/* Upcoming */}
               {upcomingEvents.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">Upcoming</p>
+                  <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">{t.clientDetails.upcoming}</p>
                   <div className="space-y-2">
                     {upcomingEvents.slice(0, 5).map((event) => (
                       <div key={event.id} className="flex items-center gap-3 rounded-lg border border-outline-subtle bg-surface-secondary p-3">
@@ -961,7 +961,7 @@ export default function ClientDetails() {
               {/* Past */}
               {pastEvents.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">Past</p>
+                  <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">{t.clientDetails.past}</p>
                   <div className="space-y-2">
                     {pastEvents.slice(-3).reverse().map((event) => (
                       <div key={event.id} className="flex items-center gap-3 rounded-lg border border-outline-subtle bg-surface-secondary/50 p-3 opacity-70">
@@ -979,7 +979,7 @@ export default function ClientDetails() {
               )}
 
               {upcomingEvents.length === 0 && pastEvents.length === 0 && (
-                <p className="text-[13px] text-text-tertiary text-center py-4">No schedule events.</p>
+                <p className="text-[13px] text-text-tertiary text-center py-4">{t.clientDetails.noScheduleEvents}</p>
               )}
             </div>
           </div>
@@ -993,7 +993,7 @@ export default function ClientDetails() {
           {/* Contact Info */}
           <div className="section-card">
             <div className="px-5 py-3.5 border-b border-outline">
-              <h2 className="text-[13px] font-semibold text-text-primary">{language === 'fr' ? 'Informations de contact' : 'Contact Information'}</h2>
+              <h2 className="text-[13px] font-semibold text-text-primary">{t.clientDetails.contactInformation}</h2>
             </div>
             <div className="p-5 space-y-5">
               {/* Phone */}
@@ -1051,7 +1051,7 @@ export default function ClientDetails() {
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <User size={12} className="text-text-tertiary" />
-                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Source du lead' : 'Lead Source'}</p>
+                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{t.clientDetails.leadSource}</p>
                 </div>
                 <p className="text-[13px] font-medium text-text-primary pl-5">
                   {leads[0]?.source || <span className="text-text-tertiary font-normal">{language === 'fr' ? 'Non spécifié' : 'Not specified'}</span>}
@@ -1061,7 +1061,7 @@ export default function ClientDetails() {
               <div className="pt-3 border-t border-outline/50">
                 <div className="flex items-center gap-2 mb-1">
                   <Calendar size={12} className="text-text-tertiary" />
-                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Client depuis' : 'Client Since'}</p>
+                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{t.clientDetails.clientSince}</p>
                 </div>
                 <p className="text-[13px] font-medium text-text-primary pl-5">{formatDate(client.created_at)}</p>
               </div>
@@ -1073,7 +1073,7 @@ export default function ClientDetails() {
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <StickyNote size={15} className="text-text-secondary" />
-                Notes
+                {t.clientDetails.notes}
               </h2>
               {notesEdited && (
                 <button
@@ -1081,7 +1081,7 @@ export default function ClientDetails() {
                   disabled={notesSaving}
                   className="inline-flex items-center gap-1 h-7 px-2.5 bg-primary text-white rounded-md text-[12px] font-medium hover:bg-primary-hover transition-colors"
                 >
-                  {notesSaving ? 'Saving...' : 'Save'}
+                  {notesSaving ? t.common.saving : t.common.save}
                 </button>
               )}
             </div>
@@ -1090,7 +1090,7 @@ export default function ClientDetails() {
                 value={notes}
                 onChange={(e) => { setNotes(e.target.value); setNotesEdited(true); }}
                 onBlur={handleSaveNotes}
-                placeholder="Add notes about this client..."
+                placeholder={t.clientDetails.addNotesPlaceholder}
                 className="w-full bg-transparent text-[13px] text-text-primary placeholder:text-text-tertiary resize-none min-h-[80px] focus:outline-none"
                 rows={4}
               />
@@ -1102,10 +1102,10 @@ export default function ClientDetails() {
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <Tag size={15} className="text-text-secondary" />
-                Tags
+                {t.clientDetails.tags}
               </h2>
               <button onClick={() => setShowTagInput(true)} className="inline-flex items-center gap-1 h-7 px-2.5 bg-surface border border-outline rounded-md text-[12px] text-text-primary hover:bg-surface-secondary transition-colors">
-                <Plus size={12} /> New Tag
+                <Plus size={12} /> {t.clientDetails.addTag}
               </button>
             </div>
             <div className="p-5">
@@ -1119,16 +1119,16 @@ export default function ClientDetails() {
                       if (e.key === 'Enter') handleAddTag();
                       if (e.key === 'Escape') { setShowTagInput(false); setNewTag(''); }
                     }}
-                    placeholder="Tag name..."
+                    placeholder={t.clientDetails.tagNamePlaceholder}
                     className="glass-input text-[13px] flex-1"
                     autoFocus
                   />
-                  <button onClick={handleAddTag} className="inline-flex items-center gap-1 h-7 px-2.5 bg-primary text-white rounded-md text-[12px] font-medium hover:bg-primary-hover transition-colors !text-[12px] !px-2.5 !py-1">Add</button>
+                  <button onClick={handleAddTag} className="inline-flex items-center gap-1 h-7 px-2.5 bg-primary text-white rounded-md text-[12px] font-medium hover:bg-primary-hover transition-colors !text-[12px] !px-2.5 !py-1">{t.clientDetails.addTag}</button>
                   <button onClick={() => { setShowTagInput(false); setNewTag(''); }} className="inline-flex items-center gap-1 h-7 px-2.5 bg-surface border border-outline rounded-md text-[12px] text-text-primary hover:bg-surface-secondary transition-colors !text-[12px] !px-2.5 !py-1"><X size={12} /></button>
                 </div>
               )}
               {tags.length === 0 && !showTagInput ? (
-                <p className="text-[13px] text-text-tertiary">No tags added.</p>
+                <p className="text-[13px] text-text-tertiary">{t.clientDetails.noTagsAdded}</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {tags.map((tag) => (
@@ -1150,22 +1150,22 @@ export default function ClientDetails() {
             <div className="px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <DollarSign size={15} className="text-text-secondary" />
-                Billing History
+                {t.clientDetails.billingHistory}
               </h2>
             </div>
             <div className="p-5">
               {/* Summary row */}
               <div className="grid grid-cols-3 gap-2 mb-4">
                 <div className="text-center">
-                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Invoiced</p>
+                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.clientDetails.invoiced}</p>
                   <p className="text-[14px] font-bold text-text-primary tabular-nums">{formatCurrency(Math.round(totalInvoiced))}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Paid</p>
+                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.clientDetails.paid}</p>
                   <p className="text-[14px] font-bold text-success tabular-nums">{formatCurrency(Math.round(totalPaid))}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Balance</p>
+                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.clientDetails.balance}</p>
                   <p className={cn('text-[14px] font-bold tabular-nums', currentBalance > 0 ? 'text-warning' : 'text-success')}>
                     {formatCurrency(Math.round(currentBalance))}
                   </p>
@@ -1173,7 +1173,7 @@ export default function ClientDetails() {
               </div>
 
               {billingHistory.length === 0 ? (
-                <p className="text-[13px] text-text-tertiary text-center py-2">No billing history.</p>
+                <p className="text-[13px] text-text-tertiary text-center py-2">{t.clientDetails.noBillingHistory}</p>
               ) : (
                 <div className="space-y-2 max-h-[300px] overflow-y-auto">
                   {billingHistory.slice(0, 10).map((item) =>
