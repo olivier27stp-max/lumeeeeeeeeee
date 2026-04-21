@@ -3,7 +3,14 @@
    With timeouts, circuit breaker, and structured logging
    ═══════════════════════════════════════════════════════════════ */
 
+import { redactPii } from './pii-redaction';
+
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+
+// Compliance: when Ollama points to a remote host, redact PII from prompts.
+// Local (loopback) instances are treated as self-hosted and skipped.
+const IS_REMOTE_OLLAMA = !/^https?:\/\/(localhost|127\.|0\.0\.0\.0)/.test(OLLAMA_URL);
+const REDACT_PII = process.env.AI_REDACT_PII !== '0' && IS_REMOTE_OLLAMA;
 
 // ── Timeouts ───────────────────────────────────────────────
 const CHAT_TIMEOUT_MS = 90_000;   // 90s for non-streaming (model loading + inference)
@@ -58,6 +65,19 @@ export interface OllamaChatResponse {
   eval_count?: number;
 }
 
+function redactMessages(messages: OllamaMessage[]): OllamaMessage[] {
+  if (!REDACT_PII) return messages;
+  const totalCounts: Record<string, number> = {};
+  const out = messages.map(m => {
+    const r = redactPii(m.content);
+    for (const [k, v] of Object.entries(r.counts)) totalCounts[k] = (totalCounts[k] || 0) + v;
+    return { ...m, content: r.text };
+  });
+  const total = Object.values(totalCounts).reduce((a, b) => a + b, 0);
+  if (total > 0) console.log(`[ollama] redacted PII (remote): ${JSON.stringify(totalCounts)}`);
+  return out;
+}
+
 // ── Non-streaming call ─────────────────────────────────────
 
 export async function ollamaChat(opts: OllamaChatOptions): Promise<OllamaChatResponse> {
@@ -68,7 +88,7 @@ export async function ollamaChat(opts: OllamaChatOptions): Promise<OllamaChatRes
     const res = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...opts, stream: false }),
+      body: JSON.stringify({ ...opts, messages: redactMessages(opts.messages), stream: false }),
       signal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
     });
 
@@ -116,7 +136,7 @@ export async function ollamaStream(
     const res = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...opts, stream: true }),
+      body: JSON.stringify({ ...opts, messages: redactMessages(opts.messages), stream: true }),
       signal: combinedSignal,
     });
 

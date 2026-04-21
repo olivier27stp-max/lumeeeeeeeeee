@@ -210,7 +210,16 @@ export default function App() {
 
   // Auto-signout after 30 min of inactivity
   useSessionTimeout(user?.id || null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('lume-sidebar-open');
+      if (saved === 'true' || saved === 'false') return saved === 'true';
+    }
+    return true;
+  });
+  useEffect(() => {
+    try { localStorage.setItem('lume-sidebar-open', String(isSidebarOpen)); } catch {}
+  }, [isSidebarOpen]);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const sidebarExpanded = isSidebarOpen || isSidebarHovered;
   const [view, setView] = useState<'landing' | 'auth'>('landing');
@@ -226,7 +235,16 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [hasSubscription, setHasSubscription] = useState<boolean | null>(null); // null = checking
   const [onboardingChecked, setOnboardingChecked] = useState(false);
-  const [showMoreNav, setShowMoreNav] = useState(false);
+  const [showMoreNav, setShowMoreNav] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('lume-sidebar-more');
+      if (saved === 'true' || saved === 'false') return saved === 'true';
+    }
+    return false;
+  });
+  useEffect(() => {
+    try { localStorage.setItem('lume-sidebar-more', String(showMoreNav)); } catch {}
+  }, [showMoreNav]);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();

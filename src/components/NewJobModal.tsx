@@ -725,6 +725,14 @@ export default function NewJobModal({
       return;
     }
 
+    // If user picked a non-draft status but didn't pick a date, confirm the
+    // silent demotion to Draft (otherwise job wouldn't appear on calendar).
+    if (!scheduledAt && String(status).toLowerCase() !== 'draft') {
+      const msg = t.modals.statusWillDemoteToDraft
+        || 'No start date set — this job will be saved as Draft and will not appear on the calendar. Continue?';
+      if (typeof window !== 'undefined' && !window.confirm(msg)) return;
+    }
+
     const filteredItems = lineItems
       .filter((item) => item.name.trim())
       .map((item) => ({

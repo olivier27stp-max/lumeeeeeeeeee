@@ -315,6 +315,8 @@ const en = {
     importCsvError: 'Failed to import CSV.',
     importCsvEmpty: 'The CSV file is empty or invalid.',
     importCsvMissingColumns: 'Missing required columns: first_name, last_name.',
+    importCsvImporting: 'Importing {count} rows…',
+    importCsvPartialFailure: '{count} row(s) failed (see console).',
   },
 
   // Jobs
@@ -987,6 +989,7 @@ const en = {
     smsNotConfigured: 'SMS provider not configured. Opening invoice so you can copy payment link.',
     failedCreateInvoice: 'Unable to create invoice from this job.',
     createInvoicePrompt: 'Job completed! Would you like to create an invoice now?',
+    markCompletedPrompt: 'Mark this job as completed? This locks the job for edits (except via admin action).',
   },
 
   // Landing page
@@ -1354,6 +1357,7 @@ const en = {
     datesRequired: 'Start and end date/time are required.',
     startTimeRequired: 'Start time is required when end time is provided.',
     endTimeAfterStart: 'End time must be after start time.',
+    statusWillDemoteToDraft: 'No start date set — this job will be saved as Draft and will not appear on the calendar. Continue?',
     addInternalNotes: 'Add internal notes...',
     company: 'Company',
     contactInformation: 'Contact Information',

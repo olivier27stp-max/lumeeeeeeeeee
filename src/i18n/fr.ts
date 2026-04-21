@@ -316,6 +316,8 @@ const fr: TranslationKeys = {
     importCsvError: 'Échec de l\'importation CSV.',
     importCsvEmpty: 'Le fichier CSV est vide ou invalide.',
     importCsvMissingColumns: 'Colonnes requises manquantes : first_name, last_name.',
+    importCsvImporting: 'Importation de {count} lignes…',
+    importCsvPartialFailure: '{count} ligne(s) ont échoué (voir console).',
   },
 
   // Jobs
@@ -988,6 +990,7 @@ const fr: TranslationKeys = {
     smsNotConfigured: 'Fournisseur SMS non configuré. Ouverture de la facture pour copier le lien de paiement.',
     failedCreateInvoice: 'Impossible de créer la facture à partir de ce job.',
     createInvoicePrompt: 'Job terminé ! Voulez-vous créer une facture maintenant ?',
+    markCompletedPrompt: 'Marquer ce job comme complété ? Cela verrouille le job (sauf action admin).',
   },
 
   // Landing page
@@ -1348,6 +1351,7 @@ const fr: TranslationKeys = {
     datesRequired: 'La date et l\'heure de début et de fin sont requises.',
     startTimeRequired: 'L\'heure de début est requise quand l\'heure de fin est fournie.',
     endTimeAfterStart: 'L\'heure de fin doit être après l\'heure de début.',
+    statusWillDemoteToDraft: 'Aucune date de début — ce job sera sauvegardé en brouillon et n\'apparaîtra pas dans le calendrier. Continuer ?',
     addInternalNotes: 'Ajouter des notes internes...',
     company: 'Entreprise',
     contactInformation: 'Informations de contact',

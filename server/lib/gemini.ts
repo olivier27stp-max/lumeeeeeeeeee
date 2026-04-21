@@ -4,9 +4,24 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { GoogleGenAI } from '@google/genai';
+import { redactPii } from './pii-redaction';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
+
+// Compliance: redact PII from prompts before sending to Google.
+// Set AI_REDACT_PII=0 to bypass (not recommended in production).
+const REDACT_PII = process.env.AI_REDACT_PII !== '0';
+
+function maybeRedact(text: string | undefined): string | undefined {
+  if (!REDACT_PII || !text) return text;
+  const { text: clean, counts } = redactPii(text);
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  if (total > 0) {
+    console.log(`[gemini] redacted PII: ${JSON.stringify(counts)}`);
+  }
+  return clean;
+}
 
 let clientInstance: GoogleGenAI | null = null;
 
@@ -132,15 +147,16 @@ export async function geminiChat(opts: GeminiChatOptions): Promise<GeminiChatRes
 
     const contents = opts.messages.map(m => ({
       role: m.role === 'user' ? 'user' as const : 'model' as const,
-      parts: [{ text: m.content }],
+      parts: [{ text: maybeRedact(m.content) ?? '' }],
     }));
+    const systemInstruction = maybeRedact(opts.systemPrompt) || undefined;
 
     // 60s timeout — Gemini SDK has no signal support, use Promise.race
     const genPromise = client.models.generateContent({
       model,
       contents,
       config: {
-        systemInstruction: opts.systemPrompt || undefined,
+        systemInstruction,
         temperature: opts.temperature ?? 0.3,
         maxOutputTokens: opts.maxTokens ?? 2048,
         responseMimeType: opts.jsonMode ? 'application/json' : undefined,
@@ -188,14 +204,15 @@ export async function geminiStream(
 
     const contents = opts.messages.map(m => ({
       role: m.role === 'user' ? 'user' as const : 'model' as const,
-      parts: [{ text: m.content }],
+      parts: [{ text: maybeRedact(m.content) ?? '' }],
     }));
+    const systemInstruction = maybeRedact(opts.systemPrompt) || undefined;
 
     const response = await client.models.generateContentStream({
       model,
       contents,
       config: {
-        systemInstruction: opts.systemPrompt || undefined,
+        systemInstruction,
         temperature: opts.temperature ?? 0.4,
         maxOutputTokens: opts.maxTokens ?? 2048,
       },

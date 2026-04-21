@@ -283,9 +283,16 @@ export default function Clients() {
           computed = isRecent ? 'active' : 'inactive';
         }
 
-        // Update DB if status changed (fire-and-forget, scoped to org)
+        // Update DB if status changed (best-effort — log failures but don't block UI)
         if (c.status !== computed) {
-          supabase.from('clients').update({ status: computed }).eq('id', c.id).eq('org_id', orgId).then(() => {});
+          supabase
+            .from('clients')
+            .update({ status: computed })
+            .eq('id', c.id)
+            .eq('org_id', orgId)
+            .then(({ error }) => {
+              if (error) console.warn('[clients] Failed to sync computed status:', error.message);
+            });
         }
 
         return { ...c, status: computed };
@@ -466,22 +473,40 @@ export default function Clients() {
         const addressIdx = headers.indexOf('address');
         const companyIdx = headers.indexOf('company');
         let imported = 0;
+        const failures: Array<{ line: number; reason: string }> = [];
+        const pending = toast.loading(
+          (t.clients.importCsvImporting || 'Importing {count} rows…').replace('{count}', String(lines.length - 1))
+        );
         for (let i = 1; i < lines.length; i++) {
           const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
           const firstName = cols[fnIdx] || '';
           const lastName = cols[lnIdx] || '';
           if (!firstName && !lastName) continue;
-          await createClient({
-            first_name: firstName,
-            last_name: lastName,
-            email: emailIdx >= 0 ? cols[emailIdx] || undefined : undefined,
-            phone: phoneIdx >= 0 ? cols[phoneIdx] || undefined : undefined,
-            address: addressIdx >= 0 ? cols[addressIdx] || undefined : undefined,
-            company: companyIdx >= 0 ? cols[companyIdx] || undefined : undefined,
-          });
-          imported++;
+          try {
+            await createClient({
+              first_name: firstName,
+              last_name: lastName,
+              email: emailIdx >= 0 ? cols[emailIdx] || undefined : undefined,
+              phone: phoneIdx >= 0 ? cols[phoneIdx] || undefined : undefined,
+              address: addressIdx >= 0 ? cols[addressIdx] || undefined : undefined,
+              company: companyIdx >= 0 ? cols[companyIdx] || undefined : undefined,
+            });
+            imported++;
+          } catch (rowErr: any) {
+            failures.push({ line: i + 1, reason: rowErr?.message || 'unknown' });
+          }
         }
-        toast.success(t.clients.importCsvSuccess.replace('{count}', String(imported)));
+        toast.dismiss(pending);
+        if (imported > 0) {
+          toast.success(t.clients.importCsvSuccess.replace('{count}', String(imported)));
+        }
+        if (failures.length > 0) {
+          console.warn('[clients] CSV import failures:', failures);
+          toast.error(
+            (t.clients.importCsvPartialFailure || '{count} row(s) failed (see console).')
+              .replace('{count}', String(failures.length))
+          );
+        }
         await loadClients();
       } catch (err: any) {
         toast.error(err?.message || t.clients.importCsvError);
@@ -941,7 +966,7 @@ function ClientForm({
         </div>
         <div>
           <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.phone}</label>
-          <input value={form.phone} onChange={(e) => patch('phone', e.target.value)} className="glass-input w-full mt-1.5" placeholder="(555) 123-4567" />
+          <input type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={(e) => patch('phone', e.target.value)} className="glass-input w-full mt-1.5" placeholder="(555) 123-4567" />
         </div>
       </div>
 

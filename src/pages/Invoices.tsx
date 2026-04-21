@@ -415,6 +415,14 @@ export default function Invoices() {
       });
       return;
     }
+    // Confirm before sending — email is irreversible
+    const confirmMsg = fr
+      ? `Envoyer la facture à ${client.email} ?`
+      : `Send invoice to ${client.email}?`;
+    if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) {
+      setActionMenuId(null);
+      return;
+    }
     try {
       await sendInvoice({ invoiceId: row.id, channels: ['email'], toEmail: client.email });
       invalidateAll();

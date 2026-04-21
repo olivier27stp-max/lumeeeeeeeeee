@@ -66,6 +66,7 @@ import fieldSessionsRouter from './routes/field-sessions';
 import memoryGraphRouter from './routes/memory-graph';
 import platformAdminRouter from './routes/platform-admin';
 import authRouter from './routes/auth';
+import dsrRouter from './routes/dsr';
 
 // Security engine
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, extractIP } from './lib/security';
@@ -73,7 +74,6 @@ import { redisRateLimit } from './lib/rate-limiter';
 import { rbacMiddleware } from './lib/route-permissions';
 import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
 import { auditRequestMiddleware } from './lib/audit-middleware';
-// PII response middleware removed — PII is stored plaintext, protected by Supabase encryption at rest + RLS
 
 const app = express();
 
@@ -250,6 +250,8 @@ app.use('/api/portal', redisRateLimit({ preset: 'auth' }));
 app.use('/api/public/form', redisRateLimit({ preset: 'auth' }));
 // Survey submissions — prevent ballot stuffing
 app.use('/api/survey', redisRateLimit({ preset: 'auth' }));
+// DSR endpoints — tight rate limit (compliance-sensitive + expensive export)
+app.use('/api/dsr', redisRateLimit({ preset: 'strict', keyFn: (req) => `dsr:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
 // AI endpoints — persistent rate limiting for expensive calls
 app.use('/api/agent/chat', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
 app.use('/api/ai/chat', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
@@ -284,6 +286,7 @@ app.use('/api/director-panel/providers', directorProviderLimiter);
 app.use('/api', directorPanelRouter);
 app.use('/api', featureFlagsRouter);
 app.use('/api', authRouter);
+app.use('/api', dsrRouter);
 app.use('/api', scheduledReportsRouter);
 app.use('/api', goalsRouter);
 app.use('/api', auditLogRouter);

@@ -1206,32 +1206,40 @@ router.post('/quotes/convert-to-invoice', async (req, res) => {
     const invoiceId = String(invoiceRow?.id || '');
     if (!invoiceId) throw new Error('Invoice created but id is missing.');
 
-    // Copy quote line items to invoice items
+    // Copy quote line items to invoice items. Optional items are excluded —
+    // only items the client actually accepted end up on the invoice.
     const { data: quoteItems } = await admin
       .from('quote_line_items').select('*').eq('quote_id', quoteId)
       .eq('item_type', 'service').order('sort_order');
 
+    let copiedSubtotalCents = 0;
     if (quoteItems && quoteItems.length > 0) {
-      const invoiceItems = quoteItems
-        .filter((item: any) => !item.is_optional)
-        .map((item: any) => ({
-          invoice_id: invoiceId,
-          description: item.name + (item.description ? ` — ${item.description}` : ''),
-          qty: Number(item.quantity) || 1,
-          unit_price_cents: item.unit_price_cents,
-          line_total_cents: item.total_cents,
-        }));
+      const copiable = quoteItems.filter((item: any) => !item.is_optional);
+      const invoiceItems = copiable.map((item: any) => ({
+        invoice_id: invoiceId,
+        description: item.name + (item.description ? ` — ${item.description}` : ''),
+        qty: Number(item.quantity) || 1,
+        unit_price_cents: item.unit_price_cents,
+        line_total_cents: item.total_cents,
+      }));
+      copiedSubtotalCents = copiable.reduce((s: number, i: any) => s + Number(i.total_cents || 0), 0);
       if (invoiceItems.length > 0) {
         await admin.from('invoice_items').insert(invoiceItems);
       }
     }
 
-    // Update invoice totals
+    // Recompute invoice totals from the actually-copied items so excluded
+    // optional items don't inflate the amount due.
+    const taxRate = Number(quote.tax_cents || 0) / Math.max(1, Number(quote.subtotal_cents || 1));
+    const effectiveSubtotal = copiedSubtotalCents || quote.subtotal_cents;
+    const effectiveTax = Math.round(effectiveSubtotal * taxRate);
+    const effectiveTotal = effectiveSubtotal + effectiveTax;
+
     await admin.from('invoices').update({
-      subtotal_cents: quote.subtotal_cents,
-      tax_cents: quote.tax_cents,
-      total_cents: quote.total_cents,
-      balance_cents: quote.total_cents,
+      subtotal_cents: effectiveSubtotal,
+      tax_cents: effectiveTax,
+      total_cents: effectiveTotal,
+      balance_cents: effectiveTotal,
       notes: quote.notes,
     }).eq('id', invoiceId).eq('org_id', auth.orgId);
 

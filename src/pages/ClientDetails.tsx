@@ -359,12 +359,20 @@ export default function ClientDetails() {
   // ─── Actions ─────────────────────────────────────────────────────
   const handleArchive = async () => {
     if (!client) return;
+    const displayName = [client.first_name, client.last_name].filter(Boolean).join(' ') || client.company || 'this client';
+    const msg = language === 'fr'
+      ? `Archiver ${displayName} ? Ses jobs, factures et devis existants restent visibles.`
+      : `Archive ${displayName}? Existing jobs, invoices and quotes remain visible.`;
+    if (typeof window !== 'undefined' && !window.confirm(msg)) {
+      setShowActionMenu(false);
+      return;
+    }
     try {
       await softDeleteClient(client.id);
-      toast.success('Client archived.');
+      toast.success(language === 'fr' ? 'Client archivé.' : 'Client archived.');
       navigate('/clients');
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to archive client.');
+      toast.error(err?.message || (language === 'fr' ? 'Échec de l\'archivage.' : 'Failed to archive client.'));
     }
     setShowActionMenu(false);
   };
