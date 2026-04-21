@@ -574,14 +574,28 @@ async function executeFal(
 
     console.log(`[fal.ai] Calling ${modelDef.endpoint} for model "${model}" | quality=${qualityPreset} style=${stylePreset} prompt_len=${(falPayload.prompt || '').length}`);
 
-    const response = await fetch(`https://fal.run/${modelDef.endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${falApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(falPayload),
-    });
+    // 120s timeout — fal.ai generation rarely takes longer; avoids hung Express response
+    const falController = new AbortController();
+    const falTimeout = setTimeout(() => falController.abort(), 120_000);
+    let response: Awaited<ReturnType<typeof fetch>>;
+    try {
+      response = await fetch(`https://fal.run/${modelDef.endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${falApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(falPayload),
+        signal: falController.signal,
+      });
+    } catch (err: any) {
+      clearTimeout(falTimeout);
+      if (err?.name === 'AbortError') {
+        return { success: false, error: 'fal.ai request timed out after 120s', outputs: [] };
+      }
+      return { success: false, error: 'Network error calling fal.ai', outputs: [] };
+    }
+    clearTimeout(falTimeout);
 
     if (response.status === 429) {
       const retryAfter = response.headers.get('retry-after');
@@ -687,25 +701,37 @@ router.post('/director-panel/training/start', async (req: Request, res: Response
       return res.status(400).json({ error: 'Missing name, trigger_word, or images' });
     }
 
-    // Submit training job to fal.ai
-    const response = await fetch('https://queue.fal.run/fal-ai/flux-lora-fast-training', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${falApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        images_data_url: images.map((img: any) => img.url),
-        trigger_word,
-        steps: steps || 1000,
-        create_masks: true,
-        is_style: false,
-      }),
-    });
+    // Submit training job to fal.ai — 60s timeout (queue submit should be fast)
+    const trainController = new AbortController();
+    const trainTimeout = setTimeout(() => trainController.abort(), 60_000);
+    let response: Awaited<ReturnType<typeof fetch>>;
+    try {
+      response = await fetch('https://queue.fal.run/fal-ai/flux-lora-fast-training', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${falApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          images_data_url: images.map((img: any) => img.url),
+          trigger_word,
+          steps: steps || 1000,
+          create_masks: true,
+          is_style: false,
+        }),
+        signal: trainController.signal,
+      });
+    } catch (err: any) {
+      clearTimeout(trainTimeout);
+      if (err?.name === 'AbortError') {
+        return res.status(504).json({ error: 'fal.ai training submit timed out' });
+      }
+      return res.status(502).json({ error: 'Network error submitting training job' });
+    }
+    clearTimeout(trainTimeout);
 
     if (!response.ok) {
-      const errBody = await response.text().catch(() => '');
-      return res.status(502).json({ error: `fal.ai training failed: ${response.status} ${errBody.slice(0, 200)}` });
+      return res.status(502).json({ error: `fal.ai training failed with status ${response.status}` });
     }
 
     const data = await response.json();

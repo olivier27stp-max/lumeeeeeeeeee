@@ -135,7 +135,8 @@ export async function geminiChat(opts: GeminiChatOptions): Promise<GeminiChatRes
       parts: [{ text: m.content }],
     }));
 
-    const response = await client.models.generateContent({
+    // 60s timeout — Gemini SDK has no signal support, use Promise.race
+    const genPromise = client.models.generateContent({
       model,
       contents,
       config: {
@@ -145,6 +146,10 @@ export async function geminiChat(opts: GeminiChatOptions): Promise<GeminiChatRes
         responseMimeType: opts.jsonMode ? 'application/json' : undefined,
       },
     });
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Gemini request timed out after 60s')), 60_000)
+    );
+    const response = await Promise.race([genPromise, timeoutPromise]);
 
     const content = response.text ?? '';
     const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;

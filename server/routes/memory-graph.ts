@@ -39,7 +39,7 @@ router.post('/memory-graph/build', async (req, res) => {
     res.json({ success: true, result });
   } catch (err: any) {
     console.error('[memory-graph] Build error:', err);
-    res.status(500).json({ error: err.message || 'Build failed' });
+    res.status(500).json({ error: 'Build failed' });
   }
 });
 
@@ -81,7 +81,7 @@ router.post('/memory-graph/lint', async (req, res) => {
     });
   } catch (err: any) {
     console.error('[memory-graph] Lint error:', err);
-    res.status(500).json({ error: err.message || 'Lint failed' });
+    res.status(500).json({ error: 'Lint failed' });
   }
 });
 
@@ -170,7 +170,7 @@ router.post('/memory-graph/lint-node', async (req, res) => {
     });
   } catch (err: any) {
     console.error('[memory-graph] Lint-node error:', err);
-    res.status(500).json({ error: err.message || 'Lint failed' });
+    res.status(500).json({ error: 'Lint failed' });
   }
 });
 

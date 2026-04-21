@@ -926,6 +926,10 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
       .eq('org_id', quote.org_id)
       .maybeSingle();
 
+    // Idempotency key scopes the retry window per minute
+    const idemBucket = Math.floor(Date.now() / 60_000);
+    const depositIdempotencyKey = `quote-deposit-${quote.id}-${depositCents}-${idemBucket}`;
+
     if (orgSecrets?.stripe_secret_key_enc?.startsWith('sk_') && orgSecrets?.stripe_publishable_key) {
       const Stripe = (await import('stripe')).default;
       const orgStripe = new Stripe(orgSecrets.stripe_secret_key_enc);
@@ -934,6 +938,8 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
         currency,
         payment_method_types: ['card'],
         metadata: paymentMetadata,
+      }, {
+        idempotencyKey: depositIdempotencyKey,
       });
 
       return res.json({
@@ -957,6 +963,8 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
         currency,
         payment_method_types: ['card'],
         metadata: paymentMetadata,
+      }, {
+        idempotencyKey: depositIdempotencyKey,
       });
 
       return res.json({
