@@ -529,8 +529,62 @@ Livraison attendue : validation de ce rapport par le responsable produit + déci
 - Email juridique `legal@lumecrm.ca` — idem
 - Versions doc : `privacy-policy-2026-04-21`, `tos-2026-04-21`, `cookie-policy-2026-04-21` — bumper à chaque révision substantielle
 
-**Restant pour autres blocs :**
-- Bloc 4 — Rétention étendue (leads inactifs cron 24m, invoices 10 ans, anonymisation batch)
+### 2026-04-21 — Bloc 4 Rétention & anonymisation
+
+**Implémenté :**
+- ✅ Migration `supabase/migrations/20260625000002_retention_policies.sql` :
+  - RPC `anonymize_inactive_leads(24)` — leads sans update depuis 24 mois (sauf status='won')
+  - RPC `anonymize_old_soft_deleted_clients(180)` — clients soft-deleted depuis 180j
+  - RPC `purge_expired_portal_tokens()` — tokens revoked > 30j OU expired > 180j
+  - RPC `run_retention_job()` — wrapper exécutant les 4 tâches, retour JSON compteurs
+  - pg_cron `lume_retention_job` quotidien 04:00 UTC
+  - Indexes helper `idx_leads_updated_at_status`, `idx_clients_deleted_at`
+- ✅ `docs/legal/data_retention_policy.md` — politique documentée par catégorie :
+  - Leads inactifs : 24 mois → anonymisation
+  - Clients soft-deleted : 180 jours → anonymisation
+  - Invoices/payments : 10 ans (obligation fiscale canadienne) — aucune purge
+  - Audit logs : 3 ans
+  - Portal tokens revoked : 30j ; expired non-révoqués : 180j
+  - SMS opt-outs : permanent (CASL)
+  - DSAR completed : 6 ans
+
+**Couverture juridique :**
+- RGPD art. 5(1)(e) storage limitation — ✓
+- PIPEDA principle 4.5 retention — ✓
+- Loi 25 art. 23 destruction/anonymisation à la fin — ✓
+- Canadian tax: 10-year invoice retention — ✓
+
+### 2026-04-21 — Bloc 5 Team management compliance
+
+**Découvertes :**
+- 80% de Team Management déjà existait : liste (ManageTeam), invitations (invitations.ts), soft deactivate, reset password, RBAC 4 rôles.
+- Vrais gaps : 48h expiry, hard delete + grace 30j + réassignation, force logout admin, MFA toggle, audit trail per-user.
+
+**Implémenté :**
+- ✅ Fix expiry invitations : 7j → **48h** dans `server/routes/invitations.ts`
+- ✅ Migration `supabase/migrations/20260625000003_team_mgmt_compliance.sql` :
+  - Colonnes ajoutées sur `team_members` : `suspended_at`, `deletion_scheduled_at`, `deletion_requested_by`, `mfa_required`, `password_reset_required`
+  - RPC `request_hard_delete_member(member_id, reassign_to)` — suspension immédiate + réassignation leads/clients/jobs/tasks + grace 30j
+  - RPC `cancel_hard_delete_member(member_id)` — annuler pendant la grace
+  - RPC `execute_scheduled_member_deletions()` — cron exécute les deletions dont la grace a expiré
+  - RPC `set_member_mfa_required(member_id, bool)` — admin force MFA
+  - RPC `list_member_audit_events(user_id, limit)` — audit trail per-user, org-scoped, admin only
+  - `run_retention_job()` mis à jour pour inclure les hard deletes programmés
+- ✅ Router `server/routes/team-compliance.ts` :
+  - `POST /api/team/:memberId/request-delete` (body: `reassign_to`, `confirm=DELETE`)
+  - `POST /api/team/:memberId/cancel-delete`
+  - `POST /api/team/:memberId/mfa-required` (body: `required: boolean`)
+  - `POST /api/team/:memberId/force-logout` — Supabase Admin API `signOut(user_id, 'global')`
+  - `GET  /api/team/:userId/audit?limit=200`
+
+**Encore à compléter (UI côté React) :**
+- Bouton "Request permanent deletion" avec modal de réassignation dans TeamMemberDetails.tsx
+- Toggle MFA required dans TeamMemberDetails
+- Bouton "Force logout" admin
+- Onglet audit trail dans TeamMemberDetails
+
+**Restant :**
+- Bloc 6 — Breach response (détection anomalies, workflow incident, templates CAI/CNIL)
 - Bloc 4 — Rétention étendue (leads inactifs, invoices, anonymisation)
 - Bloc 5 — Consentement + bannière cookies + politique versionnée
 - Bloc 6 — Breach response workflow

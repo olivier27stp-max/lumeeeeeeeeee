@@ -67,6 +67,8 @@ import memoryGraphRouter from './routes/memory-graph';
 import platformAdminRouter from './routes/platform-admin';
 import authRouter from './routes/auth';
 import dsrRouter from './routes/dsr';
+import teamComplianceRouter from './routes/team-compliance';
+import incidentsRouter from './routes/incidents';
 
 // Security engine
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, extractIP } from './lib/security';
@@ -252,6 +254,9 @@ app.use('/api/public/form', redisRateLimit({ preset: 'auth' }));
 app.use('/api/survey', redisRateLimit({ preset: 'auth' }));
 // DSR endpoints — tight rate limit (compliance-sensitive + expensive export)
 app.use('/api/dsr', redisRateLimit({ preset: 'strict', keyFn: (req) => `dsr:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
+// Incidents — strict (failed-login needs to fit brute-force detection window)
+app.use('/api/incidents/failed-login', redisRateLimit({ preset: 'auth' }));
+app.use('/api/incidents', redisRateLimit({ preset: 'standard', keyFn: (req) => `inc:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
 // AI endpoints — persistent rate limiting for expensive calls
 app.use('/api/agent/chat', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
 app.use('/api/ai/chat', redisRateLimit({ preset: 'strict', keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
@@ -287,6 +292,8 @@ app.use('/api', directorPanelRouter);
 app.use('/api', featureFlagsRouter);
 app.use('/api', authRouter);
 app.use('/api', dsrRouter);
+app.use('/api', teamComplianceRouter);
+app.use('/api', incidentsRouter);
 app.use('/api', scheduledReportsRouter);
 app.use('/api', goalsRouter);
 app.use('/api', auditLogRouter);

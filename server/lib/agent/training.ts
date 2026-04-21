@@ -29,10 +29,10 @@ export async function getFewShotExamples(
 ): Promise<FewShotExample[]> {
   try {
     let query = supabase
-      .from('agent_few_shots')
+      .from('few_shot_examples')
       .select('id, user_message, agent_response, domain, quality_score')
       .eq('org_id', orgId)
-      .eq('active', true)
+      .eq('is_active', true)
       .order('quality_score', { ascending: false })
       .limit(limit);
 
@@ -46,10 +46,10 @@ export async function getFewShotExamples(
     // If domain-specific returned nothing, try without domain filter
     if ((!data || data.length === 0) && domain) {
       const { data: fallback } = await supabase
-        .from('agent_few_shots')
+        .from('few_shot_examples')
         .select('id, user_message, agent_response, domain, quality_score')
         .eq('org_id', orgId)
-        .eq('active', true)
+        .eq('is_active', true)
         .order('quality_score', { ascending: false })
         .limit(limit);
 

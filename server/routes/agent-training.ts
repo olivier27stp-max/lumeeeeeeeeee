@@ -57,11 +57,14 @@ router.post('/agent/outcome', async (req, res) => {
     const id = await recordOutcome(admin, {
       orgId: auth.orgId,
       userId: auth.user.id,
-      decisionLogId, sessionId, messageId,
-      domain, actionType,
+      decisionLogId: decisionLogId || undefined,
+      sessionId: sessionId || undefined,
+      messageId: messageId || undefined,
+      domain,
+      actionType: actionType || undefined,
       confidence: confidence || 70,
       outcome,
-      outcomeNote,
+      outcomeNote: outcomeNote || undefined,
     });
 
     return res.status(201).json({ id });
@@ -86,9 +89,13 @@ router.post('/agent/correction', async (req, res) => {
     const id = await recordCorrection(admin, {
       orgId: auth.orgId,
       userId: auth.user.id,
-      sessionId, messageId,
-      originalResponse, domain,
-      correctionType, correctionText, correctAnswer,
+      sessionId: sessionId || undefined,
+      messageId: messageId || undefined,
+      originalResponse,
+      domain: domain || undefined,
+      correctionType,
+      correctionText,
+      correctAnswer: correctAnswer || undefined,
     });
 
     return res.status(201).json({ id });
@@ -110,7 +117,7 @@ router.post('/agent/feedback-train', async (req, res) => {
     }
     const { messageId, isPositive, domain } = parsed.data;
 
-    await recordFeedback(admin, auth.orgId, auth.user.id, messageId, isPositive, domain);
+    await recordFeedback(admin, auth.orgId, auth.user.id, messageId, isPositive, domain || undefined);
 
     return res.json({ ok: true });
   } catch (err: any) {

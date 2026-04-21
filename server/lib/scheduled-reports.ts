@@ -27,7 +27,7 @@ async function gatherReportData(orgId: string, from: string, to: string): Promis
   const admin = getServiceClient();
 
   // Org name
-  const { data: org } = await admin.from('organizations').select('name').eq('id', orgId).maybeSingle();
+  const { data: org } = await admin.from('orgs').select('name').eq('id', orgId).maybeSingle();
 
   // Overview via RPC
   const { data: overview } = await admin.rpc('rpc_insights_overview', { p_org: orgId, p_from: from, p_to: to });

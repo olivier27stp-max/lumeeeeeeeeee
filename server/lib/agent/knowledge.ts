@@ -96,10 +96,10 @@ export async function loadOrgKnowledge(
 
   // Load knowledge entries from the training/knowledge table
   const { data: entries } = await supabase
-    .from('agent_knowledge')
+    .from('org_knowledge')
     .select('title, content, domain, language')
     .eq('org_id', orgId)
-    .eq('active', true)
+    .eq('is_active', true)
     .order('priority', { ascending: false })
     .limit(10);
 
