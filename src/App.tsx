@@ -55,6 +55,7 @@ import Auth from './pages/Auth';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import PrivacyCenter from './pages/PrivacyCenter';
+import Subprocessors from './pages/Subprocessors';
 import { CookieBanner } from './components/CookieBanner';
 import Landing from './pages/Landing';
 import { supabase } from './lib/supabase';
@@ -534,6 +535,7 @@ export default function App() {
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
+          <Route path="/subprocessors" element={<Subprocessors />} />
           <Route element={<MarketingLayout />}>
             <Route index element={<MarketingHome />} />
             <Route path="features" element={<MarketingFeatures />} />
@@ -563,6 +565,7 @@ export default function App() {
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
+          <Route path="/subprocessors" element={<Subprocessors />} />
         <Route element={<MarketingLayout />}>
           <Route index element={<MarketingHome />} />
           <Route path="features" element={<MarketingFeatures />} />
@@ -1117,6 +1120,7 @@ function AuthenticatedApp({
                     <Route path="/account/privacy" element={<PageWrapper><PrivacyCenter /></PageWrapper>} />
                     <Route path="/privacy" element={<Privacy />} />
                     <Route path="/terms" element={<Terms />} />
+          <Route path="/subprocessors" element={<Subprocessors />} />
                     <Route path="/settings/payments" element={<Gated permission="settings.read"><PageWrapper><PaymentSettings /></PageWrapper></Gated>} />
                     <Route path="/settings/products" element={<Gated permission="settings.update"><PageWrapper><ProductsServices /></PageWrapper></Gated>} />
                     <Route path="/automations" element={<Gated permission="automations.read"><PageWrapper><Automations /></PageWrapper></Gated>} />

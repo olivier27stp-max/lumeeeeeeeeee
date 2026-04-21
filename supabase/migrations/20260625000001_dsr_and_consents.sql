@@ -38,6 +38,7 @@ create index if not exists idx_consents_org on public.consents(org_id, created_a
 alter table public.consents enable row level security;
 
 -- Un utilisateur voit son propre historique + l'org voit les consentements de ses clients/leads
+drop policy if exists consents_select_own on public.consents;
 create policy consents_select_own on public.consents for select
   using (
     (subject_type = 'user' and subject_id = auth.uid())
@@ -45,6 +46,7 @@ create policy consents_select_own on public.consents for select
   );
 
 -- Seul service_role insère (via RPC record_consent) ou l'utilisateur pour lui-même
+drop policy if exists consents_insert_self on public.consents;
 create policy consents_insert_self on public.consents for insert
   with check (
     (subject_type = 'user' and subject_id = auth.uid())
@@ -78,15 +80,18 @@ create index if not exists idx_dsar_subject on public.dsar_requests(subject_type
 
 alter table public.dsar_requests enable row level security;
 
+drop policy if exists dsar_select_org on public.dsar_requests;
 create policy dsar_select_org on public.dsar_requests for select
   using (public.has_org_membership(auth.uid(), org_id));
 
+drop policy if exists dsar_insert_self on public.dsar_requests;
 create policy dsar_insert_self on public.dsar_requests for insert
   with check (
     requested_by = auth.uid()
     or public.has_org_membership(auth.uid(), org_id)
   );
 
+drop policy if exists dsar_update_admin on public.dsar_requests;
 create policy dsar_update_admin on public.dsar_requests for update
   using (public.has_org_membership(auth.uid(), org_id))
   with check (public.has_org_membership(auth.uid(), org_id));

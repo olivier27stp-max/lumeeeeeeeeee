@@ -83,7 +83,7 @@ Points bloquants (CRITIQUES) :
 | **Google Maps / Geocoding** | adresses de propriétés | [server/routes/geocode.ts](lume-crm/server/routes/geocode.ts) | Géocodage jobs | ✓ Google Maps Platform Terms | — |
 | **Google Gemini** | contexte CRM en prompt (PII potentiel) | [server/lib/gemini.ts](lume-crm/server/lib/gemini.ts), [server/routes/agent.ts](lume-crm/server/routes/agent.ts) | IA recommandations | ✓ Google Cloud DPA | **⚠ Pas de redaction PII avant envoi** |
 | **Ollama** | idem Gemini si remote | [server/lib/ollama.ts](lume-crm/server/lib/ollama.ts) | LLM alternatif | Dépend du déploiement | Local OU distant selon config |
-| **FAL.ai** | descriptions prompts image | [src/lib/director-panel/providers/fal-provider.ts](lume-crm/src/lib/director-panel/providers/fal-provider.ts) | Génération créative | DPA non documenté | — |
+| ~~FAL.ai~~ | Retiré 2026-04-21 (décision produit, non utilisé) | — | — | — | — |
 | **Anthropic Claude** | — | — | — | — | **Non intégré** actuellement |
 
 ### Gaps sous-traitants
@@ -316,7 +316,7 @@ Points bloquants (CRITIQUES) :
 ### Critiques
 
 1. **Chiffrement PII optionnel** — défaut plaintext
-2. **Prompts IA non sanitisés** — exfiltration potentielle de PII vers Gemini/FAL
+2. **Prompts IA non sanitisés** — exfiltration potentielle de PII vers Gemini/Ollama
 3. **Table `contacts` avec `org_id` NULL** autorisé en RLS
 4. **`profiles` absente du schéma** mais requêtée par dashboardApi/jobsApi/Settings
 5. **Service role sans re-validation** `org_id` côté routes acceptant body
@@ -350,7 +350,6 @@ Points bloquants (CRITIQUES) :
 | Twilio Inc. | SMS | Téléphone, contenu | USA | ✓ | USA |
 | Resend | Email transactionnel | Email, contenu | USA (AWS) | ✓ | USA |
 | Google LLC | Maps/Geocoding + Gemini | Adresses, prompts | Global | ✓ | USA |
-| FAL.ai | Génération image | Prompts | USA | ✗ **à obtenir** | USA |
 | Upstash (optionnel) | Redis rate limit | Aucun PII direct | Global | ✓ | USA |
 
 ---
@@ -378,7 +377,7 @@ Points bloquants (CRITIQUES) :
 - [ ] Re-validation serveur `org_id` sur toutes les routes utilisant `getServiceClient()`
 - [ ] MFA obligatoire sur tous les comptes admin (toggle par org)
 - [ ] Révocation globale des sessions (RPC `revoke_all_sessions(user_id)`)
-- [ ] Sanitisation prompts IA (redact email/phone/adresse avant Gemini/FAL)
+- [ ] Sanitisation prompts IA (redact email/phone/adresse avant Gemini/Ollama)
 - [ ] Installer Sentry + règles alerting
 - [ ] Rate limit sur `/api/payments/*`
 - [ ] Purger/redacter `audit_events.metadata` (ou chiffrement)
@@ -430,7 +429,7 @@ Points bloquants (CRITIQUES) :
 4. **Clients UE ciblés à court terme ?** Si oui, transfert US nécessite SCC + analyse Schrems II
 5. **Budget consultation avocat** pour validation des templates ?
 6. **Qui reçoit les notifications d'incident ?** (email + numéro d'astreinte)
-7. **FAL.ai** : conserver ou remplacer par fournisseur avec DPA explicite ?
+7. ~~FAL.ai~~ — retiré du périmètre 2026-04-21 (non utilisé)
 
 ---
 
@@ -464,7 +463,7 @@ Livraison attendue : validation de ce rapport par le responsable produit + déci
 - ✅ `server/lib/ollama.ts` — redaction auto si `OLLAMA_URL` pointe hors loopback
 
 **Non traité ici (décision) :**
-- FAL.ai (Director Panel) — les prompts sont créatifs par nature, la redaction auto dégraderait l'UX. À adresser par bandeau UI avertissant l'utilisateur de ne pas taper de PII dans les prompts créatifs.
+- ~~FAL.ai~~ retiré du périmètre.
 
 **Bloc 1.5 — audit routes terminé :**
 - Grep exhaustif des 41 routes serveur : **0 occurrence** de `req.body.org_id` / `body.orgId`. Toutes les routes utilisent `auth.orgId` dérivé de `resolveOrgId()` (RPC `current_org_id()` basée sur JWT, ou lookup `memberships` via client authentifié — jamais service_role).
@@ -583,8 +582,68 @@ Livraison attendue : validation de ce rapport par le responsable produit + déci
 - Bouton "Force logout" admin
 - Onglet audit trail dans TeamMemberDetails
 
-**Restant :**
-- Bloc 6 — Breach response (détection anomalies, workflow incident, templates CAI/CNIL)
+### 2026-04-21 — Bloc 6 Breach response
+
+**Implémenté :**
+- ✅ Migration `supabase/migrations/20260625000004_breach_response.sql` :
+  - Tables `security_incidents` (registre Loi 25 art. 3.8), `incident_timeline`, `failed_login_attempts`
+  - RLS admin-only sur incidents
+  - RPC `record_failed_login(email, ip, ua, reason)`
+  - RPC `detect_login_anomalies(minutes)` — brute-force email (≥5/15m) + IP (≥20/15m)
+  - RPC `create_incident(title, type, severity, description, detection)`
+  - RPC `purge_old_failed_logins()` — rétention 90j
+  - `run_retention_job()` mis à jour pour inclure purge failed_logins
+- ✅ Router `server/routes/incidents.ts` :
+  - `POST /api/incidents` — déclaration
+  - `GET  /api/incidents` — liste org (admin)
+  - `GET  /api/incidents/:id` — détail + timeline
+  - `PATCH /api/incidents/:id` — champs whitelist (status, severity, risk, notification timestamps, etc.)
+  - `POST /api/incidents/:id/timeline` — ajout entrée
+  - `GET  /api/incidents/anomalies?minutes=15`
+  - `POST /api/incidents/failed-login` — hook client-side après échec login
+- ✅ Rate limit : `auth` preset sur `/api/incidents/failed-login`, `standard` sur le reste
+- ✅ Doc `docs/legal/breach_response_plan.md` — workflow 7 phases + templates notifications CAI / OPC / CNIL / affected persons
+
+**Couverture juridique :**
+- Loi 25 art. 3.5 (notification) + 3.7 (circonstances) + 3.8 (registre) — ✓
+- LPRPDE s. 10.1 + Breach Regulations — ✓
+- RGPD art. 33 (72h) + art. 34 (personnes concernées) — ✓
+
+### 2026-04-21 — Blocs 7-10 (livraison finale)
+
+**Bloc 7 — Sous-traitants**
+- ✅ `docs/legal/subprocessor_list.md` — liste customer-facing
+- ✅ `src/pages/Subprocessors.tsx` — route `/subprocessors` publique (montée dans App.tsx sur les 3 layouts)
+
+**Bloc 8 — Docs légales**
+- ✅ `docs/legal/dpa_template.md` — template DPA B2B signable
+- ✅ `docs/legal/cookie_policy.md` — politique cookies
+- ✅ `docs/compliance/ropa.md` — registre des activités de traitement (RGPD art. 30)
+
+**Bloc 9 — Tests conformité**
+- ✅ `tests/compliance/pii-redaction.test.ts` (11 tests)
+- ✅ `tests/compliance/consent-storage.test.ts` (5 tests)
+- ✅ `tests/compliance/README.md` — mode d'emploi + templates tests DB-dépendants
+- ✅ **Fix regex SIN/SSN** dans `pii-redaction.ts` pour éviter faux positifs sur téléphones
+- ✅ **16/16 tests passent** (`npx vitest run tests/compliance`)
+
+**Bloc 10 — Go-live**
+- ✅ `compliance_checklist.md` — checklist pré-production exhaustive (12 sections, ~70 checkbox)
+- ✅ `COMPLIANCE_README.md` — guide équipe : où trouver quoi, responsabilités, workflows, versions
+
+## Bilan final
+
+**Blocs 1–10 tous livrés.** Le dispositif technique est en place pour Loi 25, LPRPDE, RGPD, CCPA.
+
+**Reste à faire par l'humain (hors code) avant prod :**
+1. Désigner un DPO, créer les boîtes email `privacy@` et `legal@`
+2. Remplir les placeholders `[COMPANY LEGAL NAME]`, `[STREET ADDRESS]` dans les templates
+3. Rédiger l'EFVP Loi 25 pour l'hébergement US-East
+4. ~~FAL.ai DPA~~ — retiré du périmètre
+5. Faire valider tous les `docs/legal/*.md` par un avocat spécialisé
+6. Parcourir `compliance_checklist.md` et cocher chaque ligne avant go-live
+7. Installer Sentry / error tracking (pas inclus — choix produit)
+8. Monter une astreinte 24/7 documentée (voir `breach_response_plan.md §2`)
 - Bloc 4 — Rétention étendue (leads inactifs, invoices, anonymisation)
 - Bloc 5 — Consentement + bannière cookies + politique versionnée
 - Bloc 6 — Breach response workflow

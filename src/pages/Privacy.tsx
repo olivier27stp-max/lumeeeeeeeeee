@@ -76,7 +76,6 @@ export default function Privacy() {
         <li><strong>Twilio Inc.</strong> (SMS delivery)</li>
         <li><strong>Resend</strong> (transactional email delivery)</li>
         <li><strong>Google LLC</strong> (Maps / Geocoding / Gemini AI)</li>
-        <li><strong>FAL.ai</strong> (creative image generation — Director Panel only)</li>
         <li><strong>Upstash</strong> (optional rate-limiting cache)</li>
       </ul>
       <p>

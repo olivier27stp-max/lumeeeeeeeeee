@@ -59,10 +59,13 @@ create index if not exists idx_incidents_unresolved on public.security_incidents
 
 alter table public.security_incidents enable row level security;
 
+drop policy if exists incidents_select_org on public.security_incidents;
 create policy incidents_select_org on public.security_incidents for select
   using (public.has_org_admin_role(auth.uid(), org_id));
+drop policy if exists incidents_insert_org on public.security_incidents;
 create policy incidents_insert_org on public.security_incidents for insert
   with check (public.has_org_membership(auth.uid(), org_id));
+drop policy if exists incidents_update_admin on public.security_incidents;
 create policy incidents_update_admin on public.security_incidents for update
   using (public.has_org_admin_role(auth.uid(), org_id))
   with check (public.has_org_admin_role(auth.uid(), org_id));
@@ -83,12 +86,14 @@ create index if not exists idx_incident_timeline on public.incident_timeline(inc
 
 alter table public.incident_timeline enable row level security;
 
+drop policy if exists timeline_select_org on public.incident_timeline;
 create policy timeline_select_org on public.incident_timeline for select
   using (exists (
     select 1 from public.security_incidents si
      where si.id = incident_timeline.incident_id
        and public.has_org_admin_role(auth.uid(), si.org_id)
   ));
+drop policy if exists timeline_insert_org on public.incident_timeline;
 create policy timeline_insert_org on public.incident_timeline for insert
   with check (exists (
     select 1 from public.security_incidents si
@@ -155,15 +160,15 @@ stable
 security definer
 set search_path = public, pg_temp
 as $FUNC$
-  with window as (
+  with attempts as (
     select email, ip_address from public.failed_login_attempts
      where created_at > now() - make_interval(mins => p_minutes)
   )
   select 'brute_force_email'::text, email, count(*)::bigint
-    from window where email <> '' group by email having count(*) >= 5
+    from attempts where email <> '' group by email having count(*) >= 5
   union all
   select 'brute_force_ip'::text, host(ip_address), count(*)::bigint
-    from window where ip_address is not null group by ip_address having count(*) >= 20;
+    from attempts where ip_address is not null group by ip_address having count(*) >= 20;
 $FUNC$;
 
 revoke all on function public.detect_login_anomalies(int) from public;

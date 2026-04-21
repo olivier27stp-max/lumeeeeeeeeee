@@ -291,7 +291,8 @@ do $$ begin
       on public.decision_logs(org_id, created_at desc);
   end if;
   if to_regclass('public.approvals') is not null then
-    create index if not exists idx_approvals_org_status
-      on public.approvals(org_id, status, created_at desc);
+    -- approvals has `requested_at`, not `created_at`
+    create index if not exists idx_approvals_org_status_req
+      on public.approvals(org_id, status, requested_at desc);
   end if;
 end $$;

@@ -1,11 +1,11 @@
 /**
  * Compliance — PII redaction for third-party AI prompts
  *
- * Gemini, Ollama (remote), FAL.ai and any other external LLM/image provider
+ * Gemini, Ollama (remote), and any other external LLM/image provider
  * MUST NOT receive unredacted PII. Use `redactPii()` on any user-facing text
  * (CRM context, notes, messages) before sending to these providers.
  *
- * See: compliance_audit.md §2 — "Gemini/Ollama/FAL reçoivent du PII non expurgé"
+ * See: compliance_audit.md §2 — "Gemini/Ollama reçoivent du PII non expurgé"
  *
  * Design: conservative — false positives (over-redaction) are preferred to
  * false negatives (leaked PII). Call sites that need un-redacted text (e.g.,
@@ -22,8 +22,9 @@ const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 // Canadian postal code (A1A 1A1 / A1A1A1) + US ZIP (5 or 5+4)
 const POSTAL_RE = /\b([A-Za-z]\d[A-Za-z][\s-]?\d[A-Za-z]\d|\d{5}(?:-\d{4})?)\b/g;
 
-// Canadian SIN (3-3-3) and US SSN (3-2-4) — loose match
-const SIN_SSN_RE = /\b\d{3}[\s-]\d{2,3}[\s-]\d{3,4}\b/g;
+// Canadian SIN "XXX XXX XXX" / "XXX-XXX-XXX" and US SSN "XXX-XX-XXXX".
+// Must be bracketed by non-digits so phone-like "514-555-1234" does NOT match.
+const SIN_SSN_RE = /(?<![\d-])(?:\d{3}[\s-]\d{3}[\s-]\d{3}|\d{3}-\d{2}-\d{4})(?![\d-])/g;
 
 // Credit card — 13-19 digit runs with optional separators (Luhn not checked)
 const CC_RE = /\b(?:\d[\s-]?){13,19}\b/g;
