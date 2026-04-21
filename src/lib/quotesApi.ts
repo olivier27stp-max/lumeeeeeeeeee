@@ -69,6 +69,22 @@ export const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
   converted: 'Converted',
 };
 
+export const QUOTE_STATUS_LABELS_FR: Record<QuoteStatus, string> = {
+  draft: 'Brouillon',
+  action_required: 'Action requise',
+  sent: 'Envoyé',
+  awaiting_response: 'En attente de réponse',
+  approved: 'Approuvé',
+  declined: 'Refusé',
+  expired: 'Expiré',
+  converted: 'Converti',
+};
+
+export function getQuoteStatusLabel(status: QuoteStatus, lang: string): string {
+  if (lang === 'fr') return QUOTE_STATUS_LABELS_FR[status] ?? QUOTE_STATUS_LABELS[status] ?? status;
+  return QUOTE_STATUS_LABELS[status] ?? status;
+}
+
 export const QUOTE_STATUS_COLORS: Record<QuoteStatus, string> = {
   draft: 'bg-surface-tertiary text-text-secondary border-outline',
   action_required: 'bg-warning-light text-warning border-warning/30',
@@ -210,6 +226,7 @@ export async function createQuote(payload: {
   line_items: QuoteLineItemInput[];
   sections?: QuoteSectionInput[];
 }): Promise<QuoteDetail> {
+  const orgId = await getCurrentOrgIdOrThrow();
   // 1. Create quote via RPC
   const { data: rpcResult, error: rpcError } = await supabase.rpc('rpc_create_quote', {
     p_lead_id: payload.lead_id || null,
@@ -241,7 +258,7 @@ export async function createQuote(payload: {
     if (payload.source_template_id) updatePayload.source_template_id = payload.source_template_id;
     if (payload.source_template_name) updatePayload.source_template_name = payload.source_template_name;
     if (Object.keys(updatePayload).length > 0) {
-      const { error: updErr } = await supabase.from('quotes').update(updatePayload).eq('id', quoteId);
+      const { error: updErr } = await supabase.from('quotes').update(updatePayload).eq('id', quoteId).eq('org_id', orgId);
       if (updErr) console.error('[createQuote] settings update failed:', updErr.message);
     }
   }
@@ -294,10 +311,12 @@ export async function createQuote(payload: {
 }
 
 export async function getQuoteById(quoteId: string): Promise<QuoteDetail | null> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data: quote, error } = await supabase
     .from('quotes')
     .select('*')
     .eq('id', quoteId)
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .single();
   if (error) {
@@ -341,9 +360,11 @@ export async function getQuoteById(quoteId: string): Promise<QuoteDetail | null>
 }
 
 export async function listQuotesForLead(leadId: string): Promise<Quote[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('quotes')
     .select('*')
+    .eq('org_id', orgId)
     .eq('lead_id', leadId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
@@ -356,9 +377,10 @@ export async function updateQuoteStatus(
   newStatus: QuoteStatus,
   reason?: string
 ): Promise<Quote> {
+  const orgId = await getCurrentOrgIdOrThrow();
   // Get current status
   const { data: current, error: fetchErr } = await supabase
-    .from('quotes').select('status').eq('id', quoteId).single();
+    .from('quotes').select('status').eq('id', quoteId).eq('org_id', orgId).single();
   if (fetchErr) throw fetchErr;
 
   const updatePayload: Record<string, any> = {
@@ -373,7 +395,7 @@ export async function updateQuoteStatus(
   if (newStatus === 'converted') updatePayload.converted_at = new Date().toISOString();
 
   const { data, error } = await supabase
-    .from('quotes').update(updatePayload).eq('id', quoteId).select('*').single();
+    .from('quotes').update(updatePayload).eq('id', quoteId).eq('org_id', orgId).select('*').single();
   if (error) throw error;
 
   // Log status change
@@ -435,6 +457,13 @@ export async function saveQuoteLineItems(
   quoteId: string,
   items: QuoteLineItemInput[]
 ): Promise<QuoteLineItem[]> {
+  // Verify quote belongs to current org before modifying line items
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data: parentQuote, error: parentErr } = await supabase
+    .from('quotes').select('id').eq('id', quoteId).eq('org_id', orgId).maybeSingle();
+  if (parentErr) throw parentErr;
+  if (!parentQuote) throw new Error('Quote not found in current organization.');
+
   // Delete existing items
   await supabase.from('quote_line_items').delete().eq('quote_id', quoteId);
 
@@ -583,10 +612,12 @@ export async function listAllQuotes(opts?: {
   const page = opts?.page || 1;
   const pageSize = opts?.pageSize || 20;
   const offset = (page - 1) * pageSize;
+  const orgId = await getCurrentOrgIdOrThrow();
 
   let query = supabase
     .from('quotes')
     .select('*, clients(first_name, last_name, company, deleted_at), leads(first_name, last_name, company, deleted_at)', { count: 'exact' })
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .range(offset, offset + pageSize - 1);
@@ -662,9 +693,11 @@ export async function fetchQuoteKpis(): Promise<{
 
 /** Fetch all pending quotes with full context for the Leads page pending quotes view. */
 export async function fetchPendingQuotes(): Promise<Array<Quote & { lead_name?: string; client_name?: string }>> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data: quotes, error } = await supabase
     .from('quotes')
     .select('*')
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .in('status', PENDING_QUOTE_STATUSES)
     .order('created_at', { ascending: false });
@@ -712,9 +745,11 @@ export async function fetchPendingQuotes(): Promise<Array<Quote & { lead_name?: 
 
 /** Fetch ALL quotes (any status) with lead/client names for the unified Quotes page. */
 export async function fetchAllQuotesWithContext(): Promise<Array<Quote & { lead_name?: string; client_name?: string }>> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data: quotes, error } = await supabase
     .from('quotes')
     .select('*')
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
 

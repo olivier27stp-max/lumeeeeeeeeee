@@ -57,16 +57,16 @@ function parseTab(raw: string | null): InsightsTab {
   return 'finance';
 }
 
-function fmtMoney(cents: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
+function fmtMoney(cents: number, locale: string = 'en-CA') {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 }
 
 
-function formatDateRange(from: string, to: string) {
+function formatDateRange(from: string, to: string, locale: string = 'en-CA') {
   const f = new Date(`${from}T00:00:00`);
   const t = new Date(`${to}T00:00:00`);
   const opts: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' };
-  return `${f.toLocaleDateString('en-US', opts)} - ${t.toLocaleDateString('en-US', opts)}`;
+  return `${f.toLocaleDateString(locale, opts)} - ${t.toLocaleDateString(locale, opts)}`;
 }
 
 /* ── Change Indicator ─────────────────────────────────────── */
@@ -209,7 +209,7 @@ export default function Insights() {
   }
 
   const revenueChartData = useMemo(() => revenueSeries.map((row) => ({
-    label: new Date(`${row.bucket_start}T00:00:00`).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+    label: new Date(`${row.bucket_start}T00:00:00`).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', { month: 'short', year: '2-digit' }),
     revenue: Number((row.revenue_cents / 100).toFixed(2)),
     invoiced: Number((row.invoiced_cents / 100).toFixed(2)),
   })), [revenueSeries]);
@@ -236,10 +236,10 @@ export default function Insights() {
     () => revenueSeries.map((row) => {
       const d = new Date(`${row.bucket_start}T00:00:00`);
       const label = autoGranularity === 'day'
-        ? d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
+        ? d.toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', { day: 'numeric', month: 'short' })
         : autoGranularity === 'week'
-        ? d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
-        : d.toLocaleDateString('en-US', { month: 'short' });
+        ? d.toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', { day: 'numeric', month: 'short' })
+        : d.toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', { month: 'short' });
       return { label, value: Number((row.revenue_cents / 100).toFixed(0)) };
     }),
     [revenueSeries, autoGranularity]
@@ -253,12 +253,12 @@ export default function Insights() {
     const overdue = invoicesSummary?.count_past_due || 0;
     const total = paid + sent + draft + overdue || 1;
     return [
-      { name: 'Paid Invoices', value: paid, pct: Math.round((paid / total) * 100) },
-      { name: 'Pending', value: sent, pct: Math.round((sent / total) * 100) },
-      { name: 'Drafts', value: draft, pct: Math.round((draft / total) * 100) },
-      { name: 'Overdue', value: overdue, pct: Math.round((overdue / total) * 100) },
+      { name: fr ? 'Factures payées' : 'Paid Invoices', value: paid, pct: Math.round((paid / total) * 100) },
+      { name: fr ? 'En attente' : 'Pending', value: sent, pct: Math.round((sent / total) * 100) },
+      { name: fr ? 'Brouillons' : 'Drafts', value: draft, pct: Math.round((draft / total) * 100) },
+      { name: fr ? 'En retard' : 'Overdue', value: overdue, pct: Math.round((overdue / total) * 100) },
     ].filter((c) => c.value > 0);
-  }, [invoicesSummary]);
+  }, [invoicesSummary, fr]);
 
 
   function updateParam(key: string, value: string) {
@@ -366,7 +366,7 @@ export default function Insights() {
                         ]
                   }
                   totalCents={overview?.invoiced_value_cents || 0}
-                  dateRange={`Data from ${formatDateRange(from, to)}`}
+                  dateRange={`${fr ? 'Données de' : 'Data from'} ${formatDateRange(from, to, fr ? 'fr-CA' : 'en-CA')}`}
                 />
               </div>
 
@@ -424,13 +424,13 @@ export default function Insights() {
                       <XAxis dataKey="label" tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
                       <YAxis tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
                       <Tooltip formatter={(value: number, name: string) => [
-                        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0)),
+                        new Intl.NumberFormat(language === 'fr' ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD' }).format(Number(value || 0)),
                         name === 'revenue' ? t.insights.revenue : t.insights.invoiced,
                       ]} />
                       <Legend />
                       <Bar dataKey="revenue" fill="var(--color-primary)" radius={[4, 4, 0, 0]} name={t.insights.revenue} onClick={(entry: any) => {
                         if (!entry?.label) return;
-                        const matchedSeries = revenueSeries.find((rs) => new Date(`${rs.bucket_start}T00:00:00`).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }) === entry.label);
+                        const matchedSeries = revenueSeries.find((rs) => new Date(`${rs.bucket_start}T00:00:00`).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', { month: 'short', year: '2-digit' }) === entry.label);
                         if (!matchedSeries) return;
                         openDrilldown(
                           `Invoices — ${entry.label}`,

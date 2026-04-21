@@ -258,9 +258,11 @@ function buildSearchFilter(search: string): string {
 
 async function loadClientNames(clientIds: string[]): Promise<Map<string, string>> {
   if (clientIds.length === 0) return new Map();
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('clients')
     .select('id, first_name, last_name, company')
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .in('id', clientIds);
 
@@ -378,7 +380,8 @@ export async function getJobTypes(): Promise<string[]> {
 }
 
 export async function getJobById(id: string): Promise<Job | null> {
-  const { data, error } = await supabase.from('jobs_active').select('*').eq('id', id).single();
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase.from('jobs_active').select('*').eq('id', id).eq('org_id', orgId).single();
   if (error) {
     if (error.code === 'PGRST116') return null;
     throw error;
@@ -426,7 +429,7 @@ export async function getJobModalDraftById(id: string): Promise<JobModalDraft | 
     postal_code: jobRow.postal_code ?? null,
     country: jobRow.country ?? 'Canada',
     description: jobRow.notes || jobRow.description || null,
-    status: formatStatusLabel(jobRow.status),
+    status: deriveJobDisplayStatus({ status: jobRow.status, scheduled_at: jobRow.scheduled_at, requires_invoicing: !!jobRow.requires_invoicing }),
     requires_invoicing: !!jobRow.requires_invoicing,
     billing_split: !!jobRow.billing_split,
     subtotal: jobRow.subtotal == null ? null : Number(jobRow.subtotal),

@@ -137,8 +137,9 @@ export interface SendInvoiceResult {
   channels?: string[];
 }
 
-export function formatMoneyFromCents(cents: number, currency = 'CAD') {
-  return new Intl.NumberFormat('en-US', {
+export function formatMoneyFromCents(cents: number, currency = 'CAD', locale?: string) {
+  const resolvedLocale = locale ?? (currency === 'CAD' ? 'en-CA' : 'en-US');
+  return new Intl.NumberFormat(resolvedLocale, {
     style: 'currency',
     currency,
     minimumFractionDigits: 2,
@@ -152,13 +153,14 @@ export function toClientDisplayName(client: { first_name?: string | null; last_n
 }
 
 export function getInvoiceRowUiStatus(row: InvoiceRow) {
-  const dueDate = row.due_date ? new Date(`${row.due_date}T00:00:00`) : null;
-  const now = new Date();
+  // Compare YYYY-MM-DD strings directly in America/Toronto timezone to avoid
+  // off-by-one due to local-midnight parsing around DST/UTC boundaries.
+  const todayYMD = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' });
   const isPastDue =
     row.balance_cents > 0 &&
     (row.status === 'sent' || row.status === 'partial') &&
-    !!dueDate &&
-    dueDate < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    !!row.due_date &&
+    String(row.due_date) < todayYMD;
 
   if (isPastDue) return 'past_due';
   if (row.status === 'draft') return 'draft';
@@ -231,10 +233,12 @@ export async function searchActiveClients(query: { q: string; page: number; page
 }> {
   const from = (query.page - 1) * query.pageSize;
   const to = from + query.pageSize - 1;
+  const orgId = await getCurrentOrgIdOrThrow();
 
   let request = supabase
     .from('clients')
     .select('id,first_name,last_name,company,email,status', { count: 'exact' })
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .range(from, to)
     .order('last_name', { ascending: true })
@@ -322,10 +326,12 @@ export async function saveInvoiceDraft(payload: {
 }
 
 export async function getInvoiceById(invoiceId: string): Promise<InvoiceDetail | null> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data: invoiceRow, error: invoiceError } = await supabase
     .from('invoices')
     .select('*')
     .eq('id', invoiceId)
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .maybeSingle();
 
@@ -516,10 +522,12 @@ export async function updateInvoiceFields(
   },
   expectedVersion?: number,
 ) {
+  const orgId = await getCurrentOrgIdOrThrow();
   let query = supabase
     .from('invoices')
     .update({ ...fields, updated_at: new Date().toISOString() })
-    .eq('id', invoiceId);
+    .eq('id', invoiceId)
+    .eq('org_id', orgId);
   if (expectedVersion != null) query = query.eq('version', expectedVersion);
   const { error } = await query;
   if (error?.code === 'PGRST116' && expectedVersion != null) {
@@ -532,22 +540,27 @@ export async function updateInvoiceRecurrence(
   invoiceId: string,
   fields: { is_recurring: boolean; recurrence_interval?: string | null; next_recurrence_date?: string | null },
 ) {
+  const orgId = await getCurrentOrgIdOrThrow();
   const { error } = await supabase
     .from('invoices')
     .update({ ...fields, updated_at: new Date().toISOString() })
-    .eq('id', invoiceId);
+    .eq('id', invoiceId)
+    .eq('org_id', orgId);
   if (error) throw error;
 }
 
 export async function voidInvoice(invoiceId: string) {
+  const orgId = await getCurrentOrgIdOrThrow();
   const { error } = await supabase
     .from('invoices')
     .update({ status: 'void', updated_at: new Date().toISOString() })
-    .eq('id', invoiceId);
+    .eq('id', invoiceId)
+    .eq('org_id', orgId);
   if (error) throw error;
 }
 
 export async function revertToDraft(invoiceId: string) {
+  const orgId = await getCurrentOrgIdOrThrow();
   const { error } = await supabase
     .from('invoices')
     .update({
@@ -556,7 +569,8 @@ export async function revertToDraft(invoiceId: string) {
       sent_at: null,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', invoiceId);
+    .eq('id', invoiceId)
+    .eq('org_id', orgId);
   if (error) throw error;
 }
 
@@ -589,11 +603,13 @@ export async function duplicateInvoice(invoiceId: string): Promise<string> {
 }
 
 export async function markInvoicePaidManually(invoiceId: string) {
+  const orgId = await getCurrentOrgIdOrThrow();
   // Get current invoice to know total
   const { data: inv, error: fetchErr } = await supabase
     .from('invoices')
     .select('total_cents')
     .eq('id', invoiceId)
+    .eq('org_id', orgId)
     .maybeSingle();
   if (fetchErr) throw fetchErr;
   if (!inv) throw new Error('Invoice not found');
@@ -606,7 +622,8 @@ export async function markInvoicePaidManually(invoiceId: string) {
       paid_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq('id', invoiceId);
+    .eq('id', invoiceId)
+    .eq('org_id', orgId);
   if (error) throw error;
 
   // Emit automation event to stop invoice reminders and trigger payment workflows

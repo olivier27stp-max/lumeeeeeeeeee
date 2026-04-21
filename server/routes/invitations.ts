@@ -20,7 +20,7 @@ const inviteSchema = z.object({
 });
 
 const acceptInviteSchema = z.object({
-  token: z.string().trim().min(1, 'Token is required.'),
+  token: z.string().trim().regex(/^[a-f0-9]{64}$/, 'Invalid token format.'),
   password: passwordSchema,
   full_name: z.string().trim().min(1, 'Full name is required.'),
 });

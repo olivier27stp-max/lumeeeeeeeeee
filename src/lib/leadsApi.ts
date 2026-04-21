@@ -116,22 +116,30 @@ async function getAuthHeaders(extra?: Record<string, string>) {
 }
 
 function buildSearchFilter(search: string): string {
-  const safe = search.replace(/,/g, ' ').trim().replace(/%/g, '\\%').replace(/_/g, '\\_');
-  return [
-    `first_name.ilike.%${safe}%`,
-    `last_name.ilike.%${safe}%`,
-    `title.ilike.%${safe}%`,
-    `company.ilike.%${safe}%`,
-    `email.ilike.%${safe}%`,
-    `phone.ilike.%${safe}%`,
-  ].join(',');
+  const cleaned = search.replace(/,/g, ' ').trim().replace(/%/g, '\\%').replace(/_/g, '\\_');
+  const variants = new Set<string>([cleaned, cleaned.normalize('NFD').replace(/[\u0300-\u036f]/g, '')]);
+  const clauses: string[] = [];
+  for (const v of variants) {
+    if (!v) continue;
+    clauses.push(
+      `first_name.ilike.%${v}%`,
+      `last_name.ilike.%${v}%`,
+      `title.ilike.%${v}%`,
+      `company.ilike.%${v}%`,
+      `email.ilike.%${v}%`,
+      `phone.ilike.%${v}%`,
+    );
+  }
+  return clauses.join(',');
 }
 
 export async function fetchLeadsScoped(query: LeadsQuery = {}): Promise<Lead[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const sortAscending = query.sort === 'oldest';
   let request = supabase
     .from('leads_active')
     .select('*')
+    .eq('org_id', orgId)
     .order('created_at', { ascending: sortAscending });
 
   if (query.search?.trim()) request = request.or(buildSearchFilter(query.search));
@@ -233,6 +241,7 @@ export async function findEmailConflict(email: string): Promise<EmailConflictRec
 }
 
 export async function updateLeadScoped(id: string, input: UpdateLeadInput): Promise<Lead> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const payload: Record<string, any> = {};
   if (input.first_name !== undefined) payload.first_name = input.first_name.trim();
   if (input.last_name !== undefined) payload.last_name = input.last_name.trim();
@@ -254,7 +263,7 @@ export async function updateLeadScoped(id: string, input: UpdateLeadInput): Prom
   if (input.converted_to_client_id !== undefined) payload.converted_to_client_id = input.converted_to_client_id;
   if (input.deleted_at !== undefined) payload.deleted_at = input.deleted_at;
 
-  const { data, error } = await supabase.from('leads').update(payload).eq('id', id).select('*').single();
+  const { data, error } = await supabase.from('leads').update(payload).eq('id', id).eq('org_id', orgId).select('*').single();
   if (error) throw error;
 
   // Sync lead status → pipeline deal stage (blocking with error handling)
@@ -264,6 +273,7 @@ export async function updateLeadScoped(id: string, input: UpdateLeadInput): Prom
       const { data: deal } = await supabase
         .from('pipeline_deals')
         .select('id')
+        .eq('org_id', orgId)
         .eq('lead_id', id)
         .is('deleted_at', null)
         .limit(1)
@@ -289,7 +299,7 @@ export async function updateLeadScoped(id: string, input: UpdateLeadInput): Prom
     if (input.company !== undefined) clientUpdate.company = input.company?.trim() || null;
     if (Object.keys(clientUpdate).length > 0) {
       clientUpdate.updated_at = new Date().toISOString();
-      const { error: syncErr } = await supabase.from('clients').update(clientUpdate).eq('id', clientId);
+      const { error: syncErr } = await supabase.from('clients').update(clientUpdate).eq('id', clientId).eq('org_id', orgId);
       if (syncErr) console.error('Lead→Client sync failed:', syncErr.message);
     }
   }
@@ -311,11 +321,13 @@ export async function deleteLeadScoped(id: string): Promise<void> {
 }
 
 export async function convertLeadToClient(leadId: string): Promise<{ lead: Lead; clientId: string }> {
+  const orgId = await getCurrentOrgIdOrThrow();
   // Fetch the lead first
   const { data: leadRow, error: leadFetchError } = await supabase
     .from('leads')
     .select('*')
     .eq('id', leadId)
+    .eq('org_id', orgId)
     .single();
   if (leadFetchError) throw leadFetchError;
   if (!leadRow) throw new Error('Lead not found.');
@@ -329,6 +341,7 @@ export async function convertLeadToClient(leadId: string): Promise<{ lead: Lead;
     .from('clients')
     .update({ status: 'active', updated_at: new Date().toISOString() })
     .eq('id', clientId)
+    .eq('org_id', orgId)
     .eq('status', 'lead');
 
   // Mark lead as converted/closed
@@ -340,6 +353,7 @@ export async function convertLeadToClient(leadId: string): Promise<{ lead: Lead;
       updated_at: new Date().toISOString(),
     })
     .eq('id', leadId)
+    .eq('org_id', orgId)
     .select('*')
     .single();
   if (updateError) throw updateError;
@@ -454,6 +468,7 @@ export async function convertLeadToJob(
 }
 
 export async function exportAllLeadsCsv(): Promise<string> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const pageSize = 1000;
   let from = 0;
   const rows: any[] = [];
@@ -463,6 +478,7 @@ export async function exportAllLeadsCsv(): Promise<string> {
     const { data, error } = await supabase
       .from('leads_active')
       .select('id,first_name,last_name,phone,email,company,address,source,status,value,assigned_to,notes,tags,created_at')
+      .eq('org_id', orgId)
       .order('created_at', { ascending: true })
       .range(from, to);
 

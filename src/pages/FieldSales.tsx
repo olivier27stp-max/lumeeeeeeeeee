@@ -62,7 +62,26 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof
   callback:        { label: 'Callback',        color: '#f59e0b', icon: PhoneIcon,     bgClass: 'bg-amber-500' },
   do_not_knock:    { label: 'Do Not Knock',    color: '#dc2626', icon: XCircle,      bgClass: 'bg-red-600' },
   revisit:         { label: 'Revisit',         color: '#06b6d4', icon: Clock,        bgClass: 'bg-cyan-500' },
+  appointment:     { label: 'Appointment',     color: '#8b5cf6', icon: Clock,        bgClass: 'bg-violet-500' },
 };
+
+const STATUS_LABEL_FR: Record<string, string> = {
+  unknown: 'Inconnu',
+  no_answer: 'Pas de réponse',
+  not_interested: 'Pas intéressé',
+  lead: 'Prospect',
+  quote_sent: 'Devis envoyé',
+  sale: 'Vente conclue',
+  callback: 'Rappel',
+  do_not_knock: 'Ne pas cogner',
+  revisit: 'Revisite',
+  appointment: 'Rendez-vous',
+};
+
+function statusLabel(status: string, lang: string): string {
+  if (lang === 'fr') return STATUS_LABEL_FR[status] ?? STATUS_CONFIG[status]?.label ?? status;
+  return STATUS_CONFIG[status]?.label ?? status;
+}
 
 const SCORE_CONFIG: Record<string, { label: string; color: string }> = {
   cold: { label: 'Cold', color: '#60a5fa' },
@@ -161,6 +180,7 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
   onContinueToJob: (address: string, clientId?: string) => void;
   onContinueToQuote: (address: string) => void;
 }) {
+  const { language } = useTranslation();
   const [pinType, setPinType] = useState('lead');
   const [noteText, setNoteText] = useState('');
   const [address, setAddress] = useState(`${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`);
@@ -298,7 +318,7 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
                       ? 'border-white/20 bg-white/5 text-text-primary'
                       : 'border-outline text-text-tertiary hover:text-text-secondary hover:border-white/10')}>
                   <div className="w-3 h-3 rounded-full" style={{ background: cfg.color }} />
-                  {cfg.label}
+                  {statusLabel(key, language)}
                 </button>
               ))}
             </div>
@@ -322,7 +342,7 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
           <div className="flex items-center gap-2 pt-1">
             <button onClick={() => handleCreate()} disabled={submitting}
               className="flex-1 py-2.5 rounded-lg bg-white text-black text-xs font-medium hover:bg-white/90 transition-colors disabled:opacity-50">
-              {submitting ? 'Creating...' : pinType === 'sale' ? 'Create & Open Job' : pinType === 'quote_sent' ? 'Create & Open Quote' : `Create ${STATUS_CONFIG[pinType]?.label ?? 'Pin'}`}
+              {submitting ? (language === 'fr' ? 'Création...' : 'Creating...') : pinType === 'sale' ? (language === 'fr' ? 'Créer et ouvrir le job' : 'Create & Open Job') : pinType === 'quote_sent' ? (language === 'fr' ? 'Créer et ouvrir le devis' : 'Create & Open Quote') : `${language === 'fr' ? 'Créer' : 'Create'} ${statusLabel(pinType, language) ?? 'Pin'}`}
             </button>
             <button onClick={onClose} className="px-3 py-2.5 rounded-lg border border-outline text-text-tertiary text-[11px] font-medium hover:text-text-secondary">
               Cancel
@@ -1760,7 +1780,7 @@ export default function FieldSales() {
               className={cn('px-2 py-0.5 rounded-md text-[10px] font-medium transition-colors flex items-center gap-1',
                 statusFilter === s ? 'bg-primary text-white' : 'text-text-tertiary hover:text-text-secondary')}>
               <div className="w-1.5 h-1.5 rounded-full" style={{ background: STATUS_CONFIG[s]?.color }} />
-              {STATUS_CONFIG[s]?.label}
+              {statusLabel(s, language)}
             </button>
           ))}
           {reps.length > 0 && (

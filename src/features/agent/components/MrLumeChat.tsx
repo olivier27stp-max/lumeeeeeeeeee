@@ -121,13 +121,21 @@ export default function MrLumeChat() {
 
   const isInConversation = messages.length > 0;
 
-  /* ── Mount: health check + load sessions ── */
+  /* ── Mount: health check (polled) + load sessions ── */
   useEffect(() => {
     mountedRef.current = true;
-    agentHealthCheck().then(h => { if (mountedRef.current) setConnectionStatus(h.ok ? 'connected' : 'disconnected'); });
+    const runHealthCheck = () => {
+      agentHealthCheck()
+        .then(h => { if (mountedRef.current) setConnectionStatus(h.ok ? 'connected' : 'disconnected'); })
+        .catch(() => { if (mountedRef.current) setConnectionStatus('disconnected'); });
+    };
+    runHealthCheck();
     agentGetSessions().then(s => { if (mountedRef.current) setSessions(s); }).catch(() => {});
+    // Retry health check every 30s so we notice a backend recovery
+    const interval = setInterval(runHealthCheck, 30_000);
     return () => {
       mountedRef.current = false;
+      clearInterval(interval);
       if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; }
     };
   }, []);
@@ -486,13 +494,6 @@ export default function MrLumeChat() {
             );
           })}
         </AnimatePresence>
-
-        {/* Relationship Graph */}
-        {showRelationGraph && !isProcessing && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-neutral-200 dark:border-neutral-700 overflow-hidden shadow-sm">
-            <div style={{ height: 450 }}><RelationshipGraph /></div>
-          </motion.div>
-        )}
 
         {/* Thinking */}
         {isProcessing && currentState && (

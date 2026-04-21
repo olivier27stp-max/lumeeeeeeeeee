@@ -3,17 +3,21 @@ import { ArrowLeft, Plus, Trash2, Star, Check, Loader2, Pencil, X, MapPin, Info,
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { useTranslation } from '../i18n';
 import {
   listTaxes, setupTaxPreset, updateTaxConfig, deleteTaxGroup, setDefaultTaxGroup, createTaxConfig, updateTaxRegistrationNumber,
   type TaxConfig, type TaxGroup, type TaxGroupItem, type TaxPreset,
 } from '../lib/taxApi';
 
-function formatMoney(cents: number) {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(cents / 100);
+function formatMoney(cents: number, locale: string = 'en-CA') {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD' }).format(cents / 100);
 }
 
 export default function TaxSettings() {
   const navigate = useNavigate();
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
   const [loading, setLoading] = useState(true);
   const [configs, setConfigs] = useState<TaxConfig[]>([]);
   const [groups, setGroups] = useState<TaxGroup[]>([]);
@@ -172,9 +176,9 @@ export default function TaxSettings() {
           <ArrowLeft size={16} className="text-text-secondary" />
         </button>
         <div className="flex-1">
-          <h1 className="text-[22px] font-bold text-text-primary tracking-tight">Tax Settings</h1>
+          <h1 className="text-[22px] font-bold text-text-primary tracking-tight">{fr ? 'Paramètres de taxe' : 'Tax Settings'}</h1>
           <p className="text-[12px] text-text-tertiary mt-0.5">
-            Configure tax rates by region. Auto-applied to all new quotes, invoices, and jobs.
+            {fr ? 'Configurez les taux de taxe par région. Appliqués automatiquement aux nouveaux devis, factures et jobs.' : 'Configure tax rates by region. Auto-applied to all new quotes, invoices, and jobs.'}
           </p>
         </div>
       </div>
@@ -206,7 +210,7 @@ export default function TaxSettings() {
                       <span className="text-[14px] font-semibold text-text-primary">{group.name}</span>
                       {group.is_default && (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-[9px] font-bold uppercase tracking-wider">
-                          <Star size={8} className="fill-current" /> Default
+                          <Star size={8} className="fill-current" /> {fr ? 'Défaut' : 'Default'}
                         </span>
                       )}
                       {activeTaxes.length > 0 && (
@@ -219,7 +223,7 @@ export default function TaxSettings() {
                       {!group.is_default && (
                         <button onClick={() => handleSetDefault(group.id)} disabled={busy}
                           className="text-[11px] text-text-tertiary hover:text-amber-500 transition-colors flex items-center gap-1">
-                          <Star size={10} /> Set default
+                          <Star size={10} /> {fr ? 'Définir par défaut' : 'Set default'}
                         </button>
                       )}
                       <button onClick={() => handleDeleteGroup(group.id, group.name)} disabled={busy}
@@ -299,7 +303,7 @@ export default function TaxSettings() {
                               className="text-[11px] text-text-tertiary hover:text-text-secondary transition-colors flex items-center gap-1 group">
                               {tax.registration_number
                                 ? <><span>No: {tax.registration_number}</span><Pencil size={9} className="opacity-0 group-hover:opacity-100" /></>
-                                : <><Plus size={9} /><span>Add registration number</span></>}
+                                : <><Plus size={9} /><span>{fr ? "Ajouter un numéro d'enregistrement" : 'Add registration number'}</span></>}
                             </button>
                           )}
                         </div>
@@ -339,23 +343,23 @@ export default function TaxSettings() {
             <div className="section-card p-5">
               <div className="flex items-center gap-2 mb-3">
                 <DollarSign size={14} className="text-text-tertiary" />
-                <p className="text-[13px] font-semibold text-text-primary">Tax Preview</p>
-                <span className="text-[11px] text-text-tertiary">on a $1,000 invoice</span>
+                <p className="text-[13px] font-semibold text-text-primary">{fr ? 'Aperçu des taxes' : 'Tax Preview'}</p>
+                <span className="text-[11px] text-text-tertiary">{fr ? 'sur une facture de 1 000 $' : 'on a $1,000 invoice'}</span>
               </div>
               <div className="bg-surface-secondary/50 rounded-lg p-4 space-y-1.5 text-[12px]">
                 <div className="flex justify-between">
-                  <span className="text-text-secondary">Subtotal</span>
-                  <span className="tabular-nums font-medium text-text-primary">{formatMoney(previewSubtotal)}</span>
+                  <span className="text-text-secondary">{fr ? 'Sous-total' : 'Subtotal'}</span>
+                  <span className="tabular-nums font-medium text-text-primary">{formatMoney(previewSubtotal, locale)}</span>
                 </div>
                 {previewTaxes.map((t, i) => (
                   <div key={i} className="flex justify-between">
                     <span className="text-text-tertiary">{t.name}</span>
-                    <span className="tabular-nums text-text-secondary">{formatMoney(t.amount)}</span>
+                    <span className="tabular-nums text-text-secondary">{formatMoney(t.amount, locale)}</span>
                   </div>
                 ))}
                 <div className="flex justify-between pt-1.5 mt-1 border-t border-outline/50 font-semibold text-[13px]">
-                  <span className="text-text-primary">Total</span>
-                  <span className="tabular-nums text-text-primary">{formatMoney(previewTotal)}</span>
+                  <span className="text-text-primary">{fr ? 'Total' : 'Total'}</span>
+                  <span className="tabular-nums text-text-primary">{formatMoney(previewTotal, locale)}</span>
                 </div>
               </div>
             </div>
@@ -365,7 +369,7 @@ export default function TaxSettings() {
           {showAddRegion ? (
             <div className="section-card p-5 space-y-5">
               <div className="flex items-center justify-between">
-                <p className="text-[13px] font-semibold text-text-primary">Add Tax Region</p>
+                <p className="text-[13px] font-semibold text-text-primary">{fr ? 'Ajouter une région de taxe' : 'Add Tax Region'}</p>
                 <button onClick={() => setShowAddRegion(false)} className="p-1 text-text-tertiary hover:text-text-primary"><X size={14} /></button>
               </div>
 
@@ -421,12 +425,12 @@ export default function TaxSettings() {
             <div className="flex items-center gap-2">
               <button onClick={() => setShowAddRegion(true)}
                 className="glass-button inline-flex items-center gap-1.5 text-[13px]">
-                <Plus size={14} /> Add Region
+                <Plus size={14} /> {fr ? 'Ajouter une région' : 'Add Region'}
               </button>
               {!showCustomTax && (
                 <button onClick={() => setShowCustomTax(true)}
                   className="glass-button inline-flex items-center gap-1.5 text-[13px]">
-                  <Plus size={14} /> Custom Tax
+                  <Plus size={14} /> {fr ? 'Taxe personnalisée' : 'Custom Tax'}
                 </button>
               )}
             </div>
@@ -436,7 +440,7 @@ export default function TaxSettings() {
           {showCustomTax && (
             <div className="section-card p-5">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-[13px] font-semibold text-text-primary">Add Custom Tax</p>
+                <p className="text-[13px] font-semibold text-text-primary">{fr ? 'Ajouter une taxe personnalisée' : 'Add Custom Tax'}</p>
                 <button onClick={() => setShowCustomTax(false)} className="p-1 text-text-tertiary hover:text-text-primary"><X size={14} /></button>
               </div>
               <p className="text-[11px] text-text-tertiary mb-3">

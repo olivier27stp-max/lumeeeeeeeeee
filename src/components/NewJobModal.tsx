@@ -251,6 +251,7 @@ export default function NewJobModal({
     { id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true },
   ]);
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const [internalSaving, setInternalSaving] = useState(false);
   const [calendarHint, setCalendarHint] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [servicePickerOpen, setServicePickerOpen] = useState(false);
@@ -733,6 +734,7 @@ export default function NewJobModal({
         included: item.included,
       }));
 
+    setInternalSaving(true);
     try {
       const createdJob = await onSave({
         id: initialValues?.id,
@@ -779,6 +781,8 @@ export default function NewJobModal({
     } catch (error: any) {
       console.error('[jobs] failed to create job', error);
       setInlineError(error?.message || 'Failed to save job.');
+    } finally {
+      setInternalSaving(false);
     }
   };
 
@@ -1458,8 +1462,8 @@ export default function NewJobModal({
                 <button onClick={() => handleClose()} className="glass-button">
                   {t.modals.cancelBtn}
                 </button>
-                <button form="new-job-form" type="submit" disabled={isSaving} className="glass-button-primary inline-flex items-center gap-2">
-                  {isSaving ? t.modals.savingBtn : isEditMode ? t.modals.saveChangesBtn : t.modals.saveJobBtn}
+                <button form="new-job-form" type="submit" disabled={isSaving || internalSaving} className="glass-button-primary inline-flex items-center gap-2">
+                  {(isSaving || internalSaving) ? t.modals.savingBtn : isEditMode ? t.modals.saveChangesBtn : t.modals.saveJobBtn}
                   <ChevronDown size={14} className="opacity-80" />
                 </button>
               </div>

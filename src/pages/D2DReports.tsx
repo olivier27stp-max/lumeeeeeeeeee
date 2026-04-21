@@ -5,6 +5,7 @@ import { Button } from '../components/d2d/button';
 import { Badge } from '../components/d2d/badge';
 import { Avatar } from '../components/d2d/avatar';
 import { cn } from '../lib/utils';
+import { useTranslation } from '../i18n';
 import { getLeaderboard } from '../lib/leaderboardApi';
 import { getRepAvatar } from '../lib/constants/avatars';
 import type { LeaderboardEntry } from '../types';
@@ -26,17 +27,22 @@ import {
 
 type Period = 'daily' | 'weekly' | 'monthly';
 
-const periodLabels: Record<Period, string> = {
+const periodLabelsEn: Record<Period, string> = {
   daily: 'Today',
   weekly: 'This Week',
   monthly: 'This Month',
+};
+const periodLabelsFr: Record<Period, string> = {
+  daily: "Aujourd'hui",
+  weekly: 'Cette semaine',
+  monthly: 'Ce mois-ci',
 };
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function formatCurrency(n: number): string {
-  return '$' + n.toLocaleString('en-US');
+function formatCurrency(n: number, locale = 'en-CA'): string {
+  return '$' + n.toLocaleString(locale);
 }
 
 function computeSummary(data: LeaderboardEntry[]) {
@@ -135,6 +141,9 @@ function ConversionFunnel({ data }: { data: LeaderboardEntry[] }) {
 // Main Page
 // ---------------------------------------------------------------------------
 export default function D2DReports() {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const periodLabels = fr ? periodLabelsFr : periodLabelsEn;
   const [period, setPeriod] = useState<Period>('monthly');
   const [data, setData] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,32 +176,32 @@ export default function D2DReports() {
   const summaryStats = [
     {
       icon: <DollarSign className="h-4 w-4" />,
-      label: 'Total Revenue',
-      value: formatCurrency(totalRevenue),
+      label: fr ? 'Revenu total' : 'Total Revenue',
+      value: formatCurrency(totalRevenue, fr ? 'fr-CA' : 'en-CA'),
       subtitle: periodLabels[period],
     },
     {
       icon: <Target className="h-4 w-4" />,
-      label: 'Total Closes',
+      label: fr ? 'Total des ventes' : 'Total Closes',
       value: String(totalCloses),
       subtitle: periodLabels[period],
     },
     {
       icon: <Users className="h-4 w-4" />,
-      label: 'Active Reps',
+      label: fr ? 'Reps actifs' : 'Active Reps',
       value: String(activeReps),
-      subtitle: `${period} period`,
+      subtitle: `${periodLabels[period]}`,
     },
     {
       icon: <TrendingUp className="h-4 w-4" />,
-      label: 'Avg Conversion',
+      label: fr ? 'Conv. moyenne' : 'Avg Conversion',
       value: `${avgConversion.toFixed(1)}%`,
-      subtitle: 'Doors to close',
+      subtitle: fr ? 'Porte à vente' : 'Doors to close',
     },
     {
       icon: <MapPin className="h-4 w-4" />,
-      label: 'Doors Knocked',
-      value: totalDoors.toLocaleString('en-US'),
+      label: fr ? 'Portes cognées' : 'Doors Knocked',
+      value: totalDoors.toLocaleString(fr ? 'fr-CA' : 'en-CA'),
       subtitle: periodLabels[period],
     },
   ];
@@ -202,9 +211,9 @@ export default function D2DReports() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-text-primary">Reports</h2>
+          <h2 className="text-lg font-semibold text-text-primary">{fr ? 'Rapports' : 'Reports'}</h2>
           <p className="text-xs text-text-tertiary">
-            Analytics and performance insights
+            {fr ? 'Analyses et performance' : 'Analytics and performance insights'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -217,7 +226,7 @@ export default function D2DReports() {
               onClick={() => setPeriod(p)}
               className="capitalize"
             >
-              {p}
+              {periodLabels[p]}
             </Button>
           ))}
           <Button variant="outline" size="sm" className="gap-1.5">
@@ -253,7 +262,7 @@ export default function D2DReports() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-3.5 w-3.5 text-text-secondary" />
-              Revenue by Rep
+              {fr ? 'Revenu par rep' : 'Revenue by Rep'}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -266,7 +275,7 @@ export default function D2DReports() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-3.5 w-3.5 text-text-secondary" />
-              Conversion Funnel
+              {fr ? 'Entonnoir de conversion' : 'Conversion Funnel'}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -278,7 +287,7 @@ export default function D2DReports() {
       {/* Detailed table */}
       <Card>
         <CardHeader>
-          <CardTitle>Rep Performance Breakdown</CardTitle>
+          <CardTitle>{fr ? 'Détail des performances par rep' : 'Rep Performance Breakdown'}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">

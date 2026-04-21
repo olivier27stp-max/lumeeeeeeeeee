@@ -59,16 +59,27 @@ export interface HardDeleteClientResult {
   job_line_items: number;
 }
 
+/** Strip diacritics so searching "belanger" still matches "Bélanger". */
+function stripAccents(input: string): string {
+  return input.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 function buildSearchFilter(search: string): string {
-  const safe = search.replace(/,/g, ' ').trim().replace(/%/g, '\\%').replace(/_/g, '\\_');
-  return [
-    `first_name.ilike.%${safe}%`,
-    `last_name.ilike.%${safe}%`,
-    `company.ilike.%${safe}%`,
-    `email.ilike.%${safe}%`,
-    `phone.ilike.%${safe}%`,
-    `address.ilike.%${safe}%`,
-  ].join(',');
+  const cleaned = search.replace(/,/g, ' ').trim().replace(/%/g, '\\%').replace(/_/g, '\\_');
+  const variants = new Set<string>([cleaned, stripAccents(cleaned)]);
+  const clauses: string[] = [];
+  for (const v of variants) {
+    if (!v) continue;
+    clauses.push(
+      `first_name.ilike.%${v}%`,
+      `last_name.ilike.%${v}%`,
+      `company.ilike.%${v}%`,
+      `email.ilike.%${v}%`,
+      `phone.ilike.%${v}%`,
+      `address.ilike.%${v}%`,
+    );
+  }
+  return clauses.join(',');
 }
 
 export async function listClients(query: ClientsQuery = {}): Promise<ClientsResult> {
@@ -140,10 +151,21 @@ export async function findClientsByEmail(email: string): Promise<ClientRecord[]>
   return (data || []) as ClientRecord[];
 }
 
+/** Basic RFC 5322-lite email format check. Returns true for empty strings. */
+function isValidEmail(email: string | null | undefined): boolean {
+  if (!email) return true;
+  const trimmed = email.trim();
+  if (!trimmed) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}
+
 export async function createClientWithDuplicateHandling(
   payload: ClientPayload,
   mode: 'add' | 'replace'
 ): Promise<ClientRecord> {
+  if (!isValidEmail(payload.email)) {
+    throw new Error('Adresse courriel invalide.');
+  }
   const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase.rpc('create_client_with_duplicate_handling', {
     p_org_id: orgId,
@@ -177,6 +199,9 @@ export async function createClient(payload: ClientPayload): Promise<ClientRecord
 }
 
 export async function updateClient(id: string, payload: Partial<ClientPayload>): Promise<ClientRecord> {
+  if (payload.email !== undefined && !isValidEmail(payload.email)) {
+    throw new Error('Adresse courriel invalide.');
+  }
   const updatePayload: Record<string, any> = {};
   if (payload.first_name !== undefined) updatePayload.first_name = payload.first_name.trim();
   if (payload.last_name !== undefined) updatePayload.last_name = payload.last_name.trim();
@@ -197,7 +222,8 @@ export async function updateClient(id: string, payload: Partial<ClientPayload>):
 
   // Support optimistic locking if version provided in payload
   const expectedVersion = (payload as any).version;
-  let query = supabase.from('clients').update(updatePayload).eq('id', id);
+  const orgId = await getCurrentOrgIdOrThrow();
+  let query = supabase.from('clients').update(updatePayload).eq('id', id).eq('org_id', orgId);
   if (expectedVersion != null) query = query.eq('version', expectedVersion);
   const { data, error } = await query.select('*').single();
   if (error?.code === 'PGRST116' && expectedVersion != null) {
@@ -261,7 +287,8 @@ export async function listClientJobs(clientId: string) {
 }
 
 export async function getClientById(clientId: string): Promise<ClientRecord | null> {
-  const { data, error } = await supabase.from('clients').select('*').is('deleted_at', null).eq('id', clientId).maybeSingle();
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase.from('clients').select('*').eq('org_id', orgId).is('deleted_at', null).eq('id', clientId).maybeSingle();
   if (error) throw error;
   return (data as ClientRecord | null) || null;
 }
@@ -269,9 +296,11 @@ export async function getClientById(clientId: string): Promise<ClientRecord | nu
 /** Find other clients sharing the same Google place_id (for duplicate address warning). */
 export async function findClientsByPlaceId(placeId: string, excludeClientId?: string): Promise<ClientRecord[]> {
   if (!placeId) return [];
+  const orgId = await getCurrentOrgIdOrThrow();
   let query = supabase
     .from('clients')
     .select('*')
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .eq('place_id', placeId)
     .order('created_at', { ascending: true });

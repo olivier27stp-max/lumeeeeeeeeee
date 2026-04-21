@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
+import DOMPurify from 'dompurify';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import {
@@ -191,7 +192,7 @@ export default function CourseView() {
             <div className="bg-surface-card rounded-2xl border border-outline/30 p-8 mb-5 min-h-[200px]">
               {activeLesson.text_content ? (
                 <div className="prose prose-sm dark:prose-invert max-w-none text-text-primary leading-relaxed whitespace-pre-wrap"
-                  dangerouslySetInnerHTML={{ __html: activeLesson.text_content }} />
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(activeLesson.text_content) }} />
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-text-muted gap-2">
                   <FileText size={36} className="opacity-30" />

@@ -369,7 +369,7 @@ export default function InvoiceEdit() {
           id: draftId || '',
           client_id: clientId,
           client_name: clientName || 'Client Name',
-          invoice_number: detailQuery.data?.invoice?.invoice_number || 'INV-XXXXXX',
+          invoice_number: detailQuery.data?.invoice?.invoice_number || (language === 'fr' ? 'Généré automatiquement' : 'Auto-generated'),
           status: detailQuery.data?.invoice?.status || 'draft',
           currency: 'CAD',
           subject: subject || null,

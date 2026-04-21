@@ -29,6 +29,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn, formatDate } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { getJobById, getJobLineItems, updateJob, type JobLineItem } from '../lib/jobsApi';
 import { createInvoiceFromJob, getInvoiceRowUiStatus } from '../lib/invoicesApi';
 import { formatCents, type TaxLine } from '../lib/jobCalc';
@@ -138,7 +139,8 @@ export default function JobDetails() {
           // Append to job attachments
           const current = job.attachments || [];
           const updated = [...current, { name: file.name, url: publicUrl }];
-          await supabase.from('jobs').update({ attachments: updated, updated_at: new Date().toISOString() }).eq('id', job.id);
+          const orgId = await getCurrentOrgIdOrThrow();
+          await supabase.from('jobs').update({ attachments: updated, updated_at: new Date().toISOString() }).eq('id', job.id).eq('org_id', orgId);
           setJob((prev) => prev ? { ...prev, attachments: updated } : prev);
           toast.success(`${file.name} uploaded`);
         } catch (err: any) {

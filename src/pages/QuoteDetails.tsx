@@ -15,7 +15,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
 import {
   getQuoteById, updateQuote, saveQuoteLineItems, type QuoteDetail,
-  type QuoteStatus, type QuoteLineItemInput, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS,
+  type QuoteStatus, type QuoteLineItemInput, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, getQuoteStatusLabel,
   formatQuoteMoney, updateQuoteStatus, sendQuoteEmail, sendQuoteSms,
   convertQuoteToJob, convertQuoteToInvoice, duplicateQuote, deleteQuote,
 } from '../lib/quotesApi';
@@ -195,7 +195,7 @@ export default function QuoteDetails() {
             <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-medium border inline-flex items-center gap-1',
               QUOTE_STATUS_COLORS[quote.status as QuoteStatus] || QUOTE_STATUS_COLORS.draft)}>
               <span className="w-1.5 h-1.5 rounded-full bg-current" />
-              {QUOTE_STATUS_LABELS[quote.status as QuoteStatus] || quote.status}
+              {getQuoteStatusLabel(quote.status as QuoteStatus, language) || quote.status}
             </span>
           </div>
           {editing === 'title' ? (
@@ -293,14 +293,14 @@ export default function QuoteDetails() {
             </div>
             <div className="space-y-3 pt-1">
               <div className="flex justify-between text-[13px] border-b border-outline pb-2.5">
-                <span className="text-text-tertiary">Quote #</span><span className="font-semibold text-text-primary">{quote.quote_number}</span>
+                <span className="text-text-tertiary">{language === 'fr' ? 'Devis n°' : 'Quote #'}</span><span className="font-semibold text-text-primary">{quote.quote_number}</span>
               </div>
               <div className="flex justify-between text-[13px] border-b border-outline pb-2.5">
-                <span className="text-text-tertiary">Created</span><span className="font-medium text-text-primary">{format(new Date(quote.created_at), 'MMM d, yyyy')}</span>
+                <span className="text-text-tertiary">{language === 'fr' ? 'Créé le' : 'Created'}</span><span className="font-medium text-text-primary">{format(new Date(quote.created_at), 'MMM d, yyyy')}</span>
               </div>
               {quote.valid_until && (
                 <div className="flex justify-between text-[13px]">
-                  <span className="text-text-tertiary">Valid until</span><span className="font-medium text-text-primary">{format(new Date(quote.valid_until), 'MMM d, yyyy')}</span>
+                  <span className="text-text-tertiary">{language === 'fr' ? "Valide jusqu'au" : 'Valid until'}</span><span className="font-medium text-text-primary">{format(new Date(quote.valid_until), 'MMM d, yyyy')}</span>
                 </div>
               )}
             </div>
@@ -309,21 +309,21 @@ export default function QuoteDetails() {
           {/* Introduction */}
           <div className="section-card p-5">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-[14px] font-semibold text-text-primary">Introduction</h4>
+              <h4 className="text-[14px] font-semibold text-text-primary">{language === 'fr' ? 'Introduction' : 'Introduction'}</h4>
               {editing !== 'intro' && <button onClick={() => startEdit('intro')} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
               {editing === 'intro' && editButtons}
             </div>
             {editing === 'intro' ? (
               <textarea value={editIntro} onChange={e => setEditIntro(e.target.value)} className={cn(inputCls, 'min-h-[80px]')} autoFocus />
             ) : (
-              <p className="text-[13px] text-text-secondary whitespace-pre-wrap">{introSection?.content || <span className="text-text-tertiary italic">Click the pencil to add an introduction...</span>}</p>
+              <p className="text-[13px] text-text-secondary whitespace-pre-wrap">{introSection?.content || <span className="text-text-tertiary italic">{language === 'fr' ? "Cliquez sur le crayon pour ajouter une introduction..." : 'Click the pencil to add an introduction...'}</span>}</p>
             )}
           </div>
 
           {/* Line Items */}
           <div className="section-card overflow-hidden">
             <div className="px-5 py-3.5 border-b border-outline flex items-center justify-between">
-              <h4 className="text-[14px] font-semibold text-text-primary">Product / Service</h4>
+              <h4 className="text-[14px] font-semibold text-text-primary">{language === 'fr' ? 'Produit / Service' : 'Product / Service'}</h4>
               {editing !== 'lineItems' && <button onClick={() => startEdit('lineItems')} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
               {editing === 'lineItems' && editButtons}
             </div>
@@ -356,7 +356,7 @@ export default function QuoteDetails() {
                 ))}
                 <button onClick={() => setEditLineItems(p => [...p, { id: crypto.randomUUID(), name: '', description: '', quantity: '1', unit_price: '0', is_optional: false }])}
                   className="glass-button text-xs flex items-center gap-1.5 px-3 py-1.5">
-                  <Plus size={12} /> Add Line Item
+                  <Plus size={12} /> {language === 'fr' ? 'Ajouter une ligne' : 'Add Line Item'}
                 </button>
               </div>
             ) : (
@@ -364,10 +364,10 @@ export default function QuoteDetails() {
                 <table className="w-full text-[13px]">
                   <thead className="border-b border-outline">
                     <tr>
-                      <th className="px-5 py-2.5 text-left font-semibold text-text-secondary">Line Item</th>
-                      <th className="px-5 py-2.5 text-center font-semibold text-text-secondary">Quantity</th>
-                      <th className="px-5 py-2.5 text-right font-semibold text-text-secondary">Unit Price</th>
-                      <th className="px-5 py-2.5 text-right font-semibold text-text-secondary">Total</th>
+                      <th className="px-5 py-2.5 text-left font-semibold text-text-secondary">{language === 'fr' ? 'Article' : 'Line Item'}</th>
+                      <th className="px-5 py-2.5 text-center font-semibold text-text-secondary">{language === 'fr' ? 'Quantité' : 'Quantity'}</th>
+                      <th className="px-5 py-2.5 text-right font-semibold text-text-secondary">{language === 'fr' ? 'Prix unitaire' : 'Unit Price'}</th>
+                      <th className="px-5 py-2.5 text-right font-semibold text-text-secondary">{language === 'fr' ? 'Total' : 'Total'}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline/50">
@@ -386,7 +386,7 @@ export default function QuoteDetails() {
                   </tbody>
                 </table>
                 <div className="bg-surface-secondary border-t border-outline px-5 py-3 space-y-1.5">
-                  <div className="flex justify-between text-[13px]"><span className="text-text-secondary">Subtotal</span><span className="text-text-primary">{formatQuoteMoney(quote.subtotal_cents)}</span></div>
+                  <div className="flex justify-between text-[13px]"><span className="text-text-secondary">{language === 'fr' ? 'Sous-total' : 'Subtotal'}</span><span className="text-text-primary">{formatQuoteMoney(quote.subtotal_cents)}</span></div>
                   {quote.discount_cents > 0 && <div className="flex justify-between text-[13px]"><span className="text-text-secondary">Discount</span><span className="text-danger">-{formatQuoteMoney(quote.discount_cents)}</span></div>}
                   <div className="flex justify-between text-[13px]"><span className="text-text-secondary">{quote.tax_rate_label || 'Tax'}</span><span className="text-text-primary">{formatQuoteMoney(quote.tax_cents)}</span></div>
                   <div className="flex justify-between text-[15px] font-bold border-t border-outline pt-2"><span className="text-text-primary">Total</span><span className="text-text-primary">{formatQuoteMoney(quote.total_cents)}</span></div>
@@ -398,14 +398,14 @@ export default function QuoteDetails() {
           {/* Contract / Disclaimer */}
           <div className="section-card p-5">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-[14px] font-semibold text-text-primary">Contract / Disclaimer</h4>
+              <h4 className="text-[14px] font-semibold text-text-primary">{language === 'fr' ? 'Contrat / Clause de non-responsabilité' : 'Contract / Disclaimer'}</h4>
               {editing !== 'disclaimer' && <button onClick={() => startEdit('disclaimer')} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
               {editing === 'disclaimer' && editButtons}
             </div>
             {editing === 'disclaimer' ? (
               <textarea value={editDisclaimer} onChange={e => setEditDisclaimer(e.target.value)} className={cn(inputCls, 'min-h-[80px]')} autoFocus />
             ) : (
-              <p className="text-[13px] text-text-secondary whitespace-pre-wrap">{disclaimerSection?.content || quote.contract_disclaimer || <span className="text-text-tertiary italic">Click the pencil to add terms...</span>}</p>
+              <p className="text-[13px] text-text-secondary whitespace-pre-wrap">{disclaimerSection?.content || quote.contract_disclaimer || <span className="text-text-tertiary italic">{language === 'fr' ? 'Cliquez sur le crayon pour ajouter des conditions...' : 'Click the pencil to add terms...'}</span>}</p>
             )}
           </div>
         </div>
@@ -415,7 +415,7 @@ export default function QuoteDetails() {
           {/* Deposit */}
           <div className="section-card p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <h4 className="text-[14px] font-semibold text-text-primary">Deposit payment settings</h4>
+              <h4 className="text-[14px] font-semibold text-text-primary">{language === 'fr' ? 'Paramètres de paiement de dépôt' : 'Deposit payment settings'}</h4>
               {editing !== 'deposit' && <button onClick={() => startEdit('deposit')} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
               {editing === 'deposit' && editButtons}
             </div>
@@ -423,7 +423,7 @@ export default function QuoteDetails() {
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-[13px] text-text-secondary cursor-pointer">
                   <input type="checkbox" checked={editRequirePayment} onChange={e => setEditRequirePayment(e.target.checked)} className="rounded" />
-                  Require payment method on file
+                  {language === 'fr' ? 'Exiger un moyen de paiement au dossier' : 'Require payment method on file'}
                 </label>
                 <label className="flex items-center gap-2 text-[13px] text-text-secondary cursor-pointer">
                   <input type="checkbox" checked={editDepositRequired} onChange={e => setEditDepositRequired(e.target.checked)} className="rounded" />
@@ -433,7 +433,7 @@ export default function QuoteDetails() {
             ) : (
               <>
                 <div className="flex items-center justify-between text-[13px]">
-                  <span className="text-text-secondary">Require payment method on file</span>
+                  <span className="text-text-secondary">{language === 'fr' ? 'Exiger un moyen de paiement au dossier' : 'Require payment method on file'}</span>
                   <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-bold',
                     quote.require_payment_method ? 'bg-primary/10 text-primary' : 'bg-surface-tertiary text-text-tertiary')}>
                     {quote.require_payment_method ? 'ON' : 'OFF'}
@@ -452,7 +452,7 @@ export default function QuoteDetails() {
           {/* Notes */}
           <div className="section-card p-4">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-[14px] font-semibold text-text-primary">Notes</h4>
+              <h4 className="text-[14px] font-semibold text-text-primary">{language === 'fr' ? 'Notes' : 'Notes'}</h4>
               {editing !== 'notes' && <button onClick={() => startEdit('notes')} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
               {editing === 'notes' && editButtons}
             </div>

@@ -20,7 +20,8 @@ function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '--';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '--';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  const locale = (typeof localStorage !== 'undefined' && localStorage.getItem('lume-language') === 'fr') ? 'fr-CA' : 'en-CA';
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 function statusLabel(status: string): string {
@@ -276,7 +277,10 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(160, 160, 160);
-  doc.text(`Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, marginL, footerY);
+  const footerLocale = (typeof localStorage !== 'undefined' && localStorage.getItem('lume-language') === 'fr') ? 'fr-CA' : 'en-CA';
+  const footerDate = new Date().toLocaleDateString(footerLocale, { year: 'numeric', month: 'long', day: 'numeric' });
+  const footerLabel = footerLocale === 'fr-CA' ? 'Généré le' : 'Generated on';
+  doc.text(`${footerLabel} ${footerDate}`, marginL, footerY);
 
   // ── Download ────────────────────────────────────────────────────
   const filename = `${invoice.invoice_number.replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf`;
