@@ -79,6 +79,12 @@ const optionalEnvSchema = z.object({
 
   // Platform admin
   PLATFORM_OWNER_ID: z.string().uuid('PLATFORM_OWNER_ID must be a valid UUID').optional(),
+
+  // External agent JWT signing key (optional in dev — falls back to
+  // an ephemeral random key generated at startup. REQUIRED in production
+  // so that JWTs issued by /api/agent/connect remain valid across restarts.)
+  AGENT_JWT_SECRET: z.string().optional()
+    .refine(v => !v || v.length >= 32, 'AGENT_JWT_SECRET must be at least 32 characters (ideally a 48-byte base64 value)'),
 });
 
 // ============================================================================

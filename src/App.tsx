@@ -679,7 +679,7 @@ function AuthenticatedApp({
     {
       label: null,
       items: [
-        { id: 'ai-helper', label: 'Lume Agent', icon: LumeAgentIcon as any, path: '/dashboard', tileColor: 'blue', requiredPermission: 'ai.use' },
+        { id: 'ai-helper', label: 'Lume Agent', icon: LumeAgentIcon as any, path: '/dashboard', tileColor: 'blue', requiredPermission: 'external_agent.use' },
         { id: 'day', label: 'CRM', icon: LayoutDashboard, path: '/day', tileColor: 'blue' },
       ],
     },
@@ -1064,7 +1064,7 @@ function AuthenticatedApp({
             <ErrorBoundary labels={t.errorBoundary}>
                   <Routes>
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                    <Route path="/dashboard" element={<Gated permission="ai.use"><PageWrapper><MrLumePage /></PageWrapper></Gated>} />
+                    <Route path="/dashboard" element={<Gated permission="external_agent.use"><PageWrapper><MrLumePage /></PageWrapper></Gated>} />
                     <Route path="/day" element={<Gated permission="settings.read"><PageWrapper><CrmWorkspace /></PageWrapper></Gated>} />
                     <Route path="/messages" element={<Gated permission="messages.read"><PageWrapper><Messages /></PageWrapper></Gated>} />
                     <Route path="/leads" element={<Navigate to="/quotes" replace />} />

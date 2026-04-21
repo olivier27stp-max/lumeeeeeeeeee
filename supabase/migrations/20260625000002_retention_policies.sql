@@ -70,17 +70,14 @@ declare
   v_cutoff timestamptz := now() - make_interval(days => p_days);
   v_count bigint := 0;
 begin
+  -- Schema: clients has only id, org_id, first_name, last_name, company, email
+  -- (confirmed via information_schema 2026-04-21 — no phone/address columns here)
   with updated as (
     update public.clients
        set first_name = 'ANONYMIZED',
            last_name  = '',
            company    = null,
            email      = null,
-           phone      = null,
-           address    = null,
-           address_line1 = null, address_line2 = null,
-           city = null, province = null, postal_code = null, country = null,
-           sms_consent_at = null,
            updated_at = now()
      where deleted_at is not null
        and deleted_at < v_cutoff

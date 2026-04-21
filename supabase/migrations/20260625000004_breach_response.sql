@@ -230,13 +230,19 @@ begin
   v_audit   := public.purge_old_audit_events(1095);
   v_members := public.execute_scheduled_member_deletions();
   v_logins  := public.purge_old_failed_logins();
-  insert into public.audit_events(org_id, actor_id, action, entity_type, entity_id, metadata)
-  values (null, null, 'retention_run', 'system', null,
-    jsonb_build_object(
-      'anonymized_leads', v_leads, 'anonymized_clients', v_clients,
-      'purged_portal_tokens', v_tokens, 'purged_audit_events', v_audit,
-      'hard_deleted_members', v_members, 'purged_failed_logins', v_logins,
-      'at', now()));
+  -- audit_events.org_id is NOT NULL: log retention run against every org
+  declare v_org_id uuid;
+  begin
+    for v_org_id in select id from public.orgs loop
+      insert into public.audit_events(org_id, actor_id, action, entity_type, entity_id, metadata)
+      values (v_org_id, null, 'retention_run', 'system', null,
+        jsonb_build_object(
+          'anonymized_leads', v_leads, 'anonymized_clients', v_clients,
+          'purged_portal_tokens', v_tokens, 'purged_audit_events', v_audit,
+          'hard_deleted_members', v_members, 'purged_failed_logins', v_logins,
+          'at', now()));
+    end loop;
+  end;
   return jsonb_build_object(
     'anonymized_leads', v_leads, 'anonymized_clients', v_clients,
     'purged_portal_tokens', v_tokens, 'purged_audit_events', v_audit,
