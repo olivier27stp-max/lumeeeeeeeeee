@@ -148,3 +148,25 @@ export async function sendMessage(
   if (error) throw error;
   return data as InternalMessage;
 }
+
+// ── Org members (team contacts) ────────────────────────────────────────
+// Used by SocialFeed.tsx to populate the "create group" member picker and
+// to resolve sender_id → display name in message bubbles.
+export type OrgMember = {
+  user_id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+};
+
+export async function listOrgMembers(orgId: string): Promise<OrgMember[]> {
+  const { data, error } = await supabase
+    .from('memberships')
+    .select('user_id, full_name, avatar_url')
+    .eq('org_id', orgId)
+    .eq('status', 'active');
+  if (error) throw error;
+  const rows = (data ?? []) as Array<{ user_id: string | null; full_name: string | null; avatar_url: string | null }>;
+  return rows
+    .filter((r) => !!r.user_id)
+    .map((r) => ({ user_id: r.user_id as string, full_name: r.full_name, avatar_url: r.avatar_url }));
+}
