@@ -213,7 +213,6 @@ const leadCreateLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) =>
 const publicPayLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — public payment page (tighter)
 const portalLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — client portal (tighter to prevent token brute-force)
 const quoteLimiterStrict = rateLimit({ windowMs: 60_000, max: 15 }); // per IP — quote track-view
-const aiChatLimiter = rateLimit({ windowMs: 60_000, max: 10, keyFn: (req) => `ai:${req.headers.authorization?.slice(-20) || req.ip}` }); // AI endpoints — expensive
 const automationLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `auto:${req.headers.authorization?.slice(-20) || req.ip}` });
 
 // ── Apply rate limiters to specific paths ──
@@ -520,21 +519,6 @@ app.listen(port, '0.0.0.0', () => {
       }, 60 * 60 * 1000);
       console.log('[scheduled-reports] Cron started (hourly, lock-guarded)');
     });
-
-    // AI Training maintenance — every 6 hours
-    Promise.all([import('./lib/agent/training-engine'), import('./lib/supabase')]).then(
-      ([{ runTrainingMaintenance }, { getServiceClient: getSC }]) => {
-        const admin = getSC();
-        setInterval(async () => {
-          const res = await withAdvisoryLock('training-maintenance', () => runTrainingMaintenance(admin))
-            .catch((e: any) => { console.error('[training] Lock error:', e?.message); return { acquired: true }; });
-          if (!res.acquired) { /* skipped */ }
-        }, 6 * 60 * 60 * 1000);
-        console.log('[training] Maintenance job started (every 6h, lock-guarded)');
-        setTimeout(() => withAdvisoryLock('training-maintenance-startup', () => runTrainingMaintenance(admin))
-          .catch((e: any) => console.error('[training] Startup maintenance error:', e?.message)), 30_000);
-      }
-    );
 
     // Security maintenance — every 15 minutes
     setInterval(() => {

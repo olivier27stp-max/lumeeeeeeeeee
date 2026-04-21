@@ -143,7 +143,6 @@ import type { PermissionKey } from './lib/permissions';
 import { hasPermission } from './lib/permissions';
 import { usePermissions } from './hooks/usePermissions';
 import { useRealtimeNotifications } from './hooks/useRealtimeNotifications';
-const MemoryGraphPage = React.lazy(() => import('./features/memory-graph/MemoryGraphPage'));
 import OnboardingWizard from './components/OnboardingWizard';
 import CommandPalette from './components/CommandPalette';
 import DevRoleSwitcher from './components/DevRoleSwitcher';
@@ -1137,8 +1136,6 @@ function AuthenticatedApp({
                     <Route path="/apps/callback" element={<Gated permission="integrations.update"><OAuthCallback /></Gated>} />
                     {/* BillingCheckout removed — upgrade goes through /checkout */}
                     <Route path="/settings/referrals" element={<Gated permission="settings.read"><PageWrapper><ReferFriend /></PageWrapper></Gated>} />
-                    {/* Memory Graph — LIA Brain Visualization */}
-                    <Route path="/memory-graph" element={<Gated permission="ai.admin"><React.Suspense fallback={null}><MemoryGraphPage /></React.Suspense></Gated>} />
 {/* Platform Admin — owner-only, server enforces auth */}
                     <Route path="/platform-admin" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><PlatformAdmin /></PageWrapper></React.Suspense> : <Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />

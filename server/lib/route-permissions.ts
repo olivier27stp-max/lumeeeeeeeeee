@@ -103,20 +103,10 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'POST /api/automations/events/lead-created': 'automations.update',
   'POST /api/automations/events/lead-status-changed': 'automations.update',
 
-  // ── AI / Agent ──
-  'POST /api/ai/chat': 'ai.use',
-  'POST /api/ai/chat/stream': 'ai.use',
-  'POST /api/agent/chat': 'ai.use',
-  'POST /api/agent/approve': 'ai.review',
-  'GET /api/agent/sessions': 'ai.use',
-  'DELETE /api/agent/sessions/:id': 'ai.use',
-  'POST /api/agent/feedback': 'ai.use',
-  'POST /api/agent/outcome': 'ai.admin',
-  'POST /api/agent/correction': 'ai.admin',
-  'POST /api/agent/feedback-train': 'ai.admin',
-  'GET /api/agent/calibration': 'ai.review',
-  'GET /api/agent/user-prefs': 'ai.use',
-  'POST /api/team-suggestions': 'ai.use',
+  // ── AI / Agent ── (backend removed — only external agent auth remains)
+  // External agent endpoints live under /api/agent/connect and /api/agent/webhook
+  // and perform their own auth via API keys / JWT — no RBAC permission mapping.
+  'POST /api/team-suggestions': 'team.read',
 
   // ── Invitations / Team ──
   'GET /api/invitations/list': 'team.read',
@@ -354,7 +344,8 @@ export function rbacMiddleware(): express.RequestHandler {
     '/api/webhooks/',          // Payment webhooks
     '/api/referrals/track',
     '/api/referrals/validate',
-    '/api/memory-graph/',      // Internal tool
+    '/api/agent/connect',      // External agent login (own auth)
+    '/api/agent/webhook',      // External agent webhook (own auth)
     '/api/quotes/:id/track-view',
   ];
 
