@@ -220,11 +220,10 @@ begin
 end$$;
 -- Writes: service_role only (no INSERT/UPDATE/DELETE policy for authenticated).
 
--- failed_login_attempts: tracking table, anyone can INSERT, only platform
--- admins can SELECT. RLS already enabled per audit — just add policies.
--- NOTE: C-003 audit shows table NOT FOUND in table_schemas.json; policies
--- assume the standard (email, ip, attempted_at, ...) shape. Gate with
--- existence check so migration doesn't fail if the table shape differs.
+-- failed_login_attempts: tracking table. Anyone can INSERT (login tracking),
+-- SELECT restricted to org owners/admins via memberships (the app-wide pattern
+-- for admin gating — see 20260302210000_crm_core.sql and memberships_select_self_or_admin).
+-- Gate with to_regclass so migration doesn't fail if table shape differs.
 do $$
 begin
   if to_regclass('public.failed_login_attempts') is not null then
@@ -237,8 +236,9 @@ begin
     execute $p$
       create policy failed_login_attempts_admin_read on public.failed_login_attempts
         for select to authenticated using (
-          exists (select 1 from public.profiles p
-                   where p.id = auth.uid() and coalesce(p.is_platform_admin, false) = true)
+          exists (select 1 from public.memberships m
+                   where m.user_id = auth.uid()
+                     and m.role in ('owner','admin'))
         )
     $p$;
   end if;
