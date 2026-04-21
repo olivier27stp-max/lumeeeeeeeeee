@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { sendSafeError } from '../lib/error-handler';
 import {
   getCommissionEntries,
@@ -13,6 +14,8 @@ import {
 } from '../lib/field-sales/commission-engine';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // GET /api/commissions?userId=...&status=...&from=...&to=...
 router.get('/commissions', async (req, res) => {

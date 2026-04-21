@@ -5,6 +5,7 @@
 
 import { Router } from 'express';
 import { getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { buildMemoryGraph } from '../lib/memory-graph/graph-builder';
 import {
   detectStaleness,
@@ -13,6 +14,8 @@ import {
 } from '../lib/memory-graph/memory-events';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // ── POST /memory-graph/build — Trigger graph rebuild ──────
 router.post('/memory-graph/build', async (req, res) => {

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import {
   getBadges,
   createBadge,
@@ -18,6 +19,8 @@ import {
 } from '../lib/field-sales/gamification-engine';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // ── Badges ──────────────────────────────────────────────────────────────
 

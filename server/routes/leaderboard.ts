@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { getLeaderboard, getRepPerformance, calculateRepStats } from '../lib/field-sales/leaderboard-engine';
 import { getRepBadges } from '../lib/field-sales/gamification-engine';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // GET /api/leaderboard?period=daily|weekly|monthly&teamId=...
 router.get('/leaderboard', async (req, res) => {

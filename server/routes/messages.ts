@@ -6,6 +6,7 @@ import { twilioClient, twilioPhoneNumber, twilioAuthToken, Twilio } from '../lib
 import { normalizeE164, findOrCreateConversation, resolvePublicBaseUrl } from '../lib/helpers';
 import { validate, messageSendSchema } from '../lib/validation';
 import { logSecurityEvent, sanitizeText, checkAnomalies, extractIP } from '../lib/security';
+import { withDeadLetter } from '../lib/dead-letter';
 
 const router = Router();
 
@@ -205,7 +206,7 @@ router.post('/messages/inbound', (req, res) => {
     // Fall through — saving the "START" as a regular message is fine
   }
 
-  (async () => {
+  withDeadLetter('sms_inbound', { From, Body: bodyTrim, MessageSid }, async () => {
     try {
       // Build phone variants for flexible matching
       const phoneDigits = normalizedPhone.replace(/\D/g, '');
@@ -378,8 +379,9 @@ router.post('/messages/inbound', (req, res) => {
       console.log('[SMS Inbound] Processed OK:', { from: normalizedPhone?.slice(-4) ? `***${normalizedPhone.slice(-4)}` : 'unknown', conversation_id: conversation.id });
     } catch (error: any) {
       console.error('[SMS Inbound] Background processing error:', error?.message || error);
+      throw error; // bubble to withDeadLetter so it's persisted
     }
-  })();
+  }); // withDeadLetter fires and returns immediately
 });
 
 // POST /api/messages/status — Twilio status callback (delivery updates)

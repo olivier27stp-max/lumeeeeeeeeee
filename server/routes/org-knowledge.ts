@@ -1,8 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // GET /api/org-knowledge — list all active entries for the org, optionally filtered by category
 router.get('/', async (req: Request, res: Response) => {

@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // GET /api/notifications — list unread + recent
 router.get('/notifications', async (req, res) => {

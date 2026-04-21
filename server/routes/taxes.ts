@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // ── Canadian tax presets ──
 const PRESETS: Record<string, { name: string; region: string; country: string; taxes: Array<{ name: string; rate: number; is_compound: boolean; sort_order: number }> }> = {

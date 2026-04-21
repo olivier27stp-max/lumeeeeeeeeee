@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // ── GET /quote-templates — list all templates for org ──────
 router.get('/quote-templates', async (req, res) => {
