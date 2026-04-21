@@ -244,6 +244,11 @@ export async function searchActiveClients(query: { q: string; page: number; page
     .order('last_name', { ascending: true })
     .order('first_name', { ascending: true });
 
+  // Active clients only — use .in() which AND-combines with other filters
+  // (unlike .or() which would override a second .or() call).
+  request = request.in('status', ['active']);
+
+  // Search across multiple columns
   const q = query.q.trim();
   if (q) {
     const safe = q.replace(/,/g, ' ').replace(/%/g, '\\%').replace(/_/g, '\\_');
@@ -251,8 +256,6 @@ export async function searchActiveClients(query: { q: string; page: number; page
       `first_name.ilike.%${safe}%,last_name.ilike.%${safe}%,company.ilike.%${safe}%,email.ilike.%${safe}%`
     );
   }
-
-  request = request.or('status.is.null,status.eq.active');
 
   const { data, error, count } = await request;
   if (error) throw error;

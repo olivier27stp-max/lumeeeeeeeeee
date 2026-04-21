@@ -536,7 +536,7 @@ export async function listStripePayouts(params: {
 
   return {
     provider: 'stripe' as const,
-    currency: items[0]?.currency || 'USD',
+    currency: items[0]?.currency || 'CAD',
     total_estimate: null as number | null,
     items,
     next_cursor: response.has_more && items.length > 0 ? items[items.length - 1].id : null,
@@ -732,7 +732,7 @@ export async function listPayPalPayouts(params: {
   const hasMore = page < totalPages;
   return {
     provider: 'paypal' as const,
-    currency: items[0]?.currency || 'USD',
+    currency: items[0]?.currency || 'CAD',
     total_estimate: payload?.total_items ? Number(payload.total_items) : null,
     items,
     next_cursor: hasMore ? serializeCursor({ page: page + 1 }) : null,

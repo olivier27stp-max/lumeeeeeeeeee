@@ -7,7 +7,7 @@ import { emailFrom } from './config';
 import { sendEmail, isMailerConfigured } from './mailer';
 
 function fmtMoney(cents: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents || 0) / 100);
+  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format((cents || 0) / 100);
 }
 
 interface ReportData {
