@@ -101,10 +101,12 @@ app.use((_req, res, next) => {
         ? "script-src 'self' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com"
         // unsafe-eval required for Vite HMR in dev only; unsafe-inline scoped to dev
         : "script-src 'self' 'unsafe-eval' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com http://localhost:*",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.mapbox.com",
       "img-src 'self' data: https: blob:",
       "font-src 'self' data: https://fonts.gstatic.com",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://api.stripe.com https://api.paypal.com",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://api.stripe.com https://api.paypal.com https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com https://fal.run https://queue.fal.run",
+      "worker-src 'self' blob:",
+      "child-src 'self' blob:",
       "frame-src https://js.stripe.com https://www.paypal.com",
       "media-src 'self' https: blob:",
       "object-src 'none'",
@@ -396,23 +398,13 @@ app.post('/api/workflows/execute-action', async (req, res) => {
   }
 });
 
-// SPA fallback — serve index.html with CSP nonce for inline styles
-import crypto from 'crypto';
-import fs from 'fs';
-
-let indexHtmlTemplate = '';
-try { indexHtmlTemplate = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8'); } catch {}
-
+// SPA fallback — serve index.html fresh from disk every time.
+// Reading once at boot caused stale HTML referencing old hashed assets
+// after a redeploy (dist/ rewritten but template in memory).
 app.get('*', (_req, res, next) => {
   if (_req.path.startsWith('/api')) return next();
-
-  // Serve index.html — no nonce injection needed since we use 'unsafe-inline' for styles
-  // (React/Tailwind/Framer Motion generate dynamic inline styles that can't have nonces)
-  if (indexHtmlTemplate) {
-    res.type('html').send(indexHtmlTemplate);
-  } else {
-    res.sendFile(path.join(distPath, 'index.html'));
-  }
+  res.set('Cache-Control', 'no-store, must-revalidate');
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
