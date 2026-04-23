@@ -202,13 +202,26 @@ router.post('/messages/inbound', (req, res) => {
         const matchedEntity = client || lead;
         orgId = matchedEntity?.org_id || null;
 
+        // No client/lead match → route to the org that owns the receiving Twilio number.
+        // Falling back to "first org in the table" is wrong: it dumps every unknown sender
+        // into Default Organization regardless of which tenant the SMS was actually sent to.
         if (!orgId) {
-          const { data: firstOrg } = await serviceClient
-            .from('orgs')
-            .select('id')
-            .limit(1)
-            .maybeSingle();
-          orgId = firstOrg?.id || null;
+          const To = req.body?.To;
+          if (To) {
+            const normalizedTo = normalizeE164(To);
+            const { data: channel } = await serviceClient
+              .from('communication_channels')
+              .select('org_id')
+              .eq('phone_number', normalizedTo)
+              .eq('channel_type', 'sms')
+              .eq('status', 'active')
+              .maybeSingle();
+            orgId = channel?.org_id || null;
+          }
+          if (!orgId) {
+            console.warn(`[SMS Inbound] No org found for destination ${To}; dropping message.`);
+            return;
+          }
         }
 
         const clientName = matchedEntity
