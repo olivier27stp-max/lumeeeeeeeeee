@@ -6,7 +6,7 @@
 
 import { supabase } from './supabase';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // ── Types ──────────────────────────────────────────────────────
 
