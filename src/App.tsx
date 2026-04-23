@@ -284,10 +284,46 @@ export default function App() {
   }, [isDark]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // OAuth (PKCE) callback: Supabase returns to the app with ?code=...
+    // The client was configured with detectSessionInUrl: true, so the SDK
+    // performs the code-for-session exchange on load — but asynchronously.
+    // We must wait for that exchange (a SIGNED_IN event) before resolving
+    // `loading`, otherwise the app renders the logged-out tree and bounces
+    // the user back to /auth while the exchange is still in flight.
+    let resolved = false;
+    const url = new URL(window.location.href);
+    const pendingOAuth =
+      url.searchParams.has('code') || window.location.hash.includes('access_token=');
+
+    const finishBootstrap = (session: any) => {
+      if (resolved) return;
+      resolved = true;
       setUser(session?.user ?? null);
       setLoading(false);
-    });
+      if (pendingOAuth) {
+        // Clean the URL so refreshes don't re-trigger the OAuth flow.
+        url.searchParams.delete('code');
+        url.searchParams.delete('state');
+        window.history.replaceState({}, '', url.pathname + url.search);
+      }
+    };
+
+    if (pendingOAuth) {
+      // Give the SDK up to 5s to finish the exchange before falling back.
+      const fallbackTimer = setTimeout(async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        finishBootstrap(session);
+      }, 5000);
+      const origSub = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          clearTimeout(fallbackTimer);
+          finishBootstrap(session);
+          origSub.data.subscription.unsubscribe();
+        }
+      });
+    } else {
+      supabase.auth.getSession().then(({ data: { session } }) => finishBootstrap(session));
+    }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const prev = user;
