@@ -1,14 +1,19 @@
 import { Router, Request, Response } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { scoreAllTerritories, scoreAllPins, getCompanyProfile } from '../lib/field-sales/scoring-engine';
 import { getScheduleRecommendations } from '../lib/field-sales/scheduling-engine';
 import { getFollowUpRecommendations } from '../lib/field-sales/followup-engine';
 import { generateDailyPlan } from '../lib/field-sales/daily-plan-engine';
 import { getAssignmentRecommendations } from '../lib/field-sales/territory-assignment-engine';
 import { autoCreateOrMergePin } from '../lib/field-sales/auto-pin';
+import { cached } from '../lib/cache';
 
 const router = Router();
+// Global guards for this router — size cap + type-check of common fields
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 const STATUS_COLORS: Record<string, string> = {
   unknown: '#6b7280', no_answer: '#9ca3af', not_interested: '#ef4444',
@@ -1110,53 +1115,55 @@ router.get('/pins', async (req: Request, res: Response) => {
   const { north, south, east, west } = req.query as Record<string, string>;
 
   try {
-    
-    
+    // Cache full org pin set for 20s — map pans/zooms refetch this constantly.
+    // Bounding-box filter is applied client-side on the cached result, so a
+    // single cache entry serves all zoom levels.
+    const allPins = await cached(`pins:${auth.orgId}`, 20, async () => {
+      // Pins — join with house_profiles for coords + metadata + rep for filtering
+      // Filter out soft-deleted houses to prevent ghost pins from appearing
+      const { data: pins, error } = await admin
+        .from('field_pins')
+        .select('id, house_id, status, has_note, pin_color, field_house_profiles!inner(lat, lng, address, metadata, current_status, client_id, assigned_user_id, territory_id, deleted_at)')
+        .eq('org_id', auth.orgId)
+        .is('field_house_profiles.deleted_at', null);
 
-    // Pins — join with house_profiles for coords + metadata + rep for filtering
-    // Filter out soft-deleted houses to prevent ghost pins from appearing
-    const { data: pins, error } = await admin
-      .from('field_pins')
-      .select('id, house_id, status, has_note, pin_color, field_house_profiles!inner(lat, lng, address, metadata, current_status, client_id, assigned_user_id, territory_id, deleted_at)')
-      .eq('org_id', auth.orgId)
-      .is('field_house_profiles.deleted_at', null);
+      if (error) throw error;
 
-    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
-
-    // Get latest note for each house that has_note
-    const houseIdsWithNotes = (pins ?? []).filter((p: any) => p.has_note).map((p: any) => p.house_id);
-    let noteMap: Record<string, string> = {};
-    if (houseIdsWithNotes.length > 0) {
-      const { data: notes } = await admin
-        .from('field_house_events')
-        .select('house_id, note_text')
-        .in('house_id', houseIdsWithNotes)
-        .not('note_text', 'is', null)
-        .order('created_at', { ascending: false });
-      // Keep first (latest) note per house
-      for (const n of notes ?? []) {
-        if (!noteMap[n.house_id] && n.note_text && !n.note_text.startsWith('Pin ') && !n.note_text.startsWith('Client linked')) {
-          noteMap[n.house_id] = n.note_text;
+      // Get latest note for each house that has_note
+      const houseIdsWithNotes = (pins ?? []).filter((p: any) => p.has_note).map((p: any) => p.house_id);
+      const noteMap: Record<string, string> = {};
+      if (houseIdsWithNotes.length > 0) {
+        const { data: notes } = await admin
+          .from('field_house_events')
+          .select('house_id, note_text')
+          .in('house_id', houseIdsWithNotes)
+          .not('note_text', 'is', null)
+          .order('created_at', { ascending: false });
+        for (const n of notes ?? []) {
+          if (!noteMap[n.house_id] && n.note_text && !n.note_text.startsWith('Pin ') && !n.note_text.startsWith('Client linked')) {
+            noteMap[n.house_id] = n.note_text;
+          }
         }
       }
-    }
 
-    // Flatten and apply bounding box filter
-    let result = (pins ?? []).map((p: any) => ({
-      id: p.id,
-      house_id: p.house_id,
-      lat: p.field_house_profiles?.lat,
-      lng: p.field_house_profiles?.lng,
-      status: p.status,
-      has_note: p.has_note,
-      pin_color: p.pin_color,
-      note_preview: noteMap[p.house_id] ?? null,
-      customer_name: p.field_house_profiles?.metadata?.customer_name ?? null,
-      address: p.field_house_profiles?.address ?? null,
-      assigned_user_id: p.field_house_profiles?.assigned_user_id ?? null,
-      territory_id: p.field_house_profiles?.territory_id ?? null,
-    })).filter((p: any) => p.lat != null && p.lng != null);
+      return (pins ?? []).map((p: any) => ({
+        id: p.id,
+        house_id: p.house_id,
+        lat: p.field_house_profiles?.lat,
+        lng: p.field_house_profiles?.lng,
+        status: p.status,
+        has_note: p.has_note,
+        pin_color: p.pin_color,
+        note_preview: noteMap[p.house_id] ?? null,
+        customer_name: p.field_house_profiles?.metadata?.customer_name ?? null,
+        address: p.field_house_profiles?.address ?? null,
+        assigned_user_id: p.field_house_profiles?.assigned_user_id ?? null,
+        territory_id: p.field_house_profiles?.territory_id ?? null,
+      })).filter((p: any) => p.lat != null && p.lng != null);
+    });
 
+    // Apply bounding box filter per-request on the cached set
+    let result = allPins;
     if (north) result = result.filter((p: any) => p.lat <= parseFloat(north));
     if (south) result = result.filter((p: any) => p.lat >= parseFloat(south));
     if (east) result = result.filter((p: any) => p.lng <= parseFloat(east));

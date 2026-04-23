@@ -83,7 +83,7 @@ router.post('/automations/events/appointment-created', validate(automationEventS
     return res.json({ ok: true });
   } catch (err: any) {
     console.error('[automation-events] appointment.created error:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -111,7 +111,7 @@ router.post('/automations/events/appointment-cancelled', validate(automationEven
     return res.json({ ok: true });
   } catch (err: any) {
     console.error('[automation-events] appointment.cancelled error:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -222,7 +222,7 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
     return res.json({ ok: true });
   } catch (err: any) {
     console.error('[automation-events] job.completed error:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -284,7 +284,7 @@ router.post('/automations/events/deal-stage-changed', validate(automationEventSc
     return res.json({ ok: true });
   } catch (err: any) {
     console.error('[automation-events] deal.stage_changed error:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -304,7 +304,7 @@ router.post('/automations/events/quote-sent', validate(automationEventSchema), a
     });
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -324,7 +324,7 @@ router.post('/automations/events/quote-approved', validate(automationEventSchema
     });
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -380,7 +380,7 @@ router.post('/automations/events/invoice-paid', validate(automationEventSchema),
     return res.json({ ok: true });
   } catch (err: any) {
     console.error('[automation-events] invoice.paid error:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -415,7 +415,7 @@ router.post('/automations/events/lead-created', validate(automationEventSchema),
     return res.json({ ok: true });
   } catch (err: any) {
     console.error('[automation-events] lead.created error:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -451,7 +451,7 @@ router.post('/automations/events/lead-status-changed', validate(automationEventS
     return res.json({ ok: true });
   } catch (err: any) {
     console.error('[automation-events] lead.status_changed error:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

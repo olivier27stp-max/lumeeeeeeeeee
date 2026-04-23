@@ -60,30 +60,35 @@ export async function getLeaderboard(
   const userIds = (data ?? []).map((r) => r.user_id);
   if (userIds.length === 0) return [];
 
-  const { data: members } = await supabase
-    .from('memberships')
-    .select('user_id, full_name, avatar_url, role, team_name')
-    .eq('org_id', orgId)
-    .in('user_id', userIds);
-
-  const memberMap = new Map(
-    (members ?? []).map((m) => [m.user_id, m])
-  );
-
-  // Fetch previous period for trend calculation
+  // Previous period range for trend calculation
   const prevDate = new Date(date || new Date());
   if (period === 'daily') prevDate.setDate(prevDate.getDate() - 1);
   else if (period === 'weekly') prevDate.setDate(prevDate.getDate() - 7);
   else prevDate.setMonth(prevDate.getMonth() - 1);
   const prevRange = periodRange(period, prevDate);
 
-  const { data: prevData } = await supabase
-    .from('fs_rep_stat_snapshots')
-    .select('user_id, revenue')
-    .eq('org_id', orgId)
-    .eq('period', period)
-    .gte('period_start', prevRange.start)
-    .lte('period_start', prevRange.end);
+  // Fetch members and previous period data in parallel
+  const [membersRes, prevRes] = await Promise.all([
+    supabase
+      .from('memberships')
+      .select('user_id, full_name, avatar_url, role, team_name')
+      .eq('org_id', orgId)
+      .in('user_id', userIds),
+    supabase
+      .from('fs_rep_stat_snapshots')
+      .select('user_id, revenue')
+      .eq('org_id', orgId)
+      .eq('period', period)
+      .gte('period_start', prevRange.start)
+      .lte('period_start', prevRange.end),
+  ]);
+
+  const members = membersRes.data;
+  const prevData = prevRes.data;
+
+  const memberMap = new Map(
+    (members ?? []).map((m) => [m.user_id, m])
+  );
 
   const prevRevenueMap = new Map<string, number>();
   for (const row of prevData ?? []) {
@@ -280,19 +285,24 @@ export async function snapshotDailyStats(
   const dayStart = format(startOfDay(today), 'yyyy-MM-dd');
   const dayEnd = format(endOfDay(today), 'yyyy-MM-dd');
 
-  for (const member of members ?? []) {
-    const stats = await calculateRepStats(supabase, orgId, member.user_id, today);
-
-    await supabase.from('fs_rep_stat_snapshots').upsert(
-      {
+  // Compute all reps' stats in parallel, then batch upsert
+  const results = await Promise.all(
+    (members ?? []).map(async (member) => {
+      const stats = await calculateRepStats(supabase, orgId, member.user_id, today);
+      return {
         org_id: orgId,
         user_id: member.user_id,
-        period: 'daily',
+        period: 'daily' as const,
         period_start: dayStart,
         period_end: dayEnd,
         ...stats,
-      },
-      { onConflict: 'user_id,period,period_start' }
-    );
+      };
+    })
+  );
+
+  if (results.length > 0) {
+    await supabase.from('fs_rep_stat_snapshots').upsert(results, {
+      onConflict: 'user_id,period,period_start',
+    });
   }
 }

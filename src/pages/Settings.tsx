@@ -16,10 +16,10 @@ import {
   MapPin,
   Receipt,
   Wallet,
-  Store,
   Archive,
   FileText,
   Gift,
+  MessageSquare,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -35,10 +35,10 @@ import { fetchPlans, fetchCurrentBilling, cancelSubscription, type Plan, type Su
 // ─── All settings tabs (unified) ─────────────────────────────────
 type SettingsTab =
   | 'account' | 'billing' | 'workspace' | 'language'
-  | 'company' | 'products' | 'payments' | 'taxes' | 'automations' | 'request-form'
-  | 'team' | 'manage-team' | 'schedule' | 'location'
-  | 'marketplace' | 'archives' | 'referrals'
-  | 'roles' | 'users' | 'd2d-config';
+  | 'company' | 'products' | 'payments' | 'messaging' | 'taxes' | 'automations' | 'request-form'
+  | 'team' | 'manage-team' | 'location'
+  | 'archives' | 'referrals'
+  | 'roles' | 'd2d-config';
 
 interface NavItem {
   id: SettingsTab;
@@ -549,56 +549,38 @@ export default function Settings() {
     }
   }
 
-  // ─── Navigation structure ────────────────────────────────────
+  // ─── Navigation structure (3 sections, simplified) ───────────
   const navSections: NavGroup[] = [
     {
       heading: t.settings.general,
       items: [
         { id: 'account',   label: t.settings.account,   icon: User },
-        { id: 'billing',   label: t.settings.billing,   icon: CreditCard },
         { id: 'workspace', label: t.settings.workspace,  icon: Building2 },
+        { id: 'company',   label: t.settings.companySettings, icon: Building, link: '/settings/company' },
         { id: 'language',  label: t.settings.language,   icon: Globe },
+        { id: 'billing',   label: t.settings.billing,   icon: CreditCard },
       ],
     },
     {
-      heading: t.billing.business,
+      heading: isFr ? 'Activité' : 'Activity',
       items: [
-        { id: 'company',          label: t.settings.companySettings, icon: Building, link: '/settings/company' },
-        { id: 'products',         label: t.settings.productsServices, icon: Package, link: '/settings/products' },
-        { id: 'payments',         label: t.commandPalette.payments,                        icon: Wallet, link: '/settings/payments' },
-        { id: 'taxes',            label: 'Taxes',                                            icon: Receipt, link: '/settings/taxes' },
-        { id: 'automations',      label: t.settings.automations,            icon: Zap, link: '/automations' },
-        { id: 'request-form',     label: (t.settings as any).requestForm || (t.requestForm.requestForm), icon: FileText, link: '/settings/request-form' },
+        { id: 'products',     label: t.settings.productsServices, icon: Package, link: '/settings/products' },
+        { id: 'taxes',        label: 'Taxes',                     icon: Receipt, link: '/settings/taxes' },
+        { id: 'payments',     label: t.commandPalette.payments,   icon: Wallet, link: '/settings/payments' },
+        { id: 'messaging',    label: isFr ? 'Messagerie SMS' : 'SMS Messaging', icon: MessageSquare, link: '/settings/messaging' },
+        { id: 'request-form', label: (t.settings as any).requestForm || (t.requestForm.requestForm), icon: FileText, link: '/settings/request-form' },
+        { id: 'automations',  label: t.settings.automations,      icon: Zap, link: '/automations' },
+        { id: 'location',     label: t.settings.locationServices, icon: MapPin },
+        { id: 'archives',     label: (t.settings as any).archives || 'Archives', icon: Archive },
       ],
     },
     {
       heading: t.settings.team,
       items: [
-        { id: 'team',               label: t.settings.organization,          icon: Users },
-        { id: 'manage-team',        label: isFr ? 'Gérer l\'équipe' : 'Manage Team',       icon: Users, link: '/settings/team' },
-        { id: 'roles',              label: isFr ? 'Rôles & Permissions' : 'Roles & Permissions', icon: Shield, link: '/settings/roles' },
-        { id: 'users',              label: isFr ? 'Utilisateurs' : 'Users',                 icon: Users, link: '/settings/users' },
-        { id: 'd2d-config',         label: isFr ? 'Config Vente' : 'Sales Config',             icon: MapPin, link: '/d2d-settings/general' },
-        { id: 'schedule',           label: t.settings.schedule,                   icon: Users },
-        { id: 'location',           label: t.settings.locationServices, icon: MapPin },
-      ],
-    },
-    {
-      heading: t.settings.connectedApps,
-      items: [
-        { id: 'marketplace',    label: isFr ? 'Marketplace d\'apps' : 'App Marketplace', icon: Store, link: '/settings/marketplace' },
-      ],
-    },
-    {
-      heading: t.settings.data,
-      items: [
-        { id: 'archives', label: (t.settings as any).archives || 'Archives', icon: Archive },
-      ],
-    },
-    {
-      heading: t.settings.referral,
-      items: [
-        { id: 'referrals' as SettingsTab, label: t.referFriend.referAFriend, icon: Gift, link: '/settings/referrals' },
+        { id: 'manage-team', label: isFr ? 'Membres' : 'Members',                icon: Users, link: '/settings/team' },
+        { id: 'roles',       label: isFr ? 'Rôles & Permissions' : 'Roles & Permissions', icon: Shield, link: '/settings/roles' },
+        { id: 'd2d-config',  label: isFr ? 'Config Vente' : 'Sales Config',      icon: MapPin, link: '/d2d-settings/general' },
+        { id: 'referrals' as SettingsTab, label: t.referFriend.referAFriend,     icon: Gift, link: '/settings/referrals' },
       ],
     },
   ];
@@ -745,34 +727,8 @@ export default function Settings() {
             )}
 
             {/* ═══ PLACEHOLDER PANELS for unbuilt sections ═══ */}
-            {activeTab === 'team' && (
-              <PlaceholderPanel title="Organization" description="Manage your organization structure and departments." />
-            )}
-            {activeTab === 'schedule' && (
-              <PlaceholderPanel title="Schedule Settings" description="Set default scheduling preferences and availability windows." />
-            )}
             {activeTab === 'location' && (
               <LocationServices />
-            )}
-            {activeTab === 'marketplace' && (
-              <div className="glass-card rounded-2xl p-10 text-center">
-                <Store size={32} className="text-text-tertiary mx-auto mb-4 opacity-25" />
-                <h3 className="text-xl font-bold text-text-primary">
-                  {t.settings.noApplicationsConnectedYet}
-                </h3>
-                <p className="text-[13px] text-text-tertiary mt-2 max-w-sm mx-auto leading-relaxed">
-                  {isFr
-                    ? 'Connectez des outils externes pour automatiser vos workflows et synchroniser vos données.'
-                    : 'Connect external tools to automate workflows and sync your data.'}
-                </p>
-                <button
-                  onClick={() => navigate('/settings/marketplace')}
-                  className="glass-button-primary inline-flex items-center gap-2 mt-5 text-[12px]"
-                >
-                  <Store size={14} />
-                  {t.settings.browseMarketplace}
-                </button>
-              </div>
             )}
             {activeTab === 'archives' && (
               <ArchivesPanel />

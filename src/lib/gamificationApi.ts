@@ -1,8 +1,6 @@
 import { supabase } from './supabase';
 import type {
   FsBadge, FsRepBadge, FsChallenge, FsBattle,
-  FsFeedPost, FsFeedReaction, FsFeedComment,
-  FeedReactionEmoji,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -80,51 +78,3 @@ export function createBattle(data: Partial<FsBattle>): Promise<FsBattle> {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Feed
-// ---------------------------------------------------------------------------
-
-export function getFeed(options?: {
-  visibility?: string;
-  teamId?: string;
-  cursor?: string;
-}): Promise<FsFeedPost[]> {
-  const params = new URLSearchParams();
-  if (options?.visibility) params.set('visibility', options.visibility);
-  if (options?.teamId) params.set('teamId', options.teamId);
-  if (options?.cursor) params.set('cursor', options.cursor);
-  const q = params.toString();
-  return apiFetch(`/gamification/feed${q ? `?${q}` : ''}`);
-}
-
-export function createFeedPost(data: {
-  type?: string;
-  visibility?: string;
-  team_id?: string;
-  title?: string;
-  body?: string;
-  image_url?: string;
-}): Promise<FsFeedPost> {
-  return apiFetch('/gamification/feed', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-export function addReaction(postId: string, emoji: FeedReactionEmoji): Promise<FsFeedReaction> {
-  return apiFetch(`/gamification/feed/${postId}/react`, {
-    method: 'POST',
-    body: JSON.stringify({ emoji }),
-  });
-}
-
-export function removeReaction(postId: string): Promise<{ ok: boolean }> {
-  return apiFetch(`/gamification/feed/${postId}/react`, { method: 'DELETE' });
-}
-
-export function addComment(postId: string, body: string): Promise<FsFeedComment> {
-  return apiFetch(`/gamification/feed/${postId}/comment`, {
-    method: 'POST',
-    body: JSON.stringify({ body }),
-  });
-}

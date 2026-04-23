@@ -910,11 +910,14 @@ router.post('/payments/paypal/create-order', validate(paypalCreateOrderSchema), 
     const amountValue = (balanceCents / 100).toFixed(2);
     const customId = JSON.stringify({ org_id: orgId, invoice_id: invoiceId, client_id: invoice.client_id || null });
 
+    // PayPal-Request-Id is PayPal's idempotency header — dedupes retries within 6h
+    const paypalRequestId = `order-${orgId}-${invoiceId}-${Math.floor(Date.now() / 60_000)}`;
     const createResponse = await fetch(`${getPayPalBaseUrl()}/v2/checkout/orders`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
+        'PayPal-Request-Id': paypalRequestId,
       },
       body: JSON.stringify({
         intent: 'CAPTURE',
@@ -975,6 +978,7 @@ router.post('/payments/paypal/capture-order', validate(paypalCaptureOrderSchema)
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
+        'PayPal-Request-Id': `capture-${orderId}`,
       },
       body: JSON.stringify({}),
     });
@@ -1087,7 +1091,9 @@ router.post('/payments/refund', async (req, res) => {
     // For destination charges, Stripe auto-reverses the transfer
     refundParams.reverse_transfer = true;
 
-    const refund = await stripe.refunds.create(refundParams);
+    // Idempotency per-payment + amount dedupes accidental double refund clicks
+    const refundIdemKey = `refund-${payment.id}-${refundAmountCents ?? 'full'}`;
+    const refund = await stripe.refunds.create(refundParams, { idempotencyKey: refundIdemKey });
 
     // Update payment record
     const isFullRefund = !refundAmountCents || refundAmountCents >= payment.amount_cents;
@@ -1280,7 +1286,17 @@ async function handleCheckoutSessionCompleted(
     return;
   }
 
-  // ── 7. Update billing profile ──
+  // ── 7. Update billing profile + propagate billing address to org ──
+  // Stripe populates customer_details.address when checkout collects billing info.
+  // We copy it into orgs so the Twilio auto-provisioning step below picks the right
+  // area code (Montréal → 514, NYC → 212, etc.) from the address the customer paid with.
+  const stripeAddr = session.customer_details?.address || null;
+  const billingCountry = (stripeAddr?.country || '').toUpperCase() || null;
+  const billingCity = stripeAddr?.city || null;
+  const billingRegion = stripeAddr?.state || null;
+  const billingPostal = stripeAddr?.postal_code || null;
+  const billingStreet = [stripeAddr?.line1, stripeAddr?.line2].filter(Boolean).join(', ') || null;
+
   try {
     await admin.from('billing_profiles').upsert({
       org_id: orgId,
@@ -1289,8 +1305,35 @@ async function handleCheckoutSessionCompleted(
       full_name: fullName,
       stripe_customer_id: typeof session.customer === 'string' ? session.customer : null,
       currency,
+      address: billingStreet,
+      city: billingCity,
+      region: billingRegion,
+      country: billingCountry,
+      postal_code: billingPostal,
     }, { onConflict: 'org_id' });
   } catch {}
+
+  // Propagate address to org only if org fields are empty — never overwrite what the user set during onboarding.
+  if (billingCountry || billingCity || billingPostal) {
+    try {
+      const { data: currentOrg } = await admin
+        .from('orgs')
+        .select('country, city, region, postal_code, address')
+        .eq('id', orgId)
+        .maybeSingle();
+
+      const patch: Record<string, any> = {};
+      if (!currentOrg?.country && billingCountry) patch.country = billingCountry;
+      if (!currentOrg?.city && billingCity) patch.city = billingCity;
+      if (!currentOrg?.region && billingRegion) patch.region = billingRegion;
+      if (!currentOrg?.postal_code && billingPostal) patch.postal_code = billingPostal;
+      if (!currentOrg?.address && billingStreet) patch.address = billingStreet;
+
+      if (Object.keys(patch).length > 0) {
+        await admin.from('orgs').update(patch).eq('id', orgId);
+      }
+    } catch {}
+  }
 
   // ── 8. Mark onboarding done ──
   try {
@@ -1312,7 +1355,18 @@ async function handleCheckoutSessionCompleted(
     console.error('[webhook/checkout] Failed to record processed session:', dedupErr.message);
   }
 
-  // ── 10. Send receipt email (async, never blocks) ──
+  // ── 10. Auto-provision Twilio SMS number (non-blocking) ──
+  // Only for plans that include SMS (pro / enterprise). Starter is skipped.
+  if (plan.includes_sms) {
+    try {
+      await provisionSmsForNewSubscription({ orgId, subscriptionId: subscription.id });
+    } catch (provErr: any) {
+      // Never fail the subscription on provisioning error — it's logged + retryable.
+      console.error('[webhook/checkout] SMS provisioning error (non-blocking):', provErr?.message);
+    }
+  }
+
+  // ── 11. Send receipt email (async, never blocks) ──
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   try {
     const { sendPaymentReceipt } = await import('../lib/billing-email');
@@ -1338,6 +1392,71 @@ async function handleCheckoutSessionCompleted(
   }
 
   console.log(`[webhook/checkout] Subscription activated for ${userEmail} — plan: ${plan.name}, org: ${orgId}`);
+}
+
+// ─── Auto-provision Twilio SMS number after a paid subscription ────────────
+// Idempotent: skips if an active SMS channel already exists for the org.
+// Logs outcome to provisioning_events for observability + retry tooling.
+
+async function provisionSmsForNewSubscription(params: {
+  orgId: string;
+  subscriptionId: string;
+}): Promise<void> {
+  const { orgId, subscriptionId } = params;
+  const admin = getServiceClient();
+
+  // Skip if an active SMS channel is already attached to this org
+  const { data: existingChannel } = await admin
+    .from('communication_channels')
+    .select('id, phone_number')
+    .eq('org_id', orgId)
+    .eq('channel_type', 'sms')
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (existingChannel) {
+    console.log(`[provisioning] Org ${orgId} already has SMS channel ${existingChannel.phone_number}, skipping`);
+    return;
+  }
+
+  // Log intent so we can observe + retry failures
+  const { data: eventRow } = await admin
+    .from('provisioning_events')
+    .insert({
+      org_id: orgId,
+      subscription_id: subscriptionId,
+      event_type: 'sms_number_purchase',
+      status: 'pending',
+    })
+    .select('id')
+    .single();
+
+  try {
+    const { provisionSmsNumber } = await import('../lib/twilioProvisioning');
+    const result = await provisionSmsNumber(orgId);
+
+    if (eventRow) {
+      await admin
+        .from('provisioning_events')
+        .update({
+          status: 'success',
+          twilio_number: result.phoneNumber,
+        })
+        .eq('id', eventRow.id);
+    }
+    console.log(`[provisioning] SMS number ${result.phoneNumber} assigned to org ${orgId}`);
+  } catch (err: any) {
+    if (eventRow) {
+      await admin
+        .from('provisioning_events')
+        .update({
+          status: 'failed',
+          error_message: String(err?.message || err).slice(0, 500),
+        })
+        .eq('id', eventRow.id);
+    }
+    throw err;
+  }
 }
 
 export default router;

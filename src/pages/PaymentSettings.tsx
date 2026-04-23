@@ -1,29 +1,25 @@
 import React from 'react';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import PermissionGate from '../components/PermissionGate';
 import ConnectOnboarding from '../components/ConnectOnboarding';
+import BackToSettings from '../components/ui/BackToSettings';
 
 export default function PaymentSettings() {
   const { t, language } = useTranslation();
-  const navigate = useNavigate();
 
   return (
     <PermissionGate permission="payments.create">
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="space-y-2">
-            <button type="button" onClick={() => navigate('/settings')} className="glass-button inline-flex items-center gap-2">
-              <ArrowLeft size={14} />
-              {language === 'fr' ? 'Paramètres' : 'Settings'}
-            </button>
-            <h1 className="text-5xl font-semibold tracking-tight text-text-primary">
+        <div className="flex items-center gap-3">
+          <BackToSettings />
+          <div className="flex-1">
+            <h1 className="text-xl font-bold text-text-primary tracking-tight">
               {t.commandPalette.payments}
             </h1>
-            <p className="text-base text-text-secondary">
+            <p className="text-[12px] text-text-tertiary mt-0.5">
               {language === 'fr'
                 ? 'Acceptez les paiements en ligne de vos clients via Lume Payments.'
                 : 'Accept online payments from your clients via Lume Payments.'}

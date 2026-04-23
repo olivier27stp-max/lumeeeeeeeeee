@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // ── GET /quote-templates — list all templates for org ──────
 router.get('/quote-templates', async (req, res) => {
@@ -21,7 +24,7 @@ router.get('/quote-templates', async (req, res) => {
     return res.json({ templates: data || [] });
   } catch (err: any) {
     console.error('[quote-templates] list failed:', err.message);
-    return res.status(500).json({ error: err.message || 'Unable to fetch templates.' });
+    return res.status(500).json({ error: 'Unable to fetch templates.' });
   }
 });
 
@@ -44,7 +47,7 @@ router.get('/quote-templates/:id', async (req, res) => {
     return res.json({ template: data });
   } catch (err: any) {
     console.error('[quote-templates] get failed:', err.message);
-    return res.status(500).json({ error: err.message || 'Unable to fetch template.' });
+    return res.status(500).json({ error: 'Unable to fetch template.' });
   }
 });
 
@@ -134,7 +137,7 @@ router.post('/quote-templates', async (req, res) => {
     return res.json({ template: data });
   } catch (err: any) {
     console.error('[quote-templates] create failed:', err.message);
-    return res.status(500).json({ error: err.message || 'Unable to create template.' });
+    return res.status(500).json({ error: 'Unable to create template.' });
   }
 });
 
@@ -228,7 +231,7 @@ router.put('/quote-templates/:id', async (req, res) => {
     return res.json({ template: data });
   } catch (err: any) {
     console.error('[quote-templates] update failed:', err.message);
-    return res.status(500).json({ error: err.message || 'Unable to update template.' });
+    return res.status(500).json({ error: 'Unable to update template.' });
   }
 });
 
@@ -261,7 +264,7 @@ router.patch('/quote-templates/:id/default', async (req, res) => {
     return res.json({ template: data });
   } catch (err: any) {
     console.error('[quote-templates] set-default failed:', err.message);
-    return res.status(500).json({ error: err.message || 'Unable to update default.' });
+    return res.status(500).json({ error: 'Unable to update default.' });
   }
 });
 
@@ -289,7 +292,7 @@ router.patch('/quote-templates/:id/active', async (req, res) => {
     return res.json({ template: data });
   } catch (err: any) {
     console.error('[quote-templates] toggle-active failed:', err.message);
-    return res.status(500).json({ error: err.message || 'Unable to toggle active.' });
+    return res.status(500).json({ error: 'Unable to toggle active.' });
   }
 });
 
@@ -321,7 +324,7 @@ router.delete('/quote-templates/:id', async (req, res) => {
     return res.json({ ok: true });
   } catch (err: any) {
     console.error('[quote-templates] delete failed:', err.message);
-    return res.status(500).json({ error: err.message || 'Unable to delete template.' });
+    return res.status(500).json({ error: 'Unable to delete template.' });
   }
 });
 
@@ -373,7 +376,7 @@ router.post('/quote-templates/:id/duplicate', async (req, res) => {
     return res.json({ template: data });
   } catch (err: any) {
     console.error('[quote-templates] duplicate failed:', err.message);
-    return res.status(500).json({ error: err.message || 'Unable to duplicate template.' });
+    return res.status(500).json({ error: 'Unable to duplicate template.' });
   }
 });
 
@@ -449,7 +452,7 @@ router.post('/quote-templates/seed', async (req, res) => {
     return res.json({ seeded: true, templates: data });
   } catch (err: any) {
     console.error('[quote-templates] seed failed:', err.message);
-    return res.status(500).json({ error: err.message || 'Unable to seed templates.' });
+    return res.status(500).json({ error: 'Unable to seed templates.' });
   }
 });
 

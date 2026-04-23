@@ -86,10 +86,14 @@ export default function InvoiceDetails() {
 
   const { invoice, client, items } = detailsQuery.data;
   const uiStatus = getInvoiceRowUiStatus(invoice);
-  const canPayNow = invoice.balance_cents > 0 && ['sent', 'partial', 'sent_not_due', 'past_due'].includes(invoice.status);
   const isDraft = invoice.status === 'draft';
   const isVoid = invoice.status === 'void';
   const isPaid = invoice.status === 'paid';
+  const canPayNow =
+    invoice.balance_cents > 0 &&
+    !isVoid &&
+    !isPaid &&
+    ['sent', 'partial', 'sent_not_due', 'past_due'].includes(invoice.status);
 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: ['invoiceDetails', invoiceId] });
@@ -138,8 +142,11 @@ export default function InvoiceDetails() {
     setActionsOpen(false);
   }
 
+  const [markingPaid, setMarkingPaid] = useState(false);
   async function handleMarkPaid() {
+    if (markingPaid) return; // prevent double-click race
     if (!window.confirm(t.invoiceDetails.markAsPaid)) return;
+    setMarkingPaid(true);
     try {
       await markInvoicePaidManually(invoice.id);
       invalidateAll();
@@ -147,6 +154,8 @@ export default function InvoiceDetails() {
       toast.success(t.invoiceDetails.invoiceMarkedAsPaid);
     } catch (err: any) {
       toast.error(err?.message || 'Failed');
+    } finally {
+      setMarkingPaid(false);
     }
     setActionsOpen(false);
   }
@@ -292,7 +301,8 @@ export default function InvoiceDetails() {
                         <button
                           type="button"
                           onClick={handleMarkPaid}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-xs text-green-600 hover:bg-surface-secondary"
+                          disabled={markingPaid}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-xs text-green-600 hover:bg-surface-secondary disabled:opacity-40"
                         >
                           <CheckCircle2 size={12} />
                           {t.invoiceDetails.markAsPaid2}

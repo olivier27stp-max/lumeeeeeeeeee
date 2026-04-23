@@ -80,8 +80,8 @@ export const PERMISSION_KEYS = [
   'gps.read',
   // Timesheets
   'timesheets.read', 'timesheets.update',
-  // AI
-  'ai.use', 'ai.review', 'ai.admin',
+  // External Agent (used by /api/agent/connect + /api/agent/webhook)
+  'external_agent.use', 'external_agent.review', 'external_agent.admin',
   // ── Financial (field-level) ──
   'financial.view_pricing',   // See prices, totals, subtotals on jobs/quotes/invoices
   'financial.view_invoices',  // Access invoices module entirely
@@ -360,11 +360,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
-    key: 'ai', label_en: 'AI (Lia)', label_fr: 'IA (Lia)',
+    key: 'external_agent', label_en: 'External Agent', label_fr: 'Agent externe',
     permissions: [
-      { key: 'ai.use', label_en: 'Use AI', label_fr: 'Utiliser l\'IA' },
-      { key: 'ai.review', label_en: 'Review AI outputs', label_fr: 'Réviser les sorties IA' },
-      { key: 'ai.admin', label_en: 'Administrate AI', label_fr: 'Administrer l\'IA' },
+      { key: 'external_agent.use', label_en: 'Use external agent', label_fr: 'Utiliser l\'agent externe' },
+      { key: 'external_agent.review', label_en: 'Review agent outputs', label_fr: 'Réviser les sorties de l\'agent' },
+      { key: 'external_agent.admin', label_en: 'Administrate external agent', label_fr: 'Administrer l\'agent externe' },
     ],
   },
 ];
@@ -422,8 +422,8 @@ export const ROLE_PRESETS: Record<TeamRole, PermissionsMap> = {
     // Map & D2D
     'map.access',
     'door_to_door.access', 'door_to_door.edit', 'door_to_door.convert',
-    // AI
-    'ai.use',
+    // External Agent
+    'external_agent.use',
     // Settings (read only)
     'settings.read',
     // Financial — sales_rep can see pricing on quotes
@@ -449,8 +449,8 @@ export const ROLE_PRESETS: Record<TeamRole, PermissionsMap> = {
     'gps.read',
     // Settings (read for app config)
     'settings.read',
-    // AI (basic use)
-    'ai.use',
+    // External Agent (basic use)
+    'external_agent.use',
     // ── ZERO financial permissions ──
     // financial.view_pricing    = false
     // financial.view_invoices   = false

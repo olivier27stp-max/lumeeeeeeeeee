@@ -53,7 +53,7 @@ const edgeSelectedStyles = `
   }
 `;
 
-import { ArrowLeft, Pencil, MessageCircle, ThumbsUp, Play, Pen, Sparkles } from 'lucide-react';
+import { ArrowLeft, Pencil, MessageCircle, ThumbsUp, Play, Pen } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
 import {
@@ -84,12 +84,6 @@ import PresenceBar, { type PresenceUser } from '../components/notes/PresenceBar'
 import CommentsPanel, { type BoardComment } from '../components/notes/CommentsPanel';
 import VotingPanel, { type Vote } from '../components/notes/VotingPanel';
 import PresentationMode from '../components/notes/PresentationMode';
-import AIBoardPanel from '../components/notes/AIBoardPanel';
-import {
-  clusterNotes, generateMindMap, summarizeBoard,
-  extractActionItems, expandIdeas, improveText,
-  type ClusterResult, type MindMapNode,
-} from '../lib/boardAI';
 import { Skeleton } from '../components/ui';
 
 // ─── Node type mapping (static — never recreated) ──────────────
@@ -169,13 +163,6 @@ function CanvasInner() {
   // ─── Presentation ──────────────────────────────────────────
   const [presenting, setPresenting] = useState(false);
   const [presentIndex, setPresentIndex] = useState(0);
-
-  // ─── AI ─────────────────────────────────────────────────────
-  const [showAI, setShowAI] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiResult, setAiResult] = useState<string | null>(null);
-  const [aiLastAction, setAiLastAction] = useState<string | null>(null);
-  const aiPendingDataRef = useRef<any>(null);
 
   // ─── Presence / cursors ────────────────────────────────────
   const [presenceUsers, setPresenceUsers] = useState<PresenceUser[]>([]);
@@ -809,264 +796,6 @@ function CanvasInner() {
     deleteBoardDrawing(pathId).catch((e: any) => { console.error('[canvas]', e?.message); });
   }, []);
 
-  // ─── AI action handler ──────────────────────────────────────
-  const handleAIAction = useCallback(async (actionId: string) => {
-    if (actionId === '_clear') {
-      setAiResult(null);
-      setAiLastAction(null);
-      aiPendingDataRef.current = null;
-      return;
-    }
-
-    setAiLoading(true);
-    setAiResult(null);
-    setAiLastAction(actionId);
-
-    try {
-      switch (actionId) {
-        case 'cluster': {
-          const result = await clusterNotes(items);
-          aiPendingDataRef.current = result;
-          const summary = result.clusters
-            .map((c) => `**${c.theme}** (${c.itemIds.length} notes)`)
-            .join('\n');
-          setAiResult(
-            (t.noteCanvas.clustersFoundnn) + summary +
-            (language === 'fr' ? '\n\nCliquez "Appliquer" pour repositionner les notes.' : '\n\nClick "Apply" to reposition notes.')
-          );
-          break;
-        }
-        case 'mindmap': {
-          const result = await generateMindMap(items);
-          aiPendingDataRef.current = result;
-          const renderTree = (node: MindMapNode, depth = 0): string => {
-            const indent = '  '.repeat(depth);
-            let text = `${indent}${depth === 0 ? '🧠 ' : '• '}${node.label}`;
-            for (const child of node.children) {
-              text += '\n' + renderTree(child, depth + 1);
-            }
-            return text;
-          };
-          setAiResult(renderTree(result.root) +
-            (language === 'fr' ? '\n\nCliquez "Appliquer" pour creer le mind map sur le canvas.' : '\n\nClick "Apply" to create the mind map on the canvas.'));
-          break;
-        }
-        case 'summary': {
-          const result = await summarizeBoard(items, language);
-          setAiResult(result);
-          break;
-        }
-        case 'actions': {
-          const result = await extractActionItems(items, language);
-          setAiResult(result);
-          aiPendingDataRef.current = result;
-          break;
-        }
-        case 'expand': {
-          const result = await expandIdeas(items, language);
-          aiPendingDataRef.current = result;
-          setAiResult(
-            result.map((r) => `• ${r.text}`).join('\n') +
-            (language === 'fr' ? '\n\nCliquez "Appliquer" pour ajouter ces idees au canvas.' : '\n\nClick "Apply" to add these ideas to the canvas.')
-          );
-          break;
-        }
-        case 'rewrite': {
-          if (!selectedItem?.content) {
-            setAiResult(t.noteCanvas.selectANoteWithTextFirst);
-            break;
-          }
-          const result = await improveText(selectedItem.content, language);
-          aiPendingDataRef.current = { itemId: selectedItem.id, text: result };
-          setAiResult(
-            (t.noteCanvas.improvedTextnn) + result +
-            (language === 'fr' ? '\n\nCliquez "Appliquer" pour remplacer.' : '\n\nClick "Apply" to replace.')
-          );
-          break;
-        }
-      }
-    } catch (err: any) {
-      setAiResult(
-        (t.noteCanvas.error) +
-        (err?.message || 'Failed to process AI request. Is Ollama running?')
-      );
-    } finally {
-      setAiLoading(false);
-    }
-  }, [items, selectedItem, language]);
-
-  // ─── Apply AI result to canvas ─────────────────────────────
-  const handleApplyAIResult = useCallback(async () => {
-    if (!boardId || !aiLastAction || !aiPendingDataRef.current) return;
-
-    try {
-      switch (aiLastAction) {
-        case 'cluster': {
-          const { clusters } = aiPendingDataRef.current as ClusterResult;
-          // Reposition notes into cluster groups
-          let groupX = 100;
-          for (const cluster of clusters) {
-            let offsetY = 0;
-            for (const itemId of cluster.itemIds) {
-              markLocalUpdate(itemId);
-              updateItem(itemId, {
-                pos_x: groupX,
-                pos_y: 100 + offsetY,
-                color: cluster.color,
-              }).catch((e: any) => { console.error('[canvas]', e?.message); });
-              setItems((prev) => prev.map((i) =>
-                i.id === itemId ? { ...i, pos_x: groupX, pos_y: 100 + offsetY, color: cluster.color } : i
-              ));
-              setNodes((nds) => nds.map((n) =>
-                n.id === itemId ? {
-                  ...n,
-                  position: { x: groupX, y: 100 + offsetY },
-                  data: { ...n.data, color: cluster.color },
-                } : n
-              ));
-              offsetY += 170;
-            }
-            // Add a frame around the cluster
-            const frameH = Math.max(offsetY + 60, 200);
-            const frame = await createItem({
-              board_id: boardId,
-              item_type: 'frame',
-              pos_x: groupX - 20,
-              pos_y: 40,
-              width: 240,
-              height: frameH,
-              content: cluster.theme,
-              color: cluster.color,
-            });
-            setItems((prev) => [...prev, frame]);
-            setNodes((nds) => [...nds, buildNode(frame)]);
-            groupX += 280;
-          }
-          toast.success(t.noteCanvas.clustersApplied);
-          break;
-        }
-        case 'mindmap': {
-          const { root } = aiPendingDataRef.current as { root: MindMapNode };
-          // Create a visual mind map layout
-          const createdIds: string[] = [];
-
-          const createMapNode = async (node: MindMapNode, x: number, y: number, depth: number): Promise<string> => {
-            const colors = ['#93c5fd', '#86efac', '#c4b5fd', '#fdba74', '#f9a8d4'];
-            const isRoot = depth === 0;
-            const item = await createItem({
-              board_id: boardId!,
-              item_type: isRoot ? 'shape' : 'sticky_note',
-              pos_x: x,
-              pos_y: y,
-              width: isRoot ? 200 : 160,
-              height: isRoot ? 80 : 100,
-              content: node.label,
-              color: isRoot ? '#3b82f6' : colors[depth % colors.length],
-              shape_type: isRoot ? 'ellipse' : null,
-            });
-            setItems((prev) => [...prev, item]);
-            setNodes((nds) => [...nds, buildNode(item)]);
-            createdIds.push(item.id);
-
-            // Lay out children in a fan
-            const spacing = 200;
-            const startY = y - ((node.children.length - 1) * spacing) / 2;
-
-            for (let i = 0; i < node.children.length; i++) {
-              const childX = x + 280;
-              const childY = startY + i * spacing;
-              const childId = await createMapNode(node.children[i], childX, childY, depth + 1);
-
-              // Connect parent → child
-              const conn = await createConnection({
-                board_id: boardId!,
-                source_id: item.id,
-                target_id: childId,
-                color: '#6b7280',
-              });
-              setConnections((prev) => [...prev, conn]);
-              setEdges((eds) => [...eds, connectionToEdge(conn)]);
-            }
-
-            return item.id;
-          };
-
-          await createMapNode(root, 200, 300, 0);
-          setTimeout(() => fitView({ padding: 0.3 }), 300);
-          toast.success(t.noteCanvas.mindMapCreated);
-          break;
-        }
-        case 'expand': {
-          const ideas = aiPendingDataRef.current as Array<{ text: string; color: string }>;
-          const startX = Math.max(...items.map((i) => i.pos_x + i.width), 200) + 60;
-
-          for (let i = 0; i < ideas.length; i++) {
-            const item = await createItem({
-              board_id: boardId,
-              item_type: 'sticky_note',
-              pos_x: startX + (i % 3) * 220,
-              pos_y: 100 + Math.floor(i / 3) * 170,
-              width: 200,
-              height: 140,
-              content: ideas[i].text,
-              color: ideas[i].color || '#c4b5fd',
-            });
-            setItems((prev) => [...prev, item]);
-            setNodes((nds) => [...nds, buildNode(item)]);
-          }
-          toast.success(t.noteCanvas.ideasAdded);
-          break;
-        }
-        case 'actions': {
-          const text = aiPendingDataRef.current as string;
-          // Create a checklist from the action items
-          const lines = text.split('\n').filter((l: string) => l.trim().startsWith('- ['));
-          const checklist = lines.map((l: string) => ({
-            id: crypto.randomUUID(),
-            text: l.replace(/^- \[.\]\s*/, '').trim(),
-            checked: l.includes('[x]'),
-          }));
-
-          if (checklist.length > 0) {
-            const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-            const item = await createItem({
-              board_id: boardId,
-              item_type: 'checklist',
-              pos_x: center.x,
-              pos_y: center.y,
-              width: 280,
-              height: Math.max(200, checklist.length * 32 + 60),
-              content: t.noteCanvas.actionItems,
-              rich_content: { checklist },
-            });
-            setItems((prev) => [...prev, item]);
-            setNodes((nds) => [...nds, buildNode(item)]);
-            toast.success(t.noteCanvas.checklistCreated);
-          }
-          break;
-        }
-        case 'rewrite': {
-          const { itemId, text } = aiPendingDataRef.current as { itemId: string; text: string };
-          markLocalUpdate(itemId);
-          await updateItem(itemId, { content: text });
-          setItems((prev) => prev.map((i) => i.id === itemId ? { ...i, content: text } : i));
-          setNodes((nds) => nds.map((n) =>
-            n.id === itemId ? { ...n, data: { ...n.data, content: text } } : n
-          ));
-          toast.success(t.noteCanvas.textUpdated);
-          break;
-        }
-      }
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to apply');
-    }
-
-    setAiResult(null);
-    setAiLastAction(null);
-    aiPendingDataRef.current = null;
-  }, [boardId, aiLastAction, items, language, markLocalUpdate, buildNode, setNodes, setEdges,
-      screenToFlowPosition, fitView, setConnections]);
-
   // ─── Presentation helpers ──────────────────────────────────
   const frameItems = useMemo(() =>
     items.filter((i) => i.item_type === 'frame').map((i) => ({
@@ -1417,13 +1146,6 @@ function CanvasInner() {
             >
               <Pen size={15} />
             </button>
-            <button
-              onClick={() => setShowAI(!showAI)}
-              className={`p-1.5 rounded-md transition-colors ${showAI ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/30' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'}`}
-              title="AI"
-            >
-              <Sparkles size={15} />
-            </button>
           </div>
 
           <span className="text-[11px] text-text-tertiary">
@@ -1611,22 +1333,6 @@ function CanvasInner() {
                 onStart={handleStartVoting}
                 onStop={handleStopVoting}
                 onClose={() => setShowVoting(false)}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ─── AI Panel ─── */}
-        {showAI && (
-          <div className="absolute top-4 right-4 z-50 pointer-events-none">
-            <div className="pointer-events-auto">
-              <AIBoardPanel
-                language={language}
-                loading={aiLoading}
-                result={aiResult}
-                onAction={handleAIAction}
-                onClose={() => { setShowAI(false); setAiResult(null); }}
-                onApplyResult={handleApplyAIResult}
               />
             </div>
           </div>

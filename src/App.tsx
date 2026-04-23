@@ -32,7 +32,6 @@ import {
   GraduationCap,
   Trophy,
   DollarSign,
-  Newspaper,
   MapPinned,
   GitBranch,
   Shield,
@@ -52,10 +51,16 @@ import Leads from './pages/Leads';
 import Schedule from './pages/Schedule';
 import SettingsPage from './pages/Settings';
 import Auth from './pages/Auth';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
+import PrivacyCenter from './pages/PrivacyCenter';
+import Subprocessors from './pages/Subprocessors';
+import { CookieBanner } from './components/CookieBanner';
 import Landing from './pages/Landing';
 import { supabase } from './lib/supabase';
 import { User } from '@supabase/supabase-js';
 import Jobs from './pages/Jobs';
+import NotFound from './pages/NotFound';
 import JobDetails from './pages/JobDetails';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
@@ -84,6 +89,7 @@ import ActivityCenter from './components/ActivityCenter';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProductsServices from './pages/ProductsServices';
 import AppMarketplace from './pages/AppMarketplace';
+import SettingsMessaging from './pages/SettingsMessaging';
 // PhoneNumberSettings removed from Settings nav
 import RequestFormSettings from './pages/RequestFormSettings';
 import QuotePresets from './pages/QuotePresets';
@@ -118,7 +124,6 @@ import ClientPortal from './pages/ClientPortal';
 import PublicPayment from './pages/PublicPayment';
 import Leaderboard from './pages/Leaderboard';
 import Commissions from './pages/Commissions';
-import SocialFeed from './pages/SocialFeed';
 import RepProfile from './pages/RepProfile';
 import FieldSales from './pages/FieldSales';
 import D2DMap from './pages/D2DMap';
@@ -137,7 +142,6 @@ import type { PermissionKey } from './lib/permissions';
 import { hasPermission } from './lib/permissions';
 import { usePermissions } from './hooks/usePermissions';
 import { useRealtimeNotifications } from './hooks/useRealtimeNotifications';
-const MemoryGraphPage = React.lazy(() => import('./features/memory-graph/MemoryGraphPage'));
 import OnboardingWizard from './components/OnboardingWizard';
 import CommandPalette from './components/CommandPalette';
 import DevRoleSwitcher from './components/DevRoleSwitcher';
@@ -158,18 +162,6 @@ import MarketingContact from './pages/marketing/Contact';
 
 // Platform Admin — lazy loaded, owner-only
 const PlatformAdmin = React.lazy(() => import('./pages/PlatformAdmin'));
-
-// Director Panel — lazy loaded
-const DirectorHome = React.lazy(() => import('./pages/director-panel/DirectorHome'));
-const DirectorFlows = React.lazy(() => import('./pages/director-panel/DirectorFlows'));
-const FlowEditor = React.lazy(() => import('./pages/director-panel/FlowEditor'));
-const DirectorTemplates = React.lazy(() => import('./pages/director-panel/DirectorTemplates'));
-const DirectorAssets = React.lazy(() => import('./pages/director-panel/DirectorAssets'));
-const DirectorRuns = React.lazy(() => import('./pages/director-panel/DirectorRuns'));
-const DirectorSettings = React.lazy(() => import('./pages/director-panel/DirectorSettings'));
-const DirectorStyles = React.lazy(() => import('./pages/director-panel/DirectorStyles'));
-const DirectorTraining = React.lazy(() => import('./pages/director-panel/DirectorTraining'));
-const DirectorLayout = React.lazy(() => import('./pages/director-panel/DirectorLayout'));
 
 type NavItem = {
   id: string;
@@ -210,7 +202,16 @@ export default function App() {
 
   // Auto-signout after 30 min of inactivity
   useSessionTimeout(user?.id || null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('lume-sidebar-open');
+      if (saved === 'true' || saved === 'false') return saved === 'true';
+    }
+    return true;
+  });
+  useEffect(() => {
+    try { localStorage.setItem('lume-sidebar-open', String(isSidebarOpen)); } catch {}
+  }, [isSidebarOpen]);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const sidebarExpanded = isSidebarOpen || isSidebarHovered;
   const [view, setView] = useState<'landing' | 'auth'>('landing');
@@ -226,7 +227,16 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [hasSubscription, setHasSubscription] = useState<boolean | null>(null); // null = checking
   const [onboardingChecked, setOnboardingChecked] = useState(false);
-  const [showMoreNav, setShowMoreNav] = useState(false);
+  const [showMoreNav, setShowMoreNav] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('lume-sidebar-more');
+      if (saved === 'true' || saved === 'false') return saved === 'true';
+    }
+    return false;
+  });
+  useEffect(() => {
+    try { localStorage.setItem('lume-sidebar-more', String(showMoreNav)); } catch {}
+  }, [showMoreNav]);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -390,13 +400,11 @@ export default function App() {
   }, [user, onboardingChecked]);
 
   // Check if user has an active subscription — redirect to /checkout if not
-  // Platform owners/admins bypass subscription check.
-  const HARDCODED_BYPASS = ['willhebert30@gmail.com', 'beatsafterimage@gmail.com'];
-  const envBypass = (import.meta.env.VITE_BETA_BYPASS_EMAILS || '')
+  // Beta bypass list sourced exclusively from env (comma-separated emails).
+  const BYPASS_EMAILS = (import.meta.env.VITE_BETA_BYPASS_EMAILS || '')
     .split(',')
     .map((e: string) => e.trim().toLowerCase())
     .filter(Boolean);
-  const BYPASS_EMAILS = [...HARDCODED_BYPASS, ...envBypass];
   useEffect(() => {
     if (!user || !onboardingChecked || showOnboarding) { setHasSubscription(null); return; }
     // Bypass for beta emails whitelisted via env
@@ -487,39 +495,32 @@ export default function App() {
     );
   }
 
-  // Director Panel flow editor — full screen, no sidebar
-  if (user && location.pathname.match(/^\/director-panel\/flows\/.+/)) {
-    return (
-      <ErrorBoundary>
-        <React.Suspense fallback={<div className="h-screen w-screen bg-[#111]" />}>
-          <Routes>
-            <Route path="/director-panel/flows/:flowId" element={<FlowEditor />} />
-          </Routes>
-        </React.Suspense>
-      </ErrorBoundary>
-    );
-  }
-
   if (!user) {
     if (view === 'auth') {
       return <Auth onBack={() => setView('landing')} />;
     }
     return (
-      <Routes>
-        <Route path="/auth" element={<Auth onBack={() => setView('landing')} />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route element={<MarketingLayout />}>
-          <Route index element={<MarketingHome />} />
-          <Route path="features" element={<MarketingFeatures />} />
-          <Route path="solutions" element={<MarketingSolutions />} />
-          <Route path="industries" element={<MarketingIndustries />} />
-          <Route path="industries/:slug" element={<MarketingIndustryDetail />} />
-          <Route path="pricing" element={<MarketingPricing />} />
-          <Route path="contact" element={<MarketingContact />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <>
+        <CookieBanner />
+        <Routes>
+          <Route path="/auth" element={<Auth onBack={() => setView('landing')} />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/subprocessors" element={<Subprocessors />} />
+          <Route element={<MarketingLayout />}>
+            <Route index element={<MarketingHome />} />
+            <Route path="features" element={<MarketingFeatures />} />
+            <Route path="solutions" element={<MarketingSolutions />} />
+            <Route path="industries" element={<MarketingIndustries />} />
+            <Route path="industries/:slug" element={<MarketingIndustryDetail />} />
+            <Route path="pricing" element={<MarketingPricing />} />
+            <Route path="contact" element={<MarketingContact />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </>
     );
   }
 
@@ -535,6 +536,9 @@ export default function App() {
         <Route path="/auth" element={<Auth onBack={() => setView('landing')} />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+          <Route path="/subprocessors" element={<Subprocessors />} />
         <Route element={<MarketingLayout />}>
           <Route index element={<MarketingHome />} />
           <Route path="features" element={<MarketingFeatures />} />
@@ -674,7 +678,7 @@ function AuthenticatedApp({
     {
       label: null,
       items: [
-        { id: 'ai-helper', label: 'Lume Agent', icon: LumeAgentIcon as any, path: '/dashboard', tileColor: 'blue', requiredPermission: 'ai.use' },
+        { id: 'ai-helper', label: 'Lume Agent', icon: LumeAgentIcon as any, path: '/dashboard', tileColor: 'blue', requiredPermission: 'external_agent.use' },
         { id: 'day', label: 'CRM', icon: LayoutDashboard, path: '/day', tileColor: 'blue' },
       ],
     },
@@ -737,11 +741,14 @@ function AuthenticatedApp({
     <JobModalControllerProvider>
       <Toaster
         richColors
-        position="top-right"
+        // On mobile, top-right overlaps the header / floats badly; bottom-center keeps
+        // toasts out of the way of scroll content.
+        position={typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'bottom-center' : 'top-right'}
         toastOptions={{
           className: '!rounded-lg !border !border-outline !shadow-md !text-[13px] !font-medium',
         }}
       />
+      <CookieBanner />
       <div className="flex h-screen overflow-hidden bg-surface">
         {/* ─── Mobile sidebar overlay ─── */}
         {isSidebarOpen && (
@@ -1056,7 +1063,7 @@ function AuthenticatedApp({
             <ErrorBoundary labels={t.errorBoundary}>
                   <Routes>
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                    <Route path="/dashboard" element={<Gated permission="ai.use"><PageWrapper><MrLumePage /></PageWrapper></Gated>} />
+                    <Route path="/dashboard" element={<Gated permission="external_agent.use"><PageWrapper><MrLumePage /></PageWrapper></Gated>} />
                     <Route path="/day" element={<Gated permission="settings.read"><PageWrapper><CrmWorkspace /></PageWrapper></Gated>} />
                     <Route path="/messages" element={<Gated permission="messages.read"><PageWrapper><Messages /></PageWrapper></Gated>} />
                     <Route path="/leads" element={<Navigate to="/quotes" replace />} />
@@ -1083,7 +1090,12 @@ function AuthenticatedApp({
                     <Route path="/payments/settings" element={<Navigate to="/settings?tab=payments" replace />} />
                     <Route path="/timesheets" element={<Gated permission="timesheets.read"><PageWrapper><Timesheets /></PageWrapper></Gated>} />
                     <Route path="/settings" element={<Gated permission="settings.read"><PageWrapper><SettingsPage /></PageWrapper></Gated>} />
+                    <Route path="/account/privacy" element={<PageWrapper><PrivacyCenter /></PageWrapper>} />
+                    <Route path="/privacy" element={<Privacy />} />
+                    <Route path="/terms" element={<Terms />} />
+          <Route path="/subprocessors" element={<Subprocessors />} />
                     <Route path="/settings/payments" element={<Gated permission="settings.read"><PageWrapper><PaymentSettings /></PageWrapper></Gated>} />
+                    <Route path="/settings/messaging" element={<Gated permission="settings.read"><PageWrapper><SettingsMessaging /></PageWrapper></Gated>} />
                     <Route path="/settings/products" element={<Gated permission="settings.update"><PageWrapper><ProductsServices /></PageWrapper></Gated>} />
                     <Route path="/automations" element={<Gated permission="automations.read"><PageWrapper><Automations /></PageWrapper></Gated>} />
                     <Route path="/tasks" element={<Gated permission="settings.read"><PageWrapper><TasksPage /></PageWrapper></Gated>} />
@@ -1124,22 +1136,9 @@ function AuthenticatedApp({
                     <Route path="/apps/callback" element={<Gated permission="integrations.update"><OAuthCallback /></Gated>} />
                     {/* BillingCheckout removed — upgrade goes through /checkout */}
                     <Route path="/settings/referrals" element={<Gated permission="settings.read"><PageWrapper><ReferFriend /></PageWrapper></Gated>} />
-                    {/* Memory Graph — LIA Brain Visualization */}
-                    <Route path="/memory-graph" element={<Gated permission="ai.admin"><React.Suspense fallback={null}><MemoryGraphPage /></React.Suspense></Gated>} />
-                    {/* Director Panel routes */}
-                    <Route path="/director-panel" element={<Gated permission="ai.admin"><React.Suspense fallback={null}><DirectorLayout /></React.Suspense></Gated>}>
-                      <Route index element={<React.Suspense fallback={null}><DirectorHome orgId={currentOrgId || ''} /></React.Suspense>} />
-                      <Route path="flows" element={<React.Suspense fallback={null}><DirectorFlows orgId={currentOrgId || ''} /></React.Suspense>} />
-                      <Route path="templates" element={<React.Suspense fallback={null}><DirectorTemplates /></React.Suspense>} />
-                      <Route path="assets" element={<React.Suspense fallback={null}><DirectorAssets /></React.Suspense>} />
-                      <Route path="runs" element={<React.Suspense fallback={null}><DirectorRuns orgId={currentOrgId || ''} /></React.Suspense>} />
-                      <Route path="settings" element={<React.Suspense fallback={null}><DirectorSettings /></React.Suspense>} />
-                      <Route path="styles" element={<React.Suspense fallback={null}><DirectorStyles /></React.Suspense>} />
-                      <Route path="training" element={<React.Suspense fallback={null}><DirectorTraining /></React.Suspense>} />
-                    </Route>
-                    {/* Platform Admin — owner-only, server enforces auth */}
+{/* Platform Admin — owner-only, server enforces auth */}
                     <Route path="/platform-admin" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><PlatformAdmin /></PageWrapper></React.Suspense> : <Navigate to="/dashboard" replace />} />
-                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
                   </Routes>
             </ErrorBoundary>
           </div>

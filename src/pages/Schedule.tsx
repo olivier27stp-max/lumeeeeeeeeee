@@ -555,7 +555,7 @@ function ScheduleContent() {
 
   /* ── Data ── */
   const { data: orgId } = useQuery({ queryKey: ['currentOrgId'], queryFn: getCurrentOrgId });
-  const teamsQ = useQuery({ queryKey: ['teams', orgId || '-'], queryFn: listTeams, enabled: !!orgId });
+  const teamsQ = useQuery({ queryKey: ['teams', orgId || '-'], queryFn: listTeams, enabled: !!orgId, staleTime: 5 * 60_000 });
   const teams = teamsQ.data || [];
 
   useEffect(() => {
@@ -579,13 +579,15 @@ function ScheduleContent() {
   const evQ = useQuery({
     queryKey: ['calendarEvents', orgId || '-', view, dateKey, tKey, unassignedMode ? 'u' : 't'],
     enabled: !!orgId && (!noneSel || unassignedMode),
+    staleTime: 30_000,
     queryFn: () => unassignedMode
       ? listUnassignedScheduledEvents({ startAt: range.start.toISOString(), endAt: range.end.toISOString() })
-      : listScheduleEventsRange({ startAt: range.start.toISOString(), endAt: range.end.toISOString(), teamIds: effTeams, bypassCache: true }),
+      : listScheduleEventsRange({ startAt: range.start.toISOString(), endAt: range.end.toISOString(), teamIds: effTeams }),
   });
   const unschedQ = useQuery({
     queryKey: ['calendarUnscheduledJobs', orgId || '-', tKey, unassignedMode ? 'u' : 't'],
     enabled: !!orgId,
+    staleTime: 30_000,
     queryFn: () => unassignedMode ? listUnassignedUnscheduledJobs() : listUnscheduledJobs(noneSel ? [] : effTeams),
   });
 
@@ -690,7 +692,9 @@ function ScheduleContent() {
   }, [dnd]);
 
   /* ── Computed ── */
-  const now = useMemo(() => new Date(), []);
+  // Stable "now" — only refreshed when the underlying events list changes,
+  // so derived memos (filtered, overlaps, counts) don't invalidate on every render.
+  const now = useMemo(() => new Date(), [evQ.dataUpdatedAt]);
   const c30 = useMemo(() => events.filter((e) => isEnd30(e, now)).length, [events, now]);
   const cInv = useMemo(() => events.filter(reqInv).length, [events]);
   const cAtt = useMemo(() => events.filter(needsAtt).length, [events]);
@@ -728,12 +732,35 @@ function ScheduleContent() {
   /* ── Realtime ── */
   useEffect(() => {
     if (!orgId) return;
-    const ch = supabase.channel('cal-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_events' }, () => qc.invalidateQueries({ queryKey: ['calendarEvents'] }))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, () => { qc.invalidateQueries({ queryKey: ['calendarEvents'] }); qc.invalidateQueries({ queryKey: ['calendarUnscheduledJobs'] }); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => qc.invalidateQueries({ queryKey: ['teams'] }))
+    // Debounce invalidations: realtime can burst many events; one refetch per burst is plenty.
+    let evTimer: ReturnType<typeof setTimeout> | null = null;
+    let teamTimer: ReturnType<typeof setTimeout> | null = null;
+    const invEvents = () => {
+      if (evTimer) return;
+      evTimer = setTimeout(() => {
+        evTimer = null;
+        qc.invalidateQueries({ queryKey: ['calendarEvents'] });
+        qc.invalidateQueries({ queryKey: ['calendarUnscheduledJobs'] });
+      }, 400);
+    };
+    const invTeams = () => {
+      if (teamTimer) return;
+      teamTimer = setTimeout(() => {
+        teamTimer = null;
+        qc.invalidateQueries({ queryKey: ['teams'] });
+      }, 400);
+    };
+
+    const ch = supabase.channel(`cal-rt-${orgId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_events', filter: `org_id=eq.${orgId}` }, invEvents)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs', filter: `org_id=eq.${orgId}` }, invEvents)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams', filter: `org_id=eq.${orgId}` }, invTeams)
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    return () => {
+      if (evTimer) clearTimeout(evTimer);
+      if (teamTimer) clearTimeout(teamTimer);
+      supabase.removeChannel(ch);
+    };
   }, [orgId, qc]);
 
   /* Free slots */

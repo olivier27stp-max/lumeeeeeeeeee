@@ -42,9 +42,6 @@ export function getBaseUrl(): string {
   return `http://localhost:${process.env.API_PORT || 5173}`;
 }
 
-// Director Panel — AI provider keys
-export const falApiKey = process.env.FAL_API_KEY || '';
-
 // Email config (SMTP via Nodemailer — see server/lib/mailer.ts)
 export const emailFrom = process.env.EMAIL_FROM || `Lume CRM <${process.env.SMTP_USER || 'noreply@lume.crm'}>`;
 

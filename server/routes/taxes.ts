@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // ── Canadian tax presets ──
 const PRESETS: Record<string, { name: string; region: string; country: string; taxes: Array<{ name: string; rate: number; is_compound: boolean; sort_order: number }> }> = {
@@ -75,7 +78,7 @@ router.get('/taxes', async (req, res) => {
     });
   } catch (err: any) {
     console.error('[taxes] list failed:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -150,7 +153,7 @@ router.get('/taxes/resolve', async (req, res) => {
     return res.json({ taxes, group, region });
   } catch (err: any) {
     console.error('[taxes] resolve failed:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -209,7 +212,7 @@ router.post('/taxes/setup', async (req, res) => {
     return res.json({ group, config_count: configIds.length });
   } catch (err: any) {
     console.error('[taxes] setup failed:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -253,7 +256,7 @@ router.post('/taxes/config', async (req, res) => {
     return res.json({ config });
   } catch (err: any) {
     console.error('[taxes] create config failed:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -278,7 +281,7 @@ router.put('/taxes/config/:id', async (req, res) => {
     return res.json({ config: data });
   } catch (err: any) {
     console.error('[taxes] update config failed:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -298,7 +301,7 @@ router.delete('/taxes/group/:id', async (req, res) => {
     return res.json({ ok: true });
   } catch (err: any) {
     console.error('[taxes] delete group failed:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -324,7 +327,7 @@ router.patch('/taxes/group/:id/default', async (req, res) => {
     return res.json({ group: data });
   } catch (err: any) {
     console.error('[taxes] set default failed:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

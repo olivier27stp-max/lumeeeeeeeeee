@@ -4,6 +4,14 @@ import { twilioClient, twilioPhoneNumber, emailFrom } from '../lib/config';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { normalizeE164, findOrCreateConversation } from '../lib/helpers';
 import { provisionSmsNumber, getOrgSmsChannel } from '../lib/twilioProvisioning';
+import {
+  submitA2PBrand,
+  submitA2PCampaign,
+  refreshA2PStatus,
+  canSendToUS,
+  type A2PBrandInput,
+  type A2PCampaignInput,
+} from '../lib/twilioA2P';
 import { validate, sendSmsSchema } from '../lib/validation';
 import { sanitizeText, sanitizeHtml, sanitizeMessageContent, stripCRLF, logSecurityEvent, checkAnomalies, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
@@ -38,6 +46,19 @@ router.post('/communications/send-sms', validate(sendSmsSchema), async (req, res
     const normalizedTo = normalizeE164(to);
     const serviceClient = getServiceClient();
 
+    // A2P 10DLC gate: block outbound SMS to US numbers until brand + campaign are verified.
+    // Canadian destinations (+1 with area codes outside US) are allowed regardless.
+    if (isUSNumber(normalizedTo)) {
+      const allowed = await canSendToUS(orgId);
+      if (!allowed) {
+        return res.status(403).json({
+          error: 'A2P_REGISTRATION_REQUIRED',
+          message:
+            'US carriers require A2P 10DLC registration before messages can be delivered. Complete the A2P wizard in Settings → SMS Messaging.',
+        });
+      }
+    }
+
     // Resolve from number: org channel or global fallback
     const channel = await getOrgSmsChannel(orgId);
     const fromNumber = channel?.phone_number || twilioPhoneNumber;
@@ -45,54 +66,55 @@ router.post('/communications/send-sms', validate(sendSmsSchema), async (req, res
       return res.status(503).json({ error: 'No SMS number configured.' });
     }
 
-    // Send via Twilio
-    const twilioMsg = await twilioClient.messages.create({
-      body,
-      from: fromNumber,
-      to: normalizedTo,
-    });
+    // Run conversation lookup in parallel with Twilio send — independent DB round-trip
+    const [twilioMsg, conversation] = await Promise.all([
+      twilioClient.messages.create({
+        body,
+        from: fromNumber,
+        to: normalizedTo,
+      }),
+      findOrCreateConversation(serviceClient, orgId, normalizedTo, client_id),
+    ]);
 
-    // Also maintain existing conversations table
-    const conversation = await findOrCreateConversation(serviceClient, orgId, normalizedTo, client_id);
-
-    await serviceClient.from('messages').insert({
-      conversation_id: conversation.id,
-      org_id: orgId,
-      client_id: conversation.client_id || client_id || null,
-      phone_number: normalizedTo,
-      direction: 'outbound',
-      message_text: body,
-      status: 'sent',
-      provider_message_id: twilioMsg.sid,
-      sender_user_id: user.id,
-    });
-
-    // Log to unified communication_messages
-    const { data: commMsg, error: commErr } = await serviceClient
-      .from('communication_messages')
-      .insert({
+    // Parallelize the two inserts + communication_messages select
+    const [, commRes] = await Promise.all([
+      serviceClient.from('messages').insert({
+        conversation_id: conversation.id,
         org_id: orgId,
-        user_id: user.id,
-        client_id: client_id || conversation.client_id || null,
-        job_id: job_id || null,
-        channel_type: 'sms',
+        client_id: conversation.client_id || client_id || null,
+        phone_number: normalizedTo,
         direction: 'outbound',
-        provider: 'twilio',
-        channel_id: channel?.id || null,
-        from_value: fromNumber,
-        to_value: normalizedTo,
-        body_text: body,
+        message_text: body,
         status: 'sent',
-        sent_at: new Date().toISOString(),
         provider_message_id: twilioMsg.sid,
-      })
-      .select('id')
-      .single();
+        sender_user_id: user.id,
+      }),
+      serviceClient
+        .from('communication_messages')
+        .insert({
+          org_id: orgId,
+          user_id: user.id,
+          client_id: client_id || conversation.client_id || null,
+          job_id: job_id || null,
+          channel_type: 'sms',
+          direction: 'outbound',
+          provider: 'twilio',
+          channel_id: channel?.id || null,
+          from_value: fromNumber,
+          to_value: normalizedTo,
+          body_text: body,
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+          provider_message_id: twilioMsg.sid,
+        })
+        .select('id')
+        .single(),
+    ]);
 
-    if (commErr) console.error('Failed to log communication:', commErr.message);
+    if (commRes.error) console.error('Failed to log communication:', commRes.error.message);
 
     return res.json({
-      id: commMsg?.id || null,
+      id: commRes.data?.id || null,
       provider_message_id: twilioMsg.sid,
       status: 'sent',
     });
@@ -287,5 +309,149 @@ router.post('/communications/provision-sms', async (req, res) => {
     return sendSafeError(res, error, 'Failed to provision SMS number.', '[communications/provision-sms]');
   }
 });
+
+// ═══════════════════════════════════════════════════════════════
+// A2P 10DLC (US only) — Brand + Campaign registration
+// ═══════════════════════════════════════════════════════════════
+
+// GET /api/communications/a2p/status — current brand + campaign status for this org
+router.get('/communications/a2p/status', async (req, res) => {
+  try {
+    const authed = await requireAuthedClient(req, res);
+    if (!authed) return;
+    const { orgId } = authed;
+
+    const serviceClient = getServiceClient();
+    const { data } = await serviceClient
+      .from('a2p_registrations')
+      .select('*')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    return res.json(data || null);
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to fetch A2P status.', '[communications/a2p/status]');
+  }
+});
+
+// POST /api/communications/a2p/submit-brand — submit the brand for vetting
+router.post('/communications/a2p/submit-brand', async (req, res) => {
+  try {
+    const authed = await requireAuthedClient(req, res);
+    if (!authed) return;
+    const { orgId } = authed;
+
+    const input = validateBrandInput(req.body);
+    const result = await submitA2PBrand(orgId, input);
+    return res.json(result);
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to submit A2P brand.', '[communications/a2p/submit-brand]');
+  }
+});
+
+// POST /api/communications/a2p/submit-campaign — submit the campaign (requires verified brand)
+router.post('/communications/a2p/submit-campaign', async (req, res) => {
+  try {
+    const authed = await requireAuthedClient(req, res);
+    if (!authed) return;
+    const { orgId } = authed;
+
+    const input = validateCampaignInput(req.body);
+    const result = await submitA2PCampaign(orgId, input);
+    return res.json(result);
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to submit A2P campaign.', '[communications/a2p/submit-campaign]');
+  }
+});
+
+// POST /api/communications/a2p/refresh — poll Twilio for latest status
+router.post('/communications/a2p/refresh', async (req, res) => {
+  try {
+    const authed = await requireAuthedClient(req, res);
+    if (!authed) return;
+    const { orgId } = authed;
+
+    const result = await refreshA2PStatus(orgId);
+    return res.json(result);
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to refresh A2P status.', '[communications/a2p/refresh]');
+  }
+});
+
+// ── Helpers ─────────────────────────────────────────────────────────
+function isUSNumber(e164: string): boolean {
+  // E.164 US/CA both start with +1. We distinguish via the 3-digit area code.
+  // Canadian area codes are listed below; everything else on +1 is treated as US.
+  if (!e164.startsWith('+1') || e164.length < 5) return false;
+  const areaCode = e164.slice(2, 5);
+  return !CANADIAN_AREA_CODES.has(areaCode);
+}
+
+const CANADIAN_AREA_CODES = new Set<string>([
+  '204', '226', '236', '249', '250', '257', '263', '289',
+  '306', '343', '354', '365', '367', '368', '382', '387',
+  '403', '416', '418', '428', '431', '437', '438', '450', '468', '474',
+  '506', '514', '519', '548', '579', '581', '584', '587',
+  '604', '613', '639', '647', '672', '683', '705', '709', '742', '753', '778', '780', '782',
+  '807', '819', '825', '867', '873', '879',
+  '902', '905',
+]);
+
+function validateBrandInput(body: any): A2PBrandInput {
+  const fields = [
+    'legal_business_name', 'ein', 'business_type', 'vertical',
+    'street', 'city', 'region', 'postal_code', 'country',
+    'website', 'support_email', 'support_phone',
+  ];
+  for (const f of fields) {
+    if (!body?.[f] || typeof body[f] !== 'string' || !body[f].trim()) {
+      const err: any = new Error(`Missing required field: ${f}`);
+      err.status = 400;
+      throw err;
+    }
+  }
+  return {
+    legal_business_name: String(body.legal_business_name).trim(),
+    ein: String(body.ein).trim(),
+    business_type: String(body.business_type).trim(),
+    vertical: String(body.vertical).trim(),
+    street: String(body.street).trim(),
+    city: String(body.city).trim(),
+    region: String(body.region).trim(),
+    postal_code: String(body.postal_code).trim(),
+    country: String(body.country).trim(),
+    website: String(body.website).trim(),
+    support_email: String(body.support_email).trim(),
+    support_phone: String(body.support_phone).trim(),
+  };
+}
+
+function validateCampaignInput(body: any): A2PCampaignInput {
+  if (!body?.use_case || !body?.description) {
+    const err: any = new Error('use_case and description are required.');
+    err.status = 400;
+    throw err;
+  }
+  const samples = Array.isArray(body.message_samples)
+    ? body.message_samples.map((s: any) => String(s || '').trim()).filter(Boolean)
+    : [];
+  if (samples.length < 2) {
+    const err: any = new Error('Provide at least 2 message samples.');
+    err.status = 400;
+    throw err;
+  }
+  return {
+    use_case: String(body.use_case).trim(),
+    description: String(body.description).trim(),
+    message_samples: samples.slice(0, 5),
+    opt_in_keywords: Array.isArray(body.opt_in_keywords)
+      ? body.opt_in_keywords.map((k: any) => String(k || '').trim()).filter(Boolean)
+      : ['START'],
+    opt_in_message: String(body.opt_in_message || 'You are now subscribed. Reply STOP to unsubscribe.').trim(),
+    opt_out_message: String(body.opt_out_message || 'You have been unsubscribed. Reply START to resubscribe.').trim(),
+    has_embedded_links: Boolean(body.has_embedded_links),
+    has_embedded_phone: Boolean(body.has_embedded_phone),
+  };
+}
 
 export default router;

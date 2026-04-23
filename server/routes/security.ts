@@ -11,11 +11,14 @@
 
 import { Router } from 'express';
 import { requireAuthedClient, isOrgAdminOrOwner, getServiceClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { sendSafeError } from '../lib/error-handler';
 import { extractIP, logSecurityEvent } from '../lib/security';
 import { createApiKey, revokeApiKey } from '../lib/api-keys';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // ── Helper: require admin/owner role ──
 async function requireAdmin(req: any, res: any) {

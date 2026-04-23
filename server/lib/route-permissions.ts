@@ -103,30 +103,10 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'POST /api/automations/events/lead-created': 'automations.update',
   'POST /api/automations/events/lead-status-changed': 'automations.update',
 
-  // ── AI / Agent ──
-  'POST /api/ai/chat': 'ai.use',
-  'POST /api/ai/chat/stream': 'ai.use',
-  'POST /api/agent/chat': 'ai.use',
-  'POST /api/agent/approve': 'ai.review',
-  'GET /api/agent/sessions': 'ai.use',
-  'DELETE /api/agent/sessions/:id': 'ai.use',
-  'POST /api/agent/feedback': 'ai.use',
-  'POST /api/agent/outcome': 'ai.admin',
-  'POST /api/agent/correction': 'ai.admin',
-  'POST /api/agent/feedback-train': 'ai.admin',
-  'GET /api/agent/calibration': 'ai.review',
-  'GET /api/agent/user-prefs': 'ai.use',
-  'POST /api/team-suggestions': 'ai.use',
-
-  // ── Director Panel ──
-  'POST /api/director-panel/providers/execute': 'ai.admin',
-  'POST /api/director-panel/storage/ensure-bucket': 'ai.admin',
-  'POST /api/director-panel/storage/ensure-training-bucket': 'ai.admin',
-  'POST /api/director-panel/assets/save': 'ai.admin',
-  'GET /api/director-panel/credits': 'ai.admin',
-  'POST /api/director-panel/training/start': 'ai.admin',
-  'GET /api/director-panel/training/status/:trainingId': 'ai.admin',
-  'GET /api/director-panel/proxy-image': 'ai.admin',
+  // ── AI / Agent ── (backend removed — only external agent auth remains)
+  // External agent endpoints live under /api/agent/connect and /api/agent/webhook
+  // and perform their own auth via API keys / JWT — no RBAC permission mapping.
+  'POST /api/team-suggestions': 'team.read',
 
   // ── Invitations / Team ──
   'GET /api/invitations/list': 'team.read',
@@ -135,6 +115,10 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'POST /api/invitations/revoke': 'users.invite',
   'POST /api/invitations/update-role': 'users.update_role',
   'POST /api/invitations/remove-member': 'users.delete',
+
+  // ── Role presets ──
+  'POST /api/roles/update-preset': 'users.update_role',
+  'GET /api/roles/presets': 'users.update_role',
 
   // ── Settings ──
   'GET /api/features': 'settings.read',
@@ -364,7 +348,8 @@ export function rbacMiddleware(): express.RequestHandler {
     '/api/webhooks/',          // Payment webhooks
     '/api/referrals/track',
     '/api/referrals/validate',
-    '/api/memory-graph/',      // Internal tool
+    '/api/agent/connect',      // External agent login (own auth)
+    '/api/agent/webhook',      // External agent webhook (own auth)
     '/api/quotes/:id/track-view',
   ];
 

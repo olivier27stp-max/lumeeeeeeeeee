@@ -314,14 +314,24 @@ router.post('/clients/soft-delete', validate(softDeleteClientSchema), async (req
       admin.from('quotes').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
     ]);
 
-    // Cascade: soft-delete schedule events for deleted jobs
+    // Cascade: schedule events (if any deleted jobs) + tag cleanup — parallel
     const deletedJobIds = (jobsRes.data ?? []).map((j: any) => j.id).filter(Boolean);
+    const cleanupTasks: Promise<unknown>[] = [
+      Promise.resolve(admin.from('client_tags').delete().eq('client_id', clientId)),
+    ];
     if (deletedJobIds.length > 0) {
-      await admin.from('schedule_events').update({ deleted_at: now }).in('job_id', deletedJobIds).eq('org_id', clientOrgId).is('deleted_at', null);
+      cleanupTasks.push(
+        Promise.resolve(
+          admin
+            .from('schedule_events')
+            .update({ deleted_at: now })
+            .in('job_id', deletedJobIds)
+            .eq('org_id', clientOrgId)
+            .is('deleted_at', null)
+        )
+      );
     }
-
-    // Clean up tags
-    await admin.from('client_tags').delete().eq('client_id', clientId);
+    await Promise.all(cleanupTasks);
 
     return res.status(200).json({
       ok: true,

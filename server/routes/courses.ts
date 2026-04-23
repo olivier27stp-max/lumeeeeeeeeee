@@ -1,8 +1,11 @@
 import express from 'express';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 
 const router = express.Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // ── Auto-migrate: ensure tables exist on first request ──
 let tablesReady = false;

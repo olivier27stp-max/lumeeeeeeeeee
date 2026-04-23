@@ -245,7 +245,12 @@ export default function QuoteDetails() {
                     <Ruler size={14} /> Mesure</button>
                   <div className="border-t border-outline my-1" />
                   <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">Send as...</p>
-                  <button onClick={() => act(async () => { await sendQuoteEmail(quote.id); toast.success('Email sent'); loadQuote(); })}
+                  <button onClick={() => {
+                    const target = entityEmail || '';
+                    if (!target) return;
+                    if (typeof window !== 'undefined' && !window.confirm(`Send quote to ${target}?`)) return;
+                    act(async () => { await sendQuoteEmail(quote.id); toast.success('Email sent'); loadQuote(); });
+                  }}
                     disabled={!entityEmail || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
                     <Mail size={14} /> Email</button>
                   <div className="border-t border-outline my-1" />

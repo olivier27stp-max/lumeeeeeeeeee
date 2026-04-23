@@ -5,6 +5,7 @@
 
 import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { registerAllProviders } from '../lib/integrations/providers';
 import { getProvider, getAllProviders } from '../lib/integrations/registry';
 import { getBaseUrl } from '../lib/config';
@@ -23,6 +24,8 @@ import {
 registerAllProviders();
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 // ── List all connections for the org ───────────────────────────
 router.get('/integrations', async (req, res) => {

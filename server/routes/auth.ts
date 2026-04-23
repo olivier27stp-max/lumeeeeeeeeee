@@ -6,8 +6,11 @@ import { getBaseUrl } from '../lib/config';
 import { sendSafeError } from '../lib/error-handler';
 import { passwordSchema } from '../lib/validation';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
+import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 
 const router = Router();
+router.use(maxBodySize());
+router.use(guardCommonShape);
 
 function getAdminClient() {
   return createClient(supabaseUrl, supabaseServiceRoleKey, {

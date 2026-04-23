@@ -173,7 +173,8 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
         token,
         invited_by: auth.user.id,
         status: 'pending',
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        // Compliance: 48h expiry (Loi 25 — invitation tokens short-lived)
+        expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
       })
       .select()
       .single();
@@ -448,7 +449,8 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
       .from('invitations')
       .update({
         token: newToken,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        // Compliance: 48h expiry (Loi 25 — invitation tokens short-lived)
+        expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
         status: 'pending',
       })
       .eq('id', invitationId);
