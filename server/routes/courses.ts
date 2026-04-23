@@ -10,6 +10,8 @@ router.use(guardCommonShape);
 // ── Auto-migrate: ensure tables exist on first request ──
 let tablesReady = false;
 let hasTargetingColumns = false;
+let hasVisibilityColumn = false;
+let hasCategoryColumn = false;
 
 async function checkTargetingColumns() {
   if (hasTargetingColumns) return;
@@ -22,11 +24,29 @@ async function checkTargetingColumns() {
   }
 }
 
+async function checkOptionalColumns() {
+  const admin = getServiceClient();
+  if (!hasVisibilityColumn) {
+    const { error } = await admin.from('courses').select('visibility').limit(1);
+    hasVisibilityColumn = !error;
+    if (!hasVisibilityColumn) {
+      console.log('[courses] visibility column not found — treating all courses as visibility=all.');
+    }
+  }
+  if (!hasCategoryColumn) {
+    const { error } = await admin.from('courses').select('category').limit(1);
+    hasCategoryColumn = !error;
+    if (!hasCategoryColumn) {
+      console.log('[courses] category column not found — category filter disabled.');
+    }
+  }
+}
+
 async function ensureTables() {
   if (tablesReady) return;
   const admin = getServiceClient();
   const { error } = await admin.from('courses').select('id').limit(1);
-  if (!error) { tablesReady = true; await checkTargetingColumns(); return; }
+  if (!error) { tablesReady = true; await checkTargetingColumns(); await checkOptionalColumns(); return; }
   if (error.code !== 'PGRST205' && error.code !== '42P01' && !error.message.includes('schema cache') && !error.message.includes('relation') ) {
     console.warn('[courses] ensureTables check returned unexpected error:', error.code, error.message);
     tablesReady = true;
@@ -141,13 +161,15 @@ async function canViewCourse(userId: string, orgId: string, course: any): Promis
   // Creator can always see their own course
   if (course.created_by === userId) return true;
 
+  const visibility = course.visibility || 'all';
+
   // Check visibility mode
-  if (course.visibility === 'all') {
+  if (visibility === 'all') {
     // If target_roles is set, filter by role
-    const targetRoles: string[] = course.target_roles || [];
+    const targetRoles: string[] = Array.isArray(course.target_roles) ? course.target_roles : [];
     if (targetRoles.length > 0 && !targetRoles.includes(member.role)) {
       // Role doesn't match, but check target_user_ids
-      const targetUserIds: string[] = course.target_user_ids || [];
+      const targetUserIds: string[] = Array.isArray(course.target_user_ids) ? course.target_user_ids : [];
       if (targetUserIds.length > 0 && targetUserIds.includes(userId)) return true;
       if (targetRoles.length > 0) return false; // Has role restriction and user doesn't match
     }
@@ -156,11 +178,11 @@ async function canViewCourse(userId: string, orgId: string, course: any): Promis
 
   // visibility === 'assigned'
   // Check target_user_ids
-  const targetUserIds: string[] = course.target_user_ids || [];
+  const targetUserIds: string[] = Array.isArray(course.target_user_ids) ? course.target_user_ids : [];
   if (targetUserIds.includes(userId)) return true;
 
   // Check target_roles
-  const targetRoles: string[] = course.target_roles || [];
+  const targetRoles: string[] = Array.isArray(course.target_roles) ? course.target_roles : [];
   if (targetRoles.length > 0 && targetRoles.includes(member.role)) return true;
 
   // Check course_assignments table
@@ -222,14 +244,15 @@ router.get('/courses', async (req, res) => {
           // Draft courses are only visible to admins/owners/creator
           if (c.status === 'draft') return false;
 
-          const targetRoles: string[] = c.target_roles || [];
-          const targetUserIds: string[] = c.target_user_ids || [];
+          const targetRoles: string[] = Array.isArray(c.target_roles) ? c.target_roles : [];
+          const targetUserIds: string[] = Array.isArray(c.target_user_ids) ? c.target_user_ids : [];
           const hasTargeting = targetRoles.length > 0 || targetUserIds.length > 0;
+          const visibility = c.visibility || 'all';
 
-          if (c.visibility === 'all' && !hasTargeting) return true;
+          if (visibility === 'all' && !hasTargeting) return true;
           if (targetUserIds.includes(auth.user.id)) return true;
           if (targetRoles.length > 0 && targetRoles.includes(userRole)) return true;
-          if (!hasTargeting && c.visibility === 'all') return true;
+          if (!hasTargeting && visibility === 'all') return true;
 
           return false;
         });
@@ -470,8 +493,8 @@ router.patch('/courses/:id', async (req, res) => {
     if (description !== undefined) updates.description = description;
     if (cover_image !== undefined) updates.cover_image = cover_image;
     if (status !== undefined) updates.status = status;
-    if (category !== undefined) updates.category = category;
-    if (visibility !== undefined) updates.visibility = visibility;
+    if (category !== undefined && hasCategoryColumn) updates.category = category;
+    if (visibility !== undefined && hasVisibilityColumn) updates.visibility = visibility;
     if (hasTargetingColumns) {
       if (target_roles !== undefined) updates.target_roles = target_roles;
       if (target_user_ids !== undefined) updates.target_user_ids = target_user_ids;
@@ -538,7 +561,7 @@ router.post('/courses/:id/duplicate', async (req, res) => {
         description: original.description,
         cover_image: original.cover_image,
         status: 'draft',
-        category: original.category,
+        ...(hasCategoryColumn ? { category: original.category } : {}),
         created_by: auth.user.id,
         ...(hasTargetingColumns && original.target_roles?.length ? { target_roles: original.target_roles } : {}),
         ...(hasTargetingColumns && original.target_user_ids?.length ? { target_user_ids: original.target_user_ids } : {}),
