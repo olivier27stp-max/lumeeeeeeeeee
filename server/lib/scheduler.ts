@@ -4,6 +4,11 @@ import {
   sendSmsIfConfigured,
   applyTemplate,
 } from './notificationHelpers';
+import {
+  addDelay,
+  subtractDelay,
+  computeNextRecurrenceDate,
+} from './scheduler-utils';
 
 const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -224,30 +229,6 @@ async function handleDaysAfterJobCompleted(
 }
 
 // ---------------------------------------------------------------------------
-// Date arithmetic helpers
-// ---------------------------------------------------------------------------
-
-function addDelay(date: Date, value: number, unit: 'hours' | 'days'): string {
-  const d = new Date(date);
-  if (unit === 'days') {
-    d.setDate(d.getDate() + value);
-  } else {
-    d.setHours(d.getHours() + value);
-  }
-  return d.toISOString().slice(0, 10);
-}
-
-function subtractDelay(date: Date, value: number, unit: 'hours' | 'days'): string {
-  const d = new Date(date);
-  if (unit === 'days') {
-    d.setDate(d.getDate() - value);
-  } else {
-    d.setHours(d.getHours() - value);
-  }
-  return d.toISOString().slice(0, 10);
-}
-
-// ---------------------------------------------------------------------------
 // Deduplication: track which (automation_id, reference_id, date) combos
 // have already fired so we don't spam within the same day.
 // Uses an in-memory set that resets daily.
@@ -292,33 +273,6 @@ async function createNotificationDeduped(
 // ---------------------------------------------------------------------------
 // Recurring invoices
 // ---------------------------------------------------------------------------
-
-function computeNextRecurrenceDate(
-  fromDate: string,
-  interval: string,
-): string {
-  const d = new Date(fromDate + 'T00:00:00');
-  switch (interval) {
-    case 'weekly':
-      d.setDate(d.getDate() + 7);
-      break;
-    case 'biweekly':
-      d.setDate(d.getDate() + 14);
-      break;
-    case 'monthly':
-      d.setMonth(d.getMonth() + 1);
-      break;
-    case 'quarterly':
-      d.setMonth(d.getMonth() + 3);
-      break;
-    case 'yearly':
-      d.setFullYear(d.getFullYear() + 1);
-      break;
-    default:
-      d.setMonth(d.getMonth() + 1);
-  }
-  return d.toISOString().slice(0, 10);
-}
 
 async function handleRecurringInvoices(supabase: SupabaseClient) {
   const today = todayDateString();
