@@ -102,6 +102,7 @@ import OnboardingFlow from './pages/OnboardingFlow';
 import CheckoutSuccess from './pages/CheckoutSuccess';
 import AcceptInvitation from './pages/AcceptInvitation';
 import Register from './pages/Register';
+import AccessBlocked from './pages/AccessBlocked';
 import VerifyEmail from './pages/VerifyEmail';
 import ReferFriend from './pages/ReferFriend';
 import MrLumePage from './features/agent/components/MrLumeChat';
@@ -226,6 +227,7 @@ export default function App() {
   const [activityOpen, setActivityOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [hasSubscription, setHasSubscription] = useState<boolean | null>(null); // null = checking
+  const [accessBlockedReason, setAccessBlockedReason] = useState<'no_membership' | 'no_subscription' | null>(null);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [showMoreNav, setShowMoreNav] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -442,16 +444,30 @@ export default function App() {
     .map((e: string) => e.trim().toLowerCase())
     .filter(Boolean);
   useEffect(() => {
-    if (!user || !onboardingChecked || showOnboarding) { setHasSubscription(null); return; }
+    if (!user || !onboardingChecked || showOnboarding) {
+      setHasSubscription(null);
+      setAccessBlockedReason(null);
+      return;
+    }
     // Bypass for beta emails whitelisted via env
     if (user.email && BYPASS_EMAILS.includes(user.email.toLowerCase())) {
       setHasSubscription(true);
+      setAccessBlockedReason(null);
       return;
     }
     (async () => {
       try {
-        const { data: mem } = await supabase.from('memberships').select('org_id').eq('user_id', user.id).limit(1).maybeSingle();
-        if (!mem) { setHasSubscription(false); return; }
+        const { data: mem } = await supabase
+          .from('memberships')
+          .select('org_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle();
+        if (!mem) {
+          setHasSubscription(false);
+          setAccessBlockedReason('no_membership');
+          return;
+        }
         const { data: sub } = await supabase
           .from('subscriptions')
           .select('id, status')
@@ -459,10 +475,17 @@ export default function App() {
           .in('status', ['active', 'trialing'])
           .limit(1)
           .maybeSingle();
-        setHasSubscription(!!sub);
+        if (sub) {
+          setHasSubscription(true);
+          setAccessBlockedReason(null);
+        } else {
+          setHasSubscription(false);
+          setAccessBlockedReason('no_subscription');
+        }
       } catch {
         // If subscriptions table doesn't exist, treat as having a subscription (don't block)
         setHasSubscription(true);
+        setAccessBlockedReason(null);
       }
     })();
   }, [user, onboardingChecked, showOnboarding]);
@@ -561,31 +584,22 @@ export default function App() {
   }
 
   // ── Subscription guard ──
-  // User is logged in but has no active subscription.
-  // They can see: landing, marketing pages, checkout, auth pages.
-  // Any app page (dashboard, settings, etc.) redirects to landing.
-  if (user && hasSubscription === false) {
+  // User is logged in but has no membership OR no active subscription.
+  // Show an explicit AccessBlocked page so the user knows WHY they can't
+  // get in, instead of being silently bounced back to the landing page.
+  // Allow /checkout and /checkout/success through so they can pay if needed.
+  if (user && hasSubscription === false && accessBlockedReason) {
     return (
       <Routes>
         <Route path="/checkout/success" element={<CheckoutSuccess />} />
         <Route path="/checkout" element={<OnboardingFlow />} />
-        <Route path="/auth" element={<Auth onBack={() => setView('landing')} />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
-          <Route path="/subprocessors" element={<Subprocessors />} />
-        <Route element={<MarketingLayout />}>
-          <Route index element={<MarketingHome />} />
-          <Route path="features" element={<MarketingFeatures />} />
-          <Route path="solutions" element={<MarketingSolutions />} />
-          <Route path="industries" element={<MarketingIndustries />} />
-          <Route path="industries/:slug" element={<MarketingIndustryDetail />} />
-          <Route path="pricing" element={<MarketingPricing />} />
-          <Route path="contact" element={<MarketingContact />} />
-        </Route>
-        {/* Any unknown/app route → back to landing */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/subprocessors" element={<Subprocessors />} />
+        <Route
+          path="*"
+          element={<AccessBlocked reason={accessBlockedReason} userEmail={user.email} />}
+        />
       </Routes>
     );
   }
