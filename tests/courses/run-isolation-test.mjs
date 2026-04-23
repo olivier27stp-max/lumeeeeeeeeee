@@ -4,10 +4,15 @@
  */
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://bbzcuzqfgsdvjsymfwmr.supabase.co';
-const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJiemN1enFmZ3NkdmpzeW1md21yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNDcwODEsImV4cCI6MjA4NjkyMzA4MX0.MgCfwDCipQ4pFiJ0KmC0nwuCgXJHEv_1glBHC50tGeA';
-const SVC_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJiemN1enFmZ3NkdmpzeW1md21yIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTM0NzA4MSwiZXhwIjoyMDg2OTIzMDgxfQ.s91KDFG3iz7q-WoaNYkyRHs6Y8YmC6F-o13qFcFvOec';
-const API = 'http://localhost:3002/api';
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SVC_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const API = process.env.API_URL || 'http://localhost:3002/api';
+
+if (!SUPABASE_URL || !ANON_KEY || !SVC_KEY) {
+  console.error('Missing env vars. Required: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY');
+  process.exit(1);
+}
 
 const SVC = createClient(SUPABASE_URL, SVC_KEY);
 

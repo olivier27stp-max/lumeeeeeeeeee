@@ -6,13 +6,22 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://bbzcuzqfgsdvjsymfwmr.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJiemN1enFmZ3NkdmpzeW1md21yIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTM0NzA4MSwiZXhwIjoyMDg2OTIzMDgxfQ.s91KDFG3iz7q-WoaNYkyRHs6Y8YmC6F-o13qFcFvOec';
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const ORG_ID = process.env.QA_ORG_ID;
+const token = process.env.SUPABASE_MANAGEMENT_TOKEN;
+const projectRef = process.env.SUPABASE_PROJECT_REF;
+
+if (!SUPABASE_URL || !SUPABASE_KEY || !ORG_ID || !token || !projectRef) {
+  console.error(
+    'Missing env vars. Required:\n' +
+    '  SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, QA_ORG_ID,\n' +
+    '  SUPABASE_MANAGEMENT_TOKEN, SUPABASE_PROJECT_REF',
+  );
+  process.exit(1);
+}
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
-const ORG_ID = '4d885f6c-e076-4ed9-ab09-23637dbee6cd';
-const token = 'sbp_70d8ff687c60f2afeb73c8c6d4f59725d3cda70e';
-const projectRef = 'bbzcuzqfgsdvjsymfwmr';
 
 async function runSQL(sql) {
   const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {

@@ -3,10 +3,18 @@
  * Tests: DB schema, quotes, pipeline, automations, workflow bridge
  */
 
-const SB_TOKEN = 'sbp_7399ae07779c3e9783915aadabbd946caca53788';
-const PROJECT = 'bbzcuzqfgsdvjsymfwmr';
-const SUPABASE_URL = 'https://bbzcuzqfgsdvjsymfwmr.supabase.co';
-const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJiemN1enFmZ3NkdmpzeW1md21yIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTM0NzA4MSwiZXhwIjoyMDg2OTIzMDgxfQ.s91KDFG3iz7q-WoaNYkyRHs6Y8YmC6F-o13qFcFvOec';
+const SB_TOKEN = process.env.SUPABASE_MANAGEMENT_TOKEN;
+const PROJECT = process.env.SUPABASE_PROJECT_REF;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!SB_TOKEN || !PROJECT || !SUPABASE_URL || !SERVICE_KEY) {
+  console.error(
+    'Missing env vars. Required: SUPABASE_MANAGEMENT_TOKEN, SUPABASE_PROJECT_REF, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY',
+  );
+  process.exit(1);
+}
+
 const API_URL = `https://api.supabase.com/v1/projects/${PROJECT}/database/query`;
 
 let passed = 0;

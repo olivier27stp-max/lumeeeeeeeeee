@@ -1,11 +1,17 @@
 const https = require('https');
-const token = 'sbp_77cb0635508cf97391b74dc763156a0d2091a210';
-const orgId = '4d885f6c-e076-4ed9-ab09-23637dbee6cd';
+const token = process.env.SUPABASE_MANAGEMENT_TOKEN;
+const orgId = process.env.QA_ORG_ID;
+const projectRef = process.env.SUPABASE_PROJECT_REF;
+
+if (!token || !orgId || !projectRef) {
+  console.error('Missing env vars. Required: SUPABASE_MANAGEMENT_TOKEN, QA_ORG_ID, SUPABASE_PROJECT_REF');
+  process.exit(1);
+}
 
 function query(sql) {
   return new Promise((resolve) => {
     const payload = JSON.stringify({ query: sql });
-    const req = https.request('https://api.supabase.com/v1/projects/bbzcuzqfgsdvjsymfwmr/database/query', {
+    const req = https.request(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
     }, (res) => { let b = ''; res.on('data', c => b += c); res.on('end', () => resolve(b)); });

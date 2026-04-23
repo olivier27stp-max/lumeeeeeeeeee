@@ -2,9 +2,14 @@
  * QA FIX — Fix all data inconsistencies in test data
  */
 
-const TOKEN = 'sbp_70d8ff687c60f2afeb73c8c6d4f59725d3cda70e';
-const PROJECT = 'bbzcuzqfgsdvjsymfwmr';
-const ORG_ID = '4d885f6c-e076-4ed9-ab09-23637dbee6cd';
+const TOKEN = process.env.SUPABASE_MANAGEMENT_TOKEN;
+const PROJECT = process.env.SUPABASE_PROJECT_REF;
+const ORG_ID = process.env.QA_ORG_ID;
+
+if (!TOKEN || !PROJECT || !ORG_ID) {
+  console.error('Missing env vars. Required: SUPABASE_MANAGEMENT_TOKEN, SUPABASE_PROJECT_REF, QA_ORG_ID');
+  process.exit(1);
+}
 
 async function q(sql) {
   const r = await fetch(`https://api.supabase.com/v1/projects/${PROJECT}/database/query`, {

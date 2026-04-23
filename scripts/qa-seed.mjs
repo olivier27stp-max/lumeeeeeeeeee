@@ -10,12 +10,21 @@
 
 import crypto from 'crypto';
 
-const SUPABASE_URL = 'https://bbzcuzqfgsdvjsymfwmr.supabase.co';
-const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJiemN1enFmZ3NkdmpzeW1md21yIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTM0NzA4MSwiZXhwIjoyMDg2OTIzMDgxfQ.s91KDFG3iz7q-WoaNYkyRHs6Y8YmC6F-o13qFcFvOec';
-const MGMT_TOKEN = 'sbp_70d8ff687c60f2afeb73c8c6d4f59725d3cda70e';
-const PROJECT_REF = 'bbzcuzqfgsdvjsymfwmr';
-const ORG_ID = '4d885f6c-e076-4ed9-ab09-23637dbee6cd';
-const USER_ID = 'e0cf4b92-c229-4785-a2e7-7081fae3e18e';
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const MGMT_TOKEN = process.env.SUPABASE_MANAGEMENT_TOKEN;
+const PROJECT_REF = process.env.SUPABASE_PROJECT_REF;
+const ORG_ID = process.env.QA_ORG_ID;
+const USER_ID = process.env.QA_USER_ID;
+
+if (!SUPABASE_URL || !SERVICE_KEY || !MGMT_TOKEN || !PROJECT_REF || !ORG_ID || !USER_ID) {
+  console.error(
+    'Missing env vars. Required:\n' +
+    '  SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_MANAGEMENT_TOKEN,\n' +
+    '  SUPABASE_PROJECT_REF, QA_ORG_ID, QA_USER_ID',
+  );
+  process.exit(1);
+}
 
 const uid = () => crypto.randomUUID();
 

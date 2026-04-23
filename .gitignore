@@ -21,6 +21,12 @@ service-account*.json
 *.db
 .secret*
 
+# ── Guard: never commit scripts that embed Supabase keys ──
+# qa/test scripts must load credentials from env vars only.
+scripts/*-with-keys.*
+scripts/local-*.env
+scripts/.env*
+
 # ── IDE ──
 .idea/
 .vscode/settings.json
