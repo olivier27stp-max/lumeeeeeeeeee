@@ -318,19 +318,37 @@ export async function logTrackingEvent(params: {
 export async function getActiveLiveLocations(): Promise<LiveLocation[]> {
   const { data, error } = await supabase
     .from('tracking_live_locations')
-    .select(`
-      *,
-      profile:profiles(full_name),
-      team:teams(name, color_hex)
-    `)
+    .select('*')
     .in('tracking_status', ['active', 'idle']);
   if (error) throw error;
 
-  return (data || []).map((row: any) => ({
+  const rows = (data || []) as any[];
+  if (rows.length === 0) return [];
+
+  const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean)));
+  const teamIds = Array.from(new Set(rows.map((r) => r.team_id).filter(Boolean)));
+
+  const [profilesRes, teamsRes] = await Promise.all([
+    userIds.length
+      ? supabase.from('profiles').select('id, full_name').in('id', userIds)
+      : Promise.resolve({ data: [], error: null } as any),
+    teamIds.length
+      ? supabase.from('teams').select('id, name, color_hex').in('id', teamIds)
+      : Promise.resolve({ data: [], error: null } as any),
+  ]);
+
+  const profileMap = new Map<string, { full_name: string | null }>(
+    ((profilesRes.data as any[]) || []).map((p) => [p.id, p]),
+  );
+  const teamMap = new Map<string, { name: string | null; color_hex: string | null }>(
+    ((teamsRes.data as any[]) || []).map((t) => [t.id, t]),
+  );
+
+  return rows.map((row) => ({
     ...row,
-    user_name: row.profile?.full_name || null,
-    team_name: row.team?.name || null,
-    team_color: row.team?.color_hex || null,
+    user_name: profileMap.get(row.user_id)?.full_name || null,
+    team_name: row.team_id ? teamMap.get(row.team_id)?.name || null : null,
+    team_color: row.team_id ? teamMap.get(row.team_id)?.color_hex || null : null,
   }));
 }
 
