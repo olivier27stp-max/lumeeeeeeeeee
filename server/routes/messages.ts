@@ -126,8 +126,10 @@ router.post('/messages/inbound', (req, res) => {
     return sendTwiml();
   }
 
-  // Validate signature — NO bypass allowed
+  // Validate signature — must use the EXACT URL Twilio called (the one we registered at provisioning time).
+  // PUBLIC_URL is what twilioProvisioning.ts uses when buying the number, so prioritize it.
   const baseUrl = process.env.TWILIO_WEBHOOK_BASE_URL
+    || process.env.PUBLIC_URL
     || process.env.PUBLIC_BASE_URL
     || process.env.FRONTEND_URL
     || resolvePublicBaseUrl(req);

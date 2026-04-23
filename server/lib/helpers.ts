@@ -98,9 +98,16 @@ export function normalizeAddress(address: string | null | undefined) {
 }
 
 export function resolvePublicBaseUrl(_req: express.Request) {
-  const configured = process.env.PUBLIC_BASE_URL || process.env.FRONTEND_URL || process.env.APP_URL || '';
+  // PUBLIC_URL is the canonical name — Twilio provisioning registers its webhook URLs against it.
+  // Fall back to legacy names for environments that haven't migrated yet.
+  const configured =
+    process.env.PUBLIC_URL ||
+    process.env.PUBLIC_BASE_URL ||
+    process.env.FRONTEND_URL ||
+    process.env.APP_URL ||
+    '';
   if (!configured) {
-    throw new Error('FRONTEND_URL or PUBLIC_BASE_URL must be configured. Never derive from request headers.');
+    throw new Error('PUBLIC_URL must be configured. Never derive from request headers.');
   }
   return configured.replace(/\/$/, '');
 }
