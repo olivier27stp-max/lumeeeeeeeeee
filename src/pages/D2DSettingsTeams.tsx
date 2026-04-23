@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '../components/d2d/card';
 import { Avatar } from '../components/d2d/avatar';
 import { Plus, X, Users, ChevronDown, Loader2 } from 'lucide-react';
+import BackToSettings from '../components/ui/BackToSettings';
 import { supabase } from '../lib/supabase';
 import {
   listTeams as apiListTeams,
@@ -253,11 +254,14 @@ export default function D2DSettingsTeams() {
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       {/* Header */}
-      <div>
-        <h2 className="text-lg font-semibold text-text-primary">Équipes</h2>
-        <p className="text-xs text-text-tertiary">
-          Créez des équipes et assignez vos reps.
-        </p>
+      <div className="flex items-center gap-3">
+        <BackToSettings />
+        <div className="flex-1">
+          <h2 className="text-lg font-semibold text-text-primary">Équipes</h2>
+          <p className="text-xs text-text-tertiary">
+            Créez des équipes et assignez vos reps.
+          </p>
+        </div>
       </div>
 
       {/* Create team */}

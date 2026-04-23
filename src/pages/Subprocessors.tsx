@@ -61,7 +61,7 @@ export default function Subprocessors() {
 
       <h2>Questions</h2>
       <p>
-        Contact <a href="mailto:privacy@lumecrm.ca">privacy@lumecrm.ca</a>.
+        Contact <a href="mailto:willhebert30@gmail.com">willhebert30@gmail.com</a>.
       </p>
     </div>
   );

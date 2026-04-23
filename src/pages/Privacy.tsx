@@ -22,8 +22,8 @@ export default function Privacy() {
 
       <h2>1. Who we are</h2>
       <p>
-        Lume CRM is operated by <strong>[COMPANY LEGAL NAME]</strong>, registered in Québec, Canada.
-        Our data protection officer can be reached at <a href="mailto:privacy@lumecrm.ca">privacy@lumecrm.ca</a>.
+        Lume CRM is operated by <strong>William Hébert</strong> (sole proprietor / entreprise individuelle), Québec, Canada.
+        Our data protection officer can be reached at <a href="mailto:willhebert30@gmail.com">willhebert30@gmail.com</a>.
       </p>
 
       <h2>2. Data we collect</h2>
@@ -55,7 +55,7 @@ export default function Privacy() {
       </ul>
       <p>
         Exercise these rights from the <a href="/account/privacy">Privacy Center</a> or by email to{' '}
-        <a href="mailto:privacy@lumecrm.ca">privacy@lumecrm.ca</a>. We respond within 30 days.
+        <a href="mailto:willhebert30@gmail.com">willhebert30@gmail.com</a>. We respond within 30 days.
       </p>
 
       <h2>5. Data retention</h2>
@@ -105,10 +105,10 @@ export default function Privacy() {
 
       <h2>10. Contact</h2>
       <p>
-        <strong>[COMPANY LEGAL NAME]</strong><br />
-        [STREET ADDRESS]<br />
-        [CITY, PROVINCE, POSTAL CODE], Canada<br />
-        <a href="mailto:privacy@lumecrm.ca">privacy@lumecrm.ca</a>
+        <strong>William Hébert</strong> (responsable de la protection des renseignements personnels)<br />
+        Québec, Canada<br />
+        <a href="mailto:willhebert30@gmail.com">willhebert30@gmail.com</a><br />
+        Astreinte incidents 24/7 : <a href="tel:+18198179526">+1 819-817-9526</a>
       </p>
     </div>
   );

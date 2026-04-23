@@ -21,9 +21,9 @@
 
 | Rôle | Owner | Tâches |
 |---|---|---|
-| DPO (responsable protection RP) | `privacy@lumecrm.ca` (à désigner) | Triage DSAR, sign-off politique, contact régulateurs |
+| DPO (responsable protection RP) | `willhebert30@gmail.com` (à désigner) | Triage DSAR, sign-off politique, contact régulateurs |
 | Incident Commander (astreinte) | Rotation docs interne | Phase détection → containment (voir breach plan §2) |
-| Legal | `legal@lumecrm.ca` | Validation templates, DPAs enterprise |
+| Legal | `willhebert30@gmail.com` | Validation templates, DPAs enterprise |
 | Platform / DevOps | Eng. lead | pg_cron, Supabase, environment variables |
 | Security | Eng. lead | Revue vulnérabilités, rotation secrets |
 
@@ -129,7 +129,7 @@ VITE_SUPABASE_ANON_KEY=
 
 ## Gaps encore ouverts (à adresser hors compliance technique)
 
-- **DPO désigné + joignable** (Loi 25 art. 3.1) — placeholder `privacy@lumecrm.ca`
+- **DPO désigné + joignable** (Loi 25 art. 3.1) — placeholder `willhebert30@gmail.com`
 - **EFVP** (Évaluation des facteurs relatifs à la vie privée) pour hébergement US-East — à rédiger
 - **Templates légaux validés par un avocat** — tous les `.md` sous `docs/legal/` sont des templates
 

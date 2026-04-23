@@ -1,9 +1,7 @@
 # Breach Response Plan — Lume CRM
 
-**Version:** `breach-plan-2026-04-21`
-**Last updated:** 2026-04-21
-
-> ⚠️ Template — validate with legal counsel before publishing.
+**Version:** `breach-plan-2026-04-22`
+**Last updated:** 2026-04-22
 
 ## 1. Purpose
 
@@ -22,7 +20,15 @@ This plan defines how Lume CRM detects, contains, assesses, notifies, and recove
 | **Security Engineer** | Technical triage, containment, forensics |
 | **Product Lead** | Customer communications, in-product notices |
 
-Primary contacts and 24/7 rotation are kept in an internal runbook (not in code).
+### 2.1 Primary on-call contact (24/7)
+
+| Rôle | Nom | Courriel | Téléphone |
+|---|---|---|---|
+| DPO / Incident Commander (cumule les rôles pendant la phase beta) | William Hébert | willhebert30@gmail.com | +1 819-817-9526 |
+
+En phase beta (entreprise individuelle), William Hébert cumule les rôles d'Incident Commander, de DPO et de Security Engineer. Toute personne détectant un incident potentiel doit immédiatement appeler le **819-817-9526** ou écrire à **willhebert30@gmail.com** avec `[SECURITY INCIDENT]` en objet.
+
+Les escalades et extensions de l'équipe (délégation formelle des rôles) seront documentées ici dès que l'entreprise sera incorporée ou dès l'embauche d'un·e collaborateur·rice permanent·e.
 
 ## 3. Workflow
 
@@ -114,7 +120,7 @@ Mesures pour éviter la répétition : [liste]
 Nombre de personnes notifiées + date prévue : [n / date]
 Coordonnées du responsable de la protection des renseignements personnels :
   Nom : [DPO]
-  Courriel : privacy@lumecrm.ca
+  Courriel : willhebert30@gmail.com
   Téléphone : [tel]
 
 [Signature — nom, titre, date]
@@ -156,7 +162,7 @@ What you can do
 [Concrete steps: change password, monitor account, watch for phishing, etc.]
 
 For more information
-Email: privacy@lumecrm.ca
+Email: willhebert30@gmail.com
 Website: https://[domain]/privacy
 
 You may also file a complaint with:

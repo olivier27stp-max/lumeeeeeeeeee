@@ -7,8 +7,8 @@
 
 ## 1. Controller / DPO contact
 
-- Controller: **[COMPANY LEGAL NAME]**, Québec, Canada
-- DPO: `privacy@lumecrm.ca`
+- Controller: **William Hébert** (sole proprietor / entreprise individuelle), Québec, Canada
+- DPO: William Hébert — `willhebert30@gmail.com` — 24/7 on-call: +1 819-817-9526
 
 ## 2. Processing activities — as Controller (Lume CRM's own operations)
 

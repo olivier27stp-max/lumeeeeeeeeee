@@ -3,7 +3,6 @@ import {
   Building,
   Check,
   Loader2,
-  ArrowLeft,
   Phone,
   Globe,
   Mail,
@@ -14,11 +13,11 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { cn } from '../lib/utils';
 import { PageHeader } from '../components/ui';
+import BackToSettings from '../components/ui/BackToSettings';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
@@ -68,7 +67,6 @@ const EMPTY_COMPANY: CompanyDetails = {
 
 export default function CompanySettings() {
   const { t, language } = useTranslation();
-  const navigate = useNavigate();
   const [form, setForm] = useState<CompanyDetails>(EMPTY_COMPANY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -195,17 +193,15 @@ export default function CompanySettings() {
   return (
     <PermissionGate permission="settings.update">
     <div className="space-y-8">
-      <PageHeader
-        title={language === 'fr' ? 'Paramètres de l\'entreprise' : 'Company Settings'}
-        subtitle={t.companySettings.informationUsedForInvoicesQuotesAndEmail}
-        icon={Building}
-        iconColor="cyan"
-      >
-        <button className="glass-button inline-flex items-center gap-1.5" onClick={() => navigate('/settings')}>
-          <ArrowLeft size={14} />
-          {t.companySettings.back}
-        </button>
-      </PageHeader>
+      <div className="flex items-center gap-3">
+        <BackToSettings />
+        <PageHeader
+          title={language === 'fr' ? 'Paramètres de l\'entreprise' : 'Company Settings'}
+          subtitle={t.companySettings.informationUsedForInvoicesQuotesAndEmail}
+          icon={Building}
+          iconColor="cyan"
+        />
+      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 4 }}

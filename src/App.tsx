@@ -89,6 +89,7 @@ import ActivityCenter from './components/ActivityCenter';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProductsServices from './pages/ProductsServices';
 import AppMarketplace from './pages/AppMarketplace';
+import SettingsMessaging from './pages/SettingsMessaging';
 // PhoneNumberSettings removed from Settings nav
 import RequestFormSettings from './pages/RequestFormSettings';
 import QuotePresets from './pages/QuotePresets';
@@ -1094,6 +1095,7 @@ function AuthenticatedApp({
                     <Route path="/terms" element={<Terms />} />
           <Route path="/subprocessors" element={<Subprocessors />} />
                     <Route path="/settings/payments" element={<Gated permission="settings.read"><PageWrapper><PaymentSettings /></PageWrapper></Gated>} />
+                    <Route path="/settings/messaging" element={<Gated permission="settings.read"><PageWrapper><SettingsMessaging /></PageWrapper></Gated>} />
                     <Route path="/settings/products" element={<Gated permission="settings.update"><PageWrapper><ProductsServices /></PageWrapper></Gated>} />
                     <Route path="/automations" element={<Gated permission="automations.read"><PageWrapper><Automations /></PageWrapper></Gated>} />
                     <Route path="/tasks" element={<Gated permission="settings.read"><PageWrapper><TasksPage /></PageWrapper></Gated>} />

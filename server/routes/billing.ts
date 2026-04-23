@@ -71,22 +71,24 @@ router.get('/billing/current', async (req, res) => {
 
     const admin = getServiceClient();
 
-    const { data: subscription } = await admin
-      .from('subscriptions')
-      .select('*')
-      .eq('org_id', auth.orgId)
-      .in('status', ['active', 'trialing'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Fetch subscription and billing_profile in parallel
+    const [subRes, profileRes] = await Promise.all([
+      admin
+        .from('subscriptions')
+        .select('*')
+        .eq('org_id', auth.orgId)
+        .in('status', ['active', 'trialing'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      admin
+        .from('billing_profiles')
+        .select('*')
+        .eq('org_id', auth.orgId)
+        .maybeSingle(),
+    ]);
 
-    const { data: billing_profile } = await admin
-      .from('billing_profiles')
-      .select('*')
-      .eq('org_id', auth.orgId)
-      .maybeSingle();
-
-    return res.json({ subscription, billing_profile });
+    return res.json({ subscription: subRes.data, billing_profile: profileRes.data });
   } catch (err: any) {
     console.error('[billing/current]', err.message);
     return res.status(500).json({ error: 'Internal server error.' });
@@ -103,34 +105,32 @@ router.post('/billing/onboarding', validate(onboardingSchema), async (req, res) 
     const admin = getServiceClient();
     const { full_name, company_name, email, phone, address, city, region, country, postal_code, industry, company_size, currency } = req.body;
 
-    // Upsert org
-    await admin.from('orgs').update({
-      name: company_name,
-      phone: phone || undefined,
-      email: email || undefined,
-      address: address || undefined,
-      city: city || undefined,
-      region: region || undefined,
-      country: country || undefined,
-      postal_code: postal_code || undefined,
-      industry: industry || undefined,
-      company_size: company_size || undefined,
-      currency: currency || undefined,
-    }).eq('id', auth.orgId);
-
-    // Upsert billing profile
-    await admin.from('billing_profiles').upsert({
-      org_id: auth.orgId,
-      billing_email: email,
-      full_name,
-      company_name,
-      phone,
-      address, city, region, country, postal_code,
-      currency,
-    }, { onConflict: 'org_id' });
-
-    // Update profile name
-    await admin.from('profiles').update({ full_name }).eq('id', auth.user.id);
+    // Run the 3 independent writes in parallel
+    await Promise.all([
+      admin.from('orgs').update({
+        name: company_name,
+        phone: phone || undefined,
+        email: email || undefined,
+        address: address || undefined,
+        city: city || undefined,
+        region: region || undefined,
+        country: country || undefined,
+        postal_code: postal_code || undefined,
+        industry: industry || undefined,
+        company_size: company_size || undefined,
+        currency: currency || undefined,
+      }).eq('id', auth.orgId),
+      admin.from('billing_profiles').upsert({
+        org_id: auth.orgId,
+        billing_email: email,
+        full_name,
+        company_name,
+        phone,
+        address, city, region, country, postal_code,
+        currency,
+      }, { onConflict: 'org_id' }),
+      admin.from('profiles').update({ full_name }).eq('id', auth.user.id),
+    ]);
 
     return res.json({ ok: true });
   } catch (err: any) {
@@ -149,18 +149,32 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
     const admin = getServiceClient();
     const { plan_slug, interval, currency, promo_code, referral_code, payment_method_id, billing_email, company_name, country, postal_code } = req.body;
 
-    // ── Email verification gate ──
-    // Block paid plan activation if the user's billing email is not verified.
-    // billing_email_verified is set to true by the verify-email endpoint.
-    // For backward compat: users who registered via normal flow and verified
-    // before this flag existed will have email_confirmed_at but no flag —
-    // we check both, but prefer the explicit flag.
-    const { data: userData } = await admin.auth.admin.getUserById(auth.user.id);
-    const userMeta = userData?.user?.user_metadata || {};
+    // ── Fetch user auth info, plan, and promo code in parallel ──
+    // These three lookups are independent — running them in parallel saves 2 round-trips.
+    const [userRes, planRes, promoRes] = await Promise.all([
+      admin.auth.admin.getUserById(auth.user.id),
+      admin
+        .from('plans')
+        .select('*')
+        .eq('slug', plan_slug)
+        .eq('is_active', true)
+        .maybeSingle(),
+      promo_code
+        ? admin
+            .from('promo_codes')
+            .select('*')
+            .eq('code', promo_code.toUpperCase())
+            .eq('is_active', true)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+
+    // Email verification gate
+    const userMeta = userRes.data?.user?.user_metadata || {};
     const hasVerificationFlag = 'billing_email_verified' in userMeta;
     const isEmailVerified = hasVerificationFlag
       ? !!userMeta.billing_email_verified
-      : !!userData?.user?.email_confirmed_at; // legacy fallback
+      : !!userRes.data?.user?.email_confirmed_at; // legacy fallback
     if (!isEmailVerified) {
       console.log(`[billing/subscribe] Blocked: user ${auth.user.id} email not verified`);
       return res.status(403).json({
@@ -169,15 +183,8 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
       });
     }
 
-    // Get the plan
-    const { data: plan, error: planError } = await admin
-      .from('plans')
-      .select('*')
-      .eq('slug', plan_slug)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (planError || !plan) {
+    const plan = planRes.data;
+    if (planRes.error || !plan) {
       return res.status(404).json({ error: 'Plan not found.' });
     }
 
@@ -187,15 +194,10 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
       : (currency === 'USD' ? 'monthly_price_usd' : 'monthly_price_cad');
     let amountCents = plan[priceField] || 0;
 
-    // Apply promo code
+    // Apply promo code (already fetched in parallel above)
     let appliedPromo = null;
     if (promo_code) {
-      const { data: promo } = await admin
-        .from('promo_codes')
-        .select('*')
-        .eq('code', promo_code.toUpperCase())
-        .eq('is_active', true)
-        .maybeSingle();
+      const promo = promoRes.data as any;
 
       if (promo) {
         const now = new Date();
@@ -609,6 +611,16 @@ router.post('/billing/create-checkout-session', async (req, res) => {
     const session = await stripe.checkout.sessions.create({
       customer: customer.id,
       mode: 'payment',
+      // Collect billing address at checkout so we can:
+      //   1) Propagate it to `orgs` (country/city/postal) for multi-tenant profile
+      //   2) Pick the right Twilio area code when auto-provisioning the SMS number
+      // Restricted to CA + US to match supported markets.
+      billing_address_collection: 'required',
+      customer_update: { address: 'auto', name: 'auto' },
+      payment_method_types: ['card'],
+      payment_method_collection: 'always',
+      allow_promotion_codes: true,
+      phone_number_collection: { enabled: true },
       line_items: [{
         price_data: {
           currency: (currency || 'CAD').toLowerCase(),

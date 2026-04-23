@@ -96,7 +96,7 @@ export default function Terms() {
 
       <h2>12. Contact</h2>
       <p>
-        <a href="mailto:legal@lumecrm.ca">legal@lumecrm.ca</a>
+        <a href="mailto:willhebert30@gmail.com">willhebert30@gmail.com</a>
       </p>
     </div>
   );

@@ -58,60 +58,68 @@ quoteRedirectRouter.get('/q/:token', async (req, res) => {
 
     const isFirstView = !invoice.is_viewed;
     const now = new Date().toISOString();
+    const frontendUrl = getBaseUrl();
 
-    // Update invoice tracking fields
-    await serviceClient
-      .from('invoices')
-      .update({
-        is_viewed: true,
-        viewed_at: isFirstView ? now : undefined,
-        view_count: (invoice.view_count || 0) + 1,
-        last_viewed_at: now,
-      })
-      .eq('id', invoice.id);
+    // Redirect immediately — tracking writes happen in background (non-critical for UX)
+    res.redirect(`${frontendUrl}/quote/${token}`);
 
-    // Log to quote_views table
-    await serviceClient
-      .from('quote_views')
-      .insert({
-        invoice_id: invoice.id,
-        client_id: invoice.client_id,
-        ip_address: req.ip || req.headers['x-forwarded-for'] || null,
-        user_agent: req.headers['user-agent'] || null,
-      });
+    // Fire-and-forget: update invoice + insert view log in parallel
+    const bgTasks: Promise<unknown>[] = [
+      Promise.resolve(
+        serviceClient
+          .from('invoices')
+          .update({
+            is_viewed: true,
+            viewed_at: isFirstView ? now : undefined,
+            view_count: (invoice.view_count || 0) + 1,
+            last_viewed_at: now,
+          })
+          .eq('id', invoice.id)
+      ),
+      Promise.resolve(
+        serviceClient
+          .from('quote_views')
+          .insert({
+            invoice_id: invoice.id,
+            client_id: invoice.client_id,
+            ip_address: req.ip || req.headers['x-forwarded-for'] || null,
+            user_agent: req.headers['user-agent'] || null,
+          })
+      ),
+    ];
 
-    // Create notification only on FIRST view
     if (isFirstView) {
-      // Get client name for notification
-      let clientName = 'Client';
-      if (invoice.client_id) {
-        const { data: client } = await serviceClient
-          .from('clients')
-          .select('first_name, last_name')
-          .eq('id', invoice.client_id)
-          .is('deleted_at', null)
-          .maybeSingle();
-        if (client) {
-          clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client';
+      bgTasks.push((async () => {
+        let clientName = 'Client';
+        if (invoice.client_id) {
+          const { data: client } = await serviceClient
+            .from('clients')
+            .select('first_name, last_name')
+            .eq('id', invoice.client_id)
+            .is('deleted_at', null)
+            .maybeSingle();
+          if (client) {
+            clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client';
+          }
         }
-      }
-
-      await serviceClient
-        .from('notifications')
-        .insert({
-          org_id: invoice.org_id,
-          type: 'quote_opened',
-          title: `${clientName} opened quote ${invoice.invoice_number}`,
-          body: `${clientName} has viewed their quote for the first time.`,
-          icon: 'eye',
-          link: `/invoices/${invoice.id}`,
-          reference_id: invoice.id,
-        });
+        await serviceClient
+          .from('notifications')
+          .insert({
+            org_id: invoice.org_id,
+            type: 'quote_opened',
+            title: `${clientName} opened quote ${invoice.invoice_number}`,
+            body: `${clientName} has viewed their quote for the first time.`,
+            icon: 'eye',
+            link: `/invoices/${invoice.id}`,
+            reference_id: invoice.id,
+          });
+      })());
     }
 
-    // Redirect to frontend quote view page
-    const frontendUrl = getBaseUrl();
-    return res.redirect(`${frontendUrl}/quote/${token}`);
+    Promise.all(bgTasks).catch((err) => {
+      console.error('[quotes/view-redirect] background tracking failed:', err?.message || err);
+    });
+    return;
   } catch (error: any) {
     return sendSafeError(res, error, 'Something went wrong.', '[quotes/view-redirect]');
   }

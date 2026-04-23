@@ -11,7 +11,7 @@
 Une demande valide peut arriver par :
 
 1. **Formulaire self-service** `/account/privacy` → `POST /api/dsr/request` → entrée dans `dsar_requests`
-2. **Email** à `privacy@lumecrm.ca`
+2. **Email** à `willhebert30@gmail.com`
 3. **Courrier postal** au siège (rare)
 4. **Via un client (B2B)** qui transmet la demande d'un de SES utilisateurs finaux
 
@@ -156,7 +156,7 @@ identité ou préciser votre demande, nous vous contacterons à ce courriel.
 Cordialement,
 [Nom du DPO]
 Responsable de la protection des renseignements personnels
-privacy@lumecrm.ca
+willhebert30@gmail.com
 ```
 
 ### 5.2 Réponse finale — accès / portabilité
@@ -175,7 +175,7 @@ Le format est JSON structuré, conforme à l'article 20 du RGPD et à
 l'article 27 al. 3 de la Loi 25.
 
 Si vous souhaitez plus d'informations ou contester cette réponse, vous
-pouvez nous écrire à privacy@lumecrm.ca. Vous pouvez également vous
+pouvez nous écrire à willhebert30@gmail.com. Vous pouvez également vous
 adresser à :
 - Commission d'accès à l'information du Québec — https://www.cai.gouv.qc.ca
 - Commissariat à la protection de la vie privée du Canada — https://www.priv.gc.ca

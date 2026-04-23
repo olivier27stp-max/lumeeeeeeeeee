@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Loader2, CheckCircle2, Mail } from 'lucide-react';
+import { Loader2, CheckCircle2, Mail, MessageSquare } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { confirmCheckout, type CheckoutStatus } from '../lib/billingApi';
+import { fetchChannels } from '../lib/communicationsApi';
 
 /**
  * CheckoutSuccess — Polls for webhook-confirmed subscription status.
@@ -17,6 +18,8 @@ export default function CheckoutSuccess() {
   const [status, setStatus] = useState<'polling' | 'success' | 'error'>('polling');
   const [errorMsg, setErrorMsg] = useState('');
   const [userEmail, setUserEmail] = useState('');
+  const [smsNumber, setSmsNumber] = useState<string | null>(null);
+  const [smsPending, setSmsPending] = useState(false);
   const pollCount = useRef(0);
   const maxPolls = 20; // ~40 seconds max wait
   const pollInterval = 2000; // 2 seconds
@@ -32,6 +35,30 @@ export default function CheckoutSuccess() {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
 
+    async function pollForSmsNumber() {
+      setSmsPending(true);
+      const smsMaxAttempts = 5;
+      const smsDelay = 2000;
+      for (let i = 0; i < smsMaxAttempts; i++) {
+        if (cancelled) return;
+        try {
+          const channels = await fetchChannels();
+          const smsChannel = channels.find(
+            (c) => c.channel_type === 'sms' && c.is_default && c.phone_number,
+          );
+          if (smsChannel?.phone_number) {
+            setSmsNumber(smsChannel.phone_number);
+            setSmsPending(false);
+            return;
+          }
+        } catch {
+          // Ignore transient fetch errors — keep polling
+        }
+        await new Promise((r) => setTimeout(r, smsDelay));
+      }
+      // Timeout: leave smsPending=true so UI shows "ready soon, we'll email you"
+    }
+
     async function poll() {
       if (cancelled) return;
       pollCount.current += 1;
@@ -46,13 +73,15 @@ export default function CheckoutSuccess() {
           setStatus('success');
 
           // Auto-sign in with stored password
+          let signedIn = false;
           if (result.email) {
             const pw = sessionStorage.getItem('onb_pw') || '';
             if (pw) {
-              await supabase.auth.signInWithPassword({
+              const { error: signInErr } = await supabase.auth.signInWithPassword({
                 email: result.email,
                 password: pw,
               });
+              signedIn = !signInErr;
             }
           }
 
@@ -60,10 +89,15 @@ export default function CheckoutSuccess() {
           ['onb_step', 'onb_plan', 'onb_interval', 'onb_name', 'onb_email', 'onb_pw', 'onb_token', 'onb_uid']
             .forEach(k => sessionStorage.removeItem(k));
 
+          // Poll for SMS channel (pro/enterprise plans) before redirecting
+          if (signedIn && !cancelled) {
+            await pollForSmsNumber();
+          }
+
           // Redirect to dashboard after short delay
           setTimeout(() => {
             if (!cancelled) window.location.href = '/';
-          }, 3000);
+          }, smsNumber ? 4000 : 3000);
           return;
         }
 
@@ -76,17 +110,23 @@ export default function CheckoutSuccess() {
           setStatus('success');
 
           // Try signing in anyway
+          let signedIn = false;
           if (result.email) {
             const pw = sessionStorage.getItem('onb_pw') || '';
             if (pw) {
-              await supabase.auth.signInWithPassword({
+              const { error: signInErr } = await supabase.auth.signInWithPassword({
                 email: result.email,
                 password: pw,
               });
+              signedIn = !signInErr;
             }
           }
           ['onb_step', 'onb_plan', 'onb_interval', 'onb_name', 'onb_email', 'onb_pw', 'onb_token', 'onb_uid']
             .forEach(k => sessionStorage.removeItem(k));
+
+          if (signedIn && !cancelled) {
+            await pollForSmsNumber();
+          }
 
           setTimeout(() => {
             if (!cancelled) window.location.href = '/';
@@ -137,6 +177,20 @@ export default function CheckoutSuccess() {
               <div className="mt-4 flex items-center justify-center gap-2 text-sm text-gray-500 bg-gray-50 rounded-lg px-4 py-3">
                 <Mail size={16} className="text-gray-400 shrink-0" />
                 <span>A receipt has been sent to <strong className="text-gray-700">{userEmail}</strong></span>
+              </div>
+            )}
+            {smsNumber && (
+              <div className="mt-3 flex items-center justify-center gap-2 text-sm text-[#1F5F4F] bg-[#E8F4F0] rounded-lg px-4 py-3">
+                <MessageSquare size={16} className="shrink-0" />
+                <span>
+                  Your SMS number: <strong>{smsNumber}</strong>
+                </span>
+              </div>
+            )}
+            {!smsNumber && smsPending && (
+              <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-4 py-3">
+                <Loader2 size={14} className="animate-spin shrink-0" />
+                <span>Setting up your dedicated SMS number...</span>
               </div>
             )}
           </>

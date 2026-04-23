@@ -524,8 +524,8 @@ Livraison attendue : validation de ce rapport par le responsable produit + déci
 
 **À valider par un avocat avant prod :**
 - Templates `Privacy.tsx` et `Terms.tsx` contiennent des placeholders `[COMPANY LEGAL NAME]`, `[STREET ADDRESS]`, etc. — à compléter
-- Email DPO `privacy@lumecrm.ca` — à créer ou remplacer
-- Email juridique `legal@lumecrm.ca` — idem
+- Email DPO `willhebert30@gmail.com` — à créer ou remplacer
+- Email juridique `willhebert30@gmail.com` — idem
 - Versions doc : `privacy-policy-2026-04-21`, `tos-2026-04-21`, `cookie-policy-2026-04-21` — bumper à chaque révision substantielle
 
 ### 2026-04-21 — Bloc 4 Rétention & anonymisation

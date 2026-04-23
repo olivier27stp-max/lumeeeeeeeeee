@@ -51,6 +51,7 @@ import auditLogRouter from './routes/audit-log';
 import orgKnowledgeRouter from './routes/org-knowledge';
 import agentAuthRouter from './routes/agent-auth';
 import invitationsRouter from './routes/invitations';
+import rolePresetsRouter from './routes/role-presets';
 import billingRouter from './routes/billing';
 import referralsRouter from './routes/referrals';
 import securityRouter from './routes/security';
@@ -68,7 +69,7 @@ import incidentsRouter from './routes/incidents';
 
 // Security engine
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, extractIP } from './lib/security';
-import { redisRateLimit } from './lib/rate-limiter';
+import { redisRateLimit, useRedis } from './lib/rate-limiter';
 import { rbacMiddleware } from './lib/route-permissions';
 import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
 import { auditRequestMiddleware } from './lib/audit-middleware';
@@ -217,23 +218,26 @@ const quoteLimiterStrict = rateLimit({ windowMs: 60_000, max: 15 }); // per IP �
 const automationLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `auto:${req.headers.authorization?.slice(-20) || req.ip}` });
 
 // ── Apply rate limiters to specific paths ──
-// In-memory limiters (always active)
-app.use('/api/messages/send', smsLimiter);
-app.use('/api/emails', emailLimiter);
-app.use('/api/payments', paymentLimiter);
+// When Redis is available, the redisRateLimit middleware below handles limiting
+// and in-memory limiters become redundant overhead. Skip them to save a Map
+// lookup + setInterval sweep on every request.
+if (!useRedis) {
+  app.use('/api/messages/send', smsLimiter);
+  app.use('/api/emails', emailLimiter);
+  app.use('/api/payments', paymentLimiter);
+  app.use('/api/pay', publicPayLimiter);
+  app.use('/api/portal', portalLimiter);
+  app.use('/api/quotes', quoteLimiterStrict);
+  app.use('/api/automations/events', automationLimiter);
+}
+// Always applied (no Redis equivalent registered below)
 app.use('/api/leads/create', leadCreateLimiter);
-app.use('/api/pay', publicPayLimiter);
-// Per-token limiter — prevents brute-force via IP rotation
+// Per-token limiter — prevents brute-force via IP rotation (not covered by presets)
 app.use('/api/pay', rateLimit({
   windowMs: 60_000,
   max: 20,
   keyFn: (req) => `paytok:${(req.path.match(/\/pay\/([a-f0-9]+)/)?.[1] || '').slice(0, 80)}`,
 }));
-app.use('/api/portal', portalLimiter);
-app.use('/api/quotes', quoteLimiterStrict);
-
-// ── Automation event rate limiters ──
-app.use('/api/automations/events', automationLimiter);
 
 // Redis-backed persistent rate limiters (when Upstash is configured)
 app.use('/api/messages/send', redisRateLimit({ preset: 'strict', keyFn: (req) => `sms:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
@@ -313,6 +317,7 @@ app.use('/api', requestFormsRouter);
 app.use('/api', quoteTemplatesRouter);
 app.use('/api', taxesRouter);
 app.use('/api', invitationsRouter);
+app.use('/api', rolePresetsRouter);
 app.use('/api', billingRouter);
 app.use('/api', referralsRouter);
 app.use('/api', coursesRouter);

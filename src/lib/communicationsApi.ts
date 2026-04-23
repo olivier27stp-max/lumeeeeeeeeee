@@ -135,3 +135,101 @@ export async function fetchCommSettings(): Promise<CommunicationSettings> {
   if (!res.ok) throw new Error(data?.error || 'Failed to fetch settings');
   return data;
 }
+
+// ─── A2P 10DLC (US only) ────────────────────────────────────────────
+
+export interface A2PRegistration {
+  id: string;
+  org_id: string;
+  legal_business_name: string | null;
+  ein: string | null;
+  business_type: string | null;
+  vertical: string | null;
+  street: string | null;
+  city: string | null;
+  region: string | null;
+  postal_code: string | null;
+  country: string | null;
+  website: string | null;
+  support_email: string | null;
+  support_phone: string | null;
+  use_case: string | null;
+  campaign_description: string | null;
+  message_samples: string[];
+  opt_in_keywords: string[];
+  opt_in_message: string | null;
+  opt_out_message: string | null;
+  has_embedded_links: boolean;
+  has_embedded_phone: boolean;
+  brand_status: string;
+  campaign_status: string;
+  brand_error: string | null;
+  campaign_error: string | null;
+  last_checked_at: string | null;
+}
+
+export interface A2PBrandPayload {
+  legal_business_name: string;
+  ein: string;
+  business_type: string;
+  vertical: string;
+  street: string;
+  city: string;
+  region: string;
+  postal_code: string;
+  country: string;
+  website: string;
+  support_email: string;
+  support_phone: string;
+}
+
+export interface A2PCampaignPayload {
+  use_case: string;
+  description: string;
+  message_samples: string[];
+  opt_in_keywords: string[];
+  opt_in_message: string;
+  opt_out_message: string;
+  has_embedded_links: boolean;
+  has_embedded_phone: boolean;
+}
+
+export async function fetchA2PStatus(): Promise<A2PRegistration | null> {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/communications/a2p/status', { headers });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || 'Failed to fetch A2P status');
+  return data;
+}
+
+export async function submitA2PBrand(payload: A2PBrandPayload) {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/communications/a2p/submit-brand', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || data?.message || 'Failed to submit brand');
+  return data;
+}
+
+export async function submitA2PCampaign(payload: A2PCampaignPayload) {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/communications/a2p/submit-campaign', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || data?.message || 'Failed to submit campaign');
+  return data;
+}
+
+export async function refreshA2PStatus() {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/communications/a2p/refresh', { method: 'POST', headers });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || 'Failed to refresh A2P status');
+  return data as { brand_status: string; campaign_status: string };
+}

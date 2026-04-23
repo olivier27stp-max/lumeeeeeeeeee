@@ -34,4 +34,4 @@ We do not currently set third-party tracking cookies. When we use third-party sc
 
 ## 6. Contact
 
-`privacy@lumecrm.ca`
+`willhebert30@gmail.com`

@@ -4,8 +4,12 @@ import { Button } from '../components/d2d/button';
 import { Input } from '../components/d2d/input';
 import { cn } from '../lib/utils';
 import { Upload, Save, Building2, Globe, Palette } from 'lucide-react';
+import { useTranslation } from '../i18n';
+import BackToSettings from '../components/ui/BackToSettings';
 
 export default function D2DSettingsGeneral() {
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
   const [companyName, setCompanyName] = useState('Clostra Solar');
   const [timezone, setTimezone] = useState('America/New_York');
   const [locale, setLocale] = useState('en');
@@ -14,11 +18,18 @@ export default function D2DSettingsGeneral() {
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       {/* Header */}
-      <div>
-        <h2 className="text-lg font-semibold text-text-primary">General Settings</h2>
-        <p className="text-xs text-text-tertiary">
-          Configure your company profile and preferences
-        </p>
+      <div className="flex items-center gap-3">
+        <BackToSettings />
+        <div className="flex-1">
+          <h2 className="text-lg font-semibold text-text-primary">
+            {isFr ? 'Paramètres généraux' : 'General Settings'}
+          </h2>
+          <p className="text-xs text-text-tertiary">
+            {isFr
+              ? 'Configurez le profil et les préférences de votre entreprise'
+              : 'Configure your company profile and preferences'}
+          </p>
+        </div>
       </div>
 
       {/* Company info */}

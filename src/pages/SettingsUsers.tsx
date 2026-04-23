@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import { Users, Plus, Shield, MapPin, Mail, MoreHorizontal } from 'lucide-react';
+import BackToSettings from '../components/ui/BackToSettings';
 import { supabase } from '../lib/supabase';
 import { ROLE_LABELS, SCOPE_LABELS, type TeamRole, type Scope } from '../lib/permissions';
 import PermissionGate from '../components/PermissionGate';
@@ -63,15 +64,18 @@ export default function SettingsUsers() {
     <PermissionGate permission="team.read">
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-text-primary flex items-center gap-2">
-              <Users size={20} className="text-accent" />
-              {fr ? 'Utilisateurs' : 'Users'}
-            </h2>
-            <p className="text-xs text-text-tertiary mt-1">
-              {fr ? 'Gérez les rôles, scopes et permissions de vos membres.' : 'Manage roles, scopes and permissions for your members.'}
-            </p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <BackToSettings />
+            <div>
+              <h2 className="text-lg font-semibold text-text-primary flex items-center gap-2">
+                <Users size={20} className="text-accent" />
+                {fr ? 'Utilisateurs' : 'Users'}
+              </h2>
+              <p className="text-xs text-text-tertiary mt-1">
+                {fr ? 'Gérez les rôles, scopes et permissions de vos membres.' : 'Manage roles, scopes and permissions for your members.'}
+              </p>
+            </div>
           </div>
           <PermissionGate permission="users.invite" fallback={null}>
             <button className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent text-white text-[13px] font-semibold hover:bg-accent/90 transition-colors">

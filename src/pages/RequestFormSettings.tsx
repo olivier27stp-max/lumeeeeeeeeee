@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  ArrowLeft,
   Save,
   Loader2,
   Check,
@@ -18,12 +17,12 @@ import {
   ChevronDown,
   FileText,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import { fetchRequestForm, upsertRequestForm, regenerateApiKey } from '../lib/requestFormsApi';
 import type { RequestForm, FormField, FormFieldType } from '../types';
+import BackToSettings from '../components/ui/BackToSettings';
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -252,7 +251,6 @@ function FormPreview({
 // ── Main Component ─────────────────────────────────────────
 
 export default function RequestFormSettings() {
-  const navigate = useNavigate();
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
 
@@ -384,12 +382,7 @@ export default function RequestFormSettings() {
     <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button
-          onClick={() => navigate('/settings')}
-          className="w-9 h-9 rounded-xl bg-surface-secondary flex items-center justify-center hover:bg-surface-secondary/80 transition-colors"
-        >
-          <ArrowLeft size={16} className="text-text-secondary" />
-        </button>
+        <BackToSettings />
         <div className="flex-1">
           <h1 className="text-[20px] font-bold text-text-primary tracking-tight">
             {t.requestForm.requestForm}

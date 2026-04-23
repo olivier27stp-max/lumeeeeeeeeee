@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Edit2, Loader2, Package, Plus, Search, Trash2, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Edit2, Loader2, Package, Plus, Search, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatCurrency } from '../lib/utils';
 import {
@@ -10,9 +9,9 @@ import {
   deletePredefinedService,
   PredefinedService,
 } from '../lib/servicesApi';
+import BackToSettings from '../components/ui/BackToSettings';
 
 export default function ProductsServices() {
-  const navigate = useNavigate();
   const [services, setServices] = useState<PredefinedService[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -121,12 +120,9 @@ export default function ProductsServices() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <button onClick={() => navigate('/settings')} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-text-secondary hover:text-text-primary transition-colors">
-        <ArrowLeft size={14} /> Settings
-      </button>
-
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
+          <BackToSettings />
           <div className="w-10 h-10 rounded-xl bg-surface-secondary flex items-center justify-center">
             <Package size={18} className="text-text-tertiary" />
           </div>

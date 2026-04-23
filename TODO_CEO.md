@@ -16,17 +16,15 @@ Cochez au fur et à mesure.
 - [ ] Noter le nom dans un endroit public (About page, footer)
 - Référence : Loi 25 art. 3.1
 
-### 2. Créer l'email `privacy@lumecrm.ca` (15 min)
-- [ ] Option A — Gmail Google Workspace : ~8$/mois, redirige vers ton email principal
-- [ ] Option B — Alias sur ton fournisseur de domaine (gratuit)
-- [ ] Option C — Zoho Mail gratuit (jusqu'à 5 users)
-- [ ] Tester que tu reçois bien les emails
+### 2. Email DPO ✅ FAIT
+Email temporaire utilisé : **willhebert30@gmail.com**
+(déjà présent dans les 14 fichiers légaux)
 
-### 3. Créer l'email `legal@lumecrm.ca` (idem, 15 min)
-- [ ] Même méthode que #2
+### 3. Remplir les placeholders dans les docs (30 min)
+Même technique Ctrl+Shift+H (remplacer dans les fichiers) pour :
+`[COMPANY LEGAL NAME]`, `[STREET ADDRESS]`, `[À DÉSIGNER]`, `[DPO]`, `[NOM]`
 
-### 4. Remplir les placeholders dans les docs (30 min)
-Cherche `[COMPANY LEGAL NAME]`, `[STREET ADDRESS]`, `[À DÉSIGNER]`, `[DPO]` dans :
+Fichiers impactés :
 - [ ] `src/pages/Privacy.tsx`
 - [ ] `src/pages/Terms.tsx`
 - [ ] `docs/legal/privacy_policy.md` (si tu l'utilises)
@@ -37,7 +35,13 @@ Cherche `[COMPANY LEGAL NAME]`, `[STREET ADDRESS]`, `[À DÉSIGNER]`, `[DPO]` da
 - [ ] `docs/compliance/ropa.md`
 - [ ] `docs/operations/sop_dsr_response.md`
 
-Astuce : VS Code → Ctrl+Shift+F (recherche globale) → `[COMPANY LEGAL NAME]` → remplacer par le vrai nom.
+Astuce : VS Code → **Ctrl+Shift+H** (remplacer dans les fichiers) → cherche le placeholder → remplace partout d'un coup.
+
+### 4b. QUAND tu achètes un domaine plus tard (5 min)
+- [ ] Cloudflare (le moins cher, email gratuit illimité) → Register Domain
+- [ ] Cloudflare → Email Routing → `privacy@ton-domaine.xx` forward to ton Gmail
+- [ ] VS Code Ctrl+Shift+H → `willhebert30@gmail.com` → `privacy@ton-domaine.xx`
+- [ ] Si tu utilises Railway pour hoster, ajouter le custom domain aussi (Railway → Settings → Networking)
 
 ### 5. Activer `pg_cron` dans Supabase (1 min)
 - [ ] https://supabase.com/dashboard → ton projet → Database → Extensions

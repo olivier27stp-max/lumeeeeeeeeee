@@ -6,13 +6,11 @@
 
 ---
 
-**Version :** `efvp-supabase-2026-04-21`
-**Date :** 2026-04-21
-**Auteur :** [RESPONSABLE DE LA PROTECTION DES RENSEIGNEMENTS PERSONNELS]
-**Entreprise :** [LUME CRM — NOM LÉGAL À COMPLÉTER]
-**Prochaine révision :** 2027-04-21 (annuelle)
-
-> ⚠️ **TEMPLATE PRÉ-REMPLI À 80%.** Les sections entre **[crochets]** doivent être complétées. Document à faire valider par un conseiller juridique spécialisé en droit du numérique et de la protection des renseignements personnels avant toute mise en production impliquant des personnes au Québec.
+**Version :** `efvp-supabase-2026-04-22`
+**Date :** 2026-04-22
+**Auteur :** William Hébert, responsable de la protection des renseignements personnels
+**Entreprise :** William Hébert (entreprise individuelle, Québec) — opérant sous le nom « Lume CRM »
+**Prochaine révision :** 2027-04-22 (annuelle)
 
 ---
 
@@ -45,11 +43,12 @@ Cette évaluation documente l'analyse requise par l'article 17 de la Loi 25 avan
 - **Utilisateurs des organisations clientes** (employés, administrateurs) — québécois selon la clientèle
 - **Clients finaux et prospects** saisis dans le CRM par nos utilisateurs — majoritairement québécois
 
-### 2.3 Volumes estimés
+### 2.3 Volumes estimés (au 2026-04-22, phase beta)
 
-- Organisations clientes actives : **[NOMBRE]**
-- Utilisateurs distincts : **[NOMBRE]**
-- Enregistrements (clients/leads/jobs) : **[NOMBRE]**
+- Organisations clientes actives : 16 (beta interne + tests)
+- Utilisateurs distincts : 18
+- Enregistrements (clients/leads/jobs) : ~60
+- Volume cible beta publique : 5 à 50 organisations
 
 ---
 
@@ -64,7 +63,7 @@ Le traitement hors Québec est strictement nécessaire pour :
 
 **Alternatives examinées :**
 
-- **Supabase `ca-central-1` (Montréal/AWS Canada) :** option disponible. Coût identique. Migration demanderait ~1-2 jours de downtime planifié. **[CHOIX À TRANCHER — voir §9.]**
+- **Supabase `ca-central-1` (Montréal/AWS Canada) :** option disponible. Coût identique. Migration demanderait ~1-2 jours de downtime planifié. **Option différée à une échéance ultérieure — voir §9.**
 - **Hébergement entièrement auto-géré au Québec :** rejeté (coûts opérationnels prohibitifs, impact négatif sur disponibilité et sécurité)
 - **Autres fournisseurs de BaaS :** pas d'équivalent fonctionnel offrant PostgreSQL managé + Auth + Storage + Realtime
 
@@ -134,7 +133,7 @@ Le traitement hors Québec est strictement nécessaire pour :
 
 Les mentions suivantes figurent dans la politique de confidentialité (`/privacy`) :
 
-- Identité du responsable et coordonnées du responsable de la protection (`privacy@lumecrm.ca`) — [⚠ À désigner formellement avant mise en production]
+- Identité du responsable (William Hébert) et coordonnées du responsable de la protection des renseignements personnels (`willhebert30@gmail.com`, 819-817-9526 — astreinte 24/7 incidents)
 - Catégories de renseignements collectées
 - Finalités du traitement
 - Fait que les renseignements peuvent être communiqués à l'extérieur du Québec (États-Unis)
@@ -158,14 +157,19 @@ Conformément à `docs/legal/data_retention_policy.md` :
 
 ## 9. Décision
 
-**Option retenue :** ☐ **À COCHER**
+**Option retenue :**
 
-- [ ] **A.** Maintien de l'hébergement `us-east-1` avec l'ensemble des mesures de mitigation ci-dessus. Révision annuelle.
-- [ ] **B.** Migration vers Supabase `ca-central-1` (Montréal) d'ici le **[DATE]**. Dans ce cas, la présente EFVP reste en vigueur à titre transitoire.
+- [x] **A.** Maintien de l'hébergement `us-east-1` avec l'ensemble des mesures de mitigation ci-dessus. Révision annuelle.
+- [ ] **B.** Migration vers Supabase `ca-central-1` (Montréal) — envisagée à l'horizon de la croissance au-delà de 100 organisations clientes ou à la première demande documentée d'un client exigeant résidence canadienne.
 
 **Justification de la décision :**
 
-> [À COMPLÉTER PAR LE RESPONSABLE]
+> La phase beta actuelle (≤50 organisations clientes) ne justifie pas le coût opérationnel (1-2 jours de downtime planifié, risques de régression auth/webhooks Stripe/Twilio) d'une migration immédiate. Le transfert vers `us-east-1` demeure strictement nécessaire à l'exploitation du service, est couvert par un DPA Supabase équivalent aux clauses contractuelles types, et bénéficie de mesures de mitigation substantielles (chiffrement AES-256 au repos, TLS 1.3 en transit, RLS PostgreSQL, redaction PII avant traitement IA, audit trail). Les personnes concernées sont informées de ce transfert dans la politique de confidentialité et leurs droits (accès, rectification, effacement, portabilité) sont pleinement exerçables via le portail DSR intégré.
+
+**Engagement de révision :**
+
+- Révision annuelle obligatoire (prochaine : 2027-04-22)
+- Révision anticipée si : (a) changement de cadre juridique US affectant les transferts, (b) incident de confidentialité impliquant Supabase ou AWS, (c) dépassement du seuil de 100 organisations clientes, (d) demande spécifique d'un client ou de la CAI.
 
 ---
 
@@ -173,9 +177,8 @@ Conformément à `docs/legal/data_retention_policy.md` :
 
 | Rôle | Nom | Signature | Date |
 |---|---|---|---|
-| Responsable de la protection des renseignements personnels | [NOM] | | |
-| Direction | [NOM] | | |
-| Conseiller juridique (validation) | [NOM] | | |
+| Responsable de la protection des renseignements personnels | William Hébert | _William Hébert_ | 2026-04-22 |
+| Direction (entreprise individuelle) | William Hébert | _William Hébert_ | 2026-04-22 |
 
 ---
 

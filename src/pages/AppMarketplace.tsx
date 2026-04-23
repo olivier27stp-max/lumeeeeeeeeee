@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import BackToSettings from '../components/ui/BackToSettings';
 import {
-  ArrowLeft,
   Check,
   ChevronRight,
   Copy,
@@ -939,16 +939,9 @@ export default function AppMarketplace() {
 
   return (
     <div className="space-y-6">
-      {/* Back */}
-      <button
-        onClick={() => navigate('/settings')}
-        className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-text-secondary hover:text-text-primary transition-colors"
-      >
-        <ArrowLeft size={14} /> Settings
-      </button>
-
       {/* Header */}
       <div className="flex items-center gap-3">
+        <BackToSettings />
         <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
           <Zap size={18} className="text-white" />
         </div>

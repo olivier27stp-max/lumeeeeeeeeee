@@ -49,15 +49,45 @@ async function expandClientRelationships(
 
   const expanded: MappedItem[] = [];
 
-  // Fetch related jobs
-  const { data: jobs } = await client
-    .from('jobs')
-    .select('id, title, job_number, client_id, client_name, status, total_cents, currency, scheduled_at, property_address, created_at')
-    .eq('org_id', orgId)
-    .is('deleted_at', null)
-    .in('client_id', clientIds)
-    .order('created_at', { ascending: false })
-    .limit(limitPerType);
+  // Fetch related jobs, quotes, invoices, requests in parallel
+  const [jobsRes, quotesRes, invoicesRes, requestsRes] = await Promise.all([
+    client
+      .from('jobs')
+      .select('id, title, job_number, client_id, client_name, status, total_cents, currency, scheduled_at, property_address, created_at')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .in('client_id', clientIds)
+      .order('created_at', { ascending: false })
+      .limit(limitPerType),
+    client
+      .from('quotes')
+      .select('id, quote_number, title, client_id, status, total_cents, currency, valid_until, created_at')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .in('client_id', clientIds)
+      .order('created_at', { ascending: false })
+      .limit(limitPerType),
+    client
+      .from('invoices')
+      .select('id, invoice_number, subject, client_id, status, total_cents, due_date, created_at')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .in('client_id', clientIds)
+      .order('created_at', { ascending: false })
+      .limit(limitPerType),
+    client
+      .from('form_submissions')
+      .select('id, first_name, last_name, company, email, phone, city, client_id, created_at')
+      .eq('org_id', orgId)
+      .in('client_id', clientIds)
+      .order('created_at', { ascending: false })
+      .limit(limitPerType),
+  ]);
+
+  const jobs = jobsRes.data;
+  const quotes = quotesRes.data;
+  const invoices = invoicesRes.data;
+  const requests = requestsRes.data;
 
   for (const j of jobs || []) {
     if (existingIds.has(j.id)) continue;
@@ -77,16 +107,6 @@ async function expandClientRelationships(
       rank: 0.5,
     });
   }
-
-  // Fetch related quotes
-  const { data: quotes } = await client
-    .from('quotes')
-    .select('id, quote_number, title, client_id, status, total_cents, currency, valid_until, created_at')
-    .eq('org_id', orgId)
-    .is('deleted_at', null)
-    .in('client_id', clientIds)
-    .order('created_at', { ascending: false })
-    .limit(limitPerType);
 
   for (const q of quotes || []) {
     if (existingIds.has(q.id)) continue;
@@ -108,16 +128,6 @@ async function expandClientRelationships(
     });
   }
 
-  // Fetch related invoices
-  const { data: invoices } = await client
-    .from('invoices')
-    .select('id, invoice_number, subject, client_id, status, total_cents, due_date, created_at')
-    .eq('org_id', orgId)
-    .is('deleted_at', null)
-    .in('client_id', clientIds)
-    .order('created_at', { ascending: false })
-    .limit(limitPerType);
-
   for (const inv of invoices || []) {
     if (existingIds.has(inv.id)) continue;
     existingIds.add(inv.id);
@@ -136,15 +146,6 @@ async function expandClientRelationships(
       rank: 0.5,
     });
   }
-
-  // Fetch related requests (form_submissions)
-  const { data: requests } = await client
-    .from('form_submissions')
-    .select('id, first_name, last_name, company, email, phone, city, client_id, created_at')
-    .eq('org_id', orgId)
-    .in('client_id', clientIds)
-    .order('created_at', { ascending: false })
-    .limit(limitPerType);
 
   for (const r of requests || []) {
     if (existingIds.has(r.id)) continue;

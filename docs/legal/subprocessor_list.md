@@ -32,4 +32,4 @@ Changes to this list are announced by email to the billing contact of each organ
 
 ## Contact
 
-Questions about subprocessors: `privacy@lumecrm.ca`.
+Questions about subprocessors: `willhebert30@gmail.com`.

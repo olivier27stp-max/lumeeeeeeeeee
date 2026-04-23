@@ -3,6 +3,7 @@ import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { getLeaderboard, getRepPerformance, calculateRepStats } from '../lib/field-sales/leaderboard-engine';
 import { getRepBadges } from '../lib/field-sales/gamification-engine';
+import { cached } from '../lib/cache';
 
 const router = Router();
 router.use(maxBodySize());
@@ -22,7 +23,10 @@ router.get('/leaderboard', async (req, res) => {
 
   try {
     const sc = getServiceClient();
-    const entries = await getLeaderboard(sc, auth.orgId, period as 'daily' | 'weekly' | 'monthly', undefined, teamId);
+    const cacheKey = `leaderboard:${auth.orgId}:${period}:${teamId || 'all'}`;
+    const entries = await cached(cacheKey, 45, () =>
+      getLeaderboard(sc, auth.orgId, period as 'daily' | 'weekly' | 'monthly', undefined, teamId)
+    );
     res.json(entries);
   } catch (err: any) {
     res.status(500).json({ error: 'Internal server error' });
@@ -44,11 +48,15 @@ router.get('/leaderboard/rep/:userId', async (req, res) => {
 
   try {
     const sc = getServiceClient();
-    const [performance, badges] = await Promise.all([
-      getRepPerformance(sc, auth.orgId, userId, { from, to }),
-      getRepBadges(sc, auth.orgId, userId),
-    ]);
-    res.json({ performance, badges });
+    const cacheKey = `rep-perf:${auth.orgId}:${userId}:${from}:${to}`;
+    const payload = await cached(cacheKey, 60, async () => {
+      const [performance, badges] = await Promise.all([
+        getRepPerformance(sc, auth.orgId, userId, { from, to }),
+        getRepBadges(sc, auth.orgId, userId),
+      ]);
+      return { performance, badges };
+    });
+    res.json(payload);
   } catch (err: any) {
     res.status(500).json({ error: 'Internal server error' });
   }

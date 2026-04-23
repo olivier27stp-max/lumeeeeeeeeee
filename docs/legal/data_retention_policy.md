@@ -76,4 +76,4 @@ This policy is reviewed annually or upon material change in applicable law. The 
 
 ## 8. Contact
 
-Data Protection Officer: `privacy@lumecrm.ca`
+Data Protection Officer: `willhebert30@gmail.com`

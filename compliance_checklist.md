@@ -6,8 +6,8 @@ Review this checklist before going live with new customers in Québec/Canada/USA
 ## A. Governance
 
 - [ ] DPO designated (name, email, phone on file)
-- [ ] DPO email `privacy@lumecrm.ca` receives mail
-- [ ] Legal contact `legal@lumecrm.ca` receives mail
+- [ ] DPO email `willhebert30@gmail.com` receives mail
+- [ ] Legal contact `willhebert30@gmail.com` receives mail
 - [ ] Company legal entity name and registered address filled in `docs/legal/privacy_policy.md`, `docs/legal/terms_of_service.md`, `src/pages/Privacy.tsx`, `src/pages/Terms.tsx`
 - [ ] ROPA reviewed and signed (`docs/compliance/ropa.md`)
 - [ ] Privacy Impact Assessment (Law 25 art. 17) on file for US hosting
