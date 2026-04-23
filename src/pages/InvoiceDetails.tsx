@@ -231,7 +231,7 @@ export default function InvoiceDetails() {
                 type="button"
                 className="glass-button inline-flex items-center gap-1.5 text-[12px]"
                 onClick={() => {
-                  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+                  const API_BASE = import.meta.env.VITE_API_URL || window.location.origin;
                   const link = `${API_BASE}/q/${invoice.view_token}`;
                   navigator.clipboard.writeText(link);
                   setLinkCopied(true);

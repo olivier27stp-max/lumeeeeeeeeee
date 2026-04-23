@@ -172,7 +172,7 @@ export default function QuoteView() {
 
   async function loadQuote() {
     try {
-      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+      const API_BASE = import.meta.env.VITE_API_URL || '';
 
       // Fetch all quote data from public server endpoint (bypasses RLS)
       const res = await fetch(`${API_BASE}/api/quotes/public/${token}`);
@@ -275,7 +275,7 @@ export default function QuoteView() {
     setDepositLoading(true);
     setDepositError(null);
     try {
-      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+      const API_BASE = import.meta.env.VITE_API_URL || '';
       const depositRes = await fetch(`${API_BASE}/api/quotes/public/deposit-intent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -308,7 +308,7 @@ export default function QuoteView() {
   // ── Confirm deposit payment with server ──
   async function confirmDepositPayment(paymentIntentId: string) {
     try {
-      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+      const API_BASE = import.meta.env.VITE_API_URL || '';
       await fetch(`${API_BASE}/api/quotes/public/deposit-confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -324,7 +324,7 @@ export default function QuoteView() {
     if (!data || !signatureData || !signerName.trim()) return;
     setAccepting(true);
     try {
-      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+      const API_BASE = import.meta.env.VITE_API_URL || '';
       const res = await fetch(`${API_BASE}/api/quotes/public/accept`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -356,7 +356,7 @@ export default function QuoteView() {
     if (!data) return;
     setDeclining(true);
     try {
-      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+      const API_BASE = import.meta.env.VITE_API_URL || '';
       const res = await fetch(`${API_BASE}/api/quotes/public/decline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -31,7 +31,10 @@ export interface Message {
 }
 
 // ─── API base ────────────────────────────────────────────────────────
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+// Empty default → fetch uses a relative URL → same-origin (Vite proxies /api in dev,
+// and in prod the API runs on the same domain as the SPA). Override with VITE_API_URL
+// only when calling a backend on a different origin.
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
