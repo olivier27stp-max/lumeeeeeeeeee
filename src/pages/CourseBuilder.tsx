@@ -4,7 +4,7 @@ import {
   ArrowLeft, Plus, Trash2, GripVertical, Save, Eye, Upload, Link2, FileText,
   ChevronDown, ChevronRight, MoreHorizontal, Copy, Pencil, X, Image,
   Video, Globe, Type, GraduationCap, Clock, Check, Users, CheckCircle2,
-  ExternalLink, BookOpen, Layers,
+  ExternalLink, BookOpen, Layers, Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
@@ -142,6 +142,11 @@ export default function CourseBuilder() {
   const [lessonAttachments, setLessonAttachments] = useState<any[]>([]);
   const [lessonSaving, setLessonSaving] = useState(false);
   const [coverUploading, setCoverUploading] = useState(false);
+  const [videoUploading, setVideoUploading] = useState(false);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [attachmentProgress, setAttachmentProgress] = useState(0);
+  const MAX_VIDEO_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB — enough for ~3h HD video
 
   // Audience targeting
   const [targetRoles, setTargetRoles] = useState<string[]>([]);
@@ -435,25 +440,55 @@ export default function CourseBuilder() {
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
     e.target.value = '';
+    if (file.size > MAX_VIDEO_BYTES) {
+      toast.error(fr ? 'Fichier trop volumineux (max 5 Go, ~3h de vidéo HD)' : 'File too large (max 5 GB, ~3h HD video)');
+      return;
+    }
+    isUploadingRef.current = true;
+    setVideoUploading(true);
+    setVideoProgress(0);
     try {
       const ext = file.name.split('.').pop();
-      const result = await uploadFile(STORAGE_BUCKETS.ATTACHMENTS, `courses/videos/${Date.now()}.${ext}`, file);
+      const result = await uploadFile(
+        STORAGE_BUCKETS.ATTACHMENTS,
+        `courses/videos/${Date.now()}.${ext}`,
+        file,
+        { onProgress: (r) => setVideoProgress(Math.round(r * 100)) },
+      );
       setLessonVideoUrl(result.url);
       if (ext === 'pdf') setLessonContentType('pdf');
       else setLessonContentType('video');
       toast.success(fr ? 'Fichier téléchargé' : 'File uploaded');
     } catch (err: any) { toast.error(err?.message || 'Upload failed'); }
+    finally {
+      setVideoUploading(false);
+      setVideoProgress(0);
+      isUploadingRef.current = false;
+    }
   };
 
   const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
     e.target.value = '';
+    isUploadingRef.current = true;
+    setAttachmentUploading(true);
+    setAttachmentProgress(0);
     try {
       const ext = file.name.split('.').pop();
-      const result = await uploadFile(STORAGE_BUCKETS.ATTACHMENTS, `courses/attachments/${Date.now()}.${ext}`, file);
+      const result = await uploadFile(
+        STORAGE_BUCKETS.ATTACHMENTS,
+        `courses/attachments/${Date.now()}.${ext}`,
+        file,
+        { onProgress: (r) => setAttachmentProgress(Math.round(r * 100)) },
+      );
       setLessonAttachments(prev => [...prev, { name: file.name, url: result.url, type: ext || 'file' }]);
       toast.success(fr ? 'Pièce jointe ajoutée' : 'Attachment added');
     } catch (err: any) { toast.error(err?.message || 'Upload failed'); }
+    finally {
+      setAttachmentUploading(false);
+      setAttachmentProgress(0);
+      isUploadingRef.current = false;
+    }
   };
 
   // ── Auto-save lesson (debounce 2s) ──
@@ -964,14 +999,23 @@ export default function CourseBuilder() {
 
                 <div className="bg-surface-card rounded-2xl border border-outline/30 p-5">
                   {lessonContentType === 'video' && (<>
-                    {lessonVideoUrl ? (
+                    {videoUploading ? (
+                      <div className="flex flex-col items-center justify-center gap-3 py-10 rounded-xl border-2 border-dashed border-outline/40">
+                        <Loader2 size={24} className="text-text-primary animate-spin" />
+                        <p className="text-[13px] font-semibold text-text-primary">{fr ? 'Téléversement en cours…' : 'Uploading…'}</p>
+                        <div className="w-full max-w-xs h-1.5 bg-surface-tertiary rounded-full overflow-hidden">
+                          <div className="h-full bg-text-primary transition-all duration-200" style={{ width: `${videoProgress}%` }} />
+                        </div>
+                        <p className="text-[11px] text-text-muted">{videoProgress}%</p>
+                      </div>
+                    ) : lessonVideoUrl ? (
                       <div><video src={lessonVideoUrl} controls className="w-full rounded-xl max-h-[280px] bg-black mb-2" /><button onClick={() => setLessonVideoUrl('')} className="text-xs text-danger hover:underline">{fr ? 'Supprimer' : 'Remove'}</button></div>
                     ) : (
                       <label className="flex flex-col items-center justify-center gap-3 py-10 rounded-xl border-2 border-dashed border-outline/40 hover:border-outline-strong cursor-pointer transition-colors">
                         <input type="file" accept="video/*" onChange={handleVideoUpload} className="hidden" />
                         <Upload size={24} className="text-text-muted" />
                         <p className="text-[13px] font-semibold text-text-primary">{t.courses.uploadYourVideo}</p>
-                        <p className="text-[11px] text-text-muted">{t.courses.supportedFormats}</p>
+                        <p className="text-[11px] text-text-muted">{fr ? 'Tous formats · jusqu’à 5 Go (~3h HD)' : 'Any format · up to 5 GB (~3h HD)'}</p>
                       </label>
                     )}
                   </>)}
@@ -986,7 +1030,16 @@ export default function CourseBuilder() {
                   )}
                   {lessonContentType === 'text' && <textarea value={lessonTextContent} onChange={e => setLessonTextContent(e.target.value)} rows={10} placeholder={fr ? 'Contenu...' : 'Content...'} className="glass-input w-full px-4 py-3 rounded-xl text-sm resize-none leading-relaxed" />}
                   {lessonContentType === 'pdf' && (<>
-                    {lessonVideoUrl ? (
+                    {videoUploading ? (
+                      <div className="flex flex-col items-center justify-center gap-3 py-10 rounded-xl border-2 border-dashed border-outline/40">
+                        <Loader2 size={24} className="text-text-primary animate-spin" />
+                        <p className="text-[13px] font-semibold text-text-primary">{fr ? 'Téléversement en cours…' : 'Uploading…'}</p>
+                        <div className="w-full max-w-xs h-1.5 bg-surface-tertiary rounded-full overflow-hidden">
+                          <div className="h-full bg-text-primary transition-all duration-200" style={{ width: `${videoProgress}%` }} />
+                        </div>
+                        <p className="text-[11px] text-text-muted">{videoProgress}%</p>
+                      </div>
+                    ) : lessonVideoUrl ? (
                       <div className="flex items-center gap-3 p-3 rounded-lg bg-surface-secondary"><FileText size={20} className="text-info shrink-0" /><span className="flex-1 text-[13px] text-text-primary truncate">{lessonVideoUrl.split('/').pop()}</span><button onClick={() => setLessonVideoUrl('')} className="text-text-muted hover:text-danger"><X size={14} /></button></div>
                     ) : (
                       <label className="flex flex-col items-center justify-center gap-3 py-10 rounded-xl border-2 border-dashed border-outline/40 hover:border-outline-strong cursor-pointer transition-colors">
@@ -1019,10 +1072,22 @@ export default function CourseBuilder() {
                     ))}
                   </div>
                 )}
-                <label className="flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-outline/40 hover:border-outline-strong cursor-pointer transition-colors text-text-muted hover:text-text-secondary text-[12px]">
-                  <input type="file" onChange={handleAttachmentUpload} className="hidden" />
-                  <Upload size={13} /> {fr ? 'Ajouter une pièce jointe' : 'Add attachment'}
-                </label>
+                {attachmentUploading ? (
+                  <div className="flex flex-col items-center gap-2 py-3 rounded-xl border-2 border-dashed border-outline/40">
+                    <div className="flex items-center gap-2 text-[12px] text-text-secondary">
+                      <Loader2 size={13} className="animate-spin" />
+                      {fr ? 'Téléversement…' : 'Uploading…'} {attachmentProgress}%
+                    </div>
+                    <div className="w-full max-w-xs h-1 bg-surface-tertiary rounded-full overflow-hidden">
+                      <div className="h-full bg-text-primary transition-all duration-200" style={{ width: `${attachmentProgress}%` }} />
+                    </div>
+                  </div>
+                ) : (
+                  <label className="flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-outline/40 hover:border-outline-strong cursor-pointer transition-colors text-text-muted hover:text-text-secondary text-[12px]">
+                    <input type="file" onChange={handleAttachmentUpload} className="hidden" />
+                    <Upload size={13} /> {fr ? 'Ajouter une pièce jointe' : 'Add attachment'}
+                  </label>
+                )}
               </div>
             </div>
           )}
