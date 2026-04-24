@@ -150,8 +150,20 @@ app.use(cors({
 // ── CSRF protection via custom header check ──
 // Browsers enforce that custom headers can only be sent via JS (XMLHttpRequest/fetch),
 // not via forms or img tags. This blocks cross-site form-based CSRF attacks.
+//
+// Webhook routes are exempted: they're called by external services (Twilio sends
+// application/x-www-form-urlencoded with no auth header) and protect themselves
+// via provider-specific signature validation (e.g. x-twilio-signature, stripe-signature).
+const WEBHOOK_PATHS_EXEMPT_FROM_CSRF = [
+  '/api/messages/inbound',
+  '/api/messages/status',
+  '/api/webhooks/stripe',
+  '/api/webhooks/paypal',
+];
 app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  // External webhooks: signature-validated downstream, never carry CSRF headers.
+  if (WEBHOOK_PATHS_EXEMPT_FROM_CSRF.includes(req.path)) return next();
   // API key requests are not vulnerable to CSRF
   if (req.headers['x-api-key']) return next();
   // Require either Authorization header or X-Requested-With (custom header = JS origin)
