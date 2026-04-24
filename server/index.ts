@@ -149,7 +149,7 @@ app.use(cors({
 
 // ── Build marker — bypasses ALL middleware to identify the live deploy ──
 // Bumped 2026-04-24T21:55Z to verify Railway picks up the CSRF webhook exemption fix.
-const BUILD_MARKER = 'csrf-webhook-fix-2026-04-24-2155';
+const BUILD_MARKER = 'csrf-webhook-fix-v2-mountpath-aware-2026-04-24-2200';
 app.get('/api/__build', (_req, res) => res.json({ build: BUILD_MARKER, t: new Date().toISOString() }));
 
 // ── CSRF protection via custom header check ──
@@ -159,11 +159,13 @@ app.get('/api/__build', (_req, res) => res.json({ build: BUILD_MARKER, t: new Da
 // Webhook routes are exempted: they're called by external services (Twilio sends
 // application/x-www-form-urlencoded with no auth header) and protect themselves
 // via provider-specific signature validation (e.g. x-twilio-signature, stripe-signature).
+// Note: middleware is mounted on '/api', so req.path here is the suffix
+// (e.g. '/messages/inbound', NOT '/api/messages/inbound').
 const WEBHOOK_PATHS_EXEMPT_FROM_CSRF = [
-  '/api/messages/inbound',
-  '/api/messages/status',
-  '/api/webhooks/stripe',
-  '/api/webhooks/paypal',
+  '/messages/inbound',
+  '/messages/status',
+  '/webhooks/stripe',
+  '/webhooks/paypal',
 ];
 app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
