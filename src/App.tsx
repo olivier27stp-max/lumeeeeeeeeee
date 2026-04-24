@@ -42,12 +42,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 import Dashboard from './pages/Dashboard';
 import CrmWorkspace from './pages/CrmWorkspace';
-// Pipeline page kept but removed from nav — backend logic still used
-// import Pipeline from './pages/Pipeline';
 import Clients from './pages/Clients';
 import ClientDetails from './pages/ClientDetails';
 import Leads from './pages/Leads';
-// Tasks page removed from navigation
 import Schedule from './pages/Schedule';
 import SettingsPage from './pages/Settings';
 import Auth from './pages/Auth';
@@ -73,36 +70,28 @@ import Insights from './pages/Insights';
 import Payments from './pages/Payments';
 import PaymentSettings from './pages/PaymentSettings';
 import Automations from './pages/Automations';
-// WorkflowsPage and WorkflowsHub removed — redirected to /automations
 import CompanySettings from './pages/CompanySettings';
 import ManageTeam from './pages/ManageTeam';
 import TeamMemberDetails from './pages/TeamMemberDetails';
 import GlobalSearch from './components/GlobalSearch';
 import SearchResultsPage from './pages/SearchResults';
 import Timesheets from './pages/Timesheets';
-import QuoteView from './pages/QuoteView';
 import Quotes from './pages/Quotes';
 import QuoteDetails from './pages/QuoteDetails';
 import type { TileColor } from './components/ui';
-// HelpChat removed — ? button navigates to Lume Agent page
 import ActivityCenter from './components/ActivityCenter';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProductsServices from './pages/ProductsServices';
 import AppMarketplace from './pages/AppMarketplace';
 import SettingsMessaging from './pages/SettingsMessaging';
-// PhoneNumberSettings removed from Settings nav
 import RequestFormSettings from './pages/RequestFormSettings';
 import QuotePresets from './pages/QuotePresets';
 const QuoteMeasure = React.lazy(() => import('./pages/QuoteMeasure'));
 import TaxSettings from './pages/TaxSettings';
 import OAuthCallback from './pages/OAuthCallback';
 import DispatchMap from './pages/DispatchMap';
-// BillingCheckout removed — all checkout goes through /checkout (CheckoutFlow)
 import OnboardingFlow from './pages/OnboardingFlow';
 import CheckoutSuccess from './pages/CheckoutSuccess';
-import AcceptInvitation from './pages/AcceptInvitation';
-import Register from './pages/Register';
-import VerifyEmail from './pages/VerifyEmail';
 import ReferFriend from './pages/ReferFriend';
 import MrLumePage from './features/agent/components/MrLumeChat';
 import Messages from './pages/Messages';
@@ -150,15 +139,12 @@ import { CompanySelectorPage, CompanySwitcher, NoCompanyState } from './componen
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import { usePlatformOwner } from './hooks/usePlatformOwner';
 
-// Marketing landing pages — from Lume-Landing-page-officielle repo
-import MarketingLayout from './components/marketing/MarketingLayout';
-import MarketingHome from './pages/marketing/Home';
-import MarketingFeatures from './pages/marketing/Features';
-import MarketingSolutions from './pages/marketing/Solutions';
-import MarketingIndustries from './pages/marketing/Industries';
-import MarketingIndustryDetail from './pages/marketing/IndustryDetail';
-import MarketingPricing from './pages/marketing/Pricing';
-import MarketingContact from './pages/marketing/Contact';
+// Route groups (extracted to src/routes/* to keep this file from growing further)
+import { PublicRoutes } from './routes/PublicRoutes';
+import { TokenRoute, detectTokenKind } from './routes/TokenRoutes';
+// Cross-cutting hooks previously inlined in App()
+import { useInactivityLogout } from './hooks/useInactivityLogout';
+import { useCommandPaletteShortcut } from './hooks/useCommandPaletteShortcut';
 
 // Platform Admin — lazy loaded, owner-only
 const PlatformAdmin = React.lazy(() => import('./pages/PlatformAdmin'));
@@ -307,36 +293,10 @@ export default function App() {
   }, []);
 
   // Auto-logout after 30 minutes of inactivity
-  useEffect(() => {
-    if (!user) return;
-    const INACTIVITY_MS = 30 * 60 * 1000;
-    let timer: ReturnType<typeof setTimeout>;
-    const reset = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        supabase.auth.signOut();
-      }, INACTIVITY_MS);
-    };
-    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'] as const;
-    events.forEach((e) => document.addEventListener(e, reset, { passive: true }));
-    reset();
-    return () => {
-      clearTimeout(timer);
-      events.forEach((e) => document.removeEventListener(e, reset));
-    };
-  }, [user]);
+  useInactivityLogout(!!user);
 
   // Ctrl+K opens command palette
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
-        setCommandPaletteOpen((prev) => !prev);
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, []);
+  useCommandPaletteShortcut(setCommandPaletteOpen);
 
   // Check if user needs onboarding — only for brand new sign-ups
   // Also ensures every user has an org + membership (auto-provision on first login)
@@ -454,45 +414,10 @@ export default function App() {
     return <OnboardingFlow />;
   }
 
-  // Public pages (no auth required)
-  if (location.pathname.startsWith('/quote/')) {
-    return (
-      <Routes>
-        <Route path="/quote/:token" element={<QuoteView />} />
-      </Routes>
-    );
-  }
-
-  if (location.pathname.startsWith('/survey/')) {
-    return (
-      <Routes>
-        <Route path="/survey/:token" element={<SatisfactionSurvey />} />
-      </Routes>
-    );
-  }
-
-  if (location.pathname.startsWith('/portal/')) {
-    return (
-      <Routes>
-        <Route path="/portal/:token" element={<ClientPortal />} />
-      </Routes>
-    );
-  }
-
-  if (location.pathname.startsWith('/pay/')) {
-    return (
-      <Routes>
-        <Route path="/pay/:token" element={<PublicPayment />} />
-      </Routes>
-    );
-  }
-
-  if (location.pathname.startsWith('/invite/')) {
-    return (
-      <Routes>
-        <Route path="/invite/:token" element={<AcceptInvitation />} />
-      </Routes>
-    );
+  // Public token pages (no auth required) — quote, survey, portal, pay, invite
+  const tokenKind = detectTokenKind(location.pathname);
+  if (tokenKind) {
+    return <TokenRoute kind={tokenKind} />;
   }
 
   if (!user) {
@@ -502,24 +427,7 @@ export default function App() {
     return (
       <>
         <CookieBanner />
-        <Routes>
-          <Route path="/auth" element={<Auth onBack={() => setView('landing')} />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/verify-email" element={<VerifyEmail />} />
-          <Route path="/privacy" element={<Privacy />} />
-          <Route path="/terms" element={<Terms />} />
-          <Route path="/subprocessors" element={<Subprocessors />} />
-          <Route element={<MarketingLayout />}>
-            <Route index element={<MarketingHome />} />
-            <Route path="features" element={<MarketingFeatures />} />
-            <Route path="solutions" element={<MarketingSolutions />} />
-            <Route path="industries" element={<MarketingIndustries />} />
-            <Route path="industries/:slug" element={<MarketingIndustryDetail />} />
-            <Route path="pricing" element={<MarketingPricing />} />
-            <Route path="contact" element={<MarketingContact />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <PublicRoutes onAuthBack={() => setView('landing')} />
       </>
     );
   }
@@ -529,29 +437,7 @@ export default function App() {
   // They can see: landing, marketing pages, checkout, auth pages.
   // Any app page (dashboard, settings, etc.) redirects to landing.
   if (user && hasSubscription === false) {
-    return (
-      <Routes>
-        <Route path="/checkout/success" element={<CheckoutSuccess />} />
-        <Route path="/checkout" element={<OnboardingFlow />} />
-        <Route path="/auth" element={<Auth onBack={() => setView('landing')} />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/privacy" element={<Privacy />} />
-        <Route path="/terms" element={<Terms />} />
-          <Route path="/subprocessors" element={<Subprocessors />} />
-        <Route element={<MarketingLayout />}>
-          <Route index element={<MarketingHome />} />
-          <Route path="features" element={<MarketingFeatures />} />
-          <Route path="solutions" element={<MarketingSolutions />} />
-          <Route path="industries" element={<MarketingIndustries />} />
-          <Route path="industries/:slug" element={<MarketingIndustryDetail />} />
-          <Route path="pricing" element={<MarketingPricing />} />
-          <Route path="contact" element={<MarketingContact />} />
-        </Route>
-        {/* Any unknown/app route → back to landing */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    );
+    return <PublicRoutes onAuthBack={() => setView('landing')} includeCheckout />;
   }
 
   // Show onboarding wizard for new users (only AFTER they have a subscription)
