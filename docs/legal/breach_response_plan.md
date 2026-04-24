@@ -101,12 +101,13 @@ Record each notification timestamp in the corresponding column (`cai_notified_at
 ### 4.1 — Notification to CAI (Québec)
 
 ```
-Objet : Déclaration d'incident de confidentialité — [ENTITY LEGAL NAME]
+Objet : Déclaration d'incident de confidentialité — William Hébert (Lume CRM)
 
 Madame, Monsieur,
 
 Conformément à l'article 3.5 de la Loi sur la protection des renseignements
-personnels dans le secteur privé (RLRQ, c. P-39.1), [ENTITY] déclare par la
+personnels dans le secteur privé (RLRQ, c. P-39.1), William Hébert (entreprise
+individuelle, Québec), opérant sous le nom « Lume CRM », déclare par la
 présente un incident de confidentialité à risque sérieux.
 
 Nature de l'incident : [type]
@@ -119,11 +120,11 @@ Mesures prises pour atténuer le préjudice : [liste]
 Mesures pour éviter la répétition : [liste]
 Nombre de personnes notifiées + date prévue : [n / date]
 Coordonnées du responsable de la protection des renseignements personnels :
-  Nom : [DPO]
+  Nom : William Hébert
   Courriel : willhebert30@gmail.com
-  Téléphone : [tel]
+  Téléphone : +1 819-817-9526
 
-[Signature — nom, titre, date]
+William Hébert — Responsable de la protection des renseignements personnels — [date]
 ```
 
 ### 4.2 — Notification to OPC (Canada)
