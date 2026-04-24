@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import express from 'express';
-import { getSupabaseAdminClient } from '../../src/lib/supabaseAdmin';
+import { getSupabaseAdminClient } from './supabaseAdmin';
 import { supabaseUrl, supabaseAnonKey, supabaseServiceRoleKey } from './config';
 
 let adminClientCache: SupabaseClient | null = null;
