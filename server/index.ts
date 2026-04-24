@@ -147,6 +147,11 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Requested-With', 'X-API-Key'],
 }));
 
+// ── Build marker — bypasses ALL middleware to identify the live deploy ──
+// Bumped 2026-04-24T21:55Z to verify Railway picks up the CSRF webhook exemption fix.
+const BUILD_MARKER = 'csrf-webhook-fix-2026-04-24-2155';
+app.get('/api/__build', (_req, res) => res.json({ build: BUILD_MARKER, t: new Date().toISOString() }));
+
 // ── CSRF protection via custom header check ──
 // Browsers enforce that custom headers can only be sent via JS (XMLHttpRequest/fetch),
 // not via forms or img tags. This blocks cross-site form-based CSRF attacks.
