@@ -44,14 +44,13 @@ Commits land on `chore/hardening-2026-04-22` in this order:
 | `c52e5da` | Add `.github/workflows/ci.yml` — lint + test + prod audit on every PR. |
 
 **Action required out-of-band (the code can't do this):** rotate the four
-Supabase tokens that were in the purged scripts. The sbp_* values and the
-long service_role JWT remain in git history on `lume/main`. Go to
-https://supabase.com/dashboard/account/tokens and revoke:
-
-- `sbp_70d8ff687c60f2afeb73c8c6d4f59725d3cda70e` (seed + cleanup + fix)
-- `sbp_77cb0635508cf97391b74dc763156a0d2091a210` (test-full-flow)
-- `sbp_7399ae07779c3e9783915aadabbd946caca53788` (test-full-system)
-- Regenerate the service_role key in Settings → API.
+Supabase tokens that were in the purged scripts. The full values remain
+in git history on `lume/main` at commits touching the qa-seed/qa-cleanup/
+qa-fix/test-full-flow/test-full-system scripts — grep `sbp_` in that
+history to find them. Then go to
+<https://supabase.com/dashboard/account/tokens> and revoke the three
+management tokens (prefixed `sbp_70d8ff…`, `sbp_77cb06…`, `sbp_7399ae…`),
+plus regenerate the service_role key in Settings → API.
 
 ---
 
