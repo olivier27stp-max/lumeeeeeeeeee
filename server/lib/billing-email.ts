@@ -154,7 +154,7 @@ export async function sendPaymentReceipt(params: SendReceiptParams): Promise<{
     // Best-effort log
     try {
       await insertReceiptLog(admin, params, 'failed', null, err.message);
-    } catch {}
+    } catch (logErr) { console.error('[billing-email] insertReceiptLog failed:', logErr); }
     return { sent: false, skipped: false, error: err.message };
   }
 }

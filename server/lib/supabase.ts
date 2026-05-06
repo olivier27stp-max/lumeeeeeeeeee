@@ -72,7 +72,6 @@ export async function requireAuthedClient(req: express.Request, res: express.Res
 
 export async function isOrgMember(client: SupabaseClient, userId: string, orgId: string) {
   if (!userId || !orgId) return false;
-  if (userId === orgId) return true;
 
   const { data, error } = await client.rpc('has_org_membership', { p_user: userId, p_org: orgId });
   if (!error) return Boolean(data);
@@ -90,7 +89,6 @@ export async function isOrgMember(client: SupabaseClient, userId: string, orgId:
 
 export async function isOrgAdminOrOwner(client: SupabaseClient, userId: string, orgId: string) {
   if (!userId || !orgId) return false;
-  if (userId === orgId) return true;
 
   const { data: roleRow, error: roleError } = await client
     .from('memberships')

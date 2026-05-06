@@ -375,13 +375,18 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
             .eq('code', referral_code)
             .maybeSingle();
 
+          const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+          const referrerName = esc(String((referral as any)?.referrer?.full_name || 'Unknown'));
+          const companyEsc = esc(String(company_name || 'N/A'));
+          const planEsc = esc(String(plan.name));
+          const intervalEsc = esc(String(interval));
           await sendEmail({
             to: lumeOwnerEmail,
             subject: 'New referral conversion!',
-            html: `<h2>Referral Conversion</h2><p>Referrer: ${(referral as any)?.referrer?.full_name || 'Unknown'}</p><p>Company: ${company_name || 'N/A'}</p><p>Plan: ${plan.name} (${interval})</p>`,
+            html: `<h2>Referral Conversion</h2><p>Referrer: ${referrerName}</p><p>Company: ${companyEsc}</p><p>Plan: ${planEsc} (${intervalEsc})</p>`,
           });
         }
-      } catch {}
+      } catch (err) { console.error('[billing] referral conversion email failed:', err); }
     }
 
     // ── Send receipt email (if paid plan, non-blocking) ──
@@ -520,7 +525,7 @@ router.post('/billing/validate-promo', async (req, res) => {
       .maybeSingle();
 
     if (!promo) {
-      return res.status(404).json({ error: 'Invalid promo code.' });
+      return res.status(400).json({ error: 'Invalid promo code.' });
     }
 
     return res.json({ promo });
@@ -619,7 +624,9 @@ router.post('/billing/create-checkout-session', async (req, res) => {
       customer_update: { address: 'auto', name: 'auto' },
       payment_method_types: ['card'],
       payment_method_collection: 'always',
-      allow_promotion_codes: true,
+      // `allow_promotion_codes` is not supported when `mode: 'payment'` with
+      // inline `price_data`. Promo codes are already applied server-side via
+      // `amountCents` above, so re-enabling this would double-discount anyway.
       phone_number_collection: { enabled: true },
       line_items: [{
         price_data: {

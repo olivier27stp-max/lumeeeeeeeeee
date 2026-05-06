@@ -4,7 +4,7 @@
 **Lume CRM** — Production SaaS CRM for service businesses. Multi-tenant, org-scoped, built with Vite + React + Express + Supabase.
 
 ## Stack
-- **Frontend**: React 18 (SPA), Vite, TypeScript, TailwindCSS, React Router v6, Framer Motion, `@dnd-kit`
+- **Frontend**: React 19 (SPA), Vite, TypeScript, TailwindCSS, React Router v6, Framer Motion, `@dnd-kit`
 - **Backend**: Node.js Express server (`server/`) running on port 3002
 - **Database**: Supabase (PostgreSQL + Auth + Storage + Realtime)
 - **Payments**: Stripe + PayPal

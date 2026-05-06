@@ -1252,7 +1252,7 @@ async function handleCheckoutSessionCompleted(
       .update({ status: 'canceled', canceled_at: now.toISOString() })
       .eq('org_id', orgId)
       .eq('status', 'active');
-  } catch {}
+  } catch (err) { console.error('[webhook/checkout] cancel previous active subscription failed:', err); }
 
   // ── 6. Create subscription ──
   const periodEnd = new Date(now);
@@ -1311,7 +1311,7 @@ async function handleCheckoutSessionCompleted(
       country: billingCountry,
       postal_code: billingPostal,
     }, { onConflict: 'org_id' });
-  } catch {}
+  } catch (err) { console.error('[webhook/checkout] billing_profiles upsert failed:', err); }
 
   // Propagate address to org only if org fields are empty — never overwrite what the user set during onboarding.
   if (billingCountry || billingCity || billingPostal) {
@@ -1332,13 +1332,13 @@ async function handleCheckoutSessionCompleted(
       if (Object.keys(patch).length > 0) {
         await admin.from('orgs').update(patch).eq('id', orgId);
       }
-    } catch {}
+    } catch (err) { console.error('[webhook/checkout] propagate billing address to org failed:', err); }
   }
 
   // ── 8. Mark onboarding done ──
   try {
     await admin.from('profiles').update({ onboarding_done: true }).eq('id', userId);
-  } catch {}
+  } catch (err) { console.error('[webhook/checkout] mark onboarding_done failed:', err); }
 
   // ── 9. Record processed session (idempotency) ──
   try {

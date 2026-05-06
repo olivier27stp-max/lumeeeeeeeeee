@@ -799,7 +799,7 @@ export async function runSecurityMaintenance() {
     await refreshBlockedIPs();
 
     // 2. Run DB maintenance function
-    try { await admin.rpc('security_maintenance'); } catch {};
+    try { await admin.rpc('security_maintenance'); } catch (err) { console.error('[security] security_maintenance rpc failed:', err); }
 
     // 3. Cleanup local dedup caches
     const now = Date.now();

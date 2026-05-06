@@ -488,7 +488,7 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
           `,
         });
       }
-    } catch {}
+    } catch (err) { console.error('[invitations] resend email failed:', err); }
 
     return res.json({ message: 'Invitation resent.', invite_link: inviteLink });
   } catch (err: any) {

@@ -735,20 +735,38 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
       const initial = name.charAt(0).toUpperCase();
       const color = rep.team_color || '#6366f1';
       const statusDot = rep.tracking_status === 'active' ? '#22c55e' : '#f59e0b';
+      // Build via DOM API (not innerHTML) — name/team_name/tracking_status come from API and would be XSS vectors otherwise
       const el = document.createElement('div');
-      el.innerHTML = `
-        <div style="position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;">
-          <div style="position:relative;">
-            <div style="position:absolute;inset:-3px;border-radius:50%;background:${color}40;animation:rep-pulse 2s ease-out infinite;"></div>
-            <div style="width:36px;height:36px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:white;position:relative;z-index:1;">${initial}</div>
-            <div style="position:absolute;bottom:-1px;right:-1px;width:10px;height:10px;border-radius:50%;background:${statusDot};border:2px solid white;z-index:2;"></div>
-          </div>
-          <div style="margin-top:4px;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:2px 8px;white-space:nowrap;">
-            <p style="font-size:10px;font-weight:700;color:white;margin:0;line-height:1.3;">${name}</p>
-            <p style="font-size:8px;color:rgba(255,255,255,0.5);margin:0;line-height:1.3;">${rep.team_name || ''} · ${rep.tracking_status}</p>
-          </div>
-        </div>
-      `;
+      el.style.cssText = 'position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;';
+
+      const avatarWrap = document.createElement('div');
+      avatarWrap.style.position = 'relative';
+
+      const pulse = document.createElement('div');
+      pulse.style.cssText = `position:absolute;inset:-3px;border-radius:50%;background:${color}40;animation:rep-pulse 2s ease-out infinite;`;
+
+      const avatar = document.createElement('div');
+      avatar.style.cssText = `width:36px;height:36px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:white;position:relative;z-index:1;`;
+      avatar.textContent = initial;
+
+      const statusBadge = document.createElement('div');
+      statusBadge.style.cssText = `position:absolute;bottom:-1px;right:-1px;width:10px;height:10px;border-radius:50%;background:${statusDot};border:2px solid white;z-index:2;`;
+
+      avatarWrap.append(pulse, avatar, statusBadge);
+
+      const labelBox = document.createElement('div');
+      labelBox.style.cssText = 'margin-top:4px;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:2px 8px;white-space:nowrap;';
+
+      const nameP = document.createElement('p');
+      nameP.style.cssText = 'font-size:10px;font-weight:700;color:white;margin:0;line-height:1.3;';
+      nameP.textContent = name;
+
+      const metaP = document.createElement('p');
+      metaP.style.cssText = 'font-size:8px;color:rgba(255,255,255,0.5);margin:0;line-height:1.3;';
+      metaP.textContent = `${rep.team_name || ''} · ${rep.tracking_status}`;
+
+      labelBox.append(nameP, metaP);
+      el.append(avatarWrap, labelBox);
 
       const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
         .setLngLat([rep.longitude, rep.latitude])

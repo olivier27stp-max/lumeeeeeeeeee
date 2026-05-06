@@ -29,7 +29,6 @@ import notificationsRouter from './routes/notifications';
 import emailsRouter from './routes/emails';
 import integrationsRouter from './routes/integrations';
 import surveysRouter from './routes/surveys';
-// invoiceTemplatesRouter removed — no more invoice template system
 import emailTemplatesRouter from './routes/email-templates';
 import communicationsRouter from './routes/communications';
 import automationTestRouter from './routes/automation-test';
@@ -42,6 +41,7 @@ import teamSuggestionsRouter from './routes/team-suggestions';
 import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
 import requestFormsRouter from './routes/request-forms';
+import marketingRouter from './routes/marketing';
 import quoteTemplatesRouter from './routes/quote-templates';
 import taxesRouter from './routes/taxes';
 import featureFlagsRouter from './routes/feature-flags';
@@ -76,6 +76,9 @@ import { auditRequestMiddleware } from './lib/audit-middleware';
 import { initSentry, attachSentryErrorHandler } from './lib/sentry';
 
 const app = express();
+
+// Do not advertise Express — small reconnaissance signal removed.
+app.disable('x-powered-by');
 
 // ── Sentry (no-op if SENTRY_DSN not set) ──
 initSentry(app);
@@ -135,7 +138,7 @@ app.use(cors({
         if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
           return callback(null, true);
         }
-      } catch {}
+      } catch (err) { console.error('[CORS] origin parse failed:', err); }
     }
     // Block everything else
     console.warn(`[CORS] Blocked origin: ${origin}`);
@@ -283,7 +286,6 @@ app.use('/api', notificationsRouter);
 app.use('/api', messagesRouter);
 app.use('/api', emailsRouter);
 app.use('/api', integrationsRouter);
-// app.use('/api', invoiceTemplatesRouter); // Removed — no more invoice templates
 app.use('/api', emailTemplatesRouter);
 app.use('/api', communicationsRouter);
 app.use('/api', automationTestRouter);
@@ -327,7 +329,9 @@ app.use('/api', jobsRouter);
 app.use('/api', trackingRouter);
 const formSubmitLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — public form submissions
 app.use('/api/public/form', formSubmitLimiter);
+app.use('/api/public/book-demo', formSubmitLimiter);
 app.use('/api', requestFormsRouter);
+app.use('/api', marketingRouter);
 app.use('/api', quoteTemplatesRouter);
 app.use('/api', taxesRouter);
 app.use('/api', invitationsRouter);
@@ -385,14 +389,14 @@ app.post('/api/workflows/execute-action', async (req, res) => {
     try {
       const { twilioClient: tc, twilioPhoneNumber: tp } = await import('./lib/config.js');
       if (tc && tp) actionCtx.twilio = { client: tc, phoneNumber: tp };
-    } catch {}
+    } catch (err) { console.error('[automation] twilio init failed:', err); }
 
     // Resolve template variables from entity context
     let vars: Record<string, string> = {};
     if (context?.entityType && context?.entityId) {
       try {
         vars = await resolveEntityVariables(admin, auth.orgId, context.entityType, context.entityId);
-      } catch {}
+      } catch (err) { console.error('[automation] resolveEntityVariables failed:', err); }
     }
     // Merge any extra context vars
     if (context) {

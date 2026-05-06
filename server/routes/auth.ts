@@ -296,7 +296,7 @@ router.post('/auth/register-checkout', async (req, res) => {
             });
             const baseUrl = getBaseUrl();
             const verifyUrl = `${baseUrl}/verify-email?token=${newToken}&email=${encodeURIComponent(email)}`;
-            try { await sendVerificationEmail(email, verifyUrl, fullName.trim()); } catch {}
+            try { await sendVerificationEmail(email, verifyUrl, fullName.trim()); } catch (err) { console.error('[auth] sendVerificationEmail failed:', err); }
           }
           return res.json({ ok: true, existing: true, email_verified: !!meta.billing_email_verified });
         }
