@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { sendSafeError } from '../lib/error-handler';
 import { requireAuthedClient, isOrgMember, getServiceClient } from '../lib/supabase';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
-import { emailFrom, twilioClient, twilioPhoneNumber } from '../lib/config';
+import { emailFrom, twilioClient } from '../lib/config';
+import { getOrgSmsFromNumber, SmsNumberNotProvisionedError } from '../lib/twilioProvisioning';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { getInvoiceForOrg } from '../lib/payments';
 import {
@@ -163,7 +164,17 @@ async function sendPaymentSms(params: {
   paymentUrl: string;
   orgId: string;
 }) {
-  if (!twilioClient || !twilioPhoneNumber) return { sent: false, reason: 'Twilio not configured' };
+  if (!twilioClient) return { sent: false, reason: 'Twilio not configured' };
+
+  let fromNumber: string;
+  try {
+    fromNumber = await getOrgSmsFromNumber(params.orgId);
+  } catch (e) {
+    if (e instanceof SmsNumberNotProvisionedError) {
+      return { sent: false, reason: 'Organization has no SMS number provisioned' };
+    }
+    throw e;
+  }
 
   const company = await getCompanyInfo(params.orgId);
   const companyName = company.company_name || 'LUME';
@@ -174,7 +185,7 @@ async function sendPaymentSms(params: {
   try {
     const msg = await twilioClient.messages.create({
       body,
-      from: twilioPhoneNumber,
+      from: fromNumber,
       to: normalizeE164(params.clientPhone),
     });
     return { sent: true, sid: msg.sid };

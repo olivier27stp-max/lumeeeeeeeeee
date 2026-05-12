@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { getServiceClient } from '../lib/supabase';
-import { twilioClient, twilioPhoneNumber, twilioAuthToken, Twilio } from '../lib/config';
+import { twilioClient, twilioAuthToken, Twilio } from '../lib/config';
+import { getOrgSmsFromNumber, SmsNumberNotProvisionedError } from '../lib/twilioProvisioning';
 import { normalizeE164, findOrCreateConversation, resolvePublicBaseUrl } from '../lib/helpers';
 import { validate, messageSendSchema } from '../lib/validation';
 import { logSecurityEvent, sanitizeText, checkAnomalies, extractIP } from '../lib/security';
@@ -43,13 +44,27 @@ router.post('/messages/send', validate(messageSendSchema), async (req, res) => {
       });
     }
 
+    // Resolve THIS org's dedicated sending number (Jobber-style: no shared fallback)
+    let fromNumber: string;
+    try {
+      fromNumber = await getOrgSmsFromNumber(orgId);
+    } catch (e) {
+      if (e instanceof SmsNumberNotProvisionedError) {
+        return res.status(409).json({
+          error: 'Your organization does not have an SMS number yet. Provision one in Settings → Messaging.',
+          code: 'sms_not_provisioned',
+        });
+      }
+      throw e;
+    }
+
     // Find or create conversation
     const conversation = await findOrCreateConversation(serviceClient, orgId, normalizedPhone, client_id, client_name);
 
-    // Send via Twilio
+    // Send via Twilio from this org's own number
     const twilioMessage = await twilioClient.messages.create({
       body: message_text,
-      from: twilioPhoneNumber,
+      from: fromNumber,
       to: normalizedPhone,
     });
 
@@ -457,6 +472,86 @@ router.post('/messages/status', async (req, res) => {
   } catch (error: any) {
     console.error('Status callback error:', error);
     return res.status(500).json({ error: 'Failed to process status update' });
+  }
+});
+
+// GET /api/messages/twilio-diagnostic — verify webhook config for the org's number
+router.get('/messages/twilio-diagnostic', async (req, res) => {
+  try {
+    const authed = await requireAuthedClient(req, res);
+    if (!authed) return;
+    const { orgId } = authed;
+
+    const checks: Array<{ name: string; ok: boolean; detail: string }> = [];
+
+    const publicUrl = (process.env.PUBLIC_URL || process.env.TWILIO_WEBHOOK_BASE_URL || '').trim().replace(/\/$/, '');
+    checks.push({
+      name: 'PUBLIC_URL set',
+      ok: !!publicUrl && /^https?:\/\//.test(publicUrl) && !publicUrl.includes('localhost'),
+      detail: publicUrl || '(empty) — set PUBLIC_URL in .env.local',
+    });
+    checks.push({
+      name: 'TWILIO_AUTH_TOKEN set',
+      ok: !!twilioAuthToken,
+      detail: twilioAuthToken ? 'present' : 'missing — webhook signature validation will reject all inbound',
+    });
+    checks.push({
+      name: 'Twilio client initialized',
+      ok: !!twilioClient,
+      detail: twilioClient ? 'ok' : 'TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN missing/invalid',
+    });
+
+    const serviceClient = getServiceClient();
+    const { data: channel } = await serviceClient
+      .from('communication_channels')
+      .select('id, phone_number, status, metadata')
+      .eq('org_id', orgId)
+      .eq('channel_type', 'sms')
+      .eq('is_default', true)
+      .maybeSingle();
+
+    checks.push({
+      name: 'Active SMS channel in DB',
+      ok: !!channel && channel.status === 'active',
+      detail: channel ? `${channel.phone_number} (${channel.status})` : 'no SMS channel — provision one first',
+    });
+
+    let expectedSmsUrl = publicUrl ? `${publicUrl}/api/messages/inbound` : '';
+    let expectedStatusUrl = publicUrl ? `${publicUrl}/api/messages/status` : '';
+
+    if (channel && twilioClient && publicUrl) {
+      try {
+        const matches = await twilioClient.incomingPhoneNumbers.list({ phoneNumber: channel.phone_number, limit: 1 });
+        const twNumber = matches[0];
+        if (!twNumber) {
+          checks.push({ name: 'Number exists on Twilio account', ok: false, detail: 'not found — wrong Twilio account or number was released' });
+        } else {
+          checks.push({ name: 'Number exists on Twilio account', ok: true, detail: twNumber.sid });
+          checks.push({
+            name: 'Twilio smsUrl matches PUBLIC_URL',
+            ok: twNumber.smsUrl === expectedSmsUrl,
+            detail: `expected=${expectedSmsUrl} actual=${twNumber.smsUrl || '(empty)'}`,
+          });
+          checks.push({
+            name: 'Twilio statusCallback matches PUBLIC_URL',
+            ok: twNumber.statusCallback === expectedStatusUrl,
+            detail: `expected=${expectedStatusUrl} actual=${twNumber.statusCallback || '(empty)'}`,
+          });
+        }
+      } catch (e: any) {
+        checks.push({ name: 'Twilio API reachable', ok: false, detail: e?.message || 'unknown error' });
+      }
+    }
+
+    const allOk = checks.every((c) => c.ok);
+    return res.json({
+      ok: allOk,
+      summary: allOk ? 'Two-way SMS is fully configured.' : 'Configuration issues detected — see checks.',
+      expected: { smsUrl: expectedSmsUrl, statusCallback: expectedStatusUrl },
+      checks,
+    });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to run Twilio diagnostic.', '[messages/twilio-diagnostic]');
   }
 });
 

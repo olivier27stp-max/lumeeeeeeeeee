@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
-import { twilioClient, twilioPhoneNumber, emailFrom } from '../lib/config';
+import { twilioClient, emailFrom } from '../lib/config';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { normalizeE164, findOrCreateConversation } from '../lib/helpers';
 import { provisionSmsNumber, getOrgSmsChannel } from '../lib/twilioProvisioning';
@@ -59,11 +59,14 @@ router.post('/communications/send-sms', validate(sendSmsSchema), async (req, res
       }
     }
 
-    // Resolve from number: org channel or global fallback
+    // Each org has its own dedicated Twilio number — no shared fallback.
     const channel = await getOrgSmsChannel(orgId);
-    const fromNumber = channel?.phone_number || twilioPhoneNumber;
+    const fromNumber = channel?.phone_number;
     if (!fromNumber) {
-      return res.status(503).json({ error: 'No SMS number configured.' });
+      return res.status(409).json({
+        error: 'Your organization does not have an SMS number yet. Provision one in Settings → Messaging.',
+        code: 'sms_not_provisioned',
+      });
     }
 
     // Run conversation lookup in parallel with Twilio send — independent DB round-trip
