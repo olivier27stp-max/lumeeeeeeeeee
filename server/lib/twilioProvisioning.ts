@@ -16,6 +16,11 @@ export async function provisionSmsNumber(orgId: string, options?: {
     throw new Error('Twilio is not configured.');
   }
 
+  const publicUrl = (process.env.PUBLIC_URL || process.env.TWILIO_WEBHOOK_BASE_URL || '').trim().replace(/\/$/, '');
+  if (!publicUrl || !/^https?:\/\//.test(publicUrl) || publicUrl.includes('localhost')) {
+    throw new Error('PUBLIC_URL must be set to a publicly reachable https:// URL before provisioning a Twilio number (got: ' + (publicUrl || 'empty') + ').');
+  }
+
   // Resolve country + area code from org profile when not explicitly passed.
   const resolved = await resolveRegionForOrg(orgId);
   const country = (options?.country || resolved.country || 'CA').toUpperCase();
@@ -33,9 +38,9 @@ export async function provisionSmsNumber(orgId: string, options?: {
   // Purchase the number with webhooks pre-wired
   const purchased = await twilioClient.incomingPhoneNumbers.create({
     phoneNumber: candidate.phoneNumber,
-    smsUrl: `${process.env.PUBLIC_URL || ''}/api/messages/inbound`,
+    smsUrl: `${publicUrl}/api/messages/inbound`,
     smsMethod: 'POST',
-    statusCallback: `${process.env.PUBLIC_URL || ''}/api/messages/status`,
+    statusCallback: `${publicUrl}/api/messages/status`,
     statusCallbackMethod: 'POST',
     friendlyName: `Lume-${orgId.slice(0, 8)}`,
   });
@@ -80,6 +85,25 @@ export async function getOrgSmsChannel(orgId: string) {
     .eq('status', 'active')
     .maybeSingle();
   return data;
+}
+
+/**
+ * Return the org's E.164 sending number, or throw a typed error if missing.
+ * Multi-tenant model: every org has its OWN Twilio number — no shared fallback.
+ * Callers should catch SmsNumberNotProvisionedError and return HTTP 409 with code.
+ */
+export class SmsNumberNotProvisionedError extends Error {
+  code = 'sms_not_provisioned' as const;
+  constructor(orgId: string) {
+    super(`Organization ${orgId} has no active Twilio SMS number. Provision one before sending.`);
+    this.name = 'SmsNumberNotProvisionedError';
+  }
+}
+
+export async function getOrgSmsFromNumber(orgId: string): Promise<string> {
+  const channel = await getOrgSmsChannel(orgId);
+  if (!channel?.phone_number) throw new SmsNumberNotProvisionedError(orgId);
+  return channel.phone_number;
 }
 
 // ─── Region resolution ─────────────────────────────────────────────────

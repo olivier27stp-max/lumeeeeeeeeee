@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
-import { emailFrom, twilioClient, twilioPhoneNumber, getBaseUrl } from '../lib/config';
+import { emailFrom, twilioClient, getBaseUrl } from '../lib/config';
+import { getOrgSmsFromNumber, SmsNumberNotProvisionedError } from '../lib/twilioProvisioning';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
 import { eventBus } from '../lib/eventBus';
@@ -405,9 +406,22 @@ router.post('/quotes/send-sms', async (req, res) => {
 
     const smsBody = `${companyName} sent you a quote (#${quote.quote_number}) for ${totalFormatted}. View it here: ${quoteUrl}`;
 
+    let fromNumber: string;
+    try {
+      fromNumber = await getOrgSmsFromNumber(quote.org_id);
+    } catch (e) {
+      if (e instanceof SmsNumberNotProvisionedError) {
+        return res.status(409).json({
+          error: 'Your organization does not have an SMS number yet. Provision one in Settings → Messaging.',
+          code: 'sms_not_provisioned',
+        });
+      }
+      throw e;
+    }
+
     const twilioMsg = await twilioClient.messages.create({
       body: smsBody,
-      from: twilioPhoneNumber,
+      from: fromNumber,
       to: formattedPhone,
     });
 
