@@ -1,4 +1,5 @@
 # ── Stage 1: Build ──────────────────────────────────────────────
+# Cache bust: 2026-05-12-v2
 FROM node:20-alpine AS builder
 WORKDIR /app
 
@@ -7,6 +8,15 @@ RUN npm ci
 
 COPY . .
 
+# These VITE_-prefixed vars are intentionally embedded into the client bundle
+# at build time. They are PUBLIC values by design:
+#  - VITE_SUPABASE_ANON_KEY: anon-role JWT (RLS-protected, designed for browser use)
+#  - VITE_GOOGLE_MAPS_API_KEY: HTTP-referer restricted in Google Cloud Console
+#  - VITE_MAPBOX_TOKEN: domain restricted in Mapbox dashboard
+# Docker's SecretsUsedInArgOrEnv linter flags these as false positives — Vite
+# REQUIRES ENV vars at build time to inline them into the client. Real secrets
+# (SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY, etc.) are never set here.
+# hadolint ignore=DL3042
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 ARG VITE_GOOGLE_MAPS_API_KEY
