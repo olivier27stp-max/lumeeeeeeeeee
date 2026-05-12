@@ -60,11 +60,22 @@ export async function fetchTeamList(): Promise<{ members: OrgMember[]; invitatio
   return res.json();
 }
 
-export async function sendInvitation(email: string, role: MemberRole): Promise<{ invitation: Invitation; invite_link: string }> {
+export type InviteScope = 'self' | 'assigned' | 'team' | 'company';
+
+export async function sendInvitation(
+  email: string,
+  role: MemberRole,
+  options?: { scope?: InviteScope; team_id?: string | null },
+): Promise<{ invitation: Invitation; invite_link: string }> {
   const res = await fetch(`${API_BASE}/invitations/send`, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ email, role }),
+    body: JSON.stringify({
+      email,
+      role,
+      scope: options?.scope,
+      team_id: options?.team_id ?? null,
+    }),
   });
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to send invitation.');
   return res.json();

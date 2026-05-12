@@ -4,8 +4,67 @@ import { z } from 'zod';
 import { validate, passwordSchema } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
 import { getBaseUrl } from '../lib/config';
+import { redisRateLimit } from '../lib/rate-limiter';
+import { extractIP } from '../lib/security';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
+
+// ─── Helpers ────────────────────────────────────────────────────
+
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function timingSafeCompare(a: string, b: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  } catch {
+    return false;
+  }
+}
+
+async function randomSleep() {
+  await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
+}
+
+/**
+ * Look up an invitation by either token_hash (new path) or plaintext token
+ * (legacy backfill window). Returns the row only if a constant-time compare
+ * against the stored hash succeeds.
+ */
+async function findInvitationByToken(admin: ReturnType<typeof getServiceClient>, token: string) {
+  const tokenHash = hashToken(token);
+  let { data: invitation } = await admin
+    .from('invitations')
+    .select('*')
+    .eq('token_hash', tokenHash)
+    .maybeSingle();
+
+  if (!invitation) {
+    // Legacy: rows that pre-date the hash column still have plaintext.
+    const { data: legacy } = await admin
+      .from('invitations')
+      .select('*')
+      .eq('token', token)
+      .maybeSingle();
+    invitation = legacy || null;
+  }
+
+  if (!invitation) return null;
+
+  const expected = invitation.token_hash || (invitation.token ? hashToken(invitation.token) : '');
+  if (!timingSafeCompare(tokenHash, expected)) return null;
+  return invitation;
+}
+
+// Per-IP rate limit for invitation accept/verify (defeats token brute-force)
+const invitationLimiter = redisRateLimit({
+  preset: 'auth',
+  keyFn: (req) => `inv:${extractIP(req)}`,
+});
 
 // ─── Validation schemas ──────────────────────────────────────────
 
@@ -156,8 +215,10 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
       return res.status(409).json({ error: 'An invitation is already pending for this email.' });
     }
 
-    // Generate secure token
+    // Generate secure token — store ONLY the SHA-256 hash. Plaintext is sent
+    // in the email link and never persisted server-side.
     const token = crypto.randomBytes(32).toString('hex');
+    const token_hash = hashToken(token);
 
     // Create invitation
     const { data: invitation, error: createError } = await admin
@@ -170,7 +231,8 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
         team_id: req.body.team_id || null,
         department_id: req.body.department_id || null,
         custom_permissions: req.body.custom_permissions || {},
-        token,
+        token: null,
+        token_hash,
         invited_by: auth.user.id,
         status: 'pending',
         // Compliance: 48h expiry (Loi 25 — invitation tokens short-lived)
@@ -184,39 +246,30 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
       return res.status(500).json({ error: 'Failed to create invitation.' });
     }
 
-    // Get org name for the email
-    const { data: org } = await admin
-      .from('orgs')
-      .select('name')
-      .eq('id', auth.orgId)
-      .maybeSingle();
+    // Get org + branding + inviter info in parallel
+    const [{ data: org }, { data: branding }, { data: inviter }] = await Promise.all([
+      admin.from('orgs').select('name').eq('id', auth.orgId).maybeSingle(),
+      admin.from('company_settings').select('company_name, logo_url, primary_color, website').eq('org_id', auth.orgId).maybeSingle(),
+      admin.from('profiles').select('full_name').eq('id', auth.user.id).maybeSingle(),
+    ]);
 
     const orgName = org?.name || 'Your organization';
     const baseUrl = getBaseUrl();
     const inviteLink = `${baseUrl}/invite/${token}`;
 
-    // Send invitation email via SMTP
+    // Send invitation email via SMTP, branded with the org's company_settings
     try {
       const { sendEmail, isMailerConfigured } = await import('../lib/mailer');
       if (isMailerConfigured()) {
-        await sendEmail({
-          to: email,
-          subject: `You've been invited to join ${orgName} on Lume CRM`,
-          html: `
-            <div style="font-family: -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-              <h1 style="font-size: 20px; font-weight: 700; margin-bottom: 16px;">You're invited!</h1>
-              <p style="font-size: 14px; color: #555; line-height: 1.6;">
-                You've been invited to join <strong>${orgName}</strong> as a <strong>${role}</strong> on Lume CRM.
-              </p>
-              <a href="${inviteLink}" style="display: inline-block; margin-top: 24px; padding: 12px 28px; background: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">
-                Accept Invitation
-              </a>
-              <p style="font-size: 12px; color: #999; margin-top: 24px;">
-                This invitation expires in 7 days. If you didn't expect this email, you can safely ignore it.
-              </p>
-            </div>
-          `,
+        const { renderInvitationEmail } = await import('../lib/email-templates/invitation');
+        const { subject, html, text } = renderInvitationEmail({
+          orgName,
+          role,
+          inviteLink,
+          inviterName: inviter?.full_name || null,
+          branding,
         });
+        await sendEmail({ to: email, subject, html, text });
       }
     } catch (emailErr: any) {
       console.error('[invitations/send] email error:', emailErr.message);
@@ -235,20 +288,15 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
 
 // ─── POST /invitations/accept — Accept an invitation ────────────
 
-router.post('/invitations/accept', validate(acceptInviteSchema), async (req, res) => {
+router.post('/invitations/accept', invitationLimiter, validate(acceptInviteSchema), async (req, res) => {
   try {
     const { token, password, full_name } = req.body;
     const admin = getServiceClient();
 
-    // Find invitation by token
-    const { data: invitation, error: findError } = await admin
-      .from('invitations')
-      .select('*')
-      .eq('token', token)
-      .eq('status', 'pending')
-      .maybeSingle();
-
-    if (findError || !invitation) {
+    // Look up by token_hash (constant-time compare inside helper)
+    const invitation = await findInvitationByToken(admin, token);
+    if (!invitation || invitation.status !== 'pending') {
+      await randomSleep();
       return res.status(404).json({ error: 'Invitation not found or already used.' });
     }
 
@@ -258,10 +306,95 @@ router.post('/invitations/accept', validate(acceptInviteSchema), async (req, res
         .from('invitations')
         .update({ status: 'expired' })
         .eq('id', invitation.id);
+      await randomSleep();
       return res.status(410).json({ error: 'This invitation has expired.' });
     }
 
-    // Create the user via Supabase Auth admin API
+    // Defense-in-depth: if a user with this email already exists, require
+    // them to be authenticated AS THAT USER before we attach them to the org.
+    // Otherwise an attacker who has the token + knows the victim's email can
+    // silently join the victim's account to their org without any password
+    // challenge.
+    let existingUserId: string | null = null;
+    try {
+      const { data: rpcData } = await admin.rpc('get_user_id_by_email', {
+        p_email: invitation.email,
+      });
+      if (rpcData) {
+        existingUserId = typeof rpcData === 'string' ? rpcData : (rpcData as any)?.id || null;
+      }
+    } catch (err) {
+      console.error('[invitations/accept] get_user_id_by_email rpc failed:', err);
+    }
+
+    if (existingUserId) {
+      // The invitation is for an account that already exists. Require the
+      // caller to be authenticated as that user — otherwise we'd be silently
+      // attaching their identity to a new org with no password challenge.
+      const authHeader = req.headers.authorization || '';
+      const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+      let callerUserId: string | null = null;
+      if (bearer) {
+        try {
+          const { data: u } = await admin.auth.getUser(bearer);
+          callerUserId = u?.user?.id || null;
+        } catch (err) {
+          console.error('[invitations/accept] getUser(bearer) failed:', err);
+        }
+      }
+
+      if (!callerUserId || callerUserId !== existingUserId) {
+        await randomSleep();
+        return res.status(401).json({
+          error: 'An account already exists for this email. Please sign in first, then re-open the invitation link.',
+          requires_login: true,
+          email: invitation.email,
+        });
+      }
+
+      // Authenticated as the invited user — attach to org if not already there.
+      const { data: existingMem } = await admin
+        .from('memberships')
+        .select('user_id, status')
+        .eq('user_id', existingUserId)
+        .eq('org_id', invitation.org_id)
+        .maybeSingle();
+
+      if (existingMem) {
+        await admin
+          .from('invitations')
+          .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+          .eq('id', invitation.id);
+        return res.json({ message: 'You are already a member of this organization.' });
+      }
+
+      const { error: memError } = await admin
+        .from('memberships')
+        .insert({
+          user_id: existingUserId,
+          org_id: invitation.org_id,
+          role: invitation.role,
+          scope: invitation.scope || 'self',
+          team_id: invitation.team_id || null,
+          department_id: invitation.department_id || null,
+          permissions: invitation.custom_permissions || {},
+          status: 'active',
+        });
+
+      if (memError) {
+        console.error('[invitations/accept] membership error:', memError.message);
+        return res.status(500).json({ error: 'Failed to add membership.' });
+      }
+
+      await admin
+        .from('invitations')
+        .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+        .eq('id', invitation.id);
+
+      return res.json({ message: 'Invitation accepted. You have been added to the organization.' });
+    }
+
+    // No existing user — create one with the provided password.
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email: invitation.email,
       password,
@@ -270,58 +403,6 @@ router.post('/invitations/accept', validate(acceptInviteSchema), async (req, res
     });
 
     if (authError) {
-      // If user already exists, try to get their ID
-      if (authError.message?.includes('already been registered') || authError.message?.includes('already exists')) {
-        // User exists — check if they're already a member
-        const { data: existingUsers } = await admin.auth.admin.listUsers();
-        const existingUser = existingUsers?.users?.find(
-          (u: any) => u.email?.toLowerCase() === invitation.email.toLowerCase()
-        );
-
-        if (!existingUser) {
-          return res.status(400).json({ error: 'User account issue. Please contact support.' });
-        }
-
-        // Check if already a member of this org
-        const { data: existingMem } = await admin
-          .from('memberships')
-          .select('user_id')
-          .eq('user_id', existingUser.id)
-          .eq('org_id', invitation.org_id)
-          .maybeSingle();
-
-        if (existingMem) {
-          // Already a member — mark invitation as accepted
-          await admin
-            .from('invitations')
-            .update({ status: 'accepted', accepted_at: new Date().toISOString() })
-            .eq('id', invitation.id);
-          return res.json({ message: 'You are already a member of this organization.' });
-        }
-
-        // Add them as a member
-        const { error: memError } = await admin
-          .from('memberships')
-          .insert({
-            user_id: existingUser.id,
-            org_id: invitation.org_id,
-            role: invitation.role,
-            status: 'active',
-          });
-
-        if (memError) {
-          console.error('[invitations/accept] membership error:', memError.message);
-          return res.status(500).json({ error: 'Failed to add membership.' });
-        }
-
-        await admin
-          .from('invitations')
-          .update({ status: 'accepted', accepted_at: new Date().toISOString() })
-          .eq('id', invitation.id);
-
-        return res.json({ message: 'Invitation accepted. You have been added to the organization.' });
-      }
-
       console.error('[invitations/accept] auth error:', authError.message);
       return res.status(500).json({ error: 'Failed to create account.' });
     }
@@ -372,26 +453,28 @@ router.post('/invitations/accept', validate(acceptInviteSchema), async (req, res
 
 // ─── GET /invitations/verify/:token — Verify invitation token ───
 
-router.get('/invitations/verify/:token', async (req, res) => {
+router.get('/invitations/verify/:token', invitationLimiter, async (req, res) => {
   try {
     const { token } = req.params;
+    if (!token || !/^[a-f0-9]{64}$/.test(token)) {
+      await randomSleep();
+      return res.status(404).json({ error: 'Invitation not found.' });
+    }
     const admin = getServiceClient();
 
-    const { data: invitation, error } = await admin
-      .from('invitations')
-      .select('id, email, role, org_id, status, expires_at')
-      .eq('token', token)
-      .maybeSingle();
-
-    if (error || !invitation) {
+    const invitation = await findInvitationByToken(admin, token);
+    if (!invitation) {
+      await randomSleep();
       return res.status(404).json({ error: 'Invitation not found.' });
     }
 
     if (invitation.status !== 'pending') {
+      await randomSleep();
       return res.status(410).json({ error: 'This invitation has already been used.', status: invitation.status });
     }
 
     if (new Date(invitation.expires_at) < new Date()) {
+      await randomSleep();
       return res.status(410).json({ error: 'This invitation has expired.' });
     }
 
@@ -443,12 +526,14 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
       return res.status(404).json({ error: 'Invitation not found.' });
     }
 
-    // Generate new token and extend expiry
+    // Generate new token and extend expiry. Store only the hash.
     const newToken = crypto.randomBytes(32).toString('hex');
+    const newTokenHash = hashToken(newToken);
     const { error: updateError } = await admin
       .from('invitations')
       .update({
-        token: newToken,
+        token: null,
+        token_hash: newTokenHash,
         // Compliance: 48h expiry (Loi 25 — invitation tokens short-lived)
         expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
         status: 'pending',
@@ -459,33 +544,32 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
       return res.status(500).json({ error: 'Failed to resend invitation.' });
     }
 
-    // Re-send email (same logic as send)
-    const { data: org } = await admin
-      .from('orgs')
-      .select('name')
-      .eq('id', auth.orgId)
-      .maybeSingle();
+    // Re-send branded email (same template as initial send)
+    const [{ data: org }, { data: branding }, { data: inviter }] = await Promise.all([
+      admin.from('orgs').select('name').eq('id', auth.orgId).maybeSingle(),
+      admin.from('company_settings').select('company_name, logo_url, primary_color, website').eq('org_id', auth.orgId).maybeSingle(),
+      admin.from('profiles').select('full_name').eq('id', auth.user.id).maybeSingle(),
+    ]);
 
     const baseUrl = getBaseUrl();
     const inviteLink = `${baseUrl}/invite/${newToken}`;
     try {
       const { sendEmail, isMailerConfigured } = await import('../lib/mailer');
       if (isMailerConfigured()) {
+        const { renderInvitationEmail } = await import('../lib/email-templates/invitation');
+        const orgName = org?.name || 'an organization';
+        const rendered = renderInvitationEmail({
+          orgName,
+          role: invitation.role,
+          inviteLink,
+          inviterName: inviter?.full_name || null,
+          branding,
+        });
         await sendEmail({
           to: invitation.email,
-          subject: `Reminder: You've been invited to ${org?.name || 'an organization'} on Lume CRM`,
-          html: `
-            <div style="font-family: -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-              <h1 style="font-size: 20px; font-weight: 700;">Reminder: You're invited!</h1>
-              <p style="font-size: 14px; color: #555; line-height: 1.6;">
-                You've been invited to join <strong>${org?.name || 'an organization'}</strong> on Lume CRM.
-              </p>
-              <a href="${inviteLink}" style="display: inline-block; margin-top: 24px; padding: 12px 28px; background: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">
-                Accept Invitation
-              </a>
-              <p style="font-size: 12px; color: #999; margin-top: 24px;">This invitation expires in 7 days.</p>
-            </div>
-          `,
+          subject: `Reminder: ${rendered.subject}`,
+          html: rendered.html,
+          text: rendered.text,
         });
       }
     } catch {}
@@ -560,6 +644,19 @@ router.post('/invitations/update-role', validate(updateMemberRoleSchema), async 
       return res.status(403).json({ error: 'Cannot change the owner\'s role.' });
     }
 
+    // Only the org owner can demote another admin
+    if (membership.role === 'admin' && role !== 'admin') {
+      const { data: callerMembership } = await admin
+        .from('memberships')
+        .select('role')
+        .eq('user_id', auth.user.id)
+        .eq('org_id', auth.orgId)
+        .maybeSingle();
+      if (callerMembership?.role !== 'owner') {
+        return res.status(403).json({ error: 'Only the organization owner can demote another admin.' });
+      }
+    }
+
     const updateData: Record<string, any> = { role };
     if (req.body.scope) updateData.scope = req.body.scope;
     if (req.body.team_id !== undefined) updateData.team_id = req.body.team_id || null;
@@ -618,6 +715,19 @@ router.post('/invitations/remove-member', validate(removeMemberSchema), async (r
       return res.status(403).json({ error: 'Cannot remove the organization owner.' });
     }
 
+    // Only owner can remove another admin
+    if (membership.role === 'admin') {
+      const { data: callerMembership } = await admin
+        .from('memberships')
+        .select('role')
+        .eq('user_id', auth.user.id)
+        .eq('org_id', auth.orgId)
+        .maybeSingle();
+      if (callerMembership?.role !== 'owner') {
+        return res.status(403).json({ error: 'Only the organization owner can remove another admin.' });
+      }
+    }
+
     // Set status to suspended instead of deleting
     const { error } = await admin
       .from('memberships')
@@ -627,6 +737,14 @@ router.post('/invitations/remove-member', validate(removeMemberSchema), async (r
 
     if (error) {
       return res.status(500).json({ error: 'Failed to remove member.' });
+    }
+
+    // Force the removed member's session to end so they cannot continue using
+    // their cached JWT until natural expiry.
+    try {
+      await admin.auth.admin.signOut(userId);
+    } catch (signOutErr: any) {
+      console.warn('[invitations/remove-member] signOut failed (non-fatal):', signOutErr?.message);
     }
 
     return res.json({ message: 'Member removed from organization.' });

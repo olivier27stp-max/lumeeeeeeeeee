@@ -135,7 +135,6 @@ import D2DSettingsGeneral from './pages/D2DSettingsGeneral';
 import D2DSettingsTeams from './pages/D2DSettingsTeams';
 import D2DOnboarding from './pages/D2DOnboarding';
 import SettingsRoles from './pages/SettingsRoles';
-import SettingsUsers from './pages/SettingsUsers';
 import PermissionGate from './components/PermissionGate';
 import ModuleGate from './components/ModuleGate';
 import { useModuleAccess } from './hooks/useModuleAccess';
@@ -1182,7 +1181,7 @@ function AuthenticatedApp({
                     {/* NOTE: /quotes/presets and /quotes/templates moved before /quotes/:id to prevent route conflict */}
                     <Route path="/settings/taxes" element={<Gated permission="settings.update"><PageWrapper><TaxSettings /></PageWrapper></Gated>} />
                     <Route path="/settings/roles" element={<Gated permission="users.update_role"><PageWrapper><SettingsRoles /></PageWrapper></Gated>} />
-                    <Route path="/settings/users" element={<Gated permission="users.invite"><PageWrapper><SettingsUsers /></PageWrapper></Gated>} />
+                    <Route path="/settings/users" element={<Navigate to="/settings/team" replace />} />
                     <Route path="/apps/callback" element={<Gated permission="integrations.update"><OAuthCallback /></Gated>} />
                     {/* BillingCheckout removed — upgrade goes through /checkout */}
                     <Route path="/settings/referrals" element={<Gated permission="settings.read"><PageWrapper><ReferFriend /></PageWrapper></Gated>} />
