@@ -41,7 +41,10 @@ import {
   type OrgMember,
   type Invitation,
   type MemberRole,
+  type InviteScope,
 } from '../lib/invitationsApi';
+import { supabase } from '../lib/supabase';
+import { getCurrentOrgId } from '../lib/orgApi';
 
 // ── Constants ────────────────────────────────────────────────────
 const ROLE_CONFIG: Record<MemberRole, { label_en: string; label_fr: string; icon: typeof Crown; color: string; badge: string }> = {
@@ -132,9 +135,13 @@ export default function ManageTeam() {
     return () => document.removeEventListener('click', handler);
   }, [openMenuId]);
 
-  const handleInvite = async (email: string, role: MemberRole) => {
+  const handleInvite = async (
+    email: string,
+    role: MemberRole,
+    options?: { scope?: InviteScope; team_id?: string | null },
+  ) => {
     try {
-      const result = await sendInvitation(email, role);
+      const result = await sendInvitation(email, role, options);
       toast.success(t.manageTeam.invitationSent);
       setShowInviteModal(false);
 
@@ -570,21 +577,60 @@ const MemberRow: React.FC<MemberRowProps> = ({
 };
 
 // ── Invite Form Component ────────────────────────────────────────
+const SCOPE_OPTIONS: { value: InviteScope; label_en: string; label_fr: string; desc_en: string; desc_fr: string }[] = [
+  { value: 'self',     label_en: 'Self only',  label_fr: 'Soi-même seulement', desc_en: 'Only their own records', desc_fr: 'Uniquement ses propres enregistrements' },
+  { value: 'team',     label_en: 'Team',       label_fr: 'Équipe',             desc_en: 'Records belonging to their team', desc_fr: 'Enregistrements de leur équipe' },
+  { value: 'company',  label_en: 'Entire company', label_fr: 'Toute la compagnie', desc_en: 'All records in the organization', desc_fr: 'Tous les enregistrements de l\'organisation' },
+];
+
+function defaultScopeForRole(role: MemberRole): InviteScope {
+  if (role === 'admin') return 'company';
+  if (role === 'sales_rep') return 'team';
+  return 'self';
+}
+
 function InviteForm({
   language,
   onSend,
   onCancel,
 }: {
   language: string;
-  onSend: (email: string, role: MemberRole) => void;
+  onSend: (email: string, role: MemberRole, options?: { scope?: InviteScope; team_id?: string | null }) => void;
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
   const isFr = language === 'fr';
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<MemberRole>('technician');
+  const [scope, setScope] = useState<InviteScope>('self');
+  const [teamId, setTeamId] = useState<string | null>(null);
+  const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
   const [sending, setSending] = useState(false);
   const roleDescriptions = isFr ? ROLE_DESCRIPTIONS_FR : ROLE_DESCRIPTIONS_EN;
+
+  // Auto-pick a sensible scope when role changes (user can still override)
+  useEffect(() => {
+    setScope(defaultScopeForRole(role));
+    if (role === 'admin') setTeamId(null);
+  }, [role]);
+
+  // Load teams for the current org so we can assign at invite time
+  useEffect(() => {
+    (async () => {
+      try {
+        const orgId = await getCurrentOrgId();
+        if (!orgId) return;
+        const { data } = await supabase
+          .from('teams')
+          .select('id, name')
+          .eq('org_id', orgId)
+          .order('name', { ascending: true });
+        setTeams((data || []) as Array<{ id: string; name: string }>);
+      } catch (err) {
+        console.warn('Could not load teams:', err);
+      }
+    })();
+  }, []);
 
   const handleSubmit = () => {
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
@@ -592,9 +638,14 @@ function InviteForm({
       return;
     }
     setSending(true);
-    onSend(email.trim(), role);
-    // Parent will close modal on success; setSending will be cleaned up on unmount
+    onSend(email.trim(), role, {
+      scope,
+      team_id: scope === 'team' ? teamId : null,
+    });
+    // Parent closes modal on success; setSending cleared on unmount
   };
+
+  const showTeamPicker = scope === 'team' && role !== 'admin';
 
   return (
     <div className="space-y-5">
@@ -642,6 +693,60 @@ function InviteForm({
           })}
         </div>
       </div>
+
+      {/* Scope picker — hidden for admins (always "company") */}
+      {role !== 'admin' && (
+        <div>
+          <label className="text-xs font-medium text-text-tertiary">
+            {isFr ? 'Portée d\'accès' : 'Access scope'}
+          </label>
+          <div className="space-y-2 mt-2">
+            {SCOPE_OPTIONS.map((s) => (
+              <button
+                key={s.value}
+                type="button"
+                onClick={() => setScope(s.value)}
+                className={cn(
+                  'w-full flex items-center gap-3 p-3 rounded-2xl border transition-all text-left',
+                  scope === s.value ? 'border-primary bg-primary/5' : 'border-outline-subtle hover:border-outline hover:bg-surface-secondary/40'
+                )}
+              >
+                <div>
+                  <span className="text-[13px] font-semibold text-text-primary">
+                    {isFr ? s.label_fr : s.label_en}
+                  </span>
+                  <p className="text-[11px] text-text-tertiary">{isFr ? s.desc_fr : s.desc_en}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Team picker — only when scope=team */}
+      {showTeamPicker && (
+        <div>
+          <label className="text-xs font-medium text-text-tertiary">
+            {isFr ? 'Équipe à assigner' : 'Assign to team'}
+          </label>
+          {teams.length === 0 ? (
+            <p className="text-[12px] text-text-tertiary mt-1.5 italic">
+              {isFr ? 'Aucune équipe créée. Créez-en une dans Paramètres → Équipes.' : 'No teams created yet. Create one in Settings → Teams.'}
+            </p>
+          ) : (
+            <select
+              value={teamId || ''}
+              onChange={(e) => setTeamId(e.target.value || null)}
+              className="glass-input w-full mt-1.5"
+            >
+              <option value="">{isFr ? '— Aucune équipe —' : '— No team —'}</option>
+              {teams.map((tm) => (
+                <option key={tm.id} value={tm.id}>{tm.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
         <button className="glass-button-ghost" onClick={onCancel}>

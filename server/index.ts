@@ -161,6 +161,11 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Requested-With', 'X-API-Key'],
 }));
 
+// ── Build marker — bypasses ALL middleware to identify the live deploy ──
+// Bumped 2026-04-24T21:55Z to verify Railway picks up the CSRF webhook exemption fix.
+const BUILD_MARKER = 'csrf-webhook-fix-v2-mountpath-aware-2026-04-24-2200';
+app.get('/api/__build', (_req, res) => res.json({ build: BUILD_MARKER, t: new Date().toISOString() }));
+
 // ── CSRF protection via custom header check ──
 // Browsers enforce that custom headers can only be sent via JS (XMLHttpRequest/fetch),
 // not via forms or img tags. This blocks cross-site form-based CSRF attacks.
@@ -170,6 +175,7 @@ app.use(cors({
 // via provider-specific signature validation (e.g. x-twilio-signature, stripe-signature).
 // Paths are relative to the /api mount point — Express strips the prefix
 // from req.path inside a mounted middleware, so DO NOT include /api here.
+// (e.g. '/messages/inbound', NOT '/api/messages/inbound').
 const WEBHOOK_PATHS_EXEMPT_FROM_CSRF = [
   '/messages/inbound',
   '/messages/status',
@@ -452,29 +458,13 @@ app.post('/api/workflows/execute-action', async (req, res) => {
   }
 });
 
-// SPA fallback — serve index.html with an in-memory cache invalidated by
-// the file mtime so a redeploy (dist/ rewritten) is picked up automatically
-// without re-reading from disk on every navigation.
-import fs from 'fs';
-const indexHtmlPath = path.join(distPath, 'index.html');
-let indexHtmlCache: { mtimeMs: number; body: string } | null = null;
-function loadIndexHtml(): string | null {
-  try {
-    const stat = fs.statSync(indexHtmlPath);
-    if (!indexHtmlCache || indexHtmlCache.mtimeMs !== stat.mtimeMs) {
-      indexHtmlCache = { mtimeMs: stat.mtimeMs, body: fs.readFileSync(indexHtmlPath, 'utf-8') };
-    }
-    return indexHtmlCache.body;
-  } catch {
-    return null;
-  }
-}
+// SPA fallback — serve index.html fresh from disk every time.
+// Reading once at boot caused stale HTML referencing old hashed assets
+// after a redeploy (dist/ rewritten but template in memory).
 app.get('*', (_req, res, next) => {
   if (_req.path.startsWith('/api')) return next();
-  res.set('Cache-Control', 'no-cache, must-revalidate');
-  const body = loadIndexHtml();
-  if (body == null) return res.sendFile(indexHtmlPath);
-  res.type('html').send(body);
+  res.set('Cache-Control', 'no-store, must-revalidate');
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 // Health check endpoint
 app.get('/api/health', (_req, res) => {

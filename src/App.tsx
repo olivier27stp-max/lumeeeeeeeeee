@@ -96,6 +96,10 @@ import OAuthCallback from './pages/OAuthCallback';
 import DispatchMap from './pages/DispatchMap';
 import OnboardingFlow from './pages/OnboardingFlow';
 import CheckoutSuccess from './pages/CheckoutSuccess';
+import AcceptInvitation from './pages/AcceptInvitation';
+import Register from './pages/Register';
+import AccessBlocked from './pages/AccessBlocked';
+import VerifyEmail from './pages/VerifyEmail';
 import ReferFriend from './pages/ReferFriend';
 import MrLumePage from './features/agent/components/MrLumeChat';
 import Messages from './pages/Messages';
@@ -127,7 +131,6 @@ import D2DSettingsGeneral from './pages/D2DSettingsGeneral';
 import D2DSettingsTeams from './pages/D2DSettingsTeams';
 import D2DOnboarding from './pages/D2DOnboarding';
 import SettingsRoles from './pages/SettingsRoles';
-import SettingsUsers from './pages/SettingsUsers';
 import PermissionGate from './components/PermissionGate';
 import ModuleGate from './components/ModuleGate';
 import { useModuleAccess } from './hooks/useModuleAccess';
@@ -216,6 +219,7 @@ export default function App() {
   const [activityOpen, setActivityOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [hasSubscription, setHasSubscription] = useState<boolean | null>(null); // null = checking
+  const [accessBlockedReason, setAccessBlockedReason] = useState<'no_membership' | 'no_subscription' | null>(null);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [showMoreNav, setShowMoreNav] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -274,10 +278,46 @@ export default function App() {
   }, [isDark]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // OAuth (PKCE) callback: Supabase returns to the app with ?code=...
+    // The client was configured with detectSessionInUrl: true, so the SDK
+    // performs the code-for-session exchange on load — but asynchronously.
+    // We must wait for that exchange (a SIGNED_IN event) before resolving
+    // `loading`, otherwise the app renders the logged-out tree and bounces
+    // the user back to /auth while the exchange is still in flight.
+    let resolved = false;
+    const url = new URL(window.location.href);
+    const pendingOAuth =
+      url.searchParams.has('code') || window.location.hash.includes('access_token=');
+
+    const finishBootstrap = (session: any) => {
+      if (resolved) return;
+      resolved = true;
       setUser(session?.user ?? null);
       setLoading(false);
-    });
+      if (pendingOAuth) {
+        // Clean the URL so refreshes don't re-trigger the OAuth flow.
+        url.searchParams.delete('code');
+        url.searchParams.delete('state');
+        window.history.replaceState({}, '', url.pathname + url.search);
+      }
+    };
+
+    if (pendingOAuth) {
+      // Give the SDK up to 5s to finish the exchange before falling back.
+      const fallbackTimer = setTimeout(async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        finishBootstrap(session);
+      }, 5000);
+      const origSub = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          clearTimeout(fallbackTimer);
+          finishBootstrap(session);
+          origSub.data.subscription.unsubscribe();
+        }
+      });
+    } else {
+      supabase.auth.getSession().then(({ data: { session } }) => finishBootstrap(session));
+    }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const prev = user;
@@ -370,16 +410,30 @@ export default function App() {
     .map((e: string) => e.trim().toLowerCase())
     .filter(Boolean);
   useEffect(() => {
-    if (!user || !onboardingChecked || showOnboarding) { setHasSubscription(null); return; }
+    if (!user || !onboardingChecked || showOnboarding) {
+      setHasSubscription(null);
+      setAccessBlockedReason(null);
+      return;
+    }
     // Bypass for beta emails whitelisted via env
     if (user.email && BYPASS_EMAILS.includes(user.email.toLowerCase())) {
       setHasSubscription(true);
+      setAccessBlockedReason(null);
       return;
     }
     (async () => {
       try {
-        const { data: mem } = await supabase.from('memberships').select('org_id').eq('user_id', user.id).limit(1).maybeSingle();
-        if (!mem) { setHasSubscription(false); return; }
+        const { data: mem } = await supabase
+          .from('memberships')
+          .select('org_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle();
+        if (!mem) {
+          setHasSubscription(false);
+          setAccessBlockedReason('no_membership');
+          return;
+        }
         const { data: sub } = await supabase
           .from('subscriptions')
           .select('id, status')
@@ -387,10 +441,17 @@ export default function App() {
           .in('status', ['active', 'trialing'])
           .limit(1)
           .maybeSingle();
-        setHasSubscription(!!sub);
+        if (sub) {
+          setHasSubscription(true);
+          setAccessBlockedReason(null);
+        } else {
+          setHasSubscription(false);
+          setAccessBlockedReason('no_subscription');
+        }
       } catch {
         // If subscriptions table doesn't exist, treat as having a subscription (don't block)
         setHasSubscription(true);
+        setAccessBlockedReason(null);
       }
     })();
   }, [user, onboardingChecked, showOnboarding]);
@@ -437,11 +498,24 @@ export default function App() {
   }
 
   // ── Subscription guard ──
-  // User is logged in but has no active subscription.
-  // They can see: landing, marketing pages, checkout, auth pages.
-  // Any app page (dashboard, settings, etc.) redirects to landing.
-  if (user && hasSubscription === false) {
-    return <PublicRoutes onAuthBack={() => setView('landing')} includeCheckout />;
+  // User is logged in but has no membership OR no active subscription.
+  // Show an explicit AccessBlocked page so the user knows WHY they can't
+  // get in, instead of being silently bounced back to the landing page.
+  // Allow /checkout and /checkout/success through so they can pay if needed.
+  if (user && hasSubscription === false && accessBlockedReason) {
+    return (
+      <Routes>
+        <Route path="/checkout/success" element={<CheckoutSuccess />} />
+        <Route path="/checkout" element={<OnboardingFlow />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/subprocessors" element={<Subprocessors />} />
+        <Route
+          path="*"
+          element={<AccessBlocked reason={accessBlockedReason} userEmail={user.email} />}
+        />
+      </Routes>
+    );
   }
 
   // Show onboarding wizard for new users (only AFTER they have a subscription)
@@ -1026,7 +1100,7 @@ function AuthenticatedApp({
                     {/* NOTE: /quotes/presets and /quotes/templates moved before /quotes/:id to prevent route conflict */}
                     <Route path="/settings/taxes" element={<Gated permission="settings.update"><PageWrapper><TaxSettings /></PageWrapper></Gated>} />
                     <Route path="/settings/roles" element={<Gated permission="users.update_role"><PageWrapper><SettingsRoles /></PageWrapper></Gated>} />
-                    <Route path="/settings/users" element={<Gated permission="users.invite"><PageWrapper><SettingsUsers /></PageWrapper></Gated>} />
+                    <Route path="/settings/users" element={<Navigate to="/settings/team" replace />} />
                     <Route path="/apps/callback" element={<Gated permission="integrations.update"><OAuthCallback /></Gated>} />
                     {/* BillingCheckout removed — upgrade goes through /checkout */}
                     <Route path="/settings/referrals" element={<Gated permission="settings.read"><PageWrapper><ReferFriend /></PageWrapper></Gated>} />
