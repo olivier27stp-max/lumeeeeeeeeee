@@ -280,7 +280,7 @@ function BulkPriorityPicker({ onSelect }: { onSelect: (p: TaskPriority) => void 
 // ═══════════════════════════════════════════════════════════════
 
 export default function Tasks() {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const queryClient = useQueryClient();
 
   // ── State ──
@@ -563,15 +563,27 @@ export default function Tasks() {
 
           {/* Empty state */}
           {!loading && rows.length === 0 && (
-            <div className="col-span-8 py-20 text-center">
+            <div className="col-span-8 py-16 text-center flex flex-col items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-surface-secondary flex items-center justify-center">
+                <CheckCircle2 size={22} className="text-text-tertiary" strokeWidth={1.5} />
+              </div>
               <div className="text-text-tertiary">
-                <div className="text-[14px] font-medium mb-1">No tasks found</div>
+                <div className="text-[14px] font-medium mb-1 text-text-primary">No tasks found</div>
                 <div className="text-[13px]">
                   {debouncedQ || statusFilter !== 'all' || priorityFilter !== 'all'
                     ? 'Try adjusting your filters or search query.'
                     : 'Create your first task to get started.'}
                 </div>
               </div>
+              {!(debouncedQ || statusFilter !== 'all' || priorityFilter !== 'all') && (
+                <button
+                  onClick={() => setModalOpen(true)}
+                  className="inline-flex items-center gap-2 h-9 px-4 bg-primary text-white rounded-md text-[13px] font-medium hover:bg-primary-hover active:scale-[0.98] transition-all mt-1"
+                >
+                  <CirclePlus size={14} strokeWidth={1.5} />
+                  Add Task
+                </button>
+              )}
             </div>
           )}
 
@@ -651,7 +663,7 @@ export default function Tasks() {
       {/* ── FOOTER ── */}
       <div className="flex items-center justify-between mt-3">
         <span className="text-[14px] text-[#64748b]">
-          {selected.size} of {total} row(s) selected.
+          {t.common.rowsSelected.replace('{selected}', String(selected.size)).replace('{total}', String(total))}
         </span>
         <div className="flex items-center gap-2">
           <button
@@ -659,14 +671,14 @@ export default function Tasks() {
             onClick={() => setPage(page - 1)}
             className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer"
           >
-            Previous
+            {t.common.previous}
           </button>
           <button
             disabled={page >= totalPages}
             onClick={() => setPage(page + 1)}
             className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer"
           >
-            Next
+            {t.common.next}
           </button>
         </div>
       </div>

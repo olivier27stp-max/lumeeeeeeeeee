@@ -1,9 +1,38 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight, Mail, MapPin, Check } from 'lucide-react';
 
+type FormState = 'idle' | 'submitting' | 'sent' | 'error';
+
 export default function Contact() {
-  const [submitted, setSubmitted] = useState(false);
+  const [form, setForm] = useState({ full_name: '', email: '', phone: '', company: '', message: '' });
+  const [state, setState] = useState<FormState>('idle');
+  const [errMsg, setErrMsg] = useState('');
+  const submitted = state === 'sent';
+
+  const onChange = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (state === 'submitting') return;
+    setState('submitting');
+    setErrMsg('');
+    try {
+      const res = await fetch('/api/public/book-demo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, source: 'contact' }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Submission failed.' }));
+        throw new Error(body.error || 'Submission failed.');
+      }
+      setState('sent');
+    } catch (err: any) {
+      setState('error');
+      setErrMsg(err?.message || 'Something went wrong — please try again.');
+    }
+  }
 
   return (
     <div style={{ backgroundColor: '#fafaf8', backgroundImage: 'url("/paper-texture.png")', backgroundRepeat: 'repeat', backgroundSize: '300px 300px' }}>
@@ -116,24 +145,22 @@ export default function Contact() {
               </div>
             ) : (
               <div className="bg-[#111] rounded-2xl p-8">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    setSubmitted(true);
-                  }}
-                  className="flex flex-col gap-4"
-                >
-                  <input type="text" required placeholder="Full name *" className="px-4 py-3 border border-white/10 bg-white/5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-[#3FAF97] transition-colors rounded-lg" />
-                  <input type="email" required placeholder="Email *" className="px-4 py-3 border border-white/10 bg-white/5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-[#3FAF97] transition-colors rounded-lg" />
-                  <input type="tel" required placeholder="Phone *" className="px-4 py-3 border border-white/10 bg-white/5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-[#3FAF97] transition-colors rounded-lg" />
-                  <input type="text" required placeholder="Company *" className="px-4 py-3 border border-white/10 bg-white/5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-[#3FAF97] transition-colors rounded-lg" />
-                  <textarea rows={3} placeholder="Message" className="px-4 py-3 border border-white/10 bg-white/5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-[#3FAF97] transition-colors rounded-lg resize-none" />
+                <form onSubmit={onSubmit} className="flex flex-col gap-4">
+                  <input type="text" required name="full_name" value={form.full_name} onChange={onChange('full_name')} placeholder="Full name *" className="px-4 py-3 border border-white/10 bg-white/5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-[#3FAF97] transition-colors rounded-lg" />
+                  <input type="email" required name="email" value={form.email} onChange={onChange('email')} placeholder="Email *" className="px-4 py-3 border border-white/10 bg-white/5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-[#3FAF97] transition-colors rounded-lg" />
+                  <input type="tel" required name="phone" value={form.phone} onChange={onChange('phone')} placeholder="Phone *" className="px-4 py-3 border border-white/10 bg-white/5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-[#3FAF97] transition-colors rounded-lg" />
+                  <input type="text" required name="company" value={form.company} onChange={onChange('company')} placeholder="Company *" className="px-4 py-3 border border-white/10 bg-white/5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-[#3FAF97] transition-colors rounded-lg" />
+                  <textarea rows={3} name="message" value={form.message} onChange={onChange('message')} placeholder="Message" className="px-4 py-3 border border-white/10 bg-white/5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-[#3FAF97] transition-colors rounded-lg resize-none" />
+                  {state === 'error' && errMsg && (
+                    <p className="text-xs text-red-400" role="alert">{errMsg}</p>
+                  )}
                   <button
                     type="submit"
-                    className="w-full flex items-center justify-center gap-2 bg-[#3FAF97] text-white px-7 py-3.5 rounded-lg text-sm font-medium hover:bg-[#1F5F4F] transition-colors group mt-2"
+                    disabled={state === 'submitting'}
+                    className="w-full flex items-center justify-center gap-2 bg-[#3FAF97] text-white px-7 py-3.5 rounded-lg text-sm font-medium hover:bg-[#1F5F4F] transition-colors group mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Book demo
-                    <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                    {state === 'submitting' ? 'Sending…' : 'Book demo'}
+                    {state !== 'submitting' && <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />}
                   </button>
                 </form>
               </div>

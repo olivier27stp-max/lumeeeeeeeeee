@@ -2,8 +2,9 @@ import { Router } from 'express';
 import express from 'express';
 import Stripe from 'stripe';
 import { z } from 'zod';
-import { requireAuthedClient, isOrgMember, isOrgAdminOrOwner, getServiceClient } from '../lib/supabase';
+import { requireAuthedClient, isOrgMember, isOrgAdminOrOwner, getServiceClient, findUserByEmail } from '../lib/supabase';
 import { parseOrgId, clampInt, resolvePublicBaseUrl } from '../lib/helpers';
+import { dispatchWebhook } from '../lib/webhookDispatcher';
 
 // Refund input validation
 const refundSchema = z.object({
@@ -185,6 +186,8 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             const newBalanceCents = Math.max(0, Number(invoice.total_cents || 0) - newPaidCents);
             const newStatus = newBalanceCents <= 0 ? 'paid' : 'partial';
 
+            // F-32: also scope by org_id to prevent metadata tampering from
+            // updating cross-org invoices.
             await admin
               .from('invoices')
               .update({
@@ -193,7 +196,30 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
                 status: newStatus,
                 paid_at: newBalanceCents <= 0 ? new Date().toISOString() : null,
               })
-              .eq('id', metadata.invoiceId);
+              .eq('id', metadata.invoiceId)
+              .eq('org_id', metadata.orgId);
+
+            // Outbound webhooks — payment.received always; invoice.paid when fully settled.
+            dispatchWebhook(metadata.orgId, 'payment.received', {
+              invoice_id: metadata.invoiceId,
+              client_id: metadata.clientId,
+              job_id: metadata.jobId,
+              provider: 'stripe',
+              provider_payment_id: intent.id,
+              amount_cents: amountPaid,
+              currency: String(intent.currency || 'CAD').toUpperCase(),
+            }).catch((err) => console.error('[webhooks] payment.received failed:', err?.message));
+
+            if (newStatus === 'paid') {
+              dispatchWebhook(metadata.orgId, 'invoice.paid', {
+                invoice_id: metadata.invoiceId,
+                client_id: metadata.clientId,
+                total_cents: Number(invoice.total_cents || 0),
+                paid_cents: newPaidCents,
+                provider: 'stripe',
+                provider_payment_id: intent.id,
+              }).catch((err) => console.error('[webhooks] invoice.paid failed:', err?.message));
+            }
           }
         }
 
@@ -262,6 +288,167 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             default_currency: (account.default_currency || 'cad').toUpperCase(),
           })
           .eq('stripe_account_id', connectAccountId);
+      }
+
+      // ── F-13: Handle customer.subscription.updated ──
+      // Sync Stripe-side subscription status (renewals, plan changes, cancellation
+      // scheduling, past_due) back into our subscriptions table.
+      if (event.type === 'customer.subscription.updated') {
+        const sub = event.data.object as Stripe.Subscription;
+        const admin = getServiceClient();
+        // Stripe SDK v20 moved current_period_* off the Subscription type onto each item;
+        // the field is still present in API responses, so cast to read it.
+        const subAny = sub as any;
+        const periodStart = subAny.current_period_start
+          ? new Date(subAny.current_period_start * 1000).toISOString()
+          : null;
+        const periodEnd = subAny.current_period_end
+          ? new Date(subAny.current_period_end * 1000).toISOString()
+          : null;
+        const canceledAt = sub.canceled_at
+          ? new Date(sub.canceled_at * 1000).toISOString()
+          : null;
+        // Cross-validate via stripe_subscription_id only — never trust metadata blindly.
+        await admin
+          .from('subscriptions')
+          .update({
+            status: sub.status,
+            cancel_at_period_end: Boolean(sub.cancel_at_period_end),
+            canceled_at: canceledAt,
+            current_period_start: periodStart,
+            current_period_end: periodEnd,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('stripe_subscription_id', sub.id);
+      }
+
+      // ── F-13: Handle customer.subscription.deleted ──
+      if (event.type === 'customer.subscription.deleted') {
+        const sub = event.data.object as Stripe.Subscription;
+        const admin = getServiceClient();
+        await admin
+          .from('subscriptions')
+          .update({
+            status: 'canceled',
+            canceled_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('stripe_subscription_id', sub.id);
+      }
+
+      // ── F-13: Handle invoice.paid (SaaS subscription renewal) ──
+      if (event.type === 'invoice.paid') {
+        const inv = event.data.object as Stripe.Invoice;
+        // Stripe SDK v20 reshaped Invoice; `subscription` still arrives in webhook payloads,
+        // so read via cast. May be a string or an expanded Subscription object.
+        const invAny = inv as any;
+        const stripeSubId = typeof invAny.subscription === 'string' ? invAny.subscription : invAny.subscription?.id;
+        const admin = getServiceClient();
+        if (stripeSubId) {
+          // Cross-validate: only touch the subscription row owned by the matching stripe sub id.
+          await admin
+            .from('subscriptions')
+            .update({
+              status: 'active',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_subscription_id', stripeSubId);
+        }
+        // If the invoice is on our internal invoices table (org-level), reconcile paid_cents.
+        const internalInvoiceId = String((inv.metadata as any)?.invoice_id || '').trim();
+        const metaOrgId = String((inv.metadata as any)?.org_id || '').trim();
+        if (internalInvoiceId && metaOrgId) {
+          const amountPaid = Math.max(0, Math.round(inv.amount_paid || 0));
+          const { data: row } = await admin
+            .from('invoices')
+            .select('id, total_cents, paid_cents')
+            .eq('id', internalInvoiceId)
+            .eq('org_id', metaOrgId)
+            .maybeSingle();
+          if (row) {
+            const newPaid = Math.min(Number(row.total_cents || 0), Number(row.paid_cents || 0) + amountPaid);
+            const newBal = Math.max(0, Number(row.total_cents || 0) - newPaid);
+            await admin
+              .from('invoices')
+              .update({
+                paid_cents: newPaid,
+                balance_cents: newBal,
+                status: newBal <= 0 ? 'paid' : 'partial',
+                paid_at: newBal <= 0 ? new Date().toISOString() : null,
+              })
+              .eq('id', internalInvoiceId)
+              .eq('org_id', metaOrgId);
+          }
+        }
+      }
+
+      // ── F-13/F-60: Handle invoice.payment_failed ──
+      if (event.type === 'invoice.payment_failed') {
+        const inv = event.data.object as Stripe.Invoice;
+        const invAny = inv as any;
+        const stripeSubId = typeof invAny.subscription === 'string' ? invAny.subscription : invAny.subscription?.id;
+        const admin = getServiceClient();
+        if (stripeSubId) {
+          await admin
+            .from('subscriptions')
+            .update({
+              status: 'past_due',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_subscription_id', stripeSubId);
+        }
+        // Hook point for dunning emails — kept as a log entry for now to avoid
+        // sending unverified PII through unrelated mailer paths.
+        console.warn('[webhook] invoice.payment_failed', {
+          stripe_subscription_id: stripeSubId,
+          attempt: inv.attempt_count,
+        });
+      }
+
+      // ── F-12: Handle charge.refunded (refunds initiated from the Stripe Dashboard) ──
+      if (event.type === 'charge.refunded') {
+        const charge = event.data.object as Stripe.Charge;
+        const paymentIntentId = typeof charge.payment_intent === 'string'
+          ? charge.payment_intent
+          : charge.payment_intent?.id;
+        if (paymentIntentId) {
+          const admin = getServiceClient();
+          // Cross-validate: only update the matching payment row; org_id stays as-is.
+          const fullyRefunded = charge.amount_refunded >= charge.amount;
+          await admin
+            .from('payments')
+            .update({
+              status: fullyRefunded ? 'refunded' : 'partially_refunded',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('provider', 'stripe')
+            .eq('provider_payment_id', paymentIntentId);
+        }
+      }
+
+      // ── F-12: Handle charge.dispute.created — flag for ops review ──
+      if (event.type === 'charge.dispute.created') {
+        const dispute = event.data.object as Stripe.Dispute;
+        const chargeId = typeof dispute.charge === 'string' ? dispute.charge : dispute.charge?.id;
+        console.warn('[webhook] charge.dispute.created — manual review required', {
+          dispute_id: dispute.id,
+          charge_id: chargeId,
+          reason: dispute.reason,
+          status: dispute.status,
+        });
+        // Best-effort: surface on the corresponding payment row so the org sees it.
+        if (chargeId) {
+          const admin = getServiceClient();
+          await admin
+            .from('payments')
+            .update({
+              status: 'disputed',
+              failure_reason: `dispute:${dispute.reason || 'unknown'}`,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('provider', 'stripe')
+            .eq('stripe_charge_id', chargeId);
+        }
       }
 
       // ── Handle checkout.session.completed (billing subscription activation) ──
@@ -1196,8 +1383,7 @@ async function handleCheckoutSessionCompleted(
 
   // ── 3. Create or find user account ──
   let userId: string;
-  const { data: existingUsers } = await admin.auth.admin.listUsers();
-  const existingUser = existingUsers?.users.find((u: any) => u.email === userEmail);
+  const existingUser: any = await findUserByEmail(admin, userEmail);
 
   if (existingUser) {
     userId = existingUser.id;

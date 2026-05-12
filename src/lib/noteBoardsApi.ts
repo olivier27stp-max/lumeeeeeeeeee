@@ -637,34 +637,17 @@ export async function uploadNoteFile(boardId: string, file: File): Promise<{ url
 
   if (error) throw error;
 
-  // Try public URL first (works if bucket is public).
-  // Fall back to a long-lived signed URL (works even if bucket is private).
-  const { data: { publicUrl } } = supabase.storage
+  // Always use short-lived signed URLs (AUDIT_INTEGRATIONS_2026_05_12.md).
+  // The `attachments` bucket holds tenant-private files — public URLs
+  // would leak data across orgs. 1h TTL is a first pass; callers may need
+  // to refresh on display, which is acceptable.
+  const { data: signedData, error: signedError } = await supabase.storage
     .from('attachments')
-    .getPublicUrl(path);
-
-  // Test if public URL is actually accessible
-  let url = publicUrl;
-  try {
-    const probe = await fetch(publicUrl, { method: 'HEAD' });
-    if (!probe.ok) {
-      // Bucket is private — use a signed URL valid for 1 year
-      const { data: signedData, error: signedError } = await supabase.storage
-        .from('attachments')
-        .createSignedUrl(path, 60 * 60 * 24 * 365);
-      if (!signedError && signedData?.signedUrl) {
-        url = signedData.signedUrl;
-      }
-    }
-  } catch {
-    // Network error on probe — try signed URL as fallback
-    const { data: signedData } = await supabase.storage
-      .from('attachments')
-      .createSignedUrl(path, 60 * 60 * 24 * 365);
-    if (signedData?.signedUrl) {
-      url = signedData.signedUrl;
-    }
+    .createSignedUrl(path, 3600);
+  if (signedError || !signedData?.signedUrl) {
+    throw signedError ?? new Error('Failed to create signed URL for attachment');
   }
+  const url = signedData.signedUrl;
 
   return {
     url,

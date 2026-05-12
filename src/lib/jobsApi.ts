@@ -431,7 +431,8 @@ export async function getJobById(id: string): Promise<Job | null> {
 }
 
 export async function getJobModalDraftById(id: string): Promise<JobModalDraft | null> {
-  const { data: jobRow, error: jobError } = await supabase.from('jobs_active').select('*').eq('id', id).maybeSingle();
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data: jobRow, error: jobError } = await supabase.from('jobs_active').select('*').eq('id', id).eq('org_id', orgId).maybeSingle();
   if (jobError) throw jobError;
   if (!jobRow) return null;
 
@@ -703,7 +704,7 @@ export async function createJob(payload: {
         postal_code: payload.postal_code || null,
         country: payload.country || 'Canada',
         place_id: payload.place_id || null,
-      }).eq('id', data.id);
+      }).eq('id', data.id).eq('org_id', orgId);
     }
 
     if (shouldQueueGeocode) {
@@ -799,7 +800,8 @@ export async function createJob(payload: {
         total_amount: financials.total,
         tax_lines: payload.tax_lines || [],
       })
-      .eq('id', data.id);
+      .eq('id', data.id)
+      .eq('org_id', orgId);
     devLogJobWrite('persist_financials', {
       org_id: orgId,
       job_id: data.id,
@@ -823,7 +825,7 @@ export async function createJob(payload: {
         deposit_cents: payload.deposit_required ? depositCents : 0,
         require_payment_method: payload.require_payment_method || false,
         deposit_status: payload.deposit_required ? 'pending' : 'not_required',
-      }).eq('id', data.id);
+      }).eq('id', data.id).eq('org_id', orgId);
     }
 
     // Refresh data so returned job has correct values
@@ -896,6 +898,7 @@ export async function updateJob(
     tax_lines?: Array<{ code: string; label: string; rate: number; enabled: boolean }>;
   }
 ): Promise<Job> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const updatePayload: Record<string, any> = {};
   if (payload.status !== undefined) updatePayload.status = normalizeStatusValue(String(payload.status || ''));
   if (payload.scheduled_at !== undefined) updatePayload.scheduled_at = payload.scheduled_at;
@@ -911,6 +914,7 @@ export async function updateJob(
       .from('jobs')
       .select('property_address')
       .eq('id', id)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (existingError) throw existingError;
 
@@ -933,7 +937,7 @@ export async function updateJob(
 
   // Support optimistic locking if version provided in payload
   const expectedVersion = (payload as any).version;
-  let query = supabase.from('jobs').update(updatePayload).eq('id', id);
+  let query = supabase.from('jobs').update(updatePayload).eq('id', id).eq('org_id', orgId);
   if (expectedVersion != null) query = query.eq('version', expectedVersion);
   const { data, error } = await query.select('*').single();
   if (error?.code === 'PGRST116' && expectedVersion != null) {
@@ -982,7 +986,8 @@ export async function getSuggestedJobNumber(): Promise<string> {
 }
 
 export async function listSalespeople(): Promise<SalespersonOption[]> {
-  const { data: memberships, error: membershipsError } = await supabase.from('memberships').select('user_id').limit(200);
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data: memberships, error: membershipsError } = await supabase.from('memberships').select('user_id').eq('org_id', orgId).limit(200);
   if (membershipsError || !memberships || memberships.length === 0) return [];
 
   const ids = Array.from(new Set(memberships.map((row: any) => row.user_id).filter(Boolean)));
@@ -996,7 +1001,8 @@ export async function listSalespeople(): Promise<SalespersonOption[]> {
 }
 
 export async function exportJobsCsv(query: Omit<JobsQuery, 'page' | 'pageSize'>): Promise<string> {
-  let request = supabase.from('jobs_active').select('*').order('created_at', { ascending: false }).limit(2000);
+  const orgId = await getCurrentOrgIdOrThrow();
+  let request = supabase.from('jobs_active').select('*').eq('org_id', orgId).order('created_at', { ascending: false }).limit(2000);
   request = applyTableFilters(request, query);
   const { data, error } = await request;
   if (error) throw error;

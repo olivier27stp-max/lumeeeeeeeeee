@@ -132,6 +132,13 @@ export async function uploadMeasurementScreenshot(
     .from('attachments')
     .upload(filename, blob, { contentType: 'image/png', upsert: true });
   if (uploadErr) throw uploadErr;
-  const { data } = supabase.storage.from('attachments').getPublicUrl(filename);
-  return data.publicUrl;
+  // Signed URL — `attachments` bucket is tenant-private. 1h TTL
+  // (AUDIT_INTEGRATIONS_2026_05_12.md). Refresh on display if needed.
+  const { data, error: signErr } = await supabase.storage
+    .from('attachments')
+    .createSignedUrl(filename, 3600);
+  if (signErr || !data?.signedUrl) {
+    throw signErr ?? new Error('Failed to create signed URL for measurement screenshot');
+  }
+  return data.signedUrl;
 }

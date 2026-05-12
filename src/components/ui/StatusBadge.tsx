@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 
 type Variant = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
@@ -116,8 +117,14 @@ interface StatusBadgeProps {
 }
 
 export default function StatusBadge({ status, variant, dot = true, className }: StatusBadgeProps) {
+  const { t } = useTranslation();
   const resolvedVariant = variant || statusVariants[status] || statusVariants[status.toLowerCase()] || 'neutral';
-  const label = status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  // Try to translate via t.status.<key>. Match snake_case key, or convert "Foo Bar" → foo_bar
+  const key = status.includes(' ')
+    ? status.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_')
+    : status.toLowerCase();
+  const translated = (t as any).status?.[key];
+  const label = translated || status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
     <span className={cn(variantMap[resolvedVariant], className)}>

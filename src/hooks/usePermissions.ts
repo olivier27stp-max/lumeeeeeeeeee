@@ -24,9 +24,17 @@ const EMPTY: UserPermissionContext = {
 };
 
 // ── Dev role override ──────────────────────────────────────────────
+// SECURITY: In production builds these helpers are no-ops. An XSS or malicious
+// browser extension could otherwise set `localStorage['lume-dev-role-override']
+// = 'owner'` and the SPA would honor it for client-side permission gating.
+// Server-side checks aren't affected, but client-side route gating was.
 const DEV_ROLE_KEY = 'lume-dev-role-override';
+const IS_DEV = import.meta.env.DEV || (typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+));
 
 export function setDevRoleOverride(role: TeamRole | null) {
+  if (!IS_DEV) return;
   if (role) {
     localStorage.setItem(DEV_ROLE_KEY, role);
   } else {
@@ -35,6 +43,11 @@ export function setDevRoleOverride(role: TeamRole | null) {
 }
 
 export function getDevRoleOverride(): TeamRole | null {
+  if (!IS_DEV) {
+    // Defensive: even if a stale override was written before this guard
+    // existed, ignore it in prod.
+    return null;
+  }
   return (localStorage.getItem(DEV_ROLE_KEY) as TeamRole) || null;
 }
 

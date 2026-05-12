@@ -660,7 +660,7 @@ export default function InvoiceEdit() {
                   <span className="font-semibold">{fmt(totals.tax_cents)}</span>
                 </div>
                 <div className="mt-2 flex justify-between border-t border-outline-subtle pt-2 text-base font-bold text-text-primary">
-                  <span>Total</span>
+                  <span>{(t as any).invoice.template.total}</span>
                   <span>{fmt(totals.total_cents)}</span>
                 </div>
               </div>

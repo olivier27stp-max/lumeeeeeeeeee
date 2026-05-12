@@ -56,16 +56,16 @@ export default function OnboardingWizard({ userId, orgId: orgIdProp, language, o
   const handleSaveCompany = useCallback(async () => {
     const trimmedName = companyName.trim();
     if (!trimmedName) {
-      toast.error(fr ? 'Le nom de l\'entreprise est requis' : 'Company name is required');
+      toast.error(t.onboarding.companyNameRequired);
       return false;
     }
     if (trimmedName.length < 2) {
-      toast.error(fr ? 'Le nom doit contenir au moins 2 caractères' : 'Name must be at least 2 characters');
+      toast.error(t.onboarding.nameMinLength);
       return false;
     }
     // Reject obvious garbage: all-consonants strings under 6 chars (e.g. "sfdvsdc")
     if (trimmedName.length < 6 && !/[aeiouyAEIOUY]/.test(trimmedName)) {
-      toast.error(fr ? 'Veuillez entrer un nom valide' : 'Please enter a valid name');
+      toast.error(t.onboarding.pleaseEnterValidName);
       return false;
     }
     setSaving(true);
@@ -83,9 +83,9 @@ export default function OnboardingWizard({ userId, orgId: orgIdProp, language, o
       if (error) throw error;
       return true;
     } catch (err: any) {
-      console.warn('Company save failed:', err?.message);
-      // Don't block onboarding if table doesn't exist yet
-      return true;
+      console.error('Company save failed:', err?.message);
+      toast.error(err?.message || 'Failed to save company info');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -213,7 +213,7 @@ export default function OnboardingWizard({ userId, orgId: orgIdProp, language, o
                   </div>
                   <div>
                     <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                      {fr ? 'Nom de l\'entreprise' : 'Company name'} *
+                      {t.onboarding.companyName} *
                     </label>
                     <div className="relative mt-1">
                       <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" size={15} />
@@ -268,7 +268,7 @@ export default function OnboardingWizard({ userId, orgId: orgIdProp, language, o
                       {t.onboarding.addYourFirstClient}
                     </h2>
                     <p className="text-[13px] text-text-tertiary mt-1">
-                      {fr ? 'Vous pourrez en ajouter d\'autres plus tard.' : 'You can add more later.'}
+                      {t.onboarding.youCanAddMoreLater}
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -334,9 +334,7 @@ export default function OnboardingWizard({ userId, orgId: orgIdProp, language, o
                     {t.onboarding.youreAllSet}
                   </h2>
                   <p className="text-[13px] text-text-tertiary mt-2 max-w-xs mx-auto">
-                    {fr
-                      ? 'Votre espace de travail est configure. Explorez le CRM et commencez a gerer vos clients.'
-                      : 'Your workspace is set up. Explore the CRM and start managing your clients.'}
+                    {t.onboarding.workspaceReady}
                   </p>
                   <div className="mt-6 flex flex-wrap justify-center gap-2 text-[12px]">
                     <span className="px-3 py-1.5 rounded-full bg-surface-secondary text-text-secondary">
@@ -356,12 +354,16 @@ export default function OnboardingWizard({ userId, orgId: orgIdProp, language, o
 
           {/* Footer */}
           <div className="flex items-center justify-between px-6 py-4 border-t border-outline bg-surface-secondary/50">
-            <button
-              onClick={handleSkip}
-              className="text-[13px] text-text-tertiary hover:text-text-secondary transition-colors"
-            >
-              {step === 2 ? '' : (t.onboarding.skip)}
-            </button>
+            {step === 2 ? (
+              <span />
+            ) : (
+              <button
+                onClick={handleSkip}
+                className="text-[13px] text-text-tertiary hover:text-text-secondary transition-colors"
+              >
+                {t.onboarding.skip}
+              </button>
+            )}
             <div className="flex items-center gap-2">
               {step > 0 && step < 2 && (
                 <button
@@ -375,7 +377,7 @@ export default function OnboardingWizard({ userId, orgId: orgIdProp, language, o
               )}
               <button
                 onClick={handleNext}
-                disabled={saving}
+                disabled={saving || !resolvedOrgId}
                 className="glass-button-primary inline-flex items-center gap-1.5"
               >
                 {saving

@@ -323,6 +323,7 @@ export function rbacMiddleware(): express.RequestHandler {
   // Paths that are public and should never be permission-checked
   const publicPrefixes = [
     '/api/quotes/public',
+    '/api/public/book-demo',
     '/api/survey/',
     '/api/portal/',
     '/api/pay/',

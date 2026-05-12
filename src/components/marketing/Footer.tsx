@@ -1,5 +1,6 @@
+import { useState, type FormEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Check } from 'lucide-react';
 
 const PRODUCT = [
   { label: 'Pipeline', href: '/features#pipeline' },
@@ -31,9 +32,39 @@ const COMPANY = [
   { label: 'Contact', href: '/contact' },
 ];
 
+type FormState = 'idle' | 'submitting' | 'sent' | 'error';
+
 export default function Footer() {
   const { pathname } = useLocation();
   const isContact = pathname === '/contact';
+  const [form, setForm] = useState({ full_name: '', email: '', phone: '', company: '', message: '' });
+  const [state, setState] = useState<FormState>('idle');
+  const [errMsg, setErrMsg] = useState('');
+
+  const onChange = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (state === 'submitting') return;
+    setState('submitting');
+    setErrMsg('');
+    try {
+      const res = await fetch('/api/public/book-demo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, source: 'landing' }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Submission failed.' }));
+        throw new Error(body.error || 'Submission failed.');
+      }
+      setState('sent');
+    } catch (err: any) {
+      setState('error');
+      setErrMsg(err?.message || 'Something went wrong — please try again.');
+    }
+  }
+
   return (
     <footer className="text-text-primary border-t border-[#c5c5c5]" style={{ backgroundColor: '#fafaf8', backgroundImage: 'url("/paper-texture.png")', backgroundRepeat: 'repeat', backgroundSize: '300px 300px' }}>
       {/* Demo Form Band */}
@@ -47,23 +78,34 @@ export default function Footer() {
           <div className="flex flex-col md:flex-row gap-10 items-start">
             {/* Form in white box */}
             <div className="flex-1 bg-white p-8">
-              <form
-                onSubmit={(e) => e.preventDefault()}
-                className="flex flex-col gap-4"
-              >
-                <input type="text" required placeholder="Full name *" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
-                <input type="email" required placeholder="Email *" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
-                <input type="tel" required placeholder="Phone *" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
-                <input type="text" required placeholder="Company *" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
-                <textarea rows={3} placeholder="Message" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors resize-none" />
-                <button
-                  type="submit"
-                  className="w-full flex items-center justify-center gap-2 bg-[#3FAF97] text-white px-7 py-3.5 text-sm font-medium hover:bg-[#1F5F4F] transition-colors group mt-2"
-                >
-                  Book demo
-                  <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                </button>
-              </form>
+              {state === 'sent' ? (
+                <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+                  <div className="w-12 h-12 rounded-full bg-[#3FAF97]/15 flex items-center justify-center">
+                    <Check size={24} className="text-[#3FAF97]" />
+                  </div>
+                  <p className="text-lg font-bold text-[#111]">Request sent!</p>
+                  <p className="text-sm text-[#555]">Our team will reach out within 24 hours.</p>
+                </div>
+              ) : (
+                <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate={false}>
+                  <input type="text" required name="full_name" value={form.full_name} onChange={onChange('full_name')} placeholder="Full name *" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
+                  <input type="email" required name="email" value={form.email} onChange={onChange('email')} placeholder="Email *" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
+                  <input type="tel" required name="phone" value={form.phone} onChange={onChange('phone')} placeholder="Phone *" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
+                  <input type="text" required name="company" value={form.company} onChange={onChange('company')} placeholder="Company *" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
+                  <textarea rows={3} name="message" value={form.message} onChange={onChange('message')} placeholder="Message" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors resize-none" />
+                  {state === 'error' && errMsg && (
+                    <p className="text-xs text-red-600" role="alert">{errMsg}</p>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={state === 'submitting'}
+                    className="w-full flex items-center justify-center gap-2 bg-[#3FAF97] text-white px-7 py-3.5 text-sm font-medium hover:bg-[#1F5F4F] transition-colors group mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {state === 'submitting' ? 'Sending…' : 'Book demo'}
+                    {state !== 'submitting' && <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />}
+                  </button>
+                </form>
+              )}
             </div>
 
             {/* Image + text overlay on the right */}
@@ -106,8 +148,8 @@ export default function Footer() {
             &copy; {new Date().getFullYear()} Lume. All rights reserved.
           </p>
           <div className="flex gap-6 text-xs text-text-tertiary">
-            <span>Privacy</span>
-            <span>Terms</span>
+            <Link to="/privacy" className="hover:text-text-primary transition-colors">Privacy</Link>
+            <Link to="/terms" className="hover:text-text-primary transition-colors">Terms</Link>
           </div>
         </div>
       </div>

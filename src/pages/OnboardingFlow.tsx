@@ -33,6 +33,16 @@ import {
 import { validateReferralCode } from '../lib/referralsApi';
 // Stripe Checkout — payment handled via Stripe hosted page (secure, PCI compliant)
 
+// ─── Stripe redirect URL allow-list ───
+// Prevents open-redirect attacks if the API ever returns an attacker-controlled URL.
+function isAllowedStripeRedirect(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:') return false;
+    return u.hostname === 'checkout.stripe.com' || u.hostname === 'billing.stripe.com';
+  } catch { return false; }
+}
+
 // ─── Plan display names — single source of truth ───
 const PLAN_NAMES: Record<string, string> = {
   starter: 'Minimum',
@@ -91,6 +101,9 @@ export default function OnboardingFlow() {
   useEffect(() => { fetchPlans().then(setPlans).catch(() => {}).finally(() => setPlansLoading(false)); }, []);
 
   // ─── Flow state (persisted in sessionStorage to survive re-renders) ───
+  // NOTE: password is NOT persisted. If sessionStorage shows a step past 'basic'
+  // after a reload but we no longer have a password in memory and no auth user,
+  // the user must restart at the password step (handled by an effect below).
   const [step, setStepRaw] = useState<StepId>(() => {
     const saved = sessionStorage.getItem('onb_step');
     return (saved && STEPS.includes(saved as StepId)) ? saved as StepId : 'basic';
@@ -98,7 +111,11 @@ export default function OnboardingFlow() {
   const setStep = (s: StepId) => { sessionStorage.setItem('onb_step', s); setStepRaw(s); };
   const [selectedSlug, setSelectedSlugRaw] = useState(() => sessionStorage.getItem('onb_plan') || planParam);
   const setSelectedSlug = (s: string) => { sessionStorage.setItem('onb_plan', s); setSelectedSlugRaw(s); };
-  const [interval, setIntervalRaw] = useState<'monthly' | 'yearly'>(() => (sessionStorage.getItem('onb_interval') as any) || 'yearly');
+  const [interval, setIntervalRaw] = useState<'monthly' | 'yearly'>(() => {
+    const stored = sessionStorage.getItem('onb_interval');
+    if (stored === 'monthly' || stored === 'yearly') return stored;
+    return intervalParam;
+  });
   const setInterval = (v: 'monthly' | 'yearly') => { sessionStorage.setItem('onb_interval', v); setIntervalRaw(v); };
   const [currency] = useState<'USD' | 'CAD'>('CAD');
 
@@ -109,9 +126,9 @@ export default function OnboardingFlow() {
   const setEmail = (v: string) => { sessionStorage.setItem('onb_email', v); setEmailRaw(v); };
   const [phone, setPhone] = useState('');
 
-  // Step 1 — signup fields (persisted)
-  const [password, setPasswordRaw] = useState(() => sessionStorage.getItem('onb_pw') || '');
-  const setPassword = (v: string) => { sessionStorage.setItem('onb_pw', v); setPasswordRaw(v); };
+  // Step 1 — signup fields (NEVER persisted: password must not leak into sessionStorage)
+  // If the user reloads before account creation, they restart at the password step.
+  const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
 
   // Step 2 — company
@@ -148,6 +165,17 @@ export default function OnboardingFlow() {
   useEffect(() => {
     if (refParam) validateReferralCode(refParam).then(v => { if (v) setReferralCode(refParam); });
   }, [refParam]);
+
+  // If the user reloaded past the password step without an authed account
+  // and without a password in memory, restart at the password (basic) step.
+  // Password is intentionally not persisted in sessionStorage.
+  useEffect(() => {
+    if (!authReady) return;
+    if (step !== 'basic' && !user && !password) {
+      setStep('basic');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authReady]);
 
   // Check email verification when reaching checkout step
   useEffect(() => {
@@ -320,7 +348,7 @@ export default function OnboardingFlow() {
       }
 
       // Success — clean up and redirect
-      ['onb_step','onb_plan','onb_interval','onb_name','onb_email','onb_pw','onb_token','onb_uid'].forEach(k => sessionStorage.removeItem(k));
+      ['onb_step','onb_plan','onb_interval','onb_name','onb_email','onb_token','onb_uid'].forEach(k => sessionStorage.removeItem(k));
       alert(isFr ? 'Abonnement activé! Bienvenue sur Lume.' : 'Subscription activated! Welcome to Lume.');
       window.location.href = '/';
       return;
@@ -719,6 +747,11 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create checkout session');
 
+      if (!isAllowedStripeRedirect(data.url)) {
+        toast.error(isFr ? 'URL de paiement invalide — réessayez' : 'Invalid checkout URL — please try again');
+        setRedirecting(false);
+        return;
+      }
       window.location.href = data.url;
     } catch (err: any) {
       toast.error(err.message || 'Error');
@@ -933,6 +966,10 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
                       return;
                     }
                     alert('Error: ' + (d.error || 'Failed'));
+                    return;
+                  }
+                  if (!isAllowedStripeRedirect(d.url)) {
+                    toast.error(isFr ? 'URL de paiement invalide — réessayez' : 'Invalid checkout URL — please try again');
                     return;
                   }
                   window.location.href = d.url;

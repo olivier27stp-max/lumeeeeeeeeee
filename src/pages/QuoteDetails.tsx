@@ -27,6 +27,7 @@ import { buildQuoteRenderData } from '../components/quote/buildQuoteRenderData';
 import { toast } from 'sonner';
 import SpecificNotes from '../components/SpecificNotes';
 import { format } from 'date-fns';
+import { frCA as dfFr, enCA as dfEn } from 'date-fns/locale';
 import { useTranslation } from '../i18n';
 import { displayEmail, displayPhone, displayAddress } from '../lib/piiSanitizer';
 
@@ -223,7 +224,7 @@ export default function QuoteDetails() {
           <div className="relative">
             <button onClick={() => setMoreOpen(!moreOpen)} disabled={busy}
               className="glass-button px-3 py-2 text-[13px] font-medium flex items-center gap-1.5">
-              <MoreHorizontal size={15} /> More
+              <MoreHorizontal size={15} /> {language === 'fr' ? 'Plus' : 'More'}
             </button>
             {moreOpen && (
               <>
@@ -279,7 +280,7 @@ export default function QuoteDetails() {
           {entityPhone && (
             <button onClick={() => act(async () => { await sendQuoteSms(quote.id); toast.success('SMS sent'); loadQuote(); })}
               disabled={busy} className="glass-button-primary px-4 py-2 text-[13px] font-semibold flex items-center gap-1.5">
-              <MessageSquare size={14} /> Send Text</button>
+              <MessageSquare size={14} /> {language === 'fr' ? 'Envoyer un texto' : 'Send Text'}</button>
           )}
         </div>
       </div>
@@ -301,11 +302,11 @@ export default function QuoteDetails() {
                 <span className="text-text-tertiary">{language === 'fr' ? 'Devis n°' : 'Quote #'}</span><span className="font-semibold text-text-primary">{quote.quote_number}</span>
               </div>
               <div className="flex justify-between text-[13px] border-b border-outline pb-2.5">
-                <span className="text-text-tertiary">{language === 'fr' ? 'Créé le' : 'Created'}</span><span className="font-medium text-text-primary">{format(new Date(quote.created_at), 'MMM d, yyyy')}</span>
+                <span className="text-text-tertiary">{language === 'fr' ? 'Créé le' : 'Created'}</span><span className="font-medium text-text-primary">{format(new Date(quote.created_at), 'PP', { locale: language === 'fr' ? dfFr : dfEn })}</span>
               </div>
               {quote.valid_until && (
                 <div className="flex justify-between text-[13px]">
-                  <span className="text-text-tertiary">{language === 'fr' ? "Valide jusqu'au" : 'Valid until'}</span><span className="font-medium text-text-primary">{format(new Date(quote.valid_until), 'MMM d, yyyy')}</span>
+                  <span className="text-text-tertiary">{language === 'fr' ? "Valide jusqu'au" : 'Valid until'}</span><span className="font-medium text-text-primary">{format(new Date(quote.valid_until), 'PP', { locale: language === 'fr' ? dfFr : dfEn })}</span>
                 </div>
               )}
             </div>
@@ -393,7 +394,7 @@ export default function QuoteDetails() {
                 <div className="bg-surface-secondary border-t border-outline px-5 py-3 space-y-1.5">
                   <div className="flex justify-between text-[13px]"><span className="text-text-secondary">{language === 'fr' ? 'Sous-total' : 'Subtotal'}</span><span className="text-text-primary">{formatQuoteMoney(quote.subtotal_cents)}</span></div>
                   {quote.discount_cents > 0 && <div className="flex justify-between text-[13px]"><span className="text-text-secondary">Discount</span><span className="text-danger">-{formatQuoteMoney(quote.discount_cents)}</span></div>}
-                  <div className="flex justify-between text-[13px]"><span className="text-text-secondary">{quote.tax_rate_label || 'Tax'}</span><span className="text-text-primary">{formatQuoteMoney(quote.tax_cents)}</span></div>
+                  <div className="flex justify-between text-[13px]"><span className="text-text-secondary">{(quote.tax_rate_label === 'No tax' && language === 'fr') ? 'Aucune taxe' : (quote.tax_rate_label || (language === 'fr' ? 'Taxe' : 'Tax'))}</span><span className="text-text-primary">{formatQuoteMoney(quote.tax_cents)}</span></div>
                   <div className="flex justify-between text-[15px] font-bold border-t border-outline pt-2"><span className="text-text-primary">Total</span><span className="text-text-primary">{formatQuoteMoney(quote.total_cents)}</span></div>
                 </div>
               </>
@@ -471,7 +472,7 @@ export default function QuoteDetails() {
                 <div className="w-10 h-10 rounded-full bg-surface-secondary flex items-center justify-center mx-auto mb-2">
                   <FileText size={16} className="text-text-tertiary" />
                 </div>
-                <p className="text-[12px] text-text-tertiary">Click to add notes (visible on quote)</p>
+                <p className="text-[12px] text-text-tertiary">{language === 'fr' ? 'Cliquez pour ajouter des notes (visibles sur le devis)' : 'Click to add notes (visible on quote)'}</p>
               </div>
             )}
           </div>

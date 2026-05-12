@@ -4,6 +4,8 @@ import {
   isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek,
   getHours, getMinutes, differenceInMinutes,
 } from 'date-fns';
+import { frCA, enCA } from 'date-fns/locale';
+import type { Locale } from 'date-fns';
 import {
   AlertTriangle, Briefcase, CalendarDays, ChevronDown, ChevronLeft,
   ChevronRight, CircleAlert, Clock, GripVertical, List,
@@ -24,6 +26,7 @@ import {
   listUnscheduledJobs, rescheduleEvent, scheduleUnscheduledJob,
 } from '../lib/scheduleApi';
 import { findFreeSlots, type FreeSlot } from '../lib/availabilityApi';
+import { optimizeRoute, applyOptimizedSchedule } from '../lib/routeOptimizationApi';
 import { listTeams, TeamRecord } from '../lib/teamsApi';
 import { supabase } from '../lib/supabase';
 import { cn, formatCurrency } from '../lib/utils';
@@ -43,6 +46,13 @@ import {
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const SLOT_H = SLOT_HEIGHT_PX;
 
+function _dfLocale(): Locale {
+  try {
+    return (typeof localStorage !== 'undefined' && localStorage.getItem('lume-language') === 'fr') ? frCA : enCA;
+  } catch { return enCA; }
+}
+const _LOC = { get locale() { return _dfLocale(); } };
+
 function buildRange(date: Date, view: CalendarUiView) {
   if (view === 'day') return { start: startOfDay(date), end: addDays(startOfDay(date), 1) };
   if (view === 'month') return { start: startOfMonth(date), end: addMonths(startOfMonth(date), 1) };
@@ -51,11 +61,12 @@ function buildRange(date: Date, view: CalendarUiView) {
 }
 
 function hLabel(date: Date, view: CalendarUiView) {
-  if (view === 'month') return format(date, 'MMMM yyyy');
-  if (view === 'day') return format(date, 'EEEE, MMMM d, yyyy');
+  const opts = { locale: _dfLocale() };
+  if (view === 'month') return format(date, 'MMMM yyyy', opts);
+  if (view === 'day') return format(date, 'EEEE, MMMM d, yyyy', opts);
   const s = startOfWeek(date, { weekStartsOn: 1 }), e = addDays(s, 6);
-  if (s.getMonth() === e.getMonth()) return `${format(s, 'MMM d')} – ${format(e, 'd, yyyy')}`;
-  return `${format(s, 'MMM d')} – ${format(e, 'MMM d, yyyy')}`;
+  if (s.getMonth() === e.getMonth()) return `${format(s, 'MMM d', opts)} – ${format(e, 'd, yyyy', opts)}`;
+  return `${format(s, 'MMM d', opts)} – ${format(e, 'MMM d, yyyy', opts)}`;
 }
 
 function computeOverlaps(events: ScheduleEventRecord[]) {
@@ -125,7 +136,7 @@ function DragEventCard({ ev, color, style, isDragging, previewDuration, onEventC
       }}
     >
       <div className="truncate text-[11px] font-semibold" style={{ color }}>{ev.job?.title || 'Job'}</div>
-      <div className="truncate text-[10px] text-text-secondary">{format(s, 'h:mm a')}{computedHeight && computedHeight > 30 ? ` – ${format(e, 'h:mm a')}` : ''}</div>
+      <div className="truncate text-[10px] text-text-secondary">{format(s, 'h:mm a', _LOC)}{computedHeight && computedHeight > 30 ? ` – ${format(e, 'h:mm a', _LOC)}` : ''}</div>
       {ev.job?.client_name && computedHeight && computedHeight > 44 && (
         <div className="mt-0.5 truncate text-[10px] text-text-tertiary">{ev.job.client_name}</div>
       )}
@@ -227,7 +238,7 @@ function TimeGrid({
           return (
             <div key={i} className={cn('border-r border-border/40 px-2 py-2.5 text-center', today && 'bg-primary/[0.03]')}>
               <div className={cn('text-[11px] font-semibold uppercase tracking-wider', today ? 'text-primary' : 'text-text-tertiary')}>
-                {format(d, 'EEE')}
+                {format(d, 'EEE', _LOC)}
               </div>
               <div className={cn('mx-auto mt-0.5 flex h-8 w-8 items-center justify-center rounded-full text-[15px]',
                 today ? 'bg-primary font-bold text-white' : 'font-medium text-text-primary')}>
@@ -385,7 +396,7 @@ function MonthView({ date, events, tcMap, onDayClick, onEventClick }: {
                     <div key={ev.id} onClick={(e) => { e.stopPropagation(); onEventClick(ev.job_id); }}
                       className="cursor-pointer truncate rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors hover:opacity-80"
                       style={{ backgroundColor: toRgba(c, 0.15), color: c }}>
-                      {format(new Date(ev.start_at), 'h:mma').toLowerCase()} {ev.job?.title || 'Job'}
+                      {format(new Date(ev.start_at), 'h:mma', _LOC).toLowerCase()} {ev.job?.title || 'Job'}
                     </div>
                   );
                 })}
@@ -430,7 +441,7 @@ function AgendaView({ events, overlaps, tcMap, teams, onEventClick, onSlotClick 
           <div key={dk}>
             <div className="flex items-center gap-4 px-6 pb-2 pt-5 lg:px-8">
               <span className={cn('text-[11px] font-bold uppercase tracking-[0.1em]', today ? 'text-primary' : 'text-text-tertiary')}>
-                {format(d, 'd MMM').toUpperCase()}, {format(d, 'EEEE').toUpperCase()}
+                {format(d, 'd MMM', _LOC).toUpperCase()}, {format(d, 'EEEE', _LOC).toUpperCase()}
               </span>
               <div className="h-px flex-1 bg-border" />
               {today && <span className="rounded-md bg-primary px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">Today</span>}
@@ -459,7 +470,7 @@ function AgendaView({ events, overlaps, tcMap, teams, onEventClick, onSlotClick 
                         <div className="min-w-0 flex-1">
                           <p className="text-[14px] font-bold leading-snug" style={{ color: c }}>{ev.job?.title || 'Job'}</p>
                           <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-text-secondary">
-                            <span className="font-medium">{format(s, 'h:mm a')} – {format(e, 'h:mm a')}</span>
+                            <span className="font-medium">{format(s, 'h:mm a', _LOC)} – {format(e, 'h:mm a', _LOC)}</span>
                             {ev.job?.client_name && <span>{ev.job.client_name}</span>}
                             {ev.job?.property_address && <span className="flex items-center gap-1 text-text-tertiary"><MapPin size={11} />{ev.job.property_address}</span>}
                           </div>
@@ -501,7 +512,7 @@ function MiniCal({ date, onSelect }: { date: Date; onSelect: (d: Date) => void }
   return (
     <div className="w-[252px]">
       <div className="mb-1.5 flex items-center justify-between px-1">
-        <span className="text-[13px] font-semibold text-text-primary">{format(anchor, 'MMMM yyyy')}</span>
+        <span className="text-[13px] font-semibold text-text-primary">{format(anchor, 'MMMM yyyy', _LOC)}</span>
         <div className="flex gap-0.5">
           <button onClick={() => setAnchor(addMonths(anchor, -1))} className="rounded p-0.5 hover:bg-surface-tertiary text-text-secondary"><ChevronLeft size={14} /></button>
           <button onClick={() => setAnchor(addMonths(anchor, 1))} className="rounded p-0.5 hover:bg-surface-tertiary text-text-secondary"><ChevronRight size={14} /></button>
@@ -853,6 +864,52 @@ function ScheduleContent() {
         </button>
 
         <button onClick={refresh} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors" title={t.schedule.refresh}><RefreshCw size={15} /></button>
+        {view === 'day' && selectedTeamIds.length === 1 && (
+          <button
+            onClick={async () => {
+              const dayJobs = filtered
+                .slice()
+                .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+                .map((e) => e.job?.id)
+                .filter(Boolean) as string[];
+              if (dayJobs.length < 2) {
+                toast.info(t.routing?.needTwoJobs || 'Need at least 2 scheduled jobs.');
+                return;
+              }
+              const team = teams.find((tm) => tm.id === selectedTeamIds[0]);
+              const proceed = window.confirm(
+                (t.routing?.confirmApply || 'This will reschedule {n} jobs for {rep}. Proceed?')
+                  .replace('{n}', String(dayJobs.length))
+                  .replace('{rep}', team?.name || 'team'),
+              );
+              if (!proceed) return;
+              try {
+                const dayStart = startOfDay(selectedDate);
+                // Anchor depart_at to the earliest currently-scheduled time so we keep the morning start.
+                const earliest = filtered.reduce(
+                  (min, e) => Math.min(min, new Date(e.start_at).getTime()),
+                  Number.POSITIVE_INFINITY,
+                );
+                const departAt = Number.isFinite(earliest) ? new Date(earliest) : dayStart;
+                const result = await optimizeRoute({ job_ids: dayJobs, depart_at: departAt.toISOString() });
+                if (result.skipped.length) {
+                  toast.warning(`${result.skipped.length} job(s) skipped (missing coords).`);
+                }
+                await applyOptimizedSchedule(result.ordered_jobs, departAt);
+                toast.success(
+                  `${t.routing?.optimizedToast || 'Optimized'}: ${result.total_distance_km.toFixed(1)} km · ~${result.total_drive_minutes} min`,
+                );
+                refresh();
+              } catch (e: any) {
+                toast.error(e?.message || 'Optimization failed.');
+              }
+            }}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-[5px] text-[13px] font-medium text-text-primary hover:bg-surface-secondary transition-colors"
+            title={t.routing?.optimizeDay || 'Optimize day'}
+          >
+            <MapPin size={13} />{t.routing?.optimizeDay || 'Optimize day'}
+          </button>
+        )}
         <button onClick={() => openCreate(selectedDate)} className="flex items-center gap-1.5 rounded-lg bg-text-primary px-3.5 py-[6px] text-[13px] font-semibold text-white shadow-sm hover:opacity-90 transition-opacity"><Plus size={14} strokeWidth={2.5} />{t.schedule.scheduleJob}</button>
       </header>
 

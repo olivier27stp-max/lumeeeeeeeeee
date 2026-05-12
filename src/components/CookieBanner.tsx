@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from '../i18n';
+import { Z } from '../lib/zIndex';
 import {
   readStoredConsent,
   writeStoredConsent,
@@ -51,7 +52,8 @@ export function CookieBanner() {
     <div
       role="dialog"
       aria-label={t.cookies.title}
-      className="fixed bottom-0 left-0 right-0 z-[9999] border-t border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900"
+      style={{ zIndex: Z.cookieBanner }}
+      className="fixed bottom-0 left-0 right-0 border-t border-outline bg-surface shadow-2xl"
     >
       <div className="mx-auto max-w-5xl px-4 py-4 sm:px-6 sm:py-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">

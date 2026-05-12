@@ -20,7 +20,14 @@ export default function Auth({ onBack }: AuthProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-  // MFA challenge state
+  // MFA challenge state.
+  // Hardening (audit P1-D8): when MFA is enrolled, the AAL1 session that
+  // signInWithPassword leaves in localStorage is itself a security boundary.
+  // We must NOT render any authenticated UI from it. The App-level guard
+  // (`<AaL2Guard />` in App.tsx) refuses to mount the authenticated tree
+  // while the current session is AAL1 AND verified MFA factors exist. The
+  // user must either finish the MFA challenge below (-> AAL2) or cancel
+  // (which signs out).
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -29,15 +36,16 @@ export default function Auth({ onBack }: AuthProps) {
     setMessage(null);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
-      // Check if user has MFA enrolled — if so, show challenge
+      // Check if user has MFA enrolled — if so, show challenge. The
+      // authenticated app tree will NOT render until AAL2 is reached
+      // (see AaL2Guard in App.tsx).
       const { data: factorsData } = await supabase.auth.mfa.listFactors();
       const verifiedFactors = factorsData?.totp?.filter(f => f.status === 'verified') || [];
 
       if (verifiedFactors.length > 0) {
-        // User has MFA — show challenge screen
         setMfaFactorId(verifiedFactors[0].id);
         return;
       }
@@ -56,7 +64,7 @@ export default function Auth({ onBack }: AuthProps) {
         factorId={mfaFactorId}
         onSuccess={() => {
           setMfaFactorId(null);
-          // Session is now fully authenticated — App.tsx will detect it
+          // Session is now AAL2 — App.tsx AaL2Guard will allow render.
         }}
         onCancel={async () => {
           await supabase.auth.signOut();
@@ -92,6 +100,7 @@ export default function Auth({ onBack }: AuthProps) {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.15 }}
           className="glass-card space-y-8"
         >
           <div className="text-center space-y-2">

@@ -255,26 +255,9 @@ export async function softDeleteClient(id: string): Promise<SoftDeleteClientResu
   };
 }
 
-export async function hardDeleteClient(id: string): Promise<HardDeleteClientResult> {
-  const orgId = await getCurrentOrgIdOrThrow();
-  const { data, error } = await supabase.rpc('delete_client_cascade', {
-    p_org_id: orgId,
-    p_client_id: id,
-    p_deleted_by: null,
-  });
-  if (error) throw error;
-  return {
-    client: Number((data as any)?.client || 0),
-    jobs: Number((data as any)?.jobs || 0),
-    leads: Number((data as any)?.leads || 0),
-    pipeline_deals: Number((data as any)?.pipeline_deals || 0),
-    invoices: Number((data as any)?.invoices || 0),
-    invoice_items: Number((data as any)?.invoice_items || 0),
-    payments: Number((data as any)?.payments || 0),
-    schedule_events: Number((data as any)?.schedule_events || 0),
-    job_line_items: Number((data as any)?.job_line_items || 0),
-  };
-}
+// REMOVED 2026-05-12: hardDeleteClient violated CLAUDE.md soft-delete rule
+// (audit AUDIT_FEATURES_2026_05_12.md). Was imported by src/pages/Clients.tsx
+// but never actually invoked. Use softDeleteClient instead.
 
 export async function listClientJobs(clientId: string) {
   const { data, error } = await supabase

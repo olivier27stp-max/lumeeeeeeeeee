@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, Suspense } from 'react';
+const RecurringInvoicesPage = React.lazy(() => import('./RecurringInvoices'));
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRecentItems } from '../hooks/useRecentItems';
 import { toast } from 'sonner';
@@ -138,7 +139,8 @@ function timeAgo(dateStr: string): string {
 }
 
 function formatTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const locale = (typeof localStorage !== 'undefined' && localStorage.getItem('lume-language') === 'fr') ? 'fr-CA' : 'en-CA';
+  return new Date(dateStr).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
 }
 
 function copyToClipboard(text: string) {
@@ -146,7 +148,7 @@ function copyToClipboard(text: string) {
 }
 
 // ─── Tabs ────────────────────────────────────────────────────────────
-type OverviewTab = 'active' | 'completed' | 'quotes' | 'jobs' | 'invoices' | 'leads' | 'specific_notes';
+type OverviewTab = 'active' | 'completed' | 'quotes' | 'jobs' | 'invoices' | 'recurring' | 'leads' | 'specific_notes';
 
 // ─── Skeleton ────────────────────────────────────────────────────────
 function DetailPageSkeleton() {
@@ -474,6 +476,7 @@ export default function ClientDetails() {
     { key: 'completed', label: language === 'fr' ? 'Terminés' : 'Completed', count: completedJobs.length },
     { key: 'jobs', label: t.clients.jobs, count: jobs.length },
     { key: 'invoices', label: t.nav.invoices, count: invoices.length },
+    { key: 'recurring', label: (t as any).recurringInvoices?.tab || (language === 'fr' ? 'Récurrentes' : 'Recurring'), count: 0 },
     { key: 'quotes', label: t.clientDetails.quotes, count: realQuotes.length },
     { key: 'leads', label: language === 'fr' ? 'Prospects' : 'Leads', count: leads.length },
     { key: 'specific_notes', label: language === 'fr' ? 'Notes spécifiques' : 'Specific Notes', count: 0 },
@@ -642,7 +645,7 @@ export default function ClientDetails() {
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <MapPin size={15} className="text-text-secondary" />
-                Properties
+                {t.clientDetails.properties}
               </h2>
               <button
                 className="inline-flex items-center gap-1 h-7 px-2.5 bg-surface border border-outline rounded-md text-[12px] text-text-primary hover:bg-surface-secondary transition-colors"
@@ -686,12 +689,12 @@ export default function ClientDetails() {
                     </a>
                     <a href={buildGoogleMapsUrl(client)} target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 h-6 px-2 bg-surface border border-outline rounded text-[11px] text-text-secondary hover:bg-surface-secondary transition-colors" title="View on map">
-                      <ExternalLink size={11} /> Map
+                      <ExternalLink size={11} /> {t.clientDetails.viewOnMap}
                     </a>
                   </div>
                 </div>
               ) : (
-                <p className="text-[13px] text-text-tertiary">No properties added yet.</p>
+                <p className="text-[13px] text-text-tertiary">{(t.clientDetails as any).noPropertiesYet}</p>
               )}
             </div>
           </div>
@@ -829,6 +832,13 @@ export default function ClientDetails() {
                     </button>
                   ))}
                 </div>
+              )}
+
+              {/* Recurring Invoices Tab */}
+              {activeTab === 'recurring' && id && (
+                <Suspense fallback={<div className="py-4 text-center text-[13px] text-text-tertiary">Loading…</div>}>
+                  <RecurringInvoicesPage initialClientId={id} />
+                </Suspense>
               )}
 
               {/* Quotes Tab */}

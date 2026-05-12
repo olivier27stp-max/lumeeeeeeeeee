@@ -327,12 +327,12 @@ export default function Quotes() {
 
       {/* ── FOOTER ── */}
       <div className="flex items-center justify-between mt-3">
-        <span className="text-[14px] text-text-secondary">{sel.size} of {total} row(s) selected.</span>
+        <span className="text-[14px] text-text-secondary">{t.common.rowsSelected.replace('{selected}', String(sel.size)).replace('{total}', String(total))}</span>
         <div className="flex items-center gap-2">
           <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
-            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">Previous</button>
+            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.previous}</button>
           <button disabled={page >= pages} onClick={() => setPage(p => Math.min(pages, p + 1))}
-            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">Next</button>
+            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.next}</button>
         </div>
       </div>
 

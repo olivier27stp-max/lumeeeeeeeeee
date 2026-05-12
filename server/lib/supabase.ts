@@ -22,6 +22,58 @@ export function getServiceClient() {
   return adminClientCache;
 }
 
+/**
+ * Look up an auth user by email without walking the entire auth.users table.
+ * Uses the `get_user_id_by_email` RPC (SECURITY DEFINER, indexed lookup) and
+ * falls back to a direct table query via the service-role client.
+ *
+ * Replaces the old `admin.auth.admin.listUsers()` pattern which is O(N) +
+ * default-paginated (≤ 50 rows) + timing-oracle-friendly.
+ */
+export async function findUserByEmail(
+  admin: SupabaseClient,
+  email: string,
+): Promise<{ id: string; email: string | null; email_confirmed_at: string | null; user_metadata: any } | null> {
+  if (!email) return null;
+  const normalized = email.trim().toLowerCase();
+
+  // Preferred: RPC returns just the id (cheap, indexed)
+  try {
+    const { data, error } = await admin.rpc('get_user_id_by_email', { p_email: normalized });
+    if (!error && data) {
+      const id = typeof data === 'string' ? data : (data as any)?.id || (data as any)?.user_id;
+      if (id) {
+        try {
+          const { data: u } = await (admin.auth.admin as any).getUserById(id);
+          if (u?.user) return u.user as any;
+        } catch (err) { console.error('[findUserByEmail] getUserById failed:', err); }
+        return { id, email: normalized, email_confirmed_at: null, user_metadata: {} };
+      }
+    }
+  } catch (err) { console.error('[findUserByEmail] rpc failed:', err); }
+
+  // Fallback: direct query against auth.users via the service role.
+  try {
+    const { data } = await (admin as any)
+      .schema('auth')
+      .from('users')
+      .select('id, email, email_confirmed_at, raw_user_meta_data')
+      .ilike('email', normalized)
+      .limit(1)
+      .maybeSingle();
+    if (data) {
+      return {
+        id: data.id,
+        email: data.email,
+        email_confirmed_at: data.email_confirmed_at,
+        user_metadata: data.raw_user_meta_data || {},
+      };
+    }
+  } catch (err) { console.error('[findUserByEmail] direct query failed:', err); }
+
+  return null;
+}
+
 export async function resolveOrgId(client: SupabaseClient) {
   const { data, error } = await client.rpc('current_org_id');
   if (!error) return (data as string | null) || null;

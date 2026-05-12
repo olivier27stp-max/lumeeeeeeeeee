@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
+import { useCompany } from '../contexts/CompanyContext';
 import PermissionGate from '../components/PermissionGate';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import {
@@ -294,6 +295,7 @@ export default function Timesheets() {
   const months = fr ? MONTH_FR : MONTH_EN;
   const days = fr ? DAY_FR : DAY_EN;
   const qc = useQueryClient();
+  const { currentOrgId } = useCompany();
 
   // ── Hub tab (check URL params for redirect from /availability) ──
   const [hubTab, setHubTab] = useState<HubTab>(() => {
@@ -397,19 +399,21 @@ export default function Timesheets() {
 
   useEffect(() => { loadData(); loadMySession(); }, [loadData, loadMySession]);
   useEffect(() => {
-    const ch = supabase.channel('ts-entries').on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries' }, () => { loadData(); loadMySession(); }).subscribe();
+    if (!currentOrgId) return;
+    const ch = supabase.channel(`ts-entries-${currentOrgId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries', filter: `org_id=eq.${currentOrgId}` }, () => { loadData(); loadMySession(); }).subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [loadData, loadMySession]);
+  }, [loadData, loadMySession, currentOrgId]);
 
   // ── Map data ──
   useEffect(() => {
     if (hubTab !== 'carte') return;
     const load = () => { import('../lib/trackingApi').then(({ getActiveLiveLocations }) => getActiveLiveLocations().then(setLiveReps).catch(() => {})); };
     load();
-    const ch = supabase.channel('ts-live-reps').on('postgres_changes', { event: '*', schema: 'public', table: 'tracking_live_locations' }, load).subscribe();
+    if (!currentOrgId) return;
+    const ch = supabase.channel(`ts-live-reps-${currentOrgId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'tracking_live_locations', filter: `org_id=eq.${currentOrgId}` }, load).subscribe();
     const poll = setInterval(load, 30000);
     return () => { supabase.removeChannel(ch); clearInterval(poll); };
-  }, [hubTab]);
+  }, [hubTab, currentOrgId]);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
@@ -928,10 +932,10 @@ export default function Timesheets() {
 
           {/* Pagination */}
           <div className="flex items-center justify-between">
-            <span className="text-[14px] text-[#64748b]">{selected.size} {fr ? 'sur' : 'of'} {filteredRows.length} {fr ? 'ligne(s) sélectionnée(s).' : 'row(s) selected.'}</span>
+            <span className="text-[14px] text-[#64748b]">{t.common.rowsSelected.replace('{selected}', String(selected.size)).replace('{total}', String(filteredRows.length))}</span>
             <div className="flex items-center gap-2">
-              <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary disabled:opacity-40 hover:bg-surface-secondary transition-colors cursor-pointer">{fr ? 'Précédent' : 'Previous'}</button>
-              <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary disabled:opacity-40 hover:bg-surface-secondary transition-colors cursor-pointer">{fr ? 'Suivant' : 'Next'}</button>
+              <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary disabled:opacity-40 hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.previous}</button>
+              <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary disabled:opacity-40 hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.next}</button>
             </div>
           </div>
         </>

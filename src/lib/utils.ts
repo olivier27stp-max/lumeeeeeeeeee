@@ -5,23 +5,22 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// Currency/locale resolved once from localStorage or defaults (safe for SSR + private browsing)
+// Currency/locale resolved dynamically from localStorage at call time so language switches take effect
 function _safeGet(key: string): string | null { try { return typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null; } catch { return null; } }
-const _storedLang = _safeGet('lume-language');
-const _locale = _storedLang === 'fr' ? 'fr-CA' : 'en-CA';
-const _currency = _safeGet('lume-currency') || 'CAD';
+function _currentLocale(): string { return _safeGet('lume-language') === 'fr' ? 'fr-CA' : 'en-CA'; }
+function _currentCurrency(): string { return _safeGet('lume-currency') || 'CAD'; }
 
 export function formatCurrency(value: number, currency?: string) {
-  return new Intl.NumberFormat(_locale, {
+  return new Intl.NumberFormat(_currentLocale(), {
     style: 'currency',
-    currency: currency || _currency,
+    currency: currency || _currentCurrency(),
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
 }
 
 export function formatDate(date: string | Date) {
-  return new Date(date).toLocaleDateString(_locale, {
+  return new Date(date).toLocaleDateString(_currentLocale(), {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

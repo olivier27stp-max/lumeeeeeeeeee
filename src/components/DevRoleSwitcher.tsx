@@ -25,7 +25,7 @@ export default function DevRoleSwitcher({ expanded }: { expanded: boolean }) {
   };
 
   return (
-    <div className="relative" style={{ border: '2px solid red' }}>
+    <div className="relative">
       <button
         onClick={() => setOpen(!open)}
         title={!expanded ? 'Dev Role Switcher' : undefined}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts';
 import { ChevronRight } from 'lucide-react';
+import { useTranslation } from '../../../i18n';
 
 const DONUT_COLORS_LIGHT = ['#171717', '#3f3f46', '#71717a', '#a1a1aa', '#d4d4d8'];
 const DONUT_COLORS_DARK = ['#e4e4e7', '#a1a1aa', '#71717a', '#52525b', '#3f3f46'];
@@ -34,13 +35,15 @@ export default function SummaryDonutCard({
   dateRange: string;
 }) {
   const dark = useIsDark();
+  const { t } = useTranslation();
+  const ti = t.insights as any;
 
   return (
     <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-5 flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-1">
         <div>
-          <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Summary</h3>
+          <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{ti.summary}</h3>
           <p className="text-xs text-zinc-400 dark:text-zinc-500">{dateRange}</p>
         </div>
         <button className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors">

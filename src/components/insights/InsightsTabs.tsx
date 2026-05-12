@@ -1,11 +1,7 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
 import { InsightsTab } from '../../lib/insightsApi';
-
-const TAB_OPTIONS: Array<{ id: InsightsTab; label: string }> = [
-  { id: 'finance', label: 'Finance' },
-  { id: 'revenue', label: 'Performance' },
-];
+import { useTranslation } from '../../i18n';
 
 export default function InsightsTabs({
   activeTab,
@@ -14,6 +10,13 @@ export default function InsightsTabs({
   activeTab: InsightsTab;
   onTabChange: (tab: InsightsTab) => void;
 }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const TAB_OPTIONS: Array<{ id: InsightsTab; label: string }> = [
+    { id: 'finance', label: 'Finance' },
+    { id: 'reports', label: fr ? 'Rapports' : 'Reports' },
+    { id: 'revenue', label: 'Performance' },
+  ];
   return (
     <div className="inline-flex rounded-md border border-outline overflow-hidden">
       {TAB_OPTIONS.map((tab) => (

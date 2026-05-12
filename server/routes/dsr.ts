@@ -14,6 +14,7 @@
 
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
@@ -32,7 +33,7 @@ router.get('/dsr/export/me', async (req, res) => {
 
   const svc = getServiceClient();
   const { data, error } = await svc.rpc('export_user_data', { p_user_id: auth.user.id });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return sendSafeError(res, error, 'Export failed.', '[dsr/export/me]');
 
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', `attachment; filename="lume-export-${auth.user.id}.json"`);
@@ -51,7 +52,7 @@ router.get('/dsr/export/client/:id', async (req, res) => {
 
   const svc = getServiceClient();
   const { data, error } = await svc.rpc('export_client_data', { p_client_id: clientId });
-  if (error) return res.status(403).json({ error: error.message });
+  if (error) return sendSafeError(res, error, 'Export failed.', '[dsr/export/client]');
 
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', `attachment; filename="lume-client-${clientId}.json"`);
@@ -75,7 +76,7 @@ router.post('/dsr/erase/client/:id', async (req, res) => {
 
   const svc = getServiceClient();
   const { error } = await svc.rpc('anonymize_client', { p_client_id: clientId });
-  if (error) return res.status(403).json({ error: error.message });
+  if (error) return sendSafeError(res, error, 'Anonymization failed.', '[dsr/erase/client]');
 
   return res.status(200).json({ ok: true, anonymized: clientId });
 });
@@ -97,7 +98,7 @@ router.post('/dsr/erase/lead/:id', async (req, res) => {
 
   const svc = getServiceClient();
   const { error } = await svc.rpc('anonymize_lead', { p_lead_id: leadId });
-  if (error) return res.status(403).json({ error: error.message });
+  if (error) return sendSafeError(res, error, 'Anonymization failed.', '[dsr/erase/lead]');
 
   return res.status(200).json({ ok: true, anonymized: leadId });
 });
@@ -132,7 +133,7 @@ router.post('/dsr/request', async (req, res) => {
     .select()
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return sendSafeError(res, error, 'Failed to record request.', '[dsr/request]');
   return res.status(201).json({ request: data, sla_days: 30 });
 });
 
@@ -162,7 +163,7 @@ router.post('/dsr/consent', async (req, res) => {
     p_org_id: org_id ?? null,
   });
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return sendSafeError(res, error, 'Failed to record consent.', '[dsr/consent]');
   return res.status(201).json({ consent_id: data });
 });
 

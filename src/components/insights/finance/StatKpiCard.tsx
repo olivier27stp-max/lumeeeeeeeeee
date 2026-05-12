@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, Receipt, AlertCircle } from 'lucide-react';
+import { useTranslation } from '../../../i18n';
 
 /* ── Helpers ────────────────────────────────────────────────── */
 
@@ -39,12 +40,13 @@ export function BalanceCard({
   onViewPayments?: () => void;
   onExport?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-5 flex flex-col justify-between min-h-[180px]">
       <div>
         <div className="flex items-center gap-2 mb-3">
           <Wallet size={16} className="text-zinc-400 dark:text-zinc-500" />
-          <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">My Balance</span>
+          <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{(t.insights as any).myBalance}</span>
         </div>
         <div className="flex items-end gap-3 flex-wrap">
           <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 tabular-nums tracking-tight">
@@ -52,7 +54,7 @@ export function BalanceCard({
           </span>
           <DeltaBadge value={changePct} />
         </div>
-        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">compared to last month</p>
+        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">{(t.insights as any).comparedLastMonth}</p>
       </div>
       <div className="flex items-center gap-2 mt-4">
         <button
@@ -60,14 +62,14 @@ export function BalanceCard({
           className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-medium py-2.5 px-4 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"
         >
           <ArrowUpRight size={13} />
-          View Payments
+          {(t.insights as any).viewPayments}
         </button>
         <button
           onClick={onExport}
           className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-medium py-2.5 px-4 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
         >
           <ArrowDownRight size={13} />
-          Export
+          {(t.insights as any).export}
         </button>
       </div>
     </div>
@@ -139,6 +141,7 @@ export function PendingInvoicesCard({
   overdueCount: number;
   microData?: number[];
 }) {
+  const { t } = useTranslation();
   const bars = microData || Array.from({ length: 24 }, () => Math.random() * 100);
   const maxBar = Math.max(...bars, 1);
 
@@ -148,11 +151,11 @@ export function PendingInvoicesCard({
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <AlertCircle size={16} className="text-zinc-400 dark:text-zinc-500" />
-            <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Pending Invoices</span>
+            <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{(t.insights as any).pendingInvoices}</span>
           </div>
           {overdueCount > 0 && (
             <span className="inline-flex items-center rounded-full bg-rose-500 text-white text-[10px] font-bold px-2.5 py-0.5">
-              {overdueCount} overdue invoice{overdueCount > 1 ? 's' : ''}
+              {overdueCount} {overdueCount > 1 ? (t.insights as any).overdueInvoices : (t.insights as any).overdueInvoice}
             </span>
           )}
         </div>

@@ -14,6 +14,7 @@ import { getLeaderboard } from '../lib/leaderboardApi';
 import { getAllActiveSessions } from '../lib/fieldSessionsApi';
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
+import { useCompany } from '../contexts/CompanyContext';
 
 /* ═══ Shared dark panel ═══ */
 const darkPanel = 'rounded-2xl bg-surface-card border border-border shadow-card';
@@ -27,6 +28,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const { openJobModal } = useJobModalController();
   const permsCtx = usePermissions();
+  const { currentOrgId } = useCompany();
   const canSeeFinancials = permsCtx.role === 'owner' || permsCtx.role === 'admin' ||
     hasPermission(permsCtx.permissions, 'financial.view_analytics', permsCtx.role ?? undefined);
   const canSeePricing = permsCtx.role === 'owner' || permsCtx.role === 'admin' ||
@@ -48,15 +50,16 @@ export default function Dashboard() {
   useEffect(() => { const id = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(id); }, []);
 
   useEffect(() => {
+    if (!currentOrgId) return;
     let tmr: ReturnType<typeof setTimeout> | null = null;
     const bounce = () => { if (tmr) clearTimeout(tmr); tmr = setTimeout(() => refreshData(), 500); };
-    const ch = supabase.channel('dashboard-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pipeline_deals', filter: 'deleted_at=is.null' }, bounce)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs', filter: 'deleted_at=is.null' }, bounce)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_events' }, bounce)
+    const ch = supabase.channel(`dashboard-live-${currentOrgId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pipeline_deals', filter: `org_id=eq.${currentOrgId}` }, bounce)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs', filter: `org_id=eq.${currentOrgId}` }, bounce)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_events', filter: `org_id=eq.${currentOrgId}` }, bounce)
       .subscribe();
     return () => { if (tmr) clearTimeout(tmr); void supabase.removeChannel(ch); };
-  }, [refreshData]);
+  }, [refreshData, currentOrgId]);
 
   const { data: quoteKpis } = useQuery({ queryKey: ['dashboard-quote-kpis'], queryFn: fetchQuoteKpis, staleTime: 30_000 });
 

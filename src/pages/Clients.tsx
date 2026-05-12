@@ -12,7 +12,6 @@ import {
   findClientsByEmail,
   findClientsByPlaceId,
   getClientById,
-  hardDeleteClient,
   softDeleteClient,
   listClientJobs,
   listClients,
@@ -375,7 +374,7 @@ export default function Clients() {
       setIsCreateOpen(false);
       setForm(EMPTY_FORM);
       await loadClients();
-      toast.success(t.clients.clientCreated, { action: { label: 'Create Job', onClick: () => window.dispatchEvent(new CustomEvent('crm:open-new-job')) } });
+      toast.success(t.clients.clientCreated, { action: { label: t.commandPalette.createJob, onClick: () => window.dispatchEvent(new CustomEvent('crm:open-new-job')) } });
     } catch (err: any) {
       setSaveError(err?.message || t.clients.failedCreate);
       toast.error(err?.message || t.clients.failedCreate);
@@ -701,7 +700,7 @@ export default function Clients() {
       {/* ── FOOTER: selection count + pagination ── */}
       <div className="flex items-center justify-between mt-3">
         <span className="text-[14px] text-[var(--color-text-secondary)]">
-          {selectedIds.size} of {total} row(s) selected.
+          {t.common.rowsSelected.replace('{selected}', String(selectedIds.size)).replace('{total}', String(total))}
         </span>
         <div className="flex items-center gap-2">
           <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}

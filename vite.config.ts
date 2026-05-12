@@ -34,5 +34,27 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: (id: string) => {
+            if (id.includes('node_modules')) {
+              if (id.includes('mapbox-gl') || id.includes('react-leaflet') || id.includes('leaflet')) return 'maps';
+              if (id.includes('fullcalendar')) return 'calendar';
+              if (id.includes('recharts')) return 'charts';
+              if (id.includes('@xyflow')) return 'xyflow';
+              if (id.includes('jspdf') || id.includes('html2canvas')) return 'pdf';
+              if (id.includes('@stripe') || id.includes('stripe-js')) return 'stripe';
+              if (id.includes('@paypal')) return 'paypal';
+              if (id.includes('framer-motion') || id.includes('motion/')) return 'motion';
+              if (id.includes('react-router')) return 'router';
+              if (id.includes('@tanstack/react-query')) return 'query';
+              if (id.includes('react') || id.includes('react-dom')) return 'react';
+              return 'vendor';
+            }
+          },
+        },
+      },
+    },
   };
 });

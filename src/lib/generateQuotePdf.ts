@@ -3,24 +3,29 @@ import type { QuoteDetail } from './quotesApi';
 import { formatQuoteMoney } from './quotesApi';
 import type { PdfCompanyInfo } from './generateInvoicePdf';
 
+const isFr = (): boolean => (typeof localStorage !== 'undefined' && localStorage.getItem('lume-language') === 'fr');
+function L(en: string, fr: string): string { return isFr() ? fr : en; }
+
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '--';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '--';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const locale = isFr() ? 'fr-CA' : 'en-CA';
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    draft: 'Draft',
-    action_required: 'Action Required',
-    sent: 'Sent',
-    awaiting_response: 'Awaiting Response',
-    approved: 'Approved',
-    declined: 'Declined',
-    expired: 'Expired',
-    converted: 'Converted',
+  const en: Record<string, string> = {
+    draft: 'Draft', action_required: 'Action Required', sent: 'Sent',
+    awaiting_response: 'Awaiting Response', approved: 'Approved',
+    declined: 'Declined', expired: 'Expired', converted: 'Converted',
   };
+  const fr: Record<string, string> = {
+    draft: 'Brouillon', action_required: 'Action requise', sent: 'Envoyé',
+    awaiting_response: 'En attente de réponse', approved: 'Approuvé',
+    declined: 'Refusé', expired: 'Expiré', converted: 'Converti',
+  };
+  const map = isFr() ? fr : en;
   return map[status] || status;
 }
 
@@ -72,7 +77,7 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(28);
   doc.setTextColor(...black);
-  doc.text('QUOTE', pageW - marginR, y + 4, { align: 'right' });
+  doc.text(L('QUOTE', 'DEVIS'), pageW - marginR, y + 4, { align: 'right' });
 
   // Quote number
   doc.setFont('helvetica', 'normal');
@@ -96,7 +101,7 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(...lightGray);
-  doc.text('PREPARED FOR', metaLeftX, y);
+  doc.text(L('PREPARED FOR', 'PRÉPARÉ POUR'), metaLeftX, y);
   y += 12;
 
   if (contact) {
@@ -127,12 +132,12 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(...lightGray);
-  doc.text('DETAILS', metaRightX - 120, detailsStartY);
+  doc.text(L('DETAILS', 'DÉTAILS'), metaRightX - 120, detailsStartY);
 
   const detailRows: [string, string][] = [];
-  if (quote.created_at) detailRows.push(['Date', fmtDate(quote.created_at)]);
-  if (quote.valid_until) detailRows.push(['Valid Until', fmtDate(quote.valid_until)]);
-  detailRows.push(['Status', statusLabel(quote.status)]);
+  if (quote.created_at) detailRows.push([L('Date', 'Date'), fmtDate(quote.created_at)]);
+  if (quote.valid_until) detailRows.push([L('Valid Until', 'Valide jusqu\'au'), fmtDate(quote.valid_until)]);
+  detailRows.push([L('Status', 'Statut'), statusLabel(quote.status)]);
 
   let detailY = detailsStartY + 12;
   doc.setFontSize(8);
@@ -174,10 +179,10 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(...lightGray);
-  doc.text('DESCRIPTION', colX.desc, y);
-  doc.text('QTY', colX.qty, y, { align: 'center' });
-  doc.text('PRICE', colX.unit + 20, y, { align: 'right' });
-  doc.text('TOTAL', colX.total, y, { align: 'right' });
+  doc.text(L('DESCRIPTION', 'DESCRIPTION'), colX.desc, y);
+  doc.text(L('QTY', 'QTÉ'), colX.qty, y, { align: 'center' });
+  doc.text(L('PRICE', 'PRIX'), colX.unit + 20, y, { align: 'right' });
+  doc.text(L('TOTAL', 'TOTAL'), colX.total, y, { align: 'right' });
   y += 6;
   doc.setDrawColor(229, 229, 229);
   doc.line(marginL, y, pageW - marginR, y);
@@ -234,7 +239,7 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(...lightGray);
-    doc.text('OPTIONAL ITEMS', marginL, y);
+    doc.text(L('OPTIONAL ITEMS', 'ÉLÉMENTS OPTIONNELS'), marginL, y);
     y += 12;
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(9);
@@ -259,7 +264,7 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
 
   if (requiredItems.length === 0 && optionalItems.length === 0) {
     doc.setTextColor(204, 204, 204);
-    doc.text('No line items', marginL, y);
+    doc.text(L('No line items', 'Aucun élément'), marginL, y);
     y += 20;
   }
 
@@ -269,13 +274,13 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
   const labelsX = totalsX - 160;
 
   const totalsRows: [string, string][] = [
-    ['Subtotal', fmt(quote.subtotal_cents)],
+    [L('Subtotal', 'Sous-total'), fmt(quote.subtotal_cents)],
   ];
   if (quote.discount_cents > 0) {
-    totalsRows.push(['Discount', `-${fmt(quote.discount_cents)}`]);
+    totalsRows.push([L('Discount', 'Rabais'), `-${fmt(quote.discount_cents)}`]);
   }
   if (quote.tax_cents > 0) {
-    totalsRows.push([quote.tax_rate_label || 'Tax', fmt(quote.tax_cents)]);
+    totalsRows.push([quote.tax_rate_label || L('Tax', 'Taxes'), fmt(quote.tax_cents)]);
   }
 
   doc.setFontSize(9);
@@ -295,7 +300,7 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.setTextColor(...black);
-  doc.text('Total', labelsX, y + 4);
+  doc.text(L('Total', 'Total'), labelsX, y + 4);
   doc.text(fmt(quote.total_cents), totalsX, y + 4, { align: 'right' });
   y += 22;
 
@@ -316,8 +321,8 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
     doc.setTextColor(102, 102, 102);
 
     const depositLabel = quote.deposit_type === 'percentage'
-      ? `Deposit required (${quote.deposit_value}%)`
-      : 'Deposit required';
+      ? `${L('Deposit required', 'Acompte requis')} (${quote.deposit_value}%)`
+      : L('Deposit required', 'Acompte requis');
     doc.text(depositLabel, labelsX + 4, y + 2);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...black);
@@ -326,7 +331,7 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(...midGray);
-    doc.text('Due upon acceptance', labelsX + 4, y + 14);
+    doc.text(L('Due upon acceptance', 'Dû à l\'acceptation'), labelsX + 4, y + 14);
 
     y += 36;
   }
@@ -344,7 +349,7 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(...lightGray);
-    doc.text('NOTES', marginL, y);
+    doc.text(L('NOTES', 'NOTES'), marginL, y);
     y += 12;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
@@ -367,7 +372,7 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(...lightGray);
-    doc.text('TERMS & CONDITIONS', marginL, y);
+    doc.text(L('TERMS & CONDITIONS', 'CONDITIONS GÉNÉRALES'), marginL, y);
     y += 12;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
@@ -382,8 +387,9 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
   doc.setFontSize(7);
   doc.setTextColor(187, 187, 187);
   doc.text(`${companyName} — Powered by Lume`, marginL, footerY);
+  const fLocale = isFr() ? 'fr-CA' : 'en-CA';
   doc.text(
-    `Generated ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+    `${L('Generated', 'Généré le')} ${new Date().toLocaleDateString(fLocale, { year: 'numeric', month: 'long', day: 'numeric' })}`,
     pageW - marginR,
     footerY,
     { align: 'right' },

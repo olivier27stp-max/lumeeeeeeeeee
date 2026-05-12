@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '../../../i18n';
 
 function fmtDollars(cents: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -29,20 +30,23 @@ export default function RevenueGoalCard({
   onViewReport?: () => void;
 }) {
   const pct = targetCents > 0 ? Math.min(100, (currentCents / targetCents) * 100) : 0;
+  const { t } = useTranslation();
+  const ti = t.insights as any;
+  const tc = t.common as any;
 
   return (
     <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-5">
       {/* Header */}
       <div className="flex items-center justify-between mb-1">
         <div>
-          <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Revenue Goal</h3>
-          <p className="text-xs text-zinc-400 dark:text-zinc-500">{pct.toFixed(0)}% Progress</p>
+          <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{ti.revenueGoal}</h3>
+          <p className="text-xs text-zinc-400 dark:text-zinc-500">{pct.toFixed(0)}% {ti.progress}</p>
         </div>
         <button
           onClick={onViewReport}
           className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
         >
-          View Report
+          {ti.viewReport}
         </button>
       </div>
 
@@ -52,7 +56,7 @@ export default function RevenueGoalCard({
           {fmtDollars(currentCents)}
         </span>
         <span className="text-sm text-zinc-400 dark:text-zinc-500 font-medium">
-          of {fmtCompact(targetCents)}
+          {tc.of} {fmtCompact(targetCents)}
         </span>
       </div>
 

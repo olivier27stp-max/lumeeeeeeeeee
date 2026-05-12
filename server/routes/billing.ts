@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import Stripe from 'stripe';
 import { validate } from '../lib/validation';
-import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, findUserByEmail } from '../lib/supabase';
 
 const router = Router();
 
@@ -492,11 +492,49 @@ router.post('/billing/cancel', async (req, res) => {
       return res.status(403).json({ error: 'Only admins or owners can cancel subscriptions.' });
     }
 
+    // F-34: Look up the Stripe subscription id first and tell Stripe to cancel
+    // at period end. The previous implementation only flipped the DB flag, so
+    // Stripe kept charging at the next renewal.
+    const { data: subRow, error: subFetchErr } = await admin
+      .from('subscriptions')
+      .select('id, stripe_subscription_id, status')
+      .eq('org_id', auth.orgId)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (subFetchErr) {
+      console.error('[billing/cancel] subscription lookup failed', subFetchErr.message);
+      return res.status(500).json({ error: 'Failed to cancel subscription.' });
+    }
+
+    if (!subRow) {
+      return res.status(404).json({ error: 'No active subscription to cancel.' });
+    }
+
+    if (subRow.stripe_subscription_id && stripe) {
+      try {
+        await stripe.subscriptions.update(subRow.stripe_subscription_id, {
+          cancel_at_period_end: true,
+        });
+      } catch (stripeErr: any) {
+        const code = stripeErr?.code || stripeErr?.raw?.code || '';
+        const msg = stripeErr?.message || '';
+        // Tolerate "already cancelled / not found" — we'll still mirror in DB.
+        const benign =
+          code === 'resource_missing' ||
+          /No such subscription/i.test(msg) ||
+          /canceled/i.test(msg);
+        if (!benign) {
+          console.error('[billing/cancel] Stripe cancel failed', { code, msg });
+          return res.status(502).json({ error: 'Failed to cancel subscription with Stripe.' });
+        }
+      }
+    }
+
     const { error } = await admin
       .from('subscriptions')
       .update({ cancel_at_period_end: true })
-      .eq('org_id', auth.orgId)
-      .eq('status', 'active');
+      .eq('id', subRow.id);
 
     if (error) {
       return res.status(500).json({ error: 'Failed to cancel subscription.' });
@@ -549,8 +587,8 @@ router.post('/billing/create-checkout-session', async (req, res) => {
     if (!email) return res.status(400).json({ error: 'Email is required.' });
 
     // ── Email verification gate for existing users ──
-    const { data: allUsers } = await admin.auth.admin.listUsers();
-    const existingUser = allUsers?.users.find((u: any) => u.email === email) as any;
+    // Targeted lookup (was: listUsers — O(N) + 50-row default page)
+    const existingUser: any = await findUserByEmail(admin, email);
     if (existingUser) {
       const meta = existingUser.user_metadata || {};
       const hasFlag = 'billing_email_verified' in meta;

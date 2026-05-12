@@ -42,7 +42,9 @@ import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
 import requestFormsRouter from './routes/request-forms';
 import marketingRouter from './routes/marketing';
+import campaignsRouter from './routes/campaigns';
 import quoteTemplatesRouter from './routes/quote-templates';
+import checklistsRouter from './routes/checklists';
 import taxesRouter from './routes/taxes';
 import featureFlagsRouter from './routes/feature-flags';
 import scheduledReportsRouter from './routes/scheduled-reports';
@@ -66,6 +68,15 @@ import authRouter from './routes/auth';
 import dsrRouter from './routes/dsr';
 import teamComplianceRouter from './routes/team-compliance';
 import incidentsRouter from './routes/incidents';
+import cronRouter from './routes/cron';
+import remindersCronRouter from './routes/reminders-cron';
+import remindersRouter from './routes/reminders';
+import meRouter from './routes/me';
+import bookingRouter from './routes/booking';
+import recurringInvoicesRouter from './routes/recurring-invoices';
+import quickbooksExportRouter from './routes/quickbooks-export';
+import routeOptimizationRouter from './routes/route-optimization';
+import webhooksConfigRouter from './routes/webhooks-config';
 
 // Security engine
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, extractIP } from './lib/security';
@@ -157,11 +168,13 @@ app.use(cors({
 // Webhook routes are exempted: they're called by external services (Twilio sends
 // application/x-www-form-urlencoded with no auth header) and protect themselves
 // via provider-specific signature validation (e.g. x-twilio-signature, stripe-signature).
+// Paths are relative to the /api mount point — Express strips the prefix
+// from req.path inside a mounted middleware, so DO NOT include /api here.
 const WEBHOOK_PATHS_EXEMPT_FROM_CSRF = [
-  '/api/messages/inbound',
-  '/api/messages/status',
-  '/api/webhooks/stripe',
-  '/api/webhooks/paypal',
+  '/messages/inbound',
+  '/messages/status',
+  '/webhooks/stripe',
+  '/webhooks/paypal',
 ];
 app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
@@ -299,6 +312,19 @@ app.use('/api', authRouter);
 app.use('/api', dsrRouter);
 app.use('/api', teamComplianceRouter);
 app.use('/api', incidentsRouter);
+app.use('/api', cronRouter);
+app.use('/api', remindersCronRouter);
+app.use('/api', remindersRouter);
+app.use('/api', meRouter);
+app.use('/api', recurringInvoicesRouter);
+app.use('/api', quickbooksExportRouter);
+app.use('/api', webhooksConfigRouter);
+app.use('/api', routeOptimizationRouter);
+
+// Public booking endpoints — tight IP rate limit on submissions
+const bookingPublicLimiter = rateLimit({ windowMs: 60_000, max: 20 });
+app.use('/api/booking', bookingPublicLimiter);
+app.use('/api', bookingRouter);
 app.use('/api', scheduledReportsRouter);
 app.use('/api', goalsRouter);
 app.use('/api', auditLogRouter);
@@ -332,7 +358,9 @@ app.use('/api/public/form', formSubmitLimiter);
 app.use('/api/public/book-demo', formSubmitLimiter);
 app.use('/api', requestFormsRouter);
 app.use('/api', marketingRouter);
+app.use('/api', campaignsRouter);
 app.use('/api', quoteTemplatesRouter);
+app.use('/api', checklistsRouter);
 app.use('/api', taxesRouter);
 app.use('/api', invitationsRouter);
 app.use('/api', rolePresetsRouter);
@@ -361,7 +389,17 @@ app.use('/api', securityRouter);
 
 // ── Serve frontend static files in production ──
 const distPath = path.resolve(__dirname, '..', 'dist');
-app.use(express.static(distPath));
+app.use(express.static(distPath, {
+  maxAge: '1y',
+  immutable: true,
+  setHeaders: (res, filePath) => {
+    // index.html must never be cached (it references hashed asset filenames
+    // that change every deploy). Hashed JS/CSS in /assets are immutable.
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    }
+  },
+}));
 
 // ── Workflow action bridge — routes visual workflow actions to the real engine ──
 app.post('/api/workflows/execute-action', async (req, res) => {
@@ -414,13 +452,29 @@ app.post('/api/workflows/execute-action', async (req, res) => {
   }
 });
 
-// SPA fallback — serve index.html fresh from disk every time.
-// Reading once at boot caused stale HTML referencing old hashed assets
-// after a redeploy (dist/ rewritten but template in memory).
+// SPA fallback — serve index.html with an in-memory cache invalidated by
+// the file mtime so a redeploy (dist/ rewritten) is picked up automatically
+// without re-reading from disk on every navigation.
+import fs from 'fs';
+const indexHtmlPath = path.join(distPath, 'index.html');
+let indexHtmlCache: { mtimeMs: number; body: string } | null = null;
+function loadIndexHtml(): string | null {
+  try {
+    const stat = fs.statSync(indexHtmlPath);
+    if (!indexHtmlCache || indexHtmlCache.mtimeMs !== stat.mtimeMs) {
+      indexHtmlCache = { mtimeMs: stat.mtimeMs, body: fs.readFileSync(indexHtmlPath, 'utf-8') };
+    }
+    return indexHtmlCache.body;
+  } catch {
+    return null;
+  }
+}
 app.get('*', (_req, res, next) => {
   if (_req.path.startsWith('/api')) return next();
-  res.set('Cache-Control', 'no-store, must-revalidate');
-  res.sendFile(path.join(distPath, 'index.html'));
+  res.set('Cache-Control', 'no-cache, must-revalidate');
+  const body = loadIndexHtml();
+  if (body == null) return res.sendFile(indexHtmlPath);
+  res.type('html').send(body);
 });
 // Health check endpoint
 app.get('/api/health', (_req, res) => {

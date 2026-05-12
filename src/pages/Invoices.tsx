@@ -702,19 +702,19 @@ export default function Invoices() {
           {/* ── FOOTER (Jobs/Clients pattern) ── */}
           <div className="flex items-center justify-between mt-3">
             <span className="text-[14px] text-text-secondary">
-              {selectedIds.size} {fr ? 'sur' : 'of'} {total} {fr ? 'ligne(s) sélectionnée(s).' : 'row(s) selected.'}
+              {t.common.rowsSelected.replace('{selected}', String(selectedIds.size)).replace('{total}', String(total))}
             </span>
             <div className="flex items-center gap-2">
               <button disabled={page <= 1} onClick={() => goToPage(page - 1)}
                 className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
-                {fr ? 'Précédent' : 'Previous'}
+                {t.common.previous}
               </button>
               {totalPages > 1 && (
                 <span className="text-[13px] text-text-muted tabular-nums px-2">{page} / {totalPages}</span>
               )}
               <button disabled={page >= totalPages} onClick={() => goToPage(page + 1)}
                 className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
-                {fr ? 'Suivant' : 'Next'}
+                {t.common.next}
               </button>
             </div>
           </div>

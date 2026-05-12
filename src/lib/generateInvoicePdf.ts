@@ -16,24 +16,28 @@ export interface PdfTaxLine {
   registration_number?: string | null;
 }
 
+const isFr = (): boolean => (typeof localStorage !== 'undefined' && localStorage.getItem('lume-language') === 'fr');
+
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '--';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '--';
-  const locale = (typeof localStorage !== 'undefined' && localStorage.getItem('lume-language') === 'fr') ? 'fr-CA' : 'en-CA';
+  const locale = isFr() ? 'fr-CA' : 'en-CA';
   return d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    draft: 'Draft',
-    sent: 'Sent',
-    partial: 'Partially Paid',
-    paid: 'Paid',
-    void: 'Void',
+  const en: Record<string, string> = {
+    draft: 'Draft', sent: 'Sent', partial: 'Partially Paid', paid: 'Paid', void: 'Void', overdue: 'Overdue',
   };
+  const fr: Record<string, string> = {
+    draft: 'Brouillon', sent: 'Envoyée', partial: 'Partiellement payée', paid: 'Payée', void: 'Annulée', overdue: 'En retard',
+  };
+  const map = isFr() ? fr : en;
   return map[status] || status;
 }
+
+function L(en: string, fr: string): string { return isFr() ? fr : en; }
 
 /**
  * Generate and trigger download of a professional invoice PDF.
@@ -54,7 +58,7 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(20);
   doc.setTextColor(30, 30, 30);
-  doc.text('INVOICE', marginL, y);
+  doc.text(L('INVOICE', 'FACTURE'), marginL, y);
 
   // Company name under INVOICE
   if (company?.company_name) {
@@ -81,10 +85,10 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
 
   // ── Invoice meta ────────────────────────────────────────────────
   const metaLeft = [
-    ['Status', statusLabel(invoice.status)],
-    ['Date', fmtDate(invoice.created_at)],
-    ['Due Date', fmtDate(invoice.due_date)],
-    ['Issued', fmtDate(invoice.issued_at)],
+    [L('Status', 'Statut'), statusLabel(invoice.status)],
+    [L('Date', 'Date'), fmtDate(invoice.created_at)],
+    [L('Due Date', 'Échéance'), fmtDate(invoice.due_date)],
+    [L('Issued', 'Émise'), fmtDate(invoice.issued_at)],
   ];
 
   doc.setFontSize(9);
@@ -104,7 +108,7 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(100, 100, 100);
-  doc.text('Bill To:', rightCol - 180, clientStartY);
+  doc.text(L('Bill To:', 'Facturer à :'), rightCol - 180, clientStartY);
 
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(30, 30, 30);
@@ -126,7 +130,7 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(9);
     doc.setTextColor(80, 80, 80);
-    doc.text(`Subject: ${invoice.subject}`, marginL, y);
+    doc.text(`${L('Subject', 'Objet')}: ${invoice.subject}`, marginL, y);
   }
 
   y += 24;
@@ -145,10 +149,10 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(80, 80, 80);
-  doc.text('DESCRIPTION', colX.desc + 6, y);
-  doc.text('QTY', colX.qty, y, { align: 'right' });
-  doc.text('UNIT PRICE', colX.unit + 40, y, { align: 'right' });
-  doc.text('TOTAL', colX.total, y, { align: 'right' });
+  doc.text(L('DESCRIPTION', 'DESCRIPTION'), colX.desc + 6, y);
+  doc.text(L('QTY', 'QTÉ'), colX.qty, y, { align: 'right' });
+  doc.text(L('UNIT PRICE', 'PRIX UNIT.'), colX.unit + 40, y, { align: 'right' });
+  doc.text(L('TOTAL', 'TOTAL'), colX.total, y, { align: 'right' });
 
   y += 14;
   doc.setFont('helvetica', 'normal');
@@ -176,7 +180,7 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
 
   if (items.length === 0) {
     doc.setTextColor(150, 150, 150);
-    doc.text('No line items', marginL + 6, y);
+    doc.text(L('No line items', 'Aucun élément'), marginL + 6, y);
     y += 20;
   }
 
@@ -187,10 +191,10 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
 
   const discountCents = (invoice as any).discount_cents || 0;
   const totalsRows: [string, string][] = [
-    ['Subtotal', fmt(invoice.subtotal_cents)],
+    [L('Subtotal', 'Sous-total'), fmt(invoice.subtotal_cents)],
   ];
   if (discountCents > 0) {
-    totalsRows.push(['Discount', `-${fmt(discountCents)}`]);
+    totalsRows.push([L('Discount', 'Rabais'), `-${fmt(discountCents)}`]);
   }
   // Show individual taxes if breakdown available, otherwise single total
   if (taxBreakdown && taxBreakdown.length > 0) {
@@ -198,7 +202,7 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
       totalsRows.push([`${tax.name} (${tax.rate}%)`, fmt(tax.amount_cents)]);
     }
   } else {
-    totalsRows.push(['Tax', fmt(invoice.tax_cents)]);
+    totalsRows.push([L('Tax', 'Taxes'), fmt(invoice.tax_cents)]);
   }
 
   doc.setFontSize(9);
@@ -217,7 +221,7 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(30, 30, 30);
-  doc.text('Total', labelsX, y + 4);
+  doc.text(L('Total', 'Total'), labelsX, y + 4);
   doc.text(fmt(invoice.total_cents), totalsX, y + 4, { align: 'right' });
   y += 22;
 
@@ -225,14 +229,14 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 100, 100);
-  doc.text('Paid', labelsX, y);
+  doc.text(L('Paid', 'Payé'), labelsX, y);
   doc.setTextColor(30, 30, 30);
   doc.text(fmt(invoice.paid_cents), totalsX, y, { align: 'right' });
   y += 16;
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(invoice.balance_cents > 0 ? 180 : 80, invoice.balance_cents > 0 ? 40 : 140, invoice.balance_cents > 0 ? 40 : 80);
-  doc.text('Balance Due', labelsX, y);
+  doc.text(L('Balance Due', 'Solde dû'), labelsX, y);
   doc.text(fmt(invoice.balance_cents), totalsX, y, { align: 'right' });
 
   // ── Notes ──────────────────────────────────────────────────────
@@ -246,7 +250,7 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(100, 100, 100);
-    doc.text('NOTES', marginL, y);
+    doc.text(L('NOTES', 'NOTES'), marginL, y);
     y += 14;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
@@ -267,7 +271,7 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
     doc.setFontSize(8);
     doc.setTextColor(140, 140, 140);
     for (const tax of regNums) {
-      doc.text(`${tax.name} No: ${tax.registration_number}`, marginL, y);
+      doc.text(`${tax.name} ${L('No', 'Nº')}: ${tax.registration_number}`, marginL, y);
       y += 11;
     }
   }
@@ -277,9 +281,9 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(160, 160, 160);
-  const footerLocale = (typeof localStorage !== 'undefined' && localStorage.getItem('lume-language') === 'fr') ? 'fr-CA' : 'en-CA';
+  const footerLocale = isFr() ? 'fr-CA' : 'en-CA';
   const footerDate = new Date().toLocaleDateString(footerLocale, { year: 'numeric', month: 'long', day: 'numeric' });
-  const footerLabel = footerLocale === 'fr-CA' ? 'Généré le' : 'Generated on';
+  const footerLabel = L('Generated on', 'Généré le');
   doc.text(`${footerLabel} ${footerDate}`, marginL, footerY);
 
   // ── Download ────────────────────────────────────────────────────

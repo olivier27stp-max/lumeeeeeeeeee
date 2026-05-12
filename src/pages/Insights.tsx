@@ -38,6 +38,18 @@ import SummaryDonutCard from '../components/insights/finance/SummaryDonutCard';
 import TransactionsTableCard from '../components/insights/finance/TransactionsTableCard';
 import RevenueGoalCard from '../components/insights/finance/RevenueGoalCard';
 
+/* ── Reports tab components ─────────────────────────────────── */
+import AverageJobValueCard from '../components/insights/AverageJobValueCard';
+import ClientLifetimeValueCard from '../components/insights/ClientLifetimeValueCard';
+import TeamProductivityCard from '../components/insights/TeamProductivityCard';
+import CancellationRateCard from '../components/insights/CancellationRateCard';
+import QuoteConversionCard from '../components/insights/QuoteConversionCard';
+import InvoiceAgingCard from '../components/insights/InvoiceAgingCard';
+import PaymentMethodMixCard from '../components/insights/PaymentMethodMixCard';
+import JobsPerWeekdayCard from '../components/insights/JobsPerWeekdayCard';
+import RecurringRevenueCard from '../components/insights/RecurringRevenueCard';
+import TopServicesByCountCard from '../components/insights/TopServicesByCountCard';
+
 const TEAM_COLORS = ['#1961ED', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
 
 function toIsoDate(date: Date) { return date.toISOString().slice(0, 10); }
@@ -54,6 +66,7 @@ function isIsoDate(value: string | null) { return !!value && /^\d{4}-\d{2}-\d{2}
 function parseTab(raw: string | null): InsightsTab {
   if (raw === 'finance') return 'finance';
   if (raw === 'revenue') return 'revenue';
+  if (raw === 'reports') return 'reports';
   return 'finance';
 }
 
@@ -384,6 +397,24 @@ export default function Insights() {
                   />
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════
+              REPORTS TAB — pre-built Jobber-parity reports
+              ═══════════════════════════════════════════════════ */}
+          {tab === 'reports' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              <AverageJobValueCard />
+              <ClientLifetimeValueCard />
+              <TeamProductivityCard />
+              <CancellationRateCard />
+              <QuoteConversionCard />
+              <InvoiceAgingCard />
+              <PaymentMethodMixCard />
+              <JobsPerWeekdayCard />
+              <RecurringRevenueCard />
+              <TopServicesByCountCard />
             </div>
           )}
 

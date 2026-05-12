@@ -14,9 +14,11 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { Z } from '../lib/zIndex';
 import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { useJobModalController } from '../contexts/JobModalController';
+import { useCompany } from '../contexts/CompanyContext';
 import type {
   FieldHouse, FieldHouseDetail, FieldHouseEvent, FieldPin, FieldPinLight,
   FieldTerritory, FieldDailyStats, FieldStatsAggregated,
@@ -271,7 +273,8 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.1 }}
-      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50"
+      style={{ zIndex: Z.modal }}
+      className="fixed inset-0 flex items-center justify-center bg-black/50"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <motion.div initial={{ scale: 0.97, y: 8 }} animate={{ scale: 1, y: 0 }}
         transition={{ duration: 0.12, ease: 'easeOut' }}
@@ -1161,6 +1164,7 @@ export default function FieldSales() {
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { openJobModal } = useJobModalController();
+  const { currentOrgId } = useCompany();
   const [showQuoteModal, setShowQuoteModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [fabAddress, setFabAddress] = useState('');
@@ -1325,13 +1329,14 @@ export default function FieldSales() {
   // Live reps — fetch + realtime subscription
   useEffect(() => {
     if (!showLiveReps) { setLiveReps([]); return; }
+    if (!currentOrgId) return;
     // Initial fetch
     import('../lib/trackingApi').then(({ getActiveLiveLocations }) =>
       getActiveLiveLocations().then(setLiveReps).catch(() => {})
     );
     // Realtime subscription
-    const channel = supabase.channel('field-live-reps')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tracking_live_locations' }, () => {
+    const channel = supabase.channel(`field-live-reps-${currentOrgId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tracking_live_locations', filter: `org_id=eq.${currentOrgId}` }, () => {
         import('../lib/trackingApi').then(({ getActiveLiveLocations }) =>
           getActiveLiveLocations().then(setLiveReps).catch(() => {})
         );
@@ -1344,7 +1349,7 @@ export default function FieldSales() {
       );
     }, 30000);
     return () => { supabase.removeChannel(channel); clearInterval(poll); };
-  }, [showLiveReps]);
+  }, [showLiveReps, currentOrgId]);
 
   // Geo alerts — check for idle reps & out-of-territory
   useEffect(() => {

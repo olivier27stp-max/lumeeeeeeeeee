@@ -10,6 +10,7 @@ import { motion } from 'motion/react';
 import { X, Send, MessageSquare, Mail, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { Z } from '../lib/zIndex';
 
 interface Client {
   id: string;
@@ -105,7 +106,7 @@ export default function BatchMessageModal({ isOpen, onClose, clients, language }
   };
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={{ zIndex: Z.modal }} className="fixed inset-0 flex items-center justify-center bg-black/50" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <motion.div initial={{ scale: 0.97, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
         className="bg-surface border border-outline rounded-2xl shadow-2xl w-[560px] max-h-[85vh] overflow-hidden flex flex-col">
 

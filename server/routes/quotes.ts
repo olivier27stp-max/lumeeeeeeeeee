@@ -7,17 +7,48 @@ import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
 import { eventBus } from '../lib/eventBus';
 import { getConnectedAccount, createDestinationPaymentIntent, getPlatformStripe } from '../lib/stripe-connect';
+import { decryptSecret } from '../../src/lib/crypto';
 import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
 // ─── Public endpoint Zod schemas ──────────────────────────────
 const viewTokenRegex = /^[a-zA-Z0-9_-]{16,128}$/;
+// Signature data URL — ONLY PNG/JPEG base64. Rejects data:text/html,
+// data:image/svg+xml (SVG can contain <script>/onload), and any other MIME.
+// Audit P1-D11.
+const signatureDataUrlRegex = /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/;
 const publicAcceptSchema = z.object({
   view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
   signer_name: z.string().trim().min(1).max(120),
-  signature_data: z.string().max(500_000), // data URL, cap ~500KB
+  signature_data: z.string()
+    .max(200_000, 'Signature too large.')
+    .regex(signatureDataUrlRegex, 'Signature must be a base64-encoded PNG or JPEG data URL.'),
 });
+
+/**
+ * Verify the base64 payload of an image data URL decodes to a valid PNG/JPEG
+ * by checking the magic bytes. Returns null on success, or an error message.
+ */
+function validateSignatureMagic(dataUrl: string): string | null {
+  const m = dataUrl.match(/^data:image\/(png|jpeg);base64,(.+)$/);
+  if (!m) return 'Signature format invalid.';
+  const mime = m[1];
+  let buf: Buffer;
+  try { buf = Buffer.from(m[2], 'base64'); } catch { return 'Signature decode failed.'; }
+  if (buf.length < 8) return 'Signature too short.';
+  if (mime === 'png') {
+    // PNG magic: 89 50 4E 47 0D 0A 1A 0A
+    if (
+      buf[0] !== 0x89 || buf[1] !== 0x50 || buf[2] !== 0x4e || buf[3] !== 0x47 ||
+      buf[4] !== 0x0d || buf[5] !== 0x0a || buf[6] !== 0x1a || buf[7] !== 0x0a
+    ) return 'Signature is not a valid PNG.';
+  } else {
+    // JPEG magic: FF D8 FF
+    if (buf[0] !== 0xff || buf[1] !== 0xd8 || buf[2] !== 0xff) return 'Signature is not a valid JPEG.';
+  }
+  return null;
+}
 const publicDepositIntentSchema = z.object({
   view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
 });
@@ -132,17 +163,22 @@ router.post('/quotes/:id/track-view', async (req, res) => {
     const { id } = req.params;
     const serviceClient = getServiceClient();
 
-    // Security: use view_token lookup instead of raw UUID to prevent enumeration
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const query = serviceClient
+    // SECURITY 2026-05-12: only accept lookup by view_token. The previous
+    // implementation also accepted a raw UUID for "backward compat with
+    // authed callers" — but the route is public and unauthenticated, so any
+    // anon could enumerate invoices and spam notifications by POSTing
+    // /api/quotes/{any-uuid}/track-view. Token-only closes that.
+    // If an authed caller needs to mark a view internally, do it via a
+    // separate authenticated endpoint, not this public one.
+    if (!id || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+    const { data: invoice, error } = await serviceClient
       .from('invoices')
       .select('id, invoice_number, client_id, org_id, is_viewed, view_count')
-      .is('deleted_at', null);
-
-    // Accept either view_token or invoice ID (for backward compat with authed callers)
-    const { data: invoice, error } = isUuid
-      ? await query.eq('id', id).maybeSingle()
-      : await query.eq('view_token', id).maybeSingle();
+      .is('deleted_at', null)
+      .eq('view_token', id)
+      .maybeSingle();
 
     if (error || !invoice) {
       return res.status(404).json({ error: 'Invoice not found' });
@@ -695,6 +731,11 @@ router.post('/quotes/public/accept', async (req, res) => {
     }
     const { view_token, signer_name, signature_data } = parsed.data;
 
+    // Magic-byte validation — defense in depth against attackers who satisfy
+    // the regex with a non-image payload (e.g. base64-encoded HTML/SVG).
+    const magicErr = validateSignatureMagic(signature_data);
+    if (magicErr) return res.status(400).json({ error: magicErr });
+
     const admin = getServiceClient();
     const { data: quote, error: qErr } = await admin
       .from('quotes')
@@ -959,9 +1000,31 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
     const idemBucket = Math.floor(Date.now() / 60_000);
     const depositIdempotencyKey = `quote-deposit-${quote.id}-${depositCents}-${idemBucket}`;
 
-    if (orgSecrets?.stripe_secret_key_enc?.startsWith('sk_') && orgSecrets?.stripe_publishable_key) {
+    if (orgSecrets?.stripe_secret_key_enc && orgSecrets?.stripe_publishable_key) {
+      // Always decrypt the encrypted column first. The previous startsWith('sk_') check
+      // was applied to the ciphertext (which never starts with 'sk_'), so this branch
+      // was dead and deposits silently fell through to the platform account (F-01/F-02).
+      let decryptedSecret: string | null = null;
+      try {
+        decryptedSecret = decryptSecret(orgSecrets.stripe_secret_key_enc);
+      } catch (decErr: any) {
+        console.error('[quotes/public/deposit-intent] failed to decrypt org Stripe secret', {
+          org_id: quote.org_id,
+          error: decErr?.message,
+        });
+        return res.status(500).json({ error: 'Payment provider is misconfigured. Please contact support.' });
+      }
+
+      // Sanity check on the DECRYPTED value — real Stripe secrets begin with sk_.
+      if (!decryptedSecret || !decryptedSecret.startsWith('sk_')) {
+        console.error('[quotes/public/deposit-intent] decrypted Stripe secret does not look valid', {
+          org_id: quote.org_id,
+        });
+        return res.status(500).json({ error: 'Payment provider is misconfigured. Please contact support.' });
+      }
+
       const Stripe = (await import('stripe')).default;
-      const orgStripe = new Stripe(orgSecrets.stripe_secret_key_enc);
+      const orgStripe = new Stripe(decryptedSecret);
       const intent = await orgStripe.paymentIntents.create({
         amount: depositCents,
         currency,
@@ -980,32 +1043,11 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
       });
     }
 
-    // PATH 3: Platform Stripe keys (direct charge, simplest fallback)
-    const platformSecretKey = process.env.STRIPE_SECRET_KEY;
-    const platformPublishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
-
-    if (platformSecretKey && platformPublishableKey) {
-      const Stripe = (await import('stripe')).default;
-      const stripe = new Stripe(platformSecretKey);
-      const intent = await stripe.paymentIntents.create({
-        amount: depositCents,
-        currency,
-        payment_method_types: ['card'],
-        metadata: paymentMetadata,
-      }, {
-        idempotencyKey: depositIdempotencyKey,
-      });
-
-      return res.json({
-        client_secret: intent.client_secret,
-        payment_intent_id: intent.id,
-        amount_cents: depositCents,
-        currency: currency.toUpperCase(),
-        publishable_key: platformPublishableKey,
-      });
-    }
-
-    return res.status(503).json({ error: 'No payment provider is configured.' });
+    // No Connect account and no org-level Stripe keys configured — refuse rather than
+    // silently routing the deposit to the platform account (F-02).
+    return res.status(503).json({
+      error: 'This business has not finished connecting a payment provider. Deposit cannot be collected yet.',
+    });
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to create deposit payment.', '[quotes/public/deposit-intent]');
   }

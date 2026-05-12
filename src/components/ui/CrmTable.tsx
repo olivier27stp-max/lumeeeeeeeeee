@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import { MoreHorizontal, ArrowUpDown, CirclePlus, SlidersHorizontal } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 
 /* ════════════════════════════════════
    AVATAR — must show illustrated character
@@ -153,6 +154,7 @@ export function CrmTableCard<T extends { id: string }>({
   searchPlaceholder?: string;
   filters?: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   const [sel, setSel] = useState<Set<string>>(new Set());
   const allSel = rows.length > 0 && sel.size === rows.length;
   const toggleAll = () => { allSel ? setSel(new Set()) : setSel(new Set(rows.map(r => r.id))); };
@@ -235,16 +237,16 @@ export function CrmTableCard<T extends { id: string }>({
       {/* ── FOOTER ── */}
       <div className="flex items-center justify-between mt-3">
         <span className="text-[14px] text-[#64748b]">
-          {sel.size} of {total} row(s) selected.
+          {t.common.rowsSelected.replace('{selected}', String(sel.size)).replace('{total}', String(total))}
         </span>
         <div className="flex items-center gap-2">
           <button disabled={page <= 1} onClick={() => onPageChange(page - 1)}
             className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
-            Previous
+            {t.common.previous}
           </button>
           <button disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}
             className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
-            Next
+            {t.common.next}
           </button>
         </div>
       </div>

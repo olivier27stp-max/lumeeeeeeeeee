@@ -133,6 +133,13 @@ BEGIN
         OR pg_get_functiondef(p.oid) ~ 'auth\.jwt\s*\('
         OR pg_get_functiondef(p.oid) ~ 'auth\.role\s*\('
       )
+      -- 2026-05-12 fix: exclude DML-performing functions. Postgres rejects
+      -- INSERT/UPDATE/DELETE inside STABLE/IMMUTABLE functions, so marking
+      -- a mutating function STABLE breaks it at runtime with
+      -- "INSERT is not allowed in a non-volatile function".
+      AND pg_get_functiondef(p.oid) NOT ILIKE '%insert into%'
+      AND pg_get_functiondef(p.oid) !~* '\mupdate\s+\w+\s+set\M'
+      AND pg_get_functiondef(p.oid) NOT ILIKE '%delete from%'
   LOOP
     BEGIN
       EXECUTE format('ALTER FUNCTION public.%I(%s) STABLE', f.proname, f.args);

@@ -167,7 +167,7 @@ export default function EmailTemplatePicker({
 
         {showPreview ? (
           <div className="glass-input w-full min-h-[120px] p-3 text-sm text-text-primary prose prose-sm max-w-none">
-            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(resolveVariables(body), { ALLOWED_TAGS: ['b', 'i', 'u', 'p', 'br', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'span', 'div', 'table', 'tr', 'td', 'th', 'thead', 'tbody'], ALLOWED_ATTR: ['href', 'style', 'class'] }) }} />
+            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(resolveVariables(body), { ALLOWED_TAGS: ['b', 'i', 'u', 'p', 'br', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'span', 'div', 'table', 'tr', 'td', 'th', 'thead', 'tbody'], ALLOWED_ATTR: ['href', 'class'], FORBID_TAGS: ['style', 'script', 'iframe', 'svg', 'math', 'form'], FORBID_ATTR: ['style', 'onerror', 'onload', 'onclick'] }) }} />
           </div>
         ) : (
           <textarea

@@ -7,6 +7,15 @@ import { sendSafeError } from '../lib/error-handler';
 import { passwordSchema } from '../lib/validation';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
+import { findUserByEmail } from '../lib/supabase';
+import { redisRateLimit } from '../lib/rate-limiter';
+import { extractIP } from '../lib/security';
+
+// Per-IP rate limit for auth endpoints (defeats brute-force + cron-driven abuse)
+const authRateLimit = redisRateLimit({
+  preset: 'auth',
+  keyFn: (req) => `auth:${extractIP(req)}`,
+});
 
 const router = Router();
 router.use(maxBodySize());
@@ -48,7 +57,7 @@ async function sendVerificationEmail(to: string, verifyUrl: string, name: string
 }
 
 // ─── POST /api/auth/register — create account + send verification email ───
-router.post('/auth/register', async (req, res) => {
+router.post('/auth/register', authRateLimit, async (req, res) => {
   try {
     const { email, password, fullName } = req.body;
 
@@ -87,8 +96,7 @@ router.post('/auth/register', async (req, res) => {
       // User already exists — resend verification if email not confirmed yet
       if (createError.message?.includes('already been registered') || createError.message?.includes('already exists')) {
         try {
-          const { data: userList } = await admin.auth.admin.listUsers();
-          const existingUser = userList?.users.find((u: any) => u.email === email) as any;
+          const existingUser = await findUserByEmail(admin, email);
 
           if (existingUser && !existingUser.email_confirmed_at) {
             // Not confirmed yet — generate new token and resend
@@ -140,30 +148,35 @@ router.post('/auth/register', async (req, res) => {
 });
 
 // ─── POST /api/auth/verify-email — verify token + confirm user ───────────
-router.post('/auth/verify-email', async (req, res) => {
+router.post('/auth/verify-email', authRateLimit, async (req, res) => {
   try {
     const { email, token } = req.body;
 
     if (!email || !token) {
       return res.status(400).json({ error: 'Email and token are required.' });
     }
-
-    const admin = getAdminClient();
-
-    // Find user by email
-    const { data: userList, error: listError } = await admin.auth.admin.listUsers();
-    if (listError) {
-      return res.status(500).json({ error: 'Internal error.' });
-    }
-
-    const user = userList.users.find((u: any) => u.email === email) as any;
-    if (!user) {
+    if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) {
       return res.status(400).json({ error: 'Invalid verification link.' });
     }
 
-    // Check token matches
+    const admin = getAdminClient();
+
+    // Targeted lookup (was: listUsers — O(N) + 50-row default page)
+    const user: any = await findUserByEmail(admin, email);
+    if (!user) {
+      // Add a small random delay so missing-user and bad-token paths
+      // are not distinguishable by response time.
+      await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
+      return res.status(400).json({ error: 'Invalid verification link.' });
+    }
+
+    // Constant-time token compare
     const meta = user.user_metadata || {};
-    if (meta.verification_token !== token) {
+    const stored = String(meta.verification_token || '');
+    const a = Buffer.from(token);
+    const b = Buffer.from(stored.padEnd(token.length, '\0').slice(0, token.length));
+    const ok = stored.length === token.length && crypto.timingSafeEqual(a, b);
+    if (!ok) {
       return res.status(400).json({ error: 'Invalid verification link.' });
     }
 
@@ -196,7 +209,7 @@ router.post('/auth/verify-email', async (req, res) => {
 });
 
 // ─── POST /api/auth/resend-verification — resend verification email ──────
-router.post('/auth/resend-verification', async (req, res) => {
+router.post('/auth/resend-verification', authRateLimit, async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -206,9 +219,8 @@ router.post('/auth/resend-verification', async (req, res) => {
 
     const admin = getAdminClient();
 
-    // Find user
-    const { data: userList } = await admin.auth.admin.listUsers();
-    const user = userList?.users.find((u: any) => u.email === email) as any;
+    // Targeted lookup (was: listUsers — O(N))
+    const user: any = await findUserByEmail(admin, email);
 
     // Always return success to prevent email enumeration
     if (!user || user.email_confirmed_at) {
@@ -248,7 +260,7 @@ router.post('/auth/resend-verification', async (req, res) => {
 // a verification email. Tracks billing email verification in user_metadata.
 // Backend payment gates check user_metadata.billing_email_verified before
 // allowing payment to proceed.
-router.post('/auth/register-checkout', async (req, res) => {
+router.post('/auth/register-checkout', authRateLimit, async (req, res) => {
   try {
     const { email, password, fullName } = req.body;
     if (!email || typeof email !== 'string') return res.status(400).json({ error: 'Email is required.' });
@@ -279,8 +291,7 @@ router.post('/auth/register-checkout', async (req, res) => {
 
     if (createError) {
       if (createError.message?.includes('already been registered') || createError.message?.includes('already exists')) {
-        const { data: userList } = await admin.auth.admin.listUsers();
-        const existingUser = userList?.users.find((u: any) => u.email === email) as any;
+        const existingUser: any = await findUserByEmail(admin, email);
         if (existingUser) {
           const meta = existingUser.user_metadata || {};
           // If not billing-email-verified, resend verification

@@ -3,6 +3,7 @@ import { requireAuthedClient, isOrgMember, isOrgAdminOrOwner, getServiceClient }
 import { parseOrgId, ensureLeadInPipeline } from '../lib/helpers';
 import { validate, createLeadSchema, softDeleteLeadSchema, softDeleteClientSchema, softDeleteDealSchema, invoiceFromJobSchema, updateLeadStatusSchema, convertLeadToJobSchema } from '../lib/validation';
 import { eventBus } from '../lib/eventBus';
+import { dispatchWebhook } from '../lib/webhookDispatcher';
 import { ensureClientForLead, resolveClientIdForLead, promoteClientFromLead } from '../lib/leadClientSync';
 import { sendSafeError } from '../lib/error-handler';
 
@@ -153,6 +154,30 @@ router.post('/leads/create', validate(createLeadSchema), async (req, res) => {
       actorId: auth.user.id,
       metadata: { name: fullName, email, phone },
     });
+
+    // Outbound webhooks — lead.created (always) + client.created (best-effort).
+    dispatchWebhook(requestedOrgId, 'lead.created', {
+      lead_id: leadId,
+      client_id: clientId,
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      phone,
+      address,
+      title,
+      value: Number.isFinite(value) ? value : 0,
+    }).catch((err) => console.error('[webhooks] lead.created failed:', err?.message));
+    if (clientId) {
+      dispatchWebhook(requestedOrgId, 'client.created', {
+        client_id: clientId,
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        phone,
+        address,
+        created_via: 'lead.create',
+      }).catch((err) => console.error('[webhooks] client.created failed:', err?.message));
+    }
 
     return res.status(200).json({
       lead: leadRow,
@@ -389,6 +414,25 @@ router.post('/invoices/from-job', validate(invoiceFromJobSchema), async (req, re
       .eq('id', invoiceId)
       .maybeSingle();
     if (invoiceError) throw invoiceError;
+
+    if (!alreadyExists) {
+      dispatchWebhook(requestedOrgId, 'invoice.created', {
+        invoice_id: invoiceId,
+        job_id: jobId,
+        status,
+        client_id: (invoiceRow as any)?.client_id || null,
+        invoice_number: (invoiceRow as any)?.invoice_number || null,
+        total_cents: (invoiceRow as any)?.total_cents || null,
+        currency: (invoiceRow as any)?.currency || null,
+      }).catch((err) => console.error('[webhooks] invoice.created failed:', err?.message));
+      if (sendNow) {
+        dispatchWebhook(requestedOrgId, 'invoice.sent', {
+          invoice_id: invoiceId,
+          job_id: jobId,
+          client_id: (invoiceRow as any)?.client_id || null,
+        }).catch((err) => console.error('[webhooks] invoice.sent failed:', err?.message));
+      }
+    }
 
     return res.json({
       invoice: invoiceRow || { id: invoiceId, status },

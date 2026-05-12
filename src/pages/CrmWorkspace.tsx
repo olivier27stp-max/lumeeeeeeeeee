@@ -53,12 +53,14 @@ export default function CrmWorkspace() {
   const leadsPages = Math.ceil(leadsTotal / 10);
   const appts = dash?.appointments?.items || [];
 
-  // Pipeline: black=clients, dark gray=jobs, light gray=quotes (as specified)
-  const pipelineTotal = Math.max(clientCount + jobCount + quoteCount, 1);
+  // Module breakdown (black=clients, dark gray=jobs, light gray=quotes).
+  // These are CRM modules, not pipeline stages — pipeline stages live in `pipeline_deals`.
+  const pipelineTotal = clientCount + jobCount + quoteCount;
+  const pipelineDenominator = Math.max(pipelineTotal, 1);
   const pipelineSegments = [
-    { label: fr ? 'Clients' : 'Clients', count: clientCount, pct: Math.round((clientCount / pipelineTotal) * 100), color: 'var(--color-primary)' },
-    { label: 'Jobs', count: jobCount, pct: Math.round((jobCount / pipelineTotal) * 100), color: '#6b7280' },
-    { label: fr ? 'Devis' : 'Quotes', count: quoteCount, pct: Math.round((quoteCount / pipelineTotal) * 100), color: '#d1d5db' },
+    { label: fr ? 'Clients' : 'Clients', count: clientCount, pct: Math.round((clientCount / pipelineDenominator) * 100), color: 'var(--color-primary)' },
+    { label: 'Jobs', count: jobCount, pct: Math.round((jobCount / pipelineDenominator) * 100), color: '#6b7280' },
+    { label: fr ? 'Devis' : 'Quotes', count: quoteCount, pct: Math.round((quoteCount / pipelineDenominator) * 100), color: '#d1d5db' },
   ];
 
   // Target progress (percentage of clients who have at least one quote)
@@ -194,15 +196,15 @@ export default function CrmWorkspace() {
                 <circle cx="80" cy="80" r="60" fill="none" stroke="#f3f4f6" strokeWidth="24" />
                 {/* Clients segment */}
                 <circle cx="80" cy="80" r="60" fill="none" stroke="var(--color-primary)" strokeWidth="24"
-                  strokeDasharray={`${(clientCount / pipelineTotal) * 377} 377`} strokeDashoffset="0" />
+                  strokeDasharray={`${(clientCount / pipelineDenominator) * 377} 377`} strokeDashoffset="0" />
                 {/* Jobs segment */}
                 <circle cx="80" cy="80" r="60" fill="none" stroke="#6b7280" strokeWidth="24"
-                  strokeDasharray={`${(jobCount / pipelineTotal) * 377} 377`}
-                  strokeDashoffset={`${-((clientCount / pipelineTotal) * 377)}`} />
+                  strokeDasharray={`${(jobCount / pipelineDenominator) * 377} 377`}
+                  strokeDashoffset={`${-((clientCount / pipelineDenominator) * 377)}`} />
                 {/* Quotes segment */}
                 <circle cx="80" cy="80" r="60" fill="none" stroke="#d1d5db" strokeWidth="24"
-                  strokeDasharray={`${(quoteCount / pipelineTotal) * 377} 377`}
-                  strokeDashoffset={`${-(((clientCount + jobCount) / pipelineTotal) * 377)}`} />
+                  strokeDasharray={`${(quoteCount / pipelineDenominator) * 377} 377`}
+                  strokeDashoffset={`${-(((clientCount + jobCount) / pipelineDenominator) * 377)}`} />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-[24px] font-bold text-text-primary tabular-nums">{pipelineTotal}</span>
@@ -276,11 +278,11 @@ export default function CrmWorkspace() {
           </div>
         </div>
 
-        {/* Panel 3: Sales Pipeline — exact reference: bar + legend rows */}
+        {/* Panel 3: Modules breakdown — bar + legend rows */}
         <div className="bg-surface-card border border-border rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-border">
-            <h3 className="text-[15px] font-semibold text-text-primary">{fr ? 'Pipeline' : 'Sales Pipeline'}</h3>
-            <p className="text-[12px] text-text-muted mt-0.5">{fr ? 'Deals en cours dans votre pipeline.' : 'Current deals in your sales pipeline.'}</p>
+            <h3 className="text-[15px] font-semibold text-text-primary">{fr ? 'Modules' : 'Modules'}</h3>
+            <p className="text-[12px] text-text-muted mt-0.5">{fr ? 'Répartition par module CRM.' : 'Breakdown by CRM module.'}</p>
           </div>
           <div className="px-5 py-4">
             {/* Segmented bar — exact reference */}
@@ -296,7 +298,7 @@ export default function CrmWorkspace() {
                 <div key={i} className="flex items-center gap-3">
                   <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                   <span className="text-[13px] text-text-primary font-medium w-20">{s.label}</span>
-                  <span className="text-[12px] text-text-secondary w-24">{s.count} {s.count === 1 ? 'deal' : 'deals'}</span>
+                  <span className="text-[12px] text-text-secondary w-24">{s.count} {s.count === 1 ? (fr ? 'élément' : 'record') : (fr ? 'éléments' : 'records')}</span>
                   {/* Mini bar */}
                   <div className="flex-1 h-2 bg-surface-tertiary rounded-full overflow-hidden">
                     <div className="h-full rounded-full" style={{ width: `${s.pct}%`, backgroundColor: s.color }} />

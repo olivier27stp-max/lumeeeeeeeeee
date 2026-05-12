@@ -1,5 +1,6 @@
 import React from 'react';
 import type { RecentTransaction } from '../../../lib/financeDashboardApi';
+import { useTranslation } from '../../../i18n';
 
 function fmtDollars(cents: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -45,16 +46,18 @@ export default function TransactionsTableCard({
   transactions: RecentTransaction[];
   onViewAll?: () => void;
 }) {
+  const { t } = useTranslation();
+  const ti = t.insights as any;
   return (
     <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-5 h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Transactions</h3>
+        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{ti.transactions}</h3>
         <button
           onClick={onViewAll}
           className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
         >
-          View All
+          {ti.viewAll}
         </button>
       </div>
 

@@ -27,6 +27,7 @@ import {
   type EntityType,
 } from '../lib/specificNotesApi';
 import { toast } from 'sonner';
+import { useTranslation } from '../i18n';
 
 // ── Props ──
 
@@ -81,6 +82,8 @@ function relativeTime(dateStr: string): string {
 // ── Main Component ──
 
 export default function SpecificNotes({ entityType, entityId, mode = 'full', className }: SpecificNotesProps) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const [notes, setNotes] = useState<SpecificNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -502,7 +505,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
           onClick={() => setShowForm(true)}
           className="glass-button-primary !text-[12px] flex items-center gap-1.5"
         >
-          <Plus size={13} /> Add Note
+          <Plus size={13} /> {fr ? 'Ajouter une note' : 'Add Note'}
         </button>
       )}
 
@@ -601,8 +604,8 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
       ) : notes.length === 0 && !showForm ? (
         <div className="text-center py-8">
           <Paperclip size={24} className="mx-auto text-text-tertiary mb-2 opacity-40" />
-          <p className="text-[13px] text-text-tertiary">No specific notes yet.</p>
-          <p className="text-[11px] text-text-muted mt-1">Add photos, videos, documents or text notes.</p>
+          <p className="text-[13px] text-text-tertiary">{fr ? 'Aucune note spécifique pour le moment.' : 'No specific notes yet.'}</p>
+          <p className="text-[11px] text-text-muted mt-1">{fr ? 'Ajoutez des photos, vidéos, documents ou notes textuelles.' : 'Add photos, videos, documents or text notes.'}</p>
         </div>
       ) : (
         <AnimatePresence mode="popLayout">

@@ -367,7 +367,7 @@ function JobStatusDropdown({ value, onChange, fr }: { value: string; onChange: (
         )}
       >
         <Filter size={14} className={isActive ? 'text-white' : 'text-[#64748b]'} />
-        Status
+        {fr ? 'Statut' : 'Status'}
         {isActive && <span className="ml-0.5 text-[11px] opacity-80">({activeLabel})</span>}
       </button>
       {open && (
@@ -636,7 +636,7 @@ export default function Jobs() {
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Client {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Date' : 'Date'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Total {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Status {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline" />
           <div className="py-3 border-b border-outline" />
 
@@ -696,12 +696,12 @@ export default function Jobs() {
 
       {/* ── FOOTER ── */}
       <div className="flex items-center justify-between mt-3">
-        <span className="text-[14px] text-text-secondary">{selectedJobIds.size} of {total} row(s) selected.</span>
+        <span className="text-[14px] text-text-secondary">{t.common.rowsSelected.replace('{selected}', String(selectedJobIds.size)).replace('{total}', String(total))}</span>
         <div className="flex items-center gap-2">
           <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
-            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">Previous</button>
+            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.previous}</button>
           <button disabled={page >= pageCount} onClick={() => setPage(p => Math.min(pageCount, p + 1))}
-            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">Next</button>
+            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.next}</button>
         </div>
       </div>
 

@@ -18,10 +18,8 @@
      Inserts a row into `agent_messages`, scoped to the org_id
      baked into the JWT (no client-supplied org_id — tamper-proof).
 
-   Signing key: AGENT_JWT_SECRET env var. If not set, a process-
-   local random key is generated at startup (tokens won't survive
-   restarts — acceptable for 15-min TTL, but for production set
-   AGENT_JWT_SECRET to a stable 32+ byte base64 value).
+   Signing key: AGENT_JWT_SECRET env var (REQUIRED — server refuses
+   to boot without it). Use a stable 32+ byte base64 value.
 
    ─────────────────────────────────────────────────────────────
    DB tables preserved (never dropped): ai_*, agent_*, memory_*
@@ -36,7 +34,14 @@ import { logSecurityEvent, extractIP } from '../lib/security';
 const router = express.Router();
 
 // ── JWT helpers (HMAC-SHA256, no external deps) ──
-const JWT_SECRET = process.env.AGENT_JWT_SECRET || crypto.randomBytes(48).toString('base64');
+// Hard-fail if AGENT_JWT_SECRET is missing — falling back to a random per-process
+// key silently breaks token validation across replicas and invalidates all tokens
+// on restart. Set AGENT_JWT_SECRET to a stable 32+ byte base64 value.
+const JWT_SECRET = process.env.AGENT_JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('FATAL: AGENT_JWT_SECRET is not set. Generate one with `openssl rand -base64 48` and set it in your environment.');
+  throw new Error('AGENT_JWT_SECRET environment variable is required');
+}
 const JWT_TTL_SECONDS = 15 * 60; // 15 minutes
 
 function b64url(buf: Buffer | string): string {

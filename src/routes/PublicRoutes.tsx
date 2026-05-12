@@ -1,10 +1,11 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Route, Routes } from 'react-router-dom';
 import Auth from '../pages/Auth';
 import Register from '../pages/Register';
 import VerifyEmail from '../pages/VerifyEmail';
 import Privacy from '../pages/Privacy';
 import Terms from '../pages/Terms';
 import Subprocessors from '../pages/Subprocessors';
+import MarketingNotFound from '../pages/marketing/NotFound';
 import MarketingLayout from '../components/marketing/MarketingLayout';
 import MarketingHome from '../pages/marketing/Home';
 import MarketingFeatures from '../pages/marketing/Features';
@@ -15,6 +16,8 @@ import MarketingPricing from '../pages/marketing/Pricing';
 import MarketingContact from '../pages/marketing/Contact';
 import CheckoutSuccess from '../pages/CheckoutSuccess';
 import OnboardingFlow from '../pages/OnboardingFlow';
+import React from 'react';
+const PublicBooking = React.lazy(() => import('../pages/PublicBooking'));
 
 type PublicRoutesProps = {
   /** Called when the user clicks Back from the Auth page. */
@@ -44,6 +47,7 @@ export function PublicRoutes({ onAuthBack, includeCheckout = false }: PublicRout
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/subprocessors" element={<Subprocessors />} />
+      <Route path="/book/:slug" element={<React.Suspense fallback={<div className="min-h-screen" />}><PublicBooking /></React.Suspense>} />
       <Route element={<MarketingLayout />}>
         <Route index element={<MarketingHome />} />
         <Route path="features" element={<MarketingFeatures />} />
@@ -52,8 +56,8 @@ export function PublicRoutes({ onAuthBack, includeCheckout = false }: PublicRout
         <Route path="industries/:slug" element={<MarketingIndustryDetail />} />
         <Route path="pricing" element={<MarketingPricing />} />
         <Route path="contact" element={<MarketingContact />} />
+        <Route path="*" element={<MarketingNotFound />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

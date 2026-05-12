@@ -18,6 +18,7 @@ import { resolveTaxes, type TaxConfig } from '../lib/taxApi';
 import { useTranslation } from '../i18n';
 import SpecificNotes from './SpecificNotes';
 import SpecificNotesInline, { type SpecificNotesInlineHandle } from './SpecificNotesInline';
+import { toast } from 'sonner';
 
 interface LineItemForm {
   id: string;
@@ -671,8 +672,24 @@ export default function NewJobModal({
         return;
       }
     }
+    // If user typed an exact client name but didn't click the dropdown entry,
+    // try to resolve clientId from typed search text before failing.
+    if (!resolvedClientId && clientSearch.trim()) {
+      const typed = clientSearch.trim().toLowerCase();
+      const match = clients.find(c => c.label.toLowerCase() === typed)
+        || clients.find(c => c.label.toLowerCase().includes(typed));
+      if (match) {
+        resolvedClientId = match.id;
+        setClientId(match.id);
+      }
+    }
     if (!resolvedClientId) {
-      setInlineError(t.modals.clientRequired);
+      const msg = clientSearch.trim()
+        ? ((t.modals as any).clientNotFoundPickOne || `No matching client. Pick one from the list or create a new client.`)
+        : t.modals.clientRequired;
+      setInlineError(msg);
+      // Toast so it's visible without scrolling
+      try { toast.error(msg); } catch {}
       return;
     }
 

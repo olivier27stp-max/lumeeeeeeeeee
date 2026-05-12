@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowUpRight, MessageSquare } from 'lucide-react';
+import { useTranslation } from '../../../i18n';
 
 const SOURCE_COLORS = ['#171717', '#3f3f46', '#71717a', '#a1a1aa'];
 
@@ -27,18 +28,20 @@ export default function IncomeSourcesCard({
   sources: IncomeSource[];
 }) {
   const total = sources.reduce((s, src) => s + src.value, 0) || 1;
+  const { t } = useTranslation();
+  const ti = t.insights as any;
 
   return (
     <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-5 flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
-        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Top Services</h3>
+        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{ti.topServices}</h3>
         <ArrowUpRight size={16} className="text-zinc-400 dark:text-zinc-500" />
       </div>
 
       {/* Total */}
       <div className="mb-1">
-        <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-0.5">Total Income</p>
+        <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-0.5">{ti.totalIncome}</p>
         <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tabular-nums tracking-tight">
           {fmtDollars(totalIncome)}
         </p>
@@ -50,7 +53,7 @@ export default function IncomeSourcesCard({
           }`}
         >
           <ArrowUpRight size={13} />
-          {Math.abs(changePct).toFixed(1)}% compared to last month
+          {Math.abs(changePct).toFixed(1)}% {ti.comparedLastMonth}
         </span>
       )}
 
@@ -91,10 +94,7 @@ export default function IncomeSourcesCard({
         <MessageSquare size={14} className="text-zinc-400 dark:text-zinc-500 mt-0.5 flex-shrink-0" />
         <div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-            Top 3 services by revenue for the selected period.
-          </p>
-          <p className="text-xs text-zinc-400 dark:text-zinc-500 leading-relaxed">
-            The rest is grouped under "Other".
+            {ti.top3ServicesHint}
           </p>
         </div>
       </div>

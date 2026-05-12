@@ -72,21 +72,13 @@ export default function CheckoutSuccess() {
           setUserEmail(result.email || '');
           setStatus('success');
 
-          // Auto-sign in with stored password
-          let signedIn = false;
-          if (result.email) {
-            const pw = sessionStorage.getItem('onb_pw') || '';
-            if (pw) {
-              const { error: signInErr } = await supabase.auth.signInWithPassword({
-                email: result.email,
-                password: pw,
-              });
-              signedIn = !signInErr;
-            }
-          }
+          // Auto-sign in only if an active Supabase session already exists
+          // (password is no longer persisted in sessionStorage for security).
+          const { data: { session } } = await supabase.auth.getSession();
+          const signedIn = !!session;
 
           // Clean up sessionStorage
-          ['onb_step', 'onb_plan', 'onb_interval', 'onb_name', 'onb_email', 'onb_pw', 'onb_token', 'onb_uid']
+          ['onb_step', 'onb_plan', 'onb_interval', 'onb_name', 'onb_email', 'onb_token', 'onb_uid']
             .forEach(k => sessionStorage.removeItem(k));
 
           // Poll for SMS channel (pro/enterprise plans) before redirecting
@@ -109,19 +101,11 @@ export default function CheckoutSuccess() {
           setUserEmail(result.email || '');
           setStatus('success');
 
-          // Try signing in anyway
-          let signedIn = false;
-          if (result.email) {
-            const pw = sessionStorage.getItem('onb_pw') || '';
-            if (pw) {
-              const { error: signInErr } = await supabase.auth.signInWithPassword({
-                email: result.email,
-                password: pw,
-              });
-              signedIn = !signInErr;
-            }
-          }
-          ['onb_step', 'onb_plan', 'onb_interval', 'onb_name', 'onb_email', 'onb_pw', 'onb_token', 'onb_uid']
+          // Sign-in only if an active Supabase session already exists
+          // (password is no longer persisted in sessionStorage for security).
+          const { data: { session } } = await supabase.auth.getSession();
+          const signedIn = !!session;
+          ['onb_step', 'onb_plan', 'onb_interval', 'onb_name', 'onb_email', 'onb_token', 'onb_uid']
             .forEach(k => sessionStorage.removeItem(k));
 
           if (signedIn && !cancelled) {

@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 
-export type InsightsTab = 'finance' | 'revenue' | 'lead_conversion' | 'jobs' | 'invoices' | 'teams' | 'pipeline' | 'clients' | 'profitability' | 'churn' | 'cohort' | 'budget' | 'relations';
+export type InsightsTab = 'finance' | 'revenue' | 'reports' | 'lead_conversion' | 'jobs' | 'invoices' | 'teams' | 'pipeline' | 'clients' | 'profitability' | 'churn' | 'cohort' | 'budget' | 'relations';
 
 // ── Existing types ──────────────────────────────────────────
 

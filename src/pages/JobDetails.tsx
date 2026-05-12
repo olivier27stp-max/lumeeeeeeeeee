@@ -46,6 +46,7 @@ import CommunicationsTimeline from '../components/communications/CommunicationsT
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
 import SpecificNotes from '../components/SpecificNotes';
+import JobChecklistsSection from '../components/JobChecklistsSection';
 import { displayEmail, displayPhone } from '../lib/piiSanitizer';
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -78,7 +79,7 @@ interface ClientInfo {
 
 // ─── Component ───────────────────────────────────────────────────────
 export default function JobDetails() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
@@ -769,7 +770,8 @@ export default function JobDetails() {
                   const end = job.end_at ? new Date(job.end_at) : null;
                   const sameDay = end && start.toDateString() === end.toDateString();
                   if (!end || sameDay) return 'All day / Any time';
-                  return `${start.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })} — ${end.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })}`;
+                  const tloc = language === 'fr' ? 'fr-CA' : 'en-CA';
+                  return `${start.toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })} — ${end.toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}`;
                 })()}
               </p>
             )}
@@ -925,6 +927,9 @@ export default function JobDetails() {
 
         {/* ═══ SPECIFIC NOTES ═══ */}
         <SpecificNotes entityType="job" entityId={id!} mode="full" />
+
+        {/* ═══ CHECKLISTS ═══ */}
+        <JobChecklistsSection jobId={id!} />
 
         {/* ═══ RECURRENCE ═══ */}
         <div className="rounded-xl border border-outline bg-surface overflow-hidden">
