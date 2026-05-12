@@ -34,9 +34,10 @@ COPY --from=builder /app/dist ./dist
 # Copy server source (runs with tsx at runtime)
 COPY server ./server
 COPY src/lib/crypto.ts ./src/lib/crypto.ts
-COPY src/lib/supabaseAdmin.ts ./src/lib/supabaseAdmin.ts
 COPY src/lib/stripeClient.ts ./src/lib/stripeClient.ts
 COPY src/lib/paypalClient.ts ./src/lib/paypalClient.ts
+# Note: supabaseAdmin.ts was moved to server/lib/ (commit c12b767) for security
+# — it's already copied via `COPY server ./server` above. No separate COPY needed.
 
 # Install tsx for running TypeScript server
 RUN npx tsx --version || npm i -g tsx
