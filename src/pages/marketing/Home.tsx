@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowRight, Star } from 'lucide-react';
+import { useState } from 'react';
+import BookDemoForm from '../../components/marketing/BookDemoForm';
 
 /* ─── HERO + DEVICES SIDE BY SIDE ─── */
-function Hero() {
+function Hero({ onBookDemo }: { onBookDemo: () => void }) {
   return (
     <section className="relative pt-28 pb-16 md:pt-36 md:pb-24 px-6 overflow-hidden">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
@@ -40,13 +42,13 @@ function Hero() {
             transition={{ delay: 0.25 }}
             className="mt-8 flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-3"
           >
-            <Link
-              to="/pricing"
+            <button
+              onClick={onBookDemo}
               className="inline-flex items-center gap-2 bg-[#3FAF97] text-white px-7 py-3.5 rounded-xl text-sm font-bold hover:bg-[#1F5F4F] transition-colors group"
             >
-              Start Now
+              Book a demo
               <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
-            </Link>
+            </button>
           </motion.div>
         </div>
 
@@ -832,7 +834,7 @@ function FeatureBlocks() {
 }
 
 /* ─── MIDDLE CTA ─── */
-function MiddleCTA() {
+function MiddleCTA({ onBookDemo }: { onBookDemo: () => void }) {
   return (
     <section className="py-24 md:py-32 px-6">
       <motion.div
@@ -848,13 +850,13 @@ function MiddleCTA() {
           Join hundreds of service companies already using Lume to automate their operations.
         </p>
         <div className="mt-8">
-          <Link
-            to="/pricing"
+          <button
+            onClick={onBookDemo}
             className="inline-flex items-center gap-2 bg-text-primary text-surface px-8 py-4 rounded-xl text-sm font-bold hover:opacity-85 transition-opacity group"
           >
-            Start Now
+            Book a demo
             <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
-          </Link>
+          </button>
         </div>
       </motion.div>
     </section>
@@ -863,14 +865,17 @@ function MiddleCTA() {
 
 /* ─── PAGE ─── */
 export default function Home() {
+  const [demoOpen, setDemoOpen] = useState(false);
+  const openDemo = () => setDemoOpen(true);
   return (
     <>
-      <Hero />
+      <Hero onBookDemo={openDemo} />
       <TrustSection />
       <Testimonial />
       <IndustriesGrid />
       <FeatureBlocks />
-      <MiddleCTA />
+      <MiddleCTA onBookDemo={openDemo} />
+      <BookDemoForm open={demoOpen} onClose={() => setDemoOpen(false)} source="home" />
     </>
   );
 }

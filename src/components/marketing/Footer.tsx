@@ -28,7 +28,6 @@ const INDUSTRIES_LINKS = [
 ];
 
 const COMPANY = [
-  { label: 'Pricing', href: '/pricing' },
   { label: 'Contact', href: '/contact' },
 ];
 

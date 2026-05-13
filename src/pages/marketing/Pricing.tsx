@@ -1,7 +1,7 @@
-import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Check, ArrowRight, ChevronDown } from 'lucide-react';
+import { ArrowRight, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import BookDemoForm from '../../components/marketing/BookDemoForm';
 
 const PLANS = [
   {
@@ -70,9 +70,9 @@ const FAQS = [
   { q: 'Is onboarding included?', a: 'Yes. All plans include guided onboarding. AutoPilot includes dedicated onboarding with a specialist.' },
 ];
 
-export default function Pricing({ authenticated }: { authenticated?: boolean }) {
+export default function Pricing({ authenticated: _authenticated }: { authenticated?: boolean }) {
   const [annual, setAnnual] = useState(true);
-  const navigate = useNavigate();
+  const [demoOpen, setDemoOpen] = useState(false);
   return (
     <div style={{ backgroundColor: '#fafaf8', backgroundImage: 'url("/paper-texture.png")', backgroundRepeat: 'repeat', backgroundSize: '300px 300px' }}>
       {/* Hero */}
@@ -201,31 +201,17 @@ export default function Pricing({ authenticated }: { authenticated?: boolean }) 
 
                 {/* CTA */}
                 <div className="mt-8">
-                  {authenticated ? (
-                    <button
-                      onClick={() => navigate(`/checkout?plan=${plan.slug}&interval=${annual ? 'annual' : 'monthly'}`)}
-                      className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
-                        plan.featured
-                          ? 'bg-[#1F5F4F] text-white hover:bg-[#174a3d]'
-                          : 'bg-text-primary text-white hover:opacity-90'
-                      }`}
-                    >
-                      {plan.cta}
-                      <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                    </button>
-                  ) : (
-                    <Link
-                      to={`/checkout?plan=${plan.slug}&interval=${annual ? 'annual' : 'monthly'}`}
-                      className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
-                        plan.featured
-                          ? 'bg-[#1F5F4F] text-white hover:bg-[#174a3d]'
-                          : 'bg-text-primary text-white hover:opacity-90'
-                      }`}
-                    >
-                      {plan.cta}
-                      <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                    </Link>
-                  )}
+                  <button
+                    onClick={() => setDemoOpen(true)}
+                    className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
+                      plan.featured
+                        ? 'bg-[#1F5F4F] text-white hover:bg-[#174a3d]'
+                        : 'bg-text-primary text-white hover:opacity-90'
+                    }`}
+                  >
+                    Book a demo
+                    <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                  </button>
                 </div>
               </motion.div>
             ))}
@@ -328,6 +314,8 @@ export default function Pricing({ authenticated }: { authenticated?: boolean }) 
           </div>
         </div>
       </section>
+
+      <BookDemoForm open={demoOpen} onClose={() => setDemoOpen(false)} source="pricing" />
     </div>
   );
 }

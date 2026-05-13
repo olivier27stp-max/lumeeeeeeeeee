@@ -8,6 +8,7 @@ import {
   Wrench, ShieldCheck, Droplets, Home, Car,
   Fence, HardHat, Hammer, Building2,
 } from 'lucide-react';
+import BookDemoForm from './BookDemoForm';
 
 const FEATURES = [
   { icon: Kanban, label: 'Visual Pipeline', desc: 'Track every opportunity at a glance', href: '/features#pipeline' },
@@ -41,6 +42,7 @@ export default function Header() {
   const [megaMenu, setMegaMenu] = useState<MegaMenu>(null);
   const [scrolled, setScrolled] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
   const lastScrollY = useRef(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
@@ -114,7 +116,6 @@ export default function Header() {
         <div className="hidden lg:flex items-center gap-1 ml-8">
           <NavDropdown label="Features" active={megaMenu === 'features'} onClick={() => toggleMega('features')} />
           <NavLink to="/industries" label="Industries" />
-          <NavLink to="/pricing" label="Pricing" />
           <NavLink to="/contact" label="Contact" />
         </div>
 
@@ -126,13 +127,13 @@ export default function Header() {
           >
             Login
           </Link>
-          <Link
-            to="/contact"
+          <button
+            onClick={() => setDemoOpen(true)}
             className="inline-flex items-center gap-2 bg-[#3FAF97] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#1F5F4F] transition-colors group"
           >
             Book a demo
             <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-          </Link>
+          </button>
         </div>
 
         {/* Mobile hamburger */}
@@ -204,7 +205,6 @@ export default function Header() {
             <div className="px-6 py-4 space-y-1">
               <MobileLink to="/features" label="Features" />
               <MobileLink to="/industries" label="Industries" />
-              <MobileLink to="/pricing" label="Pricing" />
               <MobileLink to="/contact" label="Contact" />
               <div className="pt-4 space-y-2">
                 <Link
@@ -213,17 +213,19 @@ export default function Header() {
                 >
                   Login
                 </Link>
-                <Link
-                  to="/contact"
+                <button
+                  onClick={() => { setMobileOpen(false); setDemoOpen(true); }}
                   className="block w-full text-center bg-[#3FAF97] text-white px-5 py-3 rounded-lg text-sm font-medium hover:bg-[#1F5F4F] transition-colors"
                 >
                   Book a demo
-                </Link>
+                </button>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <BookDemoForm open={demoOpen} onClose={() => setDemoOpen(false)} source="header" />
     </header>
   );
 }

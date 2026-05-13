@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import Auth from '../pages/Auth';
 import Register from '../pages/Register';
 import VerifyEmail from '../pages/VerifyEmail';
@@ -12,7 +12,6 @@ import MarketingFeatures from '../pages/marketing/Features';
 import MarketingSolutions from '../pages/marketing/Solutions';
 import MarketingIndustries from '../pages/marketing/Industries';
 import MarketingIndustryDetail from '../pages/marketing/IndustryDetail';
-import MarketingPricing from '../pages/marketing/Pricing';
 import MarketingContact from '../pages/marketing/Contact';
 import CheckoutSuccess from '../pages/CheckoutSuccess';
 import OnboardingFlow from '../pages/OnboardingFlow';
@@ -52,7 +51,8 @@ export function PublicRoutes({ onAuthBack, includeCheckout = false }: PublicRout
         <Route path="solutions" element={<MarketingSolutions />} />
         <Route path="industries" element={<MarketingIndustries />} />
         <Route path="industries/:slug" element={<MarketingIndustryDetail />} />
-        <Route path="pricing" element={<MarketingPricing />} />
+        {/* Public pricing page hidden — redirect to home (book-a-demo flow only) */}
+        <Route path="pricing" element={<Navigate to="/" replace />} />
         <Route path="contact" element={<MarketingContact />} />
         <Route path="*" element={<MarketingNotFound />} />
       </Route>

@@ -100,6 +100,7 @@ import AcceptInvitation from './pages/AcceptInvitation';
 import Register from './pages/Register';
 import AccessBlocked from './pages/AccessBlocked';
 import VerifyEmail from './pages/VerifyEmail';
+import VerifyEmailGate from './components/auth/VerifyEmailGate';
 import ReferFriend from './pages/ReferFriend';
 import MrLumePage from './features/agent/components/MrLumeChat';
 import Messages from './pages/Messages';
@@ -139,6 +140,7 @@ import { hasPermission } from './lib/permissions';
 import { usePermissions } from './hooks/usePermissions';
 import { useRealtimeNotifications } from './hooks/useRealtimeNotifications';
 import OnboardingWizard from './components/OnboardingWizard';
+import SetupChecklist from './components/SetupChecklist';
 import CommandPalette from './components/CommandPalette';
 import DevRoleSwitcher from './components/DevRoleSwitcher';
 import { CompanyProvider, useCompany } from './contexts/CompanyContext';
@@ -155,6 +157,7 @@ import { useCommandPaletteShortcut } from './hooks/useCommandPaletteShortcut';
 
 // Platform Admin — lazy loaded, owner-only
 const PlatformAdmin = React.lazy(() => import('./pages/PlatformAdmin'));
+const AdminDemoRequests = React.lazy(() => import('./pages/admin/DemoRequests'));
 
 type NavItem = {
   id: string;
@@ -385,16 +388,11 @@ export default function App() {
           .eq('id', user.id)
           .maybeSingle();
 
+        // Show wizard for any account where onboarding is not yet done.
+        // The subscription guard below also ensures we don't render it until
+        // the user has paid (showOnboarding && user is the outer condition).
         if (!profile?.onboarding_done) {
-          // Only show wizard for accounts created in the last 5 minutes (fresh sign-up)
-          const createdAt = new Date(user.created_at || 0).getTime();
-          const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-          if (createdAt > fiveMinutesAgo) {
-            setShowOnboarding(true);
-          } else {
-            // Old account, never completed onboarding — just mark it done silently
-            try { await supabase.from('profiles').update({ onboarding_done: true }).eq('id', user.id); } catch {}
-          }
+          setShowOnboarding(true);
         }
       } catch {
         // If profile table doesn't have onboarding_done column, skip
@@ -498,6 +496,32 @@ export default function App() {
     );
   }
 
+  // ── Email verification gate ──
+  // Hard gate for email/password users whose address is not yet confirmed.
+  // Google/OAuth users have `email_confirmed_at` set by Supabase automatically,
+  // so they bypass this. We skip during the OAuth callback (the session may not
+  // yet be hydrated) and on the verify-email landing page.
+  const isOAuthCallback =
+    location.pathname === '/auth/callback' ||
+    location.pathname === '/apps/callback' ||
+    location.pathname === '/verify-email';
+  // Google/OAuth providers set email_confirmed_at automatically, so this only
+  // triggers for unverified email/password sign-ups.
+  if (user && !(user as any).email_confirmed_at && !isOAuthCallback) {
+    return (
+      <>
+        <Toaster
+          richColors
+          position="top-right"
+          toastOptions={{
+            className: '!rounded-lg !border !border-outline !shadow-md !text-[13px] !font-medium',
+          }}
+        />
+        <VerifyEmailGate email={user.email || ''} />
+      </>
+    );
+  }
+
   // ── Subscription guard ──
   // User is logged in but has no membership OR no active subscription.
   // Show an explicit AccessBlocked page so the user knows WHY they can't
@@ -519,8 +543,9 @@ export default function App() {
     );
   }
 
-  // Show onboarding wizard for new users (only AFTER they have a subscription)
-  if (showOnboarding && user) {
+  // Show onboarding wizard only when user is paid (hasSubscription === true)
+  // AND onboarding has not been completed yet.
+  if (showOnboarding && user && hasSubscription === true) {
     return (
       <CompanyProvider userId={user.id}>
         <OnboardingWizardWrapper userId={user.id} language={language} onComplete={() => setShowOnboarding(false)} />
@@ -662,7 +687,10 @@ function AuthenticatedApp({
         { id: 'timesheets', label: t.nav.timesheets, icon: Timer, path: '/timesheets', tileColor: 'blue', requiredPermission: 'timesheets.read' },
         { id: 'courses', label: t.courses?.title || 'Courses', icon: GraduationCap, path: '/courses', tileColor: 'blue' },
         { id: 'payments', label: t.nav.payments, icon: CreditCard, path: '/payments', tileColor: 'blue', requiredPermission: 'financial.view_payments' },
-        ...(isPlatformOwner ? [{ id: 'platform-admin', label: 'Platform Admin', icon: Shield, path: '/platform-admin', tileColor: 'blue' as const }] : []),
+        ...(isPlatformOwner ? [
+          { id: 'platform-admin', label: 'Platform Admin', icon: Shield, path: '/platform-admin', tileColor: 'blue' as const },
+          { id: 'demo-requests', label: 'Demo requests', icon: Mail, path: '/platform-admin/demo-requests', tileColor: 'blue' as const },
+        ] : []),
       ],
     },
     {
@@ -1101,6 +1129,8 @@ function AuthenticatedApp({
                     <Route path="/settings/referrals" element={<Gated permission="settings.read"><PageWrapper><ReferFriend /></PageWrapper></Gated>} />
 {/* Platform Admin — owner-only, server enforces auth */}
                     <Route path="/platform-admin" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><PlatformAdmin /></PageWrapper></React.Suspense> : <Navigate to="/dashboard" replace />} />
+                    <Route path="/platform-admin/demo-requests" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><AdminDemoRequests /></PageWrapper></React.Suspense> : <Navigate to="/dashboard" replace />} />
+                    <Route path="/platform-admin/demo-requests/:id" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><AdminDemoRequests /></PageWrapper></React.Suspense> : <Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
                   </Routes>
             </ErrorBoundary>
@@ -1109,6 +1139,8 @@ function AuthenticatedApp({
       </div>
       {/* HelpChat removed — ? button now navigates to Lume Agent */}
       <ActivityCenter open={activityOpen} onClose={() => setActivityOpen(false)} />
+      {/* Setup checklist — visible only to owner/admin until completed/dismissed */}
+      {(permsCtx.role === 'owner' || permsCtx.role === 'admin') && <SetupChecklist />}
       <AnimatePresence>
         {commandPaletteOpen && (
           <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} language={language} />
