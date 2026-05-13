@@ -346,7 +346,7 @@ export default function LocationServices() {
                       placeholder="https://your-traccar-server.com"
                       value={formFields.server_url || ''}
                       onChange={(e) => setFormFields({ ...formFields, server_url: e.target.value })}
-                      className="input-primary w-full text-[13px] rounded-lg"
+                      className="glass-input w-full text-[13px]"
                     />
                   </div>
                   <div>
@@ -356,7 +356,7 @@ export default function LocationServices() {
                       placeholder="admin@example.com"
                       value={formFields.username || ''}
                       onChange={(e) => setFormFields({ ...formFields, username: e.target.value })}
-                      className="input-primary w-full text-[13px] rounded-lg"
+                      className="glass-input w-full text-[13px]"
                     />
                   </div>
                   <div>
@@ -366,7 +366,7 @@ export default function LocationServices() {
                       placeholder="••••••••"
                       value={formFields.password || ''}
                       onChange={(e) => setFormFields({ ...formFields, password: e.target.value })}
-                      className="input-primary w-full text-[13px] rounded-lg"
+                      className="glass-input w-full text-[13px]"
                     />
                   </div>
                 </div>
@@ -379,7 +379,7 @@ export default function LocationServices() {
                       placeholder="Bearer token from Life360"
                       value={formFields.access_token || ''}
                       onChange={(e) => setFormFields({ ...formFields, access_token: e.target.value })}
-                      className="input-primary w-full text-[13px] rounded-lg"
+                      className="glass-input w-full text-[13px]"
                     />
                   </div>
                   <div>
@@ -389,7 +389,7 @@ export default function LocationServices() {
                       placeholder="Auto-detect if blank"
                       value={formFields.circle_id || ''}
                       onChange={(e) => setFormFields({ ...formFields, circle_id: e.target.value })}
-                      className="input-primary w-full text-[13px] rounded-lg"
+                      className="glass-input w-full text-[13px]"
                     />
                   </div>
                 </div>

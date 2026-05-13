@@ -46,10 +46,10 @@ function apiPinToLeadPin(pin: FieldPinLight): LeadPinData {
     email: '',
     address: pin.address || `${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`,
     note: pin.note_preview || '',
-    // Preserve house_id for API operations
-    client_id: null,
-    job_id: null,
-    quote_id: null,
+    client_id: pin.client_id ?? null,
+    lead_id: pin.lead_id ?? null,
+    job_id: pin.job_id ?? null,
+    quote_id: pin.quote_id ?? null,
   };
 }
 
@@ -81,6 +81,9 @@ export default function D2DMap() {
   const [showQuoteModal, setShowQuoteModal] = useState(false);
   const [quoteLead, setQuoteLead] = useState<Lead | null>(null);
   const [pendingQuotePin, setPendingQuotePin] = useState<LeadPinData | null>(null);
+
+  // Local link updates pushed into MapContainer (so popup shows "Job liée" right away)
+  const [pinLinkUpdates, setPinLinkUpdates] = useState<Record<string, { job_id?: string; quote_id?: string; client_id?: string; lead_id?: string }>>({});
 
   // Load pins from API on mount
   useEffect(() => {
@@ -168,6 +171,7 @@ export default function D2DMap() {
         const houseId = pinHouseMap.get(pin.id);
         if (houseId && job?.id) {
           linkHouseToEntity(houseId, { entity_type: 'job', entity_id: job.id }).catch(() => {});
+          setPinLinkUpdates((prev) => ({ ...prev, [pin.id]: { ...prev[pin.id], job_id: job.id } }));
         }
         toast.success('Job créée à partir du pin');
       },
@@ -191,6 +195,8 @@ export default function D2DMap() {
       if (houseId) {
         linkHouseToEntity(houseId, { entity_type: 'quote', entity_id: detail.id }).catch(() => {});
       }
+      const pinId = pendingQuotePin.id;
+      setPinLinkUpdates((prev) => ({ ...prev, [pinId]: { ...prev[pinId], quote_id: detail.id } }));
       toast.success('Devis créé à partir du pin');
     }
     setShowQuoteModal(false);
@@ -221,6 +227,7 @@ export default function D2DMap() {
         onPinCreated={handlePinCreated}
         onPinDeleted={handlePinDeleted}
         onPinUpdated={handlePinUpdated}
+        pinLinkUpdates={pinLinkUpdates}
         liveReps={liveReps.map(r => ({
           user_id: r.user_id,
           user_name: r.user_name ?? '',

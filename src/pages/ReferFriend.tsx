@@ -104,7 +104,7 @@ export default function ReferFriend() {
       </PageHeader>
 
       {/* Hero banner */}
-      <div className="section-card p-6 bg-gradient-to-br from-primary via-primary to-blue-600 text-white overflow-hidden relative">
+      <div className="section-card p-6 bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-700 text-white overflow-hidden relative">
         <div className="absolute top-0 right-0 w-40 h-40 bg-surface-card/5 rounded-full -translate-y-1/2 translate-x-1/2" />
         <div className="absolute bottom-0 left-0 w-32 h-32 bg-surface-card/5 rounded-full translate-y-1/2 -translate-x-1/2" />
         <div className="relative z-10 space-y-3">

@@ -109,6 +109,10 @@ export interface FieldPinLight {
   address?: string | null;
   assigned_user_id?: string | null;
   territory_id?: string | null;
+  client_id?: string | null;
+  lead_id?: string | null;
+  quote_id?: string | null;
+  job_id?: string | null;
 }
 
 export interface FieldHouseDetail extends FieldHouse {

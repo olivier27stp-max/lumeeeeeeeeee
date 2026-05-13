@@ -11,12 +11,13 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Zap, Clock, Mail, Bell, FileText, CalendarClock, MessageSquare,
   ToggleLeft, ToggleRight, Loader2, Send, UserPlus, AlertTriangle,
   Heart, Star, Sun, UserX, CreditCard, Banknote, Search,
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
-  Users, Briefcase, Receipt, ThumbsUp,
+  Users, Briefcase, Receipt, ThumbsUp, ArrowLeft,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -257,6 +258,7 @@ function getActionLabel(type: string): string {
 export default function Automations() {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  const navigate = useNavigate();
 
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -357,15 +359,24 @@ export default function Automations() {
     <div className="space-y-6 max-w-[1100px] mx-auto">
 
       {/* ── Header ── */}
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-text-primary">
-          {fr ? 'Automatisations' : 'Automations'}
-        </h1>
-        <p className="text-[13px] text-text-tertiary mt-0.5">
-          {fr
-            ? 'Automatisations événementielles pour votre entreprise'
-            : 'Event-driven automations for your business'}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-text-primary">
+            {fr ? 'Automatisations' : 'Automations'}
+          </h1>
+          <p className="text-[13px] text-text-tertiary mt-0.5">
+            {fr
+              ? 'Automatisations événementielles pour votre entreprise'
+              : 'Event-driven automations for your business'}
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/settings')}
+          className="glass-button-ghost inline-flex shrink-0 items-center gap-1.5 text-[12px]"
+        >
+          <ArrowLeft size={14} />
+          {fr ? 'Retour' : 'Back'}
+        </button>
       </div>
 
       {/* ── Stats row ── */}

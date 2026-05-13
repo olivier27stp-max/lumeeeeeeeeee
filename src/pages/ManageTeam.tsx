@@ -492,7 +492,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'section-card rounded-2xl p-4 flex items-center gap-4 transition-all group hover:bg-surface-secondary/30',
+        'section-card !overflow-visible rounded-2xl p-4 flex items-center gap-4 transition-all group hover:bg-surface-secondary/30',
         isSuspended && 'opacity-50'
       )}
     >

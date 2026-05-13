@@ -8,6 +8,7 @@
 
   /* ── PRIMARY — pure black ── */
   --color-primary: #171717;
+  --color-primary-foreground: #ffffff;
   --color-primary-hover: #0a0a0a;
   --color-primary-light: #f5f5f5;
   --color-primary-lighter: #fafafa;
@@ -212,6 +213,7 @@
 
     /* Primary — clean white for dark mode */
     --color-primary: #f0f0f2;
+    --color-primary-foreground: #09090b;
     --color-primary-hover: #d8d8dc;
     --color-primary-light: #1c1c1f;
     --color-primary-lighter: #131316;
@@ -666,7 +668,7 @@ body.dark .dot-grid {
   padding: 0.4375rem 0.875rem;
   font-size: 0.8125rem;
   font-weight: 500;
-  color: #ffffff;
+  color: var(--color-primary-foreground);
   cursor: pointer;
   transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
   &:hover {

@@ -94,9 +94,11 @@ export interface MapContainerProps {
   onPinUpdated?: (pin: LeadPinData) => void;
   /** Live rep positions (loaded from API by parent) */
   liveReps?: Array<{ user_id: string; user_name: string | null; latitude: number; longitude: number; tracking_status: string; speed_mps: number | null; team_name: string | null; team_color: string | null }>;
+  /** Imperative link-id updates by pin id (parent pushes after creating job/quote) */
+  pinLinkUpdates?: Record<string, { job_id?: string | null; quote_id?: string | null; client_id?: string | null; lead_id?: string | null }>;
 }
 
-export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, onPinCreated, onPinDeleted, onPinUpdated, liveReps: liveRepsProp }: MapContainerProps = {}) {
+export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, onPinCreated, onPinDeleted, onPinUpdated, liveReps: liveRepsProp, pinLinkUpdates }: MapContainerProps = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
 
@@ -158,6 +160,12 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
 
   // --- Lume ---
   // CRM actions handled via props callbacks
+
+  // --- Street search ---
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; place_name: string; center: [number, number] }>>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchTimerRef = useRef<number | null>(null);
 
   // --- Pin navigation (Find & Replace style) ---
   const [navigatingStatus, setNavigatingStatus] = useState<PinStatus | null>(null);
@@ -675,7 +683,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
           );
         },
         () => { initMap(fallback, 14); },
-        { enableHighAccuracy: true, timeout: 5000 },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
       );
     } else {
       initMap(fallback, 14);
@@ -690,6 +698,43 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
 
   // mapReady is used by other effects below
   const [mapReady, setMapReady] = useState(false);
+
+  // Debounced street search via Mapbox geocoding
+  useEffect(() => {
+    if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
+    const q = searchQuery.trim();
+    if (q.length < 3) { setSearchResults([]); return; }
+    const token = import.meta.env.VITE_MAPBOX_TOKEN;
+    if (!token) return;
+    searchTimerRef.current = window.setTimeout(() => {
+      const center = mapRef.current?.getCenter();
+      const proximity = center ? `&proximity=${center.lng},${center.lat}` : '';
+      fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${token}&language=fr&limit=6&types=address,place,postcode,locality,neighborhood${proximity}`)
+        .then((r) => r.json())
+        .then((data) => {
+          const features = (data?.features ?? []).map((f: any) => ({
+            id: f.id, place_name: f.place_name, center: f.center as [number, number],
+          }));
+          setSearchResults(features);
+        })
+        .catch(() => setSearchResults([]));
+    }, 250);
+    return () => { if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current); };
+  }, [searchQuery]);
+
+  // Sync external link updates into local markers so the popup re-renders with
+  // "✓ Job liée" instead of "+ Créer une Job" after the parent creates a job.
+  useEffect(() => {
+    if (!pinLinkUpdates) return;
+    for (const [pinId, links] of Object.entries(pinLinkUpdates)) {
+      const rec = markersRef.current.get(pinId);
+      if (!rec) continue;
+      if (links.job_id !== undefined) rec.pin.job_id = links.job_id;
+      if (links.quote_id !== undefined) rec.pin.quote_id = links.quote_id;
+      if (links.client_id !== undefined) rec.pin.client_id = links.client_id;
+      if (links.lead_id !== undefined) rec.pin.lead_id = links.lead_id;
+    }
+  }, [pinLinkUpdates]);
 
   // Sync data-attributes
   useEffect(() => {
@@ -1048,6 +1093,53 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
 
       {/* Selection rectangle overlay */}
       <div ref={selectBoxRef} className="pointer-events-none absolute z-20 rounded border-2 border-red-400/60 bg-red-500/15" style={{ display: 'none' }} />
+
+      {/* Street search */}
+      {!showTokenMsg && (
+        <div className="pointer-events-auto absolute left-1/2 top-3 z-30 w-[min(420px,calc(100vw-2rem))] -translate-x-1/2">
+          <div className="relative">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40">
+              <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
+              onFocus={() => setSearchOpen(true)}
+              onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+              placeholder="Rechercher une rue, un quartier, un code postal…"
+              className="w-full rounded-xl border border-white/10 bg-black/70 py-2.5 pl-9 pr-9 text-[13px] text-white placeholder-white/35 shadow-xl outline-none backdrop-blur-xl focus:border-indigo-400/40"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-white/40 hover:bg-white/10 hover:text-white"
+                aria-label="Effacer"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            )}
+            {searchOpen && searchResults.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 max-h-[300px] overflow-auto rounded-xl border border-white/10 bg-black/85 shadow-2xl backdrop-blur-xl">
+                {searchResults.map((r) => (
+                  <button
+                    key={r.id}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      mapRef.current?.flyTo({ center: r.center, zoom: 17, duration: 800 });
+                      setSearchOpen(false);
+                      setSearchQuery(r.place_name);
+                    }}
+                    className="block w-full truncate px-3 py-2 text-left text-[12px] text-white/80 hover:bg-white/10"
+                  >
+                    {r.place_name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Custom GPS re-center button (replaces Mapbox GeolocateControl to avoid duplicate dot) */}
       {!showTokenMsg && (

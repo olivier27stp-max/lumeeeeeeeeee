@@ -8,7 +8,7 @@ import { getFollowUpRecommendations } from '../lib/field-sales/followup-engine';
 import { generateDailyPlan } from '../lib/field-sales/daily-plan-engine';
 import { getAssignmentRecommendations } from '../lib/field-sales/territory-assignment-engine';
 import { autoCreateOrMergePin } from '../lib/field-sales/auto-pin';
-import { cached } from '../lib/cache';
+import { cached, cacheDelete } from '../lib/cache';
 
 const router = Router();
 // Global guards for this router — size cap + type-check of common fields
@@ -507,6 +507,7 @@ router.post('/houses/:id/link', async (req: Request, res: Response) => {
     if (entity_type === 'job') updates.job_id = entity_id;
 
     await admin.from('field_house_profiles').update(updates).eq('id', req.params.id).eq('org_id', auth.orgId);
+    cacheDelete(`pins:${auth.orgId}`);
 
     // Also create link record
     await admin.from('field_pin_entity_links').upsert({
@@ -1123,7 +1124,7 @@ router.get('/pins', async (req: Request, res: Response) => {
       // Filter out soft-deleted houses to prevent ghost pins from appearing
       const { data: pins, error } = await admin
         .from('field_pins')
-        .select('id, house_id, status, has_note, pin_color, field_house_profiles!inner(lat, lng, address, metadata, current_status, client_id, assigned_user_id, territory_id, deleted_at)')
+        .select('id, house_id, status, has_note, pin_color, field_house_profiles!inner(lat, lng, address, metadata, current_status, client_id, lead_id, quote_id, job_id, assigned_user_id, territory_id, deleted_at)')
         .eq('org_id', auth.orgId)
         .is('field_house_profiles.deleted_at', null);
 
@@ -1159,6 +1160,10 @@ router.get('/pins', async (req: Request, res: Response) => {
         address: p.field_house_profiles?.address ?? null,
         assigned_user_id: p.field_house_profiles?.assigned_user_id ?? null,
         territory_id: p.field_house_profiles?.territory_id ?? null,
+        client_id: p.field_house_profiles?.client_id ?? null,
+        lead_id: p.field_house_profiles?.lead_id ?? null,
+        quote_id: p.field_house_profiles?.quote_id ?? null,
+        job_id: p.field_house_profiles?.job_id ?? null,
       })).filter((p: any) => p.lat != null && p.lng != null);
     });
 
