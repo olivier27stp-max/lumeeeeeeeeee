@@ -104,29 +104,73 @@ router.post('/public/book-demo', validate(bookDemoSchema), async (req, res) => {
 
     const demoId = inserted?.id;
 
+    // Short, human-readable reference (e.g. LUM-AB12CD34) — derived from the
+    // first 8 hex chars of the UUID. Easier than "click this link to look it
+    // up" when the owner is on the phone with the lead.
+    const reference = demoId
+      ? `LUM-${String(demoId).replace(/-/g, '').slice(0, 8).toUpperCase()}`
+      : `LUM-${Date.now().toString(36).toUpperCase()}`;
+
     // ── Admin notification email ────────────────────────────
     const ownerEmail = getPlatformOwnerEmail();
     const baseUrl = getAppBaseUrl();
     if (isMailerConfigured()) {
+      const submittedAt = new Date().toLocaleString('fr-CA', {
+        timeZone: 'America/Toronto',
+        dateStyle: 'long',
+        timeStyle: 'short',
+      });
+      const messageBlock = body.message
+        ? `<div style="margin:20px 0;padding:16px;border-left:3px solid #3FAF97;background:#f6fbf9">
+             <p style="margin:0 0 6px;font-weight:600;color:#1F5F4F">Message du prospect</p>
+             <p style="margin:0;white-space:pre-wrap;color:#1a1a1a">${escape(body.message)}</p>
+           </div>`
+        : '';
+
       const adminHtml = `
-        <h2>Nouvelle demande de démo: ${escape(company_name)}</h2>
-        <table style="border-collapse:collapse;font-family:system-ui,sans-serif;font-size:14px">
-          <tr><td style="padding:6px 12px"><strong>Name</strong></td><td style="padding:6px 12px">${escape(body.full_name)}</td></tr>
-          <tr><td style="padding:6px 12px"><strong>Company</strong></td><td style="padding:6px 12px">${escape(company_name)}</td></tr>
-          <tr><td style="padding:6px 12px"><strong>Email</strong></td><td style="padding:6px 12px">${escape(body.email)}</td></tr>
-          <tr><td style="padding:6px 12px"><strong>Phone</strong></td><td style="padding:6px 12px">${escape(body.phone)}</td></tr>
-          <tr><td style="padding:6px 12px"><strong>Industry</strong></td><td style="padding:6px 12px">${escape(industry)}</td></tr>
-          <tr><td style="padding:6px 12px"><strong>Team size</strong></td><td style="padding:6px 12px">${escape(body.employee_count || '—')}</td></tr>
-          <tr><td style="padding:6px 12px"><strong>Source</strong></td><td style="padding:6px 12px">${escape(body.source || '—')}</td></tr>
-          <tr><td style="padding:6px 12px"><strong>Availability</strong></td><td style="padding:6px 12px">${escape(body.availability || '—')}</td></tr>
-          <tr><td style="padding:6px 12px;vertical-align:top"><strong>Message</strong></td><td style="padding:6px 12px;white-space:pre-wrap">${escape(body.message || '—')}</td></tr>
-        </table>
-        ${baseUrl ? `<p style="margin-top:16px"><a href="${baseUrl}/platform-admin/demo-requests/${demoId}">Voir dans le dashboard</a></p>` : ''}
+        <div style="font-family:-apple-system,system-ui,sans-serif;max-width:600px;color:#1a1a1a">
+          <div style="background:#1F5F4F;color:white;padding:20px 24px;border-radius:8px 8px 0 0">
+            <p style="margin:0;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;opacity:.85">Nouveau lead — Plateforme Lume</p>
+            <h1 style="margin:8px 0 0;font-size:22px">${escape(company_name)}</h1>
+            <p style="margin:6px 0 0;font-size:13px;opacity:.85">Réf. <strong>${reference}</strong> · Reçu le ${escape(submittedAt)}</p>
+          </div>
+
+          <div style="background:#FFF7E6;border:1px solid #FFD580;padding:14px 18px;font-size:14px">
+            <p style="margin:0;color:#5C3A00"><strong>📞 Action requise — appeler le prospect</strong></p>
+            <p style="margin:6px 0 0;color:#5C3A00">Réponse promise dans les 24 h. Ne pas laisser traîner.</p>
+          </div>
+
+          <table style="border-collapse:collapse;width:100%;margin-top:0;font-size:14px;border:1px solid #e5e7eb;border-top:none">
+            <tr><td style="padding:10px 14px;background:#fafafa;width:140px;font-weight:600">Nom</td><td style="padding:10px 14px">${escape(body.full_name)}</td></tr>
+            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Entreprise</td><td style="padding:10px 14px">${escape(company_name)}</td></tr>
+            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Téléphone</td><td style="padding:10px 14px"><a href="tel:${escape(body.phone)}" style="color:#1F5F4F;text-decoration:none;font-weight:600">${escape(body.phone)}</a></td></tr>
+            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Email</td><td style="padding:10px 14px"><a href="mailto:${escape(body.email)}" style="color:#1F5F4F">${escape(body.email)}</a></td></tr>
+            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Secteur</td><td style="padding:10px 14px">${escape(industry)}</td></tr>
+            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Taille équipe</td><td style="padding:10px 14px">${escape(body.employee_count || '—')}</td></tr>
+            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Disponibilités</td><td style="padding:10px 14px">${escape(body.availability || '—')}</td></tr>
+            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Source</td><td style="padding:10px 14px">${escape(body.source || '—')}</td></tr>
+          </table>
+
+          ${messageBlock}
+
+          ${baseUrl ? `
+            <div style="margin-top:24px;text-align:center">
+              <a href="${baseUrl}/platform-admin/demo-requests/${demoId}"
+                 style="display:inline-block;padding:12px 24px;background:#1F5F4F;color:white;text-decoration:none;border-radius:6px;font-weight:600">
+                Voir dans le dashboard
+              </a>
+            </div>` : ''}
+
+          <p style="margin-top:24px;font-size:12px;color:#6b7280;text-align:center">
+            Référence: <strong>${reference}</strong> · ID interne: ${escape(demoId || '—')}<br/>
+            Pour répondre directement au prospect, utilise simplement « Répondre » dans ton client mail.
+          </p>
+        </div>
       `;
       sendEmail({
         to: ownerEmail,
         replyTo: body.email,
-        subject: `Nouvelle demande de démo: ${company_name}`,
+        subject: `[${reference}] Nouveau lead Lume — ${company_name} (${industry})`,
         html: adminHtml,
       }).catch((err) => console.error('[public/book-demo] admin email failed:', err?.message));
 
@@ -135,14 +179,18 @@ router.post('/public/book-demo', validate(bookDemoSchema), async (req, res) => {
         <div style="font-family:system-ui,sans-serif;font-size:14px;color:#1a1a1a;max-width:560px">
           <h2 style="color:#1F5F4F;margin-bottom:12px">Merci pour ta demande de démo Lume</h2>
           <p>Bonjour ${escape(body.full_name.split(' ')[0] || '')},</p>
-          <p>Nous avons bien reçu ta demande de démo pour <strong>${escape(company_name)}</strong>. Notre équipe te contactera sous <strong>24h</strong> pour planifier une session adaptée à ton industrie.</p>
-          <p style="margin-top:16px"><strong>À quoi t'attendre :</strong></p>
-          <ul style="padding-left:18px;line-height:1.6">
+          <p>Nous avons bien reçu ta demande de démo pour <strong>${escape(company_name)}</strong>. Notre équipe te contactera sous <strong>24 h</strong> pour planifier une session adaptée à ton industrie.</p>
+          <p style="margin:16px 0 8px"><strong>À quoi t'attendre :</strong></p>
+          <ul style="padding-left:18px;line-height:1.6;margin-top:0">
             <li>Une démo personnalisée de 20-30 min</li>
             <li>Adaptée à ton industrie (${escape(industry)})</li>
             <li>Réponses à toutes tes questions, sans engagement</li>
           </ul>
-          <p style="margin-top:20px;color:#555">Si c'est urgent, écris-nous directement à ${escape(ownerEmail)}.</p>
+          <div style="margin-top:18px;padding:12px 14px;background:#f6fbf9;border-left:3px solid #3FAF97;font-size:13px">
+            <strong>Ta référence :</strong> ${reference}<br/>
+            <span style="color:#555">Conserve-la si tu veux nous écrire au sujet de cette demande.</span>
+          </div>
+          <p style="margin-top:20px;color:#555">Si c'est urgent, écris-nous à ${escape(ownerEmail)}.</p>
           <p style="margin-top:24px">— L'équipe Lume CRM</p>
         </div>
       `;
