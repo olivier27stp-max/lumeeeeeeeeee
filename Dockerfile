@@ -3,6 +3,11 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Skip Chromium download — puppeteer is dev-only (scripts/organize-schema-visualizer.cjs),
+# never used at build or runtime. Saves ~170MB download + 3-5min on cold builds.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
@@ -31,6 +36,11 @@ RUN npm run build
 # ── Stage 2: Production ────────────────────────────────────────
 FROM node:20-alpine AS production
 WORKDIR /app
+
+# Same Chromium skip in prod stage — even though --omit=dev should skip puppeteer,
+# any transitive postinstall that probes it would still try the download.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 # Create non-root user for security (prevents container escape → root access)
 RUN addgroup -g 1001 lume && adduser -D -u 1001 -G lume lume
