@@ -37,7 +37,6 @@ import {
   Shield,
   UserCog,
   Lock,
-  Mail,
   Map,
   Repeat,
   CalendarCheck,
@@ -157,7 +156,6 @@ import { useCommandPaletteShortcut } from './hooks/useCommandPaletteShortcut';
 
 // Platform Admin — lazy loaded, owner-only
 const PlatformAdmin = React.lazy(() => import('./pages/PlatformAdmin'));
-const AdminDemoRequests = React.lazy(() => import('./pages/admin/DemoRequests'));
 
 type NavItem = {
   id: string;
@@ -699,7 +697,6 @@ function AuthenticatedApp({
         { id: 'payments', label: t.nav.payments, icon: CreditCard, path: '/payments', tileColor: 'blue', requiredPermission: 'financial.view_payments' },
         ...(isPlatformOwner ? [
           { id: 'platform-admin', label: 'Platform Admin', icon: Shield, path: '/platform-admin', tileColor: 'blue' as const },
-          { id: 'demo-requests', label: 'Demo requests', icon: Mail, path: '/platform-admin/demo-requests', tileColor: 'blue' as const },
         ] : []),
       ],
     },
@@ -1139,8 +1136,6 @@ function AuthenticatedApp({
                     <Route path="/settings/referrals" element={<Gated permission="settings.read"><PageWrapper><ReferFriend /></PageWrapper></Gated>} />
 {/* Platform Admin — owner-only, server enforces auth */}
                     <Route path="/platform-admin" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><PlatformAdmin /></PageWrapper></React.Suspense> : <Navigate to="/dashboard" replace />} />
-                    <Route path="/platform-admin/demo-requests" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><AdminDemoRequests /></PageWrapper></React.Suspense> : <Navigate to="/dashboard" replace />} />
-                    <Route path="/platform-admin/demo-requests/:id" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><AdminDemoRequests /></PageWrapper></React.Suspense> : <Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
                   </Routes>
             </ErrorBoundary>

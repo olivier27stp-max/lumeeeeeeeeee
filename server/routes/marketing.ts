@@ -1,11 +1,9 @@
 import { Router } from 'express';
-import type { Request, Response } from 'express';
+import type { Request } from 'express';
 import { z } from 'zod';
 import { validate } from '../lib/validation';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
-import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
-import { platformOwnerId } from '../lib/config';
 
 const router = Router();
 
@@ -27,8 +25,6 @@ const industryEnum = z.enum(INDUSTRY_VALUES);
 const phoneRegex = /^[+]?[0-9][0-9\s\-().]{6,19}$/;
 
 // ── Public submission schema ────────────────────────────────
-// Backward compatible: accepts legacy `company` alongside `company_name`,
-// and legacy `source` values ('landing','contact') in addition to channels.
 const bookDemoSchema = z.object({
   full_name: z.string().trim().min(1, 'Full name is required.').max(200),
   company_name: z.string().trim().min(1).max(200).optional(),
@@ -55,7 +51,7 @@ function extractClientIp(req: Request): string | null {
   return req.ip || null;
 }
 
-function getPlatformOwnerEmail(): string {
+function getOwnerEmail(): string {
   return (
     process.env.PLATFORM_OWNER_EMAIL ||
     process.env.SALES_INBOX_EMAIL ||
@@ -63,256 +59,109 @@ function getPlatformOwnerEmail(): string {
   );
 }
 
-function getAppBaseUrl(): string {
-  return (process.env.FRONTEND_URL || process.env.APP_BASE_URL || '').replace(/\/$/, '');
-}
-
-// ── POST /api/public/book-demo (public) ─────────────────────
+// ── POST /api/public/book-demo ──────────────────────────────
+// Plus de persistance en base — la soumission envoie simplement un courriel
+// au propriétaire (willhebert30@gmail.com par défaut) + une confirmation au
+// prospect. Pas de page admin dans le CRM.
 router.post('/public/book-demo', validate(bookDemoSchema), async (req, res) => {
   try {
     const body = req.body as z.infer<typeof bookDemoSchema>;
     const company_name = (body.company_name || body.company || '').trim();
     const industry = (body.industry || 'other') as typeof INDUSTRY_VALUES[number];
-    const admin = getServiceClient();
 
     const ip = extractClientIp(req);
     const ua = String(req.headers['user-agent'] || '').slice(0, 500);
 
-    const { data: inserted, error: insertError } = await admin
-      .from('demo_requests')
-      .insert({
-        full_name: body.full_name,
-        company_name,
-        email: body.email,
-        phone: body.phone,
-        industry,
-        employee_count: body.employee_count || null,
-        source: body.source || null,
-        availability: body.availability || null,
-        message: body.message || null,
-        ip_address: ip,
-        user_agent: ua,
-      })
-      .select('id')
-      .single();
+    const reference = `LUM-${Date.now().toString(36).toUpperCase()}`;
+    const ownerEmail = getOwnerEmail();
 
-    if (insertError) {
-      console.error('[public/book-demo] insert failed:', insertError.message);
-      // Still return ok-ish to avoid leaking infra; but actually surface error so client can retry
-      return res.status(500).json({ error: 'Unable to save your request. Please try again.' });
+    if (!isMailerConfigured()) {
+      console.warn('[public/book-demo] mailer not configured — email skipped', { reference, email: body.email });
+      // On répond OK quand même pour pas casser le formulaire en dev.
+      return res.json({ ok: true, message: 'Demo request received' });
     }
 
-    const demoId = inserted?.id;
+    const submittedAt = new Date().toLocaleString('fr-CA', {
+      timeZone: 'America/Toronto',
+      dateStyle: 'long',
+      timeStyle: 'short',
+    });
+    const messageBlock = body.message
+      ? `<div style="margin:20px 0;padding:16px;border-left:3px solid #3FAF97;background:#f6fbf9">
+           <p style="margin:0 0 6px;font-weight:600;color:#1F5F4F">Message du prospect</p>
+           <p style="margin:0;white-space:pre-wrap;color:#1a1a1a">${escape(body.message)}</p>
+         </div>`
+      : '';
 
-    // Short, human-readable reference (e.g. LUM-AB12CD34) — derived from the
-    // first 8 hex chars of the UUID. Easier than "click this link to look it
-    // up" when the owner is on the phone with the lead.
-    const reference = demoId
-      ? `LUM-${String(demoId).replace(/-/g, '').slice(0, 8).toUpperCase()}`
-      : `LUM-${Date.now().toString(36).toUpperCase()}`;
-
-    // ── Admin notification email ────────────────────────────
-    const ownerEmail = getPlatformOwnerEmail();
-    const baseUrl = getAppBaseUrl();
-    if (isMailerConfigured()) {
-      const submittedAt = new Date().toLocaleString('fr-CA', {
-        timeZone: 'America/Toronto',
-        dateStyle: 'long',
-        timeStyle: 'short',
-      });
-      const messageBlock = body.message
-        ? `<div style="margin:20px 0;padding:16px;border-left:3px solid #3FAF97;background:#f6fbf9">
-             <p style="margin:0 0 6px;font-weight:600;color:#1F5F4F">Message du prospect</p>
-             <p style="margin:0;white-space:pre-wrap;color:#1a1a1a">${escape(body.message)}</p>
-           </div>`
-        : '';
-
-      const adminHtml = `
-        <div style="font-family:-apple-system,system-ui,sans-serif;max-width:600px;color:#1a1a1a">
-          <div style="background:#1F5F4F;color:white;padding:20px 24px;border-radius:8px 8px 0 0">
-            <p style="margin:0;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;opacity:.85">Nouveau lead — Plateforme Lume</p>
-            <h1 style="margin:8px 0 0;font-size:22px">${escape(company_name)}</h1>
-            <p style="margin:6px 0 0;font-size:13px;opacity:.85">Réf. <strong>${reference}</strong> · Reçu le ${escape(submittedAt)}</p>
-          </div>
-
-          <div style="background:#FFF7E6;border:1px solid #FFD580;padding:14px 18px;font-size:14px">
-            <p style="margin:0;color:#5C3A00"><strong>📞 Action requise — appeler le prospect</strong></p>
-            <p style="margin:6px 0 0;color:#5C3A00">Réponse promise dans les 24 h. Ne pas laisser traîner.</p>
-          </div>
-
-          <table style="border-collapse:collapse;width:100%;margin-top:0;font-size:14px;border:1px solid #e5e7eb;border-top:none">
-            <tr><td style="padding:10px 14px;background:#fafafa;width:140px;font-weight:600">Nom</td><td style="padding:10px 14px">${escape(body.full_name)}</td></tr>
-            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Entreprise</td><td style="padding:10px 14px">${escape(company_name)}</td></tr>
-            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Téléphone</td><td style="padding:10px 14px"><a href="tel:${escape(body.phone)}" style="color:#1F5F4F;text-decoration:none;font-weight:600">${escape(body.phone)}</a></td></tr>
-            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Email</td><td style="padding:10px 14px"><a href="mailto:${escape(body.email)}" style="color:#1F5F4F">${escape(body.email)}</a></td></tr>
-            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Secteur</td><td style="padding:10px 14px">${escape(industry)}</td></tr>
-            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Taille équipe</td><td style="padding:10px 14px">${escape(body.employee_count || '—')}</td></tr>
-            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Disponibilités</td><td style="padding:10px 14px">${escape(body.availability || '—')}</td></tr>
-            <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Source</td><td style="padding:10px 14px">${escape(body.source || '—')}</td></tr>
-          </table>
-
-          ${messageBlock}
-
-          ${baseUrl ? `
-            <div style="margin-top:24px;text-align:center">
-              <a href="${baseUrl}/platform-admin/demo-requests/${demoId}"
-                 style="display:inline-block;padding:12px 24px;background:#1F5F4F;color:white;text-decoration:none;border-radius:6px;font-weight:600">
-                Voir dans le dashboard
-              </a>
-            </div>` : ''}
-
-          <p style="margin-top:24px;font-size:12px;color:#6b7280;text-align:center">
-            Référence: <strong>${reference}</strong> · ID interne: ${escape(demoId || '—')}<br/>
-            Pour répondre directement au prospect, utilise simplement « Répondre » dans ton client mail.
-          </p>
+    const adminHtml = `
+      <div style="font-family:-apple-system,system-ui,sans-serif;max-width:600px;color:#1a1a1a">
+        <div style="background:#1F5F4F;color:white;padding:20px 24px;border-radius:8px 8px 0 0">
+          <p style="margin:0;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;opacity:.85">Nouveau lead — Plateforme Lume</p>
+          <h1 style="margin:8px 0 0;font-size:22px">${escape(company_name)}</h1>
+          <p style="margin:6px 0 0;font-size:13px;opacity:.85">Réf. <strong>${reference}</strong> · Reçu le ${escape(submittedAt)}</p>
         </div>
-      `;
-      sendEmail({
-        to: ownerEmail,
-        replyTo: body.email,
-        subject: `[${reference}] Nouveau lead Lume — ${company_name} (${industry})`,
-        html: adminHtml,
-      }).catch((err) => console.error('[public/book-demo] admin email failed:', err?.message));
 
-      // ── Prospect confirmation email ────────────────────────
-      const prospectHtml = `
-        <div style="font-family:system-ui,sans-serif;font-size:14px;color:#1a1a1a;max-width:560px">
-          <h2 style="color:#1F5F4F;margin-bottom:12px">Merci pour ta demande de démo Lume</h2>
-          <p>Bonjour ${escape(body.full_name.split(' ')[0] || '')},</p>
-          <p>Nous avons bien reçu ta demande de démo pour <strong>${escape(company_name)}</strong>. Notre équipe te contactera sous <strong>24 h</strong> pour planifier une session adaptée à ton industrie.</p>
-          <p style="margin:16px 0 8px"><strong>À quoi t'attendre :</strong></p>
-          <ul style="padding-left:18px;line-height:1.6;margin-top:0">
-            <li>Une démo personnalisée de 20-30 min</li>
-            <li>Adaptée à ton industrie (${escape(industry)})</li>
-            <li>Réponses à toutes tes questions, sans engagement</li>
-          </ul>
-          <div style="margin-top:18px;padding:12px 14px;background:#f6fbf9;border-left:3px solid #3FAF97;font-size:13px">
-            <strong>Ta référence :</strong> ${reference}<br/>
-            <span style="color:#555">Conserve-la si tu veux nous écrire au sujet de cette demande.</span>
-          </div>
-          <p style="margin-top:20px;color:#555">Si c'est urgent, écris-nous à ${escape(ownerEmail)}.</p>
-          <p style="margin-top:24px">— L'équipe Lume CRM</p>
+        <div style="background:#FFF7E6;border:1px solid #FFD580;padding:14px 18px;font-size:14px">
+          <p style="margin:0;color:#5C3A00"><strong>📞 Action requise — appeler le prospect</strong></p>
+          <p style="margin:6px 0 0;color:#5C3A00">Réponse promise dans les 24 h.</p>
         </div>
-      `;
-      sendEmail({
-        to: body.email,
-        subject: 'Merci pour ta demande de démo Lume',
-        html: prospectHtml,
-      }).catch((err) => console.error('[public/book-demo] prospect email failed:', err?.message));
-    } else {
-      console.warn('[public/book-demo] mailer not configured — emails skipped', { demoId });
-    }
+
+        <table style="border-collapse:collapse;width:100%;margin-top:0;font-size:14px;border:1px solid #e5e7eb;border-top:none">
+          <tr><td style="padding:10px 14px;background:#fafafa;width:140px;font-weight:600">Nom</td><td style="padding:10px 14px">${escape(body.full_name)}</td></tr>
+          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Entreprise</td><td style="padding:10px 14px">${escape(company_name)}</td></tr>
+          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Téléphone</td><td style="padding:10px 14px"><a href="tel:${escape(body.phone)}" style="color:#1F5F4F;text-decoration:none;font-weight:600">${escape(body.phone)}</a></td></tr>
+          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Email</td><td style="padding:10px 14px"><a href="mailto:${escape(body.email)}" style="color:#1F5F4F">${escape(body.email)}</a></td></tr>
+          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Secteur</td><td style="padding:10px 14px">${escape(industry)}</td></tr>
+          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Taille équipe</td><td style="padding:10px 14px">${escape(body.employee_count || '—')}</td></tr>
+          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Disponibilités</td><td style="padding:10px 14px">${escape(body.availability || '—')}</td></tr>
+          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Source</td><td style="padding:10px 14px">${escape(body.source || '—')}</td></tr>
+        </table>
+
+        ${messageBlock}
+
+        <p style="margin-top:24px;font-size:12px;color:#6b7280;text-align:center">
+          Référence: <strong>${reference}</strong> · IP: ${escape(ip || '—')} · UA: ${escape(ua.slice(0, 80))}<br/>
+          Pour répondre directement au prospect, utilise simplement « Répondre » dans ton client mail.
+        </p>
+      </div>
+    `;
+
+    sendEmail({
+      to: ownerEmail,
+      replyTo: body.email,
+      subject: `[${reference}] Nouveau lead Lume — ${company_name} (${industry})`,
+      html: adminHtml,
+    }).catch((err) => console.error('[public/book-demo] admin email failed:', err?.message));
+
+    // ── Prospect confirmation email ────────────────────────
+    const prospectHtml = `
+      <div style="font-family:system-ui,sans-serif;font-size:14px;color:#1a1a1a;max-width:560px">
+        <h2 style="color:#1F5F4F;margin-bottom:12px">Merci pour ta demande de démo Lume</h2>
+        <p>Bonjour ${escape(body.full_name.split(' ')[0] || '')},</p>
+        <p>Nous avons bien reçu ta demande de démo pour <strong>${escape(company_name)}</strong>. Notre équipe te contactera sous <strong>24 h</strong> pour planifier une session adaptée à ton industrie.</p>
+        <p style="margin:16px 0 8px"><strong>À quoi t'attendre :</strong></p>
+        <ul style="padding-left:18px;line-height:1.6;margin-top:0">
+          <li>Une démo personnalisée de 20-30 min</li>
+          <li>Adaptée à ton industrie (${escape(industry)})</li>
+          <li>Réponses à toutes tes questions, sans engagement</li>
+        </ul>
+        <div style="margin-top:18px;padding:12px 14px;background:#f6fbf9;border-left:3px solid #3FAF97;font-size:13px">
+          <strong>Ta référence :</strong> ${reference}<br/>
+          <span style="color:#555">Conserve-la si tu veux nous écrire au sujet de cette demande.</span>
+        </div>
+        <p style="margin-top:20px;color:#555">Si c'est urgent, écris-nous à ${escape(ownerEmail)}.</p>
+        <p style="margin-top:24px">— L'équipe Lume CRM</p>
+      </div>
+    `;
+    sendEmail({
+      to: body.email,
+      subject: 'Merci pour ta demande de démo Lume',
+      html: prospectHtml,
+    }).catch((err) => console.error('[public/book-demo] prospect email failed:', err?.message));
 
     return res.json({ ok: true, message: 'Demo request received' });
   } catch (err: any) {
     return sendSafeError(res, err, 'Unable to submit demo request.', '[public/book-demo]');
-  }
-});
-
-// ─── Admin auth helper ───────────────────────────────────────
-async function requirePlatformOwner(req: Request, res: Response) {
-  if (!platformOwnerId) { res.status(503).json({ error: 'Platform admin not configured.' }); return null; }
-  const auth = await requireAuthedClient(req, res);
-  if (!auth) return null;
-  if (auth.user.id !== platformOwnerId) { res.status(403).json({ error: 'Forbidden.' }); return null; }
-  return auth;
-}
-
-// ── GET /api/admin/demo-requests ────────────────────────────
-router.get('/admin/demo-requests', async (req, res) => {
-  try {
-    if (!await requirePlatformOwner(req, res)) return;
-    const admin = getServiceClient();
-    const status = typeof req.query.status === 'string' ? req.query.status : '';
-
-    let q = admin.from('demo_requests').select('*').order('created_at', { ascending: false }).limit(500);
-    if (status && ['new', 'contacted', 'demoed', 'converted', 'rejected'].includes(status)) {
-      q = q.eq('status', status);
-    }
-    const { data, error } = await q;
-    if (error) throw error;
-    return res.json({ requests: data || [] });
-  } catch (err: any) {
-    return sendSafeError(res, err, 'Unable to fetch demo requests.', '[admin/demo-requests]');
-  }
-});
-
-// ── PATCH /api/admin/demo-requests/:id ──────────────────────
-const patchSchema = z.object({
-  status: z.enum(['new', 'contacted', 'demoed', 'converted', 'rejected']).optional(),
-  notes: z.string().trim().max(8000).optional().nullable(),
-});
-router.patch('/admin/demo-requests/:id', validate(patchSchema), async (req, res) => {
-  try {
-    if (!await requirePlatformOwner(req, res)) return;
-    const admin = getServiceClient();
-    const id = String(req.params.id);
-    const update: Record<string, any> = { ...req.body };
-    if (update.status === 'contacted') {
-      update.contacted_at = new Date().toISOString();
-    }
-    const { data, error } = await admin
-      .from('demo_requests')
-      .update(update)
-      .eq('id', id)
-      .select('*')
-      .single();
-    if (error) throw error;
-    return res.json({ request: data });
-  } catch (err: any) {
-    return sendSafeError(res, err, 'Unable to update demo request.', '[admin/demo-requests/patch]');
-  }
-});
-
-// ── POST /api/admin/demo-requests/:id/create-account ────────
-router.post('/admin/demo-requests/:id/create-account', async (req, res) => {
-  try {
-    if (!await requirePlatformOwner(req, res)) return;
-    const admin = getServiceClient();
-    const id = String(req.params.id);
-
-    const { data: row, error: fetchErr } = await admin
-      .from('demo_requests')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (fetchErr || !row) {
-      return res.status(404).json({ error: 'Demo request not found.' });
-    }
-
-    const baseUrl = getAppBaseUrl();
-    const redirectTo = baseUrl ? `${baseUrl}/auth` : undefined;
-
-    const { data: inviteData, error: inviteErr } = await (admin.auth.admin as any).inviteUserByEmail(row.email, {
-      data: {
-        from_demo_request: id,
-        full_name: row.full_name,
-        company_name: row.company_name,
-      },
-      ...(redirectTo ? { redirectTo } : {}),
-    });
-
-    if (inviteErr || !inviteData?.user) {
-      console.error('[admin/demo-requests/create-account] invite failed:', inviteErr?.message);
-      return res.status(500).json({ error: inviteErr?.message || 'Unable to send invitation.' });
-    }
-
-    const userId = inviteData.user.id;
-    const actionLink: string | undefined =
-      (inviteData as any)?.properties?.action_link || (inviteData as any)?.action_link;
-
-    await admin
-      .from('demo_requests')
-      .update({
-        status: 'converted',
-        converted_at: new Date().toISOString(),
-        converted_user_id: userId,
-      })
-      .eq('id', id);
-
-    return res.json({ ok: true, user_id: userId, invitation_url: actionLink });
-  } catch (err: any) {
-    return sendSafeError(res, err, 'Unable to create account.', '[admin/demo-requests/create-account]');
   }
 });
 
