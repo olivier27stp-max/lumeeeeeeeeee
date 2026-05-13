@@ -46,8 +46,11 @@ COPY server ./server
 COPY src/lib/crypto.ts ./src/lib/crypto.ts
 COPY src/lib/stripeClient.ts ./src/lib/stripeClient.ts
 COPY src/lib/paypalClient.ts ./src/lib/paypalClient.ts
-# Note: supabaseAdmin.ts was moved to server/lib/ (commit c12b767) for security
-# — it's already copied via `COPY server ./server` above. No separate COPY needed.
+# `src/lib/supabaseAdmin.ts` is now a stub that throws if imported from
+# client code (real impl lives at `server/lib/supabaseAdmin.ts` for security
+# — commit c12b767). The stub exists so Railway/BuildKit cache layers that
+# still reference this COPY resolve cleanly.
+COPY src/lib/supabaseAdmin.ts ./src/lib/supabaseAdmin.ts
 
 # Install tsx for running TypeScript server
 RUN npx tsx --version || npm i -g tsx
