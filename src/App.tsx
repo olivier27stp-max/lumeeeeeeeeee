@@ -662,7 +662,6 @@ function AuthenticatedApp({
         { id: 'timesheets', label: t.nav.timesheets, icon: Timer, path: '/timesheets', tileColor: 'blue', requiredPermission: 'timesheets.read' },
         { id: 'courses', label: t.courses?.title || 'Courses', icon: GraduationCap, path: '/courses', tileColor: 'blue' },
         { id: 'payments', label: t.nav.payments, icon: CreditCard, path: '/payments', tileColor: 'blue', requiredPermission: 'financial.view_payments' },
-        { id: 'campaigns', label: (t.nav as any).campaigns, icon: Mail, path: '/campaigns', tileColor: 'blue', requiredPermission: 'settings.read' },
         ...(isPlatformOwner ? [{ id: 'platform-admin', label: 'Platform Admin', icon: Shield, path: '/platform-admin', tileColor: 'blue' as const }] : []),
       ],
     },
