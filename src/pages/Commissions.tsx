@@ -79,6 +79,25 @@ export default function D2DCommissions() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Resolve role on mount so the UI hides admin-only controls for reps.
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const token = session.session?.access_token;
+        if (!token) return;
+        const res = await fetch('/api/commissions/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const body = await res.json();
+          setIsAdmin(Boolean(body?.is_admin));
+        }
+      } catch { /* silent — default to rep view */ }
+    })();
+  }, []);
 
   // Fetch profile names for a set of user_ids
   const fetchProfiles = useCallback(async (userIds: string[]) => {
@@ -215,7 +234,8 @@ export default function D2DCommissions() {
   })();
 
   // Show action buttons when we have real data
-  const showActions = !error && entries !== null;
+  // Approve/Reverse actions are admin-only. Reps see read-only commission rows.
+  const showActions = !error && entries !== null && isAdmin;
 
   return (
     <div className="space-y-6">
