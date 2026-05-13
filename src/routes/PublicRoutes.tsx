@@ -17,7 +17,6 @@ import MarketingContact from '../pages/marketing/Contact';
 import CheckoutSuccess from '../pages/CheckoutSuccess';
 import OnboardingFlow from '../pages/OnboardingFlow';
 import React from 'react';
-const PublicBooking = React.lazy(() => import('../pages/PublicBooking'));
 
 type PublicRoutesProps = {
   /** Called when the user clicks Back from the Auth page. */
@@ -47,7 +46,6 @@ export function PublicRoutes({ onAuthBack, includeCheckout = false }: PublicRout
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/subprocessors" element={<Subprocessors />} />
-      <Route path="/book/:slug" element={<React.Suspense fallback={<div className="min-h-screen" />}><PublicBooking /></React.Suspense>} />
       <Route element={<MarketingLayout />}>
         <Route index element={<MarketingHome />} />
         <Route path="features" element={<MarketingFeatures />} />

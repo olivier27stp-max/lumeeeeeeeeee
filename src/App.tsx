@@ -653,7 +653,6 @@ function AuthenticatedApp({
         { id: 'invoices', label: t.nav.invoices, icon: FileText, path: '/invoices', tileColor: 'blue', requiredPermission: 'financial.view_invoices' },
         { id: 'jobs', label: t.nav.jobs, icon: Briefcase, path: '/jobs', tileColor: 'blue', requiredPermission: 'jobs.read' },
         { id: 'schedule', label: t.nav.calendar, icon: CalendarIcon, path: '/calendar', tileColor: 'blue', requiredPermission: 'calendar.read' },
-        { id: 'bookings', label: (t.nav as any).bookings, icon: CalendarCheck, path: '/settings/booking', tileColor: 'blue', requiredPermission: 'calendar.read' },
       ],
     },
     {
@@ -664,8 +663,6 @@ function AuthenticatedApp({
         { id: 'courses', label: t.courses?.title || 'Courses', icon: GraduationCap, path: '/courses', tileColor: 'blue' },
         { id: 'payments', label: t.nav.payments, icon: CreditCard, path: '/payments', tileColor: 'blue', requiredPermission: 'financial.view_payments' },
         { id: 'campaigns', label: (t.nav as any).campaigns, icon: Mail, path: '/campaigns', tileColor: 'blue', requiredPermission: 'settings.read' },
-        { id: 'route-optimizer', label: (t.nav as any).routeOptimizer, icon: Map, path: '/route-optimizer', tileColor: 'blue', requiredPermission: 'jobs.read' },
-        { id: 'recurring-invoices', label: (t.nav as any).recurringInvoices, icon: Repeat, path: '/invoices/recurring', tileColor: 'blue', requiredPermission: 'financial.view_invoices' },
         ...(isPlatformOwner ? [{ id: 'platform-admin', label: 'Platform Admin', icon: Shield, path: '/platform-admin', tileColor: 'blue' as const }] : []),
       ],
     },

@@ -1,5 +1,4 @@
-import React, { useEffect, useState, useCallback, Suspense } from 'react';
-const RecurringInvoicesPage = React.lazy(() => import('./RecurringInvoices'));
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRecentItems } from '../hooks/useRecentItems';
 import { toast } from 'sonner';
@@ -148,7 +147,7 @@ function copyToClipboard(text: string) {
 }
 
 // ─── Tabs ────────────────────────────────────────────────────────────
-type OverviewTab = 'active' | 'completed' | 'quotes' | 'jobs' | 'invoices' | 'recurring' | 'leads' | 'specific_notes';
+type OverviewTab = 'active' | 'completed' | 'quotes' | 'jobs' | 'invoices' | 'leads' | 'specific_notes';
 
 // ─── Skeleton ────────────────────────────────────────────────────────
 function DetailPageSkeleton() {
@@ -476,7 +475,6 @@ export default function ClientDetails() {
     { key: 'completed', label: language === 'fr' ? 'Terminés' : 'Completed', count: completedJobs.length },
     { key: 'jobs', label: t.clients.jobs, count: jobs.length },
     { key: 'invoices', label: t.nav.invoices, count: invoices.length },
-    { key: 'recurring', label: (t as any).recurringInvoices?.tab || (language === 'fr' ? 'Récurrentes' : 'Recurring'), count: 0 },
     { key: 'quotes', label: t.clientDetails.quotes, count: realQuotes.length },
     { key: 'leads', label: language === 'fr' ? 'Prospects' : 'Leads', count: leads.length },
     { key: 'specific_notes', label: language === 'fr' ? 'Notes spécifiques' : 'Specific Notes', count: 0 },
@@ -832,13 +830,6 @@ export default function ClientDetails() {
                     </button>
                   ))}
                 </div>
-              )}
-
-              {/* Recurring Invoices Tab */}
-              {activeTab === 'recurring' && id && (
-                <Suspense fallback={<div className="py-4 text-center text-[13px] text-text-tertiary">Loading…</div>}>
-                  <RecurringInvoicesPage initialClientId={id} />
-                </Suspense>
               )}
 
               {/* Quotes Tab */}
