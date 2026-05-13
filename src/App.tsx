@@ -234,7 +234,8 @@ export default function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { unreadCount: unreadNotifs, resetCount: resetNotifCount } = useRealtimeNotifications(!!user);
+  // NOTE: useRealtimeNotifications uses useCompany() internally, so it must be
+  // called inside <CompanyProvider>. It's hoisted into AuthenticatedApp instead.
   const [unreadSms, setUnreadSms] = useState(0);
 
   // Fetch unread SMS count + realtime subscription
@@ -547,8 +548,6 @@ export default function App() {
       activityOpen={activityOpen}
       setActivityOpen={setActivityOpen}
       unreadSms={unreadSms}
-      unreadNotifs={unreadNotifs}
-      resetNotifCount={resetNotifCount}
       navigate={navigate}
       location={location}
     />
@@ -576,12 +575,12 @@ function AuthenticatedApp({
   activityOpen,
   setActivityOpen,
   unreadSms,
-  unreadNotifs,
-  resetNotifCount,
   navigate,
   location,
 }: any) {
   const { current, companies, loading: companyLoading, isMultiCompany, hasNoCompany, currentOrgId } = useCompany();
+  // Call realtime notifications hook INSIDE CompanyProvider (it uses useCompany() internally)
+  const { unreadCount: unreadNotifs, resetCount: resetNotifCount } = useRealtimeNotifications(!!user);
 
   // Sidebar counters: pending quotes + overdue invoices
   const [pendingQuotes, setPendingQuotes] = useState(0);
