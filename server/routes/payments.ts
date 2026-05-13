@@ -172,32 +172,16 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           const admin = getServiceClient();
           const amountPaid = Math.max(0, Math.round(intent.amount_received || intent.amount || 0));
 
-          const { data: invoice } = await admin
-            .from('invoices')
-            .select('id, total_cents, paid_cents, balance_cents')
-            .eq('id', metadata.invoiceId)
-            .maybeSingle();
+          const { data: applied } = await admin.rpc('apply_invoice_payment', {
+            p_invoice_id: metadata.invoiceId,
+            p_org_id: metadata.orgId,
+            p_amount_cents: amountPaid,
+          });
+          const invoiceRow = Array.isArray(applied) ? applied[0] : applied;
 
-          if (invoice) {
-            const newPaidCents = Math.min(
-              Number(invoice.total_cents || 0),
-              Number(invoice.paid_cents || 0) + amountPaid
-            );
-            const newBalanceCents = Math.max(0, Number(invoice.total_cents || 0) - newPaidCents);
-            const newStatus = newBalanceCents <= 0 ? 'paid' : 'partial';
-
-            // F-32: also scope by org_id to prevent metadata tampering from
-            // updating cross-org invoices.
-            await admin
-              .from('invoices')
-              .update({
-                paid_cents: newPaidCents,
-                balance_cents: newBalanceCents,
-                status: newStatus,
-                paid_at: newBalanceCents <= 0 ? new Date().toISOString() : null,
-              })
-              .eq('id', metadata.invoiceId)
-              .eq('org_id', metadata.orgId);
+          if (invoiceRow) {
+            const newPaidCents = Number(invoiceRow.paid_cents || 0);
+            const newStatus = invoiceRow.status;
 
             // Outbound webhooks — payment.received always; invoice.paid when fully settled.
             dispatchWebhook(metadata.orgId, 'payment.received', {
@@ -214,7 +198,7 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
               dispatchWebhook(metadata.orgId, 'invoice.paid', {
                 invoice_id: metadata.invoiceId,
                 client_id: metadata.clientId,
-                total_cents: Number(invoice.total_cents || 0),
+                total_cents: Number(invoiceRow.total_cents || 0),
                 paid_cents: newPaidCents,
                 provider: 'stripe',
                 provider_payment_id: intent.id,
@@ -1294,27 +1278,13 @@ router.post('/payments/refund', async (req, res) => {
 
     if (updateError) throw updateError;
 
-    // If full refund, update invoice paid_cents
+    // If full refund, atomically reverse paid_cents
     if (isFullRefund && payment.invoice_id) {
-      const { data: invoice } = await admin
-        .from('invoices')
-        .select('id, total_cents, paid_cents')
-        .eq('id', payment.invoice_id)
-        .maybeSingle();
-
-      if (invoice) {
-        const newPaid = Math.max(0, Number(invoice.paid_cents || 0) - payment.amount_cents);
-        const newBalance = Math.max(0, Number(invoice.total_cents || 0) - newPaid);
-        await admin
-          .from('invoices')
-          .update({
-            paid_cents: newPaid,
-            balance_cents: newBalance,
-            status: newPaid <= 0 ? 'sent' : 'partial',
-            paid_at: null,
-          })
-          .eq('id', payment.invoice_id);
-      }
+      await admin.rpc('reverse_invoice_payment', {
+        p_invoice_id: payment.invoice_id,
+        p_org_id: orgId,
+        p_amount_cents: payment.amount_cents,
+      });
     }
 
     // Update associated payment_request status if full refund
@@ -1446,6 +1416,8 @@ async function handleCheckoutSessionCompleted(
   else periodEnd.setMonth(periodEnd.getMonth() + 1);
 
   const amountCents = session.amount_total || 0;
+  const stripeSubId = typeof session.subscription === 'string' ? session.subscription : (session.subscription as any)?.id || null;
+  const stripeCustomerId = typeof session.customer === 'string' ? session.customer : (session.customer as any)?.id || null;
 
   const { data: subscription, error: subError } = await admin
     .from('subscriptions')
@@ -1462,6 +1434,8 @@ async function handleCheckoutSessionCompleted(
       current_period_end: periodEnd.toISOString(),
       stripe_checkout_session_id: sessionId,
       stripe_payment_intent_id: typeof session.payment_intent === 'string' ? session.payment_intent : null,
+      stripe_subscription_id: stripeSubId,
+      stripe_customer_id: stripeCustomerId,
       payment_confirmed_at: now.toISOString(),
     })
     .select('*')

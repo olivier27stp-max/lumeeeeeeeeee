@@ -15,6 +15,7 @@ import {
   updateSyncStatus, getGeofences,
 } from '../lib/locationApi';
 import { type LiveLocation, getActiveLiveLocations } from '../lib/trackingApi';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { fetchMapJobs, type MapJobPin, type MapDateRange } from '../lib/mapApi';
 import { useSearchParams } from 'react-router-dom';
 import JobPopup from '../components/map/JobPopup';
@@ -160,13 +161,18 @@ export default function DispatchMap() {
 
   // Realtime subscription for browser-based live locations
   useEffect(() => {
-    const channel = supabase
-      .channel('dispatch-live-locations')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tracking_live_locations' }, () => {
-        getActiveLiveLocations().then(setLiveLocations).catch(() => {});
-      })
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    (async () => {
+      const orgId = await getCurrentOrgIdOrThrow().catch(() => null);
+      if (!orgId) return;
+      channel = supabase
+        .channel(`dispatch-live-locations-${orgId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tracking_live_locations', filter: `org_id=eq.${orgId}` }, () => {
+          getActiveLiveLocations().then(setLiveLocations).catch(() => {});
+        })
+        .subscribe();
+    })();
+    return () => { if (channel) void supabase.removeChannel(channel); };
   }, []);
 
   const handleSync = async () => {

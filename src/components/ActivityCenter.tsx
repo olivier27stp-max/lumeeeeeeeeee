@@ -122,11 +122,15 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
     ).catch(() => {});
 
     // Subscribe to realtime notifications so new ones appear while panel is open
-    const channel = supabase
-      .channel('activity-center-realtime')
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    (async () => {
+      const orgId = await getCurrentOrgIdOrThrow().catch(() => null);
+      if (!orgId) return;
+      channel = supabase
+      .channel(`activity-center-realtime-${orgId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications' },
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `org_id=eq.${orgId}` },
         (payload: { new: { id: string; type: string; title: string; body?: string; link?: string; created_at: string; is_read: boolean } }) => {
           const n = payload.new;
           const iconInfo = ICON_MAP[n.type] || { icon: Activity, color: 'text-text-tertiary bg-surface-tertiary' };
@@ -147,9 +151,10 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
         }
       )
       .subscribe();
+    })();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [open]);
 

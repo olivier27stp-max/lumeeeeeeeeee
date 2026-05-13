@@ -23,6 +23,7 @@ import {
   stageToDbSlug,
 } from '../lib/pipelineApi';
 import { createLeadQuick, fetchLeadsScoped, updateLeadStatus, type LeadStatus } from '../lib/leadsApi';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useJobModalController } from '../contexts/JobModalController';
 import { getActiveJobByLeadId, updateJob } from '../lib/jobsApi';
 import { mapLeadToJobDraft } from '../lib/mapLeadToJobDraft';
@@ -245,22 +246,18 @@ export default function Pipeline() {
 
   // Supabase Realtime: auto-refresh when pipeline_deals, leads, or clients change
   useEffect(() => {
-    const channel = supabase
-      .channel('pipeline-live-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pipeline_deals' }, () => {
-        void load();
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads', filter: 'deleted_at=is.null' }, () => {
-        void load();
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'clients', filter: 'deleted_at=is.null' }, () => {
-        void load();
-      })
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    (async () => {
+      const orgId = await getCurrentOrgIdOrThrow().catch(() => null);
+      if (!orgId) return;
+      channel = supabase
+        .channel(`pipeline-live-sync-${orgId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'pipeline_deals', filter: `org_id=eq.${orgId}` }, () => void load())
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads', filter: `org_id=eq.${orgId}` }, () => void load())
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'clients', filter: `org_id=eq.${orgId}` }, () => void load())
+        .subscribe();
+    })();
+    return () => { if (channel) void supabase.removeChannel(channel); };
   }, []);
 
   useEffect(() => {

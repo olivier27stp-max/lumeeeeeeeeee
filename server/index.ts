@@ -42,7 +42,8 @@ import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
 import requestFormsRouter from './routes/request-forms';
 import marketingRouter from './routes/marketing';
-import campaignsRouter from './routes/campaigns';
+// Removed: campaigns / booking / recurring-invoices / route-optimization /
+// webhooks-config / quickbooks-export — corresponding UI features deleted.
 import quoteTemplatesRouter from './routes/quote-templates';
 import checklistsRouter from './routes/checklists';
 import taxesRouter from './routes/taxes';
@@ -73,11 +74,6 @@ import remindersCronRouter from './routes/reminders-cron';
 import remindersRouter from './routes/reminders';
 import meRouter from './routes/me';
 import onboardingRouter from './routes/onboarding';
-import bookingRouter from './routes/booking';
-import recurringInvoicesRouter from './routes/recurring-invoices';
-import quickbooksExportRouter from './routes/quickbooks-export';
-import routeOptimizationRouter from './routes/route-optimization';
-import webhooksConfigRouter from './routes/webhooks-config';
 
 // Security engine
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, extractIP } from './lib/security';
@@ -324,15 +320,6 @@ app.use('/api', remindersCronRouter);
 app.use('/api', remindersRouter);
 app.use('/api', meRouter);
 app.use('/api', onboardingRouter);
-app.use('/api', recurringInvoicesRouter);
-app.use('/api', quickbooksExportRouter);
-app.use('/api', webhooksConfigRouter);
-app.use('/api', routeOptimizationRouter);
-
-// Public booking endpoints — tight IP rate limit on submissions
-const bookingPublicLimiter = rateLimit({ windowMs: 60_000, max: 20 });
-app.use('/api/booking', bookingPublicLimiter);
-app.use('/api', bookingRouter);
 app.use('/api', scheduledReportsRouter);
 app.use('/api', goalsRouter);
 app.use('/api', auditLogRouter);
@@ -366,7 +353,6 @@ app.use('/api/public/form', formSubmitLimiter);
 app.use('/api/public/book-demo', formSubmitLimiter);
 app.use('/api', requestFormsRouter);
 app.use('/api', marketingRouter);
-app.use('/api', campaignsRouter);
 app.use('/api', quoteTemplatesRouter);
 app.use('/api', checklistsRouter);
 app.use('/api', taxesRouter);

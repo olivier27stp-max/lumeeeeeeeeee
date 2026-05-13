@@ -489,14 +489,19 @@ export default function Jobs() {
 
   // Realtime subscription — refresh when jobs change from any source
   useEffect(() => {
-    const channel = supabase
-      .channel('jobs-page-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, () => {
-        void loadJobs();
-        void loadKpis();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    (async () => {
+      const orgId = await getCurrentOrgIdOrThrow().catch(() => null);
+      if (!orgId) return;
+      channel = supabase
+        .channel(`jobs-page-realtime-${orgId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs', filter: `org_id=eq.${orgId}` }, () => {
+          void loadJobs();
+          void loadKpis();
+        })
+        .subscribe();
+    })();
+    return () => { if (channel) supabase.removeChannel(channel); };
   }, [statusFilter, jobTypeFilter, debouncedQuery, sortBy, sortDirection, page, pageSize]);
 
   const handleSort = (key: JobSort) => {

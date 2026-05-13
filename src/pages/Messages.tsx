@@ -289,26 +289,28 @@ export default function Messages() {
 
   // Real-time subscription for new messages
   useEffect(() => {
-    const channel = supabase
-      .channel('messages-live')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        const newMsg = payload.new as Message;
-        // If we're viewing this conversation, add the message
-        if (selectedConvo && newMsg.conversation_id === selectedConvo.id) {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
-        }
-        // Refresh conversation list
-        loadConversations();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
-        loadConversations();
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    (async () => {
+      const orgId = await getCurrentOrgIdOrThrow().catch(() => null);
+      if (!orgId) return;
+      channel = supabase
+        .channel(`messages-live-${orgId}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `org_id=eq.${orgId}` }, (payload) => {
+          const newMsg = payload.new as Message;
+          if (selectedConvo && newMsg.conversation_id === selectedConvo.id) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
+          }
+          loadConversations();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `org_id=eq.${orgId}` }, () => {
+          loadConversations();
+        })
+        .subscribe();
+    })();
+    return () => { if (channel) supabase.removeChannel(channel); };
   }, [selectedConvo, loadConversations]);
 
   // Load messages when conversation selected

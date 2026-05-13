@@ -293,22 +293,28 @@ export function subscribeToNotes(
   onNoteChange: (payload: any) => void,
   onChecklistChange: (payload: any) => void,
 ) {
-  const channel = supabase
-    .channel('notes_realtime')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'notes' },
-      onNoteChange,
-    )
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'notes_checklist' },
-      onChecklistChange,
-    )
-    .subscribe();
+  let channel: ReturnType<typeof supabase.channel> | null = null;
+  (async () => {
+    const { getCurrentOrgIdOrThrow } = await import('./orgApi');
+    const orgId = await getCurrentOrgIdOrThrow().catch(() => null);
+    if (!orgId) return;
+    channel = supabase
+      .channel(`notes_realtime_${orgId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notes', filter: `org_id=eq.${orgId}` },
+        onNoteChange,
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notes_checklist' },
+        onChecklistChange,
+      )
+      .subscribe();
+  })();
 
   return () => {
-    supabase.removeChannel(channel);
+    if (channel) supabase.removeChannel(channel);
   };
 }
 

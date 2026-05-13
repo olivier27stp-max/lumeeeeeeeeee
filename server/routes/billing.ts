@@ -653,18 +653,11 @@ router.post('/billing/create-checkout-session', async (req, res) => {
     // SECURITY: Never store passwords in Stripe metadata
     const session = await stripe.checkout.sessions.create({
       customer: customer.id,
-      mode: 'payment',
-      // Collect billing address at checkout so we can:
-      //   1) Propagate it to `orgs` (country/city/postal) for multi-tenant profile
-      //   2) Pick the right Twilio area code when auto-provisioning the SMS number
-      // Restricted to CA + US to match supported markets.
+      mode: 'subscription',
       billing_address_collection: 'required',
       customer_update: { address: 'auto', name: 'auto' },
       payment_method_types: ['card'],
       payment_method_collection: 'always',
-      // `allow_promotion_codes` is not supported when `mode: 'payment'` with
-      // inline `price_data`. Promo codes are already applied server-side via
-      // `amountCents` above, so re-enabling this would double-discount anyway.
       phone_number_collection: { enabled: true },
       line_items: [{
         price_data: {
@@ -674,6 +667,7 @@ router.post('/billing/create-checkout-session', async (req, res) => {
             description: (plan.features || []).slice(0, 3).join(', '),
           },
           unit_amount: amountCents,
+          recurring: { interval: interval === 'yearly' ? 'year' : 'month' },
         },
         quantity: 1,
       }],

@@ -266,14 +266,24 @@ export default function App() {
 
     loadUnread();
 
-    const channel = supabase
-      .channel('sms-unread-badge')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
-        loadUnread();
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    (async () => {
+      const { data: membership } = await supabase
+        .from('memberships')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle();
+      const oid = membership?.org_id;
+      if (!oid) return;
+      channel = supabase
+        .channel(`sms-unread-badge-${oid}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `org_id=eq.${oid}` }, () => {
+          loadUnread();
+        })
+        .subscribe();
+    })();
+    return () => { if (channel) supabase.removeChannel(channel); };
   }, [user]);
 
   useEffect(() => {

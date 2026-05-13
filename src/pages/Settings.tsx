@@ -18,12 +18,8 @@ import {
   Wallet,
   Archive,
   FileText,
-  ClipboardList,
   Gift,
   MessageSquare,
-  Bell,
-  FileSpreadsheet,
-  Webhook,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -572,13 +568,9 @@ export default function Settings() {
         { id: 'products',     label: t.settings.productsServices, icon: Package, link: '/settings/products' },
         { id: 'taxes',        label: 'Taxes',                     icon: Receipt, link: '/settings/taxes' },
         { id: 'payments',     label: t.commandPalette.payments,   icon: Wallet, link: '/settings/payments' },
-        { id: 'reminders',    label: isFr ? 'Rappels de paiement' : 'Payment Reminders', icon: Bell, link: '/settings/reminders' },
         { id: 'messaging',    label: isFr ? 'Messagerie SMS' : 'SMS Messaging', icon: MessageSquare, link: '/settings/messaging' },
         { id: 'request-form', label: (t.settings as any).requestForm || (t.requestForm.requestForm), icon: FileText, link: '/settings/request-form' },
-        { id: 'checklists' as SettingsTab, label: (t as any).checklists?.templatesTitle || (isFr ? 'Modèles de checklist' : 'Checklist Templates'), icon: ClipboardList, link: '/settings/checklists' },
-        { id: 'quickbooks' as SettingsTab, label: (t as any).quickbooks?.sidebar || (isFr ? 'QuickBooks' : 'QuickBooks'), icon: FileSpreadsheet, link: '/settings/quickbooks' },
         { id: 'automations',  label: t.settings.automations,      icon: Zap, link: '/automations' },
-        { id: 'webhooks' as SettingsTab, label: 'Webhooks', icon: Webhook, link: '/settings/webhooks' },
         { id: 'location',     label: t.settings.locationServices, icon: MapPin },
         { id: 'archives',     label: (t.settings as any).archives || 'Archives', icon: Archive },
       ],
