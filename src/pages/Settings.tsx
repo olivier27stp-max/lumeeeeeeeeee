@@ -329,9 +329,9 @@ function BillingTab({ navigate, isFr, t }: { navigate: (path: string) => void; i
     return s;
   };
   const statusStyle = (s: string) => {
-    if (s === 'active' || s === 'trialing') return 'bg-surface-card/20 text-white';
+    if (s === 'active' || s === 'trialing') return 'bg-white/20 text-white';
     if (s === 'past_due') return 'bg-warning/30 text-warning';
-    return 'bg-surface-card/10 text-white/60';
+    return 'bg-white/10 text-white/60';
   };
 
   const handleCancel = async () => {
@@ -365,7 +365,7 @@ function BillingTab({ navigate, isFr, t }: { navigate: (path: string) => void; i
     <div className="space-y-6">
       {/* ── Current Plan Card ── */}
       {subscription && subscription.status !== 'canceled' ? (
-        <div className="glass-card rounded-2xl p-6 bg-primary overflow-hidden relative">
+        <div className="glass-card rounded-2xl p-6 bg-gradient-to-br from-indigo-700 via-blue-700 to-blue-800 overflow-hidden relative">
           <div className="relative z-10 space-y-5">
             <div className="flex justify-between items-start">
               <div>

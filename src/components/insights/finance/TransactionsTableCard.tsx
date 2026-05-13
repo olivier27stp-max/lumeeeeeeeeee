@@ -1,4 +1,5 @@
 import React from 'react';
+import { User } from 'lucide-react';
 import type { RecentTransaction } from '../../../lib/financeDashboardApi';
 import { useTranslation } from '../../../i18n';
 
@@ -83,13 +84,10 @@ export default function TransactionsTableCard({
               key={tx.id}
               className="grid grid-cols-[1fr_160px_90px_100px] gap-2 items-center py-3.5 px-1 hover:bg-zinc-50/60 dark:hover:bg-zinc-800/60 transition-colors rounded-lg"
             >
-              {/* Avatar + Name */}
+              {/* Avatar + Name — same person icon as other tables */}
               <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                  style={{ backgroundColor: tx.color }}
-                >
-                  {tx.initials}
+                <div className="w-9 h-9 rounded-full bg-primary/10 dark:bg-zinc-700 flex items-center justify-center text-primary dark:text-zinc-200 flex-shrink-0 border border-primary/15 dark:border-zinc-600">
+                  <User size={16} strokeWidth={2} />
                 </div>
                 <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">
                   {tx.label}

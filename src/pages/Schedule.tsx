@@ -582,14 +582,17 @@ function ScheduleContent() {
   }, [orgId, setSelectedTeamIds]);
 
   const allSel = teams.length > 0 && selectedTeamIds.length === teams.length;
+  // Treat "0 teams selected" the same as "all teams" — never show an empty
+  // calendar just because the user unchecked everything. To see only
+  // unassigned jobs, switch to `unassignedMode` explicitly.
   const noneSel = teams.length > 0 && selectedTeamIds.length === 0;
-  const effTeams = useMemo(() => allSel ? [] : selectedTeamIds, [allSel, selectedTeamIds]);
-  const tKey = useMemo(() => allSel ? 'all' : selectedTeamIds.length === 0 ? 'none' : [...selectedTeamIds].sort().join(','), [allSel, selectedTeamIds]);
+  const effTeams = useMemo(() => (allSel || noneSel) ? [] : selectedTeamIds, [allSel, noneSel, selectedTeamIds]);
+  const tKey = useMemo(() => (allSel || noneSel) ? 'all' : [...selectedTeamIds].sort().join(','), [allSel, noneSel, selectedTeamIds]);
   const range = useMemo(() => buildRange(selectedDate, view), [selectedDate, view]);
 
   const evQ = useQuery({
     queryKey: ['calendarEvents', orgId || '-', view, dateKey, tKey, unassignedMode ? 'u' : 't'],
-    enabled: !!orgId && (!noneSel || unassignedMode),
+    enabled: !!orgId,
     staleTime: 30_000,
     queryFn: () => unassignedMode
       ? listUnassignedScheduledEvents({ startAt: range.start.toISOString(), endAt: range.end.toISOString() })
@@ -599,7 +602,7 @@ function ScheduleContent() {
     queryKey: ['calendarUnscheduledJobs', orgId || '-', tKey, unassignedMode ? 'u' : 't'],
     enabled: !!orgId,
     staleTime: 30_000,
-    queryFn: () => unassignedMode ? listUnassignedUnscheduledJobs() : listUnscheduledJobs(noneSel ? [] : effTeams),
+    queryFn: () => unassignedMode ? listUnassignedUnscheduledJobs() : listUnscheduledJobs(effTeams),
   });
 
   const events = evQ.data || [];
@@ -917,9 +920,7 @@ function ScheduleContent() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="min-w-0 flex-1 overflow-hidden bg-surface">
           {evQ.isLoading ? <div className="h-full animate-pulse bg-surface-secondary/50" /> :
-           noneSel && !unassignedMode ? (
-            <div className="grid h-full place-items-center"><div className="text-center"><Users className="mx-auto mb-2 text-text-tertiary" size={32} /><p className="text-sm font-semibold text-text-primary">{t.schedule.noTeamsSelected}</p><p className="mt-1 text-xs text-text-secondary">{t.schedule.noTeamsSelectedMsg}</p></div></div>
-          ) : view === 'month' ? (
+           view === 'month' ? (
             <MonthView date={selectedDate} events={filtered} tcMap={tcMap} onDayClick={(d) => { setDate(d); setView('day'); }} onEventClick={(id) => void openExisting(id)} />
           ) : view === 'week' ? (
             <TimeGrid columns={weekColumns} events={filtered} tcMap={tcMap} onSlotClick={(s) => openCreate(s)} onEventClick={(id) => void openExisting(id)} {...timeGridDndProps} />
