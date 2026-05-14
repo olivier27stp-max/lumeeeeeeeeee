@@ -3,9 +3,10 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Avatar } from '../components/d2d/avatar';
 import { getRepAvatar } from '../lib/constants/avatars';
 import { getRepPerformance, getRealtimeStats } from '../lib/leaderboardApi';
+import { getCommissionEntries } from '../lib/commissionsApi';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
-import type { RepPerformanceDetail } from '../types';
+import type { RepPerformanceDetail, FsCommissionEntry } from '../types';
 import {
   MessageSquare,
   Phone,
@@ -120,6 +121,8 @@ export default function D2DRepProfile() {
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [commissions, setCommissions] = useState<FsCommissionEntry[]>([]);
+  const [closes, setCloses] = useState<Array<{ id: string; title: string; value: number; stage: string; won_at: string | null; created_at: string }>>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -210,11 +213,37 @@ export default function D2DRepProfile() {
         return;
       }
 
-      // It's a UUID — fetch from the API
+      // It's a UUID — fetch from the API + real commissions + real closes
       try {
         const data = await fetchFromApi(paramId);
+        const orgId = await getCurrentOrgIdOrThrow();
+        const [commissionEntries, dealsRes] = await Promise.all([
+          getCommissionEntries({ userId: paramId }).catch(() => []),
+          supabase
+            .from('pipeline_deals')
+            .select('id, title, value, stage, won_at, created_at')
+            .eq('org_id', orgId)
+            .eq('rep_id', paramId)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+            .limit(50)
+            .then((r) => r.data || []),
+        ]);
+        // Replace the fake 10% commission estimate with the real total
+        const realCommission = commissionEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const realClosesCount = dealsRes.filter((d: any) => d.stage === 'won').length;
+        const finalData: ProfileData = {
+          ...data,
+          stats: {
+            ...data.stats,
+            commission: realCommission,
+            closes: realClosesCount || data.stats.closes,
+          },
+        };
         if (!cancelled) {
-          setProfile(data);
+          setProfile(finalData);
+          setCommissions(commissionEntries);
+          setCloses(dealsRes as any);
           setLoading(false);
         }
       } catch (err) {
@@ -438,6 +467,75 @@ export default function D2DRepProfile() {
                 </div>
               </CardPanel>
             )}
+
+            {/* ── Closes (auto-linked via pipeline_deals.rep_id) ── */}
+            <CardPanel title={`Closes (${closes.length})`}>
+              {closes.length === 0 ? (
+                <p className="text-sm text-text-tertiary text-center py-6">Aucun deal lié à ce rep pour le moment.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-outline">
+                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Titre</th>
+                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Étape</th>
+                        <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Valeur</th>
+                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {closes.slice(0, 15).map((d) => (
+                        <tr key={d.id} className="border-b border-outline/50 last:border-0">
+                          <td className="px-2 py-2 text-text-primary font-medium truncate max-w-[200px]">{d.title}</td>
+                          <td className="px-2 py-2 text-text-secondary capitalize text-[12px]">{d.stage}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-text-primary">{fmtCurrency(d.value || 0)}</td>
+                          <td className="px-2 py-2 text-text-tertiary text-[12px]">{new Date(d.won_at || d.created_at).toLocaleDateString('fr-CA')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardPanel>
+
+            {/* ── Commission history ── */}
+            <CardPanel title={`Historique commissions (${commissions.length})`}>
+              {commissions.length === 0 ? (
+                <p className="text-sm text-text-tertiary text-center py-6">Aucune commission enregistrée.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-outline">
+                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Description</th>
+                        <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Base</th>
+                        <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Commission</th>
+                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Statut</th>
+                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {commissions.slice(0, 30).map((c) => (
+                        <tr key={c.id} className="border-b border-outline/50 last:border-0">
+                          <td className="px-2 py-2 text-text-primary truncate max-w-[180px]">{c.description ?? c.lead_id ?? '—'}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-text-secondary">${(c.base_amount || 0).toLocaleString('en-US')}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-text-primary font-semibold">${(c.amount || 0).toLocaleString('en-US')}</td>
+                          <td className="px-2 py-2">
+                            <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-semibold capitalize ${
+                              c.status === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' :
+                              c.status === 'approved' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400' :
+                              c.status === 'pending' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400' :
+                              'bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300'
+                            }`}>{c.status}</span>
+                          </td>
+                          <td className="px-2 py-2 text-text-tertiary text-[12px]">{new Date(c.created_at).toLocaleDateString('fr-CA')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardPanel>
           </div>
         </div>
       </div>

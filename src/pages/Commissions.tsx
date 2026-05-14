@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { StatCard } from '../components/d2d/stat-card';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/d2d/card';
 import { Button } from '../components/d2d/button';
@@ -215,6 +216,7 @@ export default function D2DCommissions() {
     if (!entries) return [];
     return entries.map((e) => ({
       id: e.id,
+      userId: e.user_id,
       lead: e.description ?? e.lead_id ?? '—',
       rep: profileMap[e.user_id] ?? e.user_id,
       rule: e.rule_id ?? '—',
@@ -328,10 +330,10 @@ export default function D2DCommissions() {
                       <tr key={entry.id} className="border-b border-border-subtle last:border-b-0 table-row-hover">
                         <td className="px-5 py-2.5 text-sm font-medium text-text-primary">{entry.lead}</td>
                         <td className="px-5 py-2.5">
-                          <div className="flex items-center gap-2">
+                          <Link to={`/reps/${entry.userId}`} className="flex items-center gap-2 hover:underline">
                             <Avatar name={entry.rep} src={getRepAvatar(entry.rep)} size="sm" className="!h-5 !w-5 !text-[8px]" />
                             <span className="text-sm text-text-secondary">{entry.rep}</span>
-                          </div>
+                          </Link>
                         </td>
                         <td className="px-5 py-2.5 text-sm text-text-muted">{entry.rule}</td>
                         <td className="px-5 py-2.5 text-right text-sm text-text-secondary">${entry.base.toLocaleString('en-US')}</td>
@@ -557,7 +559,11 @@ function RatesPanel() {
                 const isSaving = savingId === m.user_id;
                 return (
                   <tr key={m.user_id} className="border-b border-border-subtle last:border-b-0">
-                    <td className="px-5 py-2.5 text-sm font-medium text-text-primary">{m.full_name || m.email}</td>
+                    <td className="px-5 py-2.5 text-sm font-medium">
+                      <Link to={`/reps/${m.user_id}`} className="text-text-primary hover:underline">
+                        {m.full_name || m.email}
+                      </Link>
+                    </td>
                     <td className="px-5 py-2.5 text-sm text-text-muted capitalize">{m.role}</td>
                     <td className="px-5 py-2.5 text-right text-sm">
                       {isEditing ? (
