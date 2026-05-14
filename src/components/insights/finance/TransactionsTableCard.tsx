@@ -92,8 +92,8 @@ export default function TransactionsTableCard({
             >
               {/* Avatar + Name — same person icon as other tables */}
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-full bg-primary/10 dark:bg-zinc-700 flex items-center justify-center text-primary dark:text-zinc-200 flex-shrink-0 border border-primary/15 dark:border-zinc-600">
-                  <User size={16} strokeWidth={2} />
+                <div className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center flex-shrink-0 border border-indigo-200 dark:border-indigo-400/30">
+                  <User size={18} strokeWidth={2.2} className="text-indigo-600 dark:text-indigo-300" />
                 </div>
                 <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">
                   {tx.label}
