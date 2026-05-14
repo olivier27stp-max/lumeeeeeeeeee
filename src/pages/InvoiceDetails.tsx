@@ -38,6 +38,8 @@ export default function InvoiceDetails() {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [sendLoading, setSendLoading] = useState(false);
   const [showVisualPreview, setShowVisualPreview] = useState(false);
+  // Must stay here (before any conditional return) — React error #310 otherwise.
+  const [markingPaid, setMarkingPaid] = useState(false);
 
   const companyQuery = useQuery({ queryKey: ['companySettings'], queryFn: getCompanySettings });
   // Visual templates removed — single fixed invoice layout
@@ -142,7 +144,6 @@ export default function InvoiceDetails() {
     setActionsOpen(false);
   }
 
-  const [markingPaid, setMarkingPaid] = useState(false);
   async function handleMarkPaid() {
     if (markingPaid) return; // prevent double-click race
     if (!window.confirm(t.invoiceDetails.markAsPaid)) return;
