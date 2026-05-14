@@ -1,5 +1,6 @@
 import React from 'react';
 import { User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { RecentTransaction } from '../../../lib/financeDashboardApi';
 import { useTranslation } from '../../../i18n';
 
@@ -49,6 +50,7 @@ export default function TransactionsTableCard({
 }) {
   const { t } = useTranslation();
   const ti = t.insights as any;
+  const navigate = useNavigate();
   return (
     <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-5 h-full flex flex-col">
       {/* Header */}
@@ -82,7 +84,11 @@ export default function TransactionsTableCard({
           return (
             <div
               key={tx.id}
-              className="grid grid-cols-[1fr_160px_90px_100px] gap-2 items-center py-3.5 px-1 hover:bg-zinc-50/60 dark:hover:bg-zinc-800/60 transition-colors rounded-lg"
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate(`/invoices/${tx.id}`)}
+              onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/invoices/${tx.id}`); }}
+              className="grid grid-cols-[1fr_160px_90px_100px] gap-2 items-center py-3.5 px-1 cursor-pointer hover:bg-zinc-50/60 dark:hover:bg-zinc-800/60 transition-colors rounded-lg"
             >
               {/* Avatar + Name — same person icon as other tables */}
               <div className="flex items-center gap-3 min-w-0">

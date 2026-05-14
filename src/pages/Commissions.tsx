@@ -11,7 +11,12 @@ import {
   getPayrollPreview,
   approveCommission,
   reverseCommission,
+  getCommissionRules,
+  createCommissionRule,
+  updateCommissionRule,
 } from '../lib/commissionsApi';
+import { fetchTeamList, type OrgMember } from '../lib/invitationsApi';
+import type { FsCommissionRule } from '../types';
 import type { FsCommissionEntry, CommissionPayrollPreview } from '../types';
 import {
   DollarSign,
@@ -28,7 +33,7 @@ import {
   Loader2,
 } from 'lucide-react';
 
-type Tab = 'commissions' | 'payout';
+type Tab = 'commissions' | 'payout' | 'rates';
 
 // No fallback data — empty state shown when API returns no results
 
@@ -264,6 +269,7 @@ export default function D2DCommissions() {
         {([
           { key: 'commissions' as Tab, label: 'Commissions' },
           { key: 'payout' as Tab, label: 'Payout' },
+          ...(isAdmin ? [{ key: 'rates' as Tab, label: 'Taux par rep' }] : []),
         ]).map((tab) => (
           <button
             key={tab.key}
@@ -446,6 +452,155 @@ export default function D2DCommissions() {
           </Card>
         </>
       )}
+
+      {/* === RATES TAB (admin only) === */}
+      {!loading && activeTab === 'rates' && isAdmin && (
+        <RatesPanel />
+      )}
     </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
+// RatesPanel — admin-only editor for per-rep commission %
+// ──────────────────────────────────────────────────────────────
+function RatesPanel() {
+  const [members, setMembers] = useState<OrgMember[]>([]);
+  const [rules, setRules] = useState<FsCommissionRule[]>([]);
+  const [busy, setBusy] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftPct, setDraftPct] = useState<string>('');
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    setBusy(true);
+    try {
+      const [team, rulesData] = await Promise.all([
+        fetchTeamList(),
+        getCommissionRules(),
+      ]);
+      // Reps only (no owner/admin in commission targets — but allow them too)
+      setMembers(team.members.filter((m) => m.status === 'active'));
+      setRules(rulesData);
+    } catch (err) {
+      console.error('Failed to load rates:', err);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  function rateForUser(userId: string): FsCommissionRule | undefined {
+    return rules.find((r) => r.applies_to_user_id === userId && r.type === 'percentage');
+  }
+
+  async function handleSave(userId: string) {
+    const pct = parseFloat(draftPct);
+    if (isNaN(pct) || pct < 0 || pct > 100) {
+      alert('Pourcentage invalide (0-100)');
+      return;
+    }
+    setSavingId(userId);
+    try {
+      const existing = rateForUser(userId);
+      if (existing) {
+        await updateCommissionRule(existing.id, { percentage: pct });
+      } else {
+        await createCommissionRule({
+          name: `Rate for ${userId.slice(0, 8)}`,
+          type: 'percentage',
+          percentage: pct,
+          applies_to_user_id: userId,
+          priority: 10,
+        } as any);
+      }
+      setEditingId(null);
+      setDraftPct('');
+      await reload();
+    } catch (err: any) {
+      alert(err.message || 'Erreur de sauvegarde');
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  if (busy) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-5 w-5 animate-spin text-text-muted" />
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Taux de commission par membre</CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border-subtle">
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">Membre</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">Rôle</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">Taux actuel</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {members.map((m) => {
+                const rule = rateForUser(m.user_id);
+                const pct = rule?.percentage ?? null;
+                const isEditing = editingId === m.user_id;
+                const isSaving = savingId === m.user_id;
+                return (
+                  <tr key={m.user_id} className="border-b border-border-subtle last:border-b-0">
+                    <td className="px-5 py-2.5 text-sm font-medium text-text-primary">{m.full_name || m.email}</td>
+                    <td className="px-5 py-2.5 text-sm text-text-muted capitalize">{m.role}</td>
+                    <td className="px-5 py-2.5 text-right text-sm">
+                      {isEditing ? (
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="100"
+                          value={draftPct}
+                          onChange={(e) => setDraftPct(e.target.value)}
+                          className="w-20 rounded border border-border bg-surface px-2 py-1 text-right text-sm"
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="font-semibold text-text-primary">{pct != null ? `${pct}%` : '—'}</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-2.5 text-right">
+                      {isEditing ? (
+                        <div className="flex justify-end gap-1.5">
+                          <Button size="sm" disabled={isSaving} onClick={() => handleSave(m.user_id)}>
+                            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Sauver'}
+                          </Button>
+                          <Button size="sm" variant="outline" disabled={isSaving} onClick={() => { setEditingId(null); setDraftPct(''); }}>
+                            Annuler
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button size="sm" variant="outline" onClick={() => { setEditingId(m.user_id); setDraftPct(pct != null ? String(pct) : ''); }}>
+                          Modifier
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {members.length === 0 && (
+                <tr><td colSpan={4} className="px-5 py-8 text-center text-sm text-text-muted">Aucun membre.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
