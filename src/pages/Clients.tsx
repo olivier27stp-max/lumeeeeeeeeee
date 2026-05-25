@@ -655,7 +655,7 @@ export default function Clients() {
 
           {/* ROWS */}
           {!loading && displayItems.map(item => {
-            const rowCls = `border-b border-[var(--color-surface-tertiary)] transition-colors ${selectedIds.has(item.id) ? 'bg-[var(--color-primary-light)]' : 'hover:bg-[var(--color-surface-secondary)]'}`;
+            const rowCls = `border-b border-[var(--color-surface-tertiary)] transition-colors ${selectedIds.has(item.id) ? 'bg-[var(--color-primary-light)]' : ''}`;
             const click = () => navigate(`/clients/${item.id}`);
             return (
               <React.Fragment key={item.id}>

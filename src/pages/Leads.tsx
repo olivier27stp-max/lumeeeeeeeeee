@@ -541,7 +541,7 @@ export default function Leads() {
           {!quotesLoading && filtered.map((quote) => {
             const contactName = quote.client_name || quote.lead_name || '\u2014';
             const statusLabel = QUOTE_STATUS_LABELS[quote.status as keyof typeof QUOTE_STATUS_LABELS] || quote.status;
-            const rowCls = 'border-b border-outline/50 hover:bg-surface-secondary/40 cursor-pointer transition-colors';
+            const rowCls = 'border-b border-outline/50 cursor-pointer transition-colors';
             const openQuote = async () => {
               try {
                 const detail = await getQuoteById(quote.id);

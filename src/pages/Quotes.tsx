@@ -297,7 +297,7 @@ export default function Quotes() {
 
           {/* ROWS */}
           {!isLoading && sorted.map(q => {
-            const rowCls = `border-b border-outline/30 transition-colors ${sel.has(q.id) ? 'bg-primary-light' : 'hover:bg-surface-secondary'}`;
+            const rowCls = `border-b border-outline/30 transition-colors ${sel.has(q.id) ? 'bg-primary-light' : ''}`;
             const click = () => nav(`/quotes/${q.id}`);
             return (
               <React.Fragment key={q.id}>

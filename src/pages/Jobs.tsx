@@ -666,7 +666,7 @@ export default function Jobs() {
 
           {/* ROWS */}
           {!loading && jobs.map(job => {
-            const rowCls = `border-b border-outline/30 transition-colors ${selectedJobIds.has(job.id) ? 'bg-[#f0f4ff]' : 'hover:bg-surface-secondary'}`;
+            const rowCls = `border-b border-outline/30 transition-colors ${selectedJobIds.has(job.id) ? 'bg-[#f0f4ff]' : ''}`;
             const click = () => handleJobClick(job);
             return (
               <React.Fragment key={job.id}>

@@ -591,7 +591,7 @@ export default function Tasks() {
           {!loading && rows.map(row => {
             const rowCls = cn(
               'border-b border-[#f1f5f9] transition-colors',
-              selected.has(row.id) ? 'bg-[#f0f4ff]' : 'hover:bg-surface-secondary'
+              selected.has(row.id) ? 'bg-[#f0f4ff]' : ''
             );
             return (
               <React.Fragment key={row.id}>
