@@ -719,14 +719,9 @@ export default function NewJobModal({
       setInlineError(t.modals.addressRequired);
       return;
     }
-    if (!addressCity.trim()) {
-      setInlineError(t.modals.cityRequired);
-      return;
-    }
-    if (!addressProvince.trim()) {
-      setInlineError(t.modals.provinceRequired);
-      return;
-    }
+    // City/province are optional: jobs persist the address as a single
+    // `property_address` string (composed below), so we don't force the
+    // structured fields. This keeps legacy jobs (address only) editable.
 
     const teamIdPayload = teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection;
 
@@ -1058,26 +1053,24 @@ export default function NewJobModal({
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-text-tertiary">
-                        {t.modals.cityLabel} <span className="text-danger">*</span>
+                        {t.modals.cityLabel}
                       </label>
                       <input
                         value={addressCity}
                         onChange={(e) => setAddressCity(e.target.value)}
                         className="glass-input w-full"
                         placeholder={t.modals.cityPlaceholder}
-                        required
                       />
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-text-tertiary">
-                        {t.modals.provinceLabel} <span className="text-danger">*</span>
+                        {t.modals.provinceLabel}
                       </label>
                       <input
                         value={addressProvince}
                         onChange={(e) => setAddressProvince(e.target.value)}
                         className="glass-input w-full"
                         placeholder={t.modals.provincePlaceholder}
-                        required
                       />
                     </div>
                     <div className="space-y-2">
