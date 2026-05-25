@@ -458,7 +458,12 @@ export async function getJobModalDraftById(id: string): Promise<JobModalDraft | 
     salesperson_id: jobRow.salesperson_id ?? null,
     job_type: (jobRow.job_type as 'one_off' | 'recurring' | null) ?? 'one_off',
     property_address: jobRow.property_address ?? null,
-    address_line1: jobRow.address_line1 ?? null,
+    // Jobs only persist `property_address`. Pre-fill address_line1 from it so
+    // the edit form shows the existing address (treat the '-' placeholder as
+    // empty). The other structured fields stay null.
+    address_line1:
+      jobRow.address_line1 ??
+      (jobRow.property_address && jobRow.property_address !== '-' ? jobRow.property_address : null),
     address_line2: jobRow.address_line2 ?? null,
     city: jobRow.city ?? null,
     province: jobRow.province ?? null,
@@ -623,14 +628,12 @@ export async function createJob(payload: {
       updated_at: new Date().toISOString(),
     };
 
-    // Include structured address fields if provided
-    if (payload.address_line1 !== undefined) updatePayload.address_line1 = payload.address_line1 || null;
-    if (payload.address_line2 !== undefined) updatePayload.address_line2 = payload.address_line2 || null;
-    if (payload.city !== undefined) updatePayload.city = payload.city || null;
-    if (payload.province !== undefined) updatePayload.province = payload.province || null;
-    if (payload.postal_code !== undefined) updatePayload.postal_code = payload.postal_code || null;
-    if (payload.country !== undefined) updatePayload.country = payload.country || 'Canada';
-    if (payload.place_id !== undefined) updatePayload.place_id = payload.place_id || null;
+    // NOTE: the jobs table stores the address only as `property_address`.
+    // Structured fields (address_line1/city/province/postal_code/place_id...)
+    // are intentionally NOT written here — those columns do not exist on the
+    // `jobs` table, and writing them makes the update fail with
+    // "Could not find the 'address_line1' column of 'jobs' in the schema cache".
+    // The full address is already preserved in `property_address` above.
 
     if (shouldQueueGeocode) {
       updatePayload.geocode_status = 'pending';
@@ -694,18 +697,10 @@ export async function createJob(payload: {
     data = created;
     shouldQueueGeocode = normalizeAddressValue(data?.property_address) !== '';
 
-    // Update structured address fields (RPC only stores property_address)
-    if (payload.address_line1 || payload.city || payload.province) {
-      await supabase.from('jobs').update({
-        address_line1: payload.address_line1 || null,
-        address_line2: payload.address_line2 || null,
-        city: payload.city || null,
-        province: payload.province || null,
-        postal_code: payload.postal_code || null,
-        country: payload.country || 'Canada',
-        place_id: payload.place_id || null,
-      }).eq('id', data.id).eq('org_id', orgId);
-    }
+    // The RPC stores the full address in property_address. Structured address
+    // columns (address_line1/city/province/...) are NOT persisted on `jobs` —
+    // those columns don't exist on the table. property_address is the source
+    // of truth for a job's location.
 
     if (shouldQueueGeocode) {
       const { error: pendingError, status: pendingStatus } = await supabase
