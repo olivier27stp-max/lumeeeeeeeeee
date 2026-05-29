@@ -821,6 +821,11 @@ function AuthenticatedApp({
             </div>
           )}
 
+          {/* Dev role switcher — quick role swap from the sidebar header (temporary) */}
+          <div className="px-2.5 pb-2">
+            <DevRoleSwitcher expanded={sidebarExpanded} />
+          </div>
+
           {/* Navigation */}
           <nav className="flex-1 px-2.5 py-2 overflow-y-auto space-y-0.5">
             {filteredNavSections.map((section, sIdx) => (
@@ -955,7 +960,6 @@ function AuthenticatedApp({
           <div className="p-2.5 space-y-0.5 border-t border-sidebar-text/10">
             {/* Company switcher — only visible for multi-company users */}
             {sidebarExpanded && <CompanySwitcher />}
-            <DevRoleSwitcher expanded={sidebarExpanded} />
             <button
               onClick={() => setIsDark(!isDark)}
               title={!sidebarExpanded ? (isDark ? t.nav.lightMode : t.nav.darkMode) : undefined}
