@@ -90,6 +90,8 @@ export const PERMISSION_KEYS = [
   'financial.view_analytics', // Access insights, KPIs, revenue widgets
   'financial.view_margins',   // See cost, margin, profit data
   'financial.export_data',    // Export CSV, PDF with financial data
+  // Commissions
+  'commissions.read',         // View commissions page (rep sees own, admin/owner see all)
   // Search
   'search.global',            // Full global search (technicians get restricted)
 ] as const;
@@ -428,6 +430,8 @@ export const ROLE_PRESETS: Record<TeamRole, PermissionsMap> = {
     'settings.read',
     // Financial — sales_rep can see pricing on quotes
     'financial.view_pricing',
+    // Commissions — sales_rep sees their own (backend enforces scope)
+    'commissions.read',
     // Search
     'search.global',
     // Timesheets (own)

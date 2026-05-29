@@ -708,7 +708,7 @@ function AuthenticatedApp({
             { id: 'field-sales', label: t.nav.venteMap, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
             { id: 'd2d-pipeline', label: t.nav.ventePipeline, icon: GitBranch, path: '/d2d-pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
             { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'financial.view_reports' },
-            { id: 'commissions', label: t.nav.commissions, icon: DollarSign, path: '/commissions', tileColor: 'blue', requiredPermission: 'financial.view_reports' },
+            { id: 'commissions', label: t.nav.commissions, icon: DollarSign, path: '/commissions', tileColor: 'blue', requiredPermission: 'commissions.read' },
           ]
         : [
             { id: 'vente-locked', label: t.nav.d2d, icon: Lock, path: '/d2d-dashboard', tileColor: 'blue' },
@@ -1122,7 +1122,7 @@ function AuthenticatedApp({
                     <Route path="/d2d-dashboard" element={<ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DDashboard /></PageWrapper></ModuleGate>} />
                     <Route path="/d2d-pipeline" element={<Gated permission="door_to_door.access"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DPipeline /></ModuleGate></Gated>} />
                     <Route path="/leaderboard" element={<Gated permission="reports.read"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Leaderboard /></PageWrapper></ModuleGate></Gated>} />
-                    <Route path="/commissions" element={<Gated permission="reports.read"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Commissions /></PageWrapper></ModuleGate></Gated>} />
+                    <Route path="/commissions" element={<Gated permission="commissions.read"><PageWrapper><Commissions /></PageWrapper></Gated>} />
                     <Route path="/d2d-reports" element={<Gated permission="door_to_door.access"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DReports /></PageWrapper></ModuleGate></Gated>} />
                     <Route path="/d2d-settings/general" element={<Gated permission="settings.update"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DSettingsGeneral /></PageWrapper></ModuleGate></Gated>} />
                     <Route path="/d2d-settings/teams" element={<Gated permission="settings.update"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DSettingsTeams /></PageWrapper></ModuleGate></Gated>} />
