@@ -722,7 +722,7 @@ function AuthenticatedApp({
             { id: 'field-sales', label: t.nav.venteMap, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
             { id: 'd2d-pipeline', label: t.nav.ventePipeline, icon: GitBranch, path: '/d2d-pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
             { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'financial.view_reports', requiredPlanFlag: 'includes_d2d' },
-            { id: 'commissions', label: t.nav.commissions, icon: DollarSign, path: '/commissions', tileColor: 'blue', requiredPermission: 'financial.view_reports', requiredPlanFlag: 'includes_d2d' },
+            { id: 'commissions', label: t.nav.commissions, icon: DollarSign, path: '/commissions', tileColor: 'blue', requiredPermission: 'commissions.read', requiredPlanFlag: 'includes_d2d' },
           ]
         : [
             { id: 'vente-locked', label: t.nav.d2d, icon: Lock, path: '/d2d-dashboard', tileColor: 'blue', requiredPlanFlag: 'includes_d2d' },
@@ -795,7 +795,7 @@ function AuthenticatedApp({
                   exit={{ opacity: 0 }}
                   className="pl-1"
                 >
-                  <img src="/lume-logo-v2.png" alt="Lume CRM" className="h-7 w-auto object-contain" />
+                  <img src="/lume-logo-v2.png" alt="Lume CRM" className="h-7 w-auto object-contain dark:invert" />
                 </motion.div>
               ) : (
                 <motion.div
@@ -805,7 +805,7 @@ function AuthenticatedApp({
                   exit={{ opacity: 0 }}
                   className="mx-auto"
                 >
-                  <img src="/lume-logo-v2.png" alt="Lume CRM" className="h-6 w-auto object-contain" />
+                  <img src="/lume-logo-v2.png" alt="Lume CRM" className="h-6 w-auto object-contain dark:invert" />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -834,6 +834,11 @@ function AuthenticatedApp({
               </p>
             </div>
           )}
+
+          {/* Dev role switcher — quick role swap from the sidebar header (temporary) */}
+          <div className="px-2.5 pb-2">
+            <DevRoleSwitcher expanded={sidebarExpanded} />
+          </div>
 
           {/* Navigation */}
           <nav className="flex-1 px-2.5 py-2 overflow-y-auto space-y-0.5">
@@ -969,7 +974,6 @@ function AuthenticatedApp({
           <div className="p-2.5 space-y-0.5 border-t border-sidebar-text/10">
             {/* Company switcher — only visible for multi-company users */}
             {sidebarExpanded && <CompanySwitcher />}
-            <DevRoleSwitcher expanded={sidebarExpanded} />
             {/* Discover premium features — surfaces locked tabs as a polished modal */}
             <button
               onClick={() => setExploreFeaturesOpen(true)}
@@ -1149,7 +1153,8 @@ function AuthenticatedApp({
                     <Route path="/d2d-dashboard" element={<PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DDashboard /></PageWrapper></ModuleGate></PlanFeatureGate>} />
                     <Route path="/d2d-pipeline" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DPipeline /></ModuleGate></PlanFeatureGate></Gated>} />
                     <Route path="/leaderboard" element={<Gated permission="reports.read"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Leaderboard /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
-                    <Route path="/commissions" element={<Gated permission="reports.read"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Commissions /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
+                    {/* Commissions: role-based dashboard from main — not restricted to the Vente module/plan flag */}
+                    <Route path="/commissions" element={<Gated permission="commissions.read"><PageWrapper><Commissions /></PageWrapper></Gated>} />
                     <Route path="/d2d-reports" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DReports /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
                     <Route path="/d2d-settings/general" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DSettingsGeneral /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
                     <Route path="/d2d-settings/teams" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DSettingsTeams /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />

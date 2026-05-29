@@ -490,7 +490,7 @@ export default function Payments() {
 
               {/* DATA ROWS */}
               {!paymentsQuery.isLoading && rows.map((r) => {
-                const rowCls = 'border-b border-outline/30 transition-colors hover:bg-surface-secondary cursor-pointer';
+                const rowCls = 'border-b border-outline/30 transition-colors cursor-pointer';
                 const methodLabel = r.method ? (r.method === 'e-transfer' ? 'E-Transfer' : r.method.charAt(0).toUpperCase() + r.method.slice(1)) : '—';
                 const click = () => {
                   if (r.invoice_id) navigate(`/invoices/${r.invoice_id}`);
@@ -654,7 +654,7 @@ export default function Payments() {
 
               {/* DATA ROWS */}
               {!payoutList.isLoading && payoutRows.map((i) => {
-                const rowCls = 'border-b border-outline/30 transition-colors hover:bg-surface-secondary cursor-pointer';
+                const rowCls = 'border-b border-outline/30 transition-colors cursor-pointer';
                 return (
                   <React.Fragment key={i.id}>
                     <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={() => setSelectedPayout(i)}>

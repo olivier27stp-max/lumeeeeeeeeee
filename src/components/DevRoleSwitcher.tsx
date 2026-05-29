@@ -3,18 +3,16 @@ import { Bug } from 'lucide-react';
 import { ALL_ROLES, ROLE_LABELS, type TeamRole } from '../lib/permissions';
 import { getDevRoleOverride, setDevRoleOverride } from '../hooks/usePermissions';
 
-const IS_DEV = import.meta.env.DEV || location.hostname === 'localhost';
-
 /**
- * Dev-only role switcher — lets you preview the app as any role.
- * Only renders in development mode. Overrides frontend permissions only
- * (server-side still uses your real role).
+ * Role switcher — lets you preview the app as any role. Overrides frontend
+ * permissions only (server-side still uses your real role).
+ *
+ * NOTE: temporarily visible in all environments (including production) so the
+ * user can quickly swap roles for testing on the live Railway site. Remove
+ * the prod visibility once role testing is done.
  */
 export default function DevRoleSwitcher({ expanded }: { expanded: boolean }) {
   const [open, setOpen] = useState(false);
-
-  // Only show in development
-  if (!IS_DEV) return null;
 
   const current = getDevRoleOverride();
 
@@ -46,7 +44,7 @@ export default function DevRoleSwitcher({ expanded }: { expanded: boolean }) {
       {open && (
         <>
           <div className="fixed inset-0 z-50" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-full left-0 mb-1 w-52 bg-surface border border-outline rounded-xl shadow-xl z-50 py-1 overflow-hidden">
+          <div className="absolute top-full left-0 mt-1 w-52 bg-surface border border-outline rounded-xl shadow-xl z-50 py-1 overflow-hidden">
             <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
               Dev Role Switcher
             </div>

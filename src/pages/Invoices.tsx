@@ -603,7 +603,7 @@ export default function Invoices() {
                 const client = clientMap[row.client_id];
                 const isMenuOpen = actionMenuId === row.id;
                 const isSelected = selectedIds.has(row.id);
-                const rowCls = `border-b border-outline/30 transition-colors ${isSelected ? 'bg-[#f0f4ff]' : 'hover:bg-surface-secondary'}`;
+                const rowCls = `border-b border-outline/30 transition-colors ${isSelected ? 'bg-[#f0f4ff]' : ''}`;
                 const click = () => navigate(`/invoices/${row.id}`);
                 const isPastDue = uiStatus === 'past_due';
 
