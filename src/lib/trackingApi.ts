@@ -315,6 +315,25 @@ export async function logTrackingEvent(params: {
 
 // ─── Admin queries ──────────────────────────────────────────────────────────
 
+/**
+ * Fetch all tracking points for a user on a given calendar date (local timezone).
+ * Returns points ordered chronologically — suitable for drawing a polyline replay.
+ */
+export async function getTrackingPointsForDay(userId: string, isoDate: string): Promise<TrackingPoint[]> {
+  // Compute UTC bounds for the local calendar day
+  const start = new Date(`${isoDate}T00:00:00`);
+  const end = new Date(`${isoDate}T23:59:59.999`);
+  const { data, error } = await supabase
+    .from('tracking_points')
+    .select('id, session_id, user_id, latitude, longitude, accuracy_m, heading, speed_mps, altitude_m, is_moving, job_id, recorded_at')
+    .eq('user_id', userId)
+    .gte('recorded_at', start.toISOString())
+    .lte('recorded_at', end.toISOString())
+    .order('recorded_at', { ascending: true });
+  if (error) throw error;
+  return (data || []) as TrackingPoint[];
+}
+
 export async function getActiveLiveLocations(): Promise<LiveLocation[]> {
   const { data, error } = await supabase
     .from('tracking_live_locations')

@@ -45,6 +45,9 @@ export function getBaseUrl(): string {
 // Email config (SMTP via Nodemailer — see server/lib/mailer.ts)
 export const emailFrom = process.env.EMAIL_FROM || `Lume CRM <${process.env.SMTP_USER || 'noreply@lume.crm'}>`;
 
+// Inbox that receives in-app support requests. Override with SUPPORT_EMAIL in .env.local.
+export const supportEmail = process.env.SUPPORT_EMAIL || 'support@lumecrm.ca';
+
 // Platform admin
 export const platformOwnerId = process.env.PLATFORM_OWNER_ID || '';
 

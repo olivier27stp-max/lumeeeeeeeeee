@@ -1148,19 +1148,23 @@ select {
   background: rgba(0, 0, 0, 0.6);
 }
 
-/* ═══ STICKY TABLE HEADERS ═══ */
-table thead th {
+/* ═══ STICKY TABLE HEADERS (opt-in only — global sticky broke
+   column width calc on table-fixed layouts) ═══ */
+table.sticky-head thead th {
   position: sticky;
   top: 0;
   z-index: 10;
   backdrop-filter: blur(8px);
 }
 
-/* ═══ ROW HOVER ACCENT (left bar — primary colored) ═══ */
-tbody tr {
+/* ═══ ROW HOVER ACCENT (left bar — opt-in only).
+   Global `tbody tr { position: relative }` broke <td> column
+   alignment vs <thead> on table-fixed layouts, so this is now
+   gated behind .row-accent on the <table>. ═══ */
+table.row-accent tbody tr {
   position: relative;
 }
-tbody tr::before {
+table.row-accent tbody tr::before {
   content: '';
   position: absolute;
   left: 0;
@@ -1171,7 +1175,7 @@ tbody tr::before {
   background: var(--color-primary);
   transition: width var(--duration-fast) var(--ease-standard);
 }
-tbody tr:hover::before {
+table.row-accent tbody tr:hover::before {
   width: 3px;
 }
 

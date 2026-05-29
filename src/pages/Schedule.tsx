@@ -542,7 +542,7 @@ function MiniCal({ date, onSelect }: { date: Date; onSelect: (d: Date) => void }
    SCHEDULE CONTENT (main orchestrator)
    ════════════════════════════════════════════════════════════════ */
 function ScheduleContent() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const qc = useQueryClient();
 
   const { selectedDate, view, selectedTeamIds, hasTeamsParam, setDate, setView, setSelectedTeamIds, toggleTeam, goToday, goPrev, goNext } = useCalendarController();
@@ -575,10 +575,14 @@ function ScheduleContent() {
     if (!hasTeamsParam && selectedTeamIds.length === 0) setSelectedTeamIds(teams.map((t) => t.id));
   }, [hasTeamsParam, selectedTeamIds.length, setSelectedTeamIds, teams]);
 
-  // Reset hydration when org changes so team filter re-syncs to the new org's teams
+  // Re-hydrate when the org actually changes (compare values, not callback identity)
+  const prevOrgIdRef = React.useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    hydratedRef.current = false;
-    setSelectedTeamIds([]);
+    if (prevOrgIdRef.current !== undefined && prevOrgIdRef.current !== orgId) {
+      hydratedRef.current = false;
+      setSelectedTeamIds([]);
+    }
+    prevOrgIdRef.current = orgId;
   }, [orgId, setSelectedTeamIds]);
 
   const allSel = teams.length > 0 && selectedTeamIds.length === teams.length;
@@ -798,7 +802,6 @@ function ScheduleContent() {
     { id: 'agenda', label: (t.schedule as any).agenda || 'Agenda', icon: <List size={14} /> },
   ];
   const filters: { id: QF; label: string; count: number }[] = [
-    { id: 'all', label: t.schedule.all, count: events.length },
     { id: 'ending_30', label: t.schedule.endingWithin30, count: c30 },
     { id: 'requires_invoicing', label: t.schedule.requiresInvoicing, count: cInv },
     { id: 'needs_attention', label: t.schedule.needsAttention, count: cAtt },
@@ -822,7 +825,6 @@ function ScheduleContent() {
     <div className="flex h-full flex-col overflow-hidden">
       {/* TOOLBAR */}
       <header className="relative z-20 flex items-center gap-2 border-b border-border bg-surface px-4 py-2.5 lg:px-6">
-        <button onClick={goToday} className="rounded-lg border border-border px-3 py-[5px] text-[13px] font-semibold text-text-primary hover:bg-surface-secondary transition-colors">{t.schedule.today}</button>
         <button onClick={goPrev} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors"><ChevronLeft size={18} /></button>
         <button onClick={goNext} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors"><ChevronRight size={18} /></button>
         <div className="relative">
@@ -840,16 +842,68 @@ function ScheduleContent() {
             <Users size={14} />{t.schedule.teams}
             {selectedTeamIds.length > 0 && selectedTeamIds.length < teams.length && <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-bold text-primary">{selectedTeamIds.length}</span>}
           </button>
-          {teamPop && (<><div className="fixed inset-0 z-30" onClick={() => setTeamPop(false)} /><div className="absolute right-0 top-full z-40 mt-1 w-64 rounded-xl border border-border bg-surface p-2 shadow-xl">
-            <div className="mb-1.5 flex items-center justify-between px-2"><button onClick={() => setSelectedTeamIds(teams.map((t) => t.id))} className="text-[11px] font-semibold text-primary hover:underline">{t.schedule.allTeams}</button><button onClick={() => setSelectedTeamIds([])} className="text-[11px] font-medium text-text-tertiary hover:underline">{t.schedule.clear}</button></div>
-            <button onClick={() => { setUnassignedMode(!unassignedMode); setTeamPop(false); }} className={cn('mb-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[12px] font-medium transition-colors', unassignedMode ? 'bg-primary/5 text-primary' : 'text-text-secondary hover:bg-surface-secondary')}>{unassignedMode ? <UserCheck size={13} /> : <UserPlus size={13} />}{t.schedule.unassigned}</button>
-            <div className="max-h-52 space-y-0.5 overflow-y-auto">{teams.map((tm) => { const c = isHexColor(tm.color_hex) ? tm.color_hex : FALLBACK_TEAM_COLOR; const on = selectedTeamIds.includes(tm.id); return (<button key={tm.id} onClick={() => toggleTeam(tm.id)} className={cn('flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[12px] transition-colors', on ? 'bg-surface-secondary font-medium text-text-primary' : 'text-text-secondary hover:bg-surface-tertiary')}><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: c }} /><span className="flex-1 truncate text-left">{tm.name}</span>{on && <span className="text-primary"><svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg></span>}</button>); })}</div>
-          </div></>)}
-        </div>
+          {teamPop && (<>
+            <div className="fixed inset-0 z-30" onClick={() => setTeamPop(false)} />
+            <div className="absolute right-0 top-full z-40 mt-1 w-72 rounded-xl border border-border bg-surface p-2 shadow-xl">
+              {/* Header: All / Clear actions */}
+              <div className="mb-1.5 flex items-center justify-between px-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">{t.schedule.teams}</span>
+                <button onClick={() => setSelectedTeamIds([])} className="text-[11px] font-medium text-text-tertiary hover:underline">{t.schedule.clear}</button>
+              </div>
 
-        {/* Filters */}
-        <div className="hidden items-center gap-1 lg:flex">
-          {filters.map((f) => (<button key={f.id} onClick={() => setActiveFilter(f.id)} className={cn('rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors', activeFilter === f.id ? 'bg-primary text-white' : 'text-text-tertiary hover:bg-surface-secondary hover:text-text-secondary')}>{f.label} <span className={cn('ml-1 text-[10px]', activeFilter === f.id ? 'text-white/70' : 'text-text-tertiary')}>{f.count}</span></button>))}
+              {/* "All teams" master checkbox */}
+              {(() => {
+                const allOn = teams.length > 0 && selectedTeamIds.length === teams.length;
+                const someOn = selectedTeamIds.length > 0 && selectedTeamIds.length < teams.length;
+                return (
+                  <button
+                    onClick={() => allOn ? setSelectedTeamIds([]) : setSelectedTeamIds(teams.map((tm) => tm.id))}
+                    className={cn('mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[12px] font-semibold transition-colors', allOn ? 'bg-primary/5 text-primary' : 'text-text-primary hover:bg-surface-secondary')}
+                  >
+                    <span className={cn('flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors', allOn ? 'border-primary bg-primary text-white' : someOn ? 'border-primary bg-primary/20' : 'border-border bg-surface')}>
+                      {allOn && <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>}
+                      {someOn && <span className="h-0.5 w-2 rounded bg-primary" />}
+                    </span>
+                    <span className="flex-1 truncate text-left">{t.schedule.allTeams}</span>
+                    <span className="text-[10px] text-text-tertiary">{teams.length}</span>
+                  </button>
+                );
+              })()}
+
+              {/* Unassigned toggle */}
+              <button onClick={() => { setUnassignedMode(!unassignedMode); setTeamPop(false); }} className={cn('mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[12px] font-medium transition-colors', unassignedMode ? 'bg-primary/5 text-primary' : 'text-text-secondary hover:bg-surface-secondary')}>
+                {unassignedMode ? <UserCheck size={13} /> : <UserPlus size={13} />}{t.schedule.unassigned}
+              </button>
+
+              <div className="my-1 border-t border-border" />
+
+              {/* Per-team checkboxes — true multi-select */}
+              <div className="max-h-64 space-y-0.5 overflow-y-auto">
+                {teams.map((tm) => {
+                  const c = isHexColor(tm.color_hex) ? tm.color_hex : FALLBACK_TEAM_COLOR;
+                  const on = selectedTeamIds.includes(tm.id);
+                  return (
+                    <button
+                      key={tm.id}
+                      onClick={(e) => { e.stopPropagation(); toggleTeam(tm.id); }}
+                      className={cn('flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[12px] transition-colors', on ? 'bg-surface-secondary text-text-primary' : 'text-text-secondary hover:bg-surface-tertiary')}
+                    >
+                      <span className={cn('flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors', on ? 'border-primary bg-primary text-white' : 'border-border bg-surface')}>
+                        {on && <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>}
+                      </span>
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: c }} />
+                      <span className="flex-1 truncate text-left">{tm.name}</span>
+                    </button>
+                  );
+                })}
+                {teams.length === 0 && (
+                  <p className="px-2.5 py-3 text-center text-[11px] text-text-tertiary">
+                    {language === 'fr' ? 'Aucune équipe' : 'No teams'}
+                  </p>
+                )}
+              </div>
+            </div>
+          </>)}
         </div>
 
         {/* View dropdown */}

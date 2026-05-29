@@ -4,13 +4,14 @@ import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { sendSafeError } from '../lib/error-handler';
 import {
   getCommissionEntries,
-  calculateCommission,
   approveCommission,
   reverseCommission,
   getCommissionRules,
   createCommissionRule,
   updateCommissionRule,
   getPayrollPreview,
+  markCommissionPaid,
+  generateCommissionsForInvoice,
 } from '../lib/field-sales/commission-engine';
 
 const router = Router();
@@ -57,19 +58,28 @@ async function requireAdmin(req: any, res: any) {
   return auth;
 }
 
-// POST /api/commissions/calculate (admin)
-router.post('/commissions/calculate', async (req, res) => {
+// POST /api/commissions/generate-for-invoice (admin) — manual re-run for an invoice
+router.post('/commissions/generate-for-invoice', async (req, res) => {
   const auth = await requireAdmin(req, res);
   if (!auth) return;
-
-  const { leadId, repUserId } = req.body;
-  if (!leadId || !repUserId) {
-    return res.status(400).json({ error: 'leadId and repUserId are required.' });
-  }
-
+  const { invoiceId } = req.body;
+  if (!invoiceId) return res.status(400).json({ error: 'invoiceId is required.' });
   try {
     const sc = getServiceClient();
-    const entry = await calculateCommission(sc, auth.orgId, leadId, repUserId);
+    const result = await generateCommissionsForInvoice(sc, auth.orgId, invoiceId);
+    res.json(result);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+  }
+});
+
+// POST /api/commissions/:id/mark-paid (admin)
+router.post('/commissions/:id/mark-paid', async (req, res) => {
+  const auth = await requireAdmin(req, res);
+  if (!auth) return;
+  try {
+    const sc = getServiceClient();
+    const entry = await markCommissionPaid(sc, auth.orgId, req.params.id);
     res.json(entry);
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
@@ -126,17 +136,83 @@ router.post('/commissions/rules', async (req, res) => {
   const auth = await requireAdmin(req, res);
   if (!auth) return;
 
-  const { name, type, flat_amount, percentage, tiers, applies_to_role, applies_to_user_id, priority } = req.body;
-  if (!name || !type) {
-    return res.status(400).json({ error: 'name and type are required.' });
-  }
+  const {
+    name, description, priority, is_active,
+    base_kind, base_percent, base_value_cents,
+    product_overrides, performance_tiers, bonuses,
+    attribution, assigned_user_ids,
+  } = req.body;
+  if (!name) return res.status(400).json({ error: 'name is required.' });
 
   try {
     const sc = getServiceClient();
     const rule = await createCommissionRule(sc, auth.orgId, {
-      name, type, flat_amount, percentage, tiers, applies_to_role, applies_to_user_id, priority,
+      name,
+      description: description ?? null,
+      // Legacy required columns — keep DB happy
+      type: 'percentage',
+      priority: priority ?? 0,
+      is_active: is_active ?? true,
+      // New engine columns
+      base_kind: base_kind ?? 'percent',
+      base_percent: base_percent ?? null,
+      base_value_cents: base_value_cents ?? null,
+      product_overrides: product_overrides ?? [],
+      performance_tiers: performance_tiers ?? [],
+      bonuses: bonuses ?? [],
+      attribution: attribution ?? { mode: 'solo' },
+      assigned_user_ids: assigned_user_ids ?? [],
     });
     res.json(rule);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+  }
+});
+
+// DELETE /api/commissions/rules/:id (admin) — soft delete
+router.delete('/commissions/rules/:id', async (req, res) => {
+  const auth = await requireAdmin(req, res);
+  if (!auth) return;
+  try {
+    const sc = getServiceClient();
+    await sc.from('fs_commission_rules')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', req.params.id).eq('org_id', auth.orgId);
+    res.json({ ok: true });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+  }
+});
+
+// GET /api/commissions/settings
+router.get('/commissions/settings', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  try {
+    const sc = getServiceClient();
+    const { data } = await sc.from('commission_settings').select('*').eq('org_id', auth.orgId).maybeSingle();
+    res.json(data || { org_id: auth.orgId, reversal_policy: 'alert', default_rule_id: null });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+  }
+});
+
+// PUT /api/commissions/settings (admin)
+router.put('/commissions/settings', async (req, res) => {
+  const auth = await requireAdmin(req, res);
+  if (!auth) return;
+  const { reversal_policy, default_rule_id } = req.body;
+  try {
+    const sc = getServiceClient();
+    const payload: Record<string, any> = { org_id: auth.orgId, updated_at: new Date().toISOString() };
+    if (reversal_policy) {
+      if (!['auto','keep','alert'].includes(reversal_policy)) return res.status(400).json({ error: 'Invalid reversal_policy.' });
+      payload.reversal_policy = reversal_policy;
+    }
+    if (default_rule_id !== undefined) payload.default_rule_id = default_rule_id;
+    const { data, error } = await sc.from('commission_settings').upsert(payload, { onConflict: 'org_id' }).select().single();
+    if (error) throw error;
+    res.json(data);
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }

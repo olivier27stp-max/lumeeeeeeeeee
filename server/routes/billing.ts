@@ -356,37 +356,99 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
       }, { onConflict: 'org_id' });
     }
 
-    // Referral tracking
+    // ── Referral reward: referrer earns 1 free month per PAID referral ──
+    // Reward model: extend the referrer's current_period_end by 30 days.
+    // Unlimited stacking; gated so only paying referrers have a link, so the
+    // referrer always has a period to extend. See project_referral_program.
     if (referral_code) {
-      await admin.from('referrals').update({
-        status: 'subscribed',
-        referred_org_id: auth.orgId,
-        referred_user_id: auth.user.id,
-        converted_at: now.toISOString(),
-      }).eq('code', referral_code).eq('status', 'signed_up');
-
       try {
-        const { sendEmail, isMailerConfigured } = await import('../lib/mailer');
-        if (isMailerConfigured()) {
-          const lumeOwnerEmail = process.env.LUME_OWNER_EMAIL || 'admin@lume.crm';
-          const { data: referral } = await admin
+        // Look up the template row (referred_email='') for the code's owner.
+        const { data: referral } = await admin
+          .from('referrals')
+          .select('id, referrer_user_id, referrer_org_id')
+          .eq('code', referral_code)
+          .limit(1)
+          .maybeSingle();
+
+        // Guards: code must exist, and self-referral (same org) is rejected.
+        if (referral && referral.referrer_org_id !== auth.orgId) {
+          // Mark the conversion. Insert a dedicated rewarded row for this
+          // referred org if one isn't already there (idempotent on org).
+          const { data: alreadyRewarded } = await admin
             .from('referrals')
-            .select('*, referrer:profiles!referrer_user_id(full_name)')
+            .select('id')
             .eq('code', referral_code)
+            .eq('referred_org_id', auth.orgId)
+            .eq('status', 'rewarded')
             .maybeSingle();
 
-          const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-          const referrerName = esc(String((referral as any)?.referrer?.full_name || 'Unknown'));
-          const companyEsc = esc(String(company_name || 'N/A'));
-          const planEsc = esc(String(plan.name));
-          const intervalEsc = esc(String(interval));
-          await sendEmail({
-            to: lumeOwnerEmail,
-            subject: 'New referral conversion!',
-            html: `<h2>Referral Conversion</h2><p>Referrer: ${referrerName}</p><p>Company: ${companyEsc}</p><p>Plan: ${planEsc} (${intervalEsc})</p>`,
-          });
+          if (!alreadyRewarded) {
+            // Extend the referrer's active subscription by 30 days, stacking
+            // on whatever current_period_end they already have.
+            const { data: referrerSub } = await admin
+              .from('subscriptions')
+              .select('id, current_period_end')
+              .eq('org_id', referral.referrer_org_id)
+              .in('status', ['active', 'trialing'])
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (referrerSub) {
+              const base = referrerSub.current_period_end
+                ? new Date(referrerSub.current_period_end)
+                : new Date(now);
+              // Stack from the later of (now, existing end) so an expired
+              // period doesn't shrink the gift.
+              const from = base > now ? base : new Date(now);
+              const extended = new Date(from);
+              extended.setDate(extended.getDate() + 30);
+
+              await admin
+                .from('subscriptions')
+                .update({ current_period_end: extended.toISOString() })
+                .eq('id', referrerSub.id);
+            }
+
+            // Record the rewarded referral (one row per converted referred org).
+            await admin.from('referrals').insert({
+              referrer_user_id: referral.referrer_user_id,
+              referrer_org_id: referral.referrer_org_id,
+              code: referral_code,
+              referred_email: (billing_email || auth.user.email || '').toLowerCase(),
+              referred_org_id: auth.orgId,
+              referred_user_id: auth.user.id,
+              status: 'rewarded',
+              converted_at: now.toISOString(),
+              rewarded_at: now.toISOString(),
+            });
+
+            // Also flag any pre-existing signed_up row for this referred org.
+            await admin
+              .from('referrals')
+              .update({ status: 'rewarded', referred_org_id: auth.orgId, referred_user_id: auth.user.id, converted_at: now.toISOString(), rewarded_at: now.toISOString() })
+              .eq('code', referral_code)
+              .eq('referred_email', (billing_email || auth.user.email || '').toLowerCase())
+              .eq('status', 'signed_up');
+
+            // Notify the referrer: they earned a free month.
+            try {
+              const { sendEmail, isMailerConfigured } = await import('../lib/mailer');
+              if (isMailerConfigured()) {
+                const { data: referrerUser } = await admin.auth.admin.getUserById(referral.referrer_user_id);
+                const referrerEmail = referrerUser?.user?.email;
+                if (referrerEmail) {
+                  await sendEmail({
+                    to: referrerEmail,
+                    subject: '🎁 You earned a free month — your referral subscribed!',
+                    html: `<h2>Your referral just subscribed</h2><p>Great news — someone you referred to Lume CRM just signed up for a paid plan, so <strong>your next month is on us</strong>. We've already extended your billing period by 30 days.</p><p>Keep sharing your link to stack more free months.</p>`,
+                  });
+                }
+              }
+            } catch (err) { console.error('[billing] referrer reward email failed:', err); }
+          }
         }
-      } catch (err) { console.error('[billing] referral conversion email failed:', err); }
+      } catch (err) { console.error('[billing] referral reward failed:', err); }
     }
 
     // ── Send receipt email (if paid plan, non-blocking) ──
@@ -543,6 +605,511 @@ router.post('/billing/cancel', async (req, res) => {
     return res.json({ message: 'Subscription will be canceled at the end of the billing period.' });
   } catch (err: any) {
     console.error('[billing/cancel]', err.message);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─── POST /billing/change-plan — Change plan or interval on existing sub ──
+// Uses Stripe's stripe.subscriptions.update with prorations.
+// Stripe credits/charges the difference automatically on next invoice.
+
+const changePlanSchema = z.object({
+  plan_slug: z.string().trim().min(1, 'Plan is required.'),
+  interval: z.enum(['monthly', 'yearly']).default('monthly'),
+});
+
+router.post('/billing/change-plan', validate(changePlanSchema), async (req, res) => {
+  try {
+    if (!stripe) return res.status(500).json({ error: 'Stripe not configured.' });
+
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const admin = getServiceClient();
+    const isAdmin = await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only admins or owners can change plans.' });
+    }
+
+    const { plan_slug, interval } = req.body as { plan_slug: string; interval: 'monthly' | 'yearly' };
+
+    // Fetch target plan
+    const { data: targetPlan } = await admin
+      .from('plans')
+      .select('*')
+      .eq('slug', plan_slug)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (!targetPlan) return res.status(404).json({ error: 'Plan not found.' });
+
+    // Fetch current sub
+    const { data: subRow } = await admin
+      .from('subscriptions')
+      .select('id, plan_id, interval, currency, stripe_subscription_id, status')
+      .eq('org_id', auth.orgId)
+      .in('status', ['active', 'trialing'])
+      .maybeSingle();
+    if (!subRow) return res.status(404).json({ error: 'No active subscription found.' });
+
+    // No-op if nothing changes
+    if (subRow.plan_id === targetPlan.id && subRow.interval === interval) {
+      return res.json({ message: 'Already on this plan and interval.', no_change: true });
+    }
+
+    // Compute new price
+    const currency = (subRow.currency || 'CAD').toUpperCase();
+    const priceField = interval === 'yearly'
+      ? (currency === 'USD' ? 'yearly_price_usd' : 'yearly_price_cad')
+      : (currency === 'USD' ? 'monthly_price_usd' : 'monthly_price_cad');
+    const amountCents = targetPlan[priceField] || 0;
+
+    // If no Stripe sub linked (e.g. legacy), just update DB
+    if (!subRow.stripe_subscription_id) {
+      const now = new Date();
+      const periodEnd = new Date(now);
+      if (interval === 'yearly') periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+      else periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+      await admin.from('subscriptions').update({
+        plan_id: targetPlan.id,
+        interval,
+        amount_cents: amountCents,
+        current_period_start: now.toISOString(),
+        current_period_end: periodEnd.toISOString(),
+      }).eq('id', subRow.id);
+
+      return res.json({ message: 'Plan changed (no Stripe link).', no_stripe: true });
+    }
+
+    // Retrieve Stripe sub to get current item id
+    let stripeSub: Stripe.Subscription;
+    try {
+      stripeSub = await stripe.subscriptions.retrieve(subRow.stripe_subscription_id);
+    } catch (err: any) {
+      console.error('[billing/change-plan] Stripe retrieve failed', err.message);
+      return res.status(502).json({ error: 'Failed to load Stripe subscription.' });
+    }
+
+    const currentItemId = stripeSub.items.data[0]?.id;
+    if (!currentItemId) {
+      return res.status(500).json({ error: 'Stripe subscription has no items.' });
+    }
+
+    // ── Determine direction: upgrade vs downgrade ──
+    const { data: currentPlanRow } = await admin
+      .from('plans')
+      .select('sort_order, monthly_price_usd, monthly_price_cad, yearly_price_usd, yearly_price_cad')
+      .eq('id', subRow.plan_id)
+      .maybeSingle();
+    const currentPrice = currentPlanRow?.[priceField] || 0;
+    const targetSortOrder = targetPlan.sort_order ?? 0;
+    const currentSortOrder = currentPlanRow?.sort_order ?? 0;
+    // Downgrade: lower plan tier OR cheaper price (e.g. yearly→monthly = downgrade)
+    const isDowngrade = targetSortOrder < currentSortOrder || amountCents < currentPrice;
+
+    // Create Product + Price for the target plan
+    let newPriceId: string;
+    try {
+      const product = await stripe.products.create({
+        name: `Lume ${targetPlan.name}`,
+        metadata: { plan_slug: targetPlan.slug, plan_id: targetPlan.id },
+      });
+      const price = await stripe.prices.create({
+        product: product.id,
+        currency: currency.toLowerCase(),
+        unit_amount: amountCents,
+        recurring: { interval: interval === 'yearly' ? 'year' : 'month' },
+      });
+      newPriceId = price.id;
+    } catch (err: any) {
+      console.error('[billing/change-plan] Stripe price create failed', err.message);
+      return res.status(502).json({ error: `Stripe price creation failed: ${err.message}` });
+    }
+
+    if (isDowngrade) {
+      // ── DOWNGRADE: schedule the change at end of current period ──
+      // Use Subscription Schedules so the user keeps current plan until period end,
+      // then auto-switches to new plan with no proration (they already paid for current month).
+      try {
+        // First, retrieve existing schedule if any (so we don't duplicate)
+        if (stripeSub.schedule) {
+          // Release existing schedule first
+          try {
+            await stripe.subscriptionSchedules.release(stripeSub.schedule as string);
+          } catch { /* ignore */ }
+        }
+
+        // Create a schedule from the current subscription
+        const schedule = await stripe.subscriptionSchedules.create({
+          from_subscription: subRow.stripe_subscription_id,
+        });
+
+        // Update the schedule: keep current phase, then add a new phase with the target plan.
+        // Stripe v18+ moved current_period_end to the subscription item.
+        const currentItem = stripeSub.items.data[0];
+        const periodEndUnix: number = (currentItem as any).current_period_end
+          ?? (stripeSub as any).current_period_end;
+
+        await stripe.subscriptionSchedules.update(schedule.id, {
+          end_behavior: 'release',
+          phases: [
+            {
+              items: [{ price: currentItem.price.id, quantity: currentItem.quantity || 1 }],
+              start_date: schedule.phases[0].start_date,
+              end_date: periodEndUnix,
+              proration_behavior: 'none',
+            },
+            {
+              items: [{ price: newPriceId, quantity: 1 }],
+              proration_behavior: 'none',
+              metadata: {
+                plan_slug: targetPlan.slug,
+                plan_id: targetPlan.id,
+                interval,
+              },
+            },
+          ],
+          metadata: {
+            ...stripeSub.metadata,
+            scheduled_plan_slug: targetPlan.slug,
+            scheduled_plan_id: targetPlan.id,
+            scheduled_interval: interval,
+          },
+        });
+
+        // Mark DB to indicate a scheduled change (UI shows banner)
+        await admin.from('subscriptions').update({
+          scheduled_plan_id: targetPlan.id,
+          scheduled_interval: interval,
+          scheduled_at: new Date(periodEndUnix * 1000).toISOString(),
+        }).eq('id', subRow.id);
+
+        const effectiveDate = new Date(periodEndUnix * 1000).toLocaleDateString('en-CA', {
+          year: 'numeric', month: 'long', day: 'numeric',
+        });
+
+        return res.json({
+          message: `Plan will change to ${targetPlan.name} on ${effectiveDate}.`,
+          scheduled: true,
+          effective_date: new Date(periodEndUnix * 1000).toISOString(),
+          plan: { slug: targetPlan.slug, name: targetPlan.name, interval, amount_cents: amountCents },
+        });
+      } catch (err: any) {
+        console.error('[billing/change-plan] Stripe schedule create failed', err.message);
+        return res.status(502).json({ error: `Schedule creation failed: ${err.message}` });
+      }
+    }
+
+    // ── UPGRADE: apply immediately with proration, billed right away ──
+    // 'always_invoice' charges the prorated difference NOW on a new invoice
+    // (rather than waiting for the next billing cycle — important for annual plans).
+    try {
+      await stripe.subscriptions.update(subRow.stripe_subscription_id, {
+        proration_behavior: 'always_invoice',
+        billing_cycle_anchor: 'unchanged',
+        items: [{
+          id: currentItemId,
+          price: newPriceId,
+        }],
+        metadata: {
+          ...stripeSub.metadata,
+          plan_slug: targetPlan.slug,
+          plan_id: targetPlan.id,
+          interval,
+        },
+      });
+    } catch (err: any) {
+      console.error('[billing/change-plan] Stripe update failed', err.message);
+      return res.status(502).json({ error: `Stripe update failed: ${err.message}` });
+    }
+
+    // Mirror in DB — webhook will also update but we want immediate UI feedback
+    await admin.from('subscriptions').update({
+      plan_id: targetPlan.id,
+      interval,
+      amount_cents: amountCents,
+      scheduled_plan_id: null,
+      scheduled_interval: null,
+      scheduled_at: null,
+    }).eq('id', subRow.id);
+
+    return res.json({
+      message: 'Plan upgraded. Proration applied on next invoice.',
+      upgraded: true,
+      plan: { slug: targetPlan.slug, name: targetPlan.name, interval, amount_cents: amountCents },
+    });
+  } catch (err: any) {
+    console.error('[billing/change-plan]', err.message);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─── POST /billing/cancel-scheduled-change — Cancel a scheduled plan change ──
+// Releases the Stripe Subscription Schedule so the current plan continues unchanged.
+
+router.post('/billing/cancel-scheduled-change', async (req, res) => {
+  try {
+    if (!stripe) return res.status(500).json({ error: 'Stripe not configured.' });
+
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const admin = getServiceClient();
+    const isAdmin = await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only admins or owners can cancel scheduled changes.' });
+    }
+
+    const { data: subRow } = await admin
+      .from('subscriptions')
+      .select('id, stripe_subscription_id, scheduled_plan_id')
+      .eq('org_id', auth.orgId)
+      .in('status', ['active', 'trialing'])
+      .maybeSingle();
+    if (!subRow) return res.status(404).json({ error: 'No active subscription found.' });
+    if (!subRow.scheduled_plan_id) {
+      return res.status(400).json({ error: 'No scheduled change to cancel.' });
+    }
+
+    if (subRow.stripe_subscription_id) {
+      try {
+        const stripeSub = await stripe.subscriptions.retrieve(subRow.stripe_subscription_id);
+        if (stripeSub.schedule) {
+          await stripe.subscriptionSchedules.release(stripeSub.schedule as string);
+        }
+      } catch (err: any) {
+        // Tolerate already-released schedules / missing schedules
+        const code = err?.code || err?.raw?.code || '';
+        const msg = err?.message || '';
+        const benign = code === 'resource_missing' || /not_active|released/i.test(msg);
+        if (!benign) {
+          console.error('[billing/cancel-scheduled-change] Stripe release failed', err.message);
+          return res.status(502).json({ error: `Stripe release failed: ${err.message}` });
+        }
+      }
+    }
+
+    await admin.from('subscriptions').update({
+      scheduled_plan_id: null,
+      scheduled_interval: null,
+      scheduled_at: null,
+    }).eq('id', subRow.id);
+
+    return res.json({ message: 'Scheduled plan change canceled.' });
+  } catch (err: any) {
+    console.error('[billing/cancel-scheduled-change]', err.message);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─── GET /billing/seats — Current usage vs plan seats + cost preview ──
+// Returns { included, used, extras_charged, extra_price_cents, currency }
+
+router.get('/billing/seats', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const admin = getServiceClient();
+
+    const { data: subRow } = await admin
+      .from('subscriptions')
+      .select('id, plan_id, currency, extra_seats')
+      .eq('org_id', auth.orgId)
+      .in('status', ['active', 'trialing'])
+      .maybeSingle();
+
+    if (!subRow) {
+      return res.json({ included: 0, used: 0, extras_charged: 0, extra_price_cents: 0, currency: 'USD' });
+    }
+
+    const { data: plan } = await admin
+      .from('plans')
+      .select('seats_included, extra_seat_price_usd, extra_seat_price_cad')
+      .eq('id', subRow.plan_id)
+      .maybeSingle();
+
+    const { count: usedCount } = await admin
+      .from('memberships')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('org_id', auth.orgId)
+      .or('status.is.null,status.eq.active');
+
+    const currency = (subRow.currency || 'CAD').toUpperCase();
+    const extraPrice = currency === 'USD'
+      ? plan?.extra_seat_price_usd ?? 0
+      : plan?.extra_seat_price_cad ?? 0;
+
+    return res.json({
+      included: plan?.seats_included ?? 0,
+      used: usedCount ?? 0,
+      extras_charged: subRow.extra_seats ?? 0,
+      extra_price_cents: extraPrice,
+      currency,
+    });
+  } catch (err: any) {
+    console.error('[billing/seats]', err.message);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─── POST /billing/seats — Set extra seat count (auto-syncs Stripe sub item) ──
+// Used by invite flow when adding a member would exceed seats_included.
+
+const setSeatsSchema = z.object({
+  extra_seats: z.number().int().min(0).max(1000),
+});
+
+router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
+  try {
+    if (!stripe) return res.status(500).json({ error: 'Stripe not configured.' });
+
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const admin = getServiceClient();
+    const isAdmin = await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only admins or owners can update seat counts.' });
+    }
+
+    const { extra_seats } = req.body as { extra_seats: number };
+
+    const { data: subRow } = await admin
+      .from('subscriptions')
+      .select('id, plan_id, currency, interval, stripe_subscription_id, stripe_seat_item_id, extra_seats')
+      .eq('org_id', auth.orgId)
+      .in('status', ['active', 'trialing'])
+      .maybeSingle();
+    if (!subRow) return res.status(404).json({ error: 'No active subscription found.' });
+
+    if (subRow.extra_seats === extra_seats) {
+      return res.json({ message: 'Already at requested seat count.', no_change: true });
+    }
+
+    const { data: plan } = await admin
+      .from('plans')
+      .select('name, slug, extra_seat_price_usd, extra_seat_price_cad')
+      .eq('id', subRow.plan_id)
+      .maybeSingle();
+    if (!plan) return res.status(404).json({ error: 'Plan not found.' });
+
+    const currency = (subRow.currency || 'CAD').toUpperCase();
+    const unitAmount = currency === 'USD'
+      ? plan.extra_seat_price_usd
+      : plan.extra_seat_price_cad;
+    if (!unitAmount) return res.status(400).json({ error: 'Plan does not support extra seats.' });
+
+    // If no Stripe sub linked, just update DB
+    if (!subRow.stripe_subscription_id) {
+      await admin.from('subscriptions').update({ extra_seats }).eq('id', subRow.id);
+      return res.json({ message: 'Seats updated (no Stripe link).', no_stripe: true, extra_seats });
+    }
+
+    // If we already have a seat line item on Stripe, just update its quantity
+    if (subRow.stripe_seat_item_id && extra_seats > 0) {
+      try {
+        await stripe.subscriptionItems.update(subRow.stripe_seat_item_id, {
+          quantity: extra_seats,
+          proration_behavior: 'always_invoice',
+        });
+      } catch (err: any) {
+        console.error('[billing/seats] Stripe seat item update failed', err.message);
+        return res.status(502).json({ error: `Stripe update failed: ${err.message}` });
+      }
+
+      await admin.from('subscriptions').update({ extra_seats }).eq('id', subRow.id);
+      return res.json({ message: 'Seat quantity updated.', extra_seats });
+    }
+
+    // Remove the seat line item if going down to 0
+    if (subRow.stripe_seat_item_id && extra_seats === 0) {
+      try {
+        await stripe.subscriptionItems.del(subRow.stripe_seat_item_id, {
+          proration_behavior: 'always_invoice',
+        });
+      } catch (err: any) {
+        console.error('[billing/seats] Stripe seat item delete failed', err.message);
+        return res.status(502).json({ error: `Stripe delete failed: ${err.message}` });
+      }
+
+      await admin.from('subscriptions').update({
+        extra_seats: 0,
+        stripe_seat_item_id: null,
+      }).eq('id', subRow.id);
+      return res.json({ message: 'Extra seats removed.', extra_seats: 0 });
+    }
+
+    // First-time add: create Stripe Product + Price for the seat, then attach to sub
+    try {
+      const product = await stripe.products.create({
+        name: `Lume ${plan.name} — Extra user seat`,
+        metadata: { plan_slug: plan.slug, type: 'extra_seat' },
+      });
+      const price = await stripe.prices.create({
+        product: product.id,
+        currency: currency.toLowerCase(),
+        unit_amount: unitAmount,
+        recurring: { interval: subRow.interval === 'yearly' ? 'year' : 'month' },
+      });
+
+      const newItem = await stripe.subscriptionItems.create({
+        subscription: subRow.stripe_subscription_id,
+        price: price.id,
+        quantity: extra_seats,
+        proration_behavior: 'always_invoice',
+      });
+
+      await admin.from('subscriptions').update({
+        extra_seats,
+        stripe_seat_item_id: newItem.id,
+      }).eq('id', subRow.id);
+
+      return res.json({ message: 'Extra seats added and billed.', extra_seats });
+    } catch (err: any) {
+      console.error('[billing/seats] Stripe seat item create failed', err.message);
+      return res.status(502).json({ error: `Stripe create failed: ${err.message}` });
+    }
+  } catch (err: any) {
+    console.error('[billing/seats POST]', err.message);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─── POST /billing/customer-portal — Open Stripe Customer Portal ──
+// User can manage card, view invoices, download receipts directly on Stripe.
+
+router.post('/billing/customer-portal', async (req, res) => {
+  try {
+    if (!stripe) return res.status(500).json({ error: 'Stripe not configured.' });
+
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const admin = getServiceClient();
+
+    const { data: subRow } = await admin
+      .from('subscriptions')
+      .select('stripe_customer_id')
+      .eq('org_id', auth.orgId)
+      .in('status', ['active', 'trialing', 'past_due'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!subRow?.stripe_customer_id) {
+      return res.status(404).json({ error: 'No Stripe customer linked to this account.' });
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const session = await stripe.billingPortal.sessions.create({
+      customer: subRow.stripe_customer_id,
+      return_url: `${frontendUrl}/settings?tab=billing`,
+    });
+
+    return res.json({ url: session.url });
+  } catch (err: any) {
+    console.error('[billing/customer-portal]', err.message);
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });

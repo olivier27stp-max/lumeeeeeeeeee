@@ -190,6 +190,14 @@ export const sendCustomEmailSchema = z.object({
   html: z.string().min(1, 'Missing html body.'),
 });
 
+// ─── Support ────────────────────────────────────────────────────────────────
+
+export const supportRequestSchema = z.object({
+  subject: z.string().trim().min(3, 'Please describe your issue in a few words.').max(200),
+  message: z.string().trim().min(10, 'Please add a bit more detail (at least 10 characters).').max(5000),
+  category: z.enum(['question', 'bug', 'billing', 'feature', 'other']).optional(),
+});
+
 // ─── Invoice Templates ──────────────────────────────────────────────────────
 
 export const invoiceTemplateSchema = z.object({

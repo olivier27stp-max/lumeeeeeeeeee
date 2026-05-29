@@ -83,6 +83,7 @@ import Quotes from './pages/Quotes';
 import QuoteDetails from './pages/QuoteDetails';
 import type { TileColor } from './components/ui';
 import ActivityCenter from './components/ActivityCenter';
+import SupportFAB from './components/SupportFAB';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProductsServices from './pages/ProductsServices';
 import AppMarketplace from './pages/AppMarketplace';
@@ -103,9 +104,10 @@ import VerifyEmailGate from './components/auth/VerifyEmailGate';
 import ReferFriend from './pages/ReferFriend';
 import MrLumePage from './features/agent/components/MrLumeChat';
 import Messages from './pages/Messages';
-import NoteBoards from './pages/NoteBoards';
-import NoteCanvas from './pages/NoteCanvas';
 import TasksPage from './pages/Tasks';
+import PlanFeatureGate from './components/PlanFeatureGate';
+import ExploreFeaturesModal from './components/ExploreFeaturesModal';
+import { useCurrentPlan } from './hooks/usePlanFeature';
 import Courses from './pages/Courses';
 import CourseView from './pages/CourseView';
 import CourseBuilder from './pages/CourseBuilder';
@@ -165,6 +167,8 @@ type NavItem = {
   tileColor: TileColor;
   /** Permission key required to see this nav item */
   requiredPermission?: PermissionKey;
+  /** Plan flag required to see this nav item (e.g. 'includes_sms') */
+  requiredPlanFlag?: 'includes_sms' | 'includes_ai' | 'includes_d2d' | 'includes_courses' | 'includes_api';
 };
 
 type NavSection = {
@@ -614,6 +618,9 @@ function AuthenticatedApp({
   const { current, companies, loading: companyLoading, isMultiCompany, hasNoCompany, currentOrgId } = useCompany();
   // Call realtime notifications hook INSIDE CompanyProvider (it uses useCompany() internally)
   const { unreadCount: unreadNotifs, resetCount: resetNotifCount } = useRealtimeNotifications(!!user);
+  // Current plan — used to hide locked features from sidebar
+  const { currentPlan } = useCurrentPlan();
+  const [exploreFeaturesOpen, setExploreFeaturesOpen] = useState(false);
 
   // Sidebar counters: pending quotes + overdue invoices
   const [pendingQuotes, setPendingQuotes] = useState(0);
@@ -663,18 +670,28 @@ function AuthenticatedApp({
     return <CompanySelectorPage />;
   }
 
-  /** Filter nav items based on user permissions */
+  /** Filter nav items based on user permissions + plan flags */
   const canSee = (item: NavItem) => {
-    if (!item.requiredPermission) return true;
-    if (permsCtx.role === 'owner') return true;
-    return hasPermission(permsCtx.permissions, item.requiredPermission, permsCtx.role ?? undefined);
+    // Permission check
+    if (item.requiredPermission) {
+      const ok = permsCtx.role === 'owner'
+        || hasPermission(permsCtx.permissions, item.requiredPermission, permsCtx.role ?? undefined);
+      if (!ok) return false;
+    }
+    // Plan flag check — hide entirely if the plan doesn't grant the feature.
+    // Until currentPlan is loaded, hide gated items to avoid flashing them in.
+    if (item.requiredPlanFlag) {
+      if (!currentPlan) return false;
+      return Boolean((currentPlan as any)[item.requiredPlanFlag]);
+    }
+    return true;
   };
 
   const navSections: NavSection[] = [
     {
       label: null,
       items: [
-        { id: 'ai-helper', label: 'Lume Agent', icon: LumeAgentIcon as any, path: '/dashboard', tileColor: 'blue', requiredPermission: 'external_agent.use' },
+        { id: 'ai-helper', label: 'Lume Agent', icon: LumeAgentIcon as any, path: '/lume-agent', tileColor: 'blue', requiredPermission: 'external_agent.use', requiredPlanFlag: 'includes_ai' },
         { id: 'day', label: 'CRM', icon: LayoutDashboard, path: '/day', tileColor: 'blue' },
       ],
     },
@@ -691,27 +708,24 @@ function AuthenticatedApp({
     {
       label: language === 'fr' ? 'Outils' : 'Tools',
       items: [
-        { id: 'messages', label: t.nav.messages, icon: MessageSquare, path: '/messages', tileColor: 'blue', requiredPermission: 'messages.read' },
+        { id: 'messages', label: t.nav.messages, icon: MessageSquare, path: '/messages', tileColor: 'blue', requiredPermission: 'messages.read', requiredPlanFlag: 'includes_sms' },
         { id: 'timesheets', label: t.nav.timesheets, icon: Timer, path: '/timesheets', tileColor: 'blue', requiredPermission: 'timesheets.read' },
-        { id: 'courses', label: t.courses?.title || 'Courses', icon: GraduationCap, path: '/courses', tileColor: 'blue' },
+        { id: 'courses', label: t.courses?.title || 'Courses', icon: GraduationCap, path: '/courses', tileColor: 'blue', requiredPlanFlag: 'includes_courses' },
         { id: 'payments', label: t.nav.payments, icon: CreditCard, path: '/payments', tileColor: 'blue', requiredPermission: 'financial.view_payments' },
-        ...(isPlatformOwner ? [
-          { id: 'platform-admin', label: 'Platform Admin', icon: Shield, path: '/platform-admin', tileColor: 'blue' as const },
-        ] : []),
       ],
     },
     {
       label: t.nav.d2d,
       items: venteModule.isEnabled
         ? [
-            { id: 'd2d-dashboard', label: t.nav.venteDashboard, icon: LayoutDashboard, path: '/d2d-dashboard', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
-            { id: 'field-sales', label: t.nav.venteMap, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
-            { id: 'd2d-pipeline', label: t.nav.ventePipeline, icon: GitBranch, path: '/d2d-pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access' },
-            { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'financial.view_reports' },
-            { id: 'commissions', label: t.nav.commissions, icon: DollarSign, path: '/commissions', tileColor: 'blue', requiredPermission: 'financial.view_reports' },
+            { id: 'd2d-dashboard', label: t.nav.venteDashboard, icon: LayoutDashboard, path: '/d2d-dashboard', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
+            { id: 'field-sales', label: t.nav.venteMap, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
+            { id: 'd2d-pipeline', label: t.nav.ventePipeline, icon: GitBranch, path: '/d2d-pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
+            { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'financial.view_reports', requiredPlanFlag: 'includes_d2d' },
+            { id: 'commissions', label: t.nav.commissions, icon: DollarSign, path: '/commissions', tileColor: 'blue', requiredPermission: 'financial.view_reports', requiredPlanFlag: 'includes_d2d' },
           ]
         : [
-            { id: 'vente-locked', label: t.nav.d2d, icon: Lock, path: '/d2d-dashboard', tileColor: 'blue' },
+            { id: 'vente-locked', label: t.nav.d2d, icon: Lock, path: '/d2d-dashboard', tileColor: 'blue', requiredPlanFlag: 'includes_d2d' },
           ],
     },
   ] as NavSection[];
@@ -956,6 +970,23 @@ function AuthenticatedApp({
             {/* Company switcher — only visible for multi-company users */}
             {sidebarExpanded && <CompanySwitcher />}
             <DevRoleSwitcher expanded={sidebarExpanded} />
+            {/* Discover premium features — surfaces locked tabs as a polished modal */}
+            <button
+              onClick={() => setExploreFeaturesOpen(true)}
+              title={!sidebarExpanded ? (language === 'fr' ? 'Découvrir les fonctionnalités' : 'Discover features') : undefined}
+              className={cn(
+                "group w-full flex items-center gap-2.5 px-2.5 py-[8px] rounded-lg text-[14px] font-medium transition-colors",
+                "bg-gradient-to-r from-primary/10 via-primary/5 to-transparent hover:from-primary/15 hover:via-primary/10 text-text-primary border border-primary/20 hover:border-primary/40",
+                !sidebarExpanded && "justify-center"
+              )}
+            >
+              <Sparkles size={16} strokeWidth={2} className="text-primary shrink-0" />
+              {sidebarExpanded && (
+                <span className="truncate">
+                  {language === 'fr' ? 'Découvrir les fonctionnalités' : 'Discover features'}
+                </span>
+              )}
+            </button>
             <button
               onClick={() => setIsDark(!isDark)}
               title={!sidebarExpanded ? (isDark ? t.nav.lightMode : t.nav.darkMode) : undefined}
@@ -1044,7 +1075,7 @@ function AuthenticatedApp({
                 )}
               </button>
               <button
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate('/lume-agent')}
                 title="Lume Agent"
                 className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-all"
               >
@@ -1060,12 +1091,14 @@ function AuthenticatedApp({
           <div className="flex-1 overflow-y-auto">
             <ErrorBoundary labels={t.errorBoundary}>
                   <Routes>
-                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                    <Route path="/dashboard" element={<Gated permission="external_agent.use"><PageWrapper><MrLumePage /></PageWrapper></Gated>} />
+                    <Route path="/" element={<Navigate to="/lume-agent" replace />} />
+                    <Route path="/pricing" element={<Navigate to={{ pathname: '/settings', search: '?tab=billing' }} replace />} />
+                    <Route path="/lume-agent" element={<Gated permission="external_agent.use"><PlanFeatureGate flag="includes_ai"><PageWrapper><MrLumePage /></PageWrapper></PlanFeatureGate></Gated>} />
+                    <Route path="/dashboard" element={<Navigate to="/lume-agent" replace />} />
                     <Route path="/day" element={<Gated permission="settings.read"><PageWrapper><CrmWorkspace /></PageWrapper></Gated>} />
-                    <Route path="/messages" element={<Gated permission="messages.read"><PageWrapper><Messages /></PageWrapper></Gated>} />
+                    <Route path="/messages" element={<Gated permission="messages.read"><PlanFeatureGate flag="includes_sms"><PageWrapper><Messages /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/leads" element={<Navigate to="/quotes" replace />} />
-                    <Route path="/pipeline" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/pipeline" element={<Navigate to="/lume-agent" replace />} />
                     <Route path="/clients" element={<Gated permission="clients.read"><div className="px-8 py-6"><Clients /></div></Gated>} />
                     <Route path="/clients/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><ClientDetails /></div></Gated>} />
                     <Route path="/jobs" element={<Gated permission="jobs.read"><div className="px-8 py-6"><Jobs /></div></Gated>} />
@@ -1097,13 +1130,11 @@ function AuthenticatedApp({
                     <Route path="/settings/products" element={<Gated permission="settings.update"><PageWrapper><ProductsServices /></PageWrapper></Gated>} />
                     <Route path="/automations" element={<Gated permission="automations.read"><PageWrapper><Automations /></PageWrapper></Gated>} />
                     <Route path="/tasks" element={<Gated permission="settings.read"><PageWrapper><TasksPage /></PageWrapper></Gated>} />
-                    <Route path="/courses" element={<Gated permission="settings.read"><div className="px-8 py-6"><Courses /></div></Gated>} />
+                    <Route path="/courses" element={<Gated permission="settings.read"><PlanFeatureGate flag="includes_courses"><div className="px-8 py-6"><Courses /></div></PlanFeatureGate></Gated>} />
                     <Route path="/training" element={<Navigate to="/courses" replace />} />
-                    <Route path="/courses/new" element={<Gated permission="settings.update"><CourseBuilder /></Gated>} />
-                    <Route path="/courses/:id" element={<Gated permission="settings.read"><CourseView /></Gated>} />
+                    <Route path="/courses/new" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_courses"><CourseBuilder /></PlanFeatureGate></Gated>} />
+                    <Route path="/courses/:id" element={<Gated permission="settings.read"><PlanFeatureGate flag="includes_courses"><CourseView /></PlanFeatureGate></Gated>} />
                     <Route path="/courses/:id/edit" element={<Gated permission="settings.update"><CourseBuilder /></Gated>} />
-                    <Route path="/notes" element={<Gated permission="settings.read"><PageWrapper><NoteBoards /></PageWrapper></Gated>} />
-                    <Route path="/notes/:id" element={<Gated permission="settings.read"><NoteCanvas /></Gated>} />
                     <Route path="/automations/hub" element={<Navigate to="/automations" replace />} />
                     <Route path="/automations/builder" element={<Navigate to="/automations" replace />} />
                     <Route path="/settings/company" element={<Gated permission="settings.update"><PageWrapper><CompanySettings /></PageWrapper></Gated>} />
@@ -1113,16 +1144,16 @@ function AuthenticatedApp({
                     <Route path="/settings/team/:memberId" element={<Gated permission="team.read"><PageWrapper><TeamMemberDetails /></PageWrapper></Gated>} />
                     {/* Dispatch: NO PageWrapper — full-bleed */}
                     <Route path="/dispatch" element={<Gated permission="map.access"><DispatchMap /></Gated>} />
-                    {/* Vente (ex-D2D) — gated by module activation */}
-                    <Route path="/field-sales" element={<Gated permission="door_to_door.access"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DMap /></ModuleGate></Gated>} />
-                    <Route path="/d2d-dashboard" element={<ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DDashboard /></PageWrapper></ModuleGate>} />
-                    <Route path="/d2d-pipeline" element={<Gated permission="door_to_door.access"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DPipeline /></ModuleGate></Gated>} />
-                    <Route path="/leaderboard" element={<Gated permission="reports.read"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Leaderboard /></PageWrapper></ModuleGate></Gated>} />
-                    <Route path="/commissions" element={<Gated permission="reports.read"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Commissions /></PageWrapper></ModuleGate></Gated>} />
-                    <Route path="/d2d-reports" element={<Gated permission="door_to_door.access"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DReports /></PageWrapper></ModuleGate></Gated>} />
-                    <Route path="/d2d-settings/general" element={<Gated permission="settings.update"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DSettingsGeneral /></PageWrapper></ModuleGate></Gated>} />
-                    <Route path="/d2d-settings/teams" element={<Gated permission="settings.update"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DSettingsTeams /></PageWrapper></ModuleGate></Gated>} />
-                    <Route path="/d2d-onboarding" element={<Gated permission="door_to_door.access"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DOnboarding /></ModuleGate></Gated>} />
+                    {/* Vente (ex-D2D) — gated by plan flag + module activation */}
+                    <Route path="/field-sales" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DMap /></ModuleGate></PlanFeatureGate></Gated>} />
+                    <Route path="/d2d-dashboard" element={<PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DDashboard /></PageWrapper></ModuleGate></PlanFeatureGate>} />
+                    <Route path="/d2d-pipeline" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DPipeline /></ModuleGate></PlanFeatureGate></Gated>} />
+                    <Route path="/leaderboard" element={<Gated permission="reports.read"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Leaderboard /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
+                    <Route path="/commissions" element={<Gated permission="reports.read"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Commissions /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
+                    <Route path="/d2d-reports" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DReports /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
+                    <Route path="/d2d-settings/general" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DSettingsGeneral /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
+                    <Route path="/d2d-settings/teams" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DSettingsTeams /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
+                    <Route path="/d2d-onboarding" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DOnboarding /></ModuleGate></PlanFeatureGate></Gated>} />
                     <Route path="/settings/team/:memberId/profile" element={<Gated permission="team.read"><RepProfile /></Gated>} />
                     <Route path="/reps/:id" element={<Gated permission="team.read"><RepProfile /></Gated>} />
                     <Route path="/settings/marketplace" element={<Gated permission="integrations.read"><PageWrapper><AppMarketplace /></PageWrapper></Gated>} />
@@ -1135,7 +1166,7 @@ function AuthenticatedApp({
                     {/* BillingCheckout removed — upgrade goes through /checkout */}
                     <Route path="/settings/referrals" element={<Gated permission="settings.read"><PageWrapper><ReferFriend /></PageWrapper></Gated>} />
 {/* Platform Admin — owner-only, server enforces auth */}
-                    <Route path="/platform-admin" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><PlatformAdmin /></PageWrapper></React.Suspense> : <Navigate to="/dashboard" replace />} />
+                    <Route path="/platform-admin" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><PlatformAdmin /></PageWrapper></React.Suspense> : <Navigate to="/lume-agent" replace />} />
                     <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
                   </Routes>
             </ErrorBoundary>
@@ -1143,6 +1174,7 @@ function AuthenticatedApp({
         </main>
       </div>
       {/* HelpChat removed — ? button now navigates to Lume Agent */}
+      <SupportFAB />
       <ActivityCenter open={activityOpen} onClose={() => setActivityOpen(false)} />
       {/* Setup checklist — visible only to owner/admin until completed/dismissed */}
       {(permsCtx.role === 'owner' || permsCtx.role === 'admin') && <SetupChecklist />}
@@ -1151,6 +1183,7 @@ function AuthenticatedApp({
           <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} language={language} />
         )}
       </AnimatePresence>
+      <ExploreFeaturesModal open={exploreFeaturesOpen} onClose={() => setExploreFeaturesOpen(false)} />
     </JobModalControllerProvider>
   );
 }

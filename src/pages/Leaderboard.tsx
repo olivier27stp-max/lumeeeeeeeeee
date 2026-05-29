@@ -77,23 +77,23 @@ function getPeriodDates(period: Period): { from: string; to: string } {
 
 function perfToKPIs(perf: RepPerformanceDetail): { key: string; value: string }[] {
   return [
-    { key: 'doors_knocked', value: String(perf.doors_knocked) },
-    { key: 'conversations', value: String(perf.conversations) },
-    { key: 'demos_set', value: String(perf.demos_set) },
-    { key: 'demos_held', value: String(perf.demos_held) },
+    { key: 'leads', value: String(perf.doors_knocked) },
+    { key: 'contacted', value: String(perf.conversations) },
+    { key: 'deals', value: String(perf.demos_set) },
     { key: 'quotes_sent', value: String(perf.quotes_sent) },
     { key: 'closes', value: String(perf.closes) },
     { key: 'revenue', value: `$${perf.revenue.toLocaleString()}` },
     { key: 'conversion_rate', value: `${Math.round(perf.conversion_rate)}%` },
+    { key: 'avg_ticket', value: `$${Math.round(perf.average_ticket || 0).toLocaleString()}` },
   ];
 }
 
 function perfToFunnel(perf: RepPerformanceDetail): { key: string; value: number; max: number }[] {
   const max = perf.doors_knocked || 1;
   return [
-    { key: 'doors_knocked', value: perf.doors_knocked, max },
-    { key: 'conversations', value: perf.conversations, max },
-    { key: 'demos_held', value: perf.demos_held, max },
+    { key: 'leads', value: perf.doors_knocked, max },
+    { key: 'contacted', value: perf.conversations, max },
+    { key: 'deals_open', value: perf.demos_set, max },
     { key: 'quotes_sent', value: perf.quotes_sent, max },
     { key: 'closes', value: perf.closes, max },
   ];

@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Avatar } from '../components/d2d/avatar';
 import { getRepAvatar } from '../lib/constants/avatars';
 import { getRepPerformance, getRealtimeStats } from '../lib/leaderboardApi';
+import { getRepRealStats, type RepRealStats } from '../lib/repStatsApi';
 import { getCommissionEntries } from '../lib/commissionsApi';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
@@ -28,7 +29,12 @@ import {
   ClipboardList,
   CheckCircle2,
   Clock,
+  FileSignature,
+  Timer,
+  CalendarCheck,
+  Navigation,
 } from 'lucide-react';
+import TechDayReplay from '../components/TechDayReplay';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -82,6 +88,9 @@ function perfToStats(perf: RepPerformanceDetail) {
     activeLeads: perf.quotes_sent,
     jobsCompleted: perf.closes,
     jobsPending: perf.follow_ups_completed,
+    contractsSigned: 0,
+    hoursWorked: 0,
+    daysWorked: 0,
   };
 }
 
@@ -106,6 +115,7 @@ interface ProfileData {
     revenue: number; closes: number; deals: number; conversion: number;
     doors: number; avgDealValue: number; commission: number;
     activeLeads: number; jobsCompleted: number; jobsPending: number;
+    contractsSigned: number; hoursWorked: number; daysWorked: number;
   };
   quarterSales: { label: string; value: number; percent: number }[];
 }
@@ -123,6 +133,7 @@ export default function D2DRepProfile() {
   const [loading, setLoading] = useState(true);
   const [commissions, setCommissions] = useState<FsCommissionEntry[]>([]);
   const [closes, setCloses] = useState<Array<{ id: string; title: string; value: number; stage: string; won_at: string | null; created_at: string }>>([]);
+  const [replayOpen, setReplayOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,10 +141,14 @@ export default function D2DRepProfile() {
     async function fetchFromApi(userId: string) {
       const orgId = await getCurrentOrgIdOrThrow();
       // Fetch profile info, team member details, and performance in parallel
-      const [profileRes, memberRes, realtimeRes] = await Promise.all([
+      const [profileRes, memberRes, realtimeRes, realStats] = await Promise.all([
         supabase.from('profiles').select('id, full_name, avatar_url, company_name').eq('id', userId).maybeSingle(),
         supabase.from('team_members').select('*').eq('user_id', userId).eq('org_id', orgId).maybeSingle(),
         getRealtimeStats(userId),
+        getRepRealStats(userId, orgId).catch(() => ({
+          totalRevenue: 0, jobsAsSalesperson: 0, jobsCompleted: 0, jobsPending: 0,
+          contractsSigned: 0, hoursWorked: 0, daysWorked: 0,
+        } as RepRealStats)),
       ]);
 
       const dbProfile = profileRes.data;
@@ -176,12 +191,24 @@ export default function D2DRepProfile() {
           percent: Math.min(100, Math.round((q.revenue / TARGET_QUARTERLY) * 100)),
         }));
 
-      const stats = perfToStats(realtimeRes);
+      // Merge leaderboard stats with real DB-derived stats — prefer DB values
+      // when they're non-zero (e.g. revenue from jobs.total_amount beats the
+      // leaderboard estimate when the leaderboard backfill hasn't run).
+      const lbStats = perfToStats(realtimeRes);
+      const stats = {
+        ...lbStats,
+        revenue: realStats.totalRevenue || lbStats.revenue,
+        jobsCompleted: realStats.jobsCompleted || lbStats.jobsCompleted,
+        jobsPending: realStats.jobsPending || lbStats.jobsPending,
+        contractsSigned: realStats.contractsSigned,
+        hoursWorked: realStats.hoursWorked,
+        daysWorked: realStats.daysWorked,
+      };
 
       const result: ProfileData = {
         id: userId,
         name,
-        role: dbMember?.role || 'Sales Rep',
+        role: dbMember?.role || 'Membre',
         tagline: '',
         avatar_url: dbMember?.avatar_url || dbProfile?.avatar_url || null,
         banner_url: null,
@@ -218,7 +245,7 @@ export default function D2DRepProfile() {
         const data = await fetchFromApi(paramId);
         const orgId = await getCurrentOrgIdOrThrow();
         const [commissionEntries, dealsRes] = await Promise.all([
-          getCommissionEntries({ userId: paramId }).catch(() => []),
+          getCommissionEntries({ userId: paramId }).catch(() => [] as Awaited<ReturnType<typeof getCommissionEntries>>),
           supabase
             .from('pipeline_deals')
             .select('id, title, value, stage, won_at, created_at')
@@ -378,6 +405,13 @@ export default function D2DRepProfile() {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setReplayOpen(true)}
+              className="flex items-center gap-2 rounded-xl border border-outline bg-surface-secondary text-text-primary px-4 py-2.5 text-[13px] font-bold hover:bg-surface-tertiary transition-colors"
+            >
+              <Navigation size={16} strokeWidth={2.5} />
+              Voir la journée
+            </button>
             <Link
               to="/feed"
               className="flex items-center gap-2 rounded-xl bg-text-primary text-surface px-5 py-2.5 text-[13px] font-bold transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
@@ -441,6 +475,13 @@ export default function D2DRepProfile() {
               <KpiCard icon={ClipboardList} label="Active Leads" value={String(p.stats.activeLeads)} />
               <KpiCard icon={CheckCircle2} label="Jobs Completed" value={String(p.stats.jobsCompleted)} />
               <KpiCard icon={Clock} label="Jobs Pending" value={String(p.stats.jobsPending)} />
+            </div>
+
+            {/* KPI row — operations */}
+            <div className="grid grid-cols-3 gap-3">
+              <KpiCard icon={FileSignature} label="Contracts Signed" value={String(p.stats.contractsSigned)} />
+              <KpiCard icon={Timer} label="Hours Worked" value={`${p.stats.hoursWorked}h`} />
+              <KpiCard icon={CalendarCheck} label="Days Worked" value={String(p.stats.daysWorked)} />
             </div>
 
             {/* Quarterly performance */}
@@ -539,6 +580,9 @@ export default function D2DRepProfile() {
           </div>
         </div>
       </div>
+      {replayOpen && (
+        <TechDayReplay userId={p.id} userName={p.name} onClose={() => setReplayOpen(false)} />
+      )}
     </div>
   );
 }

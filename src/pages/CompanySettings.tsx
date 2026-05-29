@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   Star,
   ExternalLink,
+  Target,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
@@ -20,6 +21,7 @@ import { PageHeader } from '../components/ui';
 import BackToSettings from '../components/ui/BackToSettings';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import PermissionGate from '../components/PermissionGate';
 import FileUpload from '../components/FileUpload';
 import { STORAGE_BUCKETS, deleteFile } from '../lib/storage';
@@ -38,6 +40,7 @@ interface CompanyDetails {
   postal_code: string;
   country: string;
   logo_url: string;
+  revenue_goal_cents: number;
   google_review_url: string;
   review_enabled: boolean;
   review_widget_settings: {
@@ -60,6 +63,7 @@ const EMPTY_COMPANY: CompanyDetails = {
   postal_code: '',
   country: '',
   logo_url: '',
+  revenue_goal_cents: 0,
   google_review_url: '',
   review_enabled: false,
   review_widget_settings: { theme: 'light', filter: 'all', layout: 'cards', max_display: 6 },
@@ -67,10 +71,22 @@ const EMPTY_COMPANY: CompanyDetails = {
 
 export default function CompanySettings() {
   const { t, language } = useTranslation();
+  const queryClient = useQueryClient();
   const [form, setForm] = useState<CompanyDetails>(EMPTY_COMPANY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
 
   useEffect(() => {
     async function fetchCompany() {
@@ -102,6 +118,7 @@ export default function CompanySettings() {
             postal_code: data.postal_code || '',
             country: data.country || '',
             logo_url: data.logo_url || '',
+            revenue_goal_cents: Number(data.revenue_goal_cents) || 0,
             google_review_url: data.google_review_url || '',
             review_enabled: data.review_enabled ?? false,
             review_widget_settings: data.review_widget_settings || EMPTY_COMPANY.review_widget_settings,
@@ -118,6 +135,7 @@ export default function CompanySettings() {
   const update = <K extends keyof CompanyDetails>(key: K, value: CompanyDetails[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setSaved(false);
+    setDirty(true);
   };
 
   const handleSave = async () => {
@@ -139,6 +157,7 @@ export default function CompanySettings() {
         postal_code: form.postal_code.trim(),
         country: form.country.trim(),
         logo_url: form.logo_url.trim(),
+        revenue_goal_cents: Math.max(0, Math.round(form.revenue_goal_cents || 0)),
         google_review_url: form.google_review_url.trim(),
         review_enabled: form.review_enabled,
         review_widget_settings: form.review_widget_settings,
@@ -173,6 +192,9 @@ export default function CompanySettings() {
       }
 
       setSaved(true);
+      setDirty(false);
+      queryClient.invalidateQueries({ queryKey: ['crm-revenue-goal'] });
+      queryClient.invalidateQueries({ queryKey: ['org-revenue-goal'] });
       toast.success(language === 'fr' ? 'Paramètres de l\'entreprise enregistrés.' : 'Company settings saved.');
       setTimeout(() => setSaved(false), 2000);
     } catch (error: any) {
@@ -399,6 +421,36 @@ export default function CompanySettings() {
           </div>
         </div>
 
+        {/* Financial Goal */}
+        <div className="section-card p-5 space-y-4">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+            <Target size={12} /> {language === 'fr' ? 'Objectif financier' : 'Financial Goal'}
+          </h3>
+
+          <div>
+            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+              {language === 'fr' ? 'Objectif de revenus ($)' : 'Revenue Goal ($)'}
+            </label>
+            <input
+              type="number"
+              min={0}
+              step={100}
+              value={form.revenue_goal_cents ? form.revenue_goal_cents / 100 : ''}
+              onChange={(e) => {
+                const dollars = parseFloat(e.target.value);
+                update('revenue_goal_cents', Number.isFinite(dollars) ? Math.round(dollars * 100) : 0);
+              }}
+              className="glass-input w-full mt-1"
+              placeholder="100000"
+            />
+            <p className="text-[11px] text-text-tertiary mt-1">
+              {language === 'fr'
+                ? 'Le diagramme d\'objectif dans Insights affichera la progression par rapport à ce montant.'
+                : 'The goal chart in Insights will display progress against this amount.'}
+            </p>
+          </div>
+        </div>
+
         {/* Google Reviews */}
         <div className="section-card p-5 space-y-4">
           <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
@@ -535,18 +587,31 @@ export default function CompanySettings() {
           </div>
         </div>
 
-        {/* Save button */}
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className={cn(
-            'glass-button inline-flex items-center gap-1.5',
-            saved && '!bg-success !text-white !border-success'
-          )}
-        >
-          {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <Check size={13} /> : null}
-          {saving ? (t.billing.saving) : saved ? (t.companySettings.saved) : (t.companySettings.saveChanges)}
-        </button>
+        {/* Save bar */}
+        <div className={cn(
+          'sticky bottom-4 z-10 flex items-center justify-between gap-3 rounded-xl border px-4 py-3 backdrop-blur',
+          dirty
+            ? 'border-amber-300 bg-amber-50/95 dark:border-amber-700 dark:bg-amber-900/40'
+            : 'border-outline bg-surface-card/90'
+        )}>
+          <span className="text-[12px] text-text-secondary">
+            {dirty
+              ? (language === 'fr' ? 'Modifications non sauvegardées' : 'Unsaved changes')
+              : (language === 'fr' ? 'Tout est à jour' : 'All changes saved')}
+          </span>
+          <button
+            onClick={handleSave}
+            disabled={saving || !dirty}
+            className={cn(
+              'glass-button inline-flex items-center gap-1.5',
+              saved && '!bg-success !text-white !border-success',
+              dirty && !saving && !saved && '!bg-primary !text-white !border-primary'
+            )}
+          >
+            {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <Check size={13} /> : null}
+            {saving ? (t.billing.saving) : saved ? (t.companySettings.saved) : (t.companySettings.saveChanges)}
+          </button>
+        </div>
       </motion.div>
     </div>
     </PermissionGate>

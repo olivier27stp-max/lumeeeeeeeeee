@@ -589,6 +589,17 @@ export default function Jobs() {
   const toggleAll = () => { allSel ? setSelectedJobIds(new Set()) : setSelectedJobIds(new Set(jobs.map(j => j.id))); };
   const toggleOne = (id: string) => { const n = new Set(selectedJobIds); n.has(id) ? n.delete(id) : n.add(id); setSelectedJobIds(n); };
 
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(null);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
 
   function JobBadge({ status }: { status: string }) {
     const s = (status || 'draft').toLowerCase();
@@ -634,7 +645,7 @@ export default function Jobs() {
 
       {/* ── TABLE (grid layout — identical structure to Clients & Devis) ── */}
       <div className="border border-outline rounded-md overflow-hidden bg-surface">
-        <div className="grid" style={{ gridTemplateColumns: '40px 1fr 1fr 1fr 1fr 100px 100px 48px' }}>
+        <div className="grid" style={{ gridTemplateColumns: '40px 1fr 1fr 1fr 1fr 100px 48px' }}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Titre' : 'Title'} {IconSort}</span></div>
@@ -642,7 +653,6 @@ export default function Jobs() {
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Date' : 'Date'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Total {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-outline" />
           <div className="py-3 border-b border-outline" />
 
           {/* LOADING */}
@@ -654,14 +664,13 @@ export default function Jobs() {
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30" />
               <div className="py-3 border-b border-outline/30" />
             </React.Fragment>
           ))}
 
           {/* EMPTY */}
           {!loading && jobs.length === 0 && (
-            <div className="col-span-8 py-20 text-center text-[14px] text-text-tertiary">{t.jobs.noJobsFound}</div>
+            <div className="col-span-7 py-20 text-center text-[14px] text-text-tertiary">{t.jobs.noJobsFound}</div>
           )}
 
           {/* ROWS */}
@@ -683,15 +692,29 @@ export default function Jobs() {
                 <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-text-primary tabular-nums truncate">{job.scheduled_at ? formatDate(job.scheduled_at) : (fr ? 'Non planifié' : 'Unscheduled')}</span></div>
                 <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] font-semibold text-text-primary tabular-nums">{formatMoney(job)}</span></div>
                 <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}><JobBadge status={job.status} /></div>
-                <div className={`py-3 px-4 flex items-center justify-end gap-1 ${rowCls}`}>
-                  <button onClick={(e) => { e.stopPropagation(); handleEditJob(job); }} className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors">
-                    <Edit2 size={14} />
-                  </button>
-                </div>
-                <div className={`py-3 pr-4 flex items-center justify-center ${rowCls}`}>
-                  <button className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors" onClick={e => { e.stopPropagation(); setJobToDelete(job); }}>
+                <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onClick={e => e.stopPropagation()}>
+                  <button
+                    className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
+                    onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === job.id ? null : job.id); }}
+                  >
                     {IconDots}
                   </button>
+                  {menuOpen === job.id && (
+                    <div ref={menuRef} className="absolute top-full right-2 mt-1 w-40 bg-surface-elevated border border-outline rounded-md shadow-dropdown z-50 py-1">
+                      <button
+                        onClick={() => { setMenuOpen(null); handleEditJob(job); }}
+                        className="w-full text-left px-3 py-1.5 text-[13px] text-text-secondary hover:bg-surface-secondary transition-colors"
+                      >
+                        {fr ? 'Modifier' : 'Edit'}
+                      </button>
+                      <button
+                        onClick={() => { setMenuOpen(null); setJobToDelete(job); }}
+                        className="w-full text-left px-3 py-1.5 text-[13px] text-red-600 hover:bg-surface-secondary transition-colors"
+                      >
+                        {fr ? 'Supprimer' : 'Delete'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </React.Fragment>
             );

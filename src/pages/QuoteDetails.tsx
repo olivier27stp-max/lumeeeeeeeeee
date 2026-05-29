@@ -278,9 +278,18 @@ export default function QuoteDetails() {
             )}
           </div>
           {entityPhone && (
-            <button onClick={() => act(async () => { await sendQuoteSms(quote.id); toast.success('SMS sent'); loadQuote(); })}
-              disabled={busy} className="glass-button-primary px-4 py-2 text-[13px] font-semibold flex items-center gap-1.5">
-              <MessageSquare size={14} /> {language === 'fr' ? 'Envoyer un texto' : 'Send Text'}</button>
+            <button
+              onClick={() => {
+                const params = new URLSearchParams({
+                  ...(client?.id ? { clientId: client.id } : {}),
+                  phone: entityPhone,
+                  ...(entityName ? { name: entityName } : {}),
+                });
+                navigate(`/messages?${params.toString()}`);
+              }}
+              className="glass-button-primary px-4 py-2 text-[13px] font-semibold flex items-center gap-1.5"
+            >
+              <MessageSquare size={14} /> {language === 'fr' ? 'Texter le client' : 'Text Client'}</button>
           )}
         </div>
       </div>

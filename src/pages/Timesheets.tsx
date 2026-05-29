@@ -32,13 +32,16 @@ import {
   minutesToTime, timeToMinutes, weekdayLabel,
   type AvailabilityRecord,
 } from '../lib/availabilityApi';
+import { punchIn as apiPunchIn, punchOut as apiPunchOut, startBreak as apiStartBreak, endBreak as apiEndBreak } from '../lib/timesheetsApi';
+import { useGpsTracker } from '../hooks/useGpsTracker';
+import TeamProfilesGrid from '../components/TeamProfilesGrid';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════════
 
 type ViewMode = 'day' | 'week' | 'month';
-type HubTab = 'feuilles' | 'carte' | 'disponibilites';
+type HubTab = 'feuilles' | 'carte' | 'disponibilites' | 'profils';
 
 interface TimeEntry {
   id: string;
@@ -555,49 +558,25 @@ export default function Timesheets() {
   const handlePunchIn = async () => {
     setTimerLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not logged in');
-      const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle();
-      const { data: membership } = await supabase.from('memberships').select('org_id, full_name').eq('user_id', user.id).limit(1).maybeSingle();
-      const orgId = membership?.org_id;
-      if (!orgId) throw new Error('No org found');
-      const name = profile?.full_name || membership?.full_name || user.email || 'Unknown';
-      const now = new Date();
-      const { error } = await supabase.from('time_entries').insert({
-        org_id: orgId,
-        employee_id: user.id,
-        employee_name: name,
-        date: now.toISOString().slice(0, 10),
-        punch_in: now.toTimeString().slice(0, 5),
-        punch_in_at: now.toISOString(),
-        status: 'active',
-        breaks: [],
-      });
-      if (error) {
-        if (error.message?.includes('one_active') || error.code === '23505') {
-          toast.error(fr ? 'Session déjà active' : 'Already have an active session');
-        } else throw error;
+      await apiPunchIn();
+      toast.success(fr ? 'Punch In !' : 'Punched In!');
+      loadMySession();
+      loadData();
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (msg.toLowerCase().includes('already punched')) {
+        toast.error(fr ? 'Session déjà active' : 'Already have an active session');
       } else {
-        toast.success(fr ? 'Punch In !' : 'Punched In!');
-        loadMySession();
-        loadData();
+        toast.error(msg || 'Error');
       }
-    } catch (err: any) { toast.error(err?.message || 'Error'); }
-    finally { setTimerLoading(false); }
+    } finally { setTimerLoading(false); }
   };
 
   const handlePunchOut = async () => {
     if (!myActiveEntry) return;
     setTimerLoading(true);
     try {
-      const now = new Date();
-      const orgId = await getCurrentOrgIdOrThrow();
-      const { error } = await supabase.from('time_entries').update({
-        punch_out: now.toTimeString().slice(0, 5),
-        punch_out_at: now.toISOString(),
-        status: 'completed',
-      }).eq('id', myActiveEntry.id).eq('org_id', orgId);
-      if (error) throw error;
+      await apiPunchOut({ entry_id: myActiveEntry.id });
       toast.success(fr ? 'Punch Out !' : 'Punched Out!');
       setMyActiveEntry(null);
       loadData();
@@ -609,18 +588,10 @@ export default function Timesheets() {
     if (!myActiveEntry) return;
     setTimerLoading(true);
     try {
-      const now = new Date().toISOString();
-      const breaks = [...myActiveEntry.breaks];
-      const lastBreak = breaks[breaks.length - 1];
+      const lastBreak = myActiveEntry.breaks[myActiveEntry.breaks.length - 1];
       const onBrk = lastBreak && !lastBreak.end;
-      if (onBrk) {
-        breaks[breaks.length - 1] = { ...lastBreak, end: now };
-      } else {
-        breaks.push({ start: now, end: '' });
-      }
-      const orgId = await getCurrentOrgIdOrThrow();
-      const { error } = await supabase.from('time_entries').update({ breaks }).eq('id', myActiveEntry.id).eq('org_id', orgId);
-      if (error) throw error;
+      if (onBrk) await apiEndBreak(myActiveEntry.id);
+      else await apiStartBreak(myActiveEntry.id);
       toast.success(onBrk ? (fr ? 'Reprise !' : 'Resumed!') : (fr ? 'En pause' : 'Paused'));
       loadMySession();
     } catch (err: any) { toast.error(err?.message || 'Error'); }
@@ -628,6 +599,11 @@ export default function Timesheets() {
   };
 
   const isOnBreak = myActiveEntry ? myActiveEntry.breaks.some((b: any) => b.start && !b.end) : false;
+
+  // GPS auto-tracking: active whenever user is punched in and not on break.
+  // Streams browser geolocation into tracking_points / tracking_live_locations
+  // every 15s so the user appears live on the Dispatch map.
+  const gps = useGpsTracker({ enabled: !!myActiveEntry && !isOnBreak });
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DISPONIBILITÉS DATA
@@ -703,7 +679,7 @@ export default function Timesheets() {
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Hub tabs */}
           <div className="flex rounded-md border border-outline overflow-hidden">
-            {([['feuilles', fr ? 'Feuilles' : 'Timesheets'], ['carte', fr ? 'Carte' : 'Map'], ['disponibilites', fr ? 'Disponibilités' : 'Availability']] as [HubTab, string][]).map(([key, label]) => (
+            {([['feuilles', fr ? 'Feuilles' : 'Timesheets'], ['carte', fr ? 'Carte' : 'Map'], ['disponibilites', fr ? 'Disponibilités' : 'Availability'], ['profils', fr ? 'Profils' : 'Profiles']] as [HubTab, string][]).map(([key, label]) => (
               <button key={key} onClick={() => setHubTab(key)}
                 className={cn('px-4 py-2 text-[13px] font-medium transition-all', hubTab === key ? 'bg-text-primary text-white' : 'bg-surface text-text-secondary hover:bg-surface-secondary')}>
                 {label}
@@ -711,7 +687,7 @@ export default function Timesheets() {
             ))}
           </div>
           {/* Date controls for feuilles/carte */}
-          {hubTab !== 'disponibilites' && (
+          {hubTab !== 'disponibilites' && hubTab !== 'profils' && (
             <>
               <div className="flex rounded-md border border-outline overflow-hidden">
                 {(['day', 'week', 'month'] as ViewMode[]).map(m => (
@@ -728,8 +704,8 @@ export default function Timesheets() {
         </div>
       </div>
 
-      {/* ── Secondary bar: date nav (feuilles/carte) or nothing (dispo) ── */}
-      {hubTab !== 'disponibilites' && (
+      {/* ── Secondary bar: date nav (feuilles/carte) or nothing (dispo/profils) ── */}
+      {hubTab !== 'disponibilites' && hubTab !== 'profils' && (
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2.5">
             <div className="inline-flex items-center gap-1.5 rounded-md border border-outline bg-surface px-3 py-[7px]">
@@ -786,6 +762,22 @@ export default function Timesheets() {
                     <p className="text-[11px] text-text-tertiary mt-1">
                       {fr ? 'Début' : 'Started'}: {new Date(myActiveEntry.punch_in_at).toLocaleTimeString(fr ? 'fr-CA' : 'en-CA', { hour: '2-digit', minute: '2-digit' })}
                       {myActiveEntry.breaks.length > 0 && ` · ${myActiveEntry.breaks.length} ${fr ? 'pause(s)' : 'break(s)'}`}
+                    </p>
+                  )}
+                  {myActiveEntry && !isOnBreak && (
+                    <p className={cn(
+                      'text-[10px] mt-1 flex items-center gap-1',
+                      gps.status === 'active' ? 'text-emerald-600' :
+                      gps.status === 'denied' ? 'text-red-600' :
+                      gps.status === 'error' ? 'text-amber-600' : 'text-text-tertiary'
+                    )}>
+                      <MapPin size={10} />
+                      {gps.status === 'active' && (fr ? 'GPS actif' : 'GPS active')}
+                      {gps.status === 'requesting' && (fr ? 'GPS: demande de permission…' : 'GPS: requesting permission…')}
+                      {gps.status === 'denied' && (fr ? 'GPS refusé — autorisez la localisation' : 'GPS denied — allow location')}
+                      {gps.status === 'no-session' && (fr ? 'GPS: session manquante' : 'GPS: missing session')}
+                      {gps.status === 'error' && `GPS: ${gps.lastError || 'error'}`}
+                      {gps.status === 'idle' && (fr ? 'GPS: en attente…' : 'GPS: starting…')}
                     </p>
                   )}
                 </div>
@@ -875,10 +867,21 @@ export default function Timesheets() {
 
           {/* Table */}
           <div className="border border-outline rounded-md overflow-hidden bg-surface">
-            <table className="w-full text-left">
+            <table className="w-full text-left table-fixed">
+              <colgroup>
+                <col style={{ width: '48px' }} />
+                <col />
+                <col style={{ width: '140px' }} />
+                <col style={{ width: '110px' }} />
+                <col style={{ width: '110px' }} />
+                <col style={{ width: '110px' }} />
+                <col style={{ width: '130px' }} />
+                <col style={{ width: '140px' }} />
+                <col style={{ width: '100px' }} />
+              </colgroup>
               <thead>
                 <tr className="border-b border-outline">
-                  <th className="w-[48px] pl-4 pr-1 py-3"><input type="checkbox" checked={selected.size === pagedRows.length && pagedRows.length > 0} onChange={() => selected.size === pagedRows.length ? selectNone() : setSelected(new Set(pagedRows.map(r => r.id)))} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></th>
+                  <th style={{ width: '48px' }} className="pl-4 pr-1 py-3 text-left align-middle"><input type="checkbox" checked={selected.size === pagedRows.length && pagedRows.length > 0} onChange={() => selected.size === pagedRows.length ? selectNone() : setSelected(new Set(pagedRows.map(r => r.id)))} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer align-middle" /></th>
                   <th className="px-4 py-3 text-[14px] font-medium text-text-primary">{fr ? 'Employé' : 'Employee'}</th>
                   <th className="px-4 py-3 text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} <ArrowUpDown size={14} className="text-text-tertiary" /></span></th>
                   <th className="px-4 py-3 text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Arrivée' : 'Clock-in'} <ArrowUpDown size={14} className="text-text-tertiary" /></span></th>
@@ -886,19 +889,23 @@ export default function Timesheets() {
                   <th className="px-4 py-3 text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Travaillé' : 'Worked'} <ArrowUpDown size={14} className="text-text-tertiary" /></span></th>
                   <th className="px-4 py-3 text-[14px] font-medium text-text-primary">{fr ? 'Pauses' : 'Breaks'}</th>
                   <th className="px-4 py-3 text-[14px] font-medium text-text-primary">{fr ? 'Problème' : 'Issue'}</th>
-                  <th className="w-[100px]" />
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {loading && Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={`sk-${i}`} className="border-b border-outline/30"><td className="pl-4 pr-1 py-[13px]"><div className="w-4 h-4 bg-surface-tertiary rounded animate-pulse" /></td>{Array.from({ length: 7 }).map((_, j) => <td key={j} className="px-4 py-[13px]"><div className="h-[18px] w-24 bg-surface-tertiary rounded animate-pulse" /></td>)}<td /><td /></tr>
+                  <tr key={`sk-${i}`} className="border-b border-outline/30">
+                    <td className="pl-4 pr-1 py-[13px] align-middle"><div className="w-4 h-4 bg-surface-tertiary rounded animate-pulse" /></td>
+                    {Array.from({ length: 7 }).map((_, j) => <td key={j} className="px-4 py-[13px]"><div className="h-[18px] w-24 bg-surface-tertiary rounded animate-pulse" /></td>)}
+                    <td className="pr-4 py-[13px]" />
+                  </tr>
                 ))}
                 {!loading && pagedRows.length === 0 && (
-                  <tr><td colSpan={10} className="py-20 text-center"><Timer size={32} className="mx-auto text-text-tertiary opacity-20 mb-3" /><p className="text-[15px] font-semibold text-text-primary">{fr ? 'Aucune feuille de temps' : 'No timesheets'}</p><p className="text-[13px] text-text-tertiary mt-1">{fr ? 'Aucune entrée trouvée pour cette période.' : 'No entries found for this period.'}</p></td></tr>
+                  <tr><td colSpan={9} className="py-20 text-center"><Timer size={32} className="mx-auto text-text-tertiary opacity-20 mb-3" /><p className="text-[15px] font-semibold text-text-primary">{fr ? 'Aucune feuille de temps' : 'No timesheets'}</p><p className="text-[13px] text-text-tertiary mt-1">{fr ? 'Aucune entrée trouvée pour cette période.' : 'No entries found for this period.'}</p></td></tr>
                 )}
                 {!loading && pagedRows.map(row => (
                   <tr key={row.id} className={cn('border-b border-[#f1f5f9] transition-colors', selected.has(row.id) ? 'bg-[#f0f4ff]' : 'hover:bg-surface-secondary', row.issue && !selected.has(row.id) && 'bg-red-500/[0.02]')}>
-                    <td className="pl-4 pr-1 py-[13px]" onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(row.id)} onChange={() => toggleSelect(row.id)} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></td>
+                    <td style={{ width: '48px' }} className="pl-4 pr-1 py-[13px] align-middle" onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(row.id)} onChange={() => toggleSelect(row.id)} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer align-middle" /></td>
                     <td className="px-4 py-[13px]"><div className="flex items-center gap-3"><UnifiedAvatar id={row.employee_id} name={row.employee_name} size={34} /><span className="text-[14px] font-medium text-text-primary">{row.employee_name}</span></div></td>
                     <td className="px-4 py-[13px]"><StatusBadgePill statusKey={row.statusKey} label={row.status} /></td>
                     <td className="px-4 py-[13px] text-[14px] text-text-secondary tabular-nums">{fmt12(row.punch_in)}</td>
@@ -1005,6 +1012,11 @@ export default function Timesheets() {
             </AnimatePresence>
           </div>
         </>
+      )}
+
+      {hubTab === 'profils' && currentOrgId && (
+        /* ════ PROFILS VIEW ════ */
+        <TeamProfilesGrid orgId={currentOrgId} fr={fr} />
       )}
 
       {hubTab === 'disponibilites' && (

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   MessageSquare,
@@ -259,6 +260,7 @@ function formatDateSeparator(dateStr: string): string {
 // ─── Main Messages Page ──────────────────────────────────────────────
 export default function Messages() {
   const { t, language } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConvo, setSelectedConvo] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -286,6 +288,48 @@ export default function Messages() {
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
+
+  // Deep-link: /messages?clientId=...&phone=...&name=...
+  // Auto-select existing conversation for the client, or create a placeholder so user can start chatting.
+  useEffect(() => {
+    if (loadingConvos) return;
+    const clientId = searchParams.get('clientId') || undefined;
+    const phoneParam = searchParams.get('phone') || undefined;
+    const nameParam = searchParams.get('name') || undefined;
+    if (!clientId && !phoneParam) return;
+
+    const existing = conversations.find(
+      (c) =>
+        (clientId && c.client_id === clientId) ||
+        (phoneParam && formatE164(c.phone_number) === formatE164(phoneParam))
+    );
+    if (existing) {
+      setSelectedConvo(existing);
+    } else if (phoneParam) {
+      const placeholder: Conversation = {
+        id: `pending-${clientId || phoneParam}`,
+        org_id: null,
+        client_id: clientId || null,
+        client_name: nameParam || null,
+        phone_number: formatE164(phoneParam),
+        last_message_text: null,
+        last_message_at: new Date().toISOString(),
+        unread_count: 0,
+        status: 'active',
+        created_at: new Date().toISOString(),
+      };
+      setSelectedConvo(placeholder);
+    } else {
+      toast.error(language === 'fr' ? 'Numéro de téléphone manquant pour ce client' : 'No phone number for this client');
+    }
+
+    // Clear params so refresh/back doesn't re-trigger
+    const next = new URLSearchParams(searchParams);
+    next.delete('clientId');
+    next.delete('phone');
+    next.delete('name');
+    setSearchParams(next, { replace: true });
+  }, [loadingConvos, conversations, searchParams, setSearchParams, language]);
 
   // Real-time subscription for new messages
   useEffect(() => {
@@ -316,6 +360,7 @@ export default function Messages() {
   // Load messages when conversation selected
   useEffect(() => {
     if (!selectedConvo) { setMessages([]); return; }
+    if (selectedConvo.id.startsWith('pending-')) { setMessages([]); return; }
     let cancelled = false;
 
     const load = async () => {
@@ -359,7 +404,15 @@ export default function Messages() {
         client_name: selectedConvo.client_name || undefined,
       });
       setMessages((prev) => [...prev, msg]);
-      loadConversations();
+      // If this was a placeholder, swap to the real conversation now that it exists server-side
+      if (selectedConvo.id.startsWith('pending-')) {
+        const convos = await fetchConversations();
+        setConversations(convos);
+        const real = convos.find((c) => c.id === msg.conversation_id);
+        if (real) setSelectedConvo(real);
+      } else {
+        loadConversations();
+      }
     } catch (err: any) {
       toast.error(err?.message || (language === 'fr' ? 'Erreur d\'envoi' : 'Failed to send'));
       setNewMessage(text);

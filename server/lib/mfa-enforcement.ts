@@ -47,8 +47,12 @@ export function mfaEnforcementMiddleware() {
     // Only check POST/PUT/DELETE (state-changing operations)
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
 
-    // Check if this route requires MFA
-    const requiresMfa = MFA_REQUIRED_PREFIXES.some(prefix => req.path.startsWith(prefix));
+    // Check if this route requires MFA.
+    // Match exact path or "<prefix>/<sub>" so that e.g. '/api/billing/cancel-scheduled-change'
+    // does NOT match the '/api/billing/cancel' prefix.
+    const requiresMfa = MFA_REQUIRED_PREFIXES.some(prefix => {
+      return req.path === prefix || req.path.startsWith(prefix + '/');
+    });
     if (!requiresMfa) return next();
 
     // Get auth context

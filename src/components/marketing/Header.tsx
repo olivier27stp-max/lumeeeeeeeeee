@@ -116,6 +116,7 @@ export default function Header() {
         <div className="hidden lg:flex items-center gap-1 ml-8">
           <NavDropdown label="Features" active={megaMenu === 'features'} onClick={() => toggleMega('features')} />
           <NavLink to="/industries" label="Industries" />
+          <NavLink to="/pricing" label="Pricing" />
           <NavLink to="/contact" label="Contact" />
         </div>
 
@@ -205,6 +206,7 @@ export default function Header() {
             <div className="px-6 py-4 space-y-1">
               <MobileLink to="/features" label="Features" />
               <MobileLink to="/industries" label="Industries" />
+              <MobileLink to="/pricing" label="Pricing" />
               <MobileLink to="/contact" label="Contact" />
               <div className="pt-4 space-y-2">
                 <Link

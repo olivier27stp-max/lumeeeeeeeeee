@@ -16,6 +16,8 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchQuoteKpis, listAllQuotes, type Quote } from '../lib/quotesApi';
 import { listClients } from '../lib/clientsApi';
 import { getJobsKpis, type JobsKpis } from '../lib/jobsApi';
+import { supabase } from '../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 
 function getQuoteName(q: any): string {
   const c = q.clients;
@@ -63,8 +65,30 @@ export default function CrmWorkspace() {
     { label: fr ? 'Devis' : 'Quotes', count: quoteCount, pct: Math.round((quoteCount / pipelineDenominator) * 100), color: '#d1d5db' },
   ];
 
-  // Target progress (percentage of clients who have at least one quote)
-  const targetPct = quoteCount > 0 && clientCount > 0 ? Math.min(Math.round((quoteCount / clientCount) * 100), 100) : 0;
+  // Revenue goal — pulled from company_settings.revenue_goal_cents
+  const { data: revenueGoal } = useQuery({
+    queryKey: ['crm-revenue-goal'],
+    queryFn: async () => {
+      const orgId = await getCurrentOrgIdOrThrow();
+      const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString();
+      const yearEnd = new Date(new Date().getFullYear(), 11, 31, 23, 59, 59).toISOString();
+
+      const [settingsRes, invoicesRes] = await Promise.all([
+        supabase.from('company_settings').select('revenue_goal_cents').eq('org_id', orgId).maybeSingle(),
+        supabase.from('invoices')
+          .select('total_cents')
+          .eq('org_id', orgId).is('deleted_at', null).eq('status', 'paid')
+          .gte('paid_at', yearStart).lte('paid_at', yearEnd),
+      ]);
+      const targetCents = Number(settingsRes.data?.revenue_goal_cents) || 0;
+      const currentCents = (invoicesRes.data || []).reduce((s: number, r: any) => s + Number(r.total_cents || 0), 0);
+      return { targetCents, currentCents };
+    },
+    staleTime: 60_000,
+  });
+  const goalTarget = revenueGoal?.targetCents ?? 0;
+  const goalCurrent = revenueGoal?.currentCents ?? 0;
+  const targetPct = goalTarget > 0 ? Math.min(Math.round((goalCurrent / goalTarget) * 100), 100) : 0;
 
   if (loading) {
     return (
@@ -122,11 +146,11 @@ export default function CrmWorkspace() {
             <span className="absolute inset-0 flex items-center justify-center text-[13px] font-bold text-text-primary">{targetPct}%</span>
           </div>
           <div className="min-w-0">
-            <p className="text-[14px] font-semibold text-text-primary leading-tight">{fr ? 'Objectif en cours' : 'Your target is incomplete'}</p>
+            <p className="text-[14px] font-semibold text-text-primary leading-tight">{fr ? 'Objectif de revenus' : 'Revenue Goal'}</p>
             <p className="text-[12px] text-text-secondary mt-1 leading-snug">
-              {fr
-                ? `${targetPct}% de votre objectif atteint.`
-                : `You have completed ${targetPct}% of the given target, you can also check your status.`}
+              {goalTarget > 0
+                ? `${formatCurrency(goalCurrent / 100)} / ${formatCurrency(goalTarget / 100)}`
+                : (fr ? 'Définissez votre objectif dans Paramètres → Entreprise.' : 'Set your goal in Settings → Company.')}
             </p>
           </div>
         </div>
@@ -185,7 +209,26 @@ export default function CrmWorkspace() {
         <div className="bg-surface-card border border-border rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
             <h3 className="text-[15px] font-semibold text-text-primary">{fr ? 'Sources de leads' : 'Leads by Source'}</h3>
-            <button className="inline-flex items-center gap-1.5 h-7 px-2.5 bg-surface-card border border-border rounded-md text-[11px] text-text-secondary font-medium hover:bg-surface-secondary transition-colors">
+            <button
+              onClick={() => {
+                const rows = [
+                  ['Source', 'Count', 'Percent'],
+                  ...pipelineSegments.map((s) => [s.label, String(s.count), `${s.pct}%`]),
+                  ['Total', String(pipelineTotal), '100%'],
+                ];
+                const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+                const blob = new Blob(["﻿" + csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `leads-by-source-${new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 bg-surface-card border border-border rounded-md text-[11px] text-text-secondary font-medium hover:bg-surface-secondary transition-colors"
+            >
               <Download size={12} /> Export
             </button>
           </div>

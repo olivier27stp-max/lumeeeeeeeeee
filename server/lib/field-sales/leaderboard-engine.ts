@@ -1,9 +1,10 @@
 /**
  * Leaderboard & Performance Engine
  *
- * Reads from fs_rep_stat_snapshots for historical data and computes
- * real-time stats from field_house_events for the current day.
- * Adapted from Clostra's leaderboard service for Lume's org_id model.
+ * Source of truth: pipeline_deals (closed_won) for closes + revenue,
+ * with leads/quotes used to compute the upstream funnel. Field-house
+ * events are still aggregated for door-to-door specific metrics
+ * (doors knocked, conversations) when available.
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
@@ -14,21 +15,22 @@ type PeriodType = 'daily' | 'weekly' | 'monthly';
 function periodRange(period: PeriodType, date: Date = new Date()) {
   switch (period) {
     case 'daily':
-      return {
-        start: format(startOfDay(date), 'yyyy-MM-dd'),
-        end: format(endOfDay(date), 'yyyy-MM-dd'),
-      };
+      return { start: startOfDay(date).toISOString(), end: endOfDay(date).toISOString() };
     case 'weekly':
-      return {
-        start: format(startOfWeek(date, { weekStartsOn: 1 }), 'yyyy-MM-dd'),
-        end: format(endOfWeek(date, { weekStartsOn: 1 }), 'yyyy-MM-dd'),
-      };
+      return { start: startOfWeek(date, { weekStartsOn: 1 }).toISOString(), end: endOfWeek(date, { weekStartsOn: 1 }).toISOString() };
     case 'monthly':
-      return {
-        start: format(startOfMonth(date), 'yyyy-MM-dd'),
-        end: format(endOfMonth(date), 'yyyy-MM-dd'),
-      };
+      return { start: startOfMonth(date).toISOString(), end: endOfMonth(date).toISOString() };
   }
+}
+
+function repIdOf(deal: any): string | null {
+  return deal.rep_id || deal.created_by || null;
+}
+
+function dealValue(deal: any): number {
+  if (deal.value != null) return Number(deal.value);
+  if (deal.value_cents != null) return Number(deal.value_cents) / 100;
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -44,88 +46,109 @@ export async function getLeaderboard(
 ) {
   const range = periodRange(period, date);
 
-  let query = supabase
-    .from('fs_rep_stat_snapshots')
-    .select('*')
+  // Current period: closed_won deals
+  const { data: wonDeals, error } = await supabase
+    .from('pipeline_deals')
+    .select('id, rep_id, created_by, value, value_cents, won_at, stage')
     .eq('org_id', orgId)
-    .eq('period', period)
-    .gte('period_start', range.start)
-    .lte('period_start', range.end)
-    .order('revenue', { ascending: false });
-
-  const { data, error } = await query;
+    .eq('stage', 'closed_won')
+    .is('deleted_at', null)
+    .gte('won_at', range.start)
+    .lte('won_at', range.end);
   if (error) throw new Error(error.message);
 
-  // Enrich with member info
-  const userIds = (data ?? []).map((r) => r.user_id);
-  if (userIds.length === 0) return [];
+  // Aggregate per rep
+  const byRep = new Map<string, { closes: number; revenue: number }>();
+  for (const d of wonDeals ?? []) {
+    const rid = repIdOf(d);
+    if (!rid) continue;
+    const cur = byRep.get(rid) || { closes: 0, revenue: 0 };
+    cur.closes += 1;
+    cur.revenue += dealValue(d);
+    byRep.set(rid, cur);
+  }
 
-  // Previous period range for trend calculation
+  if (byRep.size === 0) return [];
+
+  // Previous period for trend
   const prevDate = new Date(date || new Date());
   if (period === 'daily') prevDate.setDate(prevDate.getDate() - 1);
   else if (period === 'weekly') prevDate.setDate(prevDate.getDate() - 7);
   else prevDate.setMonth(prevDate.getMonth() - 1);
   const prevRange = periodRange(period, prevDate);
 
-  // Fetch members and previous period data in parallel
-  const [membersRes, prevRes] = await Promise.all([
+  const userIds = Array.from(byRep.keys());
+
+  const [membersRes, prevWonRes, leadsRes] = await Promise.all([
     supabase
       .from('memberships')
-      .select('user_id, full_name, avatar_url, role, team_name')
+      .select('user_id, full_name, avatar_url, role, team_name, team_id')
       .eq('org_id', orgId)
       .in('user_id', userIds),
     supabase
-      .from('fs_rep_stat_snapshots')
-      .select('user_id, revenue')
+      .from('pipeline_deals')
+      .select('rep_id, created_by, value, value_cents')
       .eq('org_id', orgId)
-      .eq('period', period)
-      .gte('period_start', prevRange.start)
-      .lte('period_start', prevRange.end),
+      .eq('stage', 'closed_won')
+      .is('deleted_at', null)
+      .gte('won_at', prevRange.start)
+      .lte('won_at', prevRange.end),
+    // doors_knocked / conversion baseline: count leads created in the period per rep
+    supabase
+      .from('leads')
+      .select('assigned_to, user_id, created_by')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .gte('created_at', range.start)
+      .lte('created_at', range.end),
   ]);
 
-  const members = membersRes.data;
-  const prevData = prevRes.data;
-
-  const memberMap = new Map(
-    (members ?? []).map((m) => [m.user_id, m])
-  );
+  const memberMap = new Map((membersRes.data ?? []).map((m: any) => [m.user_id, m]));
 
   const prevRevenueMap = new Map<string, number>();
-  for (const row of prevData ?? []) {
-    prevRevenueMap.set(row.user_id, (prevRevenueMap.get(row.user_id) || 0) + Number(row.revenue));
+  for (const d of prevWonRes.data ?? []) {
+    const rid = repIdOf(d);
+    if (!rid) continue;
+    prevRevenueMap.set(rid, (prevRevenueMap.get(rid) || 0) + dealValue(d));
   }
 
-  let entries = (data ?? []).map((row, index) => {
-    const member = memberMap.get(row.user_id);
-    const prevRevenue = prevRevenueMap.get(row.user_id) || 0;
+  const leadsByRep = new Map<string, number>();
+  for (const l of leadsRes.data ?? []) {
+    const rid = (l as any).assigned_to || (l as any).user_id || (l as any).created_by;
+    if (!rid) continue;
+    leadsByRep.set(rid, (leadsByRep.get(rid) || 0) + 1);
+  }
+
+  let entries = userIds.map((uid) => {
+    const m: any = memberMap.get(uid) || {};
+    const stats = byRep.get(uid)!;
+    const prevRevenue = prevRevenueMap.get(uid) || 0;
     const trend = prevRevenue > 0
-      ? Math.round(((Number(row.revenue) - prevRevenue) / prevRevenue) * 100)
-      : Number(row.revenue) > 0 ? 100 : 0;
+      ? Math.round(((stats.revenue - prevRevenue) / prevRevenue) * 100)
+      : stats.revenue > 0 ? 100 : 0;
+    const leads = leadsByRep.get(uid) || 0;
+    const conversion_rate = leads > 0 ? Math.round((stats.closes / leads) * 100 * 10) / 10 : 0;
     return {
-      rank: index + 1,
-      user_id: row.user_id,
-      full_name: member?.full_name || 'Unknown',
-      avatar_url: member?.avatar_url || null,
-      team_name: member?.team_name || null,
-      closes: row.closes,
-      revenue: row.revenue,
-      doors_knocked: row.doors_knocked,
-      conversion_rate: row.conversion_rate,
+      rank: 0,
+      user_id: uid,
+      full_name: m.full_name || 'Unknown',
+      avatar_url: m.avatar_url || null,
+      team_name: m.team_name || null,
+      team_id: m.team_id || null,
+      closes: stats.closes,
+      revenue: stats.revenue,
+      doors_knocked: leads,
+      conversion_rate,
       trend,
     };
   });
 
-  // Filter by team if specified
+  entries.sort((a, b) => b.revenue - a.revenue);
+
   if (teamId) {
-    const { data: teamMembers } = await supabase
-      .from('memberships')
-      .select('user_id')
-      .eq('org_id', orgId)
-      .eq('team_id', teamId);
-    const teamUserIds = new Set((teamMembers ?? []).map((m) => m.user_id));
-    entries = entries.filter((e) => teamUserIds.has(e.user_id));
-    entries.forEach((e, i) => { e.rank = i + 1; });
+    entries = entries.filter((e) => e.team_id === teamId);
   }
+  entries.forEach((e, i) => { e.rank = i + 1; });
 
   return entries;
 }
@@ -140,43 +163,67 @@ export async function getRepPerformance(
   userId: string,
   dateRange: { from: string; to: string }
 ) {
-  const { data, error } = await supabase
-    .from('fs_rep_stat_snapshots')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('user_id', userId)
-    .gte('period_start', dateRange.from)
-    .lte('period_end', dateRange.to);
+  const fromIso = new Date(dateRange.from).toISOString();
+  const toIso = endOfDay(new Date(dateRange.to)).toISOString();
 
-  if (error) throw new Error(error.message);
+  const [leadsRes, quotesRes, dealsRes, jobsRes] = await Promise.all([
+    supabase
+      .from('leads')
+      .select('id, status, created_at, assigned_to, user_id, created_by')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso),
+    supabase
+      .from('quotes')
+      .select('id, status, salesperson_id, created_by, sent_via_email_at, sent_via_sms_at, created_at, total_cents')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso),
+    supabase
+      .from('pipeline_deals')
+      .select('id, stage, rep_id, created_by, value, value_cents, won_at, created_at')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso),
+    supabase
+      .from('jobs')
+      .select('id, status, salesperson_id, created_by, completed_at, total_cents')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .gte('completed_at', fromIso)
+      .lte('completed_at', toIso),
+  ]);
+
+  const matchLead = (l: any) => (l.assigned_to || l.user_id || l.created_by) === userId;
+  const matchQuote = (q: any) => (q.salesperson_id || q.created_by) === userId;
+  const matchDeal = (d: any) => repIdOf(d) === userId;
+  const matchJob = (j: any) => (j.salesperson_id || j.created_by) === userId;
+
+  const myLeads = (leadsRes.data ?? []).filter(matchLead);
+  const myQuotes = (quotesRes.data ?? []).filter(matchQuote);
+  const myDeals = (dealsRes.data ?? []).filter(matchDeal);
+  const myWonDeals = myDeals.filter((d: any) => d.stage === 'closed_won' && d.won_at && d.won_at >= fromIso && d.won_at <= toIso);
+  const myJobs = (jobsRes.data ?? []).filter(matchJob);
 
   const agg = {
-    doors_knocked: 0,
-    conversations: 0,
-    demos_set: 0,
-    demos_held: 0,
-    quotes_sent: 0,
-    closes: 0,
-    revenue: 0,
+    doors_knocked: myLeads.length,
+    conversations: myLeads.filter((l: any) => l.status && l.status !== 'new').length,
+    demos_set: myDeals.length,
+    demos_held: myDeals.filter((d: any) => d.stage !== 'new_prospect').length,
+    quotes_sent: myQuotes.filter((q: any) => q.sent_via_email_at || q.sent_via_sms_at || ['sent', 'awaiting_response', 'approved', 'declined', 'converted'].includes(q.status)).length,
+    closes: myWonDeals.length,
+    revenue: myWonDeals.reduce((s: number, d: any) => s + dealValue(d), 0),
     conversion_rate: 0,
     average_ticket: 0,
-    follow_ups_completed: 0,
+    follow_ups_completed: myJobs.filter((j: any) => j.status === 'completed').length,
   };
 
-  for (const row of data ?? []) {
-    agg.doors_knocked += row.doors_knocked;
-    agg.conversations += row.conversations;
-    agg.demos_set += row.demos_set;
-    agg.demos_held += row.demos_held;
-    agg.quotes_sent += row.quotes_sent;
-    agg.closes += row.closes;
-    agg.revenue += Number(row.revenue);
-    agg.follow_ups_completed += row.follow_ups_completed;
-  }
-
   agg.conversion_rate =
-    agg.conversations > 0
-      ? Math.round((agg.closes / agg.conversations) * 100 * 10) / 10
+    agg.doors_knocked > 0
+      ? Math.round((agg.closes / agg.doors_knocked) * 100 * 10) / 10
       : 0;
   agg.average_ticket =
     agg.closes > 0 ? Math.round(agg.revenue / agg.closes) : 0;
@@ -194,75 +241,9 @@ export async function calculateRepStats(
   userId: string,
   date: Date = new Date()
 ) {
-  const dayStart = startOfDay(date).toISOString();
-  const dayEnd = endOfDay(date).toISOString();
-
-  const { data: events, error } = await supabase
-    .from('field_house_events')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('user_id', userId)
-    .gte('created_at', dayStart)
-    .lte('created_at', dayEnd);
-
-  if (error) throw new Error(error.message);
-
-  const stats = {
-    doors_knocked: 0,
-    conversations: 0,
-    demos_set: 0,
-    demos_held: 0,
-    quotes_sent: 0,
-    closes: 0,
-    revenue: 0,
-    conversion_rate: 0,
-    average_ticket: 0,
-    follow_ups_completed: 0,
-  };
-
-  for (const event of events ?? []) {
-    const type = event.event_type || event.status;
-    switch (type) {
-      case 'knock':
-      case 'door_knock':
-        stats.doors_knocked++;
-        break;
-      case 'conversation':
-      case 'contact':
-        stats.conversations++;
-        break;
-      case 'demo_set':
-      case 'callback':
-        stats.demos_set++;
-        break;
-      case 'demo_held':
-        stats.demos_held++;
-        break;
-      case 'quote_sent':
-        stats.quotes_sent++;
-        break;
-      case 'follow_up':
-        stats.follow_ups_completed++;
-        break;
-      case 'lead':
-      case 'sale':
-      case 'closed_won': {
-        stats.closes++;
-        const rev = event.metadata?.revenue ?? event.metadata?.value ?? 0;
-        if (typeof rev === 'number') stats.revenue += rev;
-        break;
-      }
-    }
-  }
-
-  stats.conversion_rate =
-    stats.conversations > 0
-      ? Math.round((stats.closes / stats.conversations) * 100 * 10) / 10
-      : 0;
-  stats.average_ticket =
-    stats.closes > 0 ? Math.round(stats.revenue / stats.closes) : 0;
-
-  return stats;
+  const dayStart = startOfDay(date).toISOString().slice(0, 10);
+  const dayEnd = endOfDay(date).toISOString().slice(0, 10);
+  return getRepPerformance(supabase, orgId, userId, { from: dayStart, to: dayEnd });
 }
 
 // ---------------------------------------------------------------------------

@@ -95,7 +95,37 @@ export default function Auth({ onBack }: AuthProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-[#F8F9FA]">
+    <div className="min-h-screen flex bg-[#F8F9FA]">
+      {/* Left visual panel — hidden on small screens */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
+        <img
+          src="https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1400&q=80"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-tr from-black/80 via-black/50 to-black/30" />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="relative z-10 flex flex-col justify-end p-14 text-white"
+        >
+          <h2 className="text-4xl font-light leading-tight">
+            {t.auth.welcomeBack}
+          </h2>
+          <p className="mt-4 text-lg font-light text-white/80 max-w-md">
+            Gérez vos clients, devis, jobs et paiements — tout au même endroit.
+            Bienvenue dans votre espace de travail Lume.
+          </p>
+          <div className="mt-8 flex items-center gap-3 text-sm text-white/60">
+            <span className="h-px w-12 bg-white/40" />
+            Le système d'exploitation de votre entreprise
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Right form panel */}
+      <div className="flex-1 flex items-center justify-center p-6">
       <div className="w-full max-w-md">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -251,6 +281,7 @@ export default function Auth({ onBack }: AuthProps) {
             </div>
           </div>
         </motion.div>
+      </div>
       </div>
     </div>
   );

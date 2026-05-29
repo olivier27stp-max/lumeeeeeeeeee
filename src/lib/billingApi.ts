@@ -26,6 +26,14 @@ export interface Plan {
   max_jobs_per_month: number | null;
   is_active: boolean;
   sort_order: number;
+  seats_included?: number | null;
+  extra_seat_price_usd?: number | null;
+  extra_seat_price_cad?: number | null;
+  includes_sms?: boolean;
+  includes_ai?: boolean;
+  includes_d2d?: boolean;
+  includes_courses?: boolean;
+  includes_api?: boolean;
 }
 
 export interface BillingProfile {
@@ -59,6 +67,9 @@ export interface Subscription {
   referral_code: string | null;
   created_at: string;
   plans?: Plan;
+  scheduled_plan_id?: string | null;
+  scheduled_interval?: 'monthly' | 'yearly' | null;
+  scheduled_at?: string | null;
 }
 
 export interface OnboardingData {
@@ -134,6 +145,63 @@ export async function cancelSubscription(): Promise<void> {
     headers: await authHeaders(),
   });
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to cancel subscription.');
+}
+
+export async function changePlan(input: { plan_slug: string; interval: 'monthly' | 'yearly' }): Promise<{
+  message: string;
+  no_change?: boolean;
+  no_stripe?: boolean;
+  plan?: { slug: string; name: string; interval: string; amount_cents: number };
+}> {
+  const res = await fetch(`${API_BASE}/billing/change-plan`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to change plan.');
+  return res.json();
+}
+
+export interface SeatUsage {
+  included: number;
+  used: number;
+  extras_charged: number;
+  extra_price_cents: number;
+  currency: string;
+}
+
+export async function fetchSeatUsage(): Promise<SeatUsage> {
+  const res = await fetch(`${API_BASE}/billing/seats`, { headers: await authHeaders() });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to load seat usage.');
+  return res.json();
+}
+
+export async function setExtraSeats(count: number): Promise<{ message: string; extra_seats?: number; no_change?: boolean; no_stripe?: boolean }> {
+  const res = await fetch(`${API_BASE}/billing/seats`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ extra_seats: count }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to update extra seats.');
+  return res.json();
+}
+
+export async function cancelScheduledChange(): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE}/billing/cancel-scheduled-change`, {
+    method: 'POST',
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to cancel scheduled change.');
+  return res.json();
+}
+
+export async function openCustomerPortal(): Promise<{ url: string }> {
+  const res = await fetch(`${API_BASE}/billing/customer-portal`, {
+    method: 'POST',
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to open billing portal.');
+  return res.json();
 }
 
 export async function validatePromoCode(code: string): Promise<{

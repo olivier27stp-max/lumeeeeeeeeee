@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, Plus, Users, Contact, Briefcase, FileText, ClipboardList,
   Calendar, Settings, MessageSquare, ArrowRight,
-  CreditCard, TrendingUp, StickyNote, Zap, Receipt, UsersRound, CalendarDays,
+  CreditCard, TrendingUp, Zap, Receipt, UsersRound, CalendarDays,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
@@ -94,7 +94,6 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
       ...(canSeePayments ? [{ id: 'nav-payments', label: t.commandPalette.payments, icon: CreditCard, action: () => navigate('/payments'), section: t.commandPalette.navigation }] : []),
       { id: 'nav-messages', label: 'Messages', icon: MessageSquare, action: () => navigate('/messages'), section: t.commandPalette.navigation, keywords: 'sms text' },
       ...(canSeeAnalytics ? [{ id: 'nav-insights', label: 'Insights', icon: TrendingUp, action: () => navigate('/insights'), section: t.commandPalette.navigation, keywords: 'analytics stats' }] : []),
-      { id: 'nav-notes', label: 'Notes', icon: StickyNote, action: () => navigate('/notes'), section: t.commandPalette.navigation, keywords: 'boards whiteboard' },
       { id: 'nav-automations', label: 'Automations', icon: Zap, action: () => navigate('/automations'), section: t.commandPalette.navigation, keywords: 'automations workflows' },
       { id: 'nav-settings', label: t.commandPalette.settings, icon: Settings, action: () => navigate('/settings'), section: t.commandPalette.navigation },
     ];

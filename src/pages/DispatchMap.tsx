@@ -113,6 +113,9 @@ export default function DispatchMap() {
   // NEW: Browser tracking live locations
   const [liveLocations, setLiveLocations] = useState<LiveLocation[]>([]);
 
+  // NEW: Punched-in employee IDs (active time_entries today)
+  const [punchedIds, setPunchedIds] = useState<Set<string>>(new Set());
+
   // NEW: Job pins
   const [jobPins, setJobPins] = useState<MapJobPin[]>([]);
   const [selectedJobPin, setSelectedJobPin] = useState<MapJobPin | null>(null);
@@ -138,6 +141,17 @@ export default function DispatchMap() {
       setProvider(prov);
       setLiveLocations(liveLocs);
       setJobPins(jobResult.pins);
+
+      // Load punched-in employees for today
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const { data: entries } = await supabase
+          .from('time_entries')
+          .select('employee_id')
+          .eq('date', today)
+          .is('punch_out', null);
+        setPunchedIds(new Set((entries || []).map((e: any) => e.employee_id)));
+      } catch { /* non-blocking */ }
 
       // If URL has jobId, auto-select that pin
       if (urlJobId && jobResult.pins.length > 0) {
@@ -452,7 +466,9 @@ export default function DispatchMap() {
           <div className="px-3 py-2.5 border-b border-outline flex items-center gap-1.5">
             <Users size={13} className="text-text-tertiary" />
             <span className="text-[12px] font-semibold text-text-primary">Team</span>
-            <span className="ml-auto text-[11px] text-text-tertiary">{locations.length}</span>
+            <span className="ml-auto text-[11px] text-text-tertiary">
+              {punchedIds.size} / {locations.length + liveLocations.length} punched
+            </span>
           </div>
           {locations.length === 0 ? (
             <p className="text-[11px] text-text-tertiary text-center py-4 px-3">
@@ -476,10 +492,22 @@ export default function DispatchMap() {
                     {getInitials(loc.user_name)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-medium text-text-primary truncate">
-                      {loc.user_name || 'Unknown'}
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[12px] font-medium text-text-primary truncate">
+                        {loc.user_name || 'Unknown'}
+                      </p>
+                      <span
+                        className={cn(
+                          'w-1.5 h-1.5 rounded-full shrink-0',
+                          punchedIds.has(loc.user_id) ? 'bg-emerald-500' : 'bg-gray-300'
+                        )}
+                        title={punchedIds.has(loc.user_id) ? 'Punched in' : 'Not punched'}
+                      />
+                    </div>
+                    <p className="text-[10px] text-text-tertiary">
+                      {punchedIds.has(loc.user_id) ? 'On the clock · ' : 'Off clock · '}
+                      {formatAge(loc.recorded_at)}
                     </p>
-                    <p className="text-[10px] text-text-tertiary">{formatAge(loc.recorded_at)}</p>
                   </div>
                   {loc.battery_pct != null && (
                     <span className={cn(

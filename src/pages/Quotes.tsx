@@ -200,6 +200,17 @@ export default function Quotes() {
   const toggleAll = () => { allSel ? setSel(new Set()) : setSel(new Set(sorted.map(r => r.id))); };
   const toggle = (id: string) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); setSel(n); };
 
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(null);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
 
   function Badge({ status }: { status: string }) {
     const s = status || 'draft';
@@ -314,10 +325,29 @@ export default function Quotes() {
                 <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] font-semibold text-text-primary tabular-nums truncate">{formatQuoteMoney(q.total_cents, q.currency)}</span></div>
                 <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}><Badge status={q.status} /></div>
                 <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-text-primary tabular-nums truncate">{formatDate(q.created_at)}</span></div>
-                <div className={`py-3 pr-4 flex items-center justify-center ${rowCls}`}>
-                  <button className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors" onClick={e => e.stopPropagation()}>
+                <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onClick={e => e.stopPropagation()}>
+                  <button
+                    className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
+                    onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === q.id ? null : q.id); }}
+                  >
                     {IconDots}
                   </button>
+                  {menuOpen === q.id && (
+                    <div ref={menuRef} className="absolute top-full right-2 mt-1 w-40 bg-surface-elevated border border-outline rounded-md shadow-dropdown z-50 py-1">
+                      <button
+                        onClick={() => { setMenuOpen(null); nav(`/quotes/${q.id}`); }}
+                        className="w-full text-left px-3 py-1.5 text-[13px] text-text-secondary hover:bg-surface-secondary transition-colors"
+                      >
+                        {fr ? 'Modifier' : 'Edit'}
+                      </button>
+                      <button
+                        onClick={() => { setMenuOpen(null); onDel(q.id); }}
+                        className="w-full text-left px-3 py-1.5 text-[13px] text-red-600 hover:bg-surface-secondary transition-colors"
+                      >
+                        {fr ? 'Supprimer' : 'Delete'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </React.Fragment>
             );

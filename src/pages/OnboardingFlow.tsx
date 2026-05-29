@@ -76,7 +76,11 @@ export default function OnboardingFlow() {
   // URL params
   const planParam = params.get('plan') || 'pro';
   const intervalParam = (params.get('interval') || 'monthly') as 'monthly' | 'yearly';
-  const refParam = params.get('ref') || '';
+  // Referral code may arrive in the URL, but the signup → email-confirm → login
+  // round-trip drops query params. Persist it so it survives to checkout.
+  const urlRef = params.get('ref') || '';
+  if (urlRef) { try { localStorage.setItem('lume_referral_code', urlRef); } catch { /* ignore */ } }
+  const refParam = urlRef || (() => { try { return localStorage.getItem('lume_referral_code') || ''; } catch { return ''; } })();
 
   // ─── Auth ───
   const [user, setUser] = useState<any>(null);
@@ -349,6 +353,7 @@ export default function OnboardingFlow() {
 
       // Success — clean up and redirect
       ['onb_step','onb_plan','onb_interval','onb_name','onb_email','onb_token','onb_uid'].forEach(k => sessionStorage.removeItem(k));
+      try { localStorage.removeItem('lume_referral_code'); } catch { /* ignore */ }
       alert(isFr ? 'Abonnement activé! Bienvenue sur Lume.' : 'Subscription activated! Welcome to Lume.');
       window.location.href = '/';
       return;

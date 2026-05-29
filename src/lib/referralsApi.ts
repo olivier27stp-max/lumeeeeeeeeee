@@ -34,7 +34,15 @@ export interface ReferralStats {
   total: number;
   converted: number;
   pending: number;
-  total_rewards_cents: number;
+  free_months_earned: number;
+}
+
+/** Thrown when the org is not on a paid plan and cannot generate a referral link. */
+export class ReferralRequiresPaidPlanError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ReferralRequiresPaidPlanError';
+  }
 }
 
 // ── API functions ────────────────────────────────────────────────
@@ -43,7 +51,13 @@ export async function fetchMyReferralCode(): Promise<{ code: string; referral_li
   const res = await fetch(`${API_BASE}/referrals/me`, {
     headers: await authHeaders(),
   });
-  if (!res.ok) throw new Error('Failed to get referral code.');
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 403 && data.error === 'referral_requires_paid_plan') {
+      throw new ReferralRequiresPaidPlanError(data.message || 'A paid plan is required to refer.');
+    }
+    throw new Error('Failed to get referral code.');
+  }
   return res.json();
 }
 

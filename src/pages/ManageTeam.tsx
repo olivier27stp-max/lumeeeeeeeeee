@@ -45,6 +45,8 @@ import {
 } from '../lib/invitationsApi';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgId } from '../lib/orgApi';
+import { fetchSeatUsage, fetchCurrentBilling, setExtraSeats } from '../lib/billingApi';
+import SeatChargeConfirmModal from '../components/SeatChargeConfirmModal';
 
 // ── Constants ────────────────────────────────────────────────────
 const ROLE_CONFIG: Record<MemberRole, { label_en: string; label_fr: string; icon: typeof Crown; color: string; badge: string }> = {
@@ -135,27 +137,95 @@ export default function ManageTeam() {
     return () => document.removeEventListener('click', handler);
   }, [openMenuId]);
 
+  // Pending invite captured while we ask the user to confirm an extra seat charge
+  const [pendingInvite, setPendingInvite] = useState<{
+    email: string;
+    role: MemberRole;
+    options?: { scope?: InviteScope; team_id?: string | null };
+  } | null>(null);
+  const [seatChargeData, setSeatChargeData] = useState<{
+    extraPriceCents: number;
+    interval: 'monthly' | 'yearly';
+    newExtras: number;
+  } | null>(null);
+  const [seatChargeBusy, setSeatChargeBusy] = useState(false);
+
+  const doSendInvite = async (
+    email: string,
+    role: MemberRole,
+    options?: { scope?: InviteScope; team_id?: string | null },
+  ) => {
+    const result = await sendInvitation(email, role, options);
+    toast.success(t.manageTeam.invitationSent);
+    setShowInviteModal(false);
+
+    if (result.invite_link) {
+      try {
+        await navigator.clipboard.writeText(result.invite_link);
+        toast.info(isFr ? 'Lien d\'invitation copié.' : 'Invite link copied to clipboard.');
+      } catch {}
+    }
+    await loadTeam();
+  };
+
   const handleInvite = async (
     email: string,
     role: MemberRole,
     options?: { scope?: InviteScope; team_id?: string | null },
   ) => {
     try {
-      const result = await sendInvitation(email, role, options);
-      toast.success(t.manageTeam.invitationSent);
-      setShowInviteModal(false);
-
-      // Copy invite link
-      if (result.invite_link) {
-        try {
-          await navigator.clipboard.writeText(result.invite_link);
-          toast.info(isFr ? 'Lien d\'invitation copié.' : 'Invite link copied to clipboard.');
-        } catch {}
+      // Check seat usage before sending
+      let usage;
+      try {
+        usage = await fetchSeatUsage();
+      } catch {
+        usage = null;
       }
 
-      await loadTeam();
+      if (usage && usage.included > 0) {
+        const wouldUse = usage.used + 1; // adding this invite as a future seat
+        const wouldOverflow = wouldUse > usage.included + usage.extras_charged;
+
+        if (wouldOverflow && usage.extra_price_cents > 0) {
+          // Fetch sub to learn the interval (monthly vs yearly)
+          let interval: 'monthly' | 'yearly' = 'monthly';
+          try {
+            const billing = await fetchCurrentBilling();
+            interval = (billing.subscription?.interval ?? 'monthly') as 'monthly' | 'yearly';
+          } catch {}
+
+          setPendingInvite({ email, role, options });
+          setSeatChargeData({
+            extraPriceCents: usage.extra_price_cents,
+            interval,
+            newExtras: 1,
+          });
+          return;
+        }
+      }
+
+      await doSendInvite(email, role, options);
     } catch (err: any) {
       toast.error(err.message);
+    }
+  };
+
+  // User confirmed they're OK paying for the extra seat — sync seat count, then send invite
+  const handleConfirmSeatCharge = async () => {
+    if (!pendingInvite || !seatChargeData) return;
+    setSeatChargeBusy(true);
+    try {
+      // Resolve target extras = current charged + 1
+      const fresh = await fetchSeatUsage();
+      const targetExtras = Math.max(0, (fresh.used + 1) - fresh.included);
+      await setExtraSeats(targetExtras);
+      await doSendInvite(pendingInvite.email, pendingInvite.role, pendingInvite.options);
+      setPendingInvite(null);
+      setSeatChargeData(null);
+    } catch (err: any) {
+      toast.error(err.message || (isFr ? 'Échec de la facturation' : 'Billing failed'));
+    } finally {
+      setSeatChargeBusy(false);
     }
   };
 
@@ -404,6 +474,20 @@ export default function ManageTeam() {
           onCancel={() => setShowInviteModal(false)}
         />
       </Modal>
+
+      {/* Seat charge confirmation modal — shown when invite exceeds plan seats */}
+      {pendingInvite && seatChargeData && (
+        <SeatChargeConfirmModal
+          open={true}
+          onClose={() => { setPendingInvite(null); setSeatChargeData(null); }}
+          onConfirm={handleConfirmSeatCharge}
+          email={pendingInvite.email}
+          newExtras={seatChargeData.newExtras}
+          extraPriceCents={seatChargeData.extraPriceCents}
+          interval={seatChargeData.interval}
+          busy={seatChargeBusy}
+        />
+      )}
 
       {/* Change Role Modal */}
       <Modal

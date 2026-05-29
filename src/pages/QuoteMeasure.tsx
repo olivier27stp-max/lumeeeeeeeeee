@@ -49,11 +49,25 @@ function useGMaps3D() {
     }
     const s = document.createElement('script');
     s.id = id; s.async = true; s.defer = true;
-    // Load alpha channel for 3D tiles support
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places,geometry&v=alpha`;
-    s.onload = () => {
-      const p = setInterval(() => { try { if (window.google?.maps) { setOk(true); clearInterval(p); } } catch {} }, 100);
+    // Load beta channel for 3D tiles support (alpha is restricted to dev environments)
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places,geometry,maps3d&v=beta`;
+    s.onload = async () => {
+      try {
+        const g = (window as any).google;
+        if (g?.maps?.importLibrary) {
+          await Promise.all([
+            g.maps.importLibrary('maps'),
+            g.maps.importLibrary('places'),
+            g.maps.importLibrary('geometry'),
+            g.maps.importLibrary('maps3d').catch((e: any) => console.warn('[gmaps] maps3d unavailable:', e)),
+          ]);
+        }
+        setOk(true);
+      } catch (e) {
+        console.error('[gmaps] failed to init libraries:', e);
+      }
     };
+    s.onerror = (e) => console.error('[gmaps] script load failed:', e);
     document.head.appendChild(s);
   }, [key]);
 
@@ -136,13 +150,34 @@ export default function QuoteMeasure() {
       map3dRef.current = map3d;
       setIs3dMode(true);
 
-      // Wait for element to be ready
+      // Wait for element to be ready (fallback to 2D after 5s)
+      let elapsed = 0;
       const check = setInterval(() => {
+        elapsed += 200;
         if (map3d.center !== undefined) {
           clearInterval(check);
           gcRef.current = new google.maps.Geocoder();
           setReady(true);
           if (addr && !savedCamera) { setSearch(addr); doGeocode3d(addr); }
+        } else if (elapsed >= 5000) {
+          clearInterval(check);
+          console.warn('[gmaps] 3D map failed to initialize, falling back to 2D');
+          try { mapDiv.current?.removeChild(map3d); } catch {}
+          map3dRef.current = null;
+          setIs3dMode(false);
+          if (!mapDiv.current) return;
+          const map = new google.maps.Map(mapDiv.current, {
+            center: { lat: 45.5017, lng: -73.5673 }, zoom: 19,
+            mapTypeId: 'hybrid', tilt: 45, heading: 0,
+            zoomControl: true, mapTypeControl: true,
+            mapTypeControlOptions: { position: google.maps.ControlPosition.TOP_RIGHT },
+            scaleControl: true, streetViewControl: false, fullscreenControl: false,
+            gestureHandling: 'greedy', rotateControl: true,
+          });
+          mapRef.current = map;
+          gcRef.current = new google.maps.Geocoder();
+          setReady(true);
+          if (addr && !savedCamera) { setSearch(addr); doGeocode(addr, map); }
         }
       }, 200);
       return () => clearInterval(check);

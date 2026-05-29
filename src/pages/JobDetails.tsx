@@ -416,10 +416,21 @@ export default function JobDetails() {
           {/* Action buttons */}
           <div className="flex items-center gap-2 print:hidden">
             <button
-              onClick={() => setShowSmsModal(true)}
+              onClick={() => {
+                if (!clientInfo?.phone) {
+                  toast.error(language === 'fr' ? 'Numéro de téléphone manquant pour ce client' : 'No phone number for this client');
+                  return;
+                }
+                const params = new URLSearchParams({
+                  ...(job.client_id ? { clientId: job.client_id } : {}),
+                  phone: clientInfo.phone,
+                  ...(job.client_name ? { name: job.client_name } : {}),
+                });
+                navigate(`/messages?${params.toString()}`);
+              }}
               className="glass-button-primary inline-flex items-center gap-1.5"
             >
-              <MessageSquare size={14} /> Text Confirmation
+              <MessageSquare size={14} /> {language === 'fr' ? 'Texter le client' : 'Text Client'}
             </button>
             <button onClick={handleEdit} className="glass-button inline-flex items-center gap-1.5">
               <Edit3 size={14} /> Edit

@@ -8,15 +8,19 @@ const PLANS = [
     name: 'Minimum',
     slug: 'starter',
     users: 'Includes 3 users',
+    extraUserPrice: '+$35/extra user/mo',
     originalPrice: 150,
     price: 105,
     desc: 'Perfect for small teams getting started and staying organized.',
     promoNote: 'For 3 months, then $150/mo',
     features: [
-      'CRM management',
+      'CRM dashboard',
+      'Client management + client portal',
       'Quotes & invoicing',
-      'Online payments',
-      'Customer management',
+      'Jobs & calendar',
+      'Online payments (Stripe & PayPal)',
+      'Tasks & leads pipeline',
+      'Email communications',
       'Mobile access',
       'Basic reporting',
     ],
@@ -27,6 +31,7 @@ const PLANS = [
     name: 'Scale',
     slug: 'pro',
     users: 'Includes 10 users',
+    extraUserPrice: '+$30/extra user/mo',
     originalPrice: 340,
     price: 240,
     badge: 'Most Popular',
@@ -34,12 +39,18 @@ const PLANS = [
     promoNote: 'For 3 months, then $340/mo',
     features: [
       'Everything in Minimum',
-      'Track employee timesheets',
-      'Automate quote and invoice follow-ups',
-      'Access quote templates',
-      'Two-way texting with customers',
+      'Two-way SMS texting with customers (dedicated number)',
+      'Automated quote & invoice follow-ups',
+      'Quote templates, presets & satellite measure tool',
+      'Employee timesheets',
       'Track employee performance',
-      'AI assistant',
+      'Recurring jobs, checklists & GPS tracking',
+      'Dispatch map & batch messaging',
+      'Internal team chat',
+      'Advanced analytics & insights',
+      'QuickBooks export',
+      'Marketplace integrations & webhooks',
+      'Custom request forms',
     ],
     cta: 'Start Now',
     featured: true,
@@ -48,14 +59,23 @@ const PLANS = [
     name: 'Autopilot',
     slug: 'autopilot',
     users: 'Includes 20 users',
+    extraUserPrice: '+$25/extra user/mo',
     originalPrice: 495,
     price: 360,
     desc: 'For high-performance teams that want full automation and control.',
     promoNote: 'For 3 months, then $495/mo',
     features: [
       'Everything in Scale',
+      'Lume AI Agent (voice + unlimited)',
+      'Door-to-door sales suite (map, pipeline, leaderboard, commissions)',
+      'Courses / LMS for team training',
+      'Multi-team management',
+      'Advanced roles & permissions',
+      'Full API access',
+      'Team availability management',
+      'Automated satisfaction surveys',
       'Premium support',
-      'Built for large teams',
+      'Dedicated onboarding specialist',
     ],
     cta: 'Start Now',
     featured: false,
@@ -157,7 +177,12 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
 
                 {/* Users + Plan name + description */}
                 {plan.users && (
-                  <p className="text-[11px] uppercase tracking-[0.15em] font-bold text-[#111] mb-1">{plan.users}</p>
+                  <p className="text-[11px] uppercase tracking-[0.15em] font-bold text-[#111] mb-1">
+                    {plan.users}
+                    {plan.extraUserPrice && (
+                      <span className="ml-1 font-medium normal-case tracking-normal text-text-secondary">· {plan.extraUserPrice}</span>
+                    )}
+                  </p>
                 )}
                 <p className="text-3xl font-extrabold text-[#111]">
                   {plan.name}
@@ -202,15 +227,21 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
                 {/* CTA */}
                 <div className="mt-8">
                   <button
-                    onClick={() => setDemoOpen(true)}
+                    onClick={() => window.location.assign(`/checkout?plan=${plan.slug}&interval=${annual ? 'yearly' : 'monthly'}`)}
                     className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
                       plan.featured
                         ? 'bg-[#1F5F4F] text-white hover:bg-[#174a3d]'
                         : 'bg-text-primary text-white hover:opacity-90'
                     }`}
                   >
-                    Book a demo
+                    {plan.cta}
                     <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                  </button>
+                  <button
+                    onClick={() => setDemoOpen(true)}
+                    className="mt-2 w-full text-[12px] text-text-tertiary hover:text-text-primary underline"
+                  >
+                    Or book a demo first
                   </button>
                 </div>
               </motion.div>

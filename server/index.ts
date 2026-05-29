@@ -40,6 +40,7 @@ import publicPayRouter from './routes/public-pay';
 import teamSuggestionsRouter from './routes/team-suggestions';
 import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
+import timesheetsRouter from './routes/timesheets';
 import requestFormsRouter from './routes/request-forms';
 import marketingRouter from './routes/marketing';
 // Removed: campaigns / booking / recurring-invoices / route-optimization /
@@ -57,6 +58,7 @@ import invitationsRouter from './routes/invitations';
 import rolePresetsRouter from './routes/role-presets';
 import billingRouter from './routes/billing';
 import referralsRouter from './routes/referrals';
+import supportRouter from './routes/support';
 import securityRouter from './routes/security';
 import coursesRouter from './routes/courses';
 import fieldSalesRouter from './routes/field-sales';
@@ -348,6 +350,7 @@ app.use('/api', surveysRouter);
 app.use('/api', teamSuggestionsRouter);
 app.use('/api', jobsRouter);
 app.use('/api', trackingRouter);
+app.use('/api', timesheetsRouter);
 const formSubmitLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — public form submissions
 app.use('/api/public/form', formSubmitLimiter);
 app.use('/api/public/book-demo', formSubmitLimiter);
@@ -360,6 +363,9 @@ app.use('/api', invitationsRouter);
 app.use('/api', rolePresetsRouter);
 app.use('/api', billingRouter);
 app.use('/api', referralsRouter);
+// In-app support: cap per IP so one tenant can't flood the support inbox.
+app.use('/api/support', rateLimit({ windowMs: 60_000, max: 5 }));
+app.use('/api', supportRouter);
 app.use('/api', coursesRouter);
 app.use('/api/field-sales', fieldSalesRouter);
 app.use('/api', leaderboardRouter);

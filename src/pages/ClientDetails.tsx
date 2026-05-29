@@ -571,9 +571,22 @@ export default function ClientDetails() {
                 </a>
               )}
               {client.phone && (
-                <a href={`sms:${client.phone}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title={t.clientDetails.sms}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const name = `${client.first_name || ''} ${client.last_name || ''}`.trim();
+                    const params = new URLSearchParams({
+                      clientId: client.id,
+                      phone: client.phone!,
+                      ...(name ? { name } : {}),
+                    });
+                    navigate(`/messages?${params.toString()}`);
+                  }}
+                  className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors"
+                  title={t.clientDetails.sms}
+                >
                   <Send size={14} /> {t.clientDetails.sms}
-                </a>
+                </button>
               )}
 
               <button

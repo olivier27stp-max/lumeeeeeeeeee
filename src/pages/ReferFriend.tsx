@@ -5,7 +5,6 @@ import {
   Check,
   Loader2,
   ArrowLeft,
-  DollarSign,
   Users,
   Clock,
   CheckCircle2,
@@ -19,6 +18,7 @@ import { toast } from 'sonner';
 import {
   fetchMyReferralCode,
   fetchReferralHistory,
+  ReferralRequiresPaidPlanError,
   type Referral,
   type ReferralStats,
 } from '../lib/referralsApi';
@@ -40,9 +40,10 @@ export default function ReferFriend() {
   const [code, setCode] = useState('');
   const [referralLink, setReferralLink] = useState('');
   const [referrals, setReferrals] = useState<Referral[]>([]);
-  const [stats, setStats] = useState<ReferralStats>({ total: 0, converted: 0, pending: 0, total_rewards_cents: 0 });
+  const [stats, setStats] = useState<ReferralStats>({ total: 0, converted: 0, pending: 0, free_months_earned: 0 });
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [needsPaidPlan, setNeedsPaidPlan] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -56,7 +57,11 @@ export default function ReferFriend() {
         setReferrals(historyData.referrals);
         setStats(historyData.stats);
       } catch (err: any) {
-        console.error('Failed to load referral data:', err.message);
+        if (err instanceof ReferralRequiresPaidPlanError) {
+          setNeedsPaidPlan(true);
+        } else {
+          console.error('Failed to load referral data:', err.message);
+        }
       } finally {
         setLoading(false);
       }
@@ -87,6 +92,38 @@ export default function ReferFriend() {
     );
   }
 
+  if (needsPaidPlan) {
+    return (
+      <div className="space-y-8">
+        <PageHeader
+          title={t.referFriend.referAFriend}
+          subtitle={isFr
+            ? 'Parrainez des entreprises et gagnez des mois gratuits.'
+            : 'Refer businesses and earn free months.'}
+          icon={Gift}
+          iconColor="blue"
+        />
+        <div className="section-card p-8 text-center max-w-lg mx-auto space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
+            <Gift size={22} className="text-primary" />
+          </div>
+          <h3 className="text-[16px] font-bold text-text-primary">
+            {isFr ? 'Passez à un plan payant pour parrainer' : 'Upgrade to a paid plan to refer'}
+          </h3>
+          <p className="text-[13px] text-text-tertiary leading-relaxed">
+            {isFr
+              ? 'Le programme de parrainage est réservé aux abonnés payants. Chaque entreprise que vous parrainez et qui s\'abonne vous fait gagner un mois gratuit.'
+              : 'The referral program is for paid subscribers. Every business you refer that subscribes earns you a free month.'}
+          </p>
+          <button className="glass-button-primary inline-flex items-center gap-2" onClick={() => navigate('/settings?tab=billing')}>
+            {isFr ? 'Voir les plans' : 'View plans'}
+            <ExternalLink size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -111,13 +148,13 @@ export default function ReferFriend() {
           <div className="flex items-center gap-2">
             <Gift size={20} />
             <h2 className="text-[18px] font-bold">
-              {t.referFriend.earn150UsdPerReferral}
+              {isFr ? 'Gagnez 1 mois gratuit par parrainage' : 'Earn 1 free month per referral'}
             </h2>
           </div>
           <p className="text-[13px] text-white/80 max-w-lg leading-relaxed">
             {isFr
-              ? 'Partagez votre code de parrainage avec d\'autres entreprises de service. Quand ils s\'abonnent, vous recevez une récompense prépayée de $150 USD.'
-              : 'Share your referral code with other service businesses. When they subscribe, you receive a $150 USD prepaid reward.'}
+              ? 'Partagez votre lien de parrainage avec d\'autres entreprises de service. Chaque fois qu\'une entreprise s\'abonne, votre prochain mois est gratuit — cumulable à l\'infini.'
+              : 'Share your referral link with other service businesses. Every time a business subscribes, your next month is free — stack as many as you want.'}
           </p>
         </div>
       </div>
@@ -128,7 +165,7 @@ export default function ReferFriend() {
           { icon: Users,         label: t.referFriend.totalReferred,   value: stats.total },
           { icon: Clock,         label: t.manageTeam.pending,             value: stats.pending },
           { icon: CheckCircle2,  label: t.referFriend.converted,            value: stats.converted },
-          { icon: DollarSign,    label: t.referFriend.totalRewards, value: `$${(stats.total_rewards_cents / 100).toFixed(0)} USD` },
+          { icon: Gift,          label: isFr ? 'Mois gratuits' : 'Free months', value: stats.free_months_earned },
         ].map((stat, i) => {
           const Icon = stat.icon;
           return (
@@ -207,8 +244,10 @@ export default function ReferFriend() {
             },
             {
               step: '3',
-              title: t.referFriend.youGetRewarded,
-              desc: t.referFriend.receive150UsdPrepaidRewardForEachConvers,
+              title: isFr ? 'Vous gagnez un mois' : 'You earn a month',
+              desc: isFr
+                ? 'Pour chaque entreprise parrainée qui s\'abonne, votre prochain mois est gratuit. Cumulable à l\'infini.'
+                : 'For every referred business that subscribes, your next month is free. Stack as many as you want.',
             },
           ].map((item) => (
             <div key={item.step} className="flex gap-3">
@@ -264,7 +303,7 @@ export default function ReferFriend() {
                       </td>
                       <td className="py-3 text-[12px] font-semibold">
                         {['subscribed', 'reward_pending', 'rewarded'].includes(ref.status) ? (
-                          <span className="text-success">${(ref.reward_amount_cents / 100).toFixed(0)} {ref.reward_currency}</span>
+                          <span className="text-success">{isFr ? '1 mois gratuit' : '1 free month'}</span>
                         ) : (
                           <span className="text-text-tertiary">-</span>
                         )}

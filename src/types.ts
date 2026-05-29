@@ -445,12 +445,41 @@ export interface FsBattle {
 
 // ── Commissions ──
 
+export interface CommissionProductOverride {
+  category: string; // matches line_item.category / service tag
+  base_kind: 'percent' | 'flat';
+  base_percent: number | null;   // 0–100
+  base_value_cents: number | null;
+}
+
+export interface CommissionPerformanceTier {
+  // Threshold compared to rep's cumulative period revenue (cents) OR sale count.
+  metric: 'revenue_cents' | 'sale_count';
+  threshold: number;
+  // Modifier applied above this threshold:
+  modifier_percent: number | null; // % added/subtracted to base rate (additive)
+  modifier_flat_cents: number | null; // flat bonus per sale above threshold
+}
+
+export interface CommissionBonus {
+  condition: 'min_sale_amount' | 'max_refund_days_passed' | 'paid_within_days';
+  value: number; // amount in cents OR days depending on condition
+  modifier_percent: number | null;
+  modifier_flat_cents: number | null;
+}
+
+export interface CommissionAttribution {
+  mode: 'solo' | 'split';
+  // For split mode, list of { user_id?, role?, pct }
+  splits?: Array<{ user_id?: string | null; role?: string | null; pct: number }>;
+}
+
 export interface FsCommissionRule {
   id: string;
   org_id: string;
   name: string;
   description: string | null;
-  type: CommissionRuleType;
+  type: CommissionRuleType; // legacy column kept for compatibility
   flat_amount: number | null;
   percentage: number | null;
   tiers: Array<{ min: number; max: number; rate: number }>;
@@ -458,9 +487,26 @@ export interface FsCommissionRule {
   applies_to_user_id: string | null;
   is_active: boolean;
   priority: number;
+  // New engine columns
+  base_kind: 'percent' | 'flat' | null;
+  base_percent: number | null;
+  base_value_cents: number | null;
+  product_overrides: CommissionProductOverride[];
+  performance_tiers: CommissionPerformanceTier[];
+  bonuses: CommissionBonus[];
+  attribution: CommissionAttribution;
+  assigned_user_ids: string[];
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+}
+
+export interface CommissionSettings {
+  org_id: string;
+  reversal_policy: 'auto' | 'keep' | 'alert';
+  default_rule_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface FsCommissionEntry {
@@ -470,6 +516,7 @@ export interface FsCommissionEntry {
   rule_id: string;
   lead_id: string | null;
   job_id: string | null;
+  invoice_id: string | null;
   status: CommissionEntryStatus;
   amount: number;
   base_amount: number;
@@ -477,6 +524,10 @@ export interface FsCommissionEntry {
   approved_by: string | null;
   approved_at: string | null;
   paid_at: string | null;
+  triggered_at: string;
+  auto_reversed: boolean;
+  reverse_reason: string | null;
+  calc_breakdown: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

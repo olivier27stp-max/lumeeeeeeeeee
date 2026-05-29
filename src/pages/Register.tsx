@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Check, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 export default function Register() {
   const { t } = useTranslation();
@@ -19,6 +19,7 @@ export default function Register() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [emailSent, setEmailSent] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   // Password strength checks
   const checks = useMemo(() => ({
@@ -60,6 +61,11 @@ export default function Register() {
 
     if (password !== confirmPassword) {
       setMessage({ type: 'error', text: t.register.passwordsDoNotMatch });
+      return;
+    }
+
+    if (!acceptedTerms) {
+      setMessage({ type: 'error', text: t.register.acceptTermsRequired });
       return;
     }
 
@@ -303,10 +309,41 @@ export default function Register() {
               </motion.div>
             )}
 
+            {/* Terms & Privacy consent */}
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-black focus:ring-1 focus:ring-black/40 cursor-pointer"
+              />
+              <span className="text-[11px] text-gray-500 font-light leading-snug">
+                {t.register.acceptPrefix}{' '}
+                <Link
+                  to="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-700 underline hover:text-black transition-colors"
+                >
+                  {t.register.termsLink}
+                </Link>{' '}
+                {t.register.acceptAnd}{' '}
+                <Link
+                  to="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-700 underline hover:text-black transition-colors"
+                >
+                  {t.register.privacyLink}
+                </Link>
+                {t.register.acceptSuffix}
+              </span>
+            </label>
+
             <button
               type="submit"
-              disabled={loading}
-              className="glass-button-primary w-full flex items-center justify-center gap-2 group"
+              disabled={loading || !acceptedTerms}
+              className="glass-button-primary w-full flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? t.auth.processing : t.register.createMyAccount}
               {!loading && <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />}

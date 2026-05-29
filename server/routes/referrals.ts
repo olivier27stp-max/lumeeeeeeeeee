@@ -17,6 +17,37 @@ router.get('/referrals/me', async (req, res) => {
 
     const admin = getServiceClient();
 
+    // Gate: only orgs on a paid plan can refer. We gate on the PLAN tier, not
+    // the subscription's amount_cents — comped/trial rows can have amount 0 but
+    // still be a real paid-tier plan. Any active sub on a non-starter plan
+    // (a plan whose own price is > 0) qualifies.
+    const { data: activeSub } = await admin
+      .from('subscriptions')
+      .select('id, plan_id')
+      .eq('org_id', auth.orgId)
+      .in('status', ['active', 'trialing'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let onPaidPlan = false;
+    if (activeSub?.plan_id) {
+      const { data: planRow } = await admin
+        .from('plans')
+        .select('slug, monthly_price_usd, monthly_price_cad')
+        .eq('id', activeSub.plan_id)
+        .maybeSingle();
+      onPaidPlan = !!planRow && planRow.slug !== 'starter' &&
+        ((planRow.monthly_price_usd || 0) > 0 || (planRow.monthly_price_cad || 0) > 0);
+    }
+
+    if (!onPaidPlan) {
+      return res.status(403).json({
+        error: 'referral_requires_paid_plan',
+        message: 'Upgrade to a paid plan to unlock your referral link and earn free months.',
+      });
+    }
+
     // Check if user already has a referral code
     const { data: existing } = await admin
       .from('referrals')
@@ -51,7 +82,7 @@ router.get('/referrals/me', async (req, res) => {
     }
 
     const baseUrl = getBaseUrl();
-    const referralLink = `${baseUrl}/signup?ref=${code}`;
+    const referralLink = `${baseUrl}/register?ref=${code}`;
 
     return res.json({ code, referral_link: referralLink });
   } catch (err: any) {
@@ -82,11 +113,11 @@ router.get('/referrals/history', async (req, res) => {
       return res.status(500).json({ error: 'Failed to load referral history.' });
     }
 
-    // Stats
+    // Stats. Reward = 1 free month per converted (rewarded) referral.
     const total = (referrals || []).length;
     const converted = (referrals || []).filter((r: any) => ['subscribed', 'reward_pending', 'rewarded'].includes(r.status)).length;
     const pending = (referrals || []).filter((r: any) => ['invited', 'signed_up'].includes(r.status)).length;
-    const totalRewards = converted * 15000; // $150 USD in cents
+    const freeMonths = (referrals || []).filter((r: any) => r.status === 'rewarded').length;
 
     return res.json({
       referrals: referrals || [],
@@ -94,7 +125,7 @@ router.get('/referrals/history', async (req, res) => {
         total,
         converted,
         pending,
-        total_rewards_cents: totalRewards,
+        free_months_earned: freeMonths,
       },
     });
   } catch (err: any) {

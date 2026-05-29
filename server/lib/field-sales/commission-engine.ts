@@ -1,97 +1,288 @@
 /**
- * Commission Engine
+ * Commission Engine v2
  *
- * Calculate, approve, reverse, and query commission entries.
- * Manages commission rules and payroll preview aggregation.
- * Adapted from Clostra for Lume's org_id multi-tenancy model.
+ * Trigger: invoice payment. Computes commission(s) per the rule assigned
+ * to the sales rep, applying base + product overrides + performance tiers
+ * + conditional bonuses + attribution splits.
+ *
+ * Inputs come from invoices.line_items + the sales rep on the source
+ * lead/quote. Stores `calc_breakdown` jsonb on the entry so the UI can
+ * explain how each dollar was computed.
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
 
 // ---------------------------------------------------------------------------
-// Calculate & Create
+// Core calculator — pure function, no DB
 // ---------------------------------------------------------------------------
 
-export async function calculateCommission(
-  supabase: SupabaseClient,
-  orgId: string,
-  leadId: string,
-  repUserId: string
-) {
-  // Get lead with value
-  const { data: lead, error: leadErr } = await supabase
-    .from('leads')
-    .select('*')
-    .eq('id', leadId)
-    .eq('org_id', orgId)
-    .single();
+export interface CalcInput {
+  invoiceTotalCents: number;
+  invoicePaidAt: string; // ISO
+  lineItems: Array<{ category?: string | null; total_cents: number }>;
+  // Rep's cumulative period stats up to (but not including) this invoice
+  repPeriodRevenueCents: number;
+  repPeriodSaleCount: number;
+}
 
-  if (leadErr) throw new Error(leadErr.message);
+export interface CalcResult {
+  amountCents: number;
+  baseAmountCents: number;
+  breakdown: {
+    base_kind: 'percent' | 'flat';
+    base_value: number;
+    base_amount_cents: number;
+    product_overrides_applied: Array<{ category: string; amount_cents: number }>;
+    tier_bonuses_cents: number;
+    conditional_bonuses_cents: number;
+  };
+}
 
-  const dealValue = lead.value ?? 0;
-  if (!dealValue) throw new Error('Lead has no value set.');
+export function calculateCommissionAmount(rule: any, input: CalcInput): CalcResult {
+  const lineItems = input.lineItems || [];
+  const total = input.invoiceTotalCents;
 
-  // Find applicable commission rule (user-specific first, then general)
-  const { data: rules, error: ruleErr } = await supabase
-    .from('fs_commission_rules')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('is_active', true)
-    .is('deleted_at', null)
-    .order('priority', { ascending: false });
+  // 1. Base
+  const baseKind: 'percent' | 'flat' = rule.base_kind || 'percent';
+  const basePct = Number(rule.base_percent ?? 0);
+  const baseFlat = Number(rule.base_value_cents ?? 0);
 
-  if (ruleErr) throw new Error(ruleErr.message);
-
-  // Find best matching rule: user-specific > role-specific > general
-  const rule = (rules ?? []).find(
-    (r) => r.applies_to_user_id === repUserId
-  ) || (rules ?? []).find(
-    (r) => !r.applies_to_user_id && !r.applies_to_role
-  ) || (rules ?? [])[0];
-
-  if (!rule) throw new Error('No applicable commission rule found.');
+  // Apply per-category overrides where defined, base rate elsewhere
+  const overrides: Array<{ category: string; base_kind: 'percent'|'flat'; base_percent: number|null; base_value_cents: number|null }> =
+    rule.product_overrides || [];
+  const overrideMap = new Map(overrides.map((o) => [o.category, o]));
 
   let amount = 0;
+  const productOverridesApplied: Array<{ category: string; amount_cents: number }> = [];
 
-  switch (rule.type) {
-    case 'flat':
-      amount = rule.flat_amount ?? 0;
-      break;
-    case 'percentage':
-      amount = dealValue * ((rule.percentage ?? 0) / 100);
-      break;
-    case 'tiered': {
-      const tiers = (rule.tiers ?? []) as Array<{
-        min: number;
-        max: number;
-        rate: number;
-      }>;
-      const tier = tiers.find(
-        (t) => dealValue >= t.min && dealValue <= t.max
-      );
-      if (tier) {
-        amount = dealValue * (tier.rate / 100);
-      }
-      break;
+  if (lineItems.length > 0 && (overrides.length > 0 || baseKind === 'percent')) {
+    // Item-by-item to allow per-category rates
+    for (const item of lineItems) {
+      const cat = item.category || '';
+      const ov = cat ? overrideMap.get(cat) : undefined;
+      let itemCommission = 0;
+      if (ov) {
+        itemCommission = ov.base_kind === 'flat'
+          ? Number(ov.base_value_cents ?? 0)
+          : Math.round(item.total_cents * (Number(ov.base_percent ?? 0) / 100));
+        productOverridesApplied.push({ category: cat, amount_cents: itemCommission });
+      } else if (baseKind === 'percent') {
+        itemCommission = Math.round(item.total_cents * (basePct / 100));
+      } // flat base handled below as single amount
+      amount += itemCommission;
     }
+    if (baseKind === 'flat' && overrides.length === 0) {
+      amount = baseFlat;
+    } else if (baseKind === 'flat') {
+      // For items without override → flat doesn't apply per-item; fall back to single flat
+      // (overrides already contributed). Add flat once for items without overrides.
+      const hasUncovered = lineItems.some((i) => !overrideMap.has(i.category || ''));
+      if (hasUncovered) amount += baseFlat;
+    }
+  } else {
+    // No items: base on invoice total
+    amount = baseKind === 'flat' ? baseFlat : Math.round(total * (basePct / 100));
   }
 
-  const { data: entry, error: entryErr } = await supabase
-    .from('fs_commission_entries')
-    .insert({
-      org_id: orgId,
-      user_id: repUserId,
-      rule_id: rule.id,
-      lead_id: leadId,
-      amount: Math.round(amount * 100) / 100,
-      base_amount: dealValue,
-      description: `Commission for lead ${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
-    })
-    .select()
-    .single();
+  const baseAmountCents = amount;
 
-  if (entryErr) throw new Error(entryErr.message);
-  return entry;
+  // 2. Performance tiers (additive modifiers on top of base)
+  let tierBonus = 0;
+  const tiers: Array<{ metric: 'revenue_cents'|'sale_count'; threshold: number; modifier_percent: number|null; modifier_flat_cents: number|null }> =
+    rule.performance_tiers || [];
+  for (const tier of tiers) {
+    const metricValue = tier.metric === 'sale_count'
+      ? input.repPeriodSaleCount + 1
+      : input.repPeriodRevenueCents + total;
+    if (metricValue >= tier.threshold) {
+      if (tier.modifier_percent) tierBonus += Math.round(total * (tier.modifier_percent / 100));
+      if (tier.modifier_flat_cents) tierBonus += tier.modifier_flat_cents;
+    }
+  }
+  amount += tierBonus;
+
+  // 3. Conditional bonuses
+  let condBonus = 0;
+  const bonuses: Array<{ condition: string; value: number; modifier_percent: number|null; modifier_flat_cents: number|null }> =
+    rule.bonuses || [];
+  for (const b of bonuses) {
+    let matched = false;
+    if (b.condition === 'min_sale_amount') matched = total >= b.value;
+    // max_refund_days_passed / paid_within_days require external timestamps — handled at trigger time
+    if (matched) {
+      if (b.modifier_percent) condBonus += Math.round(total * (b.modifier_percent / 100));
+      if (b.modifier_flat_cents) condBonus += b.modifier_flat_cents;
+    }
+  }
+  amount += condBonus;
+
+  return {
+    amountCents: Math.max(0, amount),
+    baseAmountCents,
+    breakdown: {
+      base_kind: baseKind,
+      base_value: baseKind === 'percent' ? basePct : baseFlat,
+      base_amount_cents: baseAmountCents,
+      product_overrides_applied: productOverridesApplied,
+      tier_bonuses_cents: tierBonus,
+      conditional_bonuses_cents: condBonus,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Trigger: invoice paid → create commission entries
+// ---------------------------------------------------------------------------
+
+export async function generateCommissionsForInvoice(
+  supabase: SupabaseClient,
+  orgId: string,
+  invoiceId: string
+): Promise<{ created: number; skipped: string | null }> {
+  // 1. Skip if already generated
+  const { data: existing } = await supabase
+    .from('fs_commission_entries')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('invoice_id', invoiceId)
+    .is('deleted_at', null)
+    .limit(1);
+  if (existing && existing.length > 0) return { created: 0, skipped: 'already_generated' };
+
+  // 2. Load invoice + line items
+  const { data: invoice, error: invErr } = await supabase
+    .from('invoices')
+    .select('id, org_id, total_cents, paid_at, status, client_id, quote_id, line_items')
+    .eq('id', invoiceId)
+    .eq('org_id', orgId)
+    .single();
+  if (invErr || !invoice) return { created: 0, skipped: 'invoice_not_found' };
+  if (invoice.status !== 'paid' || !invoice.paid_at) return { created: 0, skipped: 'not_paid' };
+
+  // 3. Identify rep: from quote.assigned_to / lead.assigned_to
+  let repUserId: string | null = null;
+  if (invoice.quote_id) {
+    const { data: q } = await supabase.from('quotes')
+      .select('assigned_to, lead_id, client_id')
+      .eq('id', invoice.quote_id).eq('org_id', orgId).maybeSingle();
+    repUserId = q?.assigned_to || null;
+    if (!repUserId && q?.lead_id) {
+      const { data: l } = await supabase.from('leads')
+        .select('assigned_to').eq('id', q.lead_id).eq('org_id', orgId).maybeSingle();
+      repUserId = l?.assigned_to || null;
+    }
+  }
+  if (!repUserId) return { created: 0, skipped: 'no_rep' };
+
+  // 4. Find rule: assigned_user_ids contains rep → else default rule from settings
+  const { data: rules } = await supabase.from('fs_commission_rules')
+    .select('*').eq('org_id', orgId).eq('is_active', true).is('deleted_at', null)
+    .order('priority', { ascending: false });
+  let rule = (rules ?? []).find((r: any) => Array.isArray(r.assigned_user_ids) && r.assigned_user_ids.includes(repUserId));
+  if (!rule) {
+    const { data: settings } = await supabase.from('commission_settings')
+      .select('default_rule_id').eq('org_id', orgId).maybeSingle();
+    if (settings?.default_rule_id) rule = (rules ?? []).find((r: any) => r.id === settings.default_rule_id);
+  }
+  if (!rule) return { created: 0, skipped: 'no_rule' };
+
+  // 5. Compute rep's period stats (calendar month) BEFORE this invoice
+  const paidDate = new Date(invoice.paid_at);
+  const periodStart = new Date(paidDate.getFullYear(), paidDate.getMonth(), 1).toISOString();
+  const { data: priorEntries } = await supabase.from('fs_commission_entries')
+    .select('base_amount').eq('org_id', orgId).eq('user_id', repUserId)
+    .is('deleted_at', null).gte('triggered_at', periodStart).lt('triggered_at', invoice.paid_at);
+  const repPeriodRevenueCents = (priorEntries ?? []).reduce((s: number, e: any) => s + Number(e.base_amount || 0), 0);
+  const repPeriodSaleCount = (priorEntries ?? []).length;
+
+  // 6. Calculate
+  const calc = calculateCommissionAmount(rule, {
+    invoiceTotalCents: Number(invoice.total_cents || 0),
+    invoicePaidAt: invoice.paid_at,
+    lineItems: Array.isArray(invoice.line_items) ? invoice.line_items : [],
+    repPeriodRevenueCents,
+    repPeriodSaleCount,
+  });
+
+  // 7. Attribution: solo vs split
+  const attribution = rule.attribution || { mode: 'solo' };
+  const recipients: Array<{ user_id: string; pct: number }> = attribution.mode === 'split' && Array.isArray(attribution.splits)
+    ? attribution.splits.filter((s: any) => s.user_id).map((s: any) => ({ user_id: s.user_id, pct: Number(s.pct || 0) }))
+    : [{ user_id: repUserId, pct: 100 }];
+  const sumPct = recipients.reduce((s, r) => s + r.pct, 0) || 100;
+
+  // 8. Insert one entry per recipient
+  let created = 0;
+  for (const r of recipients) {
+    const share = Math.round(calc.amountCents * (r.pct / sumPct));
+    if (share <= 0) continue;
+    const { error } = await supabase.from('fs_commission_entries').insert({
+      org_id: orgId, user_id: r.user_id, rule_id: rule.id,
+      invoice_id: invoiceId, job_id: null, lead_id: null,
+      status: 'pending', amount: share / 100, base_amount: Number(invoice.total_cents || 0) / 100,
+      description: `Commission on invoice payment`, triggered_at: invoice.paid_at,
+      calc_breakdown: { ...calc.breakdown, split_pct: r.pct, total_calculated_cents: calc.amountCents },
+    });
+    if (!error) created++;
+  }
+  return { created, skipped: null };
+}
+
+// ---------------------------------------------------------------------------
+// Reversal handler: invoice un-paid (refund/cancel) → apply policy
+// ---------------------------------------------------------------------------
+
+export async function handleInvoiceReversal(
+  supabase: SupabaseClient,
+  orgId: string,
+  invoiceId: string,
+  reason: string
+): Promise<{ action: 'auto_reversed' | 'kept' | 'alert'; affected: number }> {
+  const { data: settings } = await supabase.from('commission_settings')
+    .select('reversal_policy').eq('org_id', orgId).maybeSingle();
+  const policy = settings?.reversal_policy || 'alert';
+
+  const { data: entries } = await supabase.from('fs_commission_entries')
+    .select('id, status').eq('org_id', orgId).eq('invoice_id', invoiceId)
+    .is('deleted_at', null);
+
+  const affected = (entries ?? []).length;
+  if (affected === 0) return { action: policy as any, affected: 0 };
+
+  if (policy === 'keep') return { action: 'kept', affected };
+
+  if (policy === 'auto') {
+    const ids = (entries ?? []).filter((e: any) => e.status !== 'paid').map((e: any) => e.id);
+    if (ids.length > 0) {
+      await supabase.from('fs_commission_entries')
+        .update({ status: 'reversed', auto_reversed: true, reverse_reason: reason, updated_at: new Date().toISOString() })
+        .in('id', ids);
+    }
+    return { action: 'auto_reversed', affected: ids.length };
+  }
+
+  // alert: mark reverse_reason but keep status; UI will surface
+  await supabase.from('fs_commission_entries')
+    .update({ reverse_reason: reason, updated_at: new Date().toISOString() })
+    .eq('org_id', orgId).eq('invoice_id', invoiceId).is('deleted_at', null);
+  return { action: 'alert', affected };
+}
+
+// ---------------------------------------------------------------------------
+// Mark paid
+// ---------------------------------------------------------------------------
+
+export async function markCommissionPaid(
+  supabase: SupabaseClient,
+  orgId: string,
+  entryId: string
+) {
+  const { data, error } = await supabase.from('fs_commission_entries')
+    .update({ status: 'paid', paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', entryId).eq('org_id', orgId).eq('status', 'approved')
+    .select().single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 // ---------------------------------------------------------------------------

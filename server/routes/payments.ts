@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuthedClient, isOrgMember, isOrgAdminOrOwner, getServiceClient, findUserByEmail } from '../lib/supabase';
 import { parseOrgId, clampInt, resolvePublicBaseUrl } from '../lib/helpers';
 import { dispatchWebhook } from '../lib/webhookDispatcher';
+import { generateCommissionsForInvoice, handleInvoiceReversal } from '../lib/field-sales/commission-engine';
 
 // Refund input validation
 const refundSchema = z.object({
@@ -203,6 +204,9 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
                 provider: 'stripe',
                 provider_payment_id: intent.id,
               }).catch((err) => console.error('[webhooks] invoice.paid failed:', err?.message));
+              // Auto-generate sales commission entries
+              generateCommissionsForInvoice(admin, metadata.orgId, metadata.invoiceId)
+                .catch((err) => console.error('[commissions] generate failed:', err?.message));
             }
           }
         }
@@ -275,34 +279,70 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
       }
 
       // ── F-13: Handle customer.subscription.updated ──
-      // Sync Stripe-side subscription status (renewals, plan changes, cancellation
-      // scheduling, past_due) back into our subscriptions table.
+      // Sync Stripe-side subscription status (renewals, plan changes from Schedules,
+      // cancellation scheduling, past_due) back into our subscriptions table.
       if (event.type === 'customer.subscription.updated') {
         const sub = event.data.object as Stripe.Subscription;
         const admin = getServiceClient();
         // Stripe SDK v20 moved current_period_* off the Subscription type onto each item;
         // the field is still present in API responses, so cast to read it.
         const subAny = sub as any;
-        const periodStart = subAny.current_period_start
-          ? new Date(subAny.current_period_start * 1000).toISOString()
+        const firstItem = sub.items.data[0] as any;
+        const periodStart = (subAny.current_period_start ?? firstItem?.current_period_start)
+          ? new Date((subAny.current_period_start ?? firstItem.current_period_start) * 1000).toISOString()
           : null;
-        const periodEnd = subAny.current_period_end
-          ? new Date(subAny.current_period_end * 1000).toISOString()
+        const periodEnd = (subAny.current_period_end ?? firstItem?.current_period_end)
+          ? new Date((subAny.current_period_end ?? firstItem.current_period_end) * 1000).toISOString()
           : null;
         const canceledAt = sub.canceled_at
           ? new Date(sub.canceled_at * 1000).toISOString()
           : null;
+
+        // Detect plan change from Stripe Schedule transition or direct update.
+        // We resolve the Lume plan by matching the price recurring.interval + unit_amount.
+        const updateRow: Record<string, any> = {
+          status: sub.status,
+          cancel_at_period_end: Boolean(sub.cancel_at_period_end),
+          canceled_at: canceledAt,
+          current_period_start: periodStart,
+          current_period_end: periodEnd,
+          updated_at: new Date().toISOString(),
+        };
+
+        if (firstItem?.price) {
+          const stripeInterval = firstItem.price.recurring?.interval; // 'month' | 'year'
+          const unitAmount = firstItem.price.unit_amount as number | null;
+          const currency = (firstItem.price.currency || 'usd').toUpperCase();
+          if (stripeInterval && unitAmount != null) {
+            const lumeInterval = stripeInterval === 'year' ? 'yearly' : 'monthly';
+            const priceField = lumeInterval === 'yearly'
+              ? (currency === 'USD' ? 'yearly_price_usd' : 'yearly_price_cad')
+              : (currency === 'USD' ? 'monthly_price_usd' : 'monthly_price_cad');
+
+            // Find the matching Lume plan by price + interval (active plans only).
+            const { data: matchingPlan } = await admin
+              .from('plans')
+              .select('id, slug')
+              .eq('is_active', true)
+              .eq(priceField, unitAmount)
+              .maybeSingle();
+
+            if (matchingPlan) {
+              updateRow.plan_id = matchingPlan.id;
+              updateRow.interval = lumeInterval;
+              updateRow.amount_cents = unitAmount;
+              // Clear scheduled change flags if the scheduled plan just became current.
+              updateRow.scheduled_plan_id = null;
+              updateRow.scheduled_interval = null;
+              updateRow.scheduled_at = null;
+            }
+          }
+        }
+
         // Cross-validate via stripe_subscription_id only — never trust metadata blindly.
         await admin
           .from('subscriptions')
-          .update({
-            status: sub.status,
-            cancel_at_period_end: Boolean(sub.cancel_at_period_end),
-            canceled_at: canceledAt,
-            current_period_start: periodStart,
-            current_period_end: periodEnd,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateRow)
           .eq('stripe_subscription_id', sub.id);
       }
 
@@ -1285,6 +1325,9 @@ router.post('/payments/refund', async (req, res) => {
         p_org_id: orgId,
         p_amount_cents: payment.amount_cents,
       });
+      // Apply commission reversal policy
+      handleInvoiceReversal(admin, orgId, payment.invoice_id, `Refund: ${refund.id}`)
+        .catch((err) => console.error('[commissions] reversal failed:', err?.message));
     }
 
     // Update associated payment_request status if full refund
