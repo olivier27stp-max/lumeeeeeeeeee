@@ -120,3 +120,55 @@ export async function fetchMapJobs(range: MapDateRange): Promise<MapJobResult> {
     missingLocationCount: rows.length - withCoords.length,
   };
 }
+
+/**
+ * Same shape as fetchMapJobs but for an explicit [start, end) window — used by
+ * the calendar "Map" button so the pins match the period currently shown
+ * (day / week / month). `end` is treated as exclusive (matches buildRange()).
+ */
+export async function fetchMapJobsInRange(startISO: string, endISO: string): Promise<MapJobResult> {
+  const orgId = await getCurrentOrgIdOrThrow();
+
+  const { data, error } = await supabase
+    .from('schedule_events')
+    .select(
+      `
+      id, start_at, end_at, status, team_id,
+      team:teams!schedule_events_team_id_fkey(name, color_hex),
+      job:jobs!schedule_events_job_id_fkey(id, job_number, title, client_name, property_address, status, total_cents, latitude, longitude)
+      `
+    )
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
+    .gte('start_at', startISO)
+    .lt('start_at', endISO)
+    .order('start_at', { ascending: true });
+
+  if (error) throw error;
+
+  const rows = (data || []) as any[];
+  const withCoords = rows.filter(hasValidCoords);
+
+  const pins: MapJobPin[] = withCoords.map((event) => ({
+    id: event.id,
+    jobId: event.job?.id || event.id,
+    jobNumber: event.job?.job_number || '',
+    title: event.job?.title || 'Untitled',
+    clientName: event.job?.client_name || null,
+    address: event.job?.property_address || null,
+    latitude: Number(event.job.latitude),
+    longitude: Number(event.job.longitude),
+    scheduledAt: event.start_at,
+    endAt: event.end_at,
+    status: event.job?.status || event.status || 'Scheduled',
+    teamColor: event.team?.color_hex || null,
+    teamName: event.team?.name || null,
+    totalCents: event.job?.total_cents || 0,
+  }));
+
+  return {
+    pins,
+    totalEvents: rows.length,
+    missingLocationCount: rows.length - withCoords.length,
+  };
+}

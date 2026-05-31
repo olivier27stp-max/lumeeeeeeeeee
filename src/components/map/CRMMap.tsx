@@ -10,12 +10,16 @@ const DEFAULT_ZOOM = 10;
 const OSM_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
 
-function createPinIcon(color: string, selected: boolean): L.DivIcon {
+function createPinIcon(color: string, selected: boolean, completed = false): L.DivIcon {
   const scale = selected ? 1.25 : 1;
   const ring = selected
     ? `<circle cx="15" cy="15" r="14" fill="none" stroke="${color}" stroke-width="2" opacity="0.35"/>`
     : '';
-  const svg = `<svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg" style="transform:scale(${scale});transform-origin:center">${ring}<circle cx="15" cy="15" r="10" fill="${color}" stroke="#2d2d2d" stroke-width="1.5"/><circle cx="15" cy="15" r="3.5" fill="white" opacity="0.9"/></svg>`;
+  // Completed jobs get a white checkmark; pending jobs keep the plain dot.
+  const inner = completed
+    ? `<path d="M10.5 15.2 L13.4 18 L19 11.4" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`
+    : `<circle cx="15" cy="15" r="3.5" fill="white" opacity="0.9"/>`;
+  const svg = `<svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg" style="transform:scale(${scale});transform-origin:center">${ring}<circle cx="15" cy="15" r="10" fill="${color}" stroke="#2d2d2d" stroke-width="1.5"/>${inner}</svg>`;
   return L.divIcon({
     html: svg,
     className: 'crm-marker',
@@ -23,6 +27,12 @@ function createPinIcon(color: string, selected: boolean): L.DivIcon {
     iconAnchor: [15, 15],
     popupAnchor: [0, -15],
   });
+}
+
+/** A job is "done" when its status maps to completed (DB: 'completed'). */
+function isCompletedStatus(status: string | null | undefined): boolean {
+  const s = String(status || '').toLowerCase().trim();
+  return s === 'completed' || s === 'complete' || s === 'done' || s === 'terminé' || s === 'termine';
 }
 
 const FALLBACK_COLOR = '#2563eb';
@@ -61,6 +71,8 @@ interface CRMMapProps {
   onOpenJob?: (jobId: string) => void;
   showJobCount?: boolean;
   missingLocationCount?: number;
+  /** When true, completed jobs render with a checkmark pin. */
+  showCompletionCheck?: boolean;
 }
 
 export default function CRMMap({
@@ -70,6 +82,7 @@ export default function CRMMap({
   onOpenJob,
   showJobCount = true,
   missingLocationCount = 0,
+  showCompletionCheck = false,
 }: CRMMapProps) {
   const [selectedPin, setSelectedPin] = useState<MapJobPin | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -80,12 +93,16 @@ export default function CRMMap({
   }, [pins]);
 
   const icons = useMemo(() => {
-    return pins.map((pin) => ({
-      id: pin.id,
-      normal: createPinIcon(isHexColor(pin.teamColor) ? pin.teamColor! : FALLBACK_COLOR, false),
-      selected: createPinIcon(isHexColor(pin.teamColor) ? pin.teamColor! : FALLBACK_COLOR, true),
-    }));
-  }, [pins]);
+    return pins.map((pin) => {
+      const color = isHexColor(pin.teamColor) ? pin.teamColor! : FALLBACK_COLOR;
+      const done = showCompletionCheck && isCompletedStatus(pin.status);
+      return {
+        id: pin.id,
+        normal: createPinIcon(color, false, done),
+        selected: createPinIcon(color, true, done),
+      };
+    });
+  }, [pins, showCompletionCheck]);
 
   return (
     <div className={cn('relative overflow-hidden rounded-2xl border border-outline bg-surface-tertiary', heightClassName, className)}>
