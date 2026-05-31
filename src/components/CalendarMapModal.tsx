@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { X as XIcon, Loader2 } from 'lucide-react';
 import { fetchMapJobsInRange } from '../lib/mapApi';
 import { useTranslation } from '../i18n';
-import { CRMMap } from './map';
+import CalendarMapGL from './map/CalendarMapGL';
 
 interface CalendarMapModalProps {
   /** Inclusive start of the selected calendar period. */
@@ -86,14 +86,11 @@ export default function CalendarMapModal({ start, end, periodLabel, onClose, onO
           ) : pins.length === 0 ? (
             <div className="flex h-[60vh] items-center justify-center text-sm text-text-secondary">{t.schedule.mapEmpty}</div>
           ) : (
-            <CRMMap
+            <CalendarMapGL
               pins={pins}
-              showCompletionCheck
-              showJobCount={false}
-              tileStyle="satellite"
-              pinColor={GOLD}
               heightClassName="h-[60vh]"
               onOpenJob={onOpenJob}
+              openJobLabel={t.schedule.mapOpenJob}
             />
           )}
         </div>
