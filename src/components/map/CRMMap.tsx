@@ -11,21 +11,24 @@ const OSM_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
 
 function createPinIcon(color: string, selected: boolean, completed = false): L.DivIcon {
-  const scale = selected ? 1.25 : 1;
+  // Teardrop pin: rounded head centered at (15,14), pointing down to the tip
+  // at (15,39) which marks the exact location (iconAnchor).
+  const scale = selected ? 1.2 : 1;
   const ring = selected
-    ? `<circle cx="15" cy="15" r="14" fill="none" stroke="${color}" stroke-width="2" opacity="0.35"/>`
+    ? `<circle cx="15" cy="14" r="13" fill="none" stroke="${color}" stroke-width="2" opacity="0.35"/>`
     : '';
-  // Completed jobs get a white checkmark; pending jobs keep the plain dot.
+  // Completed jobs get a white checkmark inside the head; pending jobs a dot.
   const inner = completed
-    ? `<path d="M10.5 15.2 L13.4 18 L19 11.4" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`
-    : `<circle cx="15" cy="15" r="3.5" fill="white" opacity="0.9"/>`;
-  const svg = `<svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg" style="transform:scale(${scale});transform-origin:center">${ring}<circle cx="15" cy="15" r="10" fill="${color}" stroke="#2d2d2d" stroke-width="1.5"/>${inner}</svg>`;
+    ? `<path d="M10.4 14.2 L13.4 17.2 L19.2 10.4" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`
+    : `<circle cx="15" cy="14" r="4" fill="white" opacity="0.95"/>`;
+  const drop = `<path d="M15 1.5 C8.1 1.5 2.5 7.1 2.5 14 C2.5 22.6 15 38.5 15 38.5 C15 38.5 27.5 22.6 27.5 14 C27.5 7.1 21.9 1.5 15 1.5 Z" fill="${color}" stroke="#2d2d2d" stroke-width="1.5"/>`;
+  const svg = `<svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg" style="transform:scale(${scale});transform-origin:15px 39px">${ring}${drop}${inner}</svg>`;
   return L.divIcon({
     html: svg,
     className: 'crm-marker',
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -15],
+    iconSize: [30, 40],
+    iconAnchor: [15, 39],
+    popupAnchor: [0, -36],
   });
 }
 

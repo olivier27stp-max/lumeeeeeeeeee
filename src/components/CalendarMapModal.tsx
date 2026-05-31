@@ -15,16 +15,16 @@ interface CalendarMapModalProps {
   onOpenJob?: (jobId: string) => void;
 }
 
-/** Small pin swatch for the legend, mirroring the map markers. */
+/** Small teardrop pin swatch for the legend, mirroring the map markers. */
 function LegendPin({ completed }: { completed: boolean }) {
   const color = '#2563eb';
   return (
-    <svg width="20" height="20" viewBox="0 0 30 30" className="shrink-0">
-      <circle cx="15" cy="15" r="10" fill={color} stroke="#2d2d2d" strokeWidth="1.5" />
+    <svg width="16" height="21" viewBox="0 0 30 40" className="shrink-0">
+      <path d="M15 1.5 C8.1 1.5 2.5 7.1 2.5 14 C2.5 22.6 15 38.5 15 38.5 C15 38.5 27.5 22.6 27.5 14 C27.5 7.1 21.9 1.5 15 1.5 Z" fill={color} stroke="#2d2d2d" strokeWidth="1.5" />
       {completed ? (
-        <path d="M10.5 15.2 L13.4 18 L19 11.4" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M10.4 14.2 L13.4 17.2 L19.2 10.4" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
       ) : (
-        <circle cx="15" cy="15" r="3.5" fill="white" opacity="0.9" />
+        <circle cx="15" cy="14" r="4" fill="white" opacity="0.95" />
       )}
     </svg>
   );
