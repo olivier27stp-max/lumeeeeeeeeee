@@ -59,6 +59,19 @@ function escapeHtml(value: string): string {
   ));
 }
 
+/** Human-readable schedule label, e.g. "mer. 12 mars · 09:00". */
+function scheduleLabel(iso: string | null): string | null {
+  if (!iso) return null;
+  try {
+    const d = new Date(iso);
+    const date = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `${date} · ${time}`;
+  } catch {
+    return null;
+  }
+}
+
 interface CalendarMapGLProps {
   pins: MapJobPin[];
   heightClassName?: string;
@@ -136,17 +149,19 @@ export default function CalendarMapGL({
     const bounds = new mapboxgl.LngLatBounds();
     for (const pin of pins) {
       const done = isCompletedStatus(pin.status);
+      const sched = scheduleLabel(pin.scheduledAt);
       const popupHtml = `
         <div style="min-width:180px">
-          <p style="font-weight:700;font-size:13px;margin:0 0 4px">${escapeHtml(pin.customerName || 'Job')}</p>
+          <p style="font-weight:700;font-size:13px;margin:0 0 2px">${escapeHtml(pin.title || 'Job')}</p>
+          ${pin.clientName ? `<p style="font-size:12px;margin:0 0 4px;color:#555">${escapeHtml(pin.clientName)}</p>` : ''}
           ${pin.address ? `<p style="font-size:12px;margin:0 0 4px;color:#555">${escapeHtml(pin.address)}</p>` : ''}
-          ${pin.scheduledLabel ? `<p style="font-size:12px;margin:0 0 6px;color:#555">${escapeHtml(pin.scheduledLabel)}</p>` : ''}
-          ${onOpenJobRef.current ? `<button data-open-job="${escapeHtml(pin.id)}" style="font-size:12px;color:#2563eb;font-weight:600;cursor:pointer;background:none;border:none;padding:0">${escapeHtml(openJobLabel)}</button>` : ''}
+          ${sched ? `<p style="font-size:12px;margin:0 0 6px;color:#555">${escapeHtml(sched)}</p>` : ''}
+          ${onOpenJobRef.current ? `<button data-open-job="${escapeHtml(pin.jobId)}" style="font-size:12px;color:#2563eb;font-weight:600;cursor:pointer;background:none;border:none;padding:0">${escapeHtml(openJobLabel)}</button>` : ''}
         </div>`;
       const popup = new mapboxgl.Popup({ offset: 28, closeButton: false }).setHTML(popupHtml);
       popup.on('open', () => {
         const btn = popup.getElement()?.querySelector('[data-open-job]') as HTMLButtonElement | null;
-        if (btn) btn.onclick = () => onOpenJobRef.current?.(btn.dataset.openJob || pin.id);
+        if (btn) btn.onclick = () => onOpenJobRef.current?.(btn.dataset.openJob || pin.jobId);
       });
 
       const marker = new mapboxgl.Marker({ element: createPinElement(GOLD, done), anchor: 'bottom' })
