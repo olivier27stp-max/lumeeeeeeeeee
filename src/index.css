@@ -196,6 +196,7 @@
     --color-outline-strong: rgba(255,255,255,0.14);
     --color-border: rgba(255,255,255,0.08);
     --color-border-light: rgba(255,255,255,0.04);
+    --color-border-subtle: rgba(255,255,255,0.06);
 
     /* Sidebar — clearly distinct from main bg, charcoal not navy */
     --color-sidebar: #111113;
