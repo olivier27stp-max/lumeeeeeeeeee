@@ -128,6 +128,15 @@ export default function CRMMap({
         style={{ width: '100%', height: '100%' }}
         zoomControl={false}
         attributionControl={false}
+        // Smooth, continuous zoom: fractional zoom levels so the tiles scale
+        // with the wheel instead of snapping between integer steps.
+        zoomSnap={0}
+        zoomDelta={0.5}
+        wheelPxPerZoomLevel={120}
+        scrollWheelZoom
+        zoomAnimation
+        fadeAnimation
+        markerZoomAnimation
       >
         {tileStyle === 'satellite' ? (
           <>
