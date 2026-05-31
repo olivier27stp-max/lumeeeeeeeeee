@@ -33,8 +33,15 @@ const IS_DEV = import.meta.env.DEV || (typeof window !== 'undefined' && (
   window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
 ));
 
+// ⚠️ TEMPORARY (QA): set to `true` to let the role switcher work on the
+// DEPLOYED site for role testing. This is a CLIENT-SIDE UI preview only —
+// the server (RBAC) and Supabase RLS still enforce your real role for data.
+// Set back to `false` (or delete this flag) once role testing is done.
+const ALLOW_ROLE_OVERRIDE_IN_PROD = true;
+const ROLE_OVERRIDE_ENABLED = IS_DEV || ALLOW_ROLE_OVERRIDE_IN_PROD;
+
 export function setDevRoleOverride(role: TeamRole | null) {
-  if (!IS_DEV) return;
+  if (!ROLE_OVERRIDE_ENABLED) return;
   if (role) {
     localStorage.setItem(DEV_ROLE_KEY, role);
   } else {
@@ -43,9 +50,9 @@ export function setDevRoleOverride(role: TeamRole | null) {
 }
 
 export function getDevRoleOverride(): TeamRole | null {
-  if (!IS_DEV) {
+  if (!ROLE_OVERRIDE_ENABLED) {
     // Defensive: even if a stale override was written before this guard
-    // existed, ignore it in prod.
+    // existed, ignore it when overrides are disabled.
     return null;
   }
   return (localStorage.getItem(DEV_ROLE_KEY) as TeamRole) || null;
