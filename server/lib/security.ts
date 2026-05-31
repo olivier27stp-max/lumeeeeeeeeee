@@ -734,6 +734,33 @@ export function extractIP(req: Request): string {
   return req.ip || req.socket.remoteAddress || '0.0.0.0';
 }
 
+/**
+ * Stable per-user rate-limit key derived from the Supabase JWT `sub` claim.
+ *
+ * Decodes the JWT payload locally (base64 — no network call, no signature
+ * verification: this is only a rate-limit bucket key, never an auth decision).
+ * The `sub` claim is the user's UUID and stays constant across token refreshes,
+ * unlike a token suffix. Falls back to the client IP for unauthenticated requests.
+ */
+export function userKey(req: Request): string {
+  const header = req.headers['authorization'];
+  if (typeof header === 'string') {
+    const token = header.startsWith('Bearer ') ? header.slice(7) : header;
+    const parts = token.split('.');
+    if (parts.length === 3) {
+      try {
+        const payload = JSON.parse(
+          Buffer.from(parts[1], 'base64').toString('utf8')
+        );
+        if (payload?.sub) return `u:${payload.sub}`;
+      } catch {
+        // Malformed token — fall through to IP.
+      }
+    }
+  }
+  return `ip:${extractIP(req)}`;
+}
+
 /** Generate a unique request ID for tracing */
 export function generateRequestId(): string {
   return crypto.randomUUID();

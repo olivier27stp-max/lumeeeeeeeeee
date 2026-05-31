@@ -78,7 +78,7 @@ import meRouter from './routes/me';
 import onboardingRouter from './routes/onboarding';
 
 // Security engine
-import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, extractIP } from './lib/security';
+import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, userKey } from './lib/security';
 import { redisRateLimit, useRedis } from './lib/rate-limiter';
 import { rbacMiddleware } from './lib/route-permissions';
 import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
@@ -240,17 +240,17 @@ app.use(auditRequestMiddleware());
 // PII stored as plaintext — protected by Supabase encryption at rest (AES-256) + RLS org_id isolation
 
 // ── Rate limiters for sensitive endpoints ──
-const smsLimiter = rateLimit({ windowMs: 60_000, max: 10, keyFn: (req) => `sms:${req.headers.authorization?.slice(-20) || req.ip}` });
-const emailLimiter = rateLimit({ windowMs: 60_000, max: 10, keyFn: (req) => `email:${req.headers.authorization?.slice(-20) || req.ip}` });
-const paymentLimiter = rateLimit({ windowMs: 60_000, max: 20, keyFn: (req) => `pay:${req.headers.authorization?.slice(-20) || req.ip}` });
+const smsLimiter = rateLimit({ windowMs: 60_000, max: 10, keyFn: (req) => `sms:${userKey(req)}` });
+const emailLimiter = rateLimit({ windowMs: 60_000, max: 10, keyFn: (req) => `email:${userKey(req)}` });
+const paymentLimiter = rateLimit({ windowMs: 60_000, max: 20, keyFn: (req) => `pay:${userKey(req)}` });
 const quoteLimiter = rateLimit({ windowMs: 60_000, max: 30 }); // per IP
-const leadCreateLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `lead:${req.headers.authorization?.slice(-20) || req.ip}` });
+const leadCreateLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `lead:${userKey(req)}` });
 
 // ── Rate limiters for public/sensitive endpoints ──
 const publicPayLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — public payment page (tighter)
 const portalLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — client portal (tighter to prevent token brute-force)
 const quoteLimiterStrict = rateLimit({ windowMs: 60_000, max: 15 }); // per IP — quote track-view
-const automationLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `auto:${req.headers.authorization?.slice(-20) || req.ip}` });
+const automationLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `auto:${userKey(req)}` });
 
 // ── Apply rate limiters to specific paths ──
 // When Redis is available, the redisRateLimit middleware below handles limiting
@@ -275,9 +275,9 @@ app.use('/api/pay', rateLimit({
 }));
 
 // Redis-backed persistent rate limiters (when Upstash is configured)
-app.use('/api/messages/send', redisRateLimit({ preset: 'strict', keyFn: (req) => `sms:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
-app.use('/api/emails', redisRateLimit({ preset: 'strict', keyFn: (req) => `email:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
-app.use('/api/payments', redisRateLimit({ preset: 'standard', keyFn: (req) => `pay:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
+app.use('/api/messages/send', redisRateLimit({ preset: 'strict', keyFn: (req) => `sms:${userKey(req)}` }));
+app.use('/api/emails', redisRateLimit({ preset: 'strict', keyFn: (req) => `email:${userKey(req)}` }));
+app.use('/api/payments', redisRateLimit({ preset: 'standard', keyFn: (req) => `pay:${userKey(req)}` }));
 app.use('/api/pay', redisRateLimit({ preset: 'public' }));
 app.use('/api/portal', redisRateLimit({ preset: 'auth' }));
 // Public form submissions — tight rate limit to prevent abuse
@@ -285,10 +285,10 @@ app.use('/api/public/form', redisRateLimit({ preset: 'auth' }));
 // Survey submissions — prevent ballot stuffing
 app.use('/api/survey', redisRateLimit({ preset: 'auth' }));
 // DSR endpoints — tight rate limit (compliance-sensitive + expensive export)
-app.use('/api/dsr', redisRateLimit({ preset: 'strict', keyFn: (req) => `dsr:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
+app.use('/api/dsr', redisRateLimit({ preset: 'strict', keyFn: (req) => `dsr:${userKey(req)}` }));
 // Incidents — strict (failed-login needs to fit brute-force detection window)
 app.use('/api/incidents/failed-login', redisRateLimit({ preset: 'auth' }));
-app.use('/api/incidents', redisRateLimit({ preset: 'standard', keyFn: (req) => `inc:${req.headers.authorization?.slice(-20) || extractIP(req)}` }));
+app.use('/api/incidents', redisRateLimit({ preset: 'standard', keyFn: (req) => `inc:${userKey(req)}` }));
 // ── MFA enforcement for admin/owner on sensitive endpoints ──
 app.use(mfaEnforcementMiddleware());
 
@@ -374,7 +374,7 @@ app.use('/api', gamificationRouter);
 app.use('/api', fieldSessionsRouter);
 
 // Platform admin — tightly rate limited, owner-only routes enforce auth internally
-const platformAdminLimiter = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `platform:${req.headers.authorization?.slice(-20) || req.ip}` });
+const platformAdminLimiter = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `platform:${userKey(req)}` });
 app.use('/api/platform-admin', platformAdminLimiter);
 app.use('/api', platformAdminRouter);
 
@@ -383,7 +383,7 @@ const cspReportLimiter = rateLimit({ windowMs: 60_000, max: 20 }); // per IP
 app.use('/api/security/csp-report', cspReportLimiter);
 
 // Security dashboard — tightly rate limited, admin-only routes enforce auth internally
-const securityLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `security:${req.headers.authorization?.slice(-20) || req.ip}` });
+const securityLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `security:${userKey(req)}` });
 app.use('/api/security', securityLimiter);
 app.use('/api', securityRouter);
 
