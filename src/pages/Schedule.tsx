@@ -9,7 +9,7 @@ import type { Locale } from 'date-fns';
 import {
   AlertTriangle, Briefcase, CalendarDays, ChevronDown, ChevronLeft,
   ChevronRight, CircleAlert, Clock, GripVertical, List,
-  MapPin, Plus, RefreshCw, SlidersHorizontal, UserCheck, UserPlus,
+  MapPin, Plus, SlidersHorizontal, UserCheck, UserPlus,
   Users, X as XIcon, PanelRightOpen, PanelRightClose,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -920,7 +920,6 @@ function ScheduleContent() {
           {unscheduledJobs.length > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-white">{unscheduledJobs.length}</span>}
         </button>
 
-        <button onClick={refresh} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors" title={t.schedule.refresh}><RefreshCw size={15} /></button>
         {view === 'day' && selectedTeamIds.length === 1 && (
           <button
             onClick={async () => {
