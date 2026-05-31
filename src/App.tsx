@@ -137,7 +137,7 @@ import PermissionGate from './components/PermissionGate';
 import ModuleGate from './components/ModuleGate';
 import { useModuleAccess } from './hooks/useModuleAccess';
 import type { PermissionKey } from './lib/permissions';
-import { hasPermission } from './lib/permissions';
+import { hasPermission, ROLE_LABELS } from './lib/permissions';
 import { usePermissions } from './hooks/usePermissions';
 import { useRealtimeNotifications } from './hooks/useRealtimeNotifications';
 import OnboardingWizard from './components/OnboardingWizard';
@@ -618,7 +618,7 @@ function AuthenticatedApp({
   navigate,
   location,
 }: any) {
-  const { current, companies, loading: companyLoading, isMultiCompany, hasNoCompany, currentOrgId } = useCompany();
+  const { current, currentRole, companies, loading: companyLoading, isMultiCompany, hasNoCompany, currentOrgId } = useCompany();
   // Call realtime notifications hook INSIDE CompanyProvider (it uses useCompany() internally)
   const { unreadCount: unreadNotifs, resetCount: resetNotifCount } = useRealtimeNotifications(!!user);
   // Current plan — used to hide locked features from sidebar
@@ -829,11 +829,11 @@ function AuthenticatedApp({
             )}
           </div>
 
-          {/* Active company name */}
-          {sidebarExpanded && current?.companyName && (
+          {/* Active user role */}
+          {sidebarExpanded && currentRole && (
             <div className="px-4 pb-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-text/50 truncate">
-                {current.companyName}
+                {ROLE_LABELS[currentRole]?.[language === 'fr' ? 'fr' : 'en'] ?? currentRole}
               </p>
             </div>
           )}
