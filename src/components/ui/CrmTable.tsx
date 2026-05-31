@@ -104,7 +104,7 @@ export function CrmFilterBtn({ label, onClick, active }: { label: string; onClic
     <button onClick={onClick}
       className={cn(
         'inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors',
-        active ? 'bg-primary text-white border-primary' : 'bg-surface text-text-primary border-outline hover:bg-surface-secondary'
+        active ? 'bg-primary text-white border-primary' : 'bg-surface-card text-text-primary border-outline hover:bg-surface-secondary'
       )}>
       <CirclePlus size={15} strokeWidth={1.5} className={active ? 'text-white' : 'text-[#64748b]'} />
       {label}
@@ -167,11 +167,11 @@ export function CrmTableCard<T extends { id: string }>({
         <input
           value={search} onChange={e => onSearch(e.target.value)}
           placeholder={searchPlaceholder || 'Search...'}
-          className="h-9 w-[200px] px-3 text-[14px] bg-surface border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary focus:border-text-tertiary transition-all"
+          className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary focus:border-text-tertiary transition-all"
         />
         {filters}
         <div className="ml-auto">
-          <button className="inline-flex items-center gap-2 h-9 px-3 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal hover:bg-surface-secondary transition-colors">
+          <button className="inline-flex items-center gap-2 h-9 px-3 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal hover:bg-surface-secondary transition-colors">
             <SlidersHorizontal size={15} className="text-[#64748b]" />
             Columns
           </button>
@@ -179,7 +179,7 @@ export function CrmTableCard<T extends { id: string }>({
       </div>
 
       {/* ── TABLE ── */}
-      <div className="border border-outline rounded-md overflow-hidden bg-surface">
+      <div className="border border-outline rounded-md overflow-hidden bg-surface-card">
         <table className="w-full text-left">
           {/* HEAD */}
           <thead>
@@ -241,11 +241,11 @@ export function CrmTableCard<T extends { id: string }>({
         </span>
         <div className="flex items-center gap-2">
           <button disabled={page <= 1} onClick={() => onPageChange(page - 1)}
-            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
+            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
             {t.common.previous}
           </button>
           <button disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}
-            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
+            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
             {t.common.next}
           </button>
         </div>

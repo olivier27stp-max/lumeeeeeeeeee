@@ -98,7 +98,7 @@ function InvoiceStatusDropdown({ value, onChange, fr }: { value: InvoiceStatusFi
           'inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors',
           isActive
             ? 'bg-primary text-white border-primary'
-            : 'bg-surface text-text-primary border-outline hover:bg-surface-secondary'
+            : 'bg-surface-card text-text-primary border-outline hover:bg-surface-secondary'
         )}
       >
         <Filter size={14} className={isActive ? 'text-white' : 'text-[#64748b]'} />
@@ -504,7 +504,7 @@ export default function Invoices() {
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             placeholder={fr ? 'Rechercher factures...' : 'Search invoices...'}
-            className="h-9 w-[200px] px-3 text-[14px] bg-surface border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all"
+            className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all"
             onBlur={() => {
               if (searchInput.trim() !== q) {
                 updateParams(next => { const v = searchInput.trim(); if (!v) next.delete('q'); else next.set('q', v); next.delete('page'); });
@@ -518,7 +518,7 @@ export default function Invoices() {
           fr={fr}
         />
         <button type="button" onClick={() => void handleExportCsv()}
-          className="inline-flex items-center gap-1.5 h-9 px-3 border border-outline rounded-md text-[14px] font-normal bg-surface text-text-primary hover:bg-surface-secondary transition-colors">
+          className="inline-flex items-center gap-1.5 h-9 px-3 border border-outline rounded-md text-[14px] font-normal bg-surface-card text-text-primary hover:bg-surface-secondary transition-colors">
           <Download size={14} className="text-[#64748b]" /> CSV
         </button>
       </div>
@@ -527,7 +527,7 @@ export default function Invoices() {
       {(
         <>
           {/* ── TABLE (CSS Grid — identical pattern to Jobs & Clients) ── */}
-          <div className="border border-outline rounded-md overflow-hidden bg-surface">
+          <div className="border border-outline rounded-md overflow-hidden bg-surface-card">
             <div className="grid" style={{ gridTemplateColumns: '40px 80px 1fr 1fr 100px 110px 100px 110px 48px' }}>
               {/* HEADER */}
               <div className="py-3 pl-4 border-b border-outline flex items-center">
@@ -672,7 +672,7 @@ export default function Invoices() {
                       {isMenuOpen && (
                         <div
                           ref={actionMenuRef}
-                          className="absolute right-0 top-full mt-1 z-50 w-48 bg-surface border border-outline rounded-md shadow-lg py-1"
+                          className="absolute right-0 top-full mt-1 z-50 w-48 bg-surface-card border border-outline rounded-md shadow-lg py-1"
                           onClick={e => e.stopPropagation()}
                         >
                           <ActionMenuItem icon={<Eye size={14} />} label={fr ? 'Voir' : 'View'}
@@ -706,14 +706,14 @@ export default function Invoices() {
             </span>
             <div className="flex items-center gap-2">
               <button disabled={page <= 1} onClick={() => goToPage(page - 1)}
-                className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
+                className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
                 {t.common.previous}
               </button>
               {totalPages > 1 && (
                 <span className="text-[13px] text-text-muted tabular-nums px-2">{page} / {totalPages}</span>
               )}
               <button disabled={page >= totalPages} onClick={() => goToPage(page + 1)}
-                className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
+                className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
                 {t.common.next}
               </button>
             </div>
@@ -726,7 +726,7 @@ export default function Invoices() {
         {invoiceToDelete && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !isDeletingInvoice && setInvoiceToDelete(null)}>
             <motion.div
-              className="bg-surface rounded-2xl border border-outline/40 shadow-2xl max-w-sm w-full mx-4"
+              className="bg-surface-card rounded-2xl border border-outline/40 shadow-2xl max-w-sm w-full mx-4"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}

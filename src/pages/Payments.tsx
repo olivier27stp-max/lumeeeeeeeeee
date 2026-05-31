@@ -98,7 +98,7 @@ function PaymentStatusDropdown({ value, onChange, fr }: { value: PaymentStatusFi
           'inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors',
           isActive
             ? 'bg-primary text-white border-primary'
-            : 'bg-surface text-text-primary border-outline hover:bg-surface-secondary'
+            : 'bg-surface-card text-text-primary border-outline hover:bg-surface-secondary'
         )}
       >
         <Filter size={14} className={isActive ? 'text-white' : 'text-[#64748b]'} />
@@ -161,7 +161,7 @@ function PaymentMethodDropdown({ value, onChange, fr }: { value: PaymentMethodFi
           'inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors',
           isActive
             ? 'bg-primary text-white border-primary'
-            : 'bg-surface text-text-primary border-outline hover:bg-surface-secondary'
+            : 'bg-surface-card text-text-primary border-outline hover:bg-surface-secondary'
         )}
       >
         <CreditCard size={14} className={isActive ? 'text-white' : 'text-[#64748b]'} />
@@ -348,7 +348,7 @@ export default function Payments() {
         </h1>
         <button
           onClick={() => navigate('/settings/payments')}
-          className="inline-flex items-center gap-2 h-10 px-5 bg-surface border border-outline text-text-primary rounded-md text-[14px] font-medium hover:bg-surface-secondary transition-all"
+          className="inline-flex items-center gap-2 h-10 px-5 bg-surface-card border border-outline text-text-primary rounded-md text-[14px] font-medium hover:bg-surface-secondary transition-all"
         >
           {fr ? 'Paramètres' : 'Settings'}
         </button>
@@ -356,7 +356,7 @@ export default function Payments() {
 
       {/* Not connected banner */}
       {!isConnected && !connectQuery.isLoading && (
-        <div className="mt-4 border border-outline rounded-md bg-surface p-4 flex items-center justify-between gap-4">
+        <div className="mt-4 border border-outline rounded-md bg-surface-card p-4 flex items-center justify-between gap-4">
           <div>
             <p className="text-[14px] font-semibold text-text-primary">
               {t.payments.activateLumePaymentsToAcceptOnlinePaymen}
@@ -433,7 +433,7 @@ export default function Payments() {
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
                 placeholder={fr ? 'Rechercher paiements...' : 'Search payments...'}
-                className="h-9 w-[200px] px-3 text-[14px] bg-surface border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all"
+                className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all"
               />
             </form>
             <PaymentStatusDropdown value={status} onChange={applyStatus} fr={fr} />
@@ -441,7 +441,7 @@ export default function Payments() {
           </div>
 
           {/* ── TABLE (CSS Grid — identical pattern to Invoices) ── */}
-          <div className="border border-outline rounded-md overflow-hidden bg-surface">
+          <div className="border border-outline rounded-md overflow-hidden bg-surface-card">
             <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 120px 110px 130px' }}>
               {/* HEADER */}
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
@@ -531,14 +531,14 @@ export default function Payments() {
             </span>
             <div className="flex items-center gap-2">
               <button disabled={page <= 1} onClick={() => goToPage(page - 1)}
-                className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
+                className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
                 {fr ? 'Précédent' : 'Previous'}
               </button>
               {totalPages > 1 && (
                 <span className="text-[13px] text-text-muted tabular-nums px-2">{page} / {totalPages}</span>
               )}
               <button disabled={page >= totalPages} onClick={() => goToPage(page + 1)}
-                className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
+                className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
                 {fr ? 'Suivant' : 'Next'}
               </button>
             </div>
@@ -551,11 +551,11 @@ export default function Payments() {
         <>
           {/* Not connected banner */}
           {!isConnected && (
-            <div className="mt-4 border border-outline rounded-md bg-surface p-4 flex items-center justify-between gap-4">
+            <div className="mt-4 border border-outline rounded-md bg-surface-card p-4 flex items-center justify-between gap-4">
               <p className="text-[14px] text-text-secondary">
                 {t.payments.activateLumePaymentsToSeeYourPayouts}
               </p>
-              <button className="inline-flex items-center h-9 px-4 bg-surface border border-outline text-text-primary rounded-md text-[14px] font-normal hover:bg-surface-secondary transition-all shrink-0" onClick={() => navigate('/settings/payments')}>
+              <button className="inline-flex items-center h-9 px-4 bg-surface-card border border-outline text-text-primary rounded-md text-[14px] font-normal hover:bg-surface-secondary transition-all shrink-0" onClick={() => navigate('/settings/payments')}>
                 {t.payments.openSettings}
               </button>
             </div>
@@ -602,14 +602,14 @@ export default function Payments() {
             <button
               type="button"
               onClick={() => void onCsv()}
-              className="inline-flex items-center gap-1.5 h-9 px-3 border border-outline rounded-md text-[14px] font-normal bg-surface text-text-primary hover:bg-surface-secondary transition-colors"
+              className="inline-flex items-center gap-1.5 h-9 px-3 border border-outline rounded-md text-[14px] font-normal bg-surface-card text-text-primary hover:bg-surface-secondary transition-colors"
             >
               <Download size={14} className="text-[#64748b]" /> CSV
             </button>
           </div>
 
           {/* ── TABLE (CSS Grid — same as overview) ── */}
-          <div className="border border-outline rounded-md overflow-hidden bg-surface">
+          <div className="border border-outline rounded-md overflow-hidden bg-surface-card">
             <div className="grid" style={{ gridTemplateColumns: '1fr 120px 120px 130px' }}>
               {/* HEADER */}
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
@@ -682,11 +682,11 @@ export default function Payments() {
             </span>
             <div className="flex items-center gap-2">
               <button disabled={cursorHistory.length === 0} onClick={() => updateParams((n) => { const h = [...cursorHistory]; h.pop(); setCursorHistory(h); const prev = h[h.length - 1]; if (!prev) n.delete('payout_cursor'); else n.set('payout_cursor', prev); })}
-                className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
+                className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
                 {fr ? 'Précédent' : 'Previous'}
               </button>
               <button disabled={!payoutList.data?.has_more || !payoutList.data?.next_cursor} onClick={() => updateParams((n) => { const next = payoutList.data?.next_cursor; if (!next) return; setCursorHistory((h) => [...h, next]); n.set('payout_cursor', next); })}
-                className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
+                className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
                 {fr ? 'Suivant' : 'Next'}
               </button>
             </div>
@@ -708,7 +708,7 @@ export default function Payments() {
               exit={{ opacity: 0 }}
             />
             <motion.aside
-              className="fixed right-0 top-0 z-[90] h-screen w-full max-w-md bg-surface border-l border-outline p-6 overflow-y-auto"
+              className="fixed right-0 top-0 z-[90] h-screen w-full max-w-md bg-surface-card border-l border-outline p-6 overflow-y-auto"
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
@@ -801,7 +801,7 @@ function PayoutTypeDropdown({ value, onChange, fr }: { value: string; onChange: 
           'inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors',
           isActive
             ? 'bg-primary text-white border-primary'
-            : 'bg-surface text-text-primary border-outline hover:bg-surface-secondary'
+            : 'bg-surface-card text-text-primary border-outline hover:bg-surface-secondary'
         )}
       >
         <Filter size={14} className={isActive ? 'text-white' : 'text-[#64748b]'} />
@@ -860,7 +860,7 @@ function PayoutDateDropdown({ value, onChange, fr }: { value: string; onChange: 
           'inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors',
           isActive
             ? 'bg-primary text-white border-primary'
-            : 'bg-surface text-text-primary border-outline hover:bg-surface-secondary'
+            : 'bg-surface-card text-text-primary border-outline hover:bg-surface-secondary'
         )}
       >
         <Calendar size={14} className={isActive ? 'text-white' : 'text-[#64748b]'} />

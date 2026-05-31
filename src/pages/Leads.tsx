@@ -490,7 +490,7 @@ export default function Leads() {
       {/* ── Search bar ── */}
       <div className="flex items-center gap-2 px-1 pb-3">
         <input type="text" placeholder={t.leads.searchLeads} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full max-w-xs pl-3 pr-3 py-1.5 text-[12px] border border-outline rounded-lg bg-surface text-text-primary placeholder:text-text-tertiary outline-none focus:border-text-tertiary transition-colors" />
+          className="w-full max-w-xs pl-3 pr-3 py-1.5 text-[12px] border border-outline rounded-lg bg-surface-card text-text-primary placeholder:text-text-tertiary outline-none focus:border-text-tertiary transition-colors" />
       </div>
 
       {/* ── Attio-style quotes table ── */}
@@ -511,7 +511,7 @@ export default function Leads() {
         const noQuotes = !quotesLoading && filtered.length === 0;
 
         return (
-      <div className="border border-outline rounded-xl overflow-hidden bg-surface">
+      <div className="border border-outline rounded-xl overflow-hidden bg-surface-card">
         <div className="grid" style={{ gridTemplateColumns: '1fr 60px 1fr 100px 90px 100px 70px 36px' }}>
           {/* Header */}
           <div className="px-4 py-2.5 border-b border-outline text-[10px] font-semibold uppercase tracking-widest text-text-tertiary flex items-center">{t.invoices.client}</div>
@@ -725,10 +725,10 @@ export default function Leads() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed right-0 top-0 h-screen w-full max-w-lg bg-surface border-l border-outline z-50 overflow-y-auto"
+              className="fixed right-0 top-0 h-screen w-full max-w-lg bg-surface-card border-l border-outline z-50 overflow-y-auto"
             >
               {/* Drawer header */}
-              <div className="sticky top-0 z-10 bg-surface border-b border-border px-5 py-4 flex items-center justify-between">
+              <div className="sticky top-0 z-10 bg-surface-card border-b border-border px-5 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="avatar-md text-base">
                     {selectedLead.first_name?.[0]}
@@ -812,7 +812,7 @@ export default function Leads() {
                               toast.error(err.message);
                             }
                           }}
-                          className="text-xs font-medium rounded-lg border border-outline bg-surface px-2 py-1 cursor-pointer hover:border-primary/40 transition-colors"
+                          className="text-xs font-medium rounded-lg border border-outline bg-surface-card px-2 py-1 cursor-pointer hover:border-primary/40 transition-colors"
                         >
                           {STATUS_OPTIONS.filter((s) => s !== 'All').map((s) => (
                             <option key={s} value={s}>{s}</option>

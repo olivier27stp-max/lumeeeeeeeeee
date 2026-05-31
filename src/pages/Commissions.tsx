@@ -410,7 +410,7 @@ function RatesPanel() {
                           max="100"
                           value={draftPct}
                           onChange={(e) => setDraftPct(e.target.value)}
-                          className="w-20 rounded border border-border bg-surface px-2 py-1 text-right text-sm"
+                          className="w-20 rounded border border-border bg-surface-card px-2 py-1 text-right text-sm"
                           autoFocus
                         />
                       ) : (

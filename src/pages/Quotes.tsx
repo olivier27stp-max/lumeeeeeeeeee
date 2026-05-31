@@ -75,7 +75,7 @@ function QuoteFilterDropdown({ label, options, value, onChange, icon }: {
           'inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors',
           isActive
             ? 'bg-primary text-white border-primary'
-            : 'bg-surface text-text-primary border-outline hover:bg-surface-secondary'
+            : 'bg-surface-card text-text-primary border-outline hover:bg-surface-secondary'
         )}
       >
         {icon || <CirclePlus size={15} strokeWidth={1.5} className={isActive ? 'text-white' : 'text-[#64748b]'} />}
@@ -232,11 +232,11 @@ export default function Quotes() {
         <h1 className="text-[28px] font-bold text-text-primary leading-tight">{fr ? 'Devis' : 'Quotes'}</h1>
         <div className="flex items-center gap-2">
           <button onClick={() => nav('/quotes/presets')}
-            className="inline-flex items-center gap-2 h-10 px-4 bg-surface border border-outline text-text-secondary rounded-md text-[13px] font-medium hover:bg-surface-secondary transition-all">
+            className="inline-flex items-center gap-2 h-10 px-4 bg-surface-card border border-outline text-text-secondary rounded-md text-[13px] font-medium hover:bg-surface-secondary transition-all">
             Presets
           </button>
           <button onClick={() => nav('/quotes/measure')}
-            className="inline-flex items-center gap-2 h-10 px-4 bg-surface border border-outline text-text-secondary rounded-md text-[13px] font-medium hover:bg-surface-secondary transition-all">
+            className="inline-flex items-center gap-2 h-10 px-4 bg-surface-card border border-outline text-text-secondary rounded-md text-[13px] font-medium hover:bg-surface-secondary transition-all">
             <Ruler size={15} />
             Mesure
           </button>
@@ -252,7 +252,7 @@ export default function Quotes() {
       <div className="flex items-center gap-2 mt-5 mb-4">
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder={fr ? 'Rechercher devis...' : 'Search quotes...'}
-          className="h-9 w-[200px] px-3 text-[14px] bg-surface border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all" />
+          className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all" />
         <QuoteFilterDropdown
           label={fr ? 'Statut' : 'Status'}
           value={tab}
@@ -277,7 +277,7 @@ export default function Quotes() {
       </div>
 
       {/* ── TABLE ── */}
-      <div className="border border-outline rounded-md overflow-hidden bg-surface">
+      <div className="border border-outline rounded-md overflow-hidden bg-surface-card">
         <div className="grid" style={{ gridTemplateColumns: '40px 1fr 1fr 1fr 100px 1fr 48px' }}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
@@ -360,9 +360,9 @@ export default function Quotes() {
         <span className="text-[14px] text-text-secondary">{t.common.rowsSelected.replace('{selected}', String(sel.size)).replace('{total}', String(total))}</span>
         <div className="flex items-center gap-2">
           <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
-            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.previous}</button>
+            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.previous}</button>
           <button disabled={page >= pages} onClick={() => setPage(p => Math.min(pages, p + 1))}
-            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.next}</button>
+            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.next}</button>
         </div>
       </div>
 
