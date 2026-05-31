@@ -231,12 +231,12 @@ function TimeGrid({
   return (
     <div className="flex h-full flex-col">
       {/* Header row */}
-      <div className="grid shrink-0 border-b border-border/60" style={{ gridTemplateColumns: gridCols }}>
-        <div className="border-r border-border/40" />
+      <div className="grid shrink-0 border-b-[1.5px] border-border" style={{ gridTemplateColumns: gridCols }}>
+        <div className="border-r-[1.5px] border-border" />
         {columns.map((d, i) => {
           const today = isSameDay(d, new Date());
           return (
-            <div key={i} className={cn('border-r border-border/40 px-2 py-2.5 text-center', today && 'bg-primary/[0.03]')}>
+            <div key={i} className={cn('border-r-[1.5px] border-border px-2 py-2.5 text-center', today && 'bg-primary/[0.03]')}>
               <div className={cn('text-[11px] font-semibold uppercase tracking-wider', today ? 'text-primary' : 'text-text-tertiary')}>
                 {format(d, 'EEE', _LOC)}
               </div>
@@ -259,8 +259,8 @@ function TimeGrid({
         <div ref={gridRef} className="relative" style={{ touchAction: isAnyDragActive ? 'none' : 'auto' }}>
           {/* Hour rows */}
           {HOURS.map((h) => (
-            <div key={h} className="grid border-b border-border/30" style={{ gridTemplateColumns: gridCols, height: SLOT_H }}>
-              <div className="flex items-start justify-end border-r border-border/40 pr-2 pt-0.5 text-[11px] font-medium text-text-tertiary">
+            <div key={h} className="grid border-b-[1.5px] border-border" style={{ gridTemplateColumns: gridCols, height: SLOT_H }}>
+              <div className="flex items-start justify-end border-r-[1.5px] border-border pr-2 pt-0.5 text-[11px] font-medium text-text-tertiary">
                 {h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}
               </div>
               {columns.map((d, ci) => {
@@ -273,7 +273,7 @@ function TimeGrid({
                     data-hour={h}
                     data-date={format(d, 'yyyy-MM-dd')}
                     className={cn(
-                      'border-r border-border/30 transition-colors',
+                      'border-r-[1.5px] border-border transition-colors',
                       isAnyDragActive ? 'cursor-copy' : 'cursor-pointer hover:bg-primary/[0.03]',
                       today && 'bg-primary/[0.02]',
                       isDropTarget && 'bg-primary/[0.08]',
@@ -369,7 +369,7 @@ function MonthView({ date, events, tcMap, onDayClick, onEventClick }: {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="grid grid-cols-7 border-b border-border/60">
+      <div className="grid grid-cols-7 border-b-[1.5px] border-border">
         {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d) => (
           <div key={d} className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{d}</div>
         ))}
@@ -381,7 +381,7 @@ function MonthView({ date, events, tcMap, onDayClick, onEventClick }: {
           const dayEvs = eventsForDay(events, day);
           return (
             <div key={i} onClick={() => onDayClick(day)}
-              className={cn('cursor-pointer border-b border-r border-border/40 px-2 pb-1 pt-1.5 transition-colors hover:bg-surface-secondary/30',
+              className={cn('cursor-pointer border-b-[1.5px] border-r-[1.5px] border-border px-2 pb-1 pt-1.5 transition-colors hover:bg-surface-secondary/30',
                 !cur && 'bg-surface-secondary/10')}>
               <div className="mb-1">
                 <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-[13px]',
