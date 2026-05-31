@@ -21,8 +21,16 @@ const LanguageContext = createContext<LanguageContextValue>({
 function getInitialLanguage(): Language {
   const stored = localStorage.getItem('lume-language');
   if (stored === 'fr' || stored === 'en') return stored;
-  const browserLang = navigator.language || '';
-  if (browserLang.startsWith('fr')) return 'fr';
+  // Honor the browser's full ordered language list (Chrome/Safari/Firefox…),
+  // not just the primary one — a user whose first choice is English but who
+  // also lists French still lands on the language they actually read first.
+  const browserLangs = navigator.languages?.length
+    ? navigator.languages
+    : [navigator.language || ''];
+  for (const lang of browserLangs) {
+    if (lang.toLowerCase().startsWith('fr')) return 'fr';
+    if (lang.toLowerCase().startsWith('en')) return 'en';
+  }
   return 'en';
 }
 
