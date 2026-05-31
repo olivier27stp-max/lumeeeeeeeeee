@@ -1939,7 +1939,7 @@ export default function FieldSales() {
       {/* ── COMPARE TERRITORIES PANEL ── */}
       {showCompare && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-          className="absolute top-16 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-xl border border-outline rounded-xl px-4 py-3 shadow-2xl pointer-events-auto w-[520px] max-w-[90vw]">
+          className="absolute top-16 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-xl border border-outline rounded-xl px-4 py-3 shadow-2xl pointer-events-auto w-[340px] max-w-[90vw]">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-[12px] font-bold text-text-primary">{fr ? 'Comparaison de territoires' : 'Compare Territories'}</h4>
             <button onClick={() => setShowCompare(false)} className="p-0.5 rounded hover:bg-surface-secondary text-text-tertiary"><X size={12} /></button>
