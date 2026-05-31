@@ -53,7 +53,12 @@ export default function Commissions() {
     return <AccessDenied />;
   }
 
-  if (currentRole === 'sales_rep') {
+  // Only owners/admins get the management layout (Overview / Reps / Rates).
+  // Every other role — sales_rep and any non-manager role — sees ONLY their
+  // own commission, with no Overview/Reps tabs.
+  const isManager = currentRole === 'owner' || currentRole === 'admin';
+
+  if (!isManager) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
