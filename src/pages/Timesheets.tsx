@@ -866,7 +866,7 @@ export default function Timesheets() {
           </div>
 
           {/* Table */}
-          <div className="border border-outline rounded-md overflow-hidden bg-surface-card">
+          <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
             <table className="w-full text-left table-fixed">
               <colgroup>
                 <col style={{ width: '48px' }} />

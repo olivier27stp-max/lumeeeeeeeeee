@@ -511,7 +511,7 @@ export default function Leads() {
         const noQuotes = !quotesLoading && filtered.length === 0;
 
         return (
-      <div className="border border-outline rounded-xl overflow-hidden bg-surface-card">
+      <div className="border border-outline rounded-xl overflow-hidden bg-white dark:bg-[#0e0e11]">
         <div className="grid" style={{ gridTemplateColumns: '1fr 60px 1fr 100px 90px 100px 70px 36px' }}>
           {/* Header */}
           <div className="px-4 py-2.5 border-b border-outline text-[10px] font-semibold uppercase tracking-widest text-text-tertiary flex items-center">{t.invoices.client}</div>

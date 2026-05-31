@@ -527,7 +527,7 @@ export default function Invoices() {
       {(
         <>
           {/* ── TABLE (CSS Grid — identical pattern to Jobs & Clients) ── */}
-          <div className="border border-outline rounded-md overflow-hidden bg-surface-card">
+          <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
             <div className="grid" style={{ gridTemplateColumns: '40px 80px 1fr 1fr 100px 110px 100px 110px 48px' }}>
               {/* HEADER */}
               <div className="py-3 pl-4 border-b border-outline flex items-center">
