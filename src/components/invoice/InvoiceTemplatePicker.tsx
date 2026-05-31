@@ -1,6 +1,7 @@
 import React from 'react';
 import { Check, Layout } from 'lucide-react';
 import type { InvoiceLayoutType } from './types';
+import { useTranslation } from '../../i18n';
 
 interface TemplateOption {
   id: string;
@@ -10,28 +11,10 @@ interface TemplateOption {
   accent: string;
 }
 
-const SYSTEM_TEMPLATES: TemplateOption[] = [
-  {
-    id: 'classic',
-    name: 'Classic',
-    layout_type: 'classic',
-    description: 'Clean, traditional layout',
-    accent: '#4f46e5',
-  },
-  {
-    id: 'modern',
-    name: 'Modern',
-    layout_type: 'modern',
-    description: 'Bold, contemporary design',
-    accent: '#6366f1',
-  },
-  {
-    id: 'minimal',
-    name: 'Minimal',
-    layout_type: 'minimal',
-    description: 'Ultra-clean, premium feel',
-    accent: '#059669',
-  },
+const SYSTEM_TEMPLATE_BASE = [
+  { id: 'classic', layout_type: 'classic', accent: '#4f46e5' },
+  { id: 'modern',  layout_type: 'modern',  accent: '#6366f1' },
+  { id: 'minimal', layout_type: 'minimal', accent: '#059669' },
 ];
 
 interface InvoiceTemplatePickerProps {
@@ -41,9 +24,18 @@ interface InvoiceTemplatePickerProps {
 }
 
 export default function InvoiceTemplatePicker({ selectedLayout, onSelect, templates }: InvoiceTemplatePickerProps) {
+  const { t } = useTranslation();
+  const it = t.invoiceTemplates;
+
+  const SYSTEM_TEMPLATES: TemplateOption[] = [
+    { id: 'classic', name: 'Classic', layout_type: 'classic', description: it.templateClassicDesc, accent: '#4f46e5' },
+    { id: 'modern',  name: 'Modern',  layout_type: 'modern',  description: it.templateModernDesc,  accent: '#6366f1' },
+    { id: 'minimal', name: 'Minimal', layout_type: 'minimal', description: it.templateMinimalDesc, accent: '#059669' },
+  ];
+
   const allTemplates = [
     ...SYSTEM_TEMPLATES,
-    ...(templates || []).filter(t => !SYSTEM_TEMPLATES.some(s => s.layout_type === t.layout_type))
+    ...(templates || []).filter(t => !SYSTEM_TEMPLATE_BASE.some(s => s.layout_type === t.layout_type))
       .map(t => ({
         id: t.id,
         name: t.name,
@@ -55,7 +47,7 @@ export default function InvoiceTemplatePicker({ selectedLayout, onSelect, templa
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-widest text-text-secondary">Template</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-text-secondary">{it.templateLabel}</p>
       <div className="grid grid-cols-3 gap-2">
         {allTemplates.map((tpl) => {
           const isSelected = selectedLayout === tpl.layout_type;

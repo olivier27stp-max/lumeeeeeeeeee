@@ -12,7 +12,7 @@ import '@xyflow/react/dist/style.css';
 import { X, Trophy, AlertTriangle, CheckCircle2, Users, Briefcase, FileText, DollarSign, User, Maximize2, Minimize2, Database, Brain, Target, Sparkles, Zap } from 'lucide-react';
 import MrLumeAvatar from './MrLumeAvatar';
 import type { ScenarioResult, ScenarioOption, AgentStateLabel } from '../types';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../../i18n';
 
 /* ═══════════════════════════════════════════════════════════════
    Custom Nodes — MiroFish style
@@ -358,6 +358,7 @@ function buildLiveGraph(
    ═══════════════════════════════════════════════════════════════ */
 
 function GraphLegend({ fr }: { fr: boolean }) {
+  const { t } = useTranslation();
   const items = [
     { color: 'bg-blue-400', label: 'Client' },
     { color: 'bg-green-400', label: 'Job' },
@@ -403,6 +404,7 @@ export default function PredictionGraph({
   crmEntities = [],
   language,
 }: PredictionGraphProps) {
+  const { t } = useTranslation();
   const fr = language === 'fr';
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [revealedScenarios, setRevealedScenarios] = useState(0);

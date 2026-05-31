@@ -3,20 +3,19 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Database, Brain, BarChart3, Target, CheckCircle2, Sparkles } from 'lucide-react';
 import MrLumeAvatar from './MrLumeAvatar';
 import type { AgentStateLabel } from '../types';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../../i18n';
 
 interface AgentThinkingProps {
   currentState: AgentStateLabel;
-  language: 'en' | 'fr';
 }
 
-const STEPS: { key: AgentStateLabel; icon: React.ElementType; en: string; fr: string }[] = [
-  { key: 'understand', icon: Brain, en: 'Understanding request', fr: 'Analyse de la demande' },
-  { key: 'fetch_context', icon: Database, en: 'Reading CRM data', fr: 'Lecture des donnees CRM' },
-  { key: 'check_memory', icon: Brain, en: 'Checking memory', fr: 'Consultation memoire' },
-  { key: 'decide', icon: Target, en: 'Making decision', fr: 'Prise de decision' },
-  { key: 'scenario_engine', icon: BarChart3, en: 'Building scenarios', fr: 'Creation des scenarios' },
-  { key: 'recommend', icon: Sparkles, en: 'Preparing answer', fr: 'Preparation de la reponse' },
+const STEPS: { key: AgentStateLabel; icon: React.ElementType; labelKey: string }[] = [
+  { key: 'understand', icon: Brain, labelKey: 'stepUnderstand' },
+  { key: 'fetch_context', icon: Database, labelKey: 'stepFetchContext' },
+  { key: 'check_memory', icon: Brain, labelKey: 'stepCheckMemory' },
+  { key: 'decide', icon: Target, labelKey: 'stepDecide' },
+  { key: 'scenario_engine', icon: BarChart3, labelKey: 'stepScenarioEngine' },
+  { key: 'recommend', icon: Sparkles, labelKey: 'stepRecommend' },
 ];
 
 const STATE_ORDER: AgentStateLabel[] = ['understand', 'fetch_context', 'check_memory', 'decide', 'scenario_engine', 'recommend'];
@@ -30,8 +29,8 @@ function getStepStatus(stepKey: AgentStateLabel, currentState: AgentStateLabel):
   return 'pending';
 }
 
-export default function AgentThinking({ currentState, language }: AgentThinkingProps) {
-  const fr = language === 'fr';
+export default function AgentThinking({ currentState }: AgentThinkingProps) {
+  const { t } = useTranslation();
 
   if (currentState === 'done' || currentState === 'error' || currentState === 'log') {
     return null;
@@ -143,7 +142,7 @@ export default function AgentThinking({ currentState, language }: AgentThinkingP
                           ? 'text-text-tertiary'
                           : 'text-text-tertiary'
                     }`}>
-                      {fr ? step.fr : step.en}
+                      {(t.agent as any)[step.labelKey]}
                     </span>
 
                     {/* Active dots */}

@@ -4,7 +4,7 @@ import { ShieldCheck, X, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import MrLumeAvatar from './MrLumeAvatar';
 import { agentApprove } from '../lib/agentApi';
 import type { ApprovalRequest } from '../types';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../../i18n';
 
 interface ApprovalCardProps {
   data: ApprovalRequest;
@@ -13,6 +13,7 @@ interface ApprovalCardProps {
 }
 
 export default function ApprovalCard({ data, language, onResolved }: ApprovalCardProps) {
+  const { t } = useTranslation();
   const fr = language === 'fr';
   const [status, setStatus] = useState<'pending' | 'approving' | 'approved' | 'rejected'>('pending');
   const [result, setResult] = useState<string | null>(null);

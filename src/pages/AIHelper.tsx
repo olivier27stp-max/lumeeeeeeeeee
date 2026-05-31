@@ -20,7 +20,7 @@ import {
   Database,
   Wrench,
 } from 'lucide-react';
-import { useTranslation } from '../i18n';
+import { useTranslation, getTranslations } from '../i18n';
 import { useLocation } from 'react-router-dom';
 import OllamaIcon from '../components/icons/OllamaIcon';
 import { useFeatureFlags } from '../features/agent/hooks/useFeatureFlags';
@@ -62,6 +62,7 @@ function fmtTime(iso: string) {
 
 /* ── Build scene blocks from real dashboard data ── */
 function buildSceneBlocks(data: DashboardData | null, lang: string) {
+  const t = getTranslations(lang);
   const fr = lang === 'fr';
 
   // --- Block 1: Prepare me for the day ---
@@ -85,7 +86,7 @@ function buildSceneBlocks(data: DashboardData | null, lang: string) {
       )) : (
         <div className="flex items-center gap-2 rounded-lg bg-surface-secondary p-2.5">
           <Calendar size={12} className="text-text-tertiary" />
-          <span className="text-xs text-text-secondary">{fr ? 'Aucun rendez-vous aujourd\'hui' : 'No appointments today'}</span>
+          <span className="text-xs text-text-secondary">{t.aiHelper.noAppointmentsToday}</span>
         </div>
       )}
       <div className="flex items-center gap-2 rounded-lg border border-outline-subtle p-2.5">
@@ -143,7 +144,7 @@ function buildSceneBlocks(data: DashboardData | null, lang: string) {
           <DollarSign size={12} className="text-text-tertiary mb-1" />
           <p className="text-sm font-bold text-text-primary">{fmtMoney(revToday)}</p>
           <p className="text-[10px] text-text-tertiary">
-            {fr ? 'Revenus aujourd\'hui' : 'Revenue today'}
+            {t.aiHelper.revenueToday}
           </p>
         </div>
         <div className="rounded-lg bg-surface-secondary p-2.5">
@@ -232,7 +233,7 @@ function buildSceneBlocks(data: DashboardData | null, lang: string) {
 }
 
 export default function AIHelper() {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const location = useLocation();
   const { permissions, role } = usePermissions();
   const { isEnabled: isFeatureEnabled } = useFeatureFlags();
@@ -391,9 +392,7 @@ export default function AIHelper() {
           m.id === assistantMsgId
             ? {
                 ...m,
-                content: language === 'fr'
-                  ? 'Impossible de se connecter à Ollama. Vérifiez que le serveur est en cours d\'exécution.'
-                  : 'Could not connect to Ollama. Make sure the server is running on localhost:11434.',
+                content: t.aiHelper.couldNotConnectToOllama,
               }
             : m
         )
@@ -466,12 +465,10 @@ export default function AIHelper() {
             <WifiOff size={24} className="text-text-tertiary" />
           </div>
           <h1 className="text-xl font-bold text-text-primary mb-2">
-            {language === 'fr' ? 'Ollama n\'est pas connecté' : 'Ollama is not connected'}
+            {t.aiHelper.ollamaNotConnected}
           </h1>
           <p className="text-sm text-text-tertiary leading-relaxed mb-6">
-            {language === 'fr'
-              ? 'Lume AI nécessite Ollama pour fonctionner localement. Installez-le et lancez le serveur pour commencer.'
-              : 'Lume AI requires Ollama to run locally. Install it and start the server to get started.'}
+            {t.aiHelper.lumeAiRequiresOllama}
           </p>
           <div className="rounded-xl bg-surface-secondary border border-outline-subtle p-4 mb-6 text-left">
             <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-2.5">
@@ -564,9 +561,7 @@ export default function AIHelper() {
             {t.aiHelper.yourIntelligentCrmAssistant}
           </h1>
           <p className="text-sm text-text-tertiary leading-relaxed max-w-md mx-auto">
-            {language === 'fr'
-              ? 'Propulsé par Ollama. Posez des questions, obtenez des résumés, rédigez des emails — le tout sans quitter Lume.'
-              : 'Powered by Ollama. Ask questions, get summaries, draft emails — all without leaving Lume.'}
+            {t.aiHelper.poweredByOllamaDesc}
           </p>
 
           {/* Status badge */}
@@ -649,9 +644,7 @@ export default function AIHelper() {
             className="flex items-center gap-2 text-xs font-medium text-text-tertiary hover:text-text-secondary transition-colors mb-10"
           >
             <Clock size={13} />
-            {language === 'fr'
-              ? `${conversations.length} conversation${conversations.length > 1 ? 's' : ''} précédente${conversations.length > 1 ? 's' : ''}`
-              : `${conversations.length} past conversation${conversations.length > 1 ? 's' : ''}`}
+            {`${conversations.length} ${t.aiHelper.pastConversations}`}
             <ArrowRight size={12} />
           </motion.button>
         )}
@@ -887,9 +880,7 @@ export default function AIHelper() {
           </button>
         </div>
         <p className="text-[10px] text-text-tertiary text-center mt-2">
-          {language === 'fr'
-            ? `Propulsé par Ollama · Mode ${chatMode === 'crm' ? 'CRM' : 'Web'} · Réponses générées localement`
-            : `Powered by Ollama · ${chatMode === 'crm' ? 'CRM' : 'Web'} mode · Responses generated locally`}
+          {t.aiHelper.ollamaFooter.replace('{mode}', chatMode === 'crm' ? 'CRM' : 'Web')}
         </p>
       </div>
     </div>

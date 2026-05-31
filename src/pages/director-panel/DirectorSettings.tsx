@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { PageHeader } from '../../components/ui';
 import { getCreditBalance } from '../../lib/directorApi';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from '../../i18n';
 
 const SETTINGS_KEY = 'lia-director-settings';
 
@@ -38,6 +39,7 @@ function savePrefs(prefs: DirectorPrefs) {
 }
 
 export default function DirectorSettings() {
+  const { t } = useTranslation();
   const [orgId, setOrgId] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
   const [loadingCredits, setLoadingCredits] = useState(false);
@@ -97,8 +99,8 @@ export default function DirectorSettings() {
     try {
       const b = await getCreditBalance(orgId);
       setCredits(b?.credits_balance ?? 0);
-      toast.success('Credits refreshed');
-    } catch { toast.error('Failed to refresh credits'); }
+      toast.success(t.directorPanel.creditsRefreshed);
+    } catch { toast.error(t.directorPanel.creditsRefreshFailed); }
     finally { setLoadingCredits(false); }
   };
 
@@ -110,7 +112,7 @@ export default function DirectorSettings() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <PageHeader title="Director Settings" subtitle="Configure providers, models, and preferences" icon={Settings} />
+      <PageHeader title={t.directorPanel.settingsTitle} subtitle={t.directorPanel.settingsSubtitle} icon={Settings} />
 
       {/* Credits */}
       <div className="section-card p-5 space-y-4">
@@ -119,8 +121,8 @@ export default function DirectorSettings() {
             <Coins className="w-5 h-5 text-amber-600" />
           </div>
           <div className="flex-1">
-            <h3 className="text-[13px] font-semibold text-text-primary">Credit Balance</h3>
-            <p className="text-[12px] text-text-tertiary">Credits used for AI generations</p>
+            <h3 className="text-[13px] font-semibold text-text-primary">{t.directorPanel.creditBalance}</h3>
+            <p className="text-[12px] text-text-tertiary">{t.directorPanel.creditsUsedForAi}</p>
           </div>
           <button onClick={handleRefreshCredits} disabled={loadingCredits} className="glass-button !p-2" title="Refresh">
             <RefreshCw className={`w-3.5 h-3.5 ${loadingCredits ? 'animate-spin' : ''}`} />
@@ -130,7 +132,7 @@ export default function DirectorSettings() {
           <span className="text-3xl font-light tabular-nums text-text-primary">
             {credits !== null ? credits.toLocaleString() : '\u2014'}
           </span>
-          <span className="text-[12px] text-text-tertiary">credits remaining</span>
+          <span className="text-[12px] text-text-tertiary">{t.directorPanel.creditsRemaining}</span>
         </div>
       </div>
 
@@ -141,13 +143,13 @@ export default function DirectorSettings() {
             <Puzzle className="w-5 h-5 text-purple-600" />
           </div>
           <div>
-            <h3 className="text-[13px] font-semibold text-text-primary">Default Models</h3>
-            <p className="text-[12px] text-text-tertiary">Pre-selected models for new generations</p>
+            <h3 className="text-[13px] font-semibold text-text-primary">{t.directorPanel.defaultModels}</h3>
+            <p className="text-[12px] text-text-tertiary">{t.directorPanel.defaultModelsDesc}</p>
           </div>
         </div>
         <div className="space-y-3 px-1">
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">Image Model</label>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">{t.directorPanel.imageModel}</label>
             <select value={prefs.defaultModel} onChange={(e) => updatePref('defaultModel', e.target.value)} className="glass-input w-full mt-1">
               <option value="flux-2-pro">Flux 2 Pro (5 credits)</option>
               <option value="flux-pro-1.1-ultra">Flux Pro 1.1 Ultra (5 credits)</option>
@@ -158,7 +160,7 @@ export default function DirectorSettings() {
             </select>
           </div>
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">Video Model</label>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">{t.directorPanel.videoModel}</label>
             <select value={prefs.defaultVideoModel} onChange={(e) => updatePref('defaultVideoModel', e.target.value)} className="glass-input w-full mt-1">
               <option value="wan-2.5">Wan 2.5 (15 credits)</option>
               <option value="kling-3">Kling 3 (20 credits)</option>
@@ -176,13 +178,13 @@ export default function DirectorSettings() {
             <Key className="w-5 h-5 text-blue-600" />
           </div>
           <div>
-            <h3 className="text-[13px] font-semibold text-text-primary">Generation Preferences</h3>
-            <p className="text-[12px] text-text-tertiary">Default settings applied to new generations</p>
+            <h3 className="text-[13px] font-semibold text-text-primary">{t.directorPanel.generationPreferences}</h3>
+            <p className="text-[12px] text-text-tertiary">{t.directorPanel.generationPreferencesDesc}</p>
           </div>
         </div>
         <div className="space-y-3 px-1">
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">Default Quality</label>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">{t.directorPanel.defaultQuality}</label>
             <select value={prefs.qualityPreset} onChange={(e) => updatePref('qualityPreset', e.target.value)} className="glass-input w-full mt-1">
               <option value="draft">Draft (fast, lower quality)</option>
               <option value="standard">Standard</option>
@@ -192,8 +194,8 @@ export default function DirectorSettings() {
           </div>
           <label className="flex items-center justify-between cursor-pointer py-2">
             <div>
-              <p className="text-[13px] font-medium text-text-primary">Auto-enhance prompts</p>
-              <p className="text-[11px] text-text-tertiary">Automatically improve prompts before generation</p>
+              <p className="text-[13px] font-medium text-text-primary">{t.directorPanel.autoEnhancePrompts}</p>
+              <p className="text-[11px] text-text-tertiary">{t.directorPanel.autoEnhanceDesc}</p>
             </div>
             <div
               onClick={() => updatePref('autoEnhance', !prefs.autoEnhance)}
@@ -212,13 +214,13 @@ export default function DirectorSettings() {
             <Settings className="w-5 h-5 text-green-600" />
           </div>
           <div>
-            <h3 className="text-[13px] font-semibold text-text-primary">LIA AI Model (Ollama)</h3>
-            <p className="text-[12px] text-text-tertiary">Choose which local model LIA uses for chat</p>
+            <h3 className="text-[13px] font-semibold text-text-primary">{t.directorPanel.liaAiModel}</h3>
+            <p className="text-[12px] text-text-tertiary">{t.directorPanel.liaAiModelDesc}</p>
           </div>
         </div>
         <div className="space-y-3 px-1">
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">Chat Model</label>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">{t.directorPanel.chatModel}</label>
             <select value={prefs.chatModel} onChange={(e) => updatePref('chatModel', e.target.value)} className="glass-input w-full mt-1">
               <option value="llama3.2">Llama 3.2 (3B — fast)</option>
               <option value="llama3.3">Llama 3.3 (70B — smart)</option>
@@ -229,7 +231,7 @@ export default function DirectorSettings() {
             <p className="text-[10px] text-text-tertiary mt-1">Run <code className="bg-surface-tertiary px-1 rounded">ollama pull {prefs.chatModel}</code> first</p>
           </div>
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">Vision Model</label>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">{t.directorPanel.visionModel}</label>
             <select value={prefs.visionModel} onChange={(e) => updatePref('visionModel', e.target.value)} className="glass-input w-full mt-1">
               <option value="llava">LLaVA (7B)</option>
               <option value="llava:13b">LLaVA 13B</option>
@@ -240,14 +242,14 @@ export default function DirectorSettings() {
         {ollamaStatus === 'offline' && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-700">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-            Ollama is not running. Start it with <code className="bg-amber-100 px-1 rounded">ollama serve</code> for LIA chat to work.
+            {t.directorPanel.ollamaOfflineWarning} <code className="bg-amber-100 px-1 rounded">ollama serve</code> {t.directorPanel.ollamaOfflineWarningEnd}
           </div>
         )}
       </div>
 
       {/* Provider Status */}
       <div className="section-card p-5 space-y-3">
-        <h3 className="text-[13px] font-semibold text-text-primary">Provider Status</h3>
+        <h3 className="text-[13px] font-semibold text-text-primary">{t.directorPanel.providerStatus}</h3>
         {[
           { name: 'fal.ai (Generation API)', status: falStatus },
           { name: 'Supabase Storage', status: storageStatus },

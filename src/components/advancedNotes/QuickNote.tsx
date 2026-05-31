@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { createNote, addTag, addChecklistItem, extractTags } from '../../lib/notesApi';
 import { cn } from '../../lib/utils';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 interface QuickNoteProps {
   language: string;
@@ -18,6 +18,7 @@ interface QuickNoteProps {
 }
 
 export default function QuickNote({ language, onCreated }: QuickNoteProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
@@ -82,10 +83,7 @@ export default function QuickNote({ language, onCreated }: QuickNoteProps) {
                   handleSubmit();
                 }
               }}
-              placeholder={language === 'fr'
-                ? 'Note rapide... (Ctrl+Enter pour sauvegarder)'
-                : 'Quick note... (Ctrl+Enter to save)'
-              }
+              placeholder={t.advancedNotes.quickNotePlaceholder}
               className="w-full bg-transparent border-none outline-none text-[13px] text-text-primary resize-none placeholder:text-text-tertiary"
               rows={3}
               autoFocus

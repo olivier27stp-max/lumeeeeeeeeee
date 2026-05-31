@@ -21,12 +21,14 @@ import {
   deleteInvoiceTemplate,
 } from '../lib/invoiceTemplatesApi';
 import InvoiceTemplateModal from './InvoiceTemplateModal';
+import { useTranslation } from '../i18n';
 
 interface Props {
   onUseTemplate: (template: InvoiceTemplate) => void;
 }
 
 export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<InvoiceTemplate | null>(null);
@@ -60,10 +62,10 @@ export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
     setActionMenuId(null);
     try {
       await duplicateInvoiceTemplate(id);
-      toast.success('Template duplicated.');
+      toast.success(t.invoiceTemplates.toastDuplicated);
       handleRefresh();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to duplicate template.');
+      toast.error(err?.message || t.invoiceTemplates.toastDuplicateFailed);
     }
   }
 
@@ -71,22 +73,22 @@ export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
     setActionMenuId(null);
     try {
       await setDefaultInvoiceTemplate(id);
-      toast.success('Default template updated.');
+      toast.success(t.invoiceTemplates.toastDefaultUpdated);
       handleRefresh();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to set default.');
+      toast.error(err?.message || t.invoiceTemplates.toastSetDefaultFailed);
     }
   }
 
   async function handleDelete(id: string) {
     setActionMenuId(null);
-    if (!window.confirm('Archive this template? It can be restored later.')) return;
+    if (!window.confirm(t.invoiceTemplates.confirmArchive)) return;
     try {
       await deleteInvoiceTemplate(id);
-      toast.success('Template archived.');
+      toast.success(t.invoiceTemplates.toastArchived);
       handleRefresh();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to archive template.');
+      toast.error(err?.message || t.invoiceTemplates.toastArchiveFailed);
     }
   }
 
@@ -95,9 +97,9 @@ export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold text-text-primary">Invoice Templates</h3>
+          <h3 className="text-lg font-bold text-text-primary">{t.invoiceTemplates.title}</h3>
           <p className="text-xs text-text-secondary">
-            Pre-built templates to speed up invoice creation.
+            {t.invoiceTemplates.subtitle}
           </p>
         </div>
         <button
@@ -106,7 +108,7 @@ export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
           className="glass-button-primary inline-flex items-center gap-2 !text-sm"
         >
           <Plus size={14} />
-          New Template
+          {t.invoiceTemplates.newTemplate}
         </button>
       </div>
 
@@ -128,7 +130,7 @@ export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
       {/* Error */}
       {isError && (
         <div className="rounded-xl border border-danger bg-danger-light px-4 py-3 text-sm text-danger">
-          Failed to load templates. Please try again.
+          {t.invoiceTemplates.loadError}
         </div>
       )}
 
@@ -136,10 +138,9 @@ export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
       {!isLoading && !isError && templates.length === 0 && (
         <div className="section-card flex flex-col items-center justify-center rounded-xl border border-outline p-10 text-center">
           <FileText size={36} className="text-text-tertiary mb-3 opacity-40" />
-          <p className="text-sm font-semibold text-text-primary">No templates yet</p>
+          <p className="text-sm font-semibold text-text-primary">{t.invoiceTemplates.emptyTitle}</p>
           <p className="text-xs text-text-secondary mt-1 max-w-xs">
-            Create your first template to streamline invoice creation with pre-filled line items,
-            taxes, and email content.
+            {t.invoiceTemplates.emptyDescription}
           </p>
           <button
             type="button"
@@ -147,7 +148,7 @@ export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
             className="glass-button-primary mt-4 inline-flex items-center gap-2 !text-sm"
           >
             <Plus size={14} />
-            Create your first template
+            {t.invoiceTemplates.createFirst}
           </button>
         </div>
       )}
@@ -169,7 +170,7 @@ export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
                   {tpl.is_default && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">
                       <Star size={10} />
-                      Default
+                      {t.invoiceTemplates.default}
                     </span>
                   )}
                 </div>
@@ -192,7 +193,7 @@ export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
                   className="glass-button inline-flex items-center gap-1.5 !px-3 !py-1.5 !text-xs"
                 >
                   <Play size={11} />
-                  Use
+                  {t.invoiceTemplates.use}
                 </button>
 
                 <div className="relative">
@@ -218,7 +219,7 @@ export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
                           className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-surface-secondary transition-colors"
                         >
                           <Pencil size={12} />
-                          Edit
+                          {t.invoiceTemplates.edit}
                         </button>
                         <button
                           type="button"
@@ -226,7 +227,7 @@ export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
                           className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-surface-secondary transition-colors"
                         >
                           <Copy size={12} />
-                          Duplicate
+                          {t.invoiceTemplates.duplicate}
                         </button>
                         {!tpl.is_default && (
                           <button
@@ -235,7 +236,7 @@ export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
                             className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-surface-secondary transition-colors"
                           >
                             <Star size={12} />
-                            Set as Default
+                            {t.invoiceTemplates.setAsDefault}
                           </button>
                         )}
                         <button
@@ -244,7 +245,7 @@ export default function InvoiceTemplatesTab({ onUseTemplate }: Props) {
                           className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger hover:bg-surface-secondary transition-colors"
                         >
                           <Trash2 size={12} />
-                          Archive
+                          {t.invoiceTemplates.archive}
                         </button>
                       </motion.div>
                     )}

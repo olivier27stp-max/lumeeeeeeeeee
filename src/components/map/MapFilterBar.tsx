@@ -2,6 +2,7 @@ import React from 'react';
 import { Maximize2, RefreshCw } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { MapDateRange } from '../../lib/mapApi';
+import { useTranslation } from '../../i18n';
 
 interface MapFilterBarProps {
   dateRange: MapDateRange;
@@ -12,13 +13,6 @@ interface MapFilterBarProps {
   jobCount?: number;
 }
 
-const DATE_CHIPS: { value: MapDateRange; label: string }[] = [
-  { value: 'today', label: 'Today' },
-  { value: 'tomorrow', label: 'Tomorrow' },
-  { value: 'this_week', label: 'This Week' },
-  { value: 'all', label: 'All Scheduled' },
-];
-
 export default function MapFilterBar({
   dateRange,
   onDateRangeChange,
@@ -26,10 +20,19 @@ export default function MapFilterBar({
   onRefresh,
   loading,
 }: MapFilterBarProps) {
+  const { t } = useTranslation();
+
+  const dateChips: { value: MapDateRange; label: string }[] = [
+    { value: 'today', label: t.dispatchMap.today },
+    { value: 'tomorrow', label: t.dispatchMap.tomorrow },
+    { value: 'this_week', label: t.dispatchMap.thisWeek },
+    { value: 'all', label: t.dispatchMap.allScheduled },
+  ];
+
   return (
     <div className="flex items-center justify-between gap-2 flex-wrap">
       <div className="flex items-center gap-1.5">
-        {DATE_CHIPS.map((chip) => (
+        {dateChips.map((chip) => (
           <button
             key={chip.value}
             type="button"
@@ -51,7 +54,7 @@ export default function MapFilterBar({
           <button
             type="button"
             onClick={onFitAll}
-            title="Fit all jobs"
+            title={t.common.refresh}
             className="rounded-lg border border-outline-subtle bg-surface p-1.5 text-text-tertiary hover:text-text-primary hover:border-outline transition-colors"
           >
             <Maximize2 size={13} />
@@ -61,7 +64,7 @@ export default function MapFilterBar({
           <button
             type="button"
             onClick={onRefresh}
-            title="Refresh"
+            title={t.common.refresh}
             className={cn(
               'rounded-lg border border-outline-subtle bg-surface p-1.5 text-text-tertiary hover:text-text-primary hover:border-outline transition-colors',
               loading && 'animate-spin'

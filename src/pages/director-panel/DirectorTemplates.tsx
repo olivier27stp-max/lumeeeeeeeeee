@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout, X } from 'lucide-react';
+import { useTranslation } from '../../i18n';
 import { PageHeader } from '../../components/ui';
 import { BUILT_IN_TEMPLATES } from '../../lib/director-panel/config/templates';
 import { TEMPLATE_IMAGES } from '../../lib/director-panel/config/template-images';
 import type { BuiltInTemplate } from '../../types/director';
 
 export default function DirectorTemplates() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [previewTemplate, setPreviewTemplate] = useState<BuiltInTemplate | null>(null);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Templates" subtitle="Start from a pre-built creative flow" icon={Layout} iconColor="purple" />
+      <PageHeader title={t.directorPanel.templatesTitle} subtitle={t.directorPanel.templatesSubtitle} icon={Layout} iconColor="purple" />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {BUILT_IN_TEMPLATES.map((tpl) => (
@@ -39,9 +41,9 @@ export default function DirectorTemplates() {
               <p className="text-[13px] font-semibold text-text-primary">{tpl.title}</p>
               <p className="text-[12px] text-text-tertiary mt-1 line-clamp-2">{tpl.description}</p>
               <div className="mt-3 flex items-center gap-2 text-[11px] text-text-tertiary">
-                <span>{tpl.nodes.length} nodes</span>
+                <span>{tpl.nodes.length} {t.directorPanel.nodes}</span>
                 <span className="text-outline">&bull;</span>
-                <span>{tpl.edges.length} connections</span>
+                <span>{tpl.edges.length} {t.directorPanel.connections}</span>
               </div>
             </div>
           </button>
@@ -80,17 +82,17 @@ export default function DirectorTemplates() {
               </div>
               <p className="text-[12px] text-text-secondary leading-relaxed">{previewTemplate.description}</p>
               <div className="mt-3 flex items-center gap-3 text-[11px] text-text-tertiary">
-                <span>{previewTemplate.nodes.length} nodes</span>
+                <span>{previewTemplate.nodes.length} {t.directorPanel.nodes}</span>
                 <span className="text-outline">&bull;</span>
-                <span>{previewTemplate.edges.length} connections</span>
+                <span>{previewTemplate.edges.length} {t.directorPanel.connections}</span>
               </div>
               <div className="mt-5 flex justify-end gap-2">
-                <button onClick={() => setPreviewTemplate(null)} className="glass-button text-[12px]">Cancel</button>
+                <button onClick={() => setPreviewTemplate(null)} className="glass-button text-[12px]">{t.directorPanel.cancel}</button>
                 <button
                   onClick={() => navigate(`/director-panel/flows/new?template=${previewTemplate.id}`)}
                   className="glass-button-primary text-[12px]"
                 >
-                  Launch Template
+                  {t.directorPanel.launchTemplate}
                 </button>
               </div>
             </div>

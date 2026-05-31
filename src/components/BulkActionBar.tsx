@@ -25,6 +25,7 @@ interface BulkActionBarProps {
 }
 
 function BulkActionBar({ count, actions, onAction, onClear, language }: BulkActionBarProps) {
+  const { t } = useTranslation();
   if (count === 0) return null;
   const fr = language === 'fr';
 
@@ -38,7 +39,7 @@ function BulkActionBar({ count, actions, onAction, onClear, language }: BulkActi
       <div className="pointer-events-auto flex items-center gap-2 bg-text-primary text-surface rounded-xl shadow-2xl px-4 py-2.5">
         {/* Count */}
         <span className="text-[13px] font-semibold tabular-nums mr-1">
-          {count} {t.bulkActions.selected}{count > 1 ? 's' : ''}
+          {count} {count > 1 ? t.bulkActions.selectedPlural : t.bulkActions.selected}
         </span>
 
         {/* Divider */}

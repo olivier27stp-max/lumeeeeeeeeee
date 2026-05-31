@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useGpsTracking } from '../hooks/useGpsTracking';
+import { useTranslation } from '../i18n';
 
 interface GpsTrackingPanelProps {
   teamId?: string | null;
@@ -19,6 +20,7 @@ export default function GpsTrackingPanel({ teamId, requireGps = false, className
     tabHidden, pointCount,
     startTracking, stopTracking, requestPermission,
   } = useGpsTracking();
+  const { t } = useTranslation();
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
 
@@ -117,7 +119,7 @@ export default function GpsTrackingPanel({ teamId, requireGps = false, className
       {isActive && lastPosition && (
         <div className="grid grid-cols-3 gap-2">
           <div className="rounded-lg bg-surface-secondary p-2 text-center">
-            <p className="text-[10px] text-text-tertiary font-medium">Accuracy</p>
+            <p className="text-[10px] text-text-tertiary font-medium">{t.dispatchMap.accuracyLabel}</p>
             <div className="flex items-center justify-center gap-1 mt-0.5">
               {lastPosition.accuracy_m < 30 ? <Signal size={10} className="text-emerald-500" /> : <SignalLow size={10} className="text-amber-500" />}
               <p className="text-xs font-bold text-text-primary">{Math.round(lastPosition.accuracy_m)}m</p>
@@ -125,17 +127,17 @@ export default function GpsTrackingPanel({ teamId, requireGps = false, className
             <p className="text-[9px] text-text-tertiary">{accuracyLabel}</p>
           </div>
           <div className="rounded-lg bg-surface-secondary p-2 text-center">
-            <p className="text-[10px] text-text-tertiary font-medium">Points</p>
+            <p className="text-[10px] text-text-tertiary font-medium">{t.dispatchMap.pointsLabel}</p>
             <p className="text-xs font-bold text-text-primary mt-0.5">{pointCount}</p>
-            <p className="text-[9px] text-text-tertiary">recorded</p>
+            <p className="text-[9px] text-text-tertiary">{t.dispatchMap.recorded}</p>
           </div>
           <div className="rounded-lg bg-surface-secondary p-2 text-center">
-            <p className="text-[10px] text-text-tertiary font-medium">Last update</p>
+            <p className="text-[10px] text-text-tertiary font-medium">{t.dispatchMap.lastUpdateLabel}</p>
             <p className="text-xs font-bold text-text-primary mt-0.5">{lastUpdate}</p>
             <p className="text-[9px] text-text-tertiary">
               {(lastPosition.speed_mps ?? 0) > 0.5
                 ? `${((lastPosition.speed_mps || 0) * 3.6).toFixed(0)} km/h`
-                : 'Stationary'}
+                : t.dispatchMap.stationary}
             </p>
           </div>
         </div>

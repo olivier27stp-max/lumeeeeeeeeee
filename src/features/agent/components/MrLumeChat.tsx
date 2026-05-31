@@ -42,8 +42,7 @@ function renderMarkdown(text: string): React.ReactNode {
 }
 
 export default function MrLumeChat() {
-  const { language } = useTranslation();
-  const fr = language === 'fr';
+  const { t, language } = useTranslation();
   const navigate = useNavigate();
   const { isEnabled } = useFeatureFlags();
   const voiceEnabled = isEnabled('voice');
@@ -220,7 +219,7 @@ export default function MrLumeChat() {
       // Finalize assistant message — if still empty and no error, show fallback
       setMessages(prev => prev.map(m => {
         if (m.id !== assistantId) return m;
-        const content = m.content || (fr ? 'Je n\'ai pas pu générer de réponse.' : 'I couldn\'t generate a response.');
+        const content = m.content || t.agent.couldNotGenerateResponse;
         return { ...m, content, isStreaming: false };
       }));
 
@@ -297,12 +296,10 @@ export default function MrLumeChat() {
       <div className="flex flex-col items-center justify-center min-h-[70vh] text-center px-4">
         <MrLumeAvatar size="lg" className="mb-5" />
         <h1 className="text-xl font-bold text-text-primary mb-2">
-          {fr ? 'Mr Lume n\'est pas disponible' : 'Mr Lume is unavailable'}
+          {t.agent.mrLumeUnavailable}
         </h1>
         <p className="text-sm text-text-tertiary leading-relaxed mb-6 max-w-md">
-          {fr
-            ? 'Le serveur AI n\'est pas accessible. Vérifiez que le backend est en cours d\'exécution.'
-            : 'The AI server is not reachable. Make sure the backend is running.'}
+          {t.agent.aiServerNotReachable}
         </p>
         <button
           onClick={() => { setConnectionStatus('checking'); agentHealthCheck().then(h => setConnectionStatus(h.ok ? 'connected' : 'disconnected')); }}
@@ -349,9 +346,7 @@ export default function MrLumeChat() {
 
   /* ── Empty state ── */
   if (!isInConversation && !showHistory) {
-    const suggestions = fr
-      ? ['Prepare-moi pour la journee', 'Y a-t-il des problemes a regler?', 'Qui devrait faire le prochain job?', 'Resume mes clients actifs']
-      : ['Prepare me for the day', 'Any issues to address?', 'Who should handle the next job?', 'Summarize my active clients'];
+    const suggestions = [t.agent.suggestionPrepareDay, t.agent.suggestionIssues, t.agent.suggestionNextJob, t.agent.suggestionSummarize];
 
     return (
       <div className="flex flex-col items-center min-h-[70vh]">
@@ -359,9 +354,7 @@ export default function MrLumeChat() {
           <MrLumeAvatar size="lg" className="mx-auto mb-6" />
           <h1 className="text-3xl font-bold tracking-tight text-text-primary mb-3">Mr Lume</h1>
           <p className="text-sm text-text-tertiary leading-relaxed max-w-md mx-auto">
-            {fr
-              ? 'Votre agent CRM intelligent. Posez des questions, obtenez des recommandations, et laissez Mr Lume analyser vos scénarios.'
-              : 'Your intelligent CRM agent. Ask questions, get recommendations, and let Mr Lume analyze your scenarios.'}
+            {t.agent.agentDescription}
           </p>
         </motion.div>
 
@@ -397,7 +390,7 @@ export default function MrLumeChat() {
             onClick={() => setShowHistory(true)}
             className="flex items-center gap-2 text-xs font-medium text-text-tertiary hover:text-text-secondary transition-colors mb-10">
             <Clock size={13} />
-            {fr ? `${sessions.length} session${sessions.length > 1 ? 's' : ''} précédente${sessions.length > 1 ? 's' : ''}` : `${sessions.length} past session${sessions.length > 1 ? 's' : ''}`}
+            {t.agent.pastSessionsCount.replace('${count}', String(sessions.length)).replace(/\$\{plural\}/g, sessions.length > 1 ? 's' : '')}
             <ArrowRight size={12} />
           </motion.button>
         )}
@@ -483,7 +476,7 @@ export default function MrLumeChat() {
 
         {/* Thinking indicator */}
         {isProcessing && currentState && (
-          <AgentThinking currentState={currentState} language={language as 'en' | 'fr'} />
+          <AgentThinking currentState={currentState} />
         )}
       </div>
 

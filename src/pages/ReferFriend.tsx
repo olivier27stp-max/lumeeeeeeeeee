@@ -32,7 +32,7 @@ const STATUS_CONFIG: Record<string, { label_en: string; label_fr: string; color:
 };
 
 export default function ReferFriend() {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const navigate = useNavigate();
   const isFr = language === 'fr';
 
@@ -202,7 +202,7 @@ export default function ReferFriend() {
             },
             {
               step: '2',
-              title: isFr ? 'Ils s\'abonnent' : 'They subscribe',
+              title: t.referFriend.theySubscribe,
               desc: t.referFriend.whenTheyCreateAnAccountAndChooseAPaidPla,
             },
             {

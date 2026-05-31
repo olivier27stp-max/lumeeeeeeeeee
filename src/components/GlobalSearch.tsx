@@ -93,24 +93,23 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
 
 // ── Quick Actions ──
 
-interface QuickAction {
+interface QuickActionDef {
   id: string;
-  label: string;
-  labelFr: string;
+  labelKey: 'createNewClient' | 'createNewQuote' | 'createNewJob' | 'createNewInvoice' | 'goToCalendar' | 'goToInvoices' | 'goToQuotes';
   icon: React.ElementType;
   destination: string;
   keywords: string;
 }
 
-const QUICK_ACTIONS: QuickAction[] = [
-  { id: 'qa-new-client', label: 'Create New Client', labelFr: 'Nouveau client', icon: Plus, destination: '/clients?action=new', keywords: 'create add new client customer nouveau' },
-  { id: 'qa-new-lead', label: 'Create New Quote', labelFr: 'Nouveau devis', icon: Plus, destination: '/leads?action=new', keywords: 'create add new quote devis prospect nouveau' },
-  { id: 'qa-new-job', label: 'Create New Job', labelFr: 'Nouvelle job', icon: Plus, destination: '/jobs?action=new', keywords: 'create add new job work travail nouveau' },
-  { id: 'qa-new-quote', label: 'Create New Quote', labelFr: 'Nouveau devis', icon: Plus, destination: '/quotes?action=new', keywords: 'create add new quote estimate devis nouveau' },
-  { id: 'qa-new-invoice', label: 'Create New Invoice', labelFr: 'Nouvelle facture', icon: Plus, destination: '/invoices?action=new', keywords: 'create add new invoice bill facture nouveau' },
-  { id: 'qa-calendar', label: 'Go to Calendar', labelFr: 'Calendrier', icon: CalendarDays, destination: '/calendar', keywords: 'calendar schedule horaire' },
-  { id: 'qa-invoices', label: 'Go to Invoices', labelFr: 'Factures', icon: Receipt, destination: '/invoices', keywords: 'invoices billing factures' },
-  { id: 'qa-quotes', label: 'Go to Quotes', labelFr: 'Devis', icon: FileText, destination: '/quotes', keywords: 'quotes estimates devis' },
+const QUICK_ACTION_DEFS: QuickActionDef[] = [
+  { id: 'qa-new-client', labelKey: 'createNewClient', icon: Plus, destination: '/clients?action=new', keywords: 'create add new client customer nouveau' },
+  { id: 'qa-new-lead', labelKey: 'createNewQuote', icon: Plus, destination: '/leads?action=new', keywords: 'create add new quote devis prospect nouveau' },
+  { id: 'qa-new-job', labelKey: 'createNewJob', icon: Plus, destination: '/jobs?action=new', keywords: 'create add new job work travail nouveau' },
+  { id: 'qa-new-quote', labelKey: 'createNewQuote', icon: Plus, destination: '/quotes?action=new', keywords: 'create add new quote estimate devis nouveau' },
+  { id: 'qa-new-invoice', labelKey: 'createNewInvoice', icon: Plus, destination: '/invoices?action=new', keywords: 'create add new invoice bill facture nouveau' },
+  { id: 'qa-calendar', labelKey: 'goToCalendar', icon: CalendarDays, destination: '/calendar', keywords: 'calendar schedule horaire' },
+  { id: 'qa-invoices', labelKey: 'goToInvoices', icon: Receipt, destination: '/invoices', keywords: 'invoices billing factures' },
+  { id: 'qa-quotes', labelKey: 'goToQuotes', icon: FileText, destination: '/quotes', keywords: 'quotes estimates devis' },
 ];
 
 // ── Helpers ──
@@ -177,8 +176,7 @@ const ENTITY_KEY_TO_TYPE: Record<EntityGroupKey, SearchEntityType> = {
 // ── Component ──
 
 export default function GlobalSearch() {
-  const { t, language } = useTranslation();
-  const fr = language === 'fr';
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -255,15 +253,16 @@ export default function GlobalSearch() {
     // Quick actions when query matches
     if (normalizedQuery.length >= 1) {
       const q = normalizedQuery.toLowerCase();
-      const matchedActions = QUICK_ACTIONS.filter((a) =>
-        a.label.toLowerCase().includes(q) || a.labelFr.toLowerCase().includes(q) || a.keywords.includes(q)
-      ).slice(0, 4);
+      const matchedActions = QUICK_ACTION_DEFS.filter((a) => {
+        const label = t.globalSearch[a.labelKey].toLowerCase();
+        return label.includes(q) || a.keywords.includes(q);
+      }).slice(0, 4);
 
       if (matchedActions.length > 0) {
         const actionItems: SuggestionAction[] = matchedActions.map((a) => ({
           id: a.id,
           kind: 'quick_action' as const,
-          label: fr ? a.labelFr : a.label,
+          label: t.globalSearch[a.labelKey],
           destination: a.destination,
         }));
         secs.push({ key: 'quick_actions', label: t.globalSearch.quickActions, items: actionItems });
@@ -333,7 +332,7 @@ export default function GlobalSearch() {
     }
 
     return { allItems: all, sections: secs };
-  }, [entitySuggestions, groupedSuggestions, exactCommand, normalizedQuery, parsedDate, fr, t]);
+  }, [entitySuggestions, groupedSuggestions, exactCommand, normalizedQuery, parsedDate, t]);
 
   const flatItems = useMemo(() => allItems.filter((i) => i.kind !== 'see_all'), [allItems]);
   const seeAllItem = useMemo(() => allItems.find((i) => i.kind === 'see_all') || null, [allItems]);
@@ -455,7 +454,7 @@ export default function GlobalSearch() {
           onKeyDown={handleKeyDown}
           placeholder={t.globalSearch.placeholder}
           className="glass-input w-full pl-9 pr-16"
-          aria-label="Global search"
+          aria-label={t.globalSearch.ariaLabel}
           role="combobox"
           aria-expanded={showDropdown}
           aria-controls={listboxId}
@@ -589,7 +588,7 @@ function SearchResultRow({
       : item.kind === 'command'
         ? Command
         : item.kind === 'quick_action'
-          ? (QUICK_ACTIONS.find((a) => a.id === item.id)?.icon || Zap)
+          ? (QUICK_ACTION_DEFS.find((a) => a.id === item.id)?.icon || Zap)
           : Search;
 
   const iconColor = item.entityType

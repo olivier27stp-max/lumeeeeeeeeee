@@ -5,9 +5,10 @@ import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { fetchPublicPaymentData, createPublicPaymentIntent } from '../lib/connectApi';
 import type { PublicPaymentData, CreatePublicPaymentIntentResponse } from '../lib/connectApi';
+import { useTranslation } from '../i18n';
 
-function formatMoney(cents: number, currency = 'CAD') {
-  return new Intl.NumberFormat('en-US', {
+function formatMoney(cents: number, currency = 'CAD', locale = 'en-US') {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
     minimumFractionDigits: 2,
@@ -18,6 +19,8 @@ function formatMoney(cents: number, currency = 'CAD') {
 
 export default function PublicPayment() {
   const { token } = useParams<{ token: string }>();
+  const { t, language } = useTranslation();
+  const locale = language === 'fr' ? 'fr-CA' : 'en-US';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [paymentData, setPaymentData] = useState<PublicPaymentData | null>(null);
@@ -26,7 +29,7 @@ export default function PublicPayment() {
 
   useEffect(() => {
     if (!token) {
-      setError('Invalid payment link.');
+      setError(t.publicPayment.invalidPaymentLink);
       setLoading(false);
       return;
     }
@@ -36,22 +39,19 @@ export default function PublicPayment() {
         const data = await fetchPublicPaymentData(token!);
         setPaymentData(data);
 
-        // If already paid, don't load Stripe
         if (data.status === 'paid') {
           setLoading(false);
           return;
         }
 
-        // Create payment intent
         const intent = await createPublicPaymentIntent(token!);
         setIntentData(intent);
 
-        // Load Stripe with the platform's publishable key
         if (intent.publishable_key) {
           setStripePromise(loadStripe(intent.publishable_key));
         }
       } catch (err: any) {
-        setError(err?.message || 'Failed to load payment page.');
+        setError(err?.message || t.publicPayment.failedToLoadPaymentPage);
       } finally {
         setLoading(false);
       }
@@ -60,7 +60,6 @@ export default function PublicPayment() {
     load();
   }, [token]);
 
-  // ── Loading state ──
   if (loading) {
     return (
       <PublicPageShell>
@@ -71,32 +70,30 @@ export default function PublicPayment() {
     );
   }
 
-  // ── Error state ──
   if (error) {
     return (
       <PublicPageShell>
         <div className="text-center py-12">
           <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3" />
-          <h2 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">Payment Unavailable</h2>
+          <h2 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">{t.publicPayment.paymentUnavailable}</h2>
           <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">{error}</p>
         </div>
       </PublicPageShell>
     );
   }
 
-  // ── Already paid ──
   if (paymentData?.status === 'paid') {
     return (
       <PublicPageShell business={paymentData.business}>
         <div className="text-center py-12">
           <CheckCircle2 size={48} className="mx-auto text-green-500 mb-4" />
-          <h2 className="text-xl font-bold text-neutral-800 dark:text-neutral-100">Payment Complete</h2>
+          <h2 className="text-xl font-bold text-neutral-800 dark:text-neutral-100">{t.publicPayment.paymentComplete}</h2>
           <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-            This invoice has already been paid. Thank you!
+            {t.publicPayment.thisInvoiceAlreadyPaid}
           </p>
           {paymentData.amount_cents > 0 && (
             <p className="mt-3 text-lg font-semibold text-neutral-700 dark:text-neutral-200">
-              {formatMoney(paymentData.amount_cents, paymentData.currency)}
+              {formatMoney(paymentData.amount_cents, paymentData.currency, locale)}
             </p>
           )}
         </div>
@@ -104,15 +101,14 @@ export default function PublicPayment() {
     );
   }
 
-  // ── Payment form ──
   if (!paymentData || !intentData || !stripePromise) {
     return (
       <PublicPageShell>
         <div className="text-center py-12">
           <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3" />
-          <h2 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">Unable to Load Payment</h2>
+          <h2 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">{t.publicPayment.unableToLoadPayment}</h2>
           <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-            Please try again or contact the business directly.
+            {t.publicPayment.pleaseTryAgainOrContact}
           </p>
         </div>
       </PublicPageShell>
@@ -125,21 +121,20 @@ export default function PublicPayment() {
       <div className="mb-6">
         {paymentData.client && (
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            Payment for {paymentData.client.name}
+            {t.publicPayment.paymentFor.replace('${name}', paymentData.client.name)}
           </p>
         )}
         {paymentData.invoice && (
           <div className="mt-3 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-neutral-600 dark:text-neutral-300">
-                Invoice {paymentData.invoice.invoice_number}
+                {t.publicPayment.invoice} {paymentData.invoice.invoice_number}
               </span>
               {paymentData.invoice.subject && (
                 <span className="text-xs text-neutral-400">{paymentData.invoice.subject}</span>
               )}
             </div>
 
-            {/* Line items */}
             {paymentData.items && paymentData.items.length > 0 && (
               <div className="border-t border-neutral-100 dark:border-neutral-700 pt-3 space-y-2">
                 {paymentData.items.map((item) => (
@@ -149,7 +144,7 @@ export default function PublicPayment() {
                       {item.qty > 1 && <span className="text-neutral-400 ml-1">x{item.qty}</span>}
                     </span>
                     <span className="text-neutral-700 dark:text-neutral-200 font-medium">
-                      {formatMoney(item.line_total_cents, paymentData.currency)}
+                      {formatMoney(item.line_total_cents, paymentData.currency, locale)}
                     </span>
                   </div>
                 ))}
@@ -158,9 +153,9 @@ export default function PublicPayment() {
 
             <div className="border-t border-neutral-200 dark:border-neutral-600 mt-3 pt-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-neutral-800 dark:text-neutral-100">Amount Due</span>
+                <span className="text-sm font-bold text-neutral-800 dark:text-neutral-100">{t.publicPayment.amountDue}</span>
                 <span className="text-xl font-bold text-neutral-900 dark:text-neutral-50">
-                  {formatMoney(paymentData.amount_cents, paymentData.currency)}
+                  {formatMoney(paymentData.amount_cents, paymentData.currency, locale)}
                 </span>
               </div>
             </div>
@@ -186,6 +181,7 @@ export default function PublicPayment() {
           amountCents={paymentData.amount_cents}
           currency={paymentData.currency}
           publicToken={token!}
+          locale={locale}
         />
       </Elements>
     </PublicPageShell>
@@ -194,13 +190,15 @@ export default function PublicPayment() {
 
 // ── Stripe Checkout Form ──
 
-function CheckoutForm({ amountCents, currency, publicToken }: {
+function CheckoutForm({ amountCents, currency, publicToken, locale }: {
   amountCents: number;
   currency: string;
   publicToken: string;
+  locale: string;
 }) {
   const stripe = useStripe();
   const elements = useElements();
+  const { t } = useTranslation();
   const [processing, setProcessing] = useState(false);
   const [succeeded, setSucceeded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -214,7 +212,7 @@ function CheckoutForm({ amountCents, currency, publicToken }: {
 
     const { error: submitError } = await elements.submit();
     if (submitError) {
-      setError(submitError.message || 'Validation error.');
+      setError(submitError.message || t.publicPayment.validationError);
       setProcessing(false);
       return;
     }
@@ -228,12 +226,11 @@ function CheckoutForm({ amountCents, currency, publicToken }: {
     });
 
     if (confirmError) {
-      setError(confirmError.message || 'Payment failed. Please try again.');
+      setError(confirmError.message || t.publicPayment.paymentFailedTryAgain);
       setProcessing(false);
       return;
     }
 
-    // Payment succeeded without redirect
     setSucceeded(true);
     setProcessing(false);
   }
@@ -242,9 +239,9 @@ function CheckoutForm({ amountCents, currency, publicToken }: {
     return (
       <div className="text-center py-8">
         <CheckCircle2 size={48} className="mx-auto text-green-500 mb-4" />
-        <h3 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">Payment Successful!</h3>
+        <h3 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">{t.publicPayment.paymentSuccessful}</h3>
         <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-          Thank you for your payment of {formatMoney(amountCents, currency)}.
+          {t.publicPayment.thankYouForPayment.replace('${amount}', formatMoney(amountCents, currency, locale))}
         </p>
       </div>
     );
@@ -270,19 +267,19 @@ function CheckoutForm({ amountCents, currency, publicToken }: {
         {processing ? (
           <>
             <Loader2 size={16} className="animate-spin" />
-            Processing...
+            {t.publicPayment.processing}
           </>
         ) : (
           <>
             <Lock size={16} />
-            Pay {formatMoney(amountCents, currency)}
+            {t.publicPayment.payAmount.replace('${amount}', formatMoney(amountCents, currency, locale))}
           </>
         )}
       </button>
 
       <div className="flex items-center justify-center gap-1.5 text-xs text-neutral-400">
         <ShieldCheck size={12} />
-        <span>Secured by Stripe. Your card details are encrypted.</span>
+        <span>{t.publicPayment.securedByStripe}</span>
       </div>
     </form>
   );
@@ -294,9 +291,9 @@ function PublicPageShell({ children, business }: {
   children: React.ReactNode;
   business?: { name: string | null; logo_url: string | null; email: string | null; phone: string | null } | null;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-900 flex flex-col">
-      {/* Header */}
       <header className="border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-4 py-4">
         <div className="max-w-lg mx-auto flex items-center gap-3">
           {business?.logo_url ? (
@@ -307,22 +304,20 @@ function PublicPageShell({ children, business }: {
             </div>
           )}
           <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">
-            {business?.name || 'Payment'}
+            {business?.name || t.publicPayment.payment}
           </span>
         </div>
       </header>
 
-      {/* Content */}
       <main className="flex-1 px-4 py-8">
         <div className="max-w-lg mx-auto bg-white dark:bg-neutral-800 rounded-xl shadow-sm border border-neutral-200 dark:border-neutral-700 p-6">
           {children}
         </div>
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between text-xs text-neutral-400">
-          <span>Powered by Lume</span>
+          <span>{t.publicPayment.poweredByLume}</span>
           {business?.email && <a href={`mailto:${business.email}`} className="hover:underline">{business.email}</a>}
         </div>
       </footer>

@@ -27,6 +27,7 @@ import { cn } from '../../../lib/utils';
 import { streamMessageToAI, analyzeImageWithVision } from '../../../lib/aiApi';
 import { trackUsageEvent } from '../../../lib/directorApi';
 import { MODEL_CATALOG } from '../../../lib/director-panel/config/model-catalog';
+import { useTranslation } from '../../../i18n';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -166,6 +167,7 @@ function formatTimestamp(ts: string): string {
 function OutputsTab() {
   const outputs = useFlowEditorStore((s) => s.runState.outputs);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const { t } = useTranslation();
 
   if (outputs.length === 0) {
     return (
@@ -283,7 +285,7 @@ function OutputsTab() {
                           status: 'completed',
                           metadata: output.metadata || {},
                         }).then(() => {
-                          import('sonner').then(({ toast }) => toast.success('Saved to assets'));
+                          import('sonner').then(({ toast }) => toast.success(t.directorPanel.savedToAssets));
                         });
                       });
                     }}
@@ -720,6 +722,7 @@ Be concise, direct, and actionable. Use short bullet points.`,
 // ---------------------------------------------------------------------------
 
 function OutputPanelComponent() {
+  const { t } = useTranslation();
   const outputPanelOpen = useFlowEditorStore((s) => s.outputPanelOpen);
   const toggleOutputPanel = useFlowEditorStore((s) => s.toggleOutputPanel);
   const activeTab = useFlowEditorStore((s) => s.outputPanelTab);
@@ -805,7 +808,7 @@ function OutputPanelComponent() {
                   Promise.all(promises).then(() => toast.success(`${outputs.length} outputs saved to assets`));
                 });
               }} />
-              <HeaderActionButton icon={Link} label="Attach to Campaign" onClick={() => { import('sonner').then(({ toast }) => toast.info('Campaign linking coming soon')); }} />
+              <HeaderActionButton icon={Link} label="Attach to Campaign" onClick={() => { import('sonner').then(({ toast }) => toast.info(t.directorPanel.campaignLinkingComingSoon)); }} />
             </div>
           )}
         </div>

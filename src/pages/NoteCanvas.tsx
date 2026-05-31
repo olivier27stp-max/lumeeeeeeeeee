@@ -319,7 +319,7 @@ function CanvasInner() {
           })))).catch(() => {}),
         ]);
       } catch (err) {
-        toast.error('Failed to load board');
+        toast.error(t.noteCanvas.failedToLoadBoard);
         navigate('/notes');
       } finally {
         setLoading(false);
@@ -478,9 +478,9 @@ function CanvasInner() {
       setConnections((prev) => [...prev, conn]);
       setEdges((eds) => [...eds, connectionToEdge(conn)]);
       setActiveTool('select');
-      toast.success('Connected');
+      toast.success(t.noteCanvas.connected);
     } catch {
-      toast.error('Failed to create connection');
+      toast.error(t.noteCanvas.failedToCreateConnection);
     }
   }, [boardId, setEdges]);
 
@@ -520,7 +520,7 @@ function CanvasInner() {
         setItems((prev) => [...prev, fullItem]);
         setNodes((nds) => [...nds, buildNode(fullItem)]);
       } catch {
-        toast.error('Failed to add link');
+        toast.error(t.noteCanvas.failedToAddLink);
       }
       return;
     }
@@ -554,7 +554,7 @@ function CanvasInner() {
       setItems((prev) => [...prev, item]);
       setNodes((nds) => [...nds, buildNode(item)]);
     } catch {
-      toast.error('Failed to add item');
+      toast.error(t.noteCanvas.failedToAddItem);
     }
   }, [boardId, language, screenToFlowPosition, buildNode, setNodes]);
 
@@ -599,7 +599,7 @@ function CanvasInner() {
       setItems((prev) => [...prev, fullItem]);
       setNodes((nds) => [...nds, buildNode(fullItem)]);
     } catch {
-      toast.error('Failed to upload file');
+      toast.error(t.noteCanvas.failedToUploadFile);
     }
   }, [boardId, screenToFlowPosition, buildNode, setNodes]);
 
@@ -624,9 +624,9 @@ function CanvasInner() {
       });
       setItems((prev) => [...prev, item]);
       setNodes((nds) => [...nds, buildNode(item)]);
-      toast.success('Duplicated');
+      toast.success(t.noteCanvas.duplicated);
     } catch {
-      toast.error('Failed to duplicate');
+      toast.error(t.noteCanvas.failedToDuplicate);
     }
   }, [selectedItem, boardId, buildNode, setNodes]);
 
@@ -638,9 +638,9 @@ function CanvasInner() {
         setConnections((prev) => prev.filter((c) => c.id !== selectedEdgeId));
         setEdges((eds) => eds.filter((e) => e.id !== selectedEdgeId));
         setSelectedEdgeId(null);
-        toast.success('Connector deleted');
+        toast.success(t.noteCanvas.connectorDeleted);
       } catch {
-        toast.error('Failed to delete connector');
+        toast.error(t.noteCanvas.failedToDeleteConnector);
       }
       return;
     }
@@ -651,7 +651,7 @@ function CanvasInner() {
       setNodes((nds) => nds.filter((n) => n.id !== selectedItemId));
       setSelectedItemId(null);
     } catch {
-      toast.error('Failed to delete item');
+      toast.error(t.noteCanvas.failedToDeleteItem);
     }
   }, [selectedItemId, selectedEdgeId, setNodes, setEdges]);
 
@@ -667,7 +667,7 @@ function CanvasInner() {
         n.id === selectedItem.id ? { ...n, draggable: !locked, data: { ...n.data, locked } } : n
       ));
     } catch {
-      toast.error('Failed to update');
+      toast.error(t.noteCanvas.failedToUpdate);
     }
   }, [selectedItem, setNodes, markLocalUpdate]);
 
@@ -709,7 +709,7 @@ function CanvasInner() {
       markLocalUpdate(id);
       await updateItem(id, updates);
     } catch {
-      toast.error('Failed to update');
+      toast.error(t.noteCanvas.failedToUpdate);
     }
   }, [setNodes, markLocalUpdate]);
 
@@ -722,7 +722,7 @@ function CanvasInner() {
       ));
       toast.success(t.noteCanvas.entityLinked);
     } catch {
-      toast.error('Failed to link entity');
+      toast.error(t.noteCanvas.failedToLinkEntity);
     }
   }, [language]);
 
@@ -734,7 +734,7 @@ function CanvasInner() {
         entity_links: (i.entity_links || []).filter((l) => l.id !== linkId),
       })));
     } catch {
-      toast.error('Failed to unlink');
+      toast.error(t.noteCanvas.failedToUnlink);
     }
   }, []);
 
@@ -751,7 +751,7 @@ function CanvasInner() {
       });
       setComments((prev) => [...prev, comment]);
     } catch {
-      toast.error('Failed to add comment');
+      toast.error(t.noteCanvas.failedToAddComment);
     }
   }, [boardId, currentUser]);
 
@@ -760,7 +760,7 @@ function CanvasInner() {
       await resolveBoardComment(commentId);
       setComments((prev) => prev.map((c) => c.id === commentId ? { ...c, resolved: true } : c));
     } catch {
-      toast.error('Failed to resolve comment');
+      toast.error(t.noteCanvas.failedToResolveComment);
     }
   }, []);
 
@@ -769,7 +769,7 @@ function CanvasInner() {
       await deleteBoardComment(commentId);
       setComments((prev) => prev.filter((c) => c.id !== commentId && c.parent_id !== commentId));
     } catch {
-      toast.error('Failed to delete comment');
+      toast.error(t.noteCanvas.failedToDeleteComment);
     }
   }, []);
 
@@ -832,7 +832,7 @@ function CanvasInner() {
             .join('\n');
           setAiResult(
             (t.noteCanvas.clustersFoundnn) + summary +
-            (language === 'fr' ? '\n\nCliquez "Appliquer" pour repositionner les notes.' : '\n\nClick "Apply" to reposition notes.')
+            t.noteCanvas.clickApplyToRepositionNotes
           );
           break;
         }
@@ -848,7 +848,7 @@ function CanvasInner() {
             return text;
           };
           setAiResult(renderTree(result.root) +
-            (language === 'fr' ? '\n\nCliquez "Appliquer" pour creer le mind map sur le canvas.' : '\n\nClick "Apply" to create the mind map on the canvas.'));
+            t.noteCanvas.clickApplyToCreateMindMap);
           break;
         }
         case 'summary': {
@@ -867,7 +867,7 @@ function CanvasInner() {
           aiPendingDataRef.current = result;
           setAiResult(
             result.map((r) => `• ${r.text}`).join('\n') +
-            (language === 'fr' ? '\n\nCliquez "Appliquer" pour ajouter ces idees au canvas.' : '\n\nClick "Apply" to add these ideas to the canvas.')
+            t.noteCanvas.clickApplyToAddIdeas
           );
           break;
         }
@@ -880,7 +880,7 @@ function CanvasInner() {
           aiPendingDataRef.current = { itemId: selectedItem.id, text: result };
           setAiResult(
             (t.noteCanvas.improvedTextnn) + result +
-            (language === 'fr' ? '\n\nCliquez "Appliquer" pour remplacer.' : '\n\nClick "Apply" to replace.')
+            t.noteCanvas.clickApplyToReplace
           );
           break;
         }
@@ -1058,7 +1058,7 @@ function CanvasInner() {
         }
       }
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to apply');
+      toast.error(err?.message || t.noteCanvas.failedToApply);
     }
 
     setAiResult(null);
@@ -1153,7 +1153,7 @@ function CanvasInner() {
           }).then((item) => {
             setItems((prev) => [...prev, item]);
             setNodes((nds) => [...nds, buildNode(item)]);
-          }).catch(() => toast.error('Paste failed'));
+          }).catch(() => toast.error(t.noteCanvas.pasteFailed));
         }
         break;
       }
@@ -1487,9 +1487,7 @@ function CanvasInner() {
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
             <div className="pointer-events-auto bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-[13px] font-medium flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              {language === 'fr'
-                ? 'Mode flèche — glisse d\'un point bleu vers un autre pour relier'
-                : 'Arrow mode — drag from a blue dot to another to connect'}
+              {t.noteCanvas.arrowModeHint}
               <button
                 onClick={() => setActiveTool('select')}
                 className="ml-2 px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded text-[11px] transition-colors"
@@ -1504,13 +1502,13 @@ function CanvasInner() {
         {isDrawing && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
             <div className="pointer-events-auto flex items-center gap-2 bg-surface border border-outline rounded-xl shadow-lg px-3 py-2">
-              {(['pen', 'highlighter', 'eraser'] as DrawTool[]).map((t) => (
+              {(['pen', 'highlighter', 'eraser'] as DrawTool[]).map((tool) => (
                 <button
-                  key={t}
-                  onClick={() => setDrawTool(t)}
-                  className={`px-3 py-1 rounded-lg text-[11px] font-medium transition-colors ${drawTool === t ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'text-text-tertiary hover:bg-surface-secondary'}`}
+                  key={tool}
+                  onClick={() => setDrawTool(tool)}
+                  className={`px-3 py-1 rounded-lg text-[11px] font-medium transition-colors ${drawTool === tool ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'text-text-tertiary hover:bg-surface-secondary'}`}
                 >
-                  {t === 'pen' ? (t.noteCanvas.pen) : t === 'highlighter' ? (t.noteCanvas.highlighter) : (t.noteCanvas.eraser)}
+                  {tool === 'pen' ? t.noteCanvas.pen : tool === 'highlighter' ? t.noteCanvas.highlighter : t.noteCanvas.eraser}
                 </button>
               ))}
               <div className="w-px h-5 bg-outline" />

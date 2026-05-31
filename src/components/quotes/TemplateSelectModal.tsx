@@ -4,7 +4,7 @@ import { LayoutTemplate, Plus, Loader2, Package, FileText } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { listQuoteTemplates } from '../../lib/quoteTemplatesApi';
 import type { QuoteTemplate } from '../../types';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 interface TemplateSelectModalProps {
   isOpen: boolean;
@@ -25,6 +25,7 @@ export default function TemplateSelectModal({
   onStartFromScratch,
   onClose,
 }: TemplateSelectModalProps) {
+  const { t } = useTranslation();
   const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
   const [loading, setLoading] = useState(true);
 

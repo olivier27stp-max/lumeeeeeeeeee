@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronUp, Mail, Paperclip, Send, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { sendEmail } from '../../lib/communicationsApi';
+import { useTranslation } from '../../i18n';
 
 interface SendEmailModalProps {
   /** Pre-filled recipient email */
@@ -35,6 +36,7 @@ export default function SendEmailModal({
   onClose,
   onSent,
 }: SendEmailModalProps) {
+  const { t } = useTranslation();
   const [to, setTo] = useState(email || '');
   const [subject, setSubject] = useState(defaultSubject);
   const [body, setBody] = useState(defaultBody);
@@ -64,7 +66,7 @@ export default function SendEmailModal({
 
   const handleSend = async () => {
     if (!to.trim() || !subject.trim() || !body.trim()) {
-      toast.error('All fields are required.');
+      toast.error(t.sendEmail.allFieldsRequired);
       return;
     }
     setSending(true);
@@ -78,11 +80,11 @@ export default function SendEmailModal({
         reply_to: replyTo,
       });
       setSent(true);
-      toast.success('Email sent');
+      toast.success(t.sendEmail.toastSent);
       onSent?.();
       setTimeout(() => onClose(), 1500);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to send email');
+      toast.error(err?.message || t.sendEmail.toastFailed);
     } finally {
       setSending(false);
     }
@@ -113,7 +115,7 @@ export default function SendEmailModal({
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-outline">
         <h3 className="text-[16px] font-bold text-text-primary">
-          Email booking confirmation{clientName ? ` to ${clientName}` : ''}
+          {t.sendEmail.title}{clientName ? ` ${t.sendEmail.to} ${clientName}` : ''}
         </h3>
         <button
           onClick={onClose}
@@ -131,7 +133,7 @@ export default function SendEmailModal({
           <div className="flex-[3] px-6 py-5 space-y-4 border-b lg:border-b-0 lg:border-r border-outline min-w-0">
             {/* To */}
             <div>
-              <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">To</label>
+              <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{t.sendEmail.toLabel}</label>
               <div className="glass-input w-full flex items-center gap-2 flex-wrap min-h-[34px]">
                 {to.trim() && isEmailValid ? (
                   <span className="inline-flex items-center gap-1 bg-surface-tertiary text-text-primary text-[12px] font-medium rounded px-2 py-0.5">
@@ -157,19 +159,19 @@ export default function SendEmailModal({
                 )}
               </div>
               {to.trim().length > 0 && !isEmailValid && (
-                <p className="text-[11px] text-danger mt-1">Enter a valid email address</p>
+                <p className="text-[11px] text-danger mt-1">{t.sendEmail.invalidEmail}</p>
               )}
             </div>
 
             {/* Subject */}
             <div>
-              <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">Subject</label>
+              <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{t.sendEmail.subject}</label>
               <input
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 className="glass-input w-full"
                 disabled={sent}
-                placeholder="Email subject"
+                placeholder="Objet du courriel"
               />
             </div>
 
@@ -181,7 +183,7 @@ export default function SendEmailModal({
                 rows={12}
                 className="glass-input w-full resize-none leading-relaxed"
                 disabled={sent}
-                placeholder="Write your message..."
+                placeholder="Rédigez votre message..."
               />
             </div>
 
@@ -194,18 +196,18 @@ export default function SendEmailModal({
                 className="w-3.5 h-3.5 rounded border-outline text-primary accent-primary"
                 disabled={sent}
               />
-              <span className="text-[12px] text-text-secondary">Send me a copy</span>
+              <span className="text-[12px] text-text-secondary">{t.sendEmail.sendMeCopy}</span>
             </label>
 
             {/* Helper text */}
             <p className="text-[11px] text-text-tertiary">
-              Your client will see a button to view the schedule and location of their upcoming appointments in their client hub.
+              {t.sendEmail.helperText}
             </p>
           </div>
 
           {/* Right column: attachments */}
           <div className="flex-[2] px-6 py-5 space-y-4 min-w-0">
-            <h4 className="text-[13px] font-semibold text-text-primary">Attachments</h4>
+            <h4 className="text-[13px] font-semibold text-text-primary">{t.sendEmail.attachments}</h4>
 
             {/* Drop zone */}
             <div
@@ -219,14 +221,14 @@ export default function SendEmailModal({
               }`}
             >
               <Upload size={18} className="mx-auto mb-2 text-text-tertiary" />
-              <p className="text-[12px] text-text-tertiary mb-2">Drag your files here or</p>
+              <p className="text-[12px] text-text-tertiary mb-2">{t.sendEmail.dragFilesOr}</p>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="glass-button text-[12px] inline-flex items-center gap-1.5"
                 disabled={sent}
               >
                 <Paperclip size={12} />
-                Select a File
+                {t.sendEmail.selectFile}
               </button>
               <input
                 ref={fileInputRef}
@@ -256,14 +258,14 @@ export default function SendEmailModal({
               onClick={() => setJobAttOpen(!jobAttOpen)}
               className="w-full flex items-center justify-between py-2 px-3 rounded-lg border border-outline hover:bg-surface-secondary transition-colors text-[13px]"
             >
-              <span className="text-text-primary font-medium">Job attachments</span>
+              <span className="text-text-primary font-medium">{t.sendEmail.jobAttachments}</span>
               <span className="flex items-center gap-1.5 text-text-tertiary">
                 <span className="bg-surface-tertiary text-text-secondary text-[11px] font-semibold rounded-full w-5 h-5 inline-flex items-center justify-center">0</span>
                 {jobAttOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </span>
             </button>
             {jobAttOpen && (
-              <p className="text-[11px] text-text-tertiary px-3">No job attachments available.</p>
+              <p className="text-[11px] text-text-tertiary px-3">{t.sendEmail.noJobAttachments}</p>
             )}
 
             {/* Client attachments */}
@@ -271,19 +273,19 @@ export default function SendEmailModal({
               onClick={() => setClientAttOpen(!clientAttOpen)}
               className="w-full flex items-center justify-between py-2 px-3 rounded-lg border border-outline hover:bg-surface-secondary transition-colors text-[13px]"
             >
-              <span className="text-text-primary font-medium">Client attachments</span>
+              <span className="text-text-primary font-medium">{t.sendEmail.clientAttachments}</span>
               <span className="flex items-center gap-1.5 text-text-tertiary">
                 <span className="bg-surface-tertiary text-text-secondary text-[11px] font-semibold rounded-full w-5 h-5 inline-flex items-center justify-center">0</span>
                 {clientAttOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </span>
             </button>
             {clientAttOpen && (
-              <p className="text-[11px] text-text-tertiary px-3">No client attachments available.</p>
+              <p className="text-[11px] text-text-tertiary px-3">{t.sendEmail.noClientAttachments}</p>
             )}
 
             {/* Size indicator */}
             <p className="text-[11px] text-text-tertiary">
-              You've attached {totalSizeMB.toFixed(2)} MB out of the 10 MB limit
+              {t.sendEmail.sizeIndicator.replace('${size}', totalSizeMB.toFixed(2))}
             </p>
           </div>
         </div>
@@ -292,11 +294,11 @@ export default function SendEmailModal({
       {/* ── Footer ── */}
       <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-outline bg-surface">
         <button onClick={onClose} className="glass-button">
-          Cancel
+          {t.sendEmail.cancel}
         </button>
         {sent ? (
           <span className="inline-flex items-center gap-1.5 text-[13px] text-success font-semibold px-3 py-1.5">
-            <CheckCircle2 size={15} /> Sent
+            <CheckCircle2 size={15} /> {t.sendEmail.sent}
           </span>
         ) : (
           <button
@@ -307,12 +309,12 @@ export default function SendEmailModal({
             {sending ? (
               <>
                 <span className="inline-block w-3.5 h-3.5 border-2 border-surface/30 border-t-surface rounded-full animate-spin" />
-                Sending…
+                {t.sendEmail.sending}
               </>
             ) : (
               <>
                 <Send size={14} />
-                Send Email
+                {t.sendEmail.sendEmail}
               </>
             )}
           </button>

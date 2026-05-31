@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Play, ChevronDown, ChevronRight, AlertTriangle, Clock, Coins, Layers, RefreshCw, ExternalLink, Image as ImageIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 import { PageHeader } from '../../components/ui';
 import { supabase } from '../../lib/supabase';
 import type { DirectorRun, DirectorRunStep } from '../../types/director';
@@ -68,6 +69,7 @@ const statusText: Record<string, string> = {
 // ─── Steps Row ──────────────────────────────────────────────────────────────
 
 function RunSteps({ runId }: { runId: string }) {
+  const { t } = useTranslation();
   const [steps, setSteps] = useState<DirectorRunStep[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -100,7 +102,7 @@ function RunSteps({ runId }: { runId: string }) {
 
   if (steps.length === 0) {
     return (
-      <div className="px-6 py-3 text-[12px] text-text-tertiary">No steps recorded</div>
+      <div className="px-6 py-3 text-[12px] text-text-tertiary">{t.directorPanel.noStepsRecorded}</div>
     );
   }
 
@@ -109,10 +111,10 @@ function RunSteps({ runId }: { runId: string }) {
       <table className="w-full text-[12px]">
         <thead>
           <tr className="text-text-tertiary text-left">
-            <th className="pb-1.5 font-medium">Status</th>
-            <th className="pb-1.5 font-medium">Provider</th>
-            <th className="pb-1.5 font-medium">Model</th>
-            <th className="pb-1.5 font-medium text-right">Duration</th>
+            <th className="pb-1.5 font-medium">{t.directorPanel.status}</th>
+            <th className="pb-1.5 font-medium">{t.directorPanel.provider}</th>
+            <th className="pb-1.5 font-medium">{t.directorPanel.model}</th>
+            <th className="pb-1.5 font-medium text-right">{t.directorPanel.duration}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-outline/50">
@@ -189,7 +191,7 @@ function RunSteps({ runId }: { runId: string }) {
         return (
           <div className="mt-3">
             <p className="text-[11px] font-medium text-text-tertiary mb-1.5 flex items-center gap-1">
-              <ImageIcon className="w-3 h-3" /> Outputs
+              <ImageIcon className="w-3 h-3" /> {t.directorPanel.outputs}
             </p>
             <div className="flex gap-2 flex-wrap">
               {outputs.map((url, i) =>
@@ -199,7 +201,7 @@ function RunSteps({ runId }: { runId: string }) {
                   </a>
                 ) : (
                   <span key={i} className="block w-16 h-16 rounded-md overflow-hidden border border-outline text-[9px] text-text-tertiary flex items-center justify-center">
-                    Invalid URL
+                    {t.directorPanel.invalidUrl}
                   </span>
                 )
               )}
@@ -214,6 +216,7 @@ function RunSteps({ runId }: { runId: string }) {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function DirectorRuns({ orgId }: { orgId: string }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [runs, setRuns] = useState<RunWithFlow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -298,14 +301,14 @@ export default function DirectorRuns({ orgId }: { orgId: string }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Run History" subtitle="All flow executions" icon={Play} iconColor="amber">
+      <PageHeader title={t.directorPanel.runHistoryTitle} subtitle={t.directorPanel.runHistorySubtitle} icon={Play} iconColor="amber">
         <button
           onClick={fetchRuns}
           disabled={loading}
           className="glass-button flex items-center gap-1.5 px-3 py-1.5 text-[12px]"
         >
           <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
-          Refresh
+          {t.directorPanel.refresh}
         </button>
       </PageHeader>
 
@@ -323,9 +326,9 @@ export default function DirectorRuns({ orgId }: { orgId: string }) {
         /* Empty state */
         <div className="section-card flex flex-col items-center justify-center py-16">
           <Play className="w-10 h-10 text-text-tertiary mb-3" />
-          <p className="text-[13px] font-medium text-text-secondary">No runs yet</p>
+          <p className="text-[13px] font-medium text-text-secondary">{t.directorPanel.noRunsYet}</p>
           <p className="text-[12px] text-text-tertiary mt-1">
-            Execute a flow to see its run history here
+            {t.directorPanel.executeFlowHint}
           </p>
         </div>
       ) : (

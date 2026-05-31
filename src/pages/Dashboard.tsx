@@ -205,7 +205,7 @@ export default function Dashboard() {
               <div className="p-8 text-center">
                 <Calendar size={24} className="mx-auto text-text-tertiary mb-2" />
                 <p className="text-[13px] text-text-tertiary">
-                  {language === 'fr' ? 'Aucune job planifiee aujourd\'hui' : 'No jobs scheduled today'}
+                  {t.dashboard.noJobsScheduledToday}
                 </p>
               </div>
             ) : (
@@ -348,7 +348,7 @@ export default function Dashboard() {
               </button>
               <button onClick={() => navigate('/insights')} className="rounded-xl border border-outline-subtle p-3 text-left hover:border-outline transition-colors">
                 <p className="text-xl font-bold text-text-primary">{formatCurrency(data.performance?.revenue?.today ?? 0)}</p>
-                <p className="text-[10px] text-text-tertiary font-medium">{language === 'fr' ? 'Revenu aujourd\'hui' : 'Revenue today'}</p>
+                <p className="text-[10px] text-text-tertiary font-medium">{t.dashboard.revenueToday}</p>
               </button>
             </div>
           </div>

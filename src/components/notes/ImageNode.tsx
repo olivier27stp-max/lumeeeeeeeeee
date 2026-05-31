@@ -132,7 +132,7 @@ function ImageNode({ data, selected }: NodeProps & { data: ImageNodeData }) {
                 className="nodrag p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => e.stopPropagation()}
-                title="Open in new tab"
+                title="Ouvrir dans un nouvel onglet"
               >
                 <ExternalLink size={12} />
               </a>
@@ -142,7 +142,7 @@ function ImageNode({ data, selected }: NodeProps & { data: ImageNodeData }) {
                 className="nodrag p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => e.stopPropagation()}
-                title="Download"
+                title="Télécharger"
               >
                 <Download size={12} />
               </a>
@@ -213,7 +213,7 @@ function ImageNode({ data, selected }: NodeProps & { data: ImageNodeData }) {
                 className="nodrag p-1.5 text-text-tertiary hover:text-text-primary rounded hover:bg-surface-secondary transition-colors"
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => e.stopPropagation()}
-                title="Download"
+                title="Télécharger"
               >
                 <Download size={14} />
               </a>

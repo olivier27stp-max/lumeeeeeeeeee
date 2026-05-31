@@ -55,7 +55,7 @@ export default function NoteBoards() {
       const data = await fetchBoards();
       setBoards(data);
     } catch (err) {
-      toast.error('Failed to load boards');
+      toast.error(t.noteBoards.failedToLoadBoards);
     } finally {
       setLoading(false);
     }
@@ -82,7 +82,7 @@ export default function NoteBoards() {
       setNewType('freeform');
       navigate(`/notes/${board.id}`);
     } catch (err) {
-      toast.error('Failed to create board');
+      toast.error(t.noteBoards.failedToCreateBoard);
     } finally {
       setCreating(false);
     }
@@ -95,7 +95,7 @@ export default function NoteBoards() {
       setBoards((prev) => prev.filter((b) => b.id !== id));
       toast.success(t.noteBoards.boardDeleted);
     } catch {
-      toast.error('Failed to delete board');
+      toast.error(t.noteBoards.failedToDeleteBoard);
     }
   };
 
@@ -105,7 +105,7 @@ export default function NoteBoards() {
       setBoards((prev) => prev.filter((b) => b.id !== id));
       toast.success(t.noteBoards.boardArchived);
     } catch {
-      toast.error('Failed to archive board');
+      toast.error(t.noteBoards.failedToArchiveBoard);
     }
   };
 
@@ -158,9 +158,7 @@ export default function NoteBoards() {
             }
             description={search
               ? undefined
-              : (language === 'fr'
-                ? 'Créez votre premier tableau pour commencer à collaborer visuellement.'
-                : 'Create your first board to start collaborating visually.')
+              : t.noteBoards.createFirstBoardDesc
             }
             action={!search ? (
               <button onClick={() => setShowCreate(true)} className="btn-primary text-[13px] flex items-center gap-1.5">

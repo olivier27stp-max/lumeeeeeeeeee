@@ -84,7 +84,7 @@ const MONTH_NAMES_EN = ['January', 'February', 'March', 'April', 'May', 'June', 
 const MONTH_NAMES_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 
 export default function Timesheets() {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [employees, setEmployees] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -285,7 +285,7 @@ export default function Timesheets() {
             <ChevronRight size={14} />
           </button>
           <button onClick={() => setCurrentDate(new Date())} className="glass-button text-[12px] !py-1.5">
-            {language === 'fr' ? "Aujourd'hui" : 'Today'}
+            {t.timesheets.today}
           </button>
         </div>
       </div>

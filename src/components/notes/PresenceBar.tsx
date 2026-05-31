@@ -2,7 +2,7 @@
 
 import React, { memo } from 'react';
 import { cn } from '../../lib/utils';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 export interface PresenceUser {
   userId: string;
@@ -17,6 +17,7 @@ interface PresenceBarProps {
 }
 
 function PresenceBar({ users, language }: PresenceBarProps) {
+  const { t } = useTranslation();
   if (users.length === 0) return null;
 
   return (

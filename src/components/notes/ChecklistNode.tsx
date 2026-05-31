@@ -140,7 +140,7 @@ function ChecklistNode({ data, selected }: NodeProps & { data: ChecklistNodeData
             }}
             onPointerDown={stopDrag}
             onMouseDown={stopDrag}
-            placeholder="Add item..."
+            placeholder="Ajouter un élément..."
             className="nodrag nowheel flex-1 text-[12px] bg-transparent border-none outline-none text-text-secondary placeholder:text-text-tertiary"
           />
           <button onClick={addItem} onPointerDown={stopDrag} className="text-text-tertiary hover:text-text-primary">

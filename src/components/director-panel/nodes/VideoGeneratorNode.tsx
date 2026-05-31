@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { useFlowEditorStore } from '../../../lib/director-panel/store';
+import { useTranslation } from '../../../i18n';
 
 // ---------------------------------------------------------------------------
 // Data shape
@@ -52,12 +53,13 @@ const HANDLE_START_Y = 56;
 const VideoGeneratorNodeComponent = ({ id, data, selected }: NodeProps) => {
   const nodeData = data as unknown as VideoGeneratorNodeData;
   const { updateNodeData } = useReactFlow();
+  const { t } = useTranslation();
 
   const handleRun = useCallback(() => {
     import('sonner').then(({ toast }) => {
-      toast.info('Use the Run button in the top bar to execute the full flow. Individual node execution is not supported — nodes depend on upstream connections.');
+      toast.info(t.directorPanel.nodeRunButtonInfo);
     });
-  }, []);
+  }, [t]);
 
   const nodeState = useFlowEditorStore((s) => s.runState.nodeStates[id]);
   const isNodeRunning = nodeState === 'running';

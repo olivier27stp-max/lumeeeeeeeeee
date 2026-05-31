@@ -100,7 +100,7 @@ function getChannels(actions: AutomationRule['actions']): string[] {
 // ═════════════════════════════════════════════════════════════
 
 export default function Automations() {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const fr = language === 'fr';
 
   const [rules, setRules] = useState<AutomationRule[]>([]);

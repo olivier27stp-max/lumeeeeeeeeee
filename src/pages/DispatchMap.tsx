@@ -194,11 +194,11 @@ export default function DispatchMap() {
   const formatAge = (dateStr: string) => {
     const diffMs = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diffMs / 60000);
-    if (mins < 1) return 'Just now';
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1) return t.dispatchMap.justNow;
+    if (mins < 60) return `${mins}${t.dispatchMap.mAgo}`;
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.floor(hrs / 24)}d ago`;
+    if (hrs < 24) return `${hrs}${t.dispatchMap.hAgo}`;
+    return `${Math.floor(hrs / 24)}${t.dispatchMap.dAgo}`;
   };
 
   return (
@@ -215,11 +215,11 @@ export default function DispatchMap() {
           <div>
             <h1 className="text-[17px] font-bold text-text-primary flex items-center gap-2">
               <MapPin size={18} />
-              Dispatch Map
+              {t.dispatchMap.title}
             </h1>
             <p className="text-[12px] text-text-tertiary">
-              {locations.length + liveLocations.length} technician{(locations.length + liveLocations.length) !== 1 ? 's' : ''}
-              {showJobs && jobPins.length > 0 ? ` · ${jobPins.length} jobs` : ''}
+              {locations.length + liveLocations.length} {(locations.length + liveLocations.length) !== 1 ? t.dispatchMap.technicians : t.dispatchMap.technician}
+              {showJobs && jobPins.length > 0 ? ` · ${jobPins.length} ${t.dispatchMap.jobs}` : ''}
             </p>
           </div>
         </div>
@@ -234,7 +234,7 @@ export default function DispatchMap() {
           ) : (
             <div className="flex items-center gap-1.5 text-[11px] text-text-tertiary font-medium bg-surface-tertiary px-2.5 py-1 rounded-full">
               <WifiOff size={11} />
-              No provider
+              {t.dispatchMap.noProvider}
             </div>
           )}
 
@@ -247,7 +247,7 @@ export default function DispatchMap() {
             )}
           >
             <Briefcase size={11} />
-            Jobs ({jobPins.length})
+            {t.dispatchMap.jobs} ({jobPins.length})
           </button>
 
           {/* Geofence toggle */}
@@ -259,7 +259,7 @@ export default function DispatchMap() {
             )}
           >
             <Crosshair size={11} />
-            Geofences
+            {t.dispatchMap.geofences}
           </button>
 
           {/* Sync button */}
@@ -269,7 +269,7 @@ export default function DispatchMap() {
             className="btn-secondary text-[12px] px-3 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50"
           >
             {syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-            {syncing ? 'Syncing...' : 'Sync'}
+            {syncing ? t.dispatchMap.syncing : t.dispatchMap.sync}
           </button>
         </div>
       </div>
@@ -286,13 +286,13 @@ export default function DispatchMap() {
             )}
           >
             <CalendarIcon size={10} />
-            {range === 'today' ? 'Today' : range === 'tomorrow' ? 'Tomorrow' : range === 'this_week' ? 'This Week' : 'All Scheduled'}
+            {range === 'today' ? t.dispatchMap.today : range === 'tomorrow' ? t.dispatchMap.tomorrow : range === 'this_week' ? t.dispatchMap.thisWeek : t.dispatchMap.allScheduled}
           </button>
         ))}
         {liveLocations.length > 0 && (
           <span className="ml-auto text-[11px] text-emerald-600 font-medium bg-emerald-50 px-2.5 py-1 rounded-full flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            {liveLocations.length} live
+            {liveLocations.length} {t.dispatchMap.live}
           </span>
         )}
       </div>
@@ -332,7 +332,7 @@ export default function DispatchMap() {
                 <Popup>
                   <div className="text-[12px]">
                     <p className="font-semibold">{fence.name}</p>
-                    <p className="text-gray-500">{fence.radius_m}m radius</p>
+                    <p className="text-gray-500">{fence.radius_m}m {t.dispatchMap.radius}</p>
                   </div>
                 </Popup>
               </LeafletCircle>
@@ -352,7 +352,7 @@ export default function DispatchMap() {
                 >
                   <Popup>
                     <div className="text-[12px] min-w-[160px]">
-                      <p className="font-semibold text-[13px]">{loc.user_name || 'Unknown'}</p>
+                      <p className="font-semibold text-[13px]">{loc.user_name || t.dispatchMap.unknown}</p>
                       {loc.address && <p className="text-gray-500 mt-0.5">{loc.address}</p>}
                       <div className="mt-2 space-y-1 text-gray-600">
                         {loc.speed_kmh != null && (
@@ -391,21 +391,21 @@ export default function DispatchMap() {
                 >
                   <Popup>
                     <div className="text-[12px] min-w-[180px]">
-                      <p className="font-semibold text-[13px]">{loc.user_name || 'Unknown'}</p>
+                      <p className="font-semibold text-[13px]">{loc.user_name || t.dispatchMap.unknown}</p>
                       {loc.team_name && <p className="text-gray-500">{loc.team_name}</p>}
                       <div className="mt-2 space-y-1 text-gray-600">
                         <p className="flex items-center gap-1">
                           <Navigation size={10} />
-                          {loc.is_moving ? `${((loc.speed_mps || 0) * 3.6).toFixed(0)} km/h` : 'Stationary'}
+                          {loc.is_moving ? `${((loc.speed_mps || 0) * 3.6).toFixed(0)} km/h` : t.dispatchMap.stationary}
                         </p>
                         {loc.accuracy_m != null && (
                           <p className="flex items-center gap-1">
-                            <Wifi size={10} /> {Math.round(loc.accuracy_m)}m accuracy
+                            <Wifi size={10} /> {Math.round(loc.accuracy_m)}m {t.dispatchMap.accuracy}
                           </p>
                         )}
                         <p className="flex items-center gap-1">
                           <Clock size={10} /> {formatAge(loc.recorded_at)}
-                          {isStale && <span className="text-amber-600 font-semibold ml-1">Stale</span>}
+                          {isStale && <span className="text-amber-600 font-semibold ml-1">{t.dispatchMap.stale}</span>}
                         </p>
                       </div>
                     </div>
@@ -445,12 +445,12 @@ export default function DispatchMap() {
         <div className="absolute top-3 left-3 z-[1000] bg-surface rounded-xl border border-outline shadow-lg max-h-[calc(100%-24px)] overflow-y-auto w-[200px]">
           <div className="px-3 py-2.5 border-b border-outline flex items-center gap-1.5">
             <Users size={13} className="text-text-tertiary" />
-            <span className="text-[12px] font-semibold text-text-primary">Team</span>
+            <span className="text-[12px] font-semibold text-text-primary">{t.dispatchMap.team}</span>
             <span className="ml-auto text-[11px] text-text-tertiary">{locations.length}</span>
           </div>
           {locations.length === 0 ? (
             <p className="text-[11px] text-text-tertiary text-center py-4 px-3">
-              No technicians tracked yet. Connect a GPS provider in Settings.
+              {t.dispatchMap.noTechnicians}
             </p>
           ) : (
             <div className="py-1">
@@ -471,7 +471,7 @@ export default function DispatchMap() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-[12px] font-medium text-text-primary truncate">
-                      {loc.user_name || 'Unknown'}
+                      {loc.user_name || t.dispatchMap.unknown}
                     </p>
                     <p className="text-[10px] text-text-tertiary">{formatAge(loc.recorded_at)}</p>
                   </div>
@@ -495,25 +495,25 @@ export default function DispatchMap() {
             {locations.length > 0 && (
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-blue-500 border border-white" />
-                <span className="text-text-secondary">External GPS</span>
+                <span className="text-text-secondary">{t.dispatchMap.externalGps}</span>
               </div>
             )}
             {liveLocations.length > 0 && (
               <div className="flex items-center gap-1.5">
                 <div className="w-3.5 h-3.5 rounded-full bg-violet-500 border-2 border-white" />
-                <span className="text-text-secondary">Live Tracking</span>
+                <span className="text-text-secondary">{t.dispatchMap.liveTracking}</span>
               </div>
             )}
             {showJobs && jobPins.length > 0 && (
               <div className="flex items-center gap-1.5">
                 <div className="w-2.5 h-2.5 rounded-full bg-blue-500 border border-white" />
-                <span className="text-text-secondary">Jobs ({jobPins.length})</span>
+                <span className="text-text-secondary">{t.dispatchMap.jobs} ({jobPins.length})</span>
               </div>
             )}
             {showGeofences && geofences.length > 0 && (
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-full border-2 border-dashed border-warning bg-warning/10" />
-                <span className="text-text-secondary">Geofences</span>
+                <span className="text-text-secondary">{t.dispatchMap.geofences}</span>
               </div>
             )}
           </div>

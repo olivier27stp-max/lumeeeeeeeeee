@@ -6,7 +6,7 @@
 
 import type { CRMContext } from './types';
 import { getDashboardData, type DashboardData } from '../dashboardApi';
-import { useTranslation } from '../i18n';
+import { getTranslations } from '../../i18n';
 
 /**
  * Build a natural-language CRM context block for the system prompt.
@@ -14,7 +14,7 @@ import { useTranslation } from '../i18n';
  * what data is available.
  */
 export function buildCRMContextBlock(ctx: CRMContext, dashData?: DashboardData | null): string {
-  const fr = ctx.language === 'fr';
+  const t = getTranslations(ctx.language);
   const lines: string[] = [];
 
   lines.push('## Current CRM Context\n');

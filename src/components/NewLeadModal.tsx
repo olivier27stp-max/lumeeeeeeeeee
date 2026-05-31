@@ -39,7 +39,7 @@ export default function NewLeadModal({
   mode = 'job',
 }: NewLeadModalProps) {
   const formRef = useRef<HTMLFormElement | null>(null);
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const [leadFirstName, setLeadFirstName] = useState('');
   const [leadLastName, setLeadLastName] = useState('');
   const [leadEmail, setLeadEmail] = useState('');
@@ -210,7 +210,7 @@ export default function NewLeadModal({
                     <div>
                       <label className={labelCls}>{t.modals.company}</label>
                       <input value={leadCompany} onChange={(e) => setLeadCompany(e.target.value)}
-                        className={inputCls} placeholder={language === 'fr' ? 'Nom de l\'entreprise' : 'Company name'} />
+                        className={inputCls} placeholder={t.modals.companyName} />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>

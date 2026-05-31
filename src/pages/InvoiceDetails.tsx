@@ -92,7 +92,7 @@ export default function InvoiceDetails() {
 
   async function handleSendInvoice() {
     if (!client?.email) {
-      toast.error(language === 'fr' ? 'Le client n\'a pas d\'email' : 'Client has no email');
+      toast.error(t.invoiceEdit.clientHasNoEmail);
       return;
     }
     setSendLoading(true);
@@ -101,7 +101,7 @@ export default function InvoiceDetails() {
       invalidateAll();
       toast.success(t.invoiceDetails.invoiceSent);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to send');
+      toast.error(err?.message || t.invoiceDetails.failedToSend);
     } finally {
       setSendLoading(false);
     }
@@ -114,7 +114,7 @@ export default function InvoiceDetails() {
       invalidateAll();
       toast.success(t.invoiceDetails.invoiceVoided);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed');
+      toast.error(err?.message || t.invoiceDetails.failedToUpdate);
     }
     setActionsOpen(false);
   }
@@ -126,7 +126,7 @@ export default function InvoiceDetails() {
       toast.success(t.invoiceDetails.invoiceDuplicated);
       navigate(`/invoices/${newId}/edit`);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed');
+      toast.error(err?.message || t.invoiceDetails.failedToUpdate);
     }
     setActionsOpen(false);
   }
@@ -139,7 +139,7 @@ export default function InvoiceDetails() {
       queryClient.invalidateQueries({ queryKey: ['paymentsOverview'] });
       toast.success(t.invoiceDetails.invoiceMarkedAsPaid);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed');
+      toast.error(err?.message || t.invoiceDetails.failedToUpdate);
     }
     setActionsOpen(false);
   }
@@ -414,7 +414,7 @@ export default function InvoiceDetails() {
                         ? (t.invoiceDetails.recurringEnabled)
                         : (t.invoiceDetails.recurringDisabled));
                     } catch (err: any) {
-                      toast.error(err.message || 'Failed to update');
+                      toast.error(err.message || t.invoiceDetails.failedToUpdate);
                     } finally {
                       setRecurringLoading(false);
                     }
@@ -454,7 +454,7 @@ export default function InvoiceDetails() {
                       queryClient.invalidateQueries({ queryKey: ['invoiceDetails', invoiceId] });
                       toast.success(t.invoiceDetails.intervalUpdated);
                     } catch (err: any) {
-                      toast.error(err.message || 'Failed to update');
+                      toast.error(err.message || t.invoiceDetails.failedToUpdate);
                     } finally {
                       setRecurringLoading(false);
                     }

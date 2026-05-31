@@ -16,7 +16,7 @@ import { fr } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
 import type { Note, NoteChecklistItem } from '../../types/note';
 import { NOTE_COLORS, ENTITY_TYPE_META } from '../../types/note';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 interface NoteCardProps {
   note: Note;
@@ -33,6 +33,7 @@ function NoteCard({
   note, language, onEdit, onDelete, onTogglePin,
   onToggleChecklist, onDeleteFile, onViewHistory,
 }: NoteCardProps) {
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [checklistExpanded, setChecklistExpanded] = useState(true);
   const [filesExpanded, setFilesExpanded] = useState(true);

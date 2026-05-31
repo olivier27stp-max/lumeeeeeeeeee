@@ -9,6 +9,7 @@ import { geocodeJob } from '../lib/geocodeApi';
 import { invalidateScheduleCache } from '../lib/scheduleApi';
 import { finishJobAndPrepareInvoice } from '../lib/invoicesApi';
 import { Job } from '../types';
+import { useTranslation } from '../i18n';
 
 type OpenJobModalParams = {
   initialValues?: JobDraftInitialValues;
@@ -31,6 +32,7 @@ const JobModalControllerContext = createContext<JobModalControllerValue | null>(
 export function JobModalControllerProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [initialValues, setInitialValues] = useState<JobDraftInitialValues | null>(null);
   const [sourceContext, setSourceContext] = useState<JobModalSourceContext | null>(null);
@@ -54,7 +56,7 @@ export function JobModalControllerProvider({ children }: { children: React.React
         .then((draft) => {
           setInitialValues(draft || null);
           if (!draft) {
-            toast.error('Job not found.');
+            toast.error(t.jobs.jobNotFound);
             return;
           }
           setIsOpen(true);
@@ -177,7 +179,7 @@ export function JobModalControllerProvider({ children }: { children: React.React
           queryClient.invalidateQueries({ queryKey: ['calendarUnscheduledJobs'] }),
           queryClient.invalidateQueries({ queryKey: ['jobsTable'] }),
         ]);
-        toast.success('Job deleted');
+        toast.success(t.jobs.jobDeleted);
         closeJobModal();
         onCreatedCallback?.(undefined as any); // trigger list refresh
       } catch (error: any) {

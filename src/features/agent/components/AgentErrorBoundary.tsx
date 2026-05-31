@@ -1,6 +1,6 @@
 import React, { type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { useTranslation } from '../i18n';
+import { getTranslations } from '../../../i18n';
 
 interface Props {
   children: ReactNode;
@@ -37,7 +37,7 @@ class AgentErrorBoundary extends TypedComponent {
 
   render() {
     if (this.state.hasError) {
-      const fr = this.props.language === 'fr';
+      const t = getTranslations(this.props.language);
       return (
         <div className="flex flex-col items-center justify-center min-h-[50vh] text-center px-4">
           <div className="w-12 h-12 rounded-xl bg-surface-secondary flex items-center justify-center mx-auto mb-4">
@@ -47,9 +47,7 @@ class AgentErrorBoundary extends TypedComponent {
             {t.agent.mrLumeEncounteredAnError}
           </h2>
           <p className="text-sm text-text-tertiary mb-4 max-w-md">
-            {fr
-              ? 'Une erreur inattendue est survenue. Veuillez réessayer.'
-              : 'An unexpected error occurred. Please try again.'}
+            {t.agent.unexpectedErrorOccurred}
           </p>
           <button
             onClick={() => {

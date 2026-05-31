@@ -3,10 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Check, Loader2, X, Users, Lock, User, AlertTriangle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { verifyInvitation, acceptInvitation } from '../lib/invitationsApi';
+import { useTranslation } from '../i18n';
 
 export default function AcceptInvitation() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const [state, setState] = useState<'loading' | 'form' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
@@ -21,7 +23,7 @@ export default function AcceptInvitation() {
   useEffect(() => {
     if (!token) {
       setState('error');
-      setErrorMessage('Invalid invitation link.');
+      setErrorMessage(t.acceptInvitation.invalidInvitationLink);
       return;
     }
 
@@ -34,7 +36,7 @@ export default function AcceptInvitation() {
         setState('form');
       } catch (err: any) {
         setState('error');
-        setErrorMessage(err.message || 'This invitation is invalid or has expired.');
+        setErrorMessage(err.message || t.acceptInvitation.thisInvitationIsInvalidOrExpired);
       }
     })();
   }, [token]);
@@ -50,7 +52,7 @@ export default function AcceptInvitation() {
       await acceptInvitation(token!, password, fullName.trim());
       setState('success');
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to accept invitation.');
+      setErrorMessage(err.message || t.acceptInvitation.failedToAccept);
       setState('error');
     } finally {
       setSubmitting(false);
@@ -58,9 +60,9 @@ export default function AcceptInvitation() {
   };
 
   const roleLabels: Record<string, string> = {
-    admin: 'Admin',
-    sales_rep: 'Sales Rep',
-    technician: 'Technician',
+    admin: t.acceptInvitation.roleAdmin,
+    sales_rep: t.acceptInvitation.roleSalesRep,
+    technician: t.acceptInvitation.roleTechnician,
   };
 
   return (
@@ -68,14 +70,14 @@ export default function AcceptInvitation() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <img src="/lume-logo.png" alt="Lume CRM" className="h-16 mx-auto dark:invert" />
+          <img src="/lume-logo.png" alt={t.acceptInvitation.lumeCrmAlt} className="h-16 mx-auto dark:invert" />
         </div>
 
         {/* Loading */}
         {state === 'loading' && (
           <div className="section-card p-8 text-center">
             <Loader2 size={24} className="animate-spin text-primary mx-auto mb-3" />
-            <p className="text-[13px] text-text-secondary">Verifying invitation...</p>
+            <p className="text-[13px] text-text-secondary">{t.acceptInvitation.verifyingInvitation}</p>
           </div>
         )}
 
@@ -85,13 +87,13 @@ export default function AcceptInvitation() {
             <div className="w-12 h-12 rounded-full bg-danger/10 flex items-center justify-center mx-auto">
               <AlertTriangle size={20} className="text-danger" />
             </div>
-            <h2 className="text-[16px] font-bold text-text-primary">Invitation Error</h2>
+            <h2 className="text-[16px] font-bold text-text-primary">{t.acceptInvitation.invitationError}</h2>
             <p className="text-[13px] text-text-secondary">{errorMessage}</p>
             <button
               onClick={() => navigate('/')}
               className="glass-button-primary inline-flex items-center gap-1.5 text-[12px]"
             >
-              Go to Lume CRM
+              {t.acceptInvitation.goToLumeCrm}
             </button>
           </div>
         )}
@@ -103,16 +105,18 @@ export default function AcceptInvitation() {
               <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
                 <Users size={20} className="text-primary" />
               </div>
-              <h2 className="text-[18px] font-bold text-text-primary">Join {orgName}</h2>
+              <h2 className="text-[18px] font-bold text-text-primary">
+                {t.acceptInvitation.joinOrg.replace('${orgName}', orgName)}
+              </h2>
               <p className="text-[13px] text-text-secondary">
-                You've been invited to join as <span className="font-semibold text-text-primary">{roleLabels[role] || role}</span>
+                {t.acceptInvitation.invitedToJoinAs} <span className="font-semibold text-text-primary">{roleLabels[role] || role}</span>
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Email (read-only) */}
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Email</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.acceptInvitation.email}</label>
                 <input
                   type="email"
                   value={email}
@@ -123,7 +127,7 @@ export default function AcceptInvitation() {
 
               {/* Full Name */}
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Full Name *</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.acceptInvitation.fullName}</label>
                 <div className="relative mt-1">
                   <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                   <input
@@ -131,7 +135,7 @@ export default function AcceptInvitation() {
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className="glass-input w-full !pl-9"
-                    placeholder="John Doe"
+                    placeholder={t.acceptInvitation.placeholderName}
                     required
                     autoFocus
                   />
@@ -140,7 +144,7 @@ export default function AcceptInvitation() {
 
               {/* Password */}
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Password *</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.acceptInvitation.passwordLabel}</label>
                 <div className="relative mt-1">
                   <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                   <input
@@ -148,7 +152,7 @@ export default function AcceptInvitation() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="glass-input w-full !pl-9"
-                    placeholder="Min. 8 characters"
+                    placeholder={t.acceptInvitation.minCharacters}
                     required
                     minLength={8}
                   />
@@ -157,7 +161,7 @@ export default function AcceptInvitation() {
 
               {/* Confirm Password */}
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Confirm Password *</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.acceptInvitation.confirmPassword}</label>
                 <div className="relative mt-1">
                   <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                   <input
@@ -168,12 +172,12 @@ export default function AcceptInvitation() {
                       'glass-input w-full !pl-9',
                       confirmPassword && password !== confirmPassword && '!border-danger'
                     )}
-                    placeholder="Re-enter password"
+                    placeholder={t.acceptInvitation.reEnterPassword}
                     required
                   />
                 </div>
                 {confirmPassword && password !== confirmPassword && (
-                  <p className="text-[11px] text-danger mt-1">Passwords do not match.</p>
+                  <p className="text-[11px] text-danger mt-1">{t.acceptInvitation.passwordsDoNotMatch}</p>
                 )}
               </div>
 
@@ -183,9 +187,9 @@ export default function AcceptInvitation() {
                 className="glass-button-primary w-full !py-3 !text-[13px] inline-flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {submitting ? (
-                  <><Loader2 size={14} className="animate-spin" /> Creating account...</>
+                  <><Loader2 size={14} className="animate-spin" /> {t.acceptInvitation.creatingAccount}</>
                 ) : (
-                  <><Check size={14} /> Accept & Join</>
+                  <><Check size={14} /> {t.acceptInvitation.acceptAndJoin}</>
                 )}
               </button>
             </form>
@@ -198,15 +202,17 @@ export default function AcceptInvitation() {
             <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center mx-auto">
               <Check size={20} className="text-success" />
             </div>
-            <h2 className="text-[16px] font-bold text-text-primary">Welcome to {orgName}!</h2>
+            <h2 className="text-[16px] font-bold text-text-primary">
+              {t.acceptInvitation.welcomeToOrg.replace('${orgName}', orgName)}
+            </h2>
             <p className="text-[13px] text-text-secondary">
-              Your account has been created. You can now sign in to Lume CRM.
+              {t.acceptInvitation.yourAccountHasBeenCreated}
             </p>
             <button
               onClick={() => navigate('/')}
               className="glass-button-primary inline-flex items-center gap-1.5 text-[12px]"
             >
-              Sign In
+              {t.acceptInvitation.signIn}
             </button>
           </div>
         )}

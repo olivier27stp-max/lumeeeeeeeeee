@@ -7,6 +7,7 @@ import { geocodeBatch } from '../../lib/geocodeApi';
 import CRMMap from './CRMMap';
 import MapFilterBar from './MapFilterBar';
 import IconTile from '../ui/IconTile';
+import { useTranslation } from '../../i18n';
 
 interface CRMMapCardProps {
   defaultRange?: MapDateRange;
@@ -21,6 +22,7 @@ export default function CRMMapCard({
   heightClassName = 'h-[420px]',
   onOpenJob,
 }: CRMMapCardProps) {
+  const { t } = useTranslation();
   const [dateRange, setDateRange] = useState<MapDateRange>(defaultRange);
   const [geocoding, setGeocoding] = useState(false);
   const queryClient = useQueryClient();
@@ -39,17 +41,17 @@ export default function CRMMapCard({
     try {
       const result = await geocodeBatch();
       if (result.succeeded > 0) {
-        toast.success(`${result.succeeded} job${result.succeeded > 1 ? 's' : ''} geocoded.`);
+        toast.success(t.dispatchMap.geocodedJobs.replace('${count}', String(result.succeeded)));
       }
       if (result.failed > 0) {
-        toast.warning(`${result.failed} job${result.failed > 1 ? 's' : ''} could not be geocoded (missing or invalid address).`);
+        toast.warning(t.dispatchMap.jobsCouldNotBeGeocoded.replace('${count}', String(result.failed)));
       }
       if (result.processed === 0) {
-        toast.info('No jobs to geocode.');
+        toast.info(t.dispatchMap.noJobsToGeocode);
       }
       await queryClient.invalidateQueries({ queryKey: ['mapJobs'] });
     } catch (err: any) {
-      toast.error(err?.message || 'Geocoding failed.');
+      toast.error(err?.message || t.dispatchMap.geocodingFailed);
     } finally {
       setGeocoding(false);
     }
@@ -61,7 +63,7 @@ export default function CRMMapCard({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
           <IconTile icon={MapPin} color="cyan" size="sm" />
-          <h2 className="text-sm font-bold text-text-primary">Job Map</h2>
+          <h2 className="text-sm font-bold text-text-primary">{t.dispatchMap.jobMap}</h2>
         </div>
         {data.missingLocationCount > 0 && (
           <button
@@ -70,7 +72,7 @@ export default function CRMMapCard({
             disabled={geocoding}
             className="rounded-lg border border-warning/40 bg-warning/10 px-2.5 py-1 text-[11px] font-semibold text-warning hover:bg-warning/20 transition-colors disabled:opacity-50"
           >
-            {geocoding ? 'Geocoding...' : `Geocode ${data.missingLocationCount} missing`}
+            {geocoding ? t.dispatchMap.geocoding : t.dispatchMap.geocodeMissing.replace('${count}', String(data.missingLocationCount))}
           </button>
         )}
       </div>
@@ -89,13 +91,13 @@ export default function CRMMapCard({
       ) : isError ? (
         <div className={`flex items-center justify-center rounded-2xl border border-outline bg-surface-tertiary ${heightClassName}`}>
           <div className="text-center space-y-2">
-            <p className="text-sm text-text-secondary">Failed to load map data.</p>
+            <p className="text-sm text-text-secondary">{t.dispatchMap.failedToLoadMapData}</p>
             <button
               type="button"
               onClick={handleRefresh}
               className="text-xs font-semibold text-accent hover:underline"
             >
-              Retry
+              {t.dispatchMap.retry}
             </button>
           </div>
         </div>

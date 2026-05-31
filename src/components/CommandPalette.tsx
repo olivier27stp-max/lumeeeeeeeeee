@@ -38,19 +38,19 @@ const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
   quote: FileText, request: ClipboardList, team: UsersRound, event: CalendarDays,
 };
 
-const ENTITY_SECTION_LABELS: Record<SearchEntityType, { en: string; fr: string }> = {
-  client: { en: 'Clients', fr: 'Clients' },
-  job: { en: 'Jobs', fr: 'Jobs' },
-  lead: { en: 'Leads', fr: 'Prospects' },
-  invoice: { en: 'Invoices', fr: 'Factures' },
-  quote: { en: 'Quotes', fr: 'Devis' },
-  request: { en: 'Requests', fr: 'Demandes' },
-  team: { en: 'Teams', fr: 'Equipes' },
-  event: { en: 'Calendar', fr: 'Calendrier' },
+const ENTITY_TYPE_TO_SEARCH_KEY: Record<SearchEntityType, 'clients' | 'jobs' | 'leads' | 'invoices' | 'quotes' | 'requests' | 'teams' | 'events'> = {
+  client: 'clients',
+  job: 'jobs',
+  lead: 'leads',
+  invoice: 'invoices',
+  quote: 'quotes',
+  request: 'requests',
+  team: 'teams',
+  event: 'events',
 };
 
 export default function CommandPalette({ open, onClose, language }: CommandPaletteProps) {
-  const fr = language === 'fr';
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -62,28 +62,28 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
   const navCommands = useMemo((): CommandItem[] => [
     { id: 'nav-dashboard', label: t.commandPalette.dashboard, icon: Search, action: () => navigate('/dashboard'), section: t.commandPalette.navigation, keywords: 'home accueil' },
     { id: 'nav-leads', label: t.clientDetails.quotes, icon: FileText, action: () => navigate('/leads'), section: t.commandPalette.navigation, keywords: 'prospects quotes devis' },
-    { id: 'nav-pipeline', label: 'Pipeline', icon: Kanban, action: () => navigate('/pipeline'), section: t.commandPalette.navigation, keywords: 'deals kanban' },
-    { id: 'nav-clients', label: 'Clients', icon: Users, action: () => navigate('/clients'), section: t.commandPalette.navigation, keywords: 'customers' },
-    { id: 'nav-jobs', label: 'Jobs', icon: Briefcase, action: () => navigate('/jobs'), section: t.commandPalette.navigation, keywords: 'travaux' },
+    { id: 'nav-pipeline', label: t.commandPalette.pipeline, icon: Kanban, action: () => navigate('/pipeline'), section: t.commandPalette.navigation, keywords: 'deals kanban' },
+    { id: 'nav-clients', label: t.commandPalette.clients, icon: Users, action: () => navigate('/clients'), section: t.commandPalette.navigation, keywords: 'customers' },
+    { id: 'nav-jobs', label: t.commandPalette.jobs, icon: Briefcase, action: () => navigate('/jobs'), section: t.commandPalette.navigation, keywords: 'travaux' },
     { id: 'nav-calendar', label: t.commandPalette.calendar, icon: Calendar, action: () => navigate('/calendar'), section: t.commandPalette.navigation, keywords: 'schedule horaire' },
     { id: 'nav-invoices', label: t.commandPalette.invoices, icon: FileText, action: () => navigate('/invoices'), section: t.commandPalette.navigation, keywords: 'bills' },
     { id: 'nav-quotes', label: t.clientDetails.quotes, icon: FileText, action: () => navigate('/quotes'), section: t.commandPalette.navigation, keywords: 'estimates' },
     { id: 'nav-payments', label: t.commandPalette.payments, icon: CreditCard, action: () => navigate('/payments'), section: t.commandPalette.navigation },
-    { id: 'nav-messages', label: 'Messages', icon: MessageSquare, action: () => navigate('/messages'), section: t.commandPalette.navigation, keywords: 'sms text' },
-    { id: 'nav-insights', label: 'Insights', icon: TrendingUp, action: () => navigate('/insights'), section: t.commandPalette.navigation, keywords: 'analytics stats' },
-    { id: 'nav-notes', label: 'Notes', icon: StickyNote, action: () => navigate('/notes'), section: t.commandPalette.navigation, keywords: 'boards whiteboard' },
-    { id: 'nav-workflows', label: 'Workflows', icon: Zap, action: () => navigate('/workflows'), section: t.commandPalette.navigation, keywords: 'automations' },
+    { id: 'nav-messages', label: t.commandPalette.messages, icon: MessageSquare, action: () => navigate('/messages'), section: t.commandPalette.navigation, keywords: 'sms text' },
+    { id: 'nav-insights', label: t.commandPalette.insights, icon: TrendingUp, action: () => navigate('/insights'), section: t.commandPalette.navigation, keywords: 'analytics stats' },
+    { id: 'nav-notes', label: t.commandPalette.notes, icon: StickyNote, action: () => navigate('/notes'), section: t.commandPalette.navigation, keywords: 'boards whiteboard' },
+    { id: 'nav-workflows', label: t.commandPalette.workflows, icon: Zap, action: () => navigate('/workflows'), section: t.commandPalette.navigation, keywords: 'automations' },
     { id: 'nav-settings', label: t.commandPalette.settings, icon: Settings, action: () => navigate('/settings'), section: t.commandPalette.navigation },
-  ], [fr, navigate]);
+  ], [navigate, t]);
 
   const actionCommands = useMemo((): CommandItem[] => [
     { id: 'act-new-lead', label: t.commandPalette.createQuote, icon: Plus, action: () => { navigate('/leads'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-lead')), 300); }, section: t.automations.actions, keywords: 'add new prospect quote devis' },
     { id: 'act-new-client', label: t.commandPalette.createClient, icon: Plus, action: () => { navigate('/clients'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-client')), 300); }, section: t.automations.actions, keywords: 'add new customer' },
     { id: 'act-new-job', label: t.commandPalette.createJob, icon: Plus, action: () => { navigate('/jobs'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-job')), 300); }, section: t.automations.actions, keywords: 'add new travail' },
     { id: 'act-new-invoice', label: t.commandPalette.createInvoice, icon: Plus, action: () => { navigate('/invoices'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-invoice')), 300); }, section: t.automations.actions, keywords: 'add new bill' },
-    { id: 'act-new-quote', label: fr ? 'Creer un devis' : 'Create quote', icon: Plus, action: () => { navigate('/quotes'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-quote')), 300); }, section: t.automations.actions, keywords: 'add new estimate' },
+    { id: 'act-new-quote', label: t.commandPalette.createQuote, icon: Plus, action: () => { navigate('/quotes'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-quote')), 300); }, section: t.automations.actions, keywords: 'add new estimate' },
     { id: 'act-new-deal', label: t.commandPalette.createDeal, icon: Plus, action: () => { navigate('/pipeline'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-deal')), 300); }, section: t.automations.actions, keywords: 'add new' },
-  ], [fr, navigate]);
+  ], [navigate, t]);
 
   // Global search via shared API
   useEffect(() => {
@@ -97,14 +97,14 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
         const results: CommandItem[] = [];
 
         for (const item of payload.items) {
-          const sectionLabel = ENTITY_SECTION_LABELS[item.type];
+          const searchKey = ENTITY_TYPE_TO_SEARCH_KEY[item.type];
           results.push({
             id: `${item.type}-${item.id}`,
             label: item.title,
             sublabel: item.subtitle || item.clientName || undefined,
             icon: ENTITY_ICONS[item.type] || Search,
             action: () => navigate(getSearchItemHref(item.type, item.id)),
-            section: fr ? sectionLabel.fr : sectionLabel.en,
+            section: t.globalSearch[searchKey],
           });
         }
 
@@ -114,7 +114,7 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
       }
     }, 200);
     return () => clearTimeout(timer);
-  }, [query, navigate, fr]);
+  }, [query, navigate, t]);
 
   // Filter commands by query
   const filtered = useMemo(() => {

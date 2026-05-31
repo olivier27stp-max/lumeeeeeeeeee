@@ -4,8 +4,10 @@ import { toast } from 'sonner';
 import { CreditCard, ExternalLink, CheckCircle2, AlertTriangle, Loader2, RefreshCw, Shield } from 'lucide-react';
 import { getAccountStatus, createConnectedAccount, createOnboardingLink, refreshOnboardingLink } from '../lib/connectApi';
 import type { ConnectedAccount } from '../types';
+import { useTranslation } from '../i18n';
 
 export default function ConnectOnboarding() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [creating, setCreating] = useState(false);
   const [onboardingUrl, setOnboardingUrl] = useState<string | null>(null);
@@ -28,7 +30,7 @@ export default function ConnectOnboarding() {
       window.open(link.url, '_blank');
       queryClient.invalidateQueries({ queryKey: ['connectAccountStatus'] });
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to activate payments.');
+      toast.error(err?.message || t.payments.failedToActivate);
     } finally {
       setCreating(false);
     }
@@ -40,13 +42,13 @@ export default function ConnectOnboarding() {
       setOnboardingUrl(link.url);
       window.open(link.url, '_blank');
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to get onboarding link.');
+      toast.error(err?.message || t.payments.failedToGetOnboardingLink);
     }
   }
 
   async function handleRefreshStatus() {
     await queryClient.invalidateQueries({ queryKey: ['connectAccountStatus'] });
-    toast.success('Status refreshed.');
+    toast.success(t.payments.statusRefreshed);
   }
 
   // ── Not connected — show activation ──
@@ -58,10 +60,9 @@ export default function ConnectOnboarding() {
             <CreditCard size={18} />
           </div>
           <div className="flex-1">
-            <h3 className="text-[15px] font-bold text-text-primary">Lume Payments</h3>
+            <h3 className="text-[15px] font-bold text-text-primary">{t.payments.lumePayments}</h3>
             <p className="mt-1 text-[13px] text-text-secondary">
-              Accept online payments from your clients. Lume partners with Stripe to securely process card payments
-              and deposit funds directly to your bank account.
+              {t.payments.lumePaymentsDesc}
             </p>
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -72,13 +73,13 @@ export default function ConnectOnboarding() {
                 disabled={creating || statusQuery.isLoading}
               >
                 {creating ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
-                {creating ? 'Setting up...' : 'Activate Lume Payments'}
+                {creating ? t.payments.settingUp : t.payments.activateLumePayments}
               </button>
             </div>
 
             <div className="mt-3 flex items-center gap-1.5 text-[11px] text-text-tertiary">
               <Shield size={11} />
-              <span>Powered by Stripe. Your financial data is encrypted and secure.</span>
+              <span>{t.payments.poweredByStripe}</span>
             </div>
           </div>
         </div>
@@ -95,10 +96,9 @@ export default function ConnectOnboarding() {
             <AlertTriangle size={18} />
           </div>
           <div className="flex-1">
-            <h3 className="text-[15px] font-bold text-text-primary">Complete Your Setup</h3>
+            <h3 className="text-[15px] font-bold text-text-primary">{t.payments.completeYourSetup}</h3>
             <p className="mt-1 text-[13px] text-text-secondary">
-              Your payment account has been created but onboarding is not yet complete.
-              Please finish setting up your account to start accepting payments.
+              {t.payments.onboardingIncompleteDesc}
             </p>
 
             <OnboardingChecklist account={account!} />
@@ -110,7 +110,7 @@ export default function ConnectOnboarding() {
                 onClick={handleContinueOnboarding}
               >
                 <ExternalLink size={14} />
-                Continue Setup
+                {t.payments.continueSetup}
               </button>
               <button
                 type="button"
@@ -118,7 +118,7 @@ export default function ConnectOnboarding() {
                 onClick={handleRefreshStatus}
               >
                 <RefreshCw size={12} />
-                Refresh Status
+                {t.payments.refreshStatus}
               </button>
             </div>
           </div>
@@ -135,9 +135,9 @@ export default function ConnectOnboarding() {
           <CheckCircle2 size={18} />
         </div>
         <div className="flex-1">
-          <h3 className="text-[15px] font-bold text-text-primary">Lume Payments Active</h3>
+          <h3 className="text-[15px] font-bold text-text-primary">{t.payments.lumePaymentsActive}</h3>
           <p className="mt-1 text-[13px] text-text-secondary">
-            Your payment account is fully set up. You can now send payment requests to your clients.
+            {t.payments.lumePaymentsActiveDesc}
           </p>
 
           <OnboardingChecklist account={account!} />
@@ -149,7 +149,7 @@ export default function ConnectOnboarding() {
               onClick={handleRefreshStatus}
             >
               <RefreshCw size={12} />
-              Refresh Status
+              {t.payments.refreshStatus}
             </button>
           </div>
         </div>
@@ -159,11 +159,12 @@ export default function ConnectOnboarding() {
 }
 
 function OnboardingChecklist({ account }: { account: ConnectedAccount }) {
+  const { t } = useTranslation();
   const items = [
-    { label: 'Account created', done: true },
-    { label: 'Details submitted', done: account.details_submitted },
-    { label: 'Charges enabled', done: account.charges_enabled },
-    { label: 'Payouts enabled', done: account.payouts_enabled },
+    { label: t.payments.checklistAccountCreated, done: true },
+    { label: t.payments.checklistDetailsSubmitted, done: account.details_submitted },
+    { label: t.payments.checklistChargesEnabled, done: account.charges_enabled },
+    { label: t.payments.checklistPayoutsEnabled, done: account.payouts_enabled },
   ];
 
   return (

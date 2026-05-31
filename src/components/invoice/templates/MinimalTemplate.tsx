@@ -1,6 +1,7 @@
 import React from 'react';
 import type { InvoiceRenderData } from '../types';
 import { formatMoneyFromCents } from '../../../lib/invoicesApi';
+import { useTranslation } from '../../../i18n';
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '--';
@@ -10,6 +11,8 @@ function fmtDate(iso: string | null | undefined): string {
 }
 
 export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
+  const { t } = useTranslation();
+  const it = t.invoiceTemplates;
   const fmt = (cents: number) => formatMoneyFromCents(cents, data.currency);
   const primary = data.primary_color || '#111827';
   const accent = data.accent_color || '#059669';
@@ -26,7 +29,7 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
           )}
         </div>
         <div className="text-right">
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-gray-400">Invoice</p>
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-gray-400">{it.invoice}</p>
           <p className="mt-0.5 text-sm font-semibold" style={{ color: primary }}>{data.invoice_number}</p>
         </div>
       </div>
@@ -37,26 +40,26 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
       {/* Meta row */}
       <div className="flex gap-8 text-xs text-gray-500">
         <div>
-          <p className="font-semibold uppercase tracking-wider text-gray-400">Date</p>
+          <p className="font-semibold uppercase tracking-wider text-gray-400">{it.date}</p>
           <p className="mt-0.5">{fmtDate(data.issued_at || data.created_at)}</p>
         </div>
         <div>
-          <p className="font-semibold uppercase tracking-wider text-gray-400">Due</p>
+          <p className="font-semibold uppercase tracking-wider text-gray-400">{it.due}</p>
           <p className="mt-0.5">{fmtDate(data.due_date)}</p>
         </div>
         <div>
-          <p className="font-semibold uppercase tracking-wider text-gray-400">Status</p>
+          <p className="font-semibold uppercase tracking-wider text-gray-400">{it.status}</p>
           <p className="mt-0.5 font-semibold" style={{
             color: data.status === 'paid' ? '#059669' : data.status === 'void' ? '#dc2626' : primary,
           }}>
-            {data.status === 'partial' ? 'Partial' : data.status.charAt(0).toUpperCase() + data.status.slice(1)}
+            {data.status === 'partial' ? it.statusPartial : (it as Record<string, string>)[`status${data.status.charAt(0).toUpperCase()}${data.status.slice(1)}`] || data.status}
           </p>
         </div>
       </div>
 
       {/* Client */}
       <div className="mt-6">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-400">Billed To</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-400">{it.billedTo}</p>
         <p className="mt-1 text-sm font-semibold" style={{ color: primary }}>{data.client_name}</p>
         <div className="text-xs text-gray-500">
           {data.client_email && <p>{data.client_email}</p>}
@@ -73,10 +76,10 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
       <div className="mt-6">
         <div className="border-b border-gray-200 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
           <div className="grid grid-cols-12 gap-2">
-            <div className="col-span-6">Description</div>
-            <div className="col-span-2 text-right">Qty</div>
-            <div className="col-span-2 text-right">Price</div>
-            <div className="col-span-2 text-right">Total</div>
+            <div className="col-span-6">{it.description}</div>
+            <div className="col-span-2 text-right">{it.qty}</div>
+            <div className="col-span-2 text-right">{it.price}</div>
+            <div className="col-span-2 text-right">{it.total}</div>
           </div>
         </div>
         <div className="divide-y divide-gray-100">
@@ -92,7 +95,7 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
             </div>
           ))}
           {data.items.length === 0 && (
-            <div className="py-8 text-center text-xs text-gray-400">No items</div>
+            <div className="py-8 text-center text-xs text-gray-400">{it.noItems}</div>
           )}
         </div>
       </div>
@@ -101,33 +104,33 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
       <div className="mt-6 flex justify-end">
         <div className="w-56 space-y-1.5 text-xs">
           <div className="flex justify-between text-gray-500">
-            <span>Subtotal</span>
+            <span>{it.subtotal}</span>
             <span>{fmt(data.subtotal_cents)}</span>
           </div>
           {data.discount_cents > 0 && (
             <div className="flex justify-between text-red-500">
-              <span>Discount</span>
+              <span>{it.discount}</span>
               <span>-{fmt(data.discount_cents)}</span>
             </div>
           )}
           <div className="flex justify-between text-gray-500">
-            <span>Tax</span>
+            <span>{it.tax}</span>
             <span>{fmt(data.tax_cents)}</span>
           </div>
           <div className="h-px" style={{ backgroundColor: accent }} />
           <div className="flex justify-between pt-1 text-sm font-bold" style={{ color: primary }}>
-            <span>Total</span>
+            <span>{it.total}</span>
             <span>{fmt(data.total_cents)}</span>
           </div>
           {data.paid_cents > 0 && (
             <div className="flex justify-between text-green-600">
-              <span>Paid</span>
+              <span>{it.paid}</span>
               <span>{fmt(data.paid_cents)}</span>
             </div>
           )}
           {data.balance_cents > 0 && data.balance_cents !== data.total_cents && (
             <div className="flex justify-between font-bold" style={{ color: accent }}>
-              <span>Balance</span>
+              <span>{it.balance}</span>
               <span>{fmt(data.balance_cents)}</span>
             </div>
           )}
@@ -137,7 +140,7 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
       {/* Notes */}
       {data.notes && (
         <div className="mt-8">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-400">Notes</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-400">{it.notes}</p>
           <p className="mt-1 whitespace-pre-wrap text-xs text-gray-500">{data.notes}</p>
         </div>
       )}

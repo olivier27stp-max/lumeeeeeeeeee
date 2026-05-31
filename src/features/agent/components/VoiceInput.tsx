@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { Mic, MicOff } from 'lucide-react';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../../i18n';
 
 interface VoiceInputProps {
   onTranscript: (text: string) => void;
@@ -16,6 +16,7 @@ const SpeechRecognitionAPI =
     : null;
 
 export default function VoiceInput({ onTranscript, language, disabled = false }: VoiceInputProps) {
+  const { t } = useTranslation();
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
@@ -104,7 +105,7 @@ export default function VoiceInput({ onTranscript, language, disabled = false }:
         type="button"
         onClick={toggleListening}
         disabled={disabled}
-        aria-label={language === 'fr' ? (isListening ? 'Arrêter la dictée' : 'Dictée vocale') : (isListening ? 'Stop listening' : 'Voice input')}
+        aria-label={isListening ? t.agent.stopListening : t.agent.voiceInput}
         className={`p-1.5 rounded-lg transition-all disabled:opacity-30 disabled:pointer-events-none ${
           isListening
             ? 'text-red-500 bg-red-50 dark:bg-red-900/20'

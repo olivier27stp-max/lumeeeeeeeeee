@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Palette, Trash2, Edit3, Save, X, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 import { PageHeader } from '../../components/ui';
 import {
   listStyleDna,
@@ -65,6 +66,7 @@ const EMPTY_FORM: StyleFormData = {
 };
 
 export default function DirectorStyles() {
+  const { t } = useTranslation();
   const [orgId, setOrgId] = useState<string | null>(null);
   const [styles, setStyles] = useState<StyleDnaRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,7 +112,7 @@ export default function DirectorStyles() {
   };
 
   const handleSave = async () => {
-    if (!orgId || !form.name.trim()) { toast.error('Name is required'); return; }
+    if (!orgId || !form.name.trim()) { toast.error(t.directorPanel.nameRequired); return; }
     setSaving(true);
     try {
       if (editingId) {
@@ -123,7 +125,7 @@ export default function DirectorStyles() {
           visual_rules: form.visual_rules, negative_rules: form.negative_rules,
         });
         setStyles((prev) => prev.map((s) => s.id === editingId ? updated : s));
-        toast.success('Style updated');
+        toast.success(t.directorPanel.styleUpdated);
       } else {
         const created = await createStyleDna({
           org_id: orgId, name: form.name, description: form.description || null,
@@ -135,12 +137,12 @@ export default function DirectorStyles() {
           config_json: {},
         });
         setStyles((prev) => [created, ...prev]);
-        toast.success('Style created');
+        toast.success(t.directorPanel.styleCreated);
       }
       setEditingId(null);
       setCreating(false);
     } catch (e: any) {
-      toast.error(e?.message || 'Failed to save');
+      toast.error(e?.message || t.directorPanel.failedToSave);
     } finally {
       setSaving(false);
     }
@@ -152,9 +154,9 @@ export default function DirectorStyles() {
       await deleteStyleDna(id);
       setStyles((prev) => prev.filter((s) => s.id !== id));
       if (editingId === id) { setEditingId(null); }
-      toast.success('Style deleted');
+      toast.success(t.directorPanel.styleDeleted);
     } catch {
-      toast.error('Failed to delete');
+      toast.error(t.directorPanel.failedToDelete);
     }
   };
 
@@ -169,10 +171,10 @@ export default function DirectorStyles() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <PageHeader title="Style DNA" subtitle="Reusable visual identity profiles for consistent generations" icon={Palette} iconColor="pink">
+      <PageHeader title={t.directorPanel.styleDnaTitle} subtitle={t.directorPanel.styleDnaSubtitle} icon={Palette} iconColor="pink">
         <button onClick={openCreate} className="glass-button-primary flex items-center gap-1.5 text-[13px]">
           <Plus className="w-4 h-4" />
-          New Style
+          {t.directorPanel.newStyle}
         </button>
       </PageHeader>
 
@@ -184,8 +186,8 @@ export default function DirectorStyles() {
           ) : styles.length === 0 && !creating ? (
             <div className="section-card p-8 text-center">
               <Palette className="w-8 h-8 text-text-tertiary/40 mx-auto mb-3" />
-              <p className="text-[13px] text-text-tertiary">No styles yet</p>
-              <button onClick={openCreate} className="mt-3 text-[12px] text-primary font-medium hover:underline">Create your first style</button>
+              <p className="text-[13px] text-text-tertiary">{t.directorPanel.noStylesYet}</p>
+              <button onClick={openCreate} className="mt-3 text-[12px] text-primary font-medium hover:underline">{t.directorPanel.createFirstStyle}</button>
             </div>
           ) : (
             styles.map((style) => (
@@ -228,7 +230,7 @@ export default function DirectorStyles() {
         {isEditing && (
           <div className="section-card p-5 space-y-4 sticky top-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-[14px] font-semibold text-text-primary">{editingId ? 'Edit Style' : 'New Style'}</h3>
+              <h3 className="text-[14px] font-semibold text-text-primary">{editingId ? t.directorPanel.editStyle : t.directorPanel.newStyle}</h3>
               <button onClick={() => { setEditingId(null); setCreating(false); }} className="p-1 rounded hover:bg-surface-tertiary text-text-tertiary">
                 <X className="w-4 h-4" />
               </button>
@@ -287,10 +289,10 @@ export default function DirectorStyles() {
             </Field>
 
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => { setEditingId(null); setCreating(false); }} className="glass-button text-[12px]">Cancel</button>
+              <button onClick={() => { setEditingId(null); setCreating(false); }} className="glass-button text-[12px]">{t.directorPanel.cancel}</button>
               <button onClick={() => void handleSave()} disabled={saving} className="glass-button-primary text-[12px] flex items-center gap-1.5">
                 <Save className="w-3.5 h-3.5" />
-                {saving ? 'Saving...' : 'Save Style'}
+                {saving ? t.directorPanel.saving : t.directorPanel.saveStyle}
               </button>
             </div>
           </div>

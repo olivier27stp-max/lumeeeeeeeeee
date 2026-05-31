@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { useFlowEditorStore } from '../../../lib/director-panel/store';
+import { useTranslation } from '../../../i18n';
 
 // ---------------------------------------------------------------------------
 // Data shape
@@ -67,12 +68,13 @@ const RESOLUTION_MAP: Record<string, string> = {
 const ImageGeneratorNodeComponent = ({ id, data, selected }: NodeProps) => {
   const nodeData = data as unknown as ImageGeneratorNodeData;
   const { updateNodeData } = useReactFlow();
+  const { t } = useTranslation();
 
   const handleRun = useCallback(() => {
     import('sonner').then(({ toast }) => {
-      toast.info('Use the Run button in the top bar to execute the full flow. Individual node execution is not supported — nodes depend on upstream connections.');
+      toast.info(t.directorPanel.nodeRunButtonInfo);
     });
-  }, []);
+  }, [t]);
 
   const resolution = RESOLUTION_MAP[nodeData.aspect_ratio] ?? '1024 x 1024';
 

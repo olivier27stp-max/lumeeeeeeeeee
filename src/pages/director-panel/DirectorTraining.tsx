@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { PageHeader } from '../../components/ui';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from '../../i18n';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,7 @@ interface TrainingJob {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function DirectorTraining() {
+  const { t } = useTranslation();
   // Training images
   const [images, setImages] = useState<TrainingImage[]>([]);
   const [modelName, setModelName] = useState('');
@@ -98,9 +100,9 @@ export default function DirectorTraining() {
   // ─── Start training ───────────────────────────────────────────────
 
   const handleStartTraining = async () => {
-    if (images.length < 5) { toast.error('Need at least 5 images'); return; }
-    if (!modelName.trim()) { toast.error('Give your model a name'); return; }
-    if (!triggerWord.trim()) { toast.error('Set a trigger word'); return; }
+    if (images.length < 5) { toast.error(t.directorPanel.needAtLeast5Images); return; }
+    if (!modelName.trim()) { toast.error(t.directorPanel.giveModelName); return; }
+    if (!triggerWord.trim()) { toast.error(t.directorPanel.setTriggerWord); return; }
 
     setIsTraining(true);
     setTrainProgress(0);
@@ -227,35 +229,35 @@ export default function DirectorTraining() {
 
   const handleDeleteJob = (jobId: string) => {
     saveJobs(jobs.filter((j) => j.id !== jobId));
-    toast.success('Job removed');
+    toast.success(t.directorPanel.jobRemoved);
   };
 
   return (
     <div className="space-y-6">
-      <PageHeader title="LoRA Training" subtitle="Train custom AI models on your images" icon={Zap} iconColor="purple" />
+      <PageHeader title={t.directorPanel.loraTrainingTitle} subtitle={t.directorPanel.loraTrainingSubtitle} icon={Zap} iconColor="purple" />
 
       {/* ─── Training Form ─── */}
       <div className="section-card">
         <div className="px-5 py-4 border-b border-outline">
-          <h3 className="text-[14px] font-semibold text-text-primary">New Training Job</h3>
-          <p className="text-[11px] text-text-tertiary mt-0.5">Upload 5-30 images of your subject. More images = better results.</p>
+          <h3 className="text-[14px] font-semibold text-text-primary">{t.directorPanel.newTrainingJob}</h3>
+          <p className="text-[11px] text-text-tertiary mt-0.5">{t.directorPanel.newTrainingJobDesc}</p>
         </div>
 
         <div className="p-5 space-y-4">
           {/* Config */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
-              <label className="text-[11px] font-medium text-text-secondary mb-1 block">Model Name</label>
+              <label className="text-[11px] font-medium text-text-secondary mb-1 block">{t.directorPanel.modelName}</label>
               <input value={modelName} onChange={(e) => setModelName(e.target.value)}
                 placeholder="e.g., my-brand-style" className="glass-input w-full text-[12px]" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-secondary mb-1 block">Trigger Word</label>
+              <label className="text-[11px] font-medium text-text-secondary mb-1 block">{t.directorPanel.triggerWord}</label>
               <input value={triggerWord} onChange={(e) => setTriggerWord(e.target.value)}
                 placeholder="e.g., MYBRAND" className="glass-input w-full text-[12px]" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-secondary mb-1 block">Base Model</label>
+              <label className="text-[11px] font-medium text-text-secondary mb-1 block">{t.directorPanel.baseModel}</label>
               <select value={baseModel} onChange={(e) => setBaseModel(e.target.value)}
                 className="glass-input w-full text-[12px]">
                 <option value="flux-2-dev-lora">Flux 2 Dev LoRA</option>
@@ -263,7 +265,7 @@ export default function DirectorTraining() {
               </select>
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-secondary mb-1 block">Training Steps</label>
+              <label className="text-[11px] font-medium text-text-secondary mb-1 block">{t.directorPanel.trainingSteps}</label>
               <select value={trainingSteps} onChange={(e) => setTrainingSteps(Number(e.target.value))}
                 className="glass-input w-full text-[12px]">
                 <option value={500}>500 (fast, lower quality)</option>
@@ -280,7 +282,7 @@ export default function DirectorTraining() {
               <label className="text-[11px] font-medium text-text-secondary">{images.length} images uploaded (min 5, max 30)</label>
               <button onClick={() => fileInputRef.current?.click()}
                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-surface-secondary border border-outline text-[11px] font-medium text-text-secondary hover:border-primary/30 transition-colors">
-                <Plus className="w-3 h-3" /> Add Images
+                <Plus className="w-3 h-3" /> {t.directorPanel.addImages}
               </button>
               <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
             </div>
@@ -290,8 +292,8 @@ export default function DirectorTraining() {
                 className="w-full py-12 rounded-xl border-2 border-dashed border-outline flex flex-col items-center gap-3 text-text-tertiary hover:border-primary/30 hover:text-text-secondary transition-colors">
                 <Upload className="w-8 h-8" />
                 <div className="text-center">
-                  <p className="text-[13px] font-medium">Drop images here or click to upload</p>
-                  <p className="text-[11px] mt-1">JPEG, PNG, WebP. Max 20MB each.</p>
+                  <p className="text-[13px] font-medium">{t.directorPanel.dropImagesHere}</p>
+                  <p className="text-[11px] mt-1">{t.directorPanel.dropImagesFormats}</p>
                 </div>
               </button>
             ) : (
@@ -327,13 +329,13 @@ export default function DirectorTraining() {
               <div className="flex items-center gap-2 mb-2">
                 <Loader2 className="w-4 h-4 text-purple-500 animate-spin" />
                 <span className="text-[12px] font-medium text-text-primary">
-                  {trainProgress < 25 ? 'Uploading images...' : trainProgress < 95 ? 'Training model...' : 'Finalizing...'}
+                  {trainProgress < 25 ? t.directorPanel.uploadingImages : trainProgress < 95 ? t.directorPanel.trainingModel : t.directorPanel.finalizing}
                 </span>
               </div>
               <div className="w-full h-2 rounded-full bg-outline overflow-hidden">
                 <div className="h-full bg-gradient-to-r from-purple-500 to-violet-500 rounded-full transition-all duration-500" style={{ width: `${trainProgress}%` }} />
               </div>
-              <p className="text-[10px] text-text-tertiary mt-1.5">This usually takes 10-30 minutes depending on the number of images and steps.</p>
+              <p className="text-[10px] text-text-tertiary mt-1.5">{t.directorPanel.trainingTimeEstimate}</p>
             </div>
           )}
 
@@ -346,9 +348,9 @@ export default function DirectorTraining() {
                 : 'bg-gradient-to-r from-purple-500 to-violet-600 text-white shadow-md hover:shadow-lg hover:scale-[1.01]',
             )}>
             {isTraining ? (
-              <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Training...</span>
+              <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> {t.directorPanel.trainingInProgress}</span>
             ) : (
-              <span className="flex items-center justify-center gap-2"><Zap className="w-4 h-4" /> Start Training ({trainingSteps} steps)</span>
+              <span className="flex items-center justify-center gap-2"><Zap className="w-4 h-4" /> {t.directorPanel.startTraining} ({trainingSteps} steps)</span>
             )}
           </button>
         </div>
@@ -358,7 +360,7 @@ export default function DirectorTraining() {
       {jobs.length > 0 && (
         <div className="section-card">
           <div className="px-5 py-4 border-b border-outline">
-            <h3 className="text-[14px] font-semibold text-text-primary">Training History</h3>
+            <h3 className="text-[14px] font-semibold text-text-primary">{t.directorPanel.trainingHistory}</h3>
           </div>
           <div className="divide-y divide-outline">
             {jobs.map((job) => (
@@ -389,15 +391,15 @@ export default function DirectorTraining() {
                   <>
                     <button onClick={() => {
                       navigator.clipboard.writeText(job.modelId!);
-                      toast.success('LoRA URL copied. Paste it in a Flux LoRA node\'s LoRA URL field.');
+                      toast.success(t.directorPanel.loraUrlCopied);
                     }} className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
-                      <Download className="w-3 h-3" /> Copy LoRA URL
+                      <Download className="w-3 h-3" /> {t.directorPanel.copyLoraUrl}
                     </button>
                     <button onClick={() => {
                       navigator.clipboard.writeText(job.modelId!);
-                      toast.success('LoRA URL copied. Paste it in a Flux LoRA node\'s LoRA URL field.');
+                      toast.success(t.directorPanel.loraUrlCopied);
                     }} className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors">
-                      <Sparkles className="w-3 h-3" /> Use in Generation
+                      <Sparkles className="w-3 h-3" /> {t.directorPanel.useInGeneration}
                     </button>
                   </>
                 )}
@@ -412,14 +414,14 @@ export default function DirectorTraining() {
 
       {/* ─── Tips ─── */}
       <div className="section-card p-5">
-        <h3 className="text-[13px] font-semibold text-text-primary mb-3">Tips for Best Results</h3>
+        <h3 className="text-[13px] font-semibold text-text-primary mb-3">{t.directorPanel.tipsTitle}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[12px] text-text-secondary">
-          <div className="flex gap-2"><span className="text-purple-500 font-bold shrink-0">1.</span> Use 10-20 high-quality images of your subject from different angles and lighting conditions.</div>
-          <div className="flex gap-2"><span className="text-purple-500 font-bold shrink-0">2.</span> Crop images to focus on the subject. Remove distracting backgrounds when possible.</div>
-          <div className="flex gap-2"><span className="text-purple-500 font-bold shrink-0">3.</span> Add captions describing each image — this significantly improves training quality.</div>
-          <div className="flex gap-2"><span className="text-purple-500 font-bold shrink-0">4.</span> Use a unique trigger word (e.g., MYBRAND) that doesn't conflict with common words.</div>
-          <div className="flex gap-2"><span className="text-purple-500 font-bold shrink-0">5.</span> More training steps = better quality but longer training time. 1000 steps is a good default.</div>
-          <div className="flex gap-2"><span className="text-purple-500 font-bold shrink-0">6.</span> After training, use your trigger word in prompts: "MYBRAND person walking in a park"</div>
+          <div className="flex gap-2"><span className="text-purple-500 font-bold shrink-0">1.</span> {t.directorPanel.tip1}</div>
+          <div className="flex gap-2"><span className="text-purple-500 font-bold shrink-0">2.</span> {t.directorPanel.tip2}</div>
+          <div className="flex gap-2"><span className="text-purple-500 font-bold shrink-0">3.</span> {t.directorPanel.tip3}</div>
+          <div className="flex gap-2"><span className="text-purple-500 font-bold shrink-0">4.</span> {t.directorPanel.tip4}</div>
+          <div className="flex gap-2"><span className="text-purple-500 font-bold shrink-0">5.</span> {t.directorPanel.tip5}</div>
+          <div className="flex gap-2"><span className="text-purple-500 font-bold shrink-0">6.</span> {t.directorPanel.tip6}</div>
         </div>
       </div>
     </div>

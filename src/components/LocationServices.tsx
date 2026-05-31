@@ -376,7 +376,7 @@ export default function LocationServices() {
                     <label className="text-[12px] font-medium text-text-secondary mb-1 block">Access Token</label>
                     <input
                       type="password"
-                      placeholder="Bearer token from Life360"
+                      placeholder="Jeton Bearer de Life360"
                       value={formFields.access_token || ''}
                       onChange={(e) => setFormFields({ ...formFields, access_token: e.target.value })}
                       className="input-primary w-full text-[13px] rounded-lg"

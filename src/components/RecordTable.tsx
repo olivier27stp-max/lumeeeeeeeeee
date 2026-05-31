@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { ChevronUp, ChevronDown, Check, Minus, Trash2, Archive } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useTranslation } from '../i18n';
 
 export interface RecordColumn<T> {
   key: string;
@@ -34,7 +35,7 @@ export default function RecordTable<T extends { id: string }>({
   columns,
   rows,
   loading,
-  emptyMessage = 'No records found.',
+  emptyMessage,
   selectable = false,
   sortKey,
   sortDirection,
@@ -44,6 +45,7 @@ export default function RecordTable<T extends { id: string }>({
   onSelectionChange,
   batchActions,
 }: RecordTableProps<T>) {
+  const { t } = useTranslation();
   const [internalSelectedIds, setInternalSelectedIds] = useState<Set<string>>(new Set());
   const selectedIds = controlledSelectedIds ?? internalSelectedIds;
   const setSelectedIds = onSelectionChange ?? setInternalSelectedIds;
@@ -75,7 +77,7 @@ export default function RecordTable<T extends { id: string }>({
       {selectable && selectedIds.size > 0 && batchActions && (
         <div className="flex items-center gap-3 border-b border-border bg-surface-secondary/80 px-4 py-2">
           <span className="text-xs font-medium text-text-secondary">
-            {selectedIds.size} selected
+            {selectedIds.size} {t.common.selected}
           </span>
           <div className="flex items-center gap-1.5">
             {batchActions.map((action) => (
@@ -100,7 +102,7 @@ export default function RecordTable<T extends { id: string }>({
             onClick={() => setSelectedIds(new Set())}
             className="ml-auto text-xs text-text-secondary hover:text-text-primary"
           >
-            Clear
+            {t.common.clear}
           </button>
         </div>
       )}
@@ -169,7 +171,7 @@ export default function RecordTable<T extends { id: string }>({
                   colSpan={columns.length + (selectable ? 1 : 0)}
                   className="px-3 py-12 text-center text-sm text-text-tertiary"
                 >
-                  {emptyMessage}
+                  {emptyMessage ?? t.common.noRecordsFound}
                 </td>
               </tr>
             )}

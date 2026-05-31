@@ -672,7 +672,7 @@ export default function App() {
               </button>
               <button
                 onClick={() => { setActivityOpen(true); resetNotifCount(); }}
-                title={language === 'fr' ? 'Centre d\'activités' : 'Activity Center'}
+                title={t.activityCenter.activityCenter}
                 className="p-2 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors relative"
               >
                 <Bell size={16} strokeWidth={1.75} />

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, ChevronUp, Trophy, AlertTriangle, CheckCircle2, TrendingUp, Sparkles, Zap } from 'lucide-react';
 import MrLumeAvatar from './MrLumeAvatar';
 import type { ScenarioResult, ScenarioOption } from '../types';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../../i18n';
 
 interface ScenarioExpansionProps {
   data: ScenarioResult;
@@ -53,6 +53,7 @@ function ScoreRing({ score, size = 48 }: { score: number; size?: number }) {
 
 /* ── Individual scenario card ── */
 function ScenarioCard({ option, index, language, revealed }: ScenarioCardProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(option.isWinner || false);
   const fr = language === 'fr';
 
@@ -187,6 +188,7 @@ function ScenarioCard({ option, index, language, revealed }: ScenarioCardProps) 
 
 /* ── Main scenario expansion (MiroFish-inspired) ── */
 export default function ScenarioExpansion({ data, language }: ScenarioExpansionProps) {
+  const { t } = useTranslation();
   const fr = language === 'fr';
   const [revealedCount, setRevealedCount] = useState(0);
   const allRevealed = revealedCount >= (data.options?.length || 0);

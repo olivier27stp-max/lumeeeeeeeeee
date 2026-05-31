@@ -256,7 +256,7 @@ export default function NewJobModal({
   const [tvqEnabled, setTvqEnabled] = useState(true);
   const [tvqRate, setTvqRate] = useState(9.975);
   const [customTaxEnabled, setCustomTaxEnabled] = useState(false);
-  const [customTaxLabel, setCustomTaxLabel] = useState('Custom tax');
+  const [customTaxLabel, setCustomTaxLabel] = useState(t.jobs.customTax);
   const [customTaxRate, setCustomTaxRate] = useState(0);
   const [totalInput, setTotalInput] = useState('');
   const [jobDepositRequired, setJobDepositRequired] = useState(false);
@@ -343,7 +343,7 @@ export default function NewJobModal({
     setTvqEnabled(initialTvq ? Boolean(initialTvq.enabled) : true);
     setTvqRate(initialTvq?.rate ?? 9.975);
     setCustomTaxEnabled(initialCustom ? Boolean(initialCustom.enabled) : false);
-    setCustomTaxLabel(initialCustom?.label || 'Custom tax');
+    setCustomTaxLabel(initialCustom?.label || t.jobs.customTax);
     setCustomTaxRate(initialCustom?.rate ?? 0);
 
     listClients({ page: 1, pageSize: 200, sort: 'name_asc' })
@@ -503,7 +503,7 @@ export default function NewJobModal({
     setTvqEnabled(true);
     setTvqRate(9.975);
     setCustomTaxEnabled(false);
-    setCustomTaxLabel('Custom tax');
+    setCustomTaxLabel(t.jobs.customTax);
     setCustomTaxRate(0);
   };
 
@@ -649,7 +649,7 @@ export default function NewJobModal({
         city: addressCity.trim() || null,
         province: addressProvince.trim() || null,
         postal_code: addressPostalCode.trim() || null,
-        country: addressCountry.trim() || 'Canada',
+        country: addressCountry.trim() || t.jobs.defaultCountry,
         place_id: addressPlaceId,
         scheduled_at: scheduledAt,
         end_at: endAt,
@@ -712,7 +712,7 @@ export default function NewJobModal({
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   className="glass-input w-full text-3xl"
-                  placeholder="e.g. Residential Cleaning - Smith Residence"
+                  placeholder={t.jobs.jobTitlePlaceholder}
                   required
                 />
               </section>
@@ -1309,7 +1309,7 @@ export default function NewJobModal({
                       type="button"
                       onClick={() => setConfirmDelete(true)}
                       className="rounded-lg border border-danger/30 p-2 text-danger hover:bg-danger/10 transition-colors"
-                      title="Delete job"
+                      title="Supprimer la tâche"
                     >
                       <Trash2 size={15} />
                     </button>

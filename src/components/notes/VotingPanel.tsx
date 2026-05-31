@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { X, ThumbsUp, Timer, Eye, EyeOff, Trophy, Play, Square } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 export interface Vote {
   itemId: string;
@@ -29,6 +29,7 @@ function VotingPanel({
   active, votes, maxVotes, anonymous, timerSeconds, timerRunning,
   currentUserId, language, onStart, onStop, onClose,
 }: VotingPanelProps) {
+  const { t } = useTranslation();
   const fr = language === 'fr';
   const [configMaxVotes, setConfigMaxVotes] = useState(3);
   const [configAnonymous, setConfigAnonymous] = useState(false);

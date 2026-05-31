@@ -7,7 +7,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { WORKFLOW_PRESETS, PRESET_CATEGORIES, type WorkflowPreset } from '../../lib/workflowPresets';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 const ICON_MAP: Record<string, typeof Zap> = {
   UserPlus, FileText, Star, MapPin, CreditCard, AlertCircle, Zap,
@@ -39,6 +39,7 @@ interface PresetLibraryProps {
 }
 
 export default function PresetLibrary({ open, onClose, onSelect, fr }: PresetLibraryProps) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [selectedPreset, setSelectedPreset] = useState<WorkflowPreset | null>(null);
@@ -86,7 +87,7 @@ export default function PresetLibrary({ open, onClose, onSelect, fr }: PresetLib
                     {t.workflows.presetLibrary}
                   </h2>
                   <p className="text-[11px] text-text-tertiary">
-                    {fr ? 'Workflows prêts à l\'emploi pour votre entreprise' : 'Ready-to-use workflows for your business'}
+                    {t.automations.readyToUseWorkflows}
                   </p>
                 </div>
               </div>

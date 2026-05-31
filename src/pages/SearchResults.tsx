@@ -151,13 +151,14 @@ function ResultsList({ items, query }: { items: SearchEntityItem[]; query: strin
 }
 
 function PaginationControls({ page, totalPages, onChange }: { page: number; totalPages: number; onChange: (p: number) => void }) {
+  const { t } = useTranslation();
   if (totalPages <= 1) return null;
   return (
     <div className="mt-3 flex items-center justify-end gap-2">
       <button type="button" onClick={() => onChange(page - 1)} disabled={page <= 1} className="glass-button !px-2 !py-1 disabled:opacity-50">
         <ChevronLeft size={14} />
       </button>
-      <p className="text-[11px] text-text-secondary">Page {page} / {totalPages}</p>
+      <p className="text-[11px] text-text-secondary">{t.searchResults.pageOf.replace('{page}', String(page)).replace('{total}', String(totalPages))}</p>
       <button type="button" onClick={() => onChange(page + 1)} disabled={page >= totalPages} className="glass-button !px-2 !py-1 disabled:opacity-50">
         <ChevronRight size={14} />
       </button>

@@ -262,7 +262,7 @@ export default function InvoiceEdit() {
         navigate(`/invoices/${id}/edit`, { replace: true });
       }
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to save');
+      toast.error(err?.message || t.invoiceEdit.failedToSave);
     } finally {
       setSaving(false);
     }
@@ -271,11 +271,11 @@ export default function InvoiceEdit() {
   // ── Send ──
   async function handleSend() {
     if (!draftId) {
-      toast.error('Please save the invoice first');
+      toast.error(t.invoiceEdit.pleaseSaveFirst);
       return;
     }
     if (!clientEmail) {
-      toast.error('Client has no email address');
+      toast.error(t.invoiceEdit.clientHasNoEmail);
       return;
     }
     setSending(true);
@@ -291,7 +291,7 @@ export default function InvoiceEdit() {
       toast.success(t.invoiceDetails.invoiceSent);
       navigate(`/invoices/${draftId}`);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to send');
+      toast.error(err?.message || t.invoiceEdit.failedToSend);
     } finally {
       setSending(false);
     }
@@ -306,7 +306,7 @@ export default function InvoiceEdit() {
         invoice: {
           id: draftId || '',
           client_id: clientId,
-          client_name: clientName || 'Client Name',
+          client_name: clientName || t.invoiceEdit.clientNamePlaceholder,
           invoice_number: detailQuery.data?.invoice?.invoice_number || 'INV-XXXXXX',
           status: detailQuery.data?.invoice?.status || 'draft',
           currency: 'CAD',
@@ -377,7 +377,7 @@ export default function InvoiceEdit() {
             />
           </div>
           <div className="mt-3 max-h-[60vh] space-y-2 overflow-y-auto">
-            {clientsQuery.isLoading && <p className="text-sm text-text-secondary">Loading...</p>}
+            {clientsQuery.isLoading && <p className="text-sm text-text-secondary">{t.invoiceEdit.loading}</p>}
             {(clientsQuery.data?.items || []).map((c) => (
               <button
                 key={c.id}
@@ -390,11 +390,11 @@ export default function InvoiceEdit() {
                 className="w-full rounded-xl border border-outline-subtle bg-surface px-4 py-3 text-left transition hover:bg-surface-secondary"
               >
                 <p className="text-sm font-semibold text-text-primary">{c.name}</p>
-                <p className="text-xs text-text-secondary">{c.email || 'No email'}</p>
+                <p className="text-xs text-text-secondary">{c.email || t.invoiceEdit.noEmail}</p>
               </button>
             ))}
             {!clientsQuery.isLoading && (clientsQuery.data?.items || []).length === 0 && (
-              <p className="py-4 text-center text-sm text-text-tertiary">No clients found</p>
+              <p className="py-4 text-center text-sm text-text-tertiary">{t.invoiceEdit.noClientsFound}</p>
             )}
           </div>
         </div>
@@ -413,7 +413,7 @@ export default function InvoiceEdit() {
           </button>
           <div>
             <h1 className="text-sm font-bold text-text-primary">
-              {isNew ? (t.invoiceEdit.newInvoice) : detailQuery.data?.invoice?.invoice_number || 'Edit Invoice'}
+              {isNew ? (t.invoiceEdit.newInvoice) : detailQuery.data?.invoice?.invoice_number || t.invoiceEdit.editInvoice}
             </h1>
             <p className="text-xs text-text-secondary">{clientName}</p>
           </div>
@@ -468,7 +468,7 @@ export default function InvoiceEdit() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                  {language === 'fr' ? 'Date d\'échéance' : 'Due Date'}
+                  {t.invoiceEdit.dueDate}
                 </label>
                 <input
                   type="date"
@@ -511,7 +511,7 @@ export default function InvoiceEdit() {
                       checked={line.included}
                       onChange={() => updateLine(line.id, { included: !line.included })}
                       className="h-4 w-4 shrink-0 rounded cursor-pointer accent-primary"
-                      title={line.included ? 'Exclude from invoice' : 'Include in invoice'}
+                      title={line.included ? t.invoiceEdit.excludeFromInvoice : t.invoiceEdit.includeInInvoice}
                     />
                     <input
                       value={line.description}
@@ -526,7 +526,7 @@ export default function InvoiceEdit() {
                     step={0.01}
                     value={line.qty}
                     onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) || 0 })}
-                    placeholder="Qty"
+                    placeholder={t.invoiceEdit.qty}
                     className="glass-input col-span-2 text-sm"
                   />
                   <input
@@ -535,7 +535,7 @@ export default function InvoiceEdit() {
                     step={0.01}
                     value={line.unitPrice}
                     onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value) || 0 })}
-                    placeholder="Price"
+                    placeholder={t.invoiceEdit.price}
                     className="glass-input col-span-2 text-sm"
                   />
                   <div className={cn('col-span-2 flex items-center justify-end text-sm font-medium', line.included ? 'text-text-primary' : 'text-text-tertiary line-through')}>
@@ -599,7 +599,7 @@ export default function InvoiceEdit() {
                   <span className="font-semibold">{fmt(totals.tax_cents)}</span>
                 </div>
                 <div className="mt-2 flex justify-between border-t border-outline-subtle pt-2 text-base font-bold text-text-primary">
-                  <span>Total</span>
+                  <span>{t.invoiceEdit.total}</span>
                   <span>{fmt(totals.total_cents)}</span>
                 </div>
               </div>

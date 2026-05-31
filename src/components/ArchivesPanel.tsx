@@ -42,28 +42,28 @@ export default function ArchivesPanel() {
   }, []);
 
   const handleRestore = async (item: ArchivedItem) => {
-    if (!window.confirm((t as any).archives?.confirmRestore || 'Restore this item?')) return;
+    if (!window.confirm(t.archives.confirmRestore)) return;
     setActionId(item.id);
     try {
       await restoreItem(item.type, item.id);
-      toast.success((t as any).archives?.restored || 'Item restored.');
+      toast.success(t.archives.restored);
       await loadArchives();
     } catch (err: any) {
-      toast.error(err?.message || (t as any).archives?.failedRestore || 'Failed to restore.');
+      toast.error(err?.message || t.archives.failedRestore);
     } finally {
       setActionId(null);
     }
   };
 
   const handleDelete = async (item: ArchivedItem) => {
-    if (!window.confirm((t as any).archives?.confirmDelete || 'Permanently delete?')) return;
+    if (!window.confirm(t.archives.confirmDelete)) return;
     setActionId(item.id);
     try {
       await permanentDeleteItem(item.type, item.id);
-      toast.success((t as any).archives?.deleted || 'Item deleted.');
+      toast.success(t.archives.deleted);
       await loadArchives();
     } catch (err: any) {
-      toast.error(err?.message || (t as any).archives?.failedDelete || 'Failed to delete.');
+      toast.error(err?.message || t.archives.failedDelete);
     } finally {
       setActionId(null);
     }
@@ -95,13 +95,12 @@ export default function ArchivesPanel() {
   };
 
   const filteredItems = getFilteredItems();
-  const archiveStrings = (t as any).archives || {};
 
   const tabs: { key: ArchiveTab; label: string; count: number }[] = [
-    { key: 'all', label: archiveStrings.all || 'All', count: allItems.length },
-    { key: 'clients', label: archiveStrings.clients || 'Clients', count: data.clients.length },
-    { key: 'leads', label: archiveStrings.leads || 'Leads', count: data.leads.length },
-    { key: 'jobs', label: archiveStrings.jobs || 'Jobs', count: data.jobs.length },
+    { key: 'all', label: t.archives.all, count: allItems.length },
+    { key: 'clients', label: t.archives.clients, count: data.clients.length },
+    { key: 'leads', label: t.archives.leads, count: data.leads.length },
+    { key: 'jobs', label: t.archives.jobs, count: data.jobs.length },
   ];
 
   const typeIcon = (type: ArchiveItemType) => {
@@ -114,9 +113,9 @@ export default function ArchivesPanel() {
 
   const typeLabel = (type: ArchiveItemType) => {
     switch (type) {
-      case 'client': return archiveStrings.clients || 'Client';
-      case 'lead': return archiveStrings.leads || 'Lead';
-      case 'job': return archiveStrings.jobs || 'Job';
+      case 'client': return t.archives.clients;
+      case 'lead': return t.archives.leads;
+      case 'job': return t.archives.jobs;
     }
   };
 
@@ -158,7 +157,7 @@ export default function ArchivesPanel() {
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
         <input
           type="text"
-          placeholder={archiveStrings.searchArchives || 'Search archives...'}
+          placeholder={t.archives.searchArchives}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="glass-input w-full pl-9"
@@ -169,8 +168,8 @@ export default function ArchivesPanel() {
       {filteredItems.length === 0 ? (
         <EmptyState
           icon={Archive}
-          title={archiveStrings.noArchives || 'No archived items'}
-          description={archiveStrings.noArchivesDesc || 'Archived records will appear here.'}
+          title={t.archives.noArchives}
+          description={t.archives.noArchivesDesc}
         />
       ) : (
         <div className="section-card overflow-hidden">
@@ -178,16 +177,16 @@ export default function ArchivesPanel() {
             <thead>
               <tr className="border-b border-border">
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {archiveStrings.type || 'Type'}
+                  {t.archives.type}
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {archiveStrings.name || 'Name'}
+                  {t.archives.name}
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
                   {t.common.status}
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {archiveStrings.archivedOn || 'Archived on'}
+                  {t.archives.archivedOn}
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
                   {t.common.actions}
@@ -242,7 +241,7 @@ export default function ArchivesPanel() {
                             ) : (
                               <RotateCcw size={12} />
                             )}
-                            {archiveStrings.restore || 'Restore'}
+                            {t.archives.restore}
                           </button>
                           <button
                             onClick={() => void handleDelete(item)}

@@ -10,9 +10,11 @@ import {
   deletePredefinedService,
   PredefinedService,
 } from '../lib/servicesApi';
+import { useTranslation } from '../i18n';
 
 export default function ProductsServices() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [services, setServices] = useState<PredefinedService[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -48,8 +50,6 @@ export default function ProductsServices() {
         (s.category || '').toLowerCase().includes(search.toLowerCase())
       )
     : services;
-
-  const categories = [...new Set(filtered.map((s) => s.category || 'Other'))].sort();
 
   function openCreate() {
     setEditingId(null);
@@ -87,7 +87,7 @@ export default function ProductsServices() {
           default_duration_minutes: durationMin,
         });
         setServices((prev) => prev.map((s) => (s.id === editingId ? updated : s)));
-        toast.success('Service updated');
+        toast.success(t.productsServices.serviceUpdated);
       } else {
         const created = await createPredefinedService({
           name: formName.trim(),
@@ -97,11 +97,11 @@ export default function ProductsServices() {
           default_duration_minutes: durationMin,
         });
         setServices((prev) => [...prev, created]);
-        toast.success('Service created');
+        toast.success(t.productsServices.serviceCreated);
       }
       setShowForm(false);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to save');
+      toast.error(err?.message || t.productsServices.failedToSave);
     } finally {
       setSaving(false);
     }
@@ -111,9 +111,9 @@ export default function ProductsServices() {
     try {
       await deletePredefinedService(id);
       setServices((prev) => prev.filter((s) => s.id !== id));
-      toast.success('Service deleted');
+      toast.success(t.productsServices.serviceDeleted);
     } catch {
-      toast.error('Failed to delete');
+      toast.error(t.productsServices.failedToDelete);
     }
   }
 
@@ -121,7 +121,7 @@ export default function ProductsServices() {
     <div className="space-y-5">
       {/* Header */}
       <button onClick={() => navigate('/settings')} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-text-secondary hover:text-text-primary transition-colors">
-        <ArrowLeft size={14} /> Settings
+        <ArrowLeft size={14} /> {t.productsServices.settings}
       </button>
 
       <div className="flex items-center justify-between">
@@ -130,12 +130,12 @@ export default function ProductsServices() {
             <Package size={18} className="text-text-tertiary" />
           </div>
           <div>
-            <h1 className="text-[20px] font-bold text-text-primary tracking-tight">Products & Services</h1>
-            <p className="text-[12px] text-text-tertiary">Manage your predefined service catalog</p>
+            <h1 className="text-[20px] font-bold text-text-primary tracking-tight">{t.productsServices.productsAndServices}</h1>
+            <p className="text-[12px] text-text-tertiary">{t.productsServices.manageYourServiceCatalog}</p>
           </div>
         </div>
         <button onClick={openCreate} className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5">
-          <Plus size={13} /> New Service
+          <Plus size={13} /> {t.productsServices.newService}
         </button>
       </div>
 
@@ -145,7 +145,7 @@ export default function ProductsServices() {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search services..."
+          placeholder={t.productsServices.searchServices}
           className="w-full bg-surface-secondary/60 border border-outline-subtle/60 rounded-lg pl-8 pr-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40 transition-colors"
         />
       </div>
@@ -155,7 +155,7 @@ export default function ProductsServices() {
         <div className="section-card p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-[14px] font-semibold text-text-primary">
-              {editingId ? 'Edit Service' : 'New Service'}
+              {editingId ? t.productsServices.editService : t.productsServices.newService}
             </h3>
             <button onClick={() => setShowForm(false)} className="p-1 rounded-md text-text-tertiary hover:text-text-primary">
               <X size={14} />
@@ -163,31 +163,31 @@ export default function ProductsServices() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="md:col-span-2">
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Name *</label>
-              <input value={formName} onChange={(e) => setFormName(e.target.value)} className="glass-input w-full mt-1" placeholder="e.g. Lavage à pression" />
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.productsServices.nameRequired}</label>
+              <input value={formName} onChange={(e) => setFormName(e.target.value)} className="glass-input w-full mt-1" placeholder={t.productsServices.placeholderName} />
             </div>
             <div className="md:col-span-2">
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Description</label>
-              <input value={formDesc} onChange={(e) => setFormDesc(e.target.value)} className="glass-input w-full mt-1" placeholder="Short description..." />
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.productsServices.description}</label>
+              <input value={formDesc} onChange={(e) => setFormDesc(e.target.value)} className="glass-input w-full mt-1" placeholder={t.productsServices.placeholderDescription} />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Default Price ($)</label>
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.productsServices.defaultPrice}</label>
               <input value={formPrice} onChange={(e) => setFormPrice(e.target.value)} type="text" inputMode="decimal" className="glass-input w-full mt-1" placeholder="475.00" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Category</label>
-              <input value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="glass-input w-full mt-1" placeholder="e.g. Nettoyage" />
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.productsServices.category}</label>
+              <input value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="glass-input w-full mt-1" placeholder={t.productsServices.placeholderCategory} />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Duration (min)</label>
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.productsServices.durationMin}</label>
               <input value={formDuration} onChange={(e) => setFormDuration(e.target.value)} type="number" className="glass-input w-full mt-1" placeholder="60" />
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <button onClick={() => setShowForm(false)} className="glass-button !text-[12px]">Cancel</button>
+            <button onClick={() => setShowForm(false)} className="glass-button !text-[12px]">{t.productsServices.cancel}</button>
             <button onClick={handleSave} disabled={!formName.trim() || saving} className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5">
               {saving && <Loader2 size={11} className="animate-spin" />}
-              {editingId ? 'Save Changes' : 'Create Service'}
+              {editingId ? t.productsServices.saveChanges : t.productsServices.createService}
             </button>
           </div>
         </div>
@@ -203,10 +203,10 @@ export default function ProductsServices() {
       ) : filtered.length === 0 ? (
         <div className="section-card p-12 text-center">
           <Package size={28} className="text-text-tertiary mx-auto mb-3 opacity-40" />
-          <p className="text-[14px] font-medium text-text-secondary">No services found</p>
-          <p className="text-[12px] text-text-tertiary mt-1">Create your first predefined service to speed up job creation.</p>
+          <p className="text-[14px] font-medium text-text-secondary">{t.productsServices.noServicesFound}</p>
+          <p className="text-[12px] text-text-tertiary mt-1">{t.productsServices.createYourFirstService}</p>
           <button onClick={openCreate} className="mt-3 text-[12px] text-primary font-semibold hover:underline inline-flex items-center gap-1">
-            <Plus size={11} /> Create a service
+            <Plus size={11} /> {t.productsServices.createAService}
           </button>
         </div>
       ) : (

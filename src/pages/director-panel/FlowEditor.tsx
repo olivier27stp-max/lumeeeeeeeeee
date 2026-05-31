@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import { useFlowEditorStore } from '../../lib/director-panel/store';
 import { getNodeDef } from '../../lib/director-panel/config/node-registry';
@@ -147,6 +148,7 @@ const AUTOSAVE_DELAY = 3000;
 // ---- Flow Editor Inner (needs ReactFlowProvider) ----------------------------
 
 function FlowEditorInner() {
+  const { t } = useTranslation();
   const { flowId } = useParams<{ flowId: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -164,7 +166,7 @@ function FlowEditorInner() {
 
   const [rfNodes, setRFNodes, onNodesChange] = useNodesState([]);
   const [rfEdges, setRFEdges, onEdgesChange] = useEdgesState([]);
-  const [flowTitle, setFlowTitle] = useState('Untitled Flow');
+  const [flowTitle, setFlowTitle] = useState(t.directorPanel.untitledFlow);
   const [saving, setSaving] = useState(false);
   const [creditEstimate, setCreditEstimate] = useState(0);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -311,8 +313,8 @@ function FlowEditorInner() {
         })
         .catch((err) => {
           // DB not set up yet - start empty
-          setFlowTitle('Untitled Flow');
-          toast.error(err?.message || 'Failed to load flow');
+          setFlowTitle(t.directorPanel.untitledFlow);
+          toast.error(err?.message || t.directorPanel.failedToLoadFlow);
         });
     }
   }, [flowId, searchParams, nodeTypesReady]);
@@ -425,7 +427,7 @@ function FlowEditorInner() {
         const { createFlow } = await import('../../lib/directorApi');
         const newFlow = await createFlow({
           org_id: orgId,
-          title: flowTitle || 'Untitled Flow',
+          title: flowTitle || t.directorPanel.untitledFlow,
           slug: 'untitled-flow',
           description: '',
           status: 'draft',
@@ -456,10 +458,10 @@ function FlowEditorInner() {
       store.setNodes(dirNodes);
       store.setEdges(dirEdges);
       store.markClean();
-      toast.success('Flow saved');
+      toast.success(t.directorPanel.flowSaved);
     } catch (err: any) {
       console.error('Save failed:', err);
-      toast.error(err?.message || 'Failed to save flow');
+      toast.error(err?.message || t.directorPanel.failedToSaveFlow);
     } finally {
       setSaving(false);
     }
@@ -519,7 +521,7 @@ function FlowEditorInner() {
         }
       } catch (creditErr: any) {
         console.warn('[director] Credit check failed, proceeding:', creditErr?.message);
-        toast.warning('Credit check unavailable — proceeding without balance verification');
+        toast.warning(t.directorPanel.creditCheckUnavailable);
       }
     }
 
@@ -626,9 +628,9 @@ function FlowEditorInner() {
     }
 
     if (result.success) {
-      toast.success('Flow completed successfully');
+      toast.success(t.directorPanel.flowCompletedSuccessfully);
     } else {
-      toast.error(`Flow failed: ${result.errors[0] || 'Unknown error'}`);
+      toast.error(`${t.directorPanel.flowFailed}: ${result.errors[0] || 'Unknown error'}`);
     }
   }, [rfNodes, rfEdges, flowId, creditEstimate, store.flow?.org_id]);
 
@@ -732,7 +734,7 @@ function FlowEditorInner() {
           const node = rfNodes.find((n) => n.id === selectedId);
           if (node) {
             (window as any).__lume_clipboard = structuredClone(node);
-            toast.success('Node copied');
+            toast.success(t.directorPanel.nodeCopied);
           }
         }
         return;
@@ -751,7 +753,7 @@ function FlowEditorInner() {
           };
           setRFNodes((nds) => [...nds, newNode]);
           store.markDirty();
-          toast.success('Node pasted');
+          toast.success(t.directorPanel.nodePasted);
         }
         return;
       }
@@ -868,7 +870,7 @@ function FlowEditorInner() {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a'); a.href = url; a.download = `${flowTitle || 'flow'}.json`; a.click();
             URL.revokeObjectURL(url);
-            toast.success('Flow exported');
+            toast.success(t.directorPanel.flowExported);
           }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-[#888] hover:bg-[#2a2a2a] transition-colors" title="Export flow JSON" aria-label="Export flow">
             <Copy className="w-3.5 h-3.5" />
           </button>
@@ -888,11 +890,11 @@ function FlowEditorInner() {
                     setRFEdges(data.edges || []);
                     if (data.title) setFlowTitle(data.title);
                     store.markDirty();
-                    toast.success('Flow imported');
+                    toast.success(t.directorPanel.flowImported);
                   } else {
-                    toast.error('Invalid flow file');
+                    toast.error(t.directorPanel.invalidFlowFile);
                   }
-                } catch { toast.error('Failed to parse flow file'); }
+                } catch { toast.error(t.directorPanel.failedToParseFlowFile); }
               };
               reader.readAsText(file);
             };
@@ -908,7 +910,7 @@ function FlowEditorInner() {
             })));
             store.markDirty();
             setTimeout(() => { try { rfFitView({ padding: 0.15 }); } catch {} }, 100);
-            toast.success('Auto-layout applied');
+            toast.success(t.directorPanel.autoLayoutApplied);
           }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-[#888] hover:bg-[#2a2a2a] transition-colors" title="Auto-layout">
             <Layout className="w-3.5 h-3.5" />
           </button>
@@ -917,12 +919,12 @@ function FlowEditorInner() {
             if (!campaignId?.trim()) return;
             const orgId = store.flow?.org_id;
             const fid = flowId;
-            if (!orgId || !fid || fid === 'new') { toast.error('Save the flow first'); return; }
+            if (!orgId || !fid || fid === 'new') { toast.error(t.directorPanel.saveFlowFirst); return; }
             try {
               const { createFlowLink } = await import('../../lib/directorApi');
               await createFlowLink({ org_id: orgId, flow_id: fid, entity_type: 'campaign', entity_id: campaignId.trim() });
-              toast.success('Flow linked to campaign');
-            } catch (err: any) { toast.error(err?.message || 'Failed to link campaign'); }
+              toast.success(t.directorPanel.flowLinkedToCampaign);
+            } catch (err: any) { toast.error(err?.message || t.directorPanel.failedToLinkCampaign); }
           }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-[#888] hover:bg-[#2a2a2a] transition-colors" title="Link to campaign">
             <Link2 className="w-3.5 h-3.5" />
           </button>

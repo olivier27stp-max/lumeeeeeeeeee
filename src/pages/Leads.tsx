@@ -629,9 +629,7 @@ export default function Leads() {
               void queryClient.invalidateQueries({ queryKey: ['dashboard-quote-kpis'] });
               setSaveSuccess(t.leads.quoteCreatedSuccessfully);
               const goToQuote = window.confirm(
-                language === 'fr'
-                  ? `Devis #${detail.quote.quote_number} créé. Voulez-vous le voir maintenant?`
-                  : `Quote #${detail.quote.quote_number} created. View it now?`
+                t.leads.quoteCreatedConfirm.replace('{n}', String(detail.quote.quote_number))
               );
               if (goToQuote) navigate(`/quotes/${detail.quote.id}`);
             }}
@@ -827,7 +825,7 @@ export default function Leads() {
                                 try {
                                   const detail = await getQuoteById(q.id);
                                   if (detail) { setQuoteDetail(detail); setIsQuoteDetailsOpen(true); }
-                                } catch { toast.error('Failed to load quote'); }
+                                } catch { toast.error(t.leads.failedToLoadQuote); }
                               }}
                               className="w-full text-left rounded-lg border border-outline p-3 hover:bg-surface-secondary transition-colors"
                             >

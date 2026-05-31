@@ -210,7 +210,7 @@ export default function Payments() {
               options={[
                 { value: 'all', label: t.payments.allMethods },
                 { value: 'card', label: t.payments.card },
-                { value: 'e-transfer', label: 'E-Transfer' },
+                { value: 'e-transfer', label: t.payments.eTransfer },
                 { value: 'cash', label: t.payments.cash },
                 { value: 'check', label: t.payments.check },
               ]}
@@ -306,8 +306,8 @@ export default function Payments() {
               onChange={(v) => setQuery((n) => { if (v === 'all') n.delete('payout_method'); else n.set('payout_method', v); n.delete('payout_cursor'); })}
               options={[
                 { value: 'all', label: t.automations.all },
-                { value: 'standard', label: 'Standard' },
-                { value: 'instant', label: 'Instant' },
+                { value: 'standard', label: t.payments.standard },
+                { value: 'instant', label: t.payments.instant },
               ]}
             />
             <FilterSelect
@@ -327,10 +327,10 @@ export default function Payments() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Date</th>
-                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Type</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.payments.date}</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.payments.type}</th>
                   <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.automations.status}</th>
-                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Net</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.payments.net}</th>
                 </tr>
               </thead>
               <tbody>
@@ -397,7 +397,7 @@ export default function Payments() {
                   <span className="text-text-primary">{formatDate(d.created)}</span>
                 </div>
                 <div className="flex justify-between text-[13px]">
-                  <span className="text-text-secondary">{language === 'fr' ? 'Date d\'arrivee' : 'Arrival date'}</span>
+                  <span className="text-text-secondary">{t.payments.arrivalDate}</span>
                   <span className="text-text-primary">{formatDate(d.arrival_date)}</span>
                 </div>
                 {d.fee_total > 0 && (

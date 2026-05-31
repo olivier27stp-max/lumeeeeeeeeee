@@ -59,6 +59,7 @@ function ServiceItem({
   onUpdate: (s: QuoteTemplateService) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start gap-2 p-3 bg-surface-secondary rounded-lg">
       <div className="mt-1.5 text-text-tertiary cursor-grab">
@@ -135,6 +136,7 @@ function TemplateCard({
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const serviceCount = (template.services || []).length;
   const totalCents = (template.services || []).reduce((sum, s) => sum + s.unit_price_cents * s.quantity, 0);
@@ -216,6 +218,7 @@ function TemplateEditor({
   onSave: (data: Partial<QuoteTemplate>) => Promise<void>;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const isNew = !template;
   const [name, setName] = useState(template?.name || '');
   const [description, setDescription] = useState(template?.description || '');
@@ -421,7 +424,7 @@ function TemplateEditor({
 
 export default function QuoteTemplates() {
   const navigate = useNavigate();
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const isFr = language === 'fr';
 
   const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
@@ -469,7 +472,7 @@ export default function QuoteTemplates() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(isFr ? `Supprimer le modèle "${name}" ?` : `Delete template "${name}"?`)) return;
+    if (!window.confirm(t.quoteTemplates.deleteTemplateName.replace('${name}', name))) return;
     try {
       await deleteQuoteTemplate(id);
       toast.success(t.quoteTemplates.templateDeleted);

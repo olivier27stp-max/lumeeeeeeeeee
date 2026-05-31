@@ -19,6 +19,7 @@ import {
   addChecklistItem, updateChecklistItem, deleteChecklistItem,
   uploadNoteFile, deleteNoteFile, extractTags,
 } from '../../lib/notesApi';
+import { useTranslation } from '../../i18n';
 
 interface NoteEditorProps {
   open: boolean;
@@ -29,6 +30,7 @@ interface NoteEditorProps {
 }
 
 export default function NoteEditor({ open, onClose, note, language, onSaved }: NoteEditorProps) {
+  const { t } = useTranslation();
   const isEdit = !!note;
   const [content, setContent] = useState('');
   const [color, setColor] = useState<NoteColor | null>(null);
@@ -253,10 +255,7 @@ export default function NoteEditor({ open, onClose, note, language, onSaved }: N
             ref={textareaRef}
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder={language === 'fr'
-              ? 'Écrivez votre note... Utilisez @nom pour mentionner, #tag pour tagger'
-              : 'Write your note... Use @name to mention, #tag to tag'
-            }
+            placeholder={t.noteEditor.writePlaceholder}
             className="input-field w-full text-[13px] resize-none min-h-[120px]"
             rows={5}
           />

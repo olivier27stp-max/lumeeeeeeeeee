@@ -13,7 +13,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { fetchActivityLog, EVENT_TYPE_LABELS, type ActivityLogEntry } from '../lib/activityApi';
 import { formatDate } from '../lib/utils';
-import { useTranslation } from '../i18n';
+import { useTranslation, getTranslations } from '../i18n';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   plus: <Plus size={14} />,
@@ -63,12 +63,11 @@ interface ActivityTimelineProps {
 }
 
 function getEventDetail(entry: ActivityLogEntry, lang: 'en' | 'fr'): string {
+  const _t = getTranslations(lang);
   const meta = entry.metadata || {};
 
   if (entry.event_type === 'status_changed') {
-    return lang === 'fr'
-      ? `${meta.old_status || '?'} → ${meta.new_status || '?'}`
-      : `${meta.old_status || '?'} → ${meta.new_status || '?'}`;
+    return `${meta.old_status || '?'} → ${meta.new_status || '?'}`;
   }
   if (entry.event_type === 'lead_converted') {
     return meta.job_title ? `→ ${meta.job_title}` : '';
@@ -159,7 +158,7 @@ export default function ActivityTimeline({ entityType, entityId }: ActivityTimel
   return (
     <div className="section-card p-4">
       <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-4">
-        {language === 'fr' ? 'Historique d\'activité' : 'Activity History'}
+        {t.activityTimeline.activityHistory}
       </h3>
       <div className="relative">
         {/* Timeline line */}

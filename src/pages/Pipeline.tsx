@@ -891,7 +891,7 @@ export default function Pipeline() {
                 <button
                   className="rounded-lg p-1 hover:bg-surface-secondary"
                   onClick={() => !isDeletingDeal && setDealToDelete(null)}
-                  aria-label="Close delete dialog"
+                  aria-label="Fermer la fenêtre de suppression"
                 >
                   <X size={16} />
                 </button>

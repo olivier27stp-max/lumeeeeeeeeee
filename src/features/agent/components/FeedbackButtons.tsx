@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../../i18n';
 
 interface FeedbackButtonsProps {
   messageId: string;
@@ -10,6 +10,7 @@ interface FeedbackButtonsProps {
 }
 
 export default function FeedbackButtons({ messageId, sessionId, language }: FeedbackButtonsProps) {
+  const { t } = useTranslation();
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
   const fr = language === 'fr';
 

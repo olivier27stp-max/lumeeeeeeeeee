@@ -43,6 +43,7 @@ function NewConversationModal({
   onSend: (phone: string, message: string, clientId?: string, clientName?: string) => Promise<void>;
   language: string;
 }) {
+  const { t } = useTranslation();
   const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -354,7 +355,7 @@ export default function Messages() {
       setMessages((prev) => [...prev, msg]);
       loadConversations();
     } catch (err: any) {
-      toast.error(err?.message || (language === 'fr' ? 'Erreur d\'envoi' : 'Failed to send'));
+      toast.error(err?.message || t.messaging.failedToSend);
       setNewMessage(text);
     } finally {
       setSending(false);
@@ -545,9 +546,7 @@ export default function Messages() {
                   {t.messaging.selectAConversation}
                 </h3>
                 <p className="text-[13px] text-text-tertiary max-w-xs">
-                  {language === 'fr'
-                    ? 'Choisissez une conversation ou envoyez un nouveau message.'
-                    : 'Choose a conversation or send a new message.'}
+                  {t.messaging.selectConversationHint}
                 </p>
               </div>
             </div>

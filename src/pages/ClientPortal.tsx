@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { FileText, DollarSign, CheckCircle2, Clock, ExternalLink } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useTranslation } from '../i18n';
 
 interface PortalData {
   client: { id: string; first_name: string; last_name: string; company: string | null; email: string | null };
@@ -38,13 +39,13 @@ interface PortalData {
   }>;
 }
 
-function formatMoney(cents: number): string {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(cents / 100);
+function formatMoney(cents: number, locale = 'en-CA'): string {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD' }).format(cents / 100);
 }
 
-function formatDate(d: string | null): string {
+function formatDate(d: string | null, locale = 'en-CA'): string {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
+  return new Date(d).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 const statusColors: Record<string, string> = {
@@ -66,6 +67,8 @@ const statusColors: Record<string, string> = {
 
 export default function ClientPortal() {
   const { token } = useParams<{ token: string }>();
+  const { t, language } = useTranslation();
+  const locale = language === 'fr' ? 'fr-CA' : 'en-CA';
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,11 +78,11 @@ export default function ClientPortal() {
     (async () => {
       try {
         const res = await fetch(`/api/portal/${token}`);
-        if (!res.ok) throw new Error(res.status === 404 ? 'Portal not found' : 'Failed to load');
+        if (!res.ok) throw new Error(res.status === 404 ? t.clientPortal.portalNotFound : t.clientPortal.failedToLoad);
         const json = await res.json();
         setData(json);
       } catch (err: any) {
-        setError(err?.message || 'Failed to load portal');
+        setError(err?.message || t.clientPortal.failedToLoad);
       } finally {
         setLoading(false);
       }
@@ -98,8 +101,8 @@ export default function ClientPortal() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
         <div className="text-center">
-          <p className="text-lg font-semibold text-gray-800 mb-2">Portal unavailable</p>
-          <p className="text-sm text-gray-500">{error || 'This link may have expired.'}</p>
+          <p className="text-lg font-semibold text-gray-800 mb-2">{t.clientPortal.somethingWentWrong}</p>
+          <p className="text-sm text-gray-500">{error || t.clientPortal.failedToLoad}</p>
         </div>
       </div>
     );
@@ -135,10 +138,10 @@ export default function ClientPortal() {
         {/* Welcome */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            Hello {clientName}
+            {t.clientPortal.welcomeBack.replace('${name}', clientName)}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Here's an overview of your account with {data.company.company_name}.
+            {t.clientPortal.yourDocumentsAndPayments}
           </p>
         </div>
 
@@ -146,19 +149,19 @@ export default function ClientPortal() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center gap-2 text-gray-500 text-xs font-medium uppercase mb-2">
-              <DollarSign size={13} /> Balance
+              <DollarSign size={13} /> {t.clientPortal.balance}
             </div>
-            <p className="text-2xl font-bold text-gray-900">{formatMoney(totalOwed)}</p>
+            <p className="text-2xl font-bold text-gray-900">{formatMoney(totalOwed, locale)}</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center gap-2 text-gray-500 text-xs font-medium uppercase mb-2">
-              <FileText size={13} /> Invoices
+              <FileText size={13} /> {t.clientPortal.invoices}
             </div>
             <p className="text-2xl font-bold text-gray-900">{data.invoices.length}</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center gap-2 text-gray-500 text-xs font-medium uppercase mb-2">
-              <CheckCircle2 size={13} /> Paid
+              <CheckCircle2 size={13} /> {t.invoices.paid}
             </div>
             <p className="text-2xl font-bold text-gray-900">{paidInvoices}</p>
           </div>
@@ -167,10 +170,10 @@ export default function ClientPortal() {
         {/* Invoices */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900">Invoices & Quotes</h2>
+            <h2 className="text-sm font-semibold text-gray-900">{t.clientPortal.invoices}</h2>
           </div>
           {data.invoices.length === 0 ? (
-            <p className="px-5 py-8 text-center text-sm text-gray-400">No invoices yet.</p>
+            <p className="px-5 py-8 text-center text-sm text-gray-400">{t.clientPortal.noInvoices}</p>
           ) : (
             <div className="divide-y divide-gray-100">
               {data.invoices.map((inv) => (
@@ -179,10 +182,10 @@ export default function ClientPortal() {
                     <FileText size={16} className="text-gray-400" />
                     <div>
                       <p className="text-sm font-medium text-gray-900">
-                        #{inv.invoice_number} — {inv.subject || 'Invoice'}
+                        #{inv.invoice_number} — {inv.subject || t.clientPortal.invoices}
                       </p>
                       <p className="text-xs text-gray-400">
-                        {inv.due_date ? `Due ${formatDate(inv.due_date)}` : 'No due date'}
+                        {inv.due_date ? `${t.clientPortal.due} ${formatDate(inv.due_date, locale)}` : '—'}
                       </p>
                     </div>
                   </div>
@@ -190,13 +193,13 @@ export default function ClientPortal() {
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[inv.status] || 'bg-gray-100 text-gray-600'}`}>
                       {inv.status}
                     </span>
-                    <span className="text-sm font-bold text-gray-900 tabular-nums">{formatMoney(inv.total_cents)}</span>
+                    <span className="text-sm font-bold text-gray-900 tabular-nums">{formatMoney(inv.total_cents, locale)}</span>
                     {inv.view_token && inv.balance_cents > 0 && (
                       <a
                         href={`/quote/${inv.view_token}`}
                         className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
                       >
-                        Pay <ExternalLink size={11} />
+                        {t.payments.pay} <ExternalLink size={11} />
                       </a>
                     )}
                   </div>
@@ -210,7 +213,7 @@ export default function ClientPortal() {
         {data.quotes && data.quotes.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">Quotes</h2>
+              <h2 className="text-sm font-semibold text-gray-900">{t.clientPortal.quotes}</h2>
             </div>
             <div className="divide-y divide-gray-100">
               {data.quotes.map((q) => (
@@ -219,10 +222,10 @@ export default function ClientPortal() {
                     <FileText size={16} className="text-gray-400" />
                     <div>
                       <p className="text-sm font-medium text-gray-900">
-                        #{q.quote_number} — {q.title || 'Quote'}
+                        #{q.quote_number} — {q.title || t.clientPortal.quotes}
                       </p>
                       <p className="text-xs text-gray-400">
-                        {q.valid_until ? `Valid until ${formatDate(q.valid_until)}` : 'No expiry'}
+                        {q.valid_until ? `${t.clientPortal.validUntil} ${formatDate(q.valid_until, locale)}` : '—'}
                       </p>
                     </div>
                   </div>
@@ -230,13 +233,13 @@ export default function ClientPortal() {
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[q.status] || 'bg-gray-100 text-gray-600'}`}>
                       {q.status.replace('_', ' ')}
                     </span>
-                    <span className="text-sm font-bold text-gray-900 tabular-nums">{formatMoney(q.total_cents)}</span>
+                    <span className="text-sm font-bold text-gray-900 tabular-nums">{formatMoney(q.total_cents, locale)}</span>
                     {q.view_token && ['sent', 'awaiting_response', 'action_required'].includes(q.status) && (
                       <a
                         href={`/quote/${q.view_token}`}
                         className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
                       >
-                        View <ExternalLink size={11} />
+                        {t.clientPortal.view} <ExternalLink size={11} />
                       </a>
                     )}
                   </div>
@@ -250,7 +253,7 @@ export default function ClientPortal() {
         {data.jobs.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">Your Jobs</h2>
+              <h2 className="text-sm font-semibold text-gray-900">{t.clientPortal.jobs}</h2>
             </div>
             <div className="divide-y divide-gray-100">
               {data.jobs.map((job) => (
@@ -260,7 +263,7 @@ export default function ClientPortal() {
                     <div>
                       <p className="text-sm font-medium text-gray-900">{job.title}</p>
                       {job.scheduled_at && (
-                        <p className="text-xs text-gray-400">{formatDate(job.scheduled_at)}</p>
+                        <p className="text-xs text-gray-400">{formatDate(job.scheduled_at, locale)}</p>
                       )}
                     </div>
                   </div>
@@ -276,7 +279,7 @@ export default function ClientPortal() {
         {/* Footer */}
         <div className="text-center py-4">
           <p className="text-xs text-gray-400">
-            Powered by <strong>Lume</strong> — {data.company.company_name}
+            {t.publicPayment.poweredByLume} — {data.company.company_name}
           </p>
         </div>
       </main>

@@ -4,7 +4,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import type { NoteItem } from '../types/noteBoard';
-import { useTranslation } from '../i18n';
+import { getTranslations } from '../i18n';
 
 const OLLAMA_URL = 'http://localhost:11434/api/chat';
 const MODEL = 'llama3.2';
@@ -136,6 +136,7 @@ Keep it to 2-3 levels deep with 3-6 branches.`,
 // ─── Summarize Board ───────────────────────────────────────────
 
 export async function summarizeBoard(items: NoteItem[], language: string): Promise<string> {
+  const t = getTranslations(language);
   const boardText = extractBoardText(items);
   if (!boardText.trim()) return t.agent.theBoardIsEmpty;
 
@@ -159,6 +160,7 @@ Include: key topics, decisions, and open questions. Use bullet points. Keep it u
 // ─── Extract Action Items ──────────────────────────────────────
 
 export async function extractActionItems(items: NoteItem[], language: string): Promise<string> {
+  const t = getTranslations(language);
   const boardText = extractBoardText(items);
   if (!boardText.trim()) return t.agent.noContentToAnalyze;
 
@@ -187,6 +189,7 @@ export interface ExpandedIdea {
 }
 
 export async function expandIdeas(items: NoteItem[], language: string): Promise<ExpandedIdea[]> {
+  const t = getTranslations(language);
   const stickyNotes = items.filter((i) => i.item_type === 'sticky_note' && i.content?.trim());
   if (stickyNotes.length === 0) return [];
 
@@ -220,6 +223,7 @@ Use diverse colors: #fef08a, #93c5fd, #86efac, #f9a8d4, #c4b5fd, #fdba74.`,
 // ─── Improve Text ──────────────────────────────────────────────
 
 export async function improveText(text: string, language: string): Promise<string> {
+  const t = getTranslations(language);
   if (!text.trim()) return text;
 
   const lang = t.agent.english;

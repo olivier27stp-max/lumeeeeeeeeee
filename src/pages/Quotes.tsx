@@ -103,7 +103,7 @@ export default function Quotes() {
       queryClient.invalidateQueries({ queryKey: ['quotes-list'] });
       queryClient.invalidateQueries({ queryKey: ['quote-kpis'] });
       toast.success(t.quotes.quoteDeleted);
-    } catch { toast.error('Failed to delete'); }
+    } catch { toast.error(t.quotes.failedToDelete); }
   }
 
   async function handleSendEmail(id: string) {
@@ -121,7 +121,7 @@ export default function Quotes() {
       queryClient.invalidateQueries({ queryKey: ['quotes-list'] });
       queryClient.invalidateQueries({ queryKey: ['quote-kpis'] });
       toast.success(t.quotes.quoteDuplicated);
-    } catch { toast.error('Failed to duplicate'); }
+    } catch { toast.error(t.quotes.failedToDuplicate); }
     setMenuOpen(null);
   }
 
@@ -140,7 +140,7 @@ export default function Quotes() {
     try {
       const detail = await getQuoteById(id);
       if (detail) downloadQuotePdf(detail);
-    } catch { toast.error('Failed to generate PDF'); }
+    } catch { toast.error(t.quotes.failedToGeneratePdf); }
     setMenuOpen(null);
   }
 
@@ -232,7 +232,7 @@ export default function Quotes() {
                 <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">{t.quotes.title}</th>
                 <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">Status</th>
                 <th className="text-right px-4 py-2.5 font-semibold text-text-secondary">Total</th>
-                <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">{language === 'fr' ? 'Valide jusqu\'au' : 'Valid Until'}</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">{t.quotes.validUntil}</th>
                 <th className="text-left px-4 py-2.5 font-semibold text-text-secondary">{t.quotes.created}</th>
                 <th className="w-10"></th>
               </tr>

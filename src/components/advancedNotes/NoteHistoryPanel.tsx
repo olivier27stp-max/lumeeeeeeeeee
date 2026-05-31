@@ -10,7 +10,7 @@ import { fr } from 'date-fns/locale';
 import Modal from '../ui/Modal';
 import { fetchNoteHistory } from '../../lib/notesApi';
 import type { NoteHistoryEntry } from '../../types/note';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 interface NoteHistoryPanelProps {
   open: boolean;
@@ -20,6 +20,7 @@ interface NoteHistoryPanelProps {
 }
 
 export default function NoteHistoryPanel({ open, onClose, noteId, language }: NoteHistoryPanelProps) {
+  const { t } = useTranslation();
   const [entries, setEntries] = useState<NoteHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
 

@@ -96,7 +96,7 @@ const TIME_OPTIONS = generateTimeOptions();
 
 // ── Main Component ───────────────────────────────────────────────────
 export default function TeamMemberDetails() {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const navigate = useNavigate();
   const { memberId } = useParams<{ memberId: string }>();
   const isFr = language === 'fr';
@@ -256,7 +256,7 @@ export default function TeamMemberDetails() {
       if (error) throw error;
       toast.success(t.teamMember.passwordResetEmailSentToFormemail);
     } catch {
-      toast.error(isFr ? 'Erreur lors de l\'envoi du courriel de réinitialisation.' : 'Failed to send password reset email.');
+      toast.error(t.teamMember.failedToSendPasswordReset);
     }
   };
 
@@ -319,7 +319,7 @@ export default function TeamMemberDetails() {
       setTimeout(() => setSaved(false), 2500);
     } catch (err: any) {
       console.error('Save exception:', err);
-      toast.error(isFr ? 'Erreur lors de l\'enregistrement.' : 'Failed to save changes.');
+      toast.error(t.teamMember.failedToSaveChanges);
     } finally {
       setSaving(false);
     }
@@ -335,7 +335,7 @@ export default function TeamMemberDetails() {
       >
         <button className="glass-button inline-flex items-center gap-1.5" onClick={() => navigate('/settings/team')}>
           <ArrowLeft size={14} />
-          {isFr ? 'Retour à l\'équipe' : 'Back to Team'}
+          {t.teamMember.backToTeam}
         </button>
       </PageHeader>
 
@@ -460,11 +460,11 @@ export default function TeamMemberDetails() {
         <div className="section-card p-5 space-y-4">
           <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
             <DollarSign size={12} />
-            {isFr ? 'Coût de main-d\'œuvre' : 'Labour Cost'}
+            {t.teamMember.labourCost}
           </h3>
           <div className="max-w-xs">
             <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-              {isFr ? 'Coût horaire de l\'employé' : 'Employee Cost Per Hour'}
+              {t.teamMember.employeeCostPerHour}
             </label>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-[13px] font-semibold text-text-tertiary">$</span>
@@ -483,7 +483,7 @@ export default function TeamMemberDetails() {
               <span className="text-[12px] text-text-tertiary whitespace-nowrap">/ {t.teamMember.hour}</span>
             </div>
             <p className="text-[11px] text-text-tertiary mt-1.5">
-              {isFr ? 'Utilisé pour l\'estimation des coûts et les rapports de rentabilité.' : 'Used for job costing and profitability reports.'}
+              {t.teamMember.labourCostDescription}
             </p>
           </div>
         </div>
@@ -595,8 +595,8 @@ export default function TeamMemberDetails() {
               </p>
               <p className="text-[12px] text-text-tertiary">
                 {isInactive
-                  ? (isFr ? 'L\'utilisateur pourra se reconnecter.' : 'User will be able to log in again.')
-                  : (isFr ? 'L\'utilisateur ne pourra plus se connecter.' : 'User will no longer be able to log in.')}
+                  ? t.teamMember.userCanLogInAgain
+                  : t.teamMember.userCanNoLongerLogIn}
               </p>
             </div>
             <button

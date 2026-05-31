@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 import OnboardingTour from '../../components/director-panel/onboarding/OnboardingTour';
 import { HOME_TOUR_KEY, HOME_TOUR_STEPS } from '../../components/director-panel/onboarding/tours';
 import { PageHeader } from '../../components/ui';
@@ -32,6 +33,7 @@ import { TEMPLATE_IMAGES } from '../../lib/director-panel/config/template-images
 type LibraryTab = 'workflow' | 'generations';
 
 export default function DirectorHome({ orgId }: { orgId: string }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [flows, setFlows] = useState<DirectorFlow[]>([]);
   const [creditBalance, setCreditBalance] = useState(0);
@@ -97,14 +99,14 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
   );
 
   const handleDeleteFlow = async (flowId: string, title: string) => {
-    if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
+    if (!confirm(`Delete "${title}"? ${t.directorPanel.deleteConfirm}`)) return;
     try {
       const { deleteFlow } = await import('../../lib/directorApi');
       await deleteFlow(flowId);
       setFlows((prev) => prev.filter((f) => f.id !== flowId));
-      toast.success(`"${title}" deleted`);
+      toast.success(`"${title}" ${t.directorPanel.deleted}`);
     } catch {
-      toast.error('Failed to delete flow');
+      toast.error(t.directorPanel.deleteFailed);
     }
   };
 
@@ -144,9 +146,9 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
         await upsertEdges(newEdges);
       }
       setFlows((prev) => [newFlow, ...prev]);
-      toast.success(`"${flow.title}" duplicated`);
+      toast.success(`"${flow.title}" ${t.directorPanel.duplicated}`);
     } catch {
-      toast.error('Failed to duplicate flow');
+      toast.error(t.directorPanel.duplicateFailed);
     }
   };
 
@@ -164,9 +166,9 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
       const { updateFlow } = await import('../../lib/directorApi');
       await updateFlow(renameId, { title: renameValue.trim() });
       setFlows((prev) => prev.map((f) => f.id === renameId ? { ...f, title: renameValue.trim() } : f));
-      toast.success('Flow renamed');
+      toast.success(t.directorPanel.flowRenamed);
     } catch {
-      toast.error('Failed to rename flow');
+      toast.error(t.directorPanel.flowRenameFailed);
     } finally {
       setRenameId(null);
     }
@@ -187,18 +189,18 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <PageHeader title="Director Panel" subtitle="AI-powered creative generation studio" icon={Sparkles} iconColor="purple">
+      <PageHeader title={t.directorPanel.directorPanelTitle} subtitle={t.directorPanel.directorPanelSubtitle} icon={Sparkles} iconColor="purple">
         <div data-tour="credits" className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-surface-secondary border border-outline text-[12px] font-medium text-text-secondary">
           <Coins className="w-3.5 h-3.5 text-amber-500" />
-          {creditBalance} credits
+          {creditBalance} {t.directorPanel.credits}
         </div>
         <button onClick={() => navigate('/director-panel/training')} className="glass-button flex items-center gap-1.5 text-[12px]">
           <GraduationCap className="w-3.5 h-3.5" />
-          Training
+          {t.directorPanel.training}
         </button>
         <button data-tour="new-flow" onClick={handleCreateFlow} className="glass-button-primary flex items-center gap-1.5 text-[13px]">
           <Plus className="w-4 h-4" />
-          New Flow
+          {t.directorPanel.newFlow}
         </button>
       </PageHeader>
 
@@ -218,7 +220,7 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
                 : 'text-text-tertiary hover:text-text-primary'
             )}
           >
-            Workflow library
+            {t.directorPanel.workflowLibrary}
           </button>
           <button
             onClick={() => setLibraryTab('generations')}
@@ -231,7 +233,7 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
           >
             <span className="flex items-center gap-1.5">
               <Clock className="w-3 h-3" />
-              Recent Generations
+              {t.directorPanel.recentGenerations}
             </span>
           </button>
         </div>
@@ -290,7 +292,7 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
       {/* ─── My Files ─── */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 data-tour="my-files" className="text-[14px] font-semibold text-text-primary">My files</h2>
+          <h2 data-tour="my-files" className="text-[14px] font-semibold text-text-primary">{t.directorPanel.myFiles}</h2>
           <div className="flex items-center gap-2">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary" />
@@ -298,7 +300,7 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
                 type="text"
                 value={fileSearch}
                 onChange={(e) => setFileSearch(e.target.value)}
-                placeholder="Search"
+                placeholder={t.directorPanel.search}
                 className="w-[160px] pl-8 pr-3 py-1.5 rounded-md bg-surface border border-outline text-[12px] text-text-primary placeholder:text-text-tertiary outline-none focus:border-primary transition-colors"
               />
             </div>
@@ -340,21 +342,21 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
                     <Workflow className="w-8 h-8 text-text-tertiary group-hover:text-primary transition-colors" />
                   </div>
                   <div className="mt-2 px-0.5">
-                    <p className="text-[13px] font-medium text-text-primary">Create your first flow</p>
-                    <p className="text-[11px] text-text-tertiary mt-0.5">Click to get started</p>
+                    <p className="text-[13px] font-medium text-text-primary">{t.directorPanel.createFirstFlow}</p>
+                    <p className="text-[11px] text-text-tertiary mt-0.5">{t.directorPanel.clickToGetStarted}</p>
                   </div>
                 </>
               ) : (
                 <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-dashed border-outline hover:border-primary transition-colors">
                   <Workflow className="w-5 h-5 text-text-tertiary" />
-                  <span className="text-[13px] text-text-secondary">Create your first flow</span>
+                  <span className="text-[13px] text-text-secondary">{t.directorPanel.createFirstFlow}</span>
                 </div>
               )}
             </button>
           </div>
         ) : filteredFlows.length === 0 && fileSearch ? (
           <div className="py-12 text-center">
-            <p className="text-[13px] text-text-tertiary">No files matching "{fileSearch}"</p>
+            <p className="text-[13px] text-text-tertiary">{t.directorPanel.noFilesMatching} "{fileSearch}"</p>
           </div>
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
@@ -373,7 +375,7 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
                   </div>
                   <div className="mt-2 px-0.5">
                     <p className="text-[13px] font-medium text-text-primary truncate">{flow.title}</p>
-                    <p className="text-[11px] text-text-tertiary mt-0.5">Last edited {timeAgo(flow.updated_at)}</p>
+                    <p className="text-[11px] text-text-tertiary mt-0.5">{t.directorPanel.lastEdited} {timeAgo(flow.updated_at)}</p>
                   </div>
                 </button>
                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -415,7 +417,7 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-medium text-text-primary truncate">{flow.title}</p>
-                    <p className="text-[11px] text-text-tertiary">Last edited {timeAgo(flow.updated_at)}</p>
+                    <p className="text-[11px] text-text-tertiary">{t.directorPanel.lastEdited} {timeAgo(flow.updated_at)}</p>
                   </div>
                   <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium', {
                     'bg-success-light text-success': flow.status === 'active',
@@ -446,18 +448,18 @@ export default function DirectorHome({ orgId }: { orgId: string }) {
       {renameId && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setRenameId(null)}>
           <div className="w-full max-w-sm rounded-2xl bg-surface border border-outline p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-[14px] font-semibold text-text-primary mb-3">Rename Flow</h3>
+            <h3 className="text-[14px] font-semibold text-text-primary mb-3">{t.directorPanel.renameFlow}</h3>
             <input
               autoFocus
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') void handleRenameSubmit(); if (e.key === 'Escape') setRenameId(null); }}
               className="glass-input w-full mb-4"
-              placeholder="Flow title..."
+              placeholder={t.directorPanel.flowTitlePlaceholder}
             />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setRenameId(null)} className="glass-button text-[12px]">Cancel</button>
-              <button onClick={() => void handleRenameSubmit()} className="glass-button-primary text-[12px]">Rename</button>
+              <button onClick={() => setRenameId(null)} className="glass-button text-[12px]">{t.directorPanel.cancel}</button>
+              <button onClick={() => void handleRenameSubmit()} className="glass-button-primary text-[12px]">{t.directorPanel.rename}</button>
             </div>
           </div>
         </div>

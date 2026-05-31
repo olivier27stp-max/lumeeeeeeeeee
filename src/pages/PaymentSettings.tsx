@@ -24,9 +24,7 @@ export default function PaymentSettings() {
               {t.commandPalette.payments}
             </h1>
             <p className="text-base text-text-secondary">
-              {language === 'fr'
-                ? 'Acceptez les paiements en ligne de vos clients via Lume Payments.'
-                : 'Accept online payments from your clients via Lume Payments.'}
+              {t.paymentSettings.acceptPaymentsDesc}
             </p>
           </div>
         </div>
@@ -46,9 +44,7 @@ export default function PaymentSettings() {
                 </span>
               </div>
               <p className="text-[12px] text-text-tertiary pl-8">
-                {language === 'fr'
-                  ? 'Connectez votre compte bancaire via Stripe en quelques minutes.'
-                  : 'Connect your bank account via Stripe in minutes.'}
+                {t.paymentSettings.connectBankDesc}
               </p>
             </div>
             <div className="space-y-1">
@@ -59,9 +55,7 @@ export default function PaymentSettings() {
                 </span>
               </div>
               <p className="text-[12px] text-text-tertiary pl-8">
-                {language === 'fr'
-                  ? 'Depuis une facture, envoyez un lien de paiement par email ou SMS.'
-                  : 'From any invoice, send a payment link via email or SMS.'}
+                {t.paymentSettings.sendPaymentLinkDesc}
               </p>
             </div>
             <div className="space-y-1">
@@ -72,9 +66,7 @@ export default function PaymentSettings() {
                 </span>
               </div>
               <p className="text-[12px] text-text-tertiary pl-8">
-                {language === 'fr'
-                  ? 'Les paiements sont deposes directement dans votre compte bancaire.'
-                  : 'Payments are deposited directly into your bank account.'}
+                {t.paymentSettings.paymentsDepositedDesc}
               </p>
             </div>
           </div>
@@ -92,9 +84,7 @@ export default function PaymentSettings() {
             </span>
           </div>
           <p className="text-[12px] text-text-tertiary">
-            {language === 'fr'
-              ? 'Aucun frais mensuel. Aucun frais cache. Payez seulement quand vous etes paye.'
-              : 'No monthly fees. No hidden charges. Only pay when you get paid.'}
+            {t.paymentSettings.noMonthlyFeesDesc}
           </p>
         </section>
       </div>

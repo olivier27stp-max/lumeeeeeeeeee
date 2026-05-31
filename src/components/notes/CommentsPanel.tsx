@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import { X, Send, CheckCircle2, MessageCircle, AtSign } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 export interface BoardComment {
   id: string;
@@ -35,6 +35,7 @@ function CommentsPanel({
   comments, selectedItemId, currentUserId, currentUserName,
   language, onAddComment, onResolve, onDelete, onClose,
 }: CommentsPanelProps) {
+  const { t } = useTranslation();
   const fr = language === 'fr';
   const [newComment, setNewComment] = useState('');
   const [replyTo, setReplyTo] = useState<string | null>(null);

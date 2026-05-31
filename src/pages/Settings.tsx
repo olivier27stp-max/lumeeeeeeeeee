@@ -53,12 +53,13 @@ interface NavGroup {
 
 // ─── Placeholder panel for unbuilt sections ──────────────────────
 function PlaceholderPanel({ title, description }: { title: string; description: string }) {
+  const { t } = useTranslation();
   return (
     <div className="section-card p-8 text-center">
       <SettingsIcon size={28} className="text-text-tertiary mx-auto mb-3 opacity-30" />
       <h3 className="text-[15px] font-semibold text-text-primary">{title}</h3>
       <p className="text-[13px] text-text-tertiary mt-1 max-w-sm mx-auto">{description}</p>
-      <span className="badge-neutral text-[10px] mt-3 inline-block">Coming soon</span>
+      <span className="badge-neutral text-[10px] mt-3 inline-block">{t.common.comingSoon}</span>
     </div>
   );
 }
@@ -275,7 +276,7 @@ export default function Settings() {
       heading: t.settings.team,
       items: [
         { id: 'team',               label: t.settings.organization,          icon: Users },
-        { id: 'manage-team',        label: isFr ? 'Gérer l\'équipe' : 'Manage Team',       icon: Users, link: '/settings/team' },
+        { id: 'manage-team',        label: t.settings.manageTeam,       icon: Users, link: '/settings/team' },
         { id: 'schedule',           label: t.settings.schedule,                   icon: Users },
         { id: 'location',           label: t.settings.locationServices, icon: MapPin },
         { id: 'route-optimization', label: t.settings.routeOptimization, icon: Route },
@@ -284,7 +285,7 @@ export default function Settings() {
     {
       heading: t.settings.connectedApps,
       items: [
-        { id: 'marketplace',    label: isFr ? 'Marketplace d\'apps' : 'App Marketplace', icon: Store, link: '/settings/marketplace' },
+        { id: 'marketplace',    label: t.settings.appMarketplace, icon: Store, link: '/settings/marketplace' },
       ],
     },
     {
@@ -526,19 +527,31 @@ export default function Settings() {
 
             {/* ═══ PLACEHOLDER PANELS for unbuilt sections ═══ */}
             {activeTab === 'expense-tracking' && (
-              <PlaceholderPanel title="Expense Tracking" description="Track business expenses and categorize spending." />
+              <PlaceholderPanel
+                title={t.settings.expenseTracking}
+                description={isFr ? 'Suivez les dépenses de votre entreprise et catégorisez vos achats.' : 'Track business expenses and categorize spending.'}
+              />
             )}
             {activeTab === 'team' && (
-              <PlaceholderPanel title="Organization" description="Manage your organization structure and departments." />
+              <PlaceholderPanel
+                title={t.settings.organization}
+                description={isFr ? "Gérez la structure de votre organisation et vos départements." : 'Manage your organization structure and departments.'}
+              />
             )}
             {activeTab === 'schedule' && (
-              <PlaceholderPanel title="Schedule Settings" description="Set default scheduling preferences and availability windows." />
+              <PlaceholderPanel
+                title={t.settings.schedule}
+                description={isFr ? "Définissez les préférences d'horaire par défaut et les plages de disponibilité." : 'Set default scheduling preferences and availability windows.'}
+              />
             )}
             {activeTab === 'location' && (
               <LocationServices />
             )}
             {activeTab === 'route-optimization' && (
-              <PlaceholderPanel title="Route Optimization" description="Optimize driving routes between job sites for your teams." />
+              <PlaceholderPanel
+                title={t.settings.routeOptimization}
+                description={isFr ? "Optimisez les trajets entre les sites d'intervention pour vos équipes." : 'Optimize driving routes between job sites for your teams.'}
+              />
             )}
             {activeTab === 'marketplace' && (
               <div className="section-card p-8 text-center">

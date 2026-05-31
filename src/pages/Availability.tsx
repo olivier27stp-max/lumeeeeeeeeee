@@ -213,28 +213,28 @@ export default function Availability() {
       createAvailability(input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['weeklyAvailability'] });
-      toast.success('Default schedule updated');
+      toast.success(t.availability.defaultScheduleUpdated);
       setWeeklyModalOpen(false);
     },
-    onError: (e: any) => toast.error(e?.message || 'Failed to add schedule'),
+    onError: (e: any) => toast.error(e?.message || t.availability.failedAddSchedule),
   });
 
   const deleteWeeklyMut = useMutation({
     mutationFn: deleteAvailability,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['weeklyAvailability'] });
-      toast.success('Schedule removed');
+      toast.success(t.availability.scheduleRemoved);
     },
-    onError: (e: any) => toast.error(e?.message || 'Failed to remove'),
+    onError: (e: any) => toast.error(e?.message || t.availability.failedRemoveSchedule),
   });
 
   const setDefaultMut = useMutation({
     mutationFn: () => setDefaultAvailability(selectedTeamId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['weeklyAvailability'] });
-      toast.success('Default Mon-Fri 8:00-17:00 set');
+      toast.success(t.availability.defaultMonFriSet);
     },
-    onError: (e: any) => toast.error(e?.message || 'Failed to set defaults'),
+    onError: (e: any) => toast.error(e?.message || t.availability.failedSetDefaults),
   });
 
   // Group weekly by day
@@ -433,7 +433,7 @@ export default function Availability() {
               <div className="border border-outline rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                    <RefreshCw size={14} /> Default Weekly Schedule
+                    <RefreshCw size={14} /> {t.availability.defaultWeeklySchedule}
                   </h3>
                   <div className="flex items-center gap-2">
                     {weeklySlots.length === 0 && (
@@ -443,7 +443,7 @@ export default function Availability() {
                         disabled={setDefaultMut.isPending}
                         className="glass-button-ghost text-[11px]"
                       >
-                        Set Mon-Fri 8-17
+                        {t.availability.setMonFri8to17}
                       </button>
                     )}
                     <button
@@ -456,13 +456,13 @@ export default function Availability() {
                       }}
                       className="glass-button-primary text-[11px] inline-flex items-center gap-1 px-2 py-1"
                     >
-                      <Plus size={12} /> Add
+                      <Plus size={12} /> {t.availability.addSchedule}
                     </button>
                   </div>
                 </div>
 
                 {weeklySlots.length === 0 ? (
-                  <p className="text-[11px] text-text-tertiary italic">No default schedule set. Team will only be available on specifically added dates below.</p>
+                  <p className="text-[11px] text-text-tertiary italic">{t.availability.noDefaultSchedule}</p>
                 ) : (
                   <div className="grid grid-cols-7 gap-1.5">
                     {[1, 2, 3, 4, 5, 6, 0].map((day) => {
@@ -473,7 +473,7 @@ export default function Availability() {
                             {weekdayLabel(day).slice(0, 3)}
                           </p>
                           {daySlots.length === 0 ? (
-                            <p className="text-[10px] text-text-tertiary italic">Off</p>
+                            <p className="text-[10px] text-text-tertiary italic">{t.availability.dayOff}</p>
                           ) : (
                             daySlots.map((s) => (
                               <div key={s.id} className="group relative bg-green-500/10 rounded px-1 py-0.5 mb-0.5">
@@ -500,8 +500,8 @@ export default function Availability() {
               {/* ═══ Date-Specific Overrides (Exceptions) ═══ */}
               <div className="flex items-center gap-2 px-1">
                 <Calendar size={14} className="text-text-tertiary" />
-                <span className="text-[13px] font-semibold text-text-primary">Date Overrides & Exceptions</span>
-                <span className="text-[11px] text-text-tertiary">— Override default schedule for specific days</span>
+                <span className="text-[13px] font-semibold text-text-primary">{t.availability.dateOverrides}</span>
+                <span className="text-[11px] text-text-tertiary">— {t.availability.dateOverridesHint}</span>
               </div>
 
               {/* Week grid */}
@@ -591,7 +591,7 @@ export default function Availability() {
                   value={teamForm.name}
                   onChange={(e) => setTeamForm((f) => ({ ...f, name: e.target.value }))}
                   className="glass-input mt-1 w-full"
-                  placeholder="e.g. Installation Team"
+                  placeholder={t.availability.teamNamePlaceholder}
                   autoFocus
                 />
               </div>
@@ -601,7 +601,7 @@ export default function Availability() {
                   value={teamForm.description || ''}
                   onChange={(e) => setTeamForm((f) => ({ ...f, description: e.target.value }))}
                   className="glass-input mt-1 w-full"
-                  placeholder="Optional description..."
+                  placeholder={t.availability.optionalDescription}
                 />
               </div>
               <div>
@@ -730,7 +730,7 @@ export default function Availability() {
                   value={slotNotes}
                   onChange={(e) => setSlotNotes(e.target.value)}
                   className="glass-input mt-1 w-full"
-                  placeholder="Optional..."
+                  placeholder={t.availability.optionalNotes}
                 />
               </div>
             </div>
@@ -778,12 +778,12 @@ export default function Availability() {
         <div className="modal-overlay" onClick={() => setWeeklyModalOpen(false)}>
           <div className="modal-content max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 pt-5">
-              <h3 className="text-[15px] font-semibold text-text-primary">Add Default Schedule</h3>
-              <p className="text-[12px] text-text-tertiary mt-1">This will repeat every week automatically.</p>
+              <h3 className="text-[15px] font-semibold text-text-primary">{t.availability.addDefaultSchedule}</h3>
+              <p className="text-[12px] text-text-tertiary mt-1">{t.availability.repeatsWeekly}</p>
             </div>
             <div className="px-5 py-4 space-y-3">
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Day</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.day}</label>
                 <select
                   value={weeklyDay}
                   onChange={(e) => setWeeklyDay(Number(e.target.value))}
@@ -796,17 +796,17 @@ export default function Availability() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Start</label>
+                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.start}</label>
                   <input type="time" value={weeklyStart} onChange={(e) => setWeeklyStart(e.target.value)} className="glass-input mt-1 w-full" />
                 </div>
                 <div>
-                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">End</label>
+                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.end}</label>
                   <input type="time" value={weeklyEnd} onChange={(e) => setWeeklyEnd(e.target.value)} className="glass-input mt-1 w-full" />
                 </div>
               </div>
             </div>
             <div className="flex justify-end gap-2 px-5 pb-5">
-              <button type="button" className="glass-button" onClick={() => setWeeklyModalOpen(false)}>Cancel</button>
+              <button type="button" className="glass-button" onClick={() => setWeeklyModalOpen(false)}>{t.common.cancel}</button>
               <button
                 type="button"
                 className="glass-button-primary"
@@ -818,7 +818,7 @@ export default function Availability() {
                   end_minute: timeToMinutes(weeklyEnd),
                 })}
               >
-                {addWeeklyMut.isPending ? 'Saving...' : 'Add'}
+                {addWeeklyMut.isPending ? t.availability.saving : t.availability.add}
               </button>
             </div>
           </div>

@@ -172,10 +172,10 @@ export default function CompanySettings() {
       }
 
       setSaved(true);
-      toast.success(language === 'fr' ? 'Paramètres de l\'entreprise enregistrés.' : 'Company settings saved.');
+      toast.success(t.companySettings.companySettingsSaved);
       setTimeout(() => setSaved(false), 2000);
     } catch (error: any) {
-      toast.error(error?.message || (language === 'fr' ? 'Erreur lors de l\'enregistrement.' : 'Failed to save.'));
+      toast.error(error?.message || t.companySettings.failedToSave);
     } finally {
       setSaving(false);
     }
@@ -193,7 +193,7 @@ export default function CompanySettings() {
     <PermissionGate permission="settings.edit_company">
     <div className="space-y-5">
       <PageHeader
-        title={language === 'fr' ? 'Paramètres de l\'entreprise' : 'Company Settings'}
+        title={t.companySettings.companySettings}
         subtitle={t.companySettings.informationUsedForInvoicesQuotesAndEmail}
         icon={Building}
         iconColor="cyan"
@@ -212,7 +212,7 @@ export default function CompanySettings() {
         {/* Company Logo */}
         <div className="section-card p-5 space-y-4">
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
-            <ImageIcon size={12} /> {language === 'fr' ? 'Logo de l\'entreprise' : 'Company Logo'}
+            <ImageIcon size={12} /> {t.companySettings.companyLogo}
           </h3>
 
           {form.logo_url ? (
@@ -259,12 +259,12 @@ export default function CompanySettings() {
         {/* Company Info */}
         <div className="section-card p-5 space-y-4">
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-            {language === 'fr' ? 'Détails de l\'entreprise' : 'Company Details'}
+            {t.companySettings.companyDetails}
           </h3>
 
           <div>
             <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-              {language === 'fr' ? 'Nom de l\'entreprise' : 'Company Name'}
+              {t.companySettings.companyName}
             </label>
             <input
               type="text"
@@ -418,30 +418,24 @@ export default function CompanySettings() {
               placeholder="https://g.page/r/your-business/review"
             />
             <p className="text-[11px] text-text-tertiary mt-1">
-              {language === 'fr'
-                ? 'Les clients satisfaits seront redirigés vers ce lien pour laisser un avis.'
-                : 'Satisfied customers will be redirected to this link to leave a review.'}
+              {t.companySettings.satisfiedCustomersDesc}
             </p>
           </div>
 
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[13px] font-medium text-text-primary">
-                {language === 'fr' ? 'Activer les demandes d\'avis' : 'Enable review requests'}
+                {t.companySettings.enableReviewRequests}
               </p>
               <p className="text-[11px] text-text-tertiary">
-                {language === 'fr'
-                  ? 'Envoyer automatiquement des demandes d\'avis après complétion d\'un travail'
-                  : 'Automatically send review requests after job completion'}
+                {t.companySettings.enableReviewRequestsDesc}
               </p>
             </div>
             <button
               type="button"
               onClick={() => {
                 if (!form.google_review_url.trim() && !form.review_enabled) {
-                  toast.error(language === 'fr'
-                    ? 'Ajoutez d\'abord votre lien Google Review'
-                    : 'Add your Google Review URL first');
+                  toast.error(t.companySettings.addGoogleReviewFirst);
                   return;
                 }
                 update('review_enabled', !form.review_enabled);
@@ -461,9 +455,7 @@ export default function CompanySettings() {
           {!form.google_review_url.trim() && (
             <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2">
               <p className="text-[12px] text-amber-700 dark:text-amber-300">
-                {language === 'fr'
-                  ? '⚠️ Aucun lien Google Review configuré. Les emails de demande d\'avis ne seront pas envoyés.'
-                  : '⚠️ No Google Review URL configured. Review request emails will not be sent.'}
+                {t.companySettings.noGoogleReviewConfigured}
               </p>
             </div>
           )}
@@ -472,7 +464,7 @@ export default function CompanySettings() {
         {/* Review Widget Settings */}
         <div className="section-card p-5 space-y-4">
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-            {language === 'fr' ? 'Widget d\'avis' : 'Reviews Widget'}
+            {t.companySettings.reviewsWidget}
           </h3>
 
           <div className="grid grid-cols-2 gap-4">

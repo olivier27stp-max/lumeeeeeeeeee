@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Trash2, ZoomIn } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useTranslation } from '../i18n';
 
 interface GalleryImage {
   url: string;
@@ -13,12 +14,13 @@ interface ImageGalleryProps {
 }
 
 export default function ImageGallery({ images, onDelete }: ImageGalleryProps) {
+  const { t } = useTranslation();
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   if (images.length === 0) {
     return (
       <div className="rounded-xl border border-outline bg-surface-secondary/30 p-8 text-center">
-        <p className="text-[13px] text-text-tertiary">No images to display</p>
+        <p className="text-[13px] text-text-tertiary">{t.common.noImagesFound}</p>
       </div>
     );
   }
@@ -83,7 +85,7 @@ export default function ImageGallery({ images, onDelete }: ImageGalleryProps) {
           </button>
           <img
             src={lightboxUrl}
-            alt="Full size"
+            alt={t.common.fullSize}
             className="max-h-[85vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           />

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { X, Send, Bot, User, Loader2, HelpCircle, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import { useTranslation } from '../i18n';
+import { useTranslation, getTranslations } from '../i18n';
 
 interface Message {
   id: string;
@@ -120,9 +120,8 @@ function findAnswer(query: string, lang: 'en' | 'fr'): string {
     return lang === 'fr' ? bestMatch.answer_fr : bestMatch.answer_en;
   }
 
-  return lang === 'fr'
-    ? "Je ne suis pas sûr de comprendre votre question. Essayez de me demander comment utiliser une fonctionnalité spécifique comme les leads, les factures, le calendrier, les paiements, les tâches ou les paramètres. Je suis là pour vous aider à naviguer dans Lume!"
-    : "I'm not sure I understand your question. Try asking me about a specific feature like leads, invoices, calendar, payments, tasks, or settings. I'm here to help you navigate Lume!";
+  const t = getTranslations(lang);
+  return t.helpChat.notSureAnswer;
 }
 
 // Render markdown-like bold text
@@ -144,9 +143,7 @@ export default function HelpChat({ open, onClose }: { open: boolean; onClose: ()
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const welcomeMsg = language === 'fr'
-    ? "Bonjour! Je suis l'assistant Lume. Posez-moi une question sur l'utilisation du CRM — leads, factures, calendrier, paiements, et plus encore!"
-    : "Hi! I'm the Lume assistant. Ask me anything about using the CRM — leads, invoices, calendar, payments, and more!";
+  const welcomeMsg = t.helpChat.welcomeMessage;
 
   useEffect(() => {
     if (open && messages.length === 0) {
@@ -196,9 +193,7 @@ export default function HelpChat({ open, onClose }: { open: boolean; onClose: ()
     }, 600 + Math.random() * 400);
   };
 
-  const suggestions = language === 'fr'
-    ? ['Comment ajouter un lead?', 'Comment créer une facture?', 'Comment utiliser le calendrier?', 'Comment connecter Stripe?']
-    : ['How do I add a lead?', 'How do I create an invoice?', 'How do I use the calendar?', 'How do I connect Stripe?'];
+  const suggestions = [t.helpChat.suggestionAddLead, t.helpChat.suggestionCreateInvoice, t.helpChat.suggestionUseCalendar, t.helpChat.suggestionConnectStripe];
 
   return (
     <AnimatePresence>
@@ -350,7 +345,7 @@ export default function HelpChat({ open, onClose }: { open: boolean; onClose: ()
                 </button>
               </div>
               <p className="text-[10px] text-text-tertiary mt-2 text-center">
-                {language === 'fr' ? 'Assistant IA local — Données non envoyées à l\'extérieur' : 'Local AI assistant — No data sent externally'}
+                {t.helpChat.localAiDisclaimer}
               </p>
             </div>
           </motion.aside>

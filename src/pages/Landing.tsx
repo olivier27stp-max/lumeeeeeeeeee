@@ -38,12 +38,12 @@ export default function Landing({ onStart }: LandingProps) {
       {/* ── Navbar ── */}
       <nav className="fixed top-0 w-full z-50 bg-[#FAFAFA]/80 backdrop-blur-xl border-b border-black/5">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-6 h-16">
-          <span className="text-lg font-bold tracking-[0.25em] uppercase">Lume</span>
+          <span className="text-lg font-bold tracking-[0.25em] uppercase">{t.landing.brandName}</span>
           <a
             href="mailto:willhebert30@gmail.com"
             className="text-xs font-medium text-[#888] hover:text-black transition-colors tracking-wide uppercase"
           >
-            Contact
+            {t.landing.contact}
           </a>
         </div>
       </nav>
@@ -60,7 +60,7 @@ export default function Landing({ onStart }: LandingProps) {
           >
             <img
               src="/lume-logo.png"
-              alt="Lume CRM"
+              alt={t.landing.brandNameFull}
               className="h-44 w-auto mix-blend-multiply"
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
@@ -145,7 +145,7 @@ export default function Landing({ onStart }: LandingProps) {
                       </p>
                     ) : (
                       <p className={`text-4xl font-extralight tabular-nums ${plan.featured ? 'text-white' : 'text-black'}`}>
-                        ${plan.price}
+                        {t.landing.currencySymbol}{plan.price}
                         <span className={`text-sm font-normal ${plan.featured ? 'text-white/40' : 'text-[#999]'}`}>
                           {t.landing.perMonth}
                         </span>
@@ -201,8 +201,8 @@ export default function Landing({ onStart }: LandingProps) {
       {/* ── Footer ── */}
       <footer className="py-10 px-6 border-t border-black/5">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <span className="text-xs font-bold tracking-[0.2em] uppercase text-[#999]">Lume</span>
-          <p className="text-[11px] text-[#bbb]">{`© ${new Date().getFullYear()} Lume CRM. ${t.landing.allRightsReserved}`}</p>
+          <span className="text-xs font-bold tracking-[0.2em] uppercase text-[#999]">{t.landing.brandName}</span>
+          <p className="text-[11px] text-[#bbb]">{`© ${new Date().getFullYear()} ${t.landing.brandNameFull}. ${t.landing.allRightsReserved}`}</p>
           <div className="flex gap-6 text-[11px] text-[#999]">
             <a href="mailto:willhebert30@gmail.com" className="hover:text-black transition-colors">
               {t.landing.contact}

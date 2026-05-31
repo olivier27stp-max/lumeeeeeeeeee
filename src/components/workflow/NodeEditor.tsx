@@ -5,7 +5,7 @@ import {
 import { cn } from '../../lib/utils';
 import { ACTION_DEFS, TRIGGER_DEFS, type ActionType, type TriggerType } from '../../lib/workflowApi';
 import type { Node } from '@xyflow/react';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 interface NodeEditorProps {
   node: Node | null;
@@ -32,6 +32,7 @@ const DELAY_UNITS = [
 ];
 
 export default function NodeEditor({ node, onUpdate, onDelete, onClose, fr }: NodeEditorProps) {
+  const { t } = useTranslation();
   const [localData, setLocalData] = useState<Record<string, any>>({});
 
   useEffect(() => {

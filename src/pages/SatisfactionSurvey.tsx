@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Star } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 interface SurveyData {
   token: string;
@@ -19,6 +20,7 @@ interface SurveyData {
 
 export default function SatisfactionSurvey() {
   const { token } = useParams<{ token: string }>();
+  const { t } = useTranslation();
   const [survey, setSurvey] = useState<SurveyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export default function SatisfactionSurvey() {
           }
         }
       })
-      .catch(() => setError('Unable to load survey.'))
+      .catch(() => setError(t.satisfactionSurvey.unableToLoadSurvey))
       .finally(() => setLoading(false));
   }, [token]);
 
@@ -64,7 +66,7 @@ export default function SatisfactionSurvey() {
         body: JSON.stringify({ rating, feedback: feedback.trim() || null }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to submit.');
+      if (!response.ok) throw new Error(data.error || t.satisfactionSurvey.failedToSubmit);
 
       setSubmitted(true);
       setResult(data);
@@ -87,7 +89,7 @@ export default function SatisfactionSurvey() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Oops</h1>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">{t.satisfactionSurvey.oops}</h1>
           <p className="text-gray-600">{error}</p>
         </div>
       </div>
@@ -114,7 +116,7 @@ export default function SatisfactionSurvey() {
           {result.redirect_to_review && result.google_review_url && (
             <div className="mt-6">
               <p className="text-gray-600 mb-4">
-                Would you mind sharing your experience on Google? It helps us a lot!
+                {t.satisfactionSurvey.wouldYouMindSharingOnGoogle}
               </p>
               <a
                 href={result.google_review_url}
@@ -123,14 +125,14 @@ export default function SatisfactionSurvey() {
                 className="inline-flex items-center gap-2 px-6 py-3 bg-neutral-900 text-white font-semibold rounded-xl hover:bg-neutral-800 transition-colors"
               >
                 <Star size={18} className="fill-white" />
-                Leave a Google Review
+                {t.satisfactionSurvey.leaveAGoogleReview}
               </a>
             </div>
           )}
 
           {!result.redirect_to_review && (
             <p className="text-gray-500 mt-4 text-sm">
-              We appreciate your honesty. Our team will be in touch soon.
+              {t.satisfactionSurvey.weAppreciateYourHonesty}
             </p>
           )}
         </div>
@@ -142,8 +144,8 @@ export default function SatisfactionSurvey() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Thank you!</h1>
-          <p className="text-gray-600">Your feedback has already been recorded.</p>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">{t.satisfactionSurvey.thankYou}</h1>
+          <p className="text-gray-600">{t.satisfactionSurvey.feedbackAlreadyRecorded}</p>
         </div>
       </div>
     );
@@ -155,16 +157,16 @@ export default function SatisfactionSurvey() {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            {survey?.company_name || 'Your experience'}
+            {survey?.company_name || t.satisfactionSurvey.yourExperience}
           </h1>
           {survey?.client_name && (
             <p className="text-gray-600">
-              Hi {survey.client_name.split(' ')[0]}, how was your experience?
+              {t.satisfactionSurvey.hiHowWasYourExperience.replace('${name}', survey.client_name.split(' ')[0])}
             </p>
           )}
           {survey?.job_name && (
             <p className="text-sm text-gray-500 mt-1">
-              Regarding: <strong>{survey.job_name}</strong>
+              {t.satisfactionSurvey.regarding} <strong>{survey.job_name}</strong>
             </p>
           )}
         </div>
@@ -194,7 +196,7 @@ export default function SatisfactionSurvey() {
 
         {rating > 0 && (
           <p className="text-center text-sm text-gray-500 mb-6">
-            {rating >= 4 ? 'Glad to hear it!' : rating >= 3 ? 'Thanks for your feedback.' : 'We\'re sorry to hear that.'}
+            {rating >= 4 ? t.satisfactionSurvey.gladToHearIt : rating >= 3 ? t.satisfactionSurvey.thanksForFeedback : t.satisfactionSurvey.sorryToHearThat}
           </p>
         )}
 
@@ -203,7 +205,7 @@ export default function SatisfactionSurvey() {
           <textarea
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            placeholder="Any comments? (optional)"
+            placeholder={t.satisfactionSurvey.anyComments}
             className="w-full rounded-xl border border-gray-200 p-3 text-sm text-gray-900 placeholder-gray-400 focus:border-neutral-400 focus:ring-1 focus:ring-neutral-400 resize-none"
             rows={3}
           />
@@ -216,7 +218,7 @@ export default function SatisfactionSurvey() {
           disabled={rating === 0 || submitting}
           className="w-full py-3 bg-neutral-900 text-white font-semibold rounded-xl hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {submitting ? 'Submitting...' : 'Submit Feedback'}
+          {submitting ? t.satisfactionSurvey.submitting : t.satisfactionSurvey.submitFeedback}
         </button>
       </div>
     </div>

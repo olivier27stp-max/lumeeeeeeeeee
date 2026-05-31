@@ -73,12 +73,12 @@ export default function FindTime() {
           onChange={(v) => setDurationFilter(Number(v))}
           icon={<Clock size={13} />}
           options={[
-            { value: '30', label: '30 min' },
-            { value: '60', label: '1 hour' },
-            { value: '90', label: '1.5 hours' },
-            { value: '120', label: '2 hours' },
-            { value: '180', label: '3 hours' },
-            { value: '240', label: '4 hours' },
+            { value: '30', label: t.findTime.thirtyMin },
+            { value: '60', label: t.findTime.oneHour },
+            { value: '90', label: t.findTime.onePointFiveHours },
+            { value: '120', label: t.findTime.twoHours },
+            { value: '180', label: t.findTime.threeHours },
+            { value: '240', label: t.findTime.fourHours },
           ]}
         />
         <FilterSelect

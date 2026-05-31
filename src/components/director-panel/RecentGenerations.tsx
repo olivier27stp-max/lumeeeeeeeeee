@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 import {
   listGenerations,
   deleteGeneration,
@@ -59,6 +60,7 @@ interface Props {
 }
 
 export default function RecentGenerations({ orgId }: Props) {
+  const { t } = useTranslation();
   const [items, setItems] = useState<DirectorGeneration[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -88,9 +90,9 @@ export default function RecentGenerations({ orgId }: Props) {
       await deleteGeneration(id);
       setItems((prev) => prev.filter((g) => g.id !== id));
       setTotal((prev) => prev - 1);
-      toast.success('Generation deleted');
+      toast.success(t.directorPanel.generationDeleted);
     } catch {
-      toast.error('Failed to delete');
+      toast.error(t.directorPanel.failedToDelete);
     } finally {
       setDeleteConfirm(null);
     }
@@ -98,7 +100,7 @@ export default function RecentGenerations({ orgId }: Props) {
 
   const handleCopyPrompt = (prompt: string | null) => {
     if (!prompt) return;
-    navigator.clipboard.writeText(prompt).then(() => toast.success('Prompt copied'));
+    navigator.clipboard.writeText(prompt).then(() => toast.success(t.directorPanel.promptCopied));
   };
 
   const loadMore = async () => {
@@ -106,7 +108,7 @@ export default function RecentGenerations({ orgId }: Props) {
       const result = await listGenerations(orgId, { type: filter, limit: PAGE_SIZE, offset: items.length });
       setItems((prev) => [...prev, ...result.data]);
     } catch {
-      toast.error('Failed to load more');
+      toast.error(t.directorPanel.failedToLoadMore);
     }
   };
 
@@ -224,8 +226,8 @@ export default function RecentGenerations({ orgId }: Props) {
                           const name = prompt('Style name:', gen.title || 'My Style');
                           if (!name) return;
                           generationToStyleDna(gen.id, orgId, name)
-                            .then(() => toast.success('Style DNA created'))
-                            .catch(() => toast.error('Failed to create style'));
+                            .then(() => toast.success(t.directorPanel.styleDnaCreated))
+                            .catch(() => toast.error(t.directorPanel.failedToCreateStyle));
                         }}
                         className="p-2 rounded-lg bg-white/20 text-white hover:bg-purple-500/60 transition-colors"
                         title="Save as Style DNA"

@@ -13,7 +13,7 @@ import {
 import { cn } from '../../lib/utils';
 import { STICKY_COLORS } from '../../types/noteBoard';
 import type { NoteItemType, ShapeType } from '../../types/noteBoard';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 export type ToolType = 'select' | 'connector' | 'draw' | NoteItemType;
 
@@ -40,6 +40,7 @@ export default function CanvasToolbar({
   onDelete, onDuplicate, onToggleLock,
   hasSelection, isLocked, language,
 }: CanvasToolbarProps) {
+  const { t } = useTranslation();
   const [showColors, setShowColors] = useState(false);
   const [showShapes, setShowShapes] = useState(false);
 

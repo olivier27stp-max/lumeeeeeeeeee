@@ -4,6 +4,7 @@ import { CheckCircle, XCircle, PenLine, Download, Phone, Mail, Globe, MapPin, Ca
 import { formatQuoteMoney } from '../lib/quotesApi';
 import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { useTranslation } from '../i18n';
 
 // ── Lume fallback logo (panda) ──
 const LUME_LOGO_URL = '/lume-logo.png';
@@ -71,11 +72,11 @@ interface QuoteData {
 type ViewState = 'loading' | 'error' | 'view' | 'accepted' | 'declined' | 'deposit_payment';
 
 // ── Helpers ──
-function fmtDate(iso: string | null | undefined): string {
+function fmtDate(iso: string | null | undefined, locale = 'en-US'): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function calcDepositAmount(quote: QuoteData['quote']): number {
@@ -100,6 +101,7 @@ function DepositPaymentForm({ onSuccess, onError }: { onSuccess: () => Promise<v
   const stripe = useStripe();
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
+  const { t } = useTranslation();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -112,12 +114,12 @@ function DepositPaymentForm({ onSuccess, onError }: { onSuccess: () => Promise<v
         redirect: 'if_required',
       });
       if (error) {
-        onError(error.message || 'Payment failed.');
+        onError(error.message || t.quoteView.paymentFailed);
       } else {
         await onSuccess();
       }
     } catch (err: any) {
-      onError(err?.message || 'Payment failed.');
+      onError(err?.message || t.quoteView.paymentFailed);
     } finally {
       setProcessing(false);
     }
@@ -132,9 +134,9 @@ function DepositPaymentForm({ onSuccess, onError }: { onSuccess: () => Promise<v
         className="w-full bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {processing ? (
-          <><Loader2 size={16} className="animate-spin" /> Processing...</>
+          <><Loader2 size={16} className="animate-spin" /> {t.quoteView.processing}</>
         ) : (
-          <><CreditCard size={16} /> Pay Deposit Now</>
+          <><CreditCard size={16} /> {t.quoteView.payDepositNow}</>
         )}
       </button>
     </form>
@@ -147,6 +149,8 @@ function DepositPaymentForm({ onSuccess, onError }: { onSuccess: () => Promise<v
 
 export default function QuoteView() {
   const { token } = useParams<{ token: string }>();
+  const { t, language } = useTranslation();
+  const locale = language === 'fr' ? 'fr-CA' : 'en-US';
   const [data, setData] = useState<QuoteData | null>(null);
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [error, setError] = useState('');
@@ -177,7 +181,7 @@ export default function QuoteView() {
       // Fetch all quote data from public server endpoint (bypasses RLS)
       const res = await fetch(`${API_BASE}/api/quotes/public/${token}`);
       if (!res.ok) {
-        setError('Quote not found');
+        setError(t.quoteView.quoteNotFoundError);
         setViewState('error');
         return;
       }
@@ -204,7 +208,7 @@ export default function QuoteView() {
         setViewState('view');
       }
     } catch (err: any) {
-      setError('Could not load quote');
+      setError(t.quoteView.couldNotLoadQuote);
       setViewState('error');
     }
   }
@@ -294,10 +298,10 @@ export default function QuoteView() {
           setStripePromise(loadStripe(intent.publishable_key));
         }
       } else {
-        setDepositError((depositResult as any)?.error || 'Unable to load payment. Please try again.');
+        setDepositError((depositResult as any)?.error || t.quoteView.unableToLoadPayment);
       }
     } catch {
-      setDepositError('Unable to connect to payment service. Please try again.');
+      setDepositError(t.quoteView.unableToConnectPayment);
     } finally {
       setDepositLoading(false);
     }
@@ -333,7 +337,7 @@ export default function QuoteView() {
         }),
       });
       const result = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((result as any)?.error || 'Failed to accept quote');
+      if (!res.ok) throw new Error((result as any)?.error || t.quoteView.failedToAccept);
 
       // If deposit is required, transition to payment step
       if (data.quote.deposit_required && data.quote.deposit_value > 0) {
@@ -344,7 +348,7 @@ export default function QuoteView() {
         setViewState('accepted');
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to accept quote. Please try again.');
+      setError(err?.message || t.quoteView.failedToAccept);
     } finally {
       setAccepting(false);
     }
@@ -360,10 +364,10 @@ export default function QuoteView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ view_token: token }),
       });
-      if (!res.ok) throw new Error('Failed to decline quote');
+      if (!res.ok) throw new Error(t.quoteView.failedToDecline);
       setViewState('declined');
     } catch (err) {
-      setError('Failed to decline quote. Please try again.');
+      setError(t.quoteView.failedToDeclineRetry);
     } finally {
       setDeclining(false);
     }
@@ -384,8 +388,8 @@ export default function QuoteView() {
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <FileText size={36} className="text-[#d4d4d4] mx-auto mb-3" />
-          <h1 className="text-[16px] font-semibold text-[#111]">Quote Not Found</h1>
-          <p className="text-[13px] text-[#888] mt-1">This link may have expired or is invalid.</p>
+          <h1 className="text-[16px] font-semibold text-[#111]">{t.quoteView.quoteNotFound}</h1>
+          <p className="text-[13px] text-[#888] mt-1">{t.quoteView.linkExpiredOrInvalid}</p>
         </div>
       </div>
     );
@@ -421,8 +425,8 @@ export default function QuoteView() {
           <div className="bg-[#f8f8f8] border border-[#e0e0e0] rounded-lg p-4 mb-5 flex items-center gap-3 no-print">
             <CheckCircle className="text-[#333] shrink-0" size={18} />
             <div>
-              <p className="font-semibold text-[#111] text-[14px]">Quote Accepted</p>
-              <p className="text-[13px] text-[#666]">Thank you for your approval. We'll be in touch shortly.</p>
+              <p className="font-semibold text-[#111] text-[14px]">{t.quoteView.quoteAccepted}</p>
+              <p className="text-[13px] text-[#666]">{t.quoteView.thankYouApproval}</p>
             </div>
           </div>
         )}
@@ -430,8 +434,8 @@ export default function QuoteView() {
           <div className="bg-[#f8f8f8] border border-[#e0e0e0] rounded-lg p-4 mb-5 flex items-center gap-3 no-print">
             <XCircle className="text-[#666] shrink-0" size={18} />
             <div>
-              <p className="font-semibold text-[#111] text-[14px]">Quote Declined</p>
-              <p className="text-[13px] text-[#666]">This quote has been declined.</p>
+              <p className="font-semibold text-[#111] text-[14px]">{t.quoteView.quoteDeclined}</p>
+              <p className="text-[13px] text-[#666]">{t.quoteView.quoteHasBeenDeclined}</p>
             </div>
           </div>
         )}
@@ -469,7 +473,7 @@ export default function QuoteView() {
 
               {/* Quote label + number */}
               <div className="text-right ml-6">
-                <h1 className="text-[28px] font-bold text-[#111] tracking-tight leading-none">QUOTE</h1>
+                <h1 className="text-[28px] font-bold text-[#111] tracking-tight leading-none">{t.quoteView.quote}</h1>
                 <p className="text-[13px] text-[#888] mt-1 font-medium">#{quote.quote_number}</p>
               </div>
             </div>
@@ -482,7 +486,7 @@ export default function QuoteView() {
           <div className="px-8 py-5 grid grid-cols-2 gap-6">
             {/* Client info */}
             <div>
-              <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">Prepared For</p>
+              <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">{t.quoteView.preparedFor}</p>
               {contact ? (
                 <>
                   <p className="text-[14px] font-semibold text-[#111]">
@@ -505,32 +509,32 @@ export default function QuoteView() {
 
             {/* Quote details */}
             <div className="text-right space-y-1.5">
-              <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">Details</p>
+              <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">{t.quoteView.details}</p>
               {quote.created_at && (
                 <div className="flex justify-end gap-2 text-[12px]">
-                  <span className="text-[#888]">Date</span>
-                  <span className="text-[#333] font-medium">{fmtDate(quote.created_at)}</span>
+                  <span className="text-[#888]">{t.quoteView.date}</span>
+                  <span className="text-[#333] font-medium">{fmtDate(quote.created_at, locale)}</span>
                 </div>
               )}
               {quote.valid_until && (
                 <div className="flex justify-end gap-2 text-[12px]">
-                  <span className="text-[#888]">{isExpired ? 'Expired' : 'Valid Until'}</span>
+                  <span className="text-[#888]">{isExpired ? t.quoteView.expired : t.quoteView.validUntil}</span>
                   <span className={`font-medium ${isExpired ? 'text-[#999]' : 'text-[#333]'}`}>
-                    {fmtDate(quote.valid_until)}
+                    {fmtDate(quote.valid_until, locale)}
                   </span>
                 </div>
               )}
               <div className="flex justify-end gap-2 text-[12px]">
-                <span className="text-[#888]">Status</span>
+                <span className="text-[#888]">{t.quoteView.status}</span>
                 <span className={`font-medium ${
                   quote.status === 'approved' ? 'text-[#333]' :
                   quote.status === 'declined' ? 'text-[#999]' :
                   isExpired ? 'text-[#999]' :
                   'text-[#333]'
                 }`}>
-                  {quote.status === 'approved' ? 'Approved' :
-                   quote.status === 'declined' ? 'Declined' :
-                   isExpired ? 'Expired' : 'Pending Review'}
+                  {quote.status === 'approved' ? t.quoteView.approved :
+                   quote.status === 'declined' ? t.quoteView.declined :
+                   isExpired ? t.quoteView.expired : t.quoteView.pendingReview}
                 </span>
               </div>
             </div>
@@ -551,10 +555,10 @@ export default function QuoteView() {
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-[#e5e5e5]">
-                  <th className="text-left py-2.5 font-semibold text-[#888] text-[11px] uppercase tracking-[0.05em]">Description</th>
-                  <th className="text-center py-2.5 font-semibold text-[#888] text-[11px] uppercase tracking-[0.05em] w-16">Qty</th>
-                  <th className="text-right py-2.5 font-semibold text-[#888] text-[11px] uppercase tracking-[0.05em] w-24">Price</th>
-                  <th className="text-right py-2.5 font-semibold text-[#888] text-[11px] uppercase tracking-[0.05em] w-24">Total</th>
+                  <th className="text-left py-2.5 font-semibold text-[#888] text-[11px] uppercase tracking-[0.05em]">{t.quoteView.description}</th>
+                  <th className="text-center py-2.5 font-semibold text-[#888] text-[11px] uppercase tracking-[0.05em] w-16">{t.quoteView.qty}</th>
+                  <th className="text-right py-2.5 font-semibold text-[#888] text-[11px] uppercase tracking-[0.05em] w-24">{t.quoteView.price}</th>
+                  <th className="text-right py-2.5 font-semibold text-[#888] text-[11px] uppercase tracking-[0.05em] w-24">{t.quoteView.total}</th>
                 </tr>
               </thead>
               <tbody>
@@ -578,7 +582,7 @@ export default function QuoteView() {
                   </tr>
                 ))}
                 {requiredItems.length === 0 && (
-                  <tr><td colSpan={4} className="py-8 text-center text-[#ccc] text-[13px]">No items</td></tr>
+                  <tr><td colSpan={4} className="py-8 text-center text-[#ccc] text-[13px]">{t.quoteView.noItems}</td></tr>
                 )}
               </tbody>
             </table>
@@ -586,7 +590,7 @@ export default function QuoteView() {
             {/* Optional items */}
             {optionalItems.length > 0 && (
               <>
-                <p className="text-[11px] font-semibold text-[#aaa] uppercase tracking-[0.05em] mt-6 mb-2">Optional Items</p>
+                <p className="text-[11px] font-semibold text-[#aaa] uppercase tracking-[0.05em] mt-6 mb-2">{t.quoteView.optionalItems}</p>
                 <table className="w-full text-[13px]">
                   <tbody>
                     {optionalItems.map((item) => (
@@ -613,12 +617,12 @@ export default function QuoteView() {
             <div className="ml-auto w-full max-w-[280px]">
               <div className="space-y-2 text-[13px]">
                 <div className="flex justify-between">
-                  <span className="text-[#888]">Subtotal</span>
+                  <span className="text-[#888]">{t.quoteView.subtotal}</span>
                   <span className="text-[#333] font-medium">{formatQuoteMoney(quote.subtotal_cents, cur)}</span>
                 </div>
                 {quote.discount_cents > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-[#888]">Discount</span>
+                    <span className="text-[#888]">{t.quoteView.discount}</span>
                     <span className="text-[#333] font-medium">-{formatQuoteMoney(quote.discount_cents, cur)}</span>
                   </div>
                 )}
@@ -630,7 +634,7 @@ export default function QuoteView() {
                 )}
                 <div className="border-t border-[#e5e5e5] pt-2 mt-2">
                   <div className="flex justify-between text-[15px]">
-                    <span className="font-bold text-[#111]">Total</span>
+                    <span className="font-bold text-[#111]">{t.quoteView.total}</span>
                     <span className="font-bold text-[#111]">{formatQuoteMoney(quote.total_cents, cur)}</span>
                   </div>
                 </div>
@@ -640,7 +644,7 @@ export default function QuoteView() {
               {quote.deposit_required && quote.deposit_value > 0 && (
                 <div className="mt-3 bg-[#f5f5f5] rounded-md px-3 py-2.5">
                   <div className="flex justify-between text-[12px]">
-                    <span className="text-[#666] font-medium">Deposit required</span>
+                    <span className="text-[#666] font-medium">{t.quoteView.depositRequired}</span>
                     <span className="text-[#333] font-semibold">
                       {quote.deposit_type === 'percentage'
                         ? `${quote.deposit_value}%`
@@ -649,7 +653,7 @@ export default function QuoteView() {
                   </div>
                   {depositAmount > 0 && (
                     <div className="flex justify-between text-[12px] mt-1">
-                      <span className="text-[#888]">Due upon acceptance</span>
+                      <span className="text-[#888]">{t.quoteView.dueUponAcceptance}</span>
                       <span className="text-[#111] font-semibold">{formatQuoteMoney(depositAmount, cur)}</span>
                     </div>
                   )}
@@ -663,7 +667,7 @@ export default function QuoteView() {
             <>
               <div className="border-t border-[#eee]" />
               <div className="px-8 py-5">
-                <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">Notes</p>
+                <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">{t.quoteView.notes}</p>
                 <p className="text-[13px] text-[#555] whitespace-pre-wrap leading-relaxed">{quote.notes}</p>
               </div>
             </>
@@ -674,7 +678,7 @@ export default function QuoteView() {
             <>
               <div className="border-t border-[#eee]" />
               <div className="px-8 py-5">
-                <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">Terms & Conditions</p>
+                <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">{t.quoteView.termsAndConditions}</p>
                 <p className="text-[12px] text-[#888] whitespace-pre-wrap leading-relaxed">{quote.contract_disclaimer}</p>
               </div>
             </>
@@ -695,7 +699,7 @@ export default function QuoteView() {
                       className="flex-1 bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors flex items-center justify-center gap-2"
                     >
                       <CheckCircle size={16} />
-                      Accept Quote
+                      {t.quoteView.acceptQuote}
                     </button>
                     <button
                       onClick={handleDecline}
@@ -703,40 +707,40 @@ export default function QuoteView() {
                       className="flex-1 bg-white border border-[#ddd] text-[#555] py-3 rounded-lg font-medium text-[14px] hover:bg-[#f8f8f8] transition-colors flex items-center justify-center gap-2"
                     >
                       <XCircle size={16} />
-                      {declining ? 'Declining...' : 'Decline'}
+                      {declining ? t.quoteView.declining : t.quoteView.decline}
                     </button>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     <h3 className="text-[14px] font-semibold text-[#111] flex items-center gap-2">
                       <PenLine size={16} />
-                      Sign to Accept
+                      {t.quoteView.signToAccept}
                     </h3>
 
                     {/* Deposit notice before signing */}
                     {quote.deposit_required && quote.deposit_value > 0 && (
                       <div className="bg-[#f5f5f5] rounded-md px-3 py-2.5 text-[12px] text-[#555]">
                         <p className="font-medium text-[#333]">
-                          A deposit of {formatQuoteMoney(depositAmount, cur)} will be required upon acceptance.
+                          {t.quoteView.depositNotice.replace('${amount}', formatQuoteMoney(depositAmount, cur))}
                         </p>
                       </div>
                     )}
 
                     {/* Signer name */}
                     <div>
-                      <label className="block text-[12px] font-medium text-[#666] mb-1">Your Full Name</label>
+                      <label className="block text-[12px] font-medium text-[#666] mb-1">{t.quoteView.yourFullName}</label>
                       <input
                         type="text"
                         value={signerName}
                         onChange={(e) => setSignerName(e.target.value)}
-                        placeholder="Full Name"
+                        placeholder={t.quoteView.fullName}
                         className="w-full px-3 py-2.5 border border-[#ddd] rounded-lg text-[13px] text-[#111] focus:outline-none focus:ring-1 focus:ring-[#111] focus:border-[#111] placeholder:text-[#ccc]"
                       />
                     </div>
 
                     {/* Signature canvas */}
                     <div>
-                      <label className="block text-[12px] font-medium text-[#666] mb-1">Signature</label>
+                      <label className="block text-[12px] font-medium text-[#666] mb-1">{t.quoteView.signature}</label>
                       <div className="border border-[#ddd] rounded-lg overflow-hidden bg-white relative">
                         <canvas
                           ref={canvasRef}
@@ -753,12 +757,12 @@ export default function QuoteView() {
                         />
                         {!signatureData && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <p className="text-[12px] text-[#ddd]">Draw your signature here</p>
+                            <p className="text-[12px] text-[#ddd]">{t.quoteView.drawSignatureHere}</p>
                           </div>
                         )}
                       </div>
                       <button onClick={clearSignature} className="text-[12px] text-[#888] hover:text-[#333] mt-1 underline">
-                        Clear signature
+                        {t.quoteView.clearSignature}
                       </button>
                     </div>
 
@@ -774,13 +778,13 @@ export default function QuoteView() {
                         className="flex-1 bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
                         <CheckCircle size={16} />
-                        {accepting ? 'Accepting...' : 'Confirm & Accept'}
+                        {accepting ? t.quoteView.accepting : t.quoteView.confirmAndAccept}
                       </button>
                       <button
                         onClick={() => { setShowSignature(false); clearSignature(); setSignerName(''); setError(''); }}
                         className="px-5 bg-white border border-[#ddd] text-[#555] py-3 rounded-lg font-medium text-[14px] hover:bg-[#f8f8f8] transition-colors"
                       >
-                        Cancel
+                        {t.quoteView.cancel}
                       </button>
                     </div>
                   </div>
@@ -794,7 +798,7 @@ export default function QuoteView() {
             <>
               <div className="border-t border-[#eee]" />
               <div className="px-8 py-5">
-                <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-3">Accepted & Signed</p>
+                <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-3">{t.quoteView.acceptedAndSigned}</p>
                 <div className="flex items-start gap-5">
                   {/* Signature image */}
                   {signature.signature_url && (
@@ -812,10 +816,10 @@ export default function QuoteView() {
                       <p className="text-[#333] font-medium">{signature.signer_name}</p>
                     )}
                     {signature.signed_at && (
-                      <p className="text-[#999]">Signed on {fmtDate(signature.signed_at)}</p>
+                      <p className="text-[#999]">{t.quoteView.signedOn.replace('${date}', fmtDate(signature.signed_at, locale))}</p>
                     )}
                     {quote.approved_at && (
-                      <p className="text-[#999]">Accepted on {fmtDate(quote.approved_at)}</p>
+                      <p className="text-[#999]">{t.quoteView.acceptedOn.replace('${date}', fmtDate(quote.approved_at, locale))}</p>
                     )}
                   </div>
                 </div>
@@ -834,25 +838,24 @@ export default function QuoteView() {
                     <div className="w-12 h-12 rounded-full bg-[#f5f5f5] flex items-center justify-center mx-auto mb-4">
                       <CheckCircle size={24} className="text-[#333]" />
                     </div>
-                    <h3 className="text-[18px] font-semibold text-[#111]">Deposit Paid</h3>
+                    <h3 className="text-[18px] font-semibold text-[#111]">{t.quoteView.depositPaid}</h3>
                     <p className="text-[13px] text-[#888] mt-2 max-w-sm mx-auto">
-                      Your deposit of <span className="font-semibold text-[#111]">{formatQuoteMoney(depositAmount, cur)}</span> has been received.
-                      Thank you for confirming your quote.
+                      {t.quoteView.depositPaidMessage.replace('${amount}', formatQuoteMoney(depositAmount, cur))}
                     </p>
                     <div className="mt-4 bg-[#f8f8f8] rounded-md px-4 py-3 inline-block">
                       <div className="flex items-center gap-4 text-[12px]">
                         <div>
-                          <span className="text-[#888]">Quote total</span>
+                          <span className="text-[#888]">{t.quoteView.quoteTotal}</span>
                           <span className="ml-2 font-medium text-[#333]">{formatQuoteMoney(quote.total_cents, cur)}</span>
                         </div>
                         <div className="w-px h-4 bg-[#ddd]" />
                         <div>
-                          <span className="text-[#888]">Deposit paid</span>
+                          <span className="text-[#888]">{t.quoteView.depositPaidLabel}</span>
                           <span className="ml-2 font-medium text-[#333]">{formatQuoteMoney(depositAmount, cur)}</span>
                         </div>
                         <div className="w-px h-4 bg-[#ddd]" />
                         <div>
-                          <span className="text-[#888]">Remaining</span>
+                          <span className="text-[#888]">{t.quoteView.remaining}</span>
                           <span className="ml-2 font-medium text-[#333]">{formatQuoteMoney(quote.total_cents - depositAmount, cur)}</span>
                         </div>
                       </div>
@@ -863,9 +866,9 @@ export default function QuoteView() {
                   <div>
                     {/* Header */}
                     <div className="mb-5">
-                      <h3 className="text-[16px] font-semibold text-[#111]">Deposit Payment</h3>
+                      <h3 className="text-[16px] font-semibold text-[#111]">{t.quoteView.depositPayment}</h3>
                       <p className="text-[13px] text-[#888] mt-1">
-                        Your quote has been accepted. Complete the deposit payment below to confirm.
+                        {t.quoteView.depositPaymentMessage}
                       </p>
                     </div>
 
@@ -873,18 +876,18 @@ export default function QuoteView() {
                     <div className="bg-[#f8f8f8] rounded-md px-4 py-3 mb-5">
                       <div className="space-y-1.5 text-[13px]">
                         <div className="flex justify-between">
-                          <span className="text-[#888]">Quote total</span>
+                          <span className="text-[#888]">{t.quoteView.quoteTotal}</span>
                           <span className="text-[#333]">{formatQuoteMoney(quote.total_cents, cur)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-[#888]">
-                            Deposit {quote.deposit_type === 'percentage' ? `(${quote.deposit_value}%)` : ''}
+                            {t.quoteView.deposit} {quote.deposit_type === 'percentage' ? `(${quote.deposit_value}%)` : ''}
                           </span>
                           <span className="font-semibold text-[#111]">{formatQuoteMoney(depositAmount, cur)}</span>
                         </div>
                         <div className="border-t border-[#e5e5e5] pt-1.5">
                           <div className="flex justify-between">
-                            <span className="text-[#888]">Remaining balance</span>
+                            <span className="text-[#888]">{t.quoteView.remainingBalance}</span>
                             <span className="text-[#333]">{formatQuoteMoney(quote.total_cents - depositAmount, cur)}</span>
                           </div>
                         </div>
@@ -901,7 +904,7 @@ export default function QuoteView() {
                             onClick={loadDepositIntent}
                             className="text-[12px] text-[#111] underline mt-1 hover:text-[#333]"
                           >
-                            Try again
+                            {t.quoteView.tryAgain}
                           </button>
                         </div>
                       </div>
@@ -911,7 +914,7 @@ export default function QuoteView() {
                     {depositLoading && (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 size={20} className="animate-spin text-[#999]" />
-                        <span className="ml-2 text-[13px] text-[#888]">Loading payment...</span>
+                        <span className="ml-2 text-[13px] text-[#888]">{t.quoteView.loadingPayment}</span>
                       </div>
                     )}
 
@@ -956,7 +959,7 @@ export default function QuoteView() {
                     {!depositLoading && !depositIntentData && !depositError && (
                       <div className="text-center py-6">
                         <Loader2 size={20} className="animate-spin text-[#999] mx-auto" />
-                        <p className="text-[13px] text-[#888] mt-2">Preparing payment...</p>
+                        <p className="text-[13px] text-[#888] mt-2">{t.quoteView.preparingPayment}</p>
                       </div>
                     )}
                   </div>
@@ -972,7 +975,7 @@ export default function QuoteView() {
               <div className="px-8 py-5 no-print">
                 <div className="bg-[#f5f5f5] rounded-md px-4 py-3 text-center">
                   <p className="text-[13px] text-[#888] font-medium">
-                    This quote expired on {fmtDate(quote.valid_until)}. Please contact us for an updated quote.
+                    {t.quoteView.quoteExpiredMessage.replace('${date}', fmtDate(quote.valid_until, locale))}
                   </p>
                 </div>
               </div>
@@ -982,7 +985,7 @@ export default function QuoteView() {
 
         {/* ── Footer ── */}
         <p className="text-center text-[11px] text-[#bbb] mt-6 no-print">
-          {company.company_name} &mdash; Powered by Lume
+          {company.company_name} &mdash; {t.quoteView.poweredBy}
         </p>
       </div>
     </div>

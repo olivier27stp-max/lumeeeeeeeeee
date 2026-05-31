@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 import { PageHeader } from '../../components/ui';
 import { listGenerations, deleteGeneration, generationToStyleDna, toggleFavorite, type DirectorGeneration } from '../../lib/directorApi';
 import { supabase } from '../../lib/supabase';
@@ -30,6 +31,7 @@ function timeAgo(date: string) {
 }
 
 export default function DirectorAssets() {
+  const { t } = useTranslation();
   const [orgId, setOrgId] = useState<string | null>(null);
   const [items, setItems] = useState<DirectorGeneration[]>([]);
   const [total, setTotal] = useState(0);
@@ -69,8 +71,8 @@ export default function DirectorAssets() {
       setTotal((prev) => prev - 1);
       setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
       if (previewItem?.id === id) setPreviewItem(null);
-      toast.success('Deleted');
-    } catch { toast.error('Failed to delete'); }
+      toast.success(t.directorPanel.deletedAsset);
+    } catch { toast.error(t.directorPanel.failedToDelete); }
   };
 
   const handleToggleFavorite = async (gen: DirectorGeneration) => {
@@ -78,8 +80,8 @@ export default function DirectorAssets() {
     try {
       await toggleFavorite(gen.id, newVal);
       setItems((prev) => prev.map((g) => g.id === gen.id ? { ...g, is_favorite: newVal } : g));
-      toast.success(newVal ? 'Added to favorites' : 'Removed from favorites');
-    } catch { toast.error('Failed to update favorite'); }
+      toast.success(newVal ? t.directorPanel.addedToFavorites : t.directorPanel.removedFromFavorites);
+    } catch { toast.error(t.directorPanel.failedToUpdateFavorite); }
   };
 
   const handleBulkDelete = async () => {
@@ -88,7 +90,7 @@ export default function DirectorAssets() {
     setItems((prev) => prev.filter((g) => !selectedIds.has(g.id)));
     setTotal((prev) => prev - selectedIds.size);
     setSelectedIds(new Set());
-    toast.success(`Deleted`);
+    toast.success(t.directorPanel.deletedAsset);
   };
 
   const toggleSelect = (id: string) => {
@@ -103,7 +105,7 @@ export default function DirectorAssets() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Assets" subtitle={`${total} generations`} icon={FolderOpen}>
+      <PageHeader title={t.directorPanel.assetsTitle} subtitle={`${total} ${t.directorPanel.generations}`} icon={FolderOpen}>
         {selectedIds.size > 0 && (
           <button onClick={handleBulkDelete} className="glass-button text-[12px] text-danger flex items-center gap-1.5">
             <Trash2 className="w-3.5 h-3.5" /> Delete {selectedIds.size}
@@ -141,8 +143,8 @@ export default function DirectorAssets() {
       ) : filtered.length === 0 ? (
         <div className="py-20 text-center">
           <ImageIcon className="w-10 h-10 text-text-tertiary/30 mx-auto mb-3" />
-          <p className="text-[14px] text-text-tertiary">No assets yet</p>
-          <p className="text-[12px] text-text-tertiary mt-1">Run a flow to generate your first assets</p>
+          <p className="text-[14px] text-text-tertiary">{t.directorPanel.noAssetsYet}</p>
+          <p className="text-[12px] text-text-tertiary mt-1">{t.directorPanel.runFlowHint}</p>
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -164,8 +166,8 @@ export default function DirectorAssets() {
                 {/* Hover actions */}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100">
                   {gen.output_url && <a href={gen.output_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-lg bg-white/20 text-white hover:bg-white/30"><Download className="w-3.5 h-3.5" /></a>}
-                  {gen.prompt && <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(gen.prompt!); toast.success('Copied'); }} className="p-1.5 rounded-lg bg-white/20 text-white hover:bg-white/30"><Copy className="w-3.5 h-3.5" /></button>}
-                  {orgId && <button onClick={(e) => { e.stopPropagation(); const n = prompt('Style name:', gen.title); if (n) generationToStyleDna(gen.id, orgId, n).then(() => toast.success('Style created')).catch(() => toast.error('Failed')); }} className="p-1.5 rounded-lg bg-white/20 text-white hover:bg-purple-500/60"><Palette className="w-3.5 h-3.5" /></button>}
+                  {gen.prompt && <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(gen.prompt!); toast.success(t.directorPanel.copied); }} className="p-1.5 rounded-lg bg-white/20 text-white hover:bg-white/30"><Copy className="w-3.5 h-3.5" /></button>}
+                  {orgId && <button onClick={(e) => { e.stopPropagation(); const n = prompt('Style name:', gen.title); if (n) generationToStyleDna(gen.id, orgId, n).then(() => toast.success(t.directorPanel.styleCreated)).catch(() => toast.error(t.directorPanel.failed)); }} className="p-1.5 rounded-lg bg-white/20 text-white hover:bg-purple-500/60"><Palette className="w-3.5 h-3.5" /></button>}
                   <button onClick={(e) => { e.stopPropagation(); void handleToggleFavorite(gen); }} className={`p-1.5 rounded-lg bg-white/20 text-white hover:bg-pink-500/60 ${gen.is_favorite ? 'bg-pink-500/60' : ''}`}><Heart className={`w-3.5 h-3.5 ${gen.is_favorite ? 'fill-current' : ''}`} /></button>
                   <button onClick={(e) => { e.stopPropagation(); void handleDelete(gen.id); }} className="p-1.5 rounded-lg bg-white/20 text-white hover:bg-red-500/60"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
@@ -202,7 +204,7 @@ export default function DirectorAssets() {
       )}
 
       {items.length < total && (
-        <div className="flex justify-center"><button onClick={() => void loadMore()} className="glass-button text-[12px]">Load more ({total - items.length} remaining)</button></div>
+        <div className="flex justify-center"><button onClick={() => void loadMore()} className="glass-button text-[12px]">{t.directorPanel.loadMore} ({total - items.length} {t.directorPanel.remaining})</button></div>
       )}
 
       {/* Preview lightbox */}
@@ -217,8 +219,8 @@ export default function DirectorAssets() {
               <p className="text-[12px] text-text-tertiary mt-1">{previewItem.model} · {previewItem.output_type} · {timeAgo(previewItem.created_at)}</p>
               {previewItem.prompt && <p className="text-[12px] text-text-secondary mt-2 italic">{previewItem.prompt}</p>}
               <div className="flex gap-2 mt-3">
-                {previewItem.output_url && <a href={previewItem.output_url} target="_blank" rel="noopener noreferrer" className="glass-button text-[11px] flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Open</a>}
-                {previewItem.prompt && <button onClick={() => { navigator.clipboard.writeText(previewItem.prompt!); toast.success('Copied'); }} className="glass-button text-[11px] flex items-center gap-1"><Copy className="w-3 h-3" /> Copy prompt</button>}
+                {previewItem.output_url && <a href={previewItem.output_url} target="_blank" rel="noopener noreferrer" className="glass-button text-[11px] flex items-center gap-1"><ExternalLink className="w-3 h-3" /> {t.directorPanel.open}</a>}
+                {previewItem.prompt && <button onClick={() => { navigator.clipboard.writeText(previewItem.prompt!); toast.success(t.directorPanel.copied); }} className="glass-button text-[11px] flex items-center gap-1"><Copy className="w-3 h-3" /> {t.directorPanel.copyPrompt}</button>}
               </div>
             </div>
           </div>

@@ -8,6 +8,7 @@ import {
   createInvoiceTemplate,
   updateInvoiceTemplate,
 } from '../lib/invoiceTemplatesApi';
+import { useTranslation } from '../i18n';
 
 interface Props {
   isOpen: boolean;
@@ -38,6 +39,7 @@ function emptyTax(): TaxForm {
 }
 
 export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, template }: Props) {
+  const { t } = useTranslation();
   const isEditMode = !!template;
 
   const [name, setName] = useState('');
@@ -111,7 +113,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
 
   async function handleSubmit() {
     if (!name.trim()) {
-      toast.error('Template name is required.');
+      toast.error(t.invoiceTemplate.nameRequired);
       return;
     }
 
@@ -145,16 +147,16 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
 
       if (isEditMode && template) {
         await updateInvoiceTemplate(template.id, input);
-        toast.success('Template updated.');
+        toast.success(t.invoiceTemplate.toastUpdated);
       } else {
         await createInvoiceTemplate(input);
-        toast.success('Template created.');
+        toast.success(t.invoiceTemplate.toastCreated);
       }
 
       onSaved();
       onClose();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to save template.');
+      toast.error(err?.message || t.invoiceTemplate.toastSaveFailed);
     } finally {
       setSaving(false);
     }
@@ -173,7 +175,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
             {/* Header */}
             <div className="flex items-center justify-between border-b border-outline px-5 py-4 sticky top-0 bg-surface z-10 rounded-t-2xl">
               <h2 className="text-lg font-bold text-text-primary">
-                {isEditMode ? 'Edit Template' : 'New Invoice Template'}
+                {isEditMode ? t.invoiceTemplate.editTitle : t.invoiceTemplate.newTitle}
               </h2>
               <button type="button" onClick={onClose} className="glass-button !p-2">
                 <X size={15} />
@@ -185,7 +187,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
               {/* Name */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                  Template Name *
+                  {t.invoiceTemplate.templateName}
                 </label>
                 <input
                   value={name}
@@ -198,7 +200,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
               {/* Title */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                  Invoice Title
+                  {t.invoiceTemplate.invoiceTitle}
                 </label>
                 <input
                   value={title}
@@ -211,12 +213,12 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
               {/* Description */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                  Description
+                  {t.invoiceTemplate.description}
                 </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Template description for internal reference"
+                  placeholder="Description du modèle pour référence interne"
                   rows={2}
                   className="glass-input w-full resize-none"
                 />
@@ -226,7 +228,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                    Default Line Items
+                    {t.invoiceTemplate.defaultLineItems}
                   </label>
                   <button
                     type="button"
@@ -234,7 +236,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
                     className="glass-button inline-flex items-center gap-1.5 !px-3 !py-1.5 !text-xs"
                   >
                     <Plus size={12} />
-                    Add Item
+                    {t.invoiceTemplate.addItem}
                   </button>
                 </div>
                 {lineItems.map((li) => (
@@ -282,7 +284,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                    Taxes
+                    {t.invoiceTemplate.taxes}
                   </label>
                   <button
                     type="button"
@@ -290,7 +292,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
                     className="glass-button inline-flex items-center gap-1.5 !px-3 !py-1.5 !text-xs"
                   >
                     <Plus size={12} />
-                    Add Tax
+                    {t.invoiceTemplate.addTax}
                   </button>
                 </div>
                 {taxes.map((tax) => (
@@ -301,7 +303,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
                     <input
                       value={tax.name}
                       onChange={(e) => updateTax(tax.id, { name: e.target.value })}
-                      placeholder="Tax name (e.g. HST)"
+                      placeholder="Nom de la taxe (ex. TVQ)"
                       className="glass-input col-span-6"
                     />
                     <input
@@ -323,14 +325,14 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
                   </div>
                 ))}
                 {taxes.length === 0 && (
-                  <p className="text-xs text-text-tertiary">No taxes configured.</p>
+                  <p className="text-xs text-text-tertiary">{t.invoiceTemplate.noTaxes}</p>
                 )}
               </div>
 
               {/* Payment Terms */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                  Payment Terms
+                  {t.invoiceTemplate.paymentTerms}
                 </label>
                 <textarea
                   value={paymentTerms}
@@ -344,12 +346,12 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
               {/* Client Note */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                  Client Note
+                  {t.invoiceTemplate.clientNote}
                 </label>
                 <textarea
                   value={clientNote}
                   onChange={(e) => setClientNote(e.target.value)}
-                  placeholder="Note that appears on the invoice for the client"
+                  placeholder="Note affichée sur la facture pour le client"
                   rows={2}
                   className="glass-input w-full resize-none"
                 />
@@ -358,12 +360,12 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
               {/* Email Subject */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                  Email Subject
+                  {t.invoiceTemplate.emailSubject}
                 </label>
                 <input
                   value={emailSubject}
                   onChange={(e) => setEmailSubject(e.target.value)}
-                  placeholder="e.g. Invoice #{invoice_number} from {company_name}"
+                  placeholder="ex. Facture #{invoice_number} de {company_name}"
                   className="glass-input w-full"
                 />
               </div>
@@ -371,12 +373,12 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
               {/* Email Body */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                  Email Body
+                  {t.invoiceTemplate.emailBody}
                 </label>
                 <textarea
                   value={emailBody}
                   onChange={(e) => setEmailBody(e.target.value)}
-                  placeholder="Email body that accompanies the invoice"
+                  placeholder="Corps du courriel accompagnant la facture"
                   rows={4}
                   className="glass-input w-full resize-none"
                 />
@@ -386,7 +388,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
             {/* Footer */}
             <div className="flex items-center justify-between border-t border-outline bg-surface/70 px-5 py-4 sticky bottom-0 rounded-b-2xl">
               <button type="button" onClick={onClose} className="glass-button">
-                Cancel
+                {t.invoiceTemplate.cancel}
               </button>
               <button
                 type="button"
@@ -399,7 +401,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
                 ) : (
                   <Save size={14} />
                 )}
-                {saving ? 'Saving...' : isEditMode ? 'Update Template' : 'Create Template'}
+                {saving ? t.invoiceTemplate.saving : isEditMode ? t.invoiceTemplate.updateTemplate : t.invoiceTemplate.createTemplate}
               </button>
             </div>
           </motion.div>

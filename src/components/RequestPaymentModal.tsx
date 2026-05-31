@@ -4,6 +4,7 @@ import { Copy, Check, Send, Loader2, Mail, MessageSquare, Link2 } from 'lucide-r
 import Modal from './ui/Modal';
 import { createPaymentRequest } from '../lib/connectApi';
 import { formatMoneyFromCents } from '../lib/invoicesApi';
+import { useTranslation } from '../i18n';
 
 type SendVia = 'link_only' | 'email' | 'sms' | 'both';
 
@@ -22,6 +23,7 @@ interface RequestPaymentModalProps {
 export default function RequestPaymentModal({
   open, onClose, invoiceId, invoiceNumber, balanceCents, currency, clientEmail, clientPhone, onSuccess,
 }: RequestPaymentModalProps) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -38,22 +40,22 @@ export default function RequestPaymentModal({
 
       if (sendVia === 'email' || sendVia === 'both') {
         if (result.notifications?.email?.sent) {
-          toast.success('Payment request sent by email!');
+          toast.success(t.requestPayment.toastSentByEmail);
         } else {
-          toast.success('Payment link created! (Email could not be sent)');
+          toast.success(t.requestPayment.toastLinkCreatedEmailFailed);
         }
       } else if (sendVia === 'sms') {
         if (result.notifications?.sms?.sent) {
-          toast.success('Payment request sent by SMS!');
+          toast.success(t.requestPayment.toastSentBySms);
         } else {
-          toast.success('Payment link created! (SMS could not be sent)');
+          toast.success(t.requestPayment.toastLinkCreatedSmsFailed);
         }
       } else {
-        toast.success('Payment link created!');
+        toast.success(t.requestPayment.toastLinkCreated);
       }
       onSuccess?.();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to create payment request.');
+      toast.error(err?.message || t.requestPayment.toastCreateFailed);
     } finally {
       setLoading(false);
     }
@@ -63,7 +65,7 @@ export default function RequestPaymentModal({
     if (!paymentUrl) return;
     navigator.clipboard.writeText(paymentUrl);
     setLinkCopied(true);
-    toast.success('Payment link copied!');
+    toast.success(t.requestPayment.toastLinkCopied);
     setTimeout(() => setLinkCopied(false), 2000);
   }
 
@@ -76,16 +78,16 @@ export default function RequestPaymentModal({
   }
 
   return (
-    <Modal open={open} onClose={handleClose} title="Request Payment" size="md">
+    <Modal open={open} onClose={handleClose} title={t.requestPayment.title} size="md">
       <div className="space-y-4">
         {/* Invoice summary */}
         <div className="rounded-lg border border-border-primary bg-surface-secondary p-4">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] text-text-secondary">Invoice</span>
+            <span className="text-[13px] text-text-secondary">{t.requestPayment.invoice}</span>
             <span className="text-[13px] font-medium text-text-primary">{invoiceNumber}</span>
           </div>
           <div className="mt-2 flex items-center justify-between">
-            <span className="text-[13px] text-text-secondary">Amount Due</span>
+            <span className="text-[13px] text-text-secondary">{t.requestPayment.amountDue}</span>
             <span className="text-[15px] font-bold text-text-primary">
               {formatMoneyFromCents(balanceCents, currency)}
             </span>
@@ -96,7 +98,7 @@ export default function RequestPaymentModal({
           <>
             {/* Send method selection */}
             <div>
-              <p className="text-[13px] font-medium text-text-primary mb-2">How would you like to send the payment request?</p>
+              <p className="text-[13px] font-medium text-text-primary mb-2">{t.requestPayment.howToSend}</p>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -108,8 +110,8 @@ export default function RequestPaymentModal({
                   }`}
                 >
                   <Link2 size={14} className="mb-1" />
-                  <div className="font-medium">Copy Link</div>
-                  <div className="text-text-tertiary">Copy and share manually</div>
+                  <div className="font-medium">{t.requestPayment.copyLink}</div>
+                  <div className="text-text-tertiary">{t.requestPayment.copyLinkDesc}</div>
                 </button>
                 <button
                   type="button"
@@ -124,8 +126,8 @@ export default function RequestPaymentModal({
                   }`}
                 >
                   <Mail size={14} className="mb-1" />
-                  <div className="font-medium">Email</div>
-                  <div className="text-text-tertiary truncate">{clientEmail || 'No email on file'}</div>
+                  <div className="font-medium">{t.requestPayment.email}</div>
+                  <div className="text-text-tertiary truncate">{clientEmail || t.requestPayment.noEmail}</div>
                 </button>
                 <button
                   type="button"
@@ -140,8 +142,8 @@ export default function RequestPaymentModal({
                   }`}
                 >
                   <MessageSquare size={14} className="mb-1" />
-                  <div className="font-medium">SMS</div>
-                  <div className="text-text-tertiary truncate">{clientPhone || 'No phone on file'}</div>
+                  <div className="font-medium">{t.requestPayment.sms}</div>
+                  <div className="text-text-tertiary truncate">{clientPhone || t.requestPayment.noPhone}</div>
                 </button>
                 <button
                   type="button"
@@ -156,14 +158,14 @@ export default function RequestPaymentModal({
                   }`}
                 >
                   <Send size={14} className="mb-1" />
-                  <div className="font-medium">Email + SMS</div>
-                  <div className="text-text-tertiary">Send via both channels</div>
+                  <div className="font-medium">{t.requestPayment.emailAndSms}</div>
+                  <div className="text-text-tertiary">{t.requestPayment.emailAndSmsDesc}</div>
                 </button>
               </div>
             </div>
 
             <div className="flex justify-end gap-2">
-              <button type="button" className="glass-button" onClick={handleClose}>Cancel</button>
+              <button type="button" className="glass-button" onClick={handleClose}>{t.requestPayment.cancel}</button>
               <button
                 type="button"
                 className="glass-button bg-text-primary text-surface hover:bg-neutral-800 inline-flex items-center gap-2"
@@ -171,7 +173,7 @@ export default function RequestPaymentModal({
                 disabled={loading}
               >
                 {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                {loading ? 'Sending...' : sendVia === 'link_only' ? 'Create Payment Link' : 'Send Payment Request'}
+                {loading ? t.requestPayment.sending : sendVia === 'link_only' ? t.requestPayment.createPaymentLink : t.requestPayment.sendPaymentRequest}
               </button>
             </div>
           </>
@@ -180,28 +182,28 @@ export default function RequestPaymentModal({
             {/* Success state */}
             <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-4">
               <p className="text-[13px] font-medium text-green-800 dark:text-green-300">
-                Payment request created!
+                {t.requestPayment.requestCreated}
               </p>
 
               {/* Notification results */}
               {notifications?.email?.sent && (
                 <p className="mt-1 text-[12px] text-green-700 dark:text-green-400 flex items-center gap-1">
-                  <Mail size={11} /> Email sent to client
+                  <Mail size={11} /> {t.requestPayment.emailSentToClient}
                 </p>
               )}
               {notifications?.sms?.sent && (
                 <p className="mt-1 text-[12px] text-green-700 dark:text-green-400 flex items-center gap-1">
-                  <MessageSquare size={11} /> SMS sent to client
+                  <MessageSquare size={11} /> {t.requestPayment.smsSentToClient}
                 </p>
               )}
               {notifications?.email && !notifications.email.sent && (
                 <p className="mt-1 text-[12px] text-amber-600 dark:text-amber-400">
-                  Email could not be sent: {notifications.email.reason}
+                  {t.requestPayment.emailNotSent}: {notifications.email.reason}
                 </p>
               )}
               {notifications?.sms && !notifications.sms.sent && (
                 <p className="mt-1 text-[12px] text-amber-600 dark:text-amber-400">
-                  SMS could not be sent: {notifications.sms.reason}
+                  {t.requestPayment.smsNotSent}: {notifications.sms.reason}
                 </p>
               )}
 
@@ -219,13 +221,13 @@ export default function RequestPaymentModal({
                   onClick={handleCopyLink}
                 >
                   {linkCopied ? <Check size={14} /> : <Copy size={14} />}
-                  {linkCopied ? 'Copied' : 'Copy'}
+                  {linkCopied ? t.requestPayment.copied : t.requestPayment.copy}
                 </button>
               </div>
             </div>
 
             <div className="flex justify-end gap-2">
-              <button type="button" className="glass-button" onClick={handleClose}>Done</button>
+              <button type="button" className="glass-button" onClick={handleClose}>{t.requestPayment.done}</button>
             </div>
           </>
         )}

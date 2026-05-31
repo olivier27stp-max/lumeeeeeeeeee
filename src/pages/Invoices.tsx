@@ -700,10 +700,7 @@ export default function Invoices() {
         {/* ─── Pagination ─── */}
         <div className="flex items-center justify-between border-t border-outline px-4 py-3">
           <p className="text-[12px] text-text-tertiary">
-            {language === 'fr'
-              ? `${((page - 1) * PAGE_SIZE) + 1}–${Math.min(page * PAGE_SIZE, total)} sur ${total}`
-              : `${((page - 1) * PAGE_SIZE) + 1}–${Math.min(page * PAGE_SIZE, total)} of ${total}`
-            }
+            {`${((page - 1) * PAGE_SIZE) + 1}–${Math.min(page * PAGE_SIZE, total)} ${t.invoices.of} ${total}`}
           </p>
           <div className="flex items-center gap-1">
             <button

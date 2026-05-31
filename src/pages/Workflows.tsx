@@ -192,7 +192,7 @@ export default function Workflows() {
         target_handle: params.targetHandle || undefined,
       });
     } catch {
-      toast.error('Failed to save connection');
+      toast.error(t.workflows.failedToSaveConnection);
     }
   }, [selectedWf, setEdges]);
 

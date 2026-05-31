@@ -23,6 +23,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { useTranslation } from '../i18n';
 import {
   INTEGRATIONS,
   CATEGORIES,
@@ -78,41 +79,42 @@ function useConnectionState() {
 
 // ─── Status Badge ───────────────────────────────────────────────
 function StatusBadge({ status }: { status: ResolvedStatus }) {
+  const { t } = useTranslation();
   switch (status) {
     case 'connected':
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-success bg-success/10 rounded-full px-2 py-0.5">
-          <Check size={9} /> Connected
+          <Check size={9} /> {t.appMarketplace.connected}
         </span>
       );
     case 'error':
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-danger bg-danger/10 rounded-full px-2 py-0.5">
-          <AlertTriangle size={9} /> Error
+          <AlertTriangle size={9} /> {t.appMarketplace.error}
         </span>
       );
     case 'requires_setup':
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 rounded-full px-2 py-0.5">
-          Requires Setup
+          {t.appMarketplace.requiresSetup}
         </span>
       );
     case 'pending':
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-text-primary bg-neutral-100 dark:bg-neutral-800/30 rounded-full px-2 py-0.5">
-          <Loader2 size={9} className="animate-spin" /> Pending
+          <Loader2 size={9} className="animate-spin" /> {t.appMarketplace.pending}
         </span>
       );
     case 'token_expired':
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 rounded-full px-2 py-0.5">
-          <Clock size={9} /> Token Expired
+          <Clock size={9} /> {t.appMarketplace.tokenExpired}
         </span>
       );
     case 'coming_soon':
       return (
         <span className="text-[10px] font-bold text-text-tertiary bg-surface-secondary rounded-full px-2 py-0.5">
-          Coming Soon
+          {t.appMarketplace.comingSoon}
         </span>
       );
     default:
@@ -121,13 +123,13 @@ function StatusBadge({ status }: { status: ResolvedStatus }) {
 }
 
 // ─── Connection Type Label ──────────────────────────────────────
-function connectionLabel(type: string): string {
+function connectionLabel(type: string, labels: Record<string, string>): string {
   switch (type) {
-    case 'oauth': return 'OAuth';
-    case 'api_key': return 'API Key';
-    case 'webhook': return 'Webhook';
-    case 'manual': return 'Manual';
-    case 'internal': return 'Built-in';
+    case 'oauth': return labels.connectionOauth;
+    case 'api_key': return labels.connectionApiKey;
+    case 'webhook': return labels.connectionWebhook;
+    case 'manual': return labels.connectionManual;
+    case 'internal': return labels.connectionBuiltIn;
     default: return '';
   }
 }
@@ -180,6 +182,7 @@ interface AppCardProps {
 }
 
 const AppCard: React.FC<AppCardProps> = ({ app, status, onClick }) => {
+  const { t } = useTranslation();
   return (
     <button
       onClick={onClick}
@@ -197,9 +200,9 @@ const AppCard: React.FC<AppCardProps> = ({ app, status, onClick }) => {
       </div>
       <p className="text-[12px] text-text-secondary leading-relaxed flex-1">{app.description_short}</p>
       <div className="mt-3 pt-3 border-t border-outline-subtle/40 flex items-center justify-between">
-        <span className="text-[11px] text-text-tertiary font-medium">{connectionLabel(app.connection_type)}</span>
+        <span className="text-[11px] text-text-tertiary font-medium">{connectionLabel(app.connection_type, t.appMarketplace)}</span>
         <span className="text-[11px] font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1">
-          View details <ChevronRight size={10} />
+          {t.appMarketplace.viewDetails} <ChevronRight size={10} />
         </span>
       </div>
     </button>
@@ -214,6 +217,7 @@ interface FeaturedCardProps {
 }
 
 const FeaturedCard: React.FC<FeaturedCardProps> = ({ app, status, onClick }) => {
+  const { t } = useTranslation();
   return (
     <button
       onClick={onClick}
@@ -231,14 +235,14 @@ const FeaturedCard: React.FC<FeaturedCardProps> = ({ app, status, onClick }) => 
         <div className="shrink-0">
           {status === 'connected' ? (
             <span className="glass-button !text-[11px] !py-1.5 inline-flex items-center gap-1.5 !border-success/40 !text-success">
-              <Check size={11} /> Connected
+              <Check size={11} /> {t.appMarketplace.connected}
             </span>
           ) : status === 'available' ? (
             <span className="glass-button-primary !text-[11px] !py-1.5 inline-flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Zap size={11} /> Connect
+              <Zap size={11} /> {t.appMarketplace.connect}
             </span>
           ) : (
-            <span className="badge-neutral text-[10px]">Coming Soon</span>
+            <span className="badge-neutral text-[10px]">{t.appMarketplace.comingSoon}</span>
           )}
         </div>
       </div>
@@ -314,6 +318,7 @@ interface DetailModalProps {
 }
 
 function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModalProps) {
+  const { t } = useTranslation();
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -355,12 +360,12 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
       const result = await connectWithCredentials(app.id, formValues);
       if (result.success) {
         await onConnectionChange();
-        toast.success(`${app.name} connecté avec succès`);
+        toast.success(t.appMarketplace.toastConnectedSuccess.replace('${name}', app.name));
       } else {
-        toast.error(result.error || `Échec de la connexion à ${app.name}`);
+        toast.error(result.error || t.appMarketplace.toastConnectionFailed.replace('${name}', app.name));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de connexion');
+      toast.error(err instanceof Error ? err.message : t.appMarketplace.toastConnectionError);
     } finally {
       setSaving(false);
     }
@@ -371,14 +376,14 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
     try {
       const result = await testConnectionApi(app.id);
       if (result.success) {
-        toast.success(`Connexion à ${app.name} fonctionnelle${result.account_name ? ` (${result.account_name})` : ''}`);
+        toast.success(t.appMarketplace.toastTestSuccess.replace('${name}', app.name) + (result.account_name ? ` (${result.account_name})` : ''));
         await onConnectionChange();
       } else {
-        toast.error(result.error || `Test échoué pour ${app.name}`);
+        toast.error(result.error || t.appMarketplace.toastTestFailed.replace('${name}', app.name));
         await onConnectionChange();
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Test échoué');
+      toast.error(err instanceof Error ? err.message : t.appMarketplace.toastTestFailedGeneric);
     } finally {
       setTesting(false);
     }
@@ -391,7 +396,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
       // Redirect to provider's OAuth page
       window.location.href = authorizeUrl;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : `Échec du démarrage OAuth pour ${app.name}`);
+      toast.error(err instanceof Error ? err.message : t.appMarketplace.toastOauthFailed.replace('${name}', app.name));
       setSaving(false);
     }
   };
@@ -401,13 +406,13 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
     try {
       const success = await refreshToken(app.id);
       if (success) {
-        toast.success(`Token de ${app.name} rafraîchi`);
+        toast.success(t.appMarketplace.toastTokenRefreshed.replace('${name}', app.name));
         await onConnectionChange();
       } else {
-        toast.error(`Impossible de rafraîchir le token. Reconnectez ${app.name}.`);
+        toast.error(t.appMarketplace.toastTokenRefreshFailed.replace('${name}', app.name));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Rafraîchissement échoué');
+      toast.error(err instanceof Error ? err.message : t.appMarketplace.toastRefreshFailed);
     } finally {
       setSaving(false);
     }
@@ -420,9 +425,9 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
       setShowDisconnectConfirm(false);
       await onConnectionChange();
       initForm();
-      toast.success(`${app.name} déconnecté`);
+      toast.success(t.appMarketplace.toastDisconnected.replace('${name}', app.name));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Échec de la déconnexion');
+      toast.error(err instanceof Error ? err.message : t.appMarketplace.toastDisconnectFailed);
     } finally {
       setDisconnecting(false);
     }
@@ -430,7 +435,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
 
   const handleCopyWebhook = () => {
     navigator.clipboard.writeText(webhookUrl);
-    toast.success('URL du webhook copiée');
+    toast.success(t.appMarketplace.toastWebhookCopied);
   };
 
   // ── Render connection UI based on type ──
@@ -444,10 +449,10 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               <Check size={16} className="text-success" />
             </div>
             <div className="flex-1">
-              <p className="text-[13px] font-semibold text-text-primary">Connecté</p>
+              <p className="text-[13px] font-semibold text-text-primary">{t.appMarketplace.connected}</p>
               <p className="text-[11px] text-text-tertiary">
                 {conn?.connected_account_name && <span className="font-medium text-text-secondary">{conn.connected_account_name}</span>}
-                {conn?.connected_at ? ` — depuis le ${new Date(conn.connected_at).toLocaleDateString('fr-CA')}` : ''}
+                {conn?.connected_at ? ` — ${t.appMarketplace.connectedSince} ${new Date(conn.connected_at).toLocaleDateString()}` : ''}
               </p>
             </div>
           </div>
@@ -456,11 +461,11 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
           {conn?.last_tested && (
             <div className="flex items-center gap-2 text-[11px] text-text-tertiary px-1">
               <Shield size={10} />
-              Dernier test: {new Date(conn.last_tested).toLocaleString('fr-CA')}
+              {t.appMarketplace.lastTest}: {new Date(conn.last_tested).toLocaleString()}
               {conn.last_test_result === 'success' ? (
-                <span className="text-success font-medium">— OK</span>
+                <span className="text-success font-medium">— {t.appMarketplace.testOk}</span>
               ) : conn.last_test_result === 'failure' ? (
-                <span className="text-danger font-medium">— Échec</span>
+                <span className="text-danger font-medium">— {t.appMarketplace.testFailure}</span>
               ) : null}
             </div>
           )}
@@ -468,7 +473,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
           {/* Webhook URL for webhook apps */}
           {app.connection_type === 'webhook' && (
             <div className="space-y-2">
-              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Webhook Endpoint</p>
+              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t.appMarketplace.webhookEndpoint}</p>
               <div className="flex items-center gap-2 p-3 bg-surface-secondary/50 rounded-lg">
                 <code className="text-[11px] text-text-secondary font-mono flex-1 truncate">{webhookUrl}</code>
                 <button onClick={handleCopyWebhook} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary">
@@ -481,20 +486,20 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
           <div className="flex items-center gap-2 pt-2">
             <button onClick={handleTest} disabled={testing} className="glass-button !text-[12px] inline-flex items-center gap-1.5">
               {testing ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
-              Tester la connexion
+              {t.appMarketplace.testConnection}
             </button>
             {!showDisconnectConfirm ? (
               <button onClick={() => setShowDisconnectConfirm(true)} className="glass-button !text-[12px] inline-flex items-center gap-1.5 !text-danger !border-danger/30 hover:!bg-danger/5">
-                <Unplug size={12} /> Déconnecter
+                <Unplug size={12} /> {t.appMarketplace.disconnect}
               </button>
             ) : (
               <div className="flex items-center gap-2">
                 <button onClick={handleDisconnect} disabled={disconnecting} className="glass-button !text-[12px] !bg-danger !text-white !border-danger inline-flex items-center gap-1.5">
                   {disconnecting ? <Loader2 size={12} className="animate-spin" /> : null}
-                  Confirmer
+                  {t.appMarketplace.confirm}
                 </button>
                 <button onClick={() => setShowDisconnectConfirm(false)} className="glass-button !text-[12px]">
-                  Annuler
+                  {t.common.cancel}
                 </button>
               </div>
             )}
@@ -512,9 +517,9 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               <Clock size={16} className="text-warning" />
             </div>
             <div className="flex-1">
-              <p className="text-[13px] font-semibold text-text-primary">Token expiré</p>
+              <p className="text-[13px] font-semibold text-text-primary">{t.appMarketplace.tokenExpired}</p>
               <p className="text-[11px] text-text-tertiary">
-                {conn?.connected_account_name || app.name} — Le token d'accès a expiré et doit être renouvelé.
+                {conn?.connected_account_name || app.name} — {t.appMarketplace.tokenExpiredDesc}
               </p>
             </div>
           </div>
@@ -522,10 +527,10 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
           <div className="flex items-center gap-2">
             <button onClick={handleRefreshToken} disabled={saving} className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5">
               {saving ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              Rafraîchir le token
+              {t.appMarketplace.refreshToken}
             </button>
             <button onClick={handleOAuth} disabled={saving} className="glass-button !text-[12px] inline-flex items-center gap-1.5">
-              <Link2 size={12} /> Reconnecter via OAuth
+              <Link2 size={12} /> {t.appMarketplace.reconnectViaOauth}
             </button>
           </div>
         </div>
@@ -541,16 +546,16 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               <Loader2 size={16} className="text-text-primary animate-spin" />
             </div>
             <div className="flex-1">
-              <p className="text-[13px] font-semibold text-text-primary">Autorisation en attente</p>
+              <p className="text-[13px] font-semibold text-text-primary">{t.appMarketplace.pendingAuthorization}</p>
               <p className="text-[11px] text-text-tertiary">
-                Le processus OAuth a été démarré. Complétez l'autorisation dans la fenêtre du fournisseur.
+                {t.appMarketplace.pendingAuthorizationDesc}
               </p>
             </div>
           </div>
 
           <button onClick={handleOAuth} disabled={saving} className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5">
             {saving ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-            Relancer l'autorisation
+            {t.appMarketplace.retryAuthorization}
           </button>
         </div>
       );
@@ -565,9 +570,9 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               <AlertTriangle size={16} className="text-danger" />
             </div>
             <div className="flex-1">
-              <p className="text-[13px] font-semibold text-text-primary">Erreur de connexion</p>
+              <p className="text-[13px] font-semibold text-text-primary">{t.appMarketplace.connectionError}</p>
               <p className="text-[11px] text-text-tertiary">
-                {conn?.last_error || 'Une erreur est survenue avec cette intégration.'}
+                {conn?.last_error || t.appMarketplace.connectionErrorDesc}
               </p>
             </div>
           </div>
@@ -575,16 +580,16 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
           <div className="flex items-center gap-2">
             <button onClick={handleTest} disabled={testing} className="glass-button !text-[12px] inline-flex items-center gap-1.5">
               {testing ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
-              Re-tester
+              {t.appMarketplace.retest}
             </button>
             {app.connection_type === 'oauth' ? (
               <button onClick={handleOAuth} disabled={saving} className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5">
                 {saving ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />}
-                Reconnecter
+                {t.appMarketplace.reconnect}
               </button>
             ) : null}
             <button onClick={() => setShowDisconnectConfirm(true)} className="glass-button !text-[12px] inline-flex items-center gap-1.5 !text-danger !border-danger/30">
-              <Unplug size={12} /> Déconnecter
+              <Unplug size={12} /> {t.appMarketplace.disconnect}
             </button>
           </div>
 
@@ -592,10 +597,10 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
             <div className="flex items-center gap-2">
               <button onClick={handleDisconnect} disabled={disconnecting} className="glass-button !text-[12px] !bg-danger !text-white !border-danger inline-flex items-center gap-1.5">
                 {disconnecting ? <Loader2 size={12} className="animate-spin" /> : null}
-                Confirmer la déconnexion
+                {t.appMarketplace.confirmDisconnect}
               </button>
               <button onClick={() => setShowDisconnectConfirm(false)} className="glass-button !text-[12px]">
-                Annuler
+                {t.common.cancel}
               </button>
             </div>
           )}
@@ -607,8 +612,8 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
     if (app.connection_type === 'coming_soon') {
       return (
         <div className="p-4 bg-surface-secondary/50 rounded-xl text-center">
-          <p className="text-[13px] font-medium text-text-secondary">This integration is coming soon.</p>
-          <p className="text-[11px] text-text-tertiary mt-1">We'll notify you when it becomes available.</p>
+          <p className="text-[13px] font-medium text-text-secondary">{t.appMarketplace.comingSoonDesc}</p>
+          <p className="text-[11px] text-text-tertiary mt-1">{t.appMarketplace.comingSoonNotify}</p>
         </div>
       );
     }
@@ -622,17 +627,17 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               <Check size={16} className="text-success" />
             </div>
             <div>
-              <p className="text-[13px] font-semibold text-text-primary">Built-in Integration</p>
-              <p className="text-[11px] text-text-tertiary">This integration is pre-configured and always active.</p>
+              <p className="text-[13px] font-semibold text-text-primary">{t.appMarketplace.builtInIntegration}</p>
+              <p className="text-[11px] text-text-tertiary">{t.appMarketplace.builtInIntegrationDesc}</p>
             </div>
           </div>
           {app.auth_fields.length > 0 && (
             <div className="space-y-3">
-              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Current Configuration</p>
+              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t.appMarketplace.currentConfiguration}</p>
               {app.auth_fields.map((field) => (
                 <div key={field.key} className="flex items-center justify-between py-2 px-3 bg-surface-secondary/50 rounded-lg">
                   <span className="text-[12px] text-text-secondary">{field.label}</span>
-                  <span className="text-[12px] text-text-tertiary font-mono">Configured</span>
+                  <span className="text-[12px] text-text-tertiary font-mono">{t.appMarketplace.configured}</span>
                 </div>
               ))}
             </div>
@@ -648,10 +653,10 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
           <div className="p-4 bg-surface-secondary/50 rounded-xl space-y-3">
             <div className="flex items-center gap-2">
               <Link2 size={14} className="text-text-tertiary" />
-              <p className="text-[12px] font-semibold text-text-primary">Connexion via {app.oauth_provider || 'OAuth'}</p>
+              <p className="text-[12px] font-semibold text-text-primary">{t.appMarketplace.connectVia.replace('${provider}', app.oauth_provider || 'OAuth')}</p>
             </div>
             <p className="text-[12px] text-text-secondary">
-              Cliquez pour connecter votre compte {app.name}. Vous serez redirigé vers {app.oauth_provider || app.name} pour autoriser Lume CRM.
+              {t.appMarketplace.oauthDescription.replace('${name}', app.name).replace('${provider}', app.oauth_provider || app.name)}
             </p>
             <button
               onClick={handleOAuth}
@@ -659,7 +664,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               className="glass-button-primary !text-[12px] w-full inline-flex items-center justify-center gap-2"
             >
               {saving ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
-              {saving ? 'Redirection...' : `Connecter ${app.name}`}
+              {saving ? t.appMarketplace.redirecting : t.appMarketplace.connectApp.replace('${name}', app.name)}
             </button>
             {app.official_setup_url && (
               <a
@@ -669,7 +674,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
                 className="inline-flex items-center gap-1.5 text-[11px] text-primary hover:underline w-full justify-center"
                 onClick={(e) => e.stopPropagation()}
               >
-                <ExternalLink size={10} /> Console développeur {app.name}
+                <ExternalLink size={10} /> {t.appMarketplace.developerConsole.replace('${name}', app.name)}
               </a>
             )}
           </div>
@@ -683,10 +688,10 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
         <div className="space-y-4">
           {/* Webhook URL */}
           <div className="space-y-2">
-            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Your Webhook Endpoint</p>
+            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t.appMarketplace.yourWebhookEndpoint}</p>
             <div className="flex items-center gap-2 p-3 bg-surface-secondary/50 rounded-xl border border-outline-subtle/40">
               <code className="text-[11px] text-text-primary font-mono flex-1 truncate">{webhookUrl}</code>
-              <button onClick={handleCopyWebhook} className="p-1.5 rounded-md text-text-tertiary hover:text-primary hover:bg-primary/5 transition-colors" title="Copy URL">
+              <button onClick={handleCopyWebhook} className="p-1.5 rounded-md text-text-tertiary hover:text-primary hover:bg-primary/5 transition-colors" title={t.appMarketplace.copyUrl}>
                 <Copy size={13} />
               </button>
             </div>
@@ -698,7 +703,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
           {/* API key if needed */}
           {app.auth_fields.length > 0 && (
             <div className="space-y-3">
-              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Authentication</p>
+              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t.appMarketplace.authentication}</p>
               {app.auth_fields.map((field) => (
                 <CredentialField
                   key={field.key}
@@ -716,7 +721,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
             className="glass-button-primary !text-[12px] w-full inline-flex items-center justify-center gap-2"
           >
             {saving ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
-            {saving ? 'Connecting...' : 'Activate Webhook'}
+            {saving ? t.appMarketplace.connecting : t.appMarketplace.activateWebhook}
           </button>
         </div>
       );
@@ -734,17 +739,17 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
             onClick={(e) => e.stopPropagation()}
           >
             <ExternalLink size={14} />
-            Open Life360 Website
+            {t.appMarketplace.openLife360Website}
           </a>
 
           <div>
-            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-3">Setup Guide</p>
+            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-3">{t.appMarketplace.setupGuide}</p>
             <div className="space-y-2.5">
               {[
-                { step: '1', title: 'Install the Life360 app', desc: 'Download Life360 from the App Store or Google Play on each technician\'s phone.' },
-                { step: '2', title: 'Create a team circle', desc: 'Open the app and create a new circle for your field team.' },
-                { step: '3', title: 'Invite technicians', desc: 'Add all technicians to the circle using their phone numbers or email addresses.' },
-                { step: '4', title: 'Enable location sharing', desc: 'Each technician must accept the invite and enable "Always" location sharing.' },
+                { step: '1', title: t.appMarketplace.life360Step1Title, desc: t.appMarketplace.life360Step1Desc },
+                { step: '2', title: t.appMarketplace.life360Step2Title, desc: t.appMarketplace.life360Step2Desc },
+                { step: '3', title: t.appMarketplace.life360Step3Title, desc: t.appMarketplace.life360Step3Desc },
+                { step: '4', title: t.appMarketplace.life360Step4Title, desc: t.appMarketplace.life360Step4Desc },
               ].map((item) => (
                 <div key={item.step} className="flex items-start gap-3 p-3 bg-surface-secondary/50 rounded-xl">
                   <div className="w-5 h-5 rounded-md bg-text-primary/10 flex items-center justify-center shrink-0 mt-0.5">
@@ -761,7 +766,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
 
           <div className="p-3 bg-surface-secondary/30 rounded-xl border border-outline-subtle/30">
             <p className="text-[11px] text-text-tertiary leading-relaxed">
-              Life360 does not currently offer a public API for third-party integrations. This setup guide helps your team use Life360's mobile app for location sharing. Full API integration will be added when available.
+              {t.appMarketplace.life360NoApiNote}
             </p>
           </div>
 
@@ -773,7 +778,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
             onClick={(e) => e.stopPropagation()}
           >
             <ExternalLink size={12} />
-            Download Life360 App
+            {t.appMarketplace.downloadLife360App}
           </a>
         </div>
       );
@@ -791,13 +796,13 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
             onClick={(e) => e.stopPropagation()}
           >
             <ExternalLink size={13} />
-            <span className="font-medium">Obtenir vos identifiants depuis {app.name}</span>
+            <span className="font-medium">{t.appMarketplace.getCredentialsFrom.replace('${name}', app.name)}</span>
           </a>
         )}
         {app.auth_fields.length > 0 ? (
           <>
             <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">
-              {app.connection_type === 'api_key' ? 'Identifiants API' : 'Configuration'}
+              {app.connection_type === 'api_key' ? t.appMarketplace.apiCredentials : t.appMarketplace.configuration}
             </p>
             <div className="space-y-3">
               {app.auth_fields.map((field) => (
@@ -816,16 +821,16 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
                 className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5"
               >
                 {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                {saving ? 'Validation en cours...' : 'Valider & Connecter'}
+                {saving ? t.appMarketplace.validating : t.appMarketplace.validateAndConnect}
               </button>
             </div>
             <p className="text-[10px] text-text-tertiary">
-              Les identifiants seront testés en temps réel avant d'être sauvegardés.
+              {t.appMarketplace.credentialsTestedBeforeSave}
             </p>
           </>
         ) : (
           <div className="p-4 bg-surface-secondary/50 rounded-xl text-center">
-            <p className="text-[12px] text-text-tertiary">Aucune configuration requise pour cette intégration.</p>
+            <p className="text-[12px] text-text-tertiary">{t.appMarketplace.noConfigRequired}</p>
           </div>
         )}
       </div>
@@ -865,7 +870,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
             <div className="flex items-center gap-2 text-[11px] text-text-tertiary font-medium">
               <span>{app.category}</span>
               <span>&middot;</span>
-              <span>{connectionLabel(app.connection_type)}</span>
+              <span>{connectionLabel(app.connection_type, t.appMarketplace)}</span>
               {app.official_site_url && (
                 <>
                   <span>&middot;</span>
@@ -876,7 +881,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
                     className="inline-flex items-center gap-1 text-primary hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    Website <ExternalLink size={9} />
+                    {t.appMarketplace.website} <ExternalLink size={9} />
                   </a>
                 </>
               )}
@@ -890,7 +895,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
                     className="inline-flex items-center gap-1 text-primary hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    Docs <ExternalLink size={9} />
+                    {t.appMarketplace.docs} <ExternalLink size={9} />
                   </a>
                 </>
               )}
@@ -902,7 +907,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
 
           {/* Features */}
           <div>
-            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-2">Supported Features</p>
+            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-2">{t.appMarketplace.supportedFeatures}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {app.supported_features.map((f, i) => (
                 <div key={i} className="flex items-center gap-2 text-[12px] text-text-secondary">
@@ -919,7 +924,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
           {/* Connection UI */}
           <div>
             <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-3">
-              {status === 'connected' ? 'Connection Status' : 'Setup'}
+              {status === 'connected' ? t.appMarketplace.connectionStatus : t.appMarketplace.setup}
             </p>
             {renderConnectionUI()}
           </div>
@@ -937,6 +942,7 @@ function ConnectedAppsSummary({
   onOpenApp: (app: Integration) => void;
   getStatus: (app: Integration) => ResolvedStatus;
 }) {
+  const { t } = useTranslation();
   const connected = INTEGRATIONS.filter((app) => getStatus(app) === 'connected');
   if (connected.length === 0) return null;
 
@@ -944,7 +950,7 @@ function ConnectedAppsSummary({
     <div className="section-card p-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
-          Connected ({connected.length})
+          {t.appMarketplace.connectedCount.replace('${count}', String(connected.length))}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -966,6 +972,7 @@ function ConnectedAppsSummary({
 
 // ─── Main Marketplace Page ──────────────────────────────────────
 export default function AppMarketplace() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -1001,7 +1008,7 @@ export default function AppMarketplace() {
         onClick={() => navigate('/settings')}
         className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-text-secondary hover:text-text-primary transition-colors"
       >
-        <ArrowLeft size={14} /> Settings
+        <ArrowLeft size={14} /> {t.nav.settings}
       </button>
 
       {/* Header */}
@@ -1010,8 +1017,8 @@ export default function AppMarketplace() {
           <Zap size={18} className="text-surface" />
         </div>
         <div>
-          <h1 className="text-[22px] font-bold text-text-primary tracking-tight">App Marketplace</h1>
-          <p className="text-[13px] text-text-tertiary">Connect your favorite tools to extend your business workflow.</p>
+          <h1 className="text-[22px] font-bold text-text-primary tracking-tight">{t.appMarketplace.title}</h1>
+          <p className="text-[13px] text-text-tertiary">{t.appMarketplace.subtitle}</p>
         </div>
       </div>
 
@@ -1024,7 +1031,7 @@ export default function AppMarketplace() {
         <input
           value={search}
           onChange={(e) => { setSearch(e.target.value); setActiveCategory(null); }}
-          placeholder="Search apps or features..."
+          placeholder={t.appMarketplace.searchPlaceholder}
           className="w-full bg-surface border border-outline-subtle/60 rounded-xl pl-9 pr-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40 transition-colors"
         />
         {search && (
@@ -1045,7 +1052,7 @@ export default function AppMarketplace() {
               : 'bg-surface border-outline-subtle/60 text-text-secondary hover:border-outline hover:text-text-primary'
           )}
         >
-          All Apps
+          {t.appMarketplace.allApps}
         </button>
         {CATEGORIES.map((cat) => (
           <button
@@ -1070,7 +1077,7 @@ export default function AppMarketplace() {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Star size={14} className="text-text-secondary" />
-              <h2 className="text-[15px] font-bold text-text-primary">Featured Apps</h2>
+              <h2 className="text-[15px] font-bold text-text-primary">{t.appMarketplace.featuredApps}</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {featured.map((app) => (
@@ -1098,12 +1105,12 @@ export default function AppMarketplace() {
       ) : filtered.length === 0 ? (
         <div className="section-card p-12 text-center">
           <Search size={28} className="text-text-tertiary mx-auto mb-3 opacity-30" />
-          <p className="text-[14px] font-medium text-text-secondary">No apps found</p>
-          <p className="text-[12px] text-text-tertiary mt-1">Try a different search term or category.</p>
+          <p className="text-[14px] font-medium text-text-secondary">{t.appMarketplace.noAppsFound}</p>
+          <p className="text-[12px] text-text-tertiary mt-1">{t.appMarketplace.tryDifferentSearch}</p>
         </div>
       ) : (
         <div>
-          <p className="text-[12px] text-text-tertiary mb-3">{filtered.length} app{filtered.length !== 1 ? 's' : ''} found</p>
+          <p className="text-[12px] text-text-tertiary mb-3">{t.appMarketplace.appsFound.replace('${count}', String(filtered.length))}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {filtered.map((app) => (
               <AppCard key={app.id} app={app} status={getStatus(app)} onClick={() => setSelectedApp(app)} />

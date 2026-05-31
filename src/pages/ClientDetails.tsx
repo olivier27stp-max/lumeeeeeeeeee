@@ -133,8 +133,8 @@ function formatTime(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text).then(() => toast.success('Copied!')).catch(() => {});
+function copyToClipboard(text: string, msg = 'Copied!') {
+  navigator.clipboard.writeText(text).then(() => toast.success(msg)).catch(() => {});
 }
 
 // ─── Tabs ────────────────────────────────────────────────────────────
@@ -322,10 +322,10 @@ export default function ClientDetails() {
     setNotesSaving(true);
     try {
       await supabase.from('clients').update({ notes }).eq('id', client.id);
-      toast.success('Notes saved');
+      toast.success(t.clientDetails.notesSaved);
       setNotesEdited(false);
     } catch {
-      toast.error('Failed to save notes');
+      toast.error(t.clientDetails.failedToSaveNotes);
     } finally {
       setNotesSaving(false);
     }
@@ -336,7 +336,7 @@ export default function ClientDetails() {
     if (!client) return;
     try {
       await softDeleteClient(client.id);
-      toast.success('Client archived.');
+      toast.success(t.clientDetails.clientArchived);
       navigate('/clients');
     } catch (err: any) {
       toast.error(err?.message || 'Failed to archive client.');
@@ -488,7 +488,7 @@ export default function ClientDetails() {
           <button
             onClick={() => navigate(`/calendar?date=${new Date(job.scheduled_at!).toISOString().slice(0, 10)}&view=day`)}
             className="p-1.5 rounded-md text-text-tertiary hover:text-primary hover:bg-primary/10 transition-colors"
-            title="View in calendar"
+            title={language === 'fr' ? 'Voir dans le calendrier' : 'View in calendar'}
           >
             <Calendar size={14} />
           </button>
@@ -522,13 +522,13 @@ export default function ClientDetails() {
         {/* Action buttons */}
         <div className="flex items-center gap-2">
           {client.phone && (
-            <a href={`tel:${client.phone}`} className="glass-button inline-flex items-center gap-1.5" title="Call">
-              <Phone size={14} /> Call
+            <a href={`tel:${client.phone}`} className="glass-button inline-flex items-center gap-1.5" title={language === 'fr' ? 'Appeler' : 'Call'}>
+              <Phone size={14} /> {language === 'fr' ? 'Appeler' : 'Call'}
             </a>
           )}
           {client.email && (
-            <a href={`mailto:${client.email}`} className="glass-button inline-flex items-center gap-1.5" title="Email">
-              <Mail size={14} /> Email
+            <a href={`mailto:${client.email}`} className="glass-button inline-flex items-center gap-1.5" title={language === 'fr' ? 'Courriel' : 'Email'}>
+              <Mail size={14} /> {language === 'fr' ? 'Courriel' : 'Email'}
             </a>
           )}
           {client.phone && (
@@ -631,13 +631,13 @@ export default function ClientDetails() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="icon-tile icon-tile-sm icon-tile-blue mt-0.5 hover:scale-110 transition-transform cursor-pointer"
-                    title="Open in Google Maps"
+                    title={language === 'fr' ? 'Ouvrir dans Google Maps' : 'Open in Google Maps'}
                   >
                     <MapPin size={13} strokeWidth={2} />
                   </a>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-text-primary">
-                      {client.address || [client.street_number, client.street_name].filter(Boolean).join(' ') || 'Address'}
+                      {client.address || [client.street_number, client.street_name].filter(Boolean).join(' ') || (language === 'fr' ? 'Adresse' : 'Address')}
                     </p>
                     <p className="text-[12px] text-text-tertiary mt-0.5">
                       {[client.city, client.province, client.postal_code].filter(Boolean).join(', ')}
@@ -649,23 +649,23 @@ export default function ClientDetails() {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="glass-button !text-[11px] !px-2 !py-1 inline-flex items-center gap-1"
-                      title="Get directions"
+                      title={language === 'fr' ? 'Obtenir l\'itinéraire' : 'Get directions'}
                     >
-                      <Navigation size={11} /> Directions
+                      <Navigation size={11} /> {language === 'fr' ? 'Itinéraire' : 'Directions'}
                     </a>
                     <a
                       href={buildGoogleMapsUrl(client)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="glass-button !text-[11px] !px-2 !py-1 inline-flex items-center gap-1"
-                      title="View on map"
+                      title={language === 'fr' ? 'Voir sur la carte' : 'View on map'}
                     >
-                      <ExternalLink size={11} /> Map
+                      <ExternalLink size={11} /> {language === 'fr' ? 'Carte' : 'Map'}
                     </a>
                   </div>
                 </div>
               ) : (
-                <p className="text-[13px] text-text-tertiary">No properties added yet.</p>
+                <p className="text-[13px] text-text-tertiary">{language === 'fr' ? 'Aucune propriété ajoutée.' : 'No properties added yet.'}</p>
               )}
             </div>
           </div>
@@ -675,7 +675,7 @@ export default function ClientDetails() {
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <div className="icon-tile icon-tile-sm icon-tile-blue"><User size={13} strokeWidth={2} /></div>
-                Contacts
+                {language === 'fr' ? 'Contacts' : 'Contacts'}
               </h2>
             </div>
             <div className="overflow-x-auto">
@@ -683,7 +683,7 @@ export default function ClientDetails() {
                 <thead>
                   <tr className="border-b border-border">
                     <th className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.name}</th>
-                    <th className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Role</th>
+                    <th className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{language === 'fr' ? 'Rôle' : 'Role'}</th>
                     <th className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.phone}</th>
                     <th className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.common.email}</th>
                   </tr>
@@ -691,12 +691,12 @@ export default function ClientDetails() {
                 <tbody>
                   <tr className="border-b border-border-light">
                     <td className="px-5 py-3 text-[13px] font-semibold text-text-primary">{fullName}</td>
-                    <td className="px-5 py-3 text-[13px] text-text-secondary">Primary</td>
+                    <td className="px-5 py-3 text-[13px] text-text-secondary">{language === 'fr' ? 'Principal' : 'Primary'}</td>
                     <td className="px-5 py-3 text-[13px] text-text-secondary">
                       {client.phone ? (
                         <span className="inline-flex items-center gap-1.5">
                           <a href={`tel:${client.phone}`} className="text-primary hover:underline">{client.phone}</a>
-                          <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary" title="Copy">
+                          <button onClick={() => copyToClipboard(client.phone!, t.clientDetails.copied)} className="text-text-tertiary hover:text-text-primary" title={language === 'fr' ? 'Copier' : 'Copy'}>
                             <Copy size={11} />
                           </button>
                         </span>
@@ -706,7 +706,7 @@ export default function ClientDetails() {
                       {client.email ? (
                         <span className="inline-flex items-center gap-1.5">
                           <a href={`mailto:${client.email}`} className="text-primary hover:underline">{client.email}</a>
-                          <button onClick={() => copyToClipboard(client.email!)} className="text-text-tertiary hover:text-text-primary" title="Copy">
+                          <button onClick={() => copyToClipboard(client.email!, t.clientDetails.copied)} className="text-text-tertiary hover:text-text-primary" title={language === 'fr' ? 'Copier' : 'Copy'}>
                             <Copy size={11} />
                           </button>
                         </span>
@@ -748,7 +748,7 @@ export default function ClientDetails() {
               {activeTab === 'active' && (
                 <div className="space-y-2.5">
                   {activeJobs.length === 0 ? (
-                    <p className="text-[13px] text-text-tertiary py-4 text-center">No active work for this client.</p>
+                    <p className="text-[13px] text-text-tertiary py-4 text-center">{language === 'fr' ? 'Aucun travail actif pour ce client.' : 'No active work for this client.'}</p>
                   ) : activeJobs.map(renderJobRow)}
                 </div>
               )}
@@ -757,7 +757,7 @@ export default function ClientDetails() {
               {activeTab === 'completed' && (
                 <div className="space-y-2.5">
                   {completedJobs.length === 0 ? (
-                    <p className="text-[13px] text-text-tertiary py-4 text-center">No completed jobs.</p>
+                    <p className="text-[13px] text-text-tertiary py-4 text-center">{language === 'fr' ? 'Aucune tâche complétée.' : 'No completed jobs.'}</p>
                   ) : completedJobs.map(renderJobRow)}
                 </div>
               )}
@@ -775,7 +775,7 @@ export default function ClientDetails() {
               {activeTab === 'invoices' && (
                 <div className="space-y-2.5">
                   {invoices.length === 0 ? (
-                    <p className="text-[13px] text-text-tertiary py-4 text-center">No invoices for this client.</p>
+                    <p className="text-[13px] text-text-tertiary py-4 text-center">{language === 'fr' ? 'Aucune facture pour ce client.' : 'No invoices for this client.'}</p>
                   ) : invoices.map((inv) => (
                     <button
                       key={inv.id}
@@ -824,7 +824,7 @@ export default function ClientDetails() {
                     </button>
                   </div>
                   {realQuotes.length === 0 ? (
-                    <p className="text-[13px] text-text-tertiary py-4 text-center">No quotes for this client.</p>
+                    <p className="text-[13px] text-text-tertiary py-4 text-center">{language === 'fr' ? 'Aucun devis pour ce client.' : 'No quotes for this client.'}</p>
                   ) : realQuotes.map((q) => (
                     <button
                       key={q.id}
@@ -832,7 +832,7 @@ export default function ClientDetails() {
                         try {
                           const detail = await getQuoteById(q.id);
                           if (detail) { setQuoteDetail(detail); setIsQuoteDetailsOpen(true); }
-                        } catch { toast.error('Failed to load quote'); }
+                        } catch { toast.error(t.clientDetails.failedToLoadQuote); }
                       }}
                       className="w-full rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between text-left hover:border-primary/30 transition-colors group"
                     >
@@ -911,7 +911,7 @@ export default function ClientDetails() {
               {/* Upcoming */}
               {upcomingEvents.length > 0 && (
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Upcoming</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">{language === 'fr' ? 'À venir' : 'Upcoming'}</p>
                   <div className="space-y-2">
                     {upcomingEvents.slice(0, 5).map((event) => (
                       <div key={event.id} className="flex items-center gap-3 rounded-lg border border-outline-subtle bg-surface-secondary p-3">
@@ -937,7 +937,7 @@ export default function ClientDetails() {
               {/* Past */}
               {pastEvents.length > 0 && (
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Past</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">{language === 'fr' ? 'Passés' : 'Past'}</p>
                   <div className="space-y-2">
                     {pastEvents.slice(-3).reverse().map((event) => (
                       <div key={event.id} className="flex items-center gap-3 rounded-lg border border-outline-subtle bg-surface-secondary/50 p-3 opacity-70">
@@ -955,7 +955,7 @@ export default function ClientDetails() {
               )}
 
               {upcomingEvents.length === 0 && pastEvents.length === 0 && (
-                <p className="text-[13px] text-text-tertiary text-center py-4">No schedule events.</p>
+                <p className="text-[13px] text-text-tertiary text-center py-4">{language === 'fr' ? 'Aucun événement planifié.' : 'No schedule events.'}</p>
               )}
             </div>
           </div>
@@ -966,7 +966,7 @@ export default function ClientDetails() {
           {/* Contact Info */}
           <div className="rounded-xl border border-outline bg-surface">
             <div className="px-5 py-3.5 border-b border-outline-subtle">
-              <h2 className="text-[13px] font-semibold text-text-primary">Contact Information</h2>
+              <h2 className="text-[13px] font-semibold text-text-primary">{language === 'fr' ? 'Coordonnées' : 'Contact Information'}</h2>
             </div>
             <div className="p-5 space-y-4">
               {/* Phone */}
@@ -977,7 +977,7 @@ export default function ClientDetails() {
                   {client.phone ? (
                     <div className="flex items-center gap-2 mt-0.5">
                       <a href={`tel:${client.phone}`} className="text-[13px] font-semibold text-primary hover:underline">{client.phone}</a>
-                      <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary" title="Copy phone">
+                      <button onClick={() => copyToClipboard(client.phone!, t.clientDetails.copied)} className="text-text-tertiary hover:text-text-primary" title={language === 'fr' ? 'Copier le téléphone' : 'Copy phone'}>
                         <Copy size={11} />
                       </button>
                     </div>
@@ -994,7 +994,7 @@ export default function ClientDetails() {
                   {client.email ? (
                     <div className="flex items-center gap-2 mt-0.5">
                       <a href={`mailto:${client.email}`} className="text-[13px] font-semibold text-primary hover:underline truncate">{client.email}</a>
-                      <button onClick={() => copyToClipboard(client.email!)} className="text-text-tertiary hover:text-text-primary flex-shrink-0" title="Copy email">
+                      <button onClick={() => copyToClipboard(client.email!, t.clientDetails.copied)} className="text-text-tertiary hover:text-text-primary flex-shrink-0" title={language === 'fr' ? 'Copier le courriel' : 'Copy email'}>
                         <Copy size={11} />
                       </button>
                     </div>
@@ -1011,12 +1011,12 @@ export default function ClientDetails() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="icon-tile icon-tile-sm icon-tile-blue hover:scale-110 transition-transform"
-                    title="Open in Google Maps"
+                    title={language === 'fr' ? 'Ouvrir dans Google Maps' : 'Open in Google Maps'}
                   >
                     <MapPin size={13} strokeWidth={2} />
                   </a>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Address</p>
+                    <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Adresse' : 'Address'}</p>
                     <a
                       href={buildGoogleMapsUrl(client)}
                       target="_blank"
@@ -1032,14 +1032,14 @@ export default function ClientDetails() {
               <div className="flex items-center gap-3">
                 <div className="icon-tile icon-tile-sm icon-tile-blue"><User size={13} strokeWidth={2} /></div>
                 <div>
-                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Lead Source</p>
+                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Source du lead' : 'Lead Source'}</p>
                   <p className="text-[13px] font-semibold text-text-primary mt-0.5">
-                    {leads[0]?.source || <span className="text-text-tertiary font-normal">Not specified</span>}
+                    {leads[0]?.source || <span className="text-text-tertiary font-normal">{language === 'fr' ? 'Non spécifiée' : 'Not specified'}</span>}
                   </p>
                 </div>
               </div>
               <div className="pt-2 border-t border-outline-subtle">
-                <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Client since</p>
+                <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Client depuis' : 'Client since'}</p>
                 <p className="text-[13px] font-semibold text-text-primary mt-0.5">{formatDate(client.created_at)}</p>
               </div>
             </div>
@@ -1050,7 +1050,7 @@ export default function ClientDetails() {
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <div className="icon-tile icon-tile-sm icon-tile-blue"><StickyNote size={13} strokeWidth={2} /></div>
-                Notes
+                {t.common.notes}
               </h2>
               {notesEdited && (
                 <button
@@ -1058,7 +1058,7 @@ export default function ClientDetails() {
                   disabled={notesSaving}
                   className="glass-button-primary !text-[12px] !px-2.5 !py-1"
                 >
-                  {notesSaving ? 'Saving...' : 'Save'}
+                  {notesSaving ? t.common.saving : t.common.save}
                 </button>
               )}
             </div>
@@ -1067,7 +1067,7 @@ export default function ClientDetails() {
                 value={notes}
                 onChange={(e) => { setNotes(e.target.value); setNotesEdited(true); }}
                 onBlur={handleSaveNotes}
-                placeholder="Add notes about this client..."
+                placeholder={language === 'fr' ? 'Ajouter des notes sur ce client...' : 'Add notes about this client...'}
                 className="w-full bg-transparent text-[13px] text-text-primary placeholder:text-text-tertiary resize-none min-h-[80px] focus:outline-none"
                 rows={4}
               />
@@ -1079,10 +1079,10 @@ export default function ClientDetails() {
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <div className="icon-tile icon-tile-sm icon-tile-blue"><Tag size={13} strokeWidth={2} /></div>
-                Tags
+                {language === 'fr' ? 'Étiquettes' : 'Tags'}
               </h2>
               <button onClick={() => setShowTagInput(true)} className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1">
-                <Plus size={12} /> New Tag
+                <Plus size={12} /> {language === 'fr' ? 'Nouvelle étiquette' : 'New Tag'}
               </button>
             </div>
             <div className="p-5">
@@ -1096,16 +1096,16 @@ export default function ClientDetails() {
                       if (e.key === 'Enter') handleAddTag();
                       if (e.key === 'Escape') { setShowTagInput(false); setNewTag(''); }
                     }}
-                    placeholder="Tag name..."
+                    placeholder={language === 'fr' ? 'Nom de l\'étiquette...' : 'Tag name...'}
                     className="glass-input text-[13px] flex-1"
                     autoFocus
                   />
-                  <button onClick={handleAddTag} className="glass-button-primary !text-[12px] !px-2.5 !py-1">Add</button>
+                  <button onClick={handleAddTag} className="glass-button-primary !text-[12px] !px-2.5 !py-1">{language === 'fr' ? 'Ajouter' : 'Add'}</button>
                   <button onClick={() => { setShowTagInput(false); setNewTag(''); }} className="glass-button !text-[12px] !px-2.5 !py-1"><X size={12} /></button>
                 </div>
               )}
               {tags.length === 0 && !showTagInput ? (
-                <p className="text-[13px] text-text-tertiary">No tags added.</p>
+                <p className="text-[13px] text-text-tertiary">{language === 'fr' ? 'Aucune étiquette.' : 'No tags added.'}</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {tags.map((tag) => (
@@ -1127,22 +1127,22 @@ export default function ClientDetails() {
             <div className="px-5 py-3.5 border-b border-outline-subtle">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <div className="icon-tile icon-tile-sm icon-tile-blue"><DollarSign size={13} strokeWidth={2} /></div>
-                Billing History
+                {language === 'fr' ? 'Historique de facturation' : 'Billing History'}
               </h2>
             </div>
             <div className="p-5">
               {/* Summary row */}
               <div className="grid grid-cols-3 gap-2 mb-4">
                 <div className="text-center">
-                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Invoiced</p>
+                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Facturé' : 'Invoiced'}</p>
                   <p className="text-[14px] font-bold text-text-primary tabular-nums">{formatCurrency(Math.round(totalInvoiced))}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Paid</p>
+                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Payé' : 'Paid'}</p>
                   <p className="text-[14px] font-bold text-success tabular-nums">{formatCurrency(Math.round(totalPaid))}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Balance</p>
+                  <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Solde' : 'Balance'}</p>
                   <p className={cn('text-[14px] font-bold tabular-nums', currentBalance > 0 ? 'text-warning' : 'text-success')}>
                     {formatCurrency(Math.round(currentBalance))}
                   </p>
@@ -1150,7 +1150,7 @@ export default function ClientDetails() {
               </div>
 
               {billingHistory.length === 0 ? (
-                <p className="text-[13px] text-text-tertiary text-center py-2">No billing history.</p>
+                <p className="text-[13px] text-text-tertiary text-center py-2">{language === 'fr' ? 'Aucun historique de facturation.' : 'No billing history.'}</p>
               ) : (
                 <div className="space-y-2 max-h-[300px] overflow-y-auto">
                   {billingHistory.slice(0, 10).map((item) =>
@@ -1162,7 +1162,7 @@ export default function ClientDetails() {
                       >
                         <div>
                           <p className="text-[13px] font-medium text-text-primary">
-                            Invoice {(item.data as InvoiceRecord).invoice_number ? `#${(item.data as InvoiceRecord).invoice_number}` : ''}
+                            {language === 'fr' ? 'Facture' : 'Invoice'} {(item.data as InvoiceRecord).invoice_number ? `#${(item.data as InvoiceRecord).invoice_number}` : ''}
                           </p>
                           <p className="text-[11px] text-text-tertiary">{formatDate(item.date)}</p>
                         </div>
@@ -1180,7 +1180,7 @@ export default function ClientDetails() {
                       >
                         <div>
                           <p className="text-[13px] font-medium text-text-primary flex items-center gap-1.5">
-                            <DollarSign size={12} className="text-success" /> Payment
+                            <DollarSign size={12} className="text-success" /> {language === 'fr' ? 'Paiement' : 'Payment'}
                             {(item.data as PaymentRecord).method && (
                               <span className="text-[11px] text-text-tertiary font-normal">({(item.data as PaymentRecord).method})</span>
                             )}

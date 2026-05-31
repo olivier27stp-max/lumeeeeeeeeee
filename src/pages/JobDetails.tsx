@@ -126,9 +126,9 @@ export default function JobDetails() {
           const updated = [...current, { name: file.name, url: publicUrl }];
           await supabase.from('jobs').update({ attachments: updated, updated_at: new Date().toISOString() }).eq('id', job.id);
           setJob((prev) => prev ? { ...prev, attachments: updated } : prev);
-          toast.success(`${file.name} uploaded`);
+          toast.success(t.jobDetails.fileUploaded.replace('${fileName}', file.name));
         } catch (err: any) {
-          toast.error(err?.message || `Failed to upload ${file.name}`);
+          toast.error(err?.message || t.jobDetails.failedUpload.replace('${fileName}', file.name));
         }
       }
     },
@@ -159,7 +159,7 @@ export default function JobDetails() {
         setJob(jobData);
         setLineItems(items);
       })
-      .catch((err) => setError(err.message || 'Failed to load job'))
+      .catch((err) => setError(err.message || t.jobDetails.failedLoadJob))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -198,7 +198,7 @@ export default function JobDetails() {
             invoice_number: r.invoice_number || null,
             status: r.status || 'draft',
             due_date: r.due_date || null,
-            subject: r.subject || 'For Services Rendered',
+            subject: r.subject || t.jobDetails.forServicesRendered,
             total_cents: Number(r.total_cents || 0),
             balance_cents: Number(r.balance_cents ?? r.total_cents ?? 0),
           })),
@@ -279,21 +279,18 @@ export default function JobDetails() {
     try {
       const updated = await updateJob(job.id, { status: 'completed' });
       setJob(updated);
-      toast.success('Job marked as completed');
+      toast.success(t.jobDetails.jobMarkedCompleted);
       setMoreActionsOpen(false);
 
       // Auto-propose invoice creation if no invoice exists
       if (invoices.length === 0) {
-        const shouldCreate = window.confirm(
-          t.jobDetails?.createInvoicePrompt
-            || 'Job completed! Would you like to create an invoice now?'
-        );
+        const shouldCreate = window.confirm(t.jobDetails.createInvoicePrompt);
         if (shouldCreate) {
           handleCreateInvoice();
         }
       }
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to close job');
+      toast.error(err?.message || t.jobDetails.failedCloseJob);
     } finally {
       setIsClosing(false);
     }
@@ -305,14 +302,14 @@ export default function JobDetails() {
     try {
       const result = await createInvoiceFromJob({ jobId: job.id, sendNow: false });
       const invoiceId = String(result.invoice_id || result.invoice?.id || '').trim();
-      if (!invoiceId) throw new Error('Invoice created but ID is missing.');
+      if (!invoiceId) throw new Error(t.jobDetails.invoiceIdMissing);
       queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
       queryClient.invalidateQueries({ queryKey: ['jobsTable'] });
-      toast.success(result.already_exists ? 'Invoice already exists' : 'Invoice draft created');
+      toast.success(result.already_exists ? t.jobDetails.invoiceAlreadyExistsShort : t.jobDetails.invoiceDraftCreatedShort);
       setMoreActionsOpen(false);
       navigate(result.already_exists ? `/invoices/${invoiceId}` : `/invoices/${invoiceId}/edit`);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to create invoice');
+      toast.error(err?.message || t.jobDetails.failedCreateInvoiceShort);
     } finally {
       setIsCreatingInvoice(false);
     }
@@ -352,7 +349,7 @@ export default function JobDetails() {
         {/* Drop zone overlay */}
         {isDragging && (
           <div className="absolute inset-0 z-50 bg-primary/10 border-2 border-dashed border-primary rounded-xl flex items-center justify-center pointer-events-none">
-            <p className="text-primary font-semibold text-lg">Drop files here</p>
+            <p className="text-primary font-semibold text-lg">{t.jobDetails.dropFilesHere}</p>
           </div>
         )}
         {/* ═══ BACK NAV ═══ */}
@@ -372,13 +369,13 @@ export default function JobDetails() {
             <div>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-[22px] font-extrabold text-text-primary leading-tight">
-                  {job.client_name || 'Unassigned'}
+                  {job.client_name || t.jobDetails.unassigned}
                 </h1>
                 {job.client_id && (
                   <button
                     onClick={() => navigate(`/clients/${job.client_id}`)}
                     className="text-text-tertiary hover:text-text-primary transition-colors"
-                    title="View client"
+                    title={t.jobDetails.viewClient}
                   >
                     <LinkIcon size={14} />
                   </button>
@@ -388,7 +385,7 @@ export default function JobDetails() {
                 <span className="text-[13px] text-text-secondary">{job.title}</span>
                 <StatusBadge status={job.status} />
                 {isToday && (
-                  <span className="badge-neutral text-[11px]">Today</span>
+                  <span className="badge-neutral text-[11px]">{t.jobDetails.today}</span>
                 )}
               </div>
             </div>
@@ -400,10 +397,10 @@ export default function JobDetails() {
               onClick={() => setShowSmsModal(true)}
               className="glass-button-primary inline-flex items-center gap-1.5"
             >
-              <MessageSquare size={14} /> Text Confirmation
+              <MessageSquare size={14} /> {t.jobDetails.textConfirmation}
             </button>
             <button onClick={handleEdit} className="glass-button inline-flex items-center gap-1.5">
-              <Edit3 size={14} /> Edit
+              <Edit3 size={14} /> {t.jobDetails.edit}
             </button>
 
             {/* More dropdown */}
@@ -418,13 +415,13 @@ export default function JobDetails() {
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setMoreActionsOpen(false)} />
                   <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border border-outline bg-surface shadow-lg py-1">
-                    <DropdownItem icon={<CheckCircle2 size={13} />} label={isClosing ? 'Closing...' : 'Close Job'} onClick={handleCloseJob} disabled={isClosing} />
-                    <DropdownItem icon={<Send size={13} />} label="Send Follow-up" onClick={() => { setEmailMode('followup'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
-                    <DropdownItem icon={<Mail size={13} />} label="Send Email" onClick={() => { setEmailMode('generic'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
+                    <DropdownItem icon={<CheckCircle2 size={13} />} label={isClosing ? t.jobDetails.closing : t.jobDetails.closeJob} onClick={handleCloseJob} disabled={isClosing} />
+                    <DropdownItem icon={<Send size={13} />} label={t.jobDetails.sendFollowUp} onClick={() => { setEmailMode('followup'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
+                    <DropdownItem icon={<Mail size={13} />} label={t.jobDetails.sendEmail} onClick={() => { setEmailMode('generic'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
                     <div className="border-t border-border my-1" />
-                    <DropdownItem icon={<FileText size={13} />} label={isCreatingInvoice ? 'Creating...' : 'Create Invoice'} onClick={handleCreateInvoice} disabled={isCreatingInvoice} />
-                    <DropdownItem icon={<Download size={13} />} label="Download PDF" onClick={handleDownloadPdf} />
-                    <DropdownItem icon={<Printer size={13} />} label="Print" onClick={handlePrint} />
+                    <DropdownItem icon={<FileText size={13} />} label={isCreatingInvoice ? t.jobDetails.creating : t.jobDetails.createInvoice} onClick={handleCreateInvoice} disabled={isCreatingInvoice} />
+                    <DropdownItem icon={<Download size={13} />} label={t.jobDetails.downloadPdf} onClick={handleDownloadPdf} />
+                    <DropdownItem icon={<Printer size={13} />} label={t.jobDetails.print} onClick={handlePrint} />
                   </div>
                 </>
               )}
@@ -444,7 +441,7 @@ export default function JobDetails() {
               {isToday && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-primary">
                   <span className="w-1.5 h-1.5 rounded-full bg-text-primary" />
-                  Today
+                  {t.jobDetails.today}
                 </span>
               )}
               {job.scheduled_at && (
@@ -454,7 +451,7 @@ export default function JobDetails() {
               )}
             </div>
             <span className="text-[13px] font-semibold text-text-secondary tabular-nums">
-              Job #{job.job_number}
+              {t.jobDetails.jobNumber.replace('${number}', String(job.job_number))}
             </span>
           </div>
 
@@ -462,13 +459,13 @@ export default function JobDetails() {
           <div className="px-5 pt-5 pb-1">
             <div className="flex items-center gap-2">
               <h2 className="text-[20px] font-bold text-text-primary">
-                {job.client_name || 'Unassigned'}
+                {job.client_name || t.jobDetails.unassigned}
               </h2>
               {job.client_id && (
                 <button
                   onClick={() => navigate(`/clients/${job.client_id}`)}
                   className="text-text-tertiary hover:text-text-primary transition-colors"
-                  title="View client profile"
+                  title={t.jobDetails.viewClientProfile}
                 >
                   <LinkIcon size={14} />
                 </button>
@@ -483,7 +480,7 @@ export default function JobDetails() {
             <div className="p-5 space-y-5">
               {/* Property address */}
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Property address</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">{t.jobDetails.propertyAddressLabel}</p>
                 <div className="flex items-start gap-3">
                   <div className="icon-tile icon-tile-sm icon-tile-purple mt-0.5">
                     <MapPin size={13} strokeWidth={2} />
@@ -494,7 +491,7 @@ export default function JobDetails() {
                         <div key={i}>{part.trim()}</div>
                       ))
                     ) : (
-                      <span className="text-text-tertiary">No address</span>
+                      <span className="text-text-tertiary">{t.jobDetails.noAddress}</span>
                     )}
                   </div>
                 </div>
@@ -502,7 +499,7 @@ export default function JobDetails() {
 
               {/* Contact details */}
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Contact details</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">{t.jobDetails.contactDetails}</p>
                 <div className="space-y-1.5">
                   {clientInfo?.phone && (
                     <a href={`tel:${clientInfo.phone}`} className="flex items-center gap-2 text-[13px] text-text-primary hover:text-text-secondary transition-colors">
@@ -517,7 +514,7 @@ export default function JobDetails() {
                     </a>
                   )}
                   {!clientInfo?.phone && !clientInfo?.email && (
-                    <p className="text-[13px] text-text-tertiary">No contact info</p>
+                    <p className="text-[13px] text-text-tertiary">{t.jobDetails.noContactInfo}</p>
                   )}
                 </div>
               </div>
@@ -525,14 +522,14 @@ export default function JobDetails() {
 
             {/* Right: Job details */}
             <div className="p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Job details</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">{t.jobDetails.jobDetailsLabel}</p>
               <div className="space-y-0">
-                <JobDetailRow label="Job type" value={job.job_type || 'One-off job'} />
-                <JobDetailRow label="Starts on" value={job.scheduled_at ? formatDate(job.scheduled_at) : '—'} />
-                <JobDetailRow label="Ends on" value={job.end_at ? formatDate(job.end_at) : (job.scheduled_at ? formatDate(job.scheduled_at) : '—')} />
-                <JobDetailRow label="Billing frequency" value={(job as any).requires_invoicing === false ? 'No invoicing' : 'Upon job completion'} />
-                <JobDetailRow label="Deposit" value={(job as any).deposit_required ? `${(job as any).deposit_type === 'percentage' ? `${(job as any).deposit_value}%` : `$${(job as any).deposit_value}`}` : 'None'} />
-                <JobDetailRow label="Salesperson" value={(job as any).salesperson_id || '—'} isLast />
+                <JobDetailRow label={t.jobDetails.jobTypeLabel} value={job.job_type || t.jobDetails.oneOffJob} />
+                <JobDetailRow label={t.jobDetails.startsOn} value={job.scheduled_at ? formatDate(job.scheduled_at) : '—'} />
+                <JobDetailRow label={t.jobDetails.endsOn} value={job.end_at ? formatDate(job.end_at) : (job.scheduled_at ? formatDate(job.scheduled_at) : '—')} />
+                <JobDetailRow label={t.jobDetails.billingFrequency} value={(job as any).requires_invoicing === false ? t.jobDetails.noInvoicing : t.jobDetails.uponJobCompletion} />
+                <JobDetailRow label={t.jobDetails.deposit} value={(job as any).deposit_required ? `${(job as any).deposit_type === 'percentage' ? `${(job as any).deposit_value}%` : `$${(job as any).deposit_value}`}` : t.jobDetails.none} />
+                <JobDetailRow label={t.jobDetails.salesperson} value={(job as any).salesperson_id || '—'} isLast />
               </div>
             </div>
           </div>
@@ -546,7 +543,7 @@ export default function JobDetails() {
               onClick={() => setShowProfitability(!showProfitability)}
               className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-text-secondary hover:text-text-primary transition-colors"
             >
-              {showProfitability ? 'Hide' : 'Show'} Profitability
+              {showProfitability ? t.jobDetails.hideProfitability : t.jobDetails.showProfitability}
               {showProfitability ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
             </button>
 
@@ -562,20 +559,20 @@ export default function JobDetails() {
                     {/* Margin */}
                     <div>
                       <p className="text-[28px] font-extrabold text-text-primary leading-none">{profitMargin}%</p>
-                      <p className="text-[11px] text-text-tertiary mt-1">Profit margin</p>
+                      <p className="text-[11px] text-text-tertiary mt-1">{t.jobDetails.profitMargin}</p>
                     </div>
 
                     {/* Breakdown */}
                     <div className="flex flex-wrap items-center gap-3 text-[13px]">
-                      <ProfitBlock label="Total price" value={formatCents(displayTotalCents)} />
+                      <ProfitBlock label={t.jobDetails.totalPrice} value={formatCents(displayTotalCents)} />
                       <span className="text-text-tertiary font-medium">−</span>
-                      <ProfitBlock label="Line Item Cost" value={formatCents(lineItemCostCents)} color="text-text-secondary" />
+                      <ProfitBlock label={t.jobDetails.lineItemCost} value={formatCents(lineItemCostCents)} color="text-text-secondary" />
                       <span className="text-text-tertiary font-medium">−</span>
-                      <ProfitBlock label="Labour" value="$0.00" color="text-text-secondary" />
+                      <ProfitBlock label={t.jobDetails.labour} value="$0.00" color="text-text-secondary" />
                       <span className="text-text-tertiary font-medium">−</span>
-                      <ProfitBlock label="Expenses" value="$0.00" color="text-text-tertiary" />
+                      <ProfitBlock label={t.jobDetails.expenses} value="$0.00" color="text-text-tertiary" />
                       <span className="text-text-tertiary font-medium">=</span>
-                      <ProfitBlock label="Profit" value={formatCents(profitCents)} color="text-text-primary" />
+                      <ProfitBlock label={t.jobDetails.profit} value={formatCents(profitCents)} color="text-text-primary" />
                     </div>
 
                     {/* Mini donut */}
@@ -596,26 +593,26 @@ export default function JobDetails() {
               <div className="icon-tile icon-tile-sm icon-tile-purple">
                 <Briefcase size={13} strokeWidth={2} />
               </div>
-              Line Items
+              {t.jobDetails.lineItems}
             </h2>
             <button onClick={handleEdit} className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1 print:hidden">
-              <Plus size={12} /> New Line Item
+              <Plus size={12} /> {t.jobDetails.newLineItem}
             </button>
           </div>
 
           <div className="p-5">
             {lineItems.length === 0 ? (
-              <p className="text-[13px] text-text-tertiary py-4 text-center">No line items</p>
+              <p className="text-[13px] text-text-tertiary py-4 text-center">{t.jobDetails.noLineItems}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-border">
-                      <th className="px-0 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Product / Service</th>
-                      <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-center w-24">Quantity</th>
-                      <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right w-28">Cost</th>
-                      <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right w-28">Price</th>
-                      <th className="px-0 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right w-28">Total</th>
+                      <th className="px-0 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.jobDetails.productService}</th>
+                      <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-center w-24">{t.jobDetails.quantity}</th>
+                      <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right w-28">{t.jobDetails.cost}</th>
+                      <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right w-28">{t.jobDetails.price}</th>
+                      <th className="px-0 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right w-28">{t.jobDetails.total}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -643,7 +640,7 @@ export default function JobDetails() {
               <div className="border-t border-border pt-4 mt-2 flex justify-end">
                 <div className="w-60 space-y-1.5">
                   <div className="flex justify-between text-[13px]">
-                    <span className="text-text-secondary">Subtotal</span>
+                    <span className="text-text-secondary">{t.jobDetails.subtotal}</span>
                     <span className="text-text-primary tabular-nums font-semibold">{formatCents(displaySubtotalCents)}</span>
                   </div>
                   {enabledTaxes.map((tax) => {
@@ -656,7 +653,7 @@ export default function JobDetails() {
                     );
                   })}
                   <div className="flex justify-between text-[15px] font-bold border-t border-border pt-2">
-                    <span className="text-text-primary">Total</span>
+                    <span className="text-text-primary">{t.jobDetails.total}</span>
                     <span className="text-text-primary tabular-nums">{formatCents(displayTotalCents)}</span>
                   </div>
                 </div>
@@ -672,10 +669,10 @@ export default function JobDetails() {
               <div className="icon-tile icon-tile-sm icon-tile-purple">
                 <Calendar size={13} strokeWidth={2} />
               </div>
-              Visits
+              {t.jobDetails.visits}
             </h2>
             <button onClick={handleEdit} className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1 print:hidden">
-              New Visit
+              {t.jobDetails.newVisit}
             </button>
           </div>
           <div className="p-5">
@@ -686,7 +683,7 @@ export default function JobDetails() {
                   const start = new Date(job.scheduled_at);
                   const end = job.end_at ? new Date(job.end_at) : null;
                   const sameDay = end && start.toDateString() === end.toDateString();
-                  if (!end || sameDay) return 'All day / Any time';
+                  if (!end || sameDay) return t.jobDetails.allDayAnyTime;
                   return `${start.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })} — ${end.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })}`;
                 })()}
               </p>
@@ -700,7 +697,7 @@ export default function JobDetails() {
                     {formatDate(job.scheduled_at)}
                   </span>
                 </div>
-                <span className="text-[12px] text-text-tertiary">Not assigned yet</span>
+                <span className="text-[12px] text-text-tertiary">{t.jobDetails.notAssignedYet}</span>
               </div>
             ) : visits.length > 0 ? (
               <div className="space-y-2">
@@ -709,17 +706,17 @@ export default function JobDetails() {
                     <div className="flex items-center gap-3">
                       <span className="w-4 h-4 rounded border border-outline bg-surface-secondary inline-block shrink-0" />
                       <span className="text-[13px] font-semibold text-text-primary">
-                        {visit.start_at ? formatDate(visit.start_at) : 'Unscheduled'}
+                        {visit.start_at ? formatDate(visit.start_at) : t.jobDetails.unscheduled}
                       </span>
                     </div>
                     <span className="text-[12px] text-text-tertiary">
-                      {visit.team_id ? 'Team assigned' : 'Not assigned yet'}
+                      {visit.team_id ? t.jobDetails.teamAssigned : t.jobDetails.notAssignedYet}
                     </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-[13px] text-text-tertiary py-4 text-center">No visits scheduled</p>
+              <p className="text-[13px] text-text-tertiary py-4 text-center">{t.jobDetails.noVisitsScheduled}</p>
             )}
           </div>
         </div>
@@ -731,7 +728,7 @@ export default function JobDetails() {
               <div className="icon-tile icon-tile-sm icon-tile-purple">
                 <DollarSign size={13} strokeWidth={2} />
               </div>
-              Invoices
+              {t.jobDetails.invoices}
             </h2>
           </div>
 
@@ -749,7 +746,7 @@ export default function JobDetails() {
                       : 'border-transparent text-text-tertiary hover:text-text-secondary',
                   )}
                 >
-                  {tab}
+                  {tab === 'billing' ? t.jobDetails.billing : t.jobDetails.reminders}
                 </button>
               ))}
             </div>
@@ -763,7 +760,7 @@ export default function JobDetails() {
                     <span className={cn('w-4 h-4 rounded border inline-flex items-center justify-center', job.billing_split ? 'bg-primary border-primary text-white' : 'border-outline bg-surface-secondary')}>
                       {job.billing_split && <span className="text-[9px]">✓</span>}
                     </span>
-                    Split into multiple invoices with a payment schedule
+                    {t.jobDetails.splitInvoices}
                   </div>
                 )}
 
@@ -771,12 +768,12 @@ export default function JobDetails() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="px-0 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Invoice</th>
-                        <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Due Date</th>
-                        <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Status</th>
-                        <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Subject</th>
-                        <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right">Balance</th>
-                        <th className="px-0 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right">Total</th>
+                        <th className="px-0 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.jobDetails.invoice}</th>
+                        <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.jobDetails.dueDate}</th>
+                        <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.jobDetails.status}</th>
+                        <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{t.jobDetails.subject}</th>
+                        <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right">{t.jobDetails.balance}</th>
+                        <th className="px-0 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary text-right">{t.jobDetails.total}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -788,12 +785,12 @@ export default function JobDetails() {
                               disabled={isCreatingInvoice}
                               className="glass-button !text-[12px] !px-2.5 !py-1"
                             >
-                              {isCreatingInvoice ? 'Creating...' : 'Create'}
+                              {isCreatingInvoice ? t.jobDetails.creating : t.jobDetails.create}
                             </button>
                           </td>
                           <td className="px-3 py-3 text-[13px] text-text-tertiary">—</td>
                           <td className="px-3 py-3"><StatusBadge status="Upcoming" /></td>
-                          <td className="px-3 py-3 text-[13px] text-text-secondary">For Services Rendered</td>
+                          <td className="px-3 py-3 text-[13px] text-text-secondary">{t.jobDetails.forServicesRendered}</td>
                           <td className="px-3 py-3 text-[13px] text-text-primary text-right tabular-nums">{formatCents(displayTotalCents)}</td>
                           <td className="py-3 text-[13px] text-text-primary text-right tabular-nums">{formatCents(displayTotalCents)}</td>
                         </tr>
@@ -824,7 +821,7 @@ export default function JobDetails() {
             )}
 
             {invoiceTab === 'reminders' && (
-              <p className="text-[13px] text-text-tertiary py-4 text-center">No reminders configured</p>
+              <p className="text-[13px] text-text-tertiary py-4 text-center">{t.jobDetails.noRemindersConfigured}</p>
             )}
           </div>
         </div>
@@ -833,7 +830,7 @@ export default function JobDetails() {
         {job.notes && (
           <div className="rounded-xl border border-outline bg-surface overflow-hidden">
             <div className="px-5 py-3.5 border-b border-outline-subtle">
-              <h2 className="text-[13px] font-semibold text-text-primary">Notes</h2>
+              <h2 className="text-[13px] font-semibold text-text-primary">{t.jobDetails.notes}</h2>
             </div>
             <div className="p-5">
               <p className="text-[13px] text-text-secondary whitespace-pre-wrap leading-relaxed">{job.notes}</p>
@@ -845,14 +842,14 @@ export default function JobDetails() {
         <div className="rounded-xl border border-outline bg-surface overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
             <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-              Recurring Schedule
+              {t.jobDetails.recurringSchedule}
             </h2>
             {!recurrence && !showRecurrenceSetup && (
               <button
                 onClick={() => setShowRecurrenceSetup(true)}
                 className="glass-button !text-[12px] !px-2.5 !py-1 print:hidden"
               >
-                Make Recurring
+                {t.jobDetails.makeRecurring}
               </button>
             )}
           </div>
@@ -861,33 +858,33 @@ export default function JobDetails() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-[13px] font-semibold text-text-primary capitalize">
-                    {recurrence.frequency === 'biweekly' ? 'Every 2 weeks' : recurrence.frequency}
+                    {recurrence.frequency === 'biweekly' ? t.jobDetails.everyTwoWeeks : recurrence.frequency === 'daily' ? t.jobDetails.daily : recurrence.frequency === 'weekly' ? t.jobDetails.weekly : recurrence.frequency === 'monthly' ? t.jobDetails.monthly : recurrence.frequency}
                   </p>
                   <p className="text-[12px] text-text-tertiary">
-                    Since {new Date(recurrence.start_date).toLocaleDateString()} — {recurrence.occurrences_created} created
-                    {recurrence.end_date ? ` — ends ${new Date(recurrence.end_date).toLocaleDateString()}` : ''}
+                    {t.jobDetails.since} {new Date(recurrence.start_date).toLocaleDateString()} — {recurrence.occurrences_created} {t.jobDetails.created}
+                    {recurrence.end_date ? ` — ${t.jobDetails.ends} ${new Date(recurrence.end_date).toLocaleDateString()}` : ''}
                   </p>
                 </div>
                 <button
                   onClick={async () => {
                     await deactivateRecurrenceRule(recurrence.id);
                     setRecurrence(null);
-                    toast.success('Recurrence stopped');
+                    toast.success(t.jobDetails.recurrenceStopped);
                   }}
                   className="glass-button !text-[12px] text-danger hover:bg-danger-light"
                 >
-                  Stop
+                  {t.jobDetails.stop}
                 </button>
               </div>
             ) : showRecurrenceSetup ? (
               <div className="space-y-3">
                 <div>
-                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Frequency</label>
+                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.jobDetails.frequency}</label>
                   <select value={recFreq} onChange={(e) => setRecFreq(e.target.value as RecurrenceFrequency)} className="glass-input w-full mt-1">
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="biweekly">Every 2 weeks</option>
-                    <option value="monthly">Monthly</option>
+                    <option value="daily">{t.jobDetails.daily}</option>
+                    <option value="weekly">{t.jobDetails.weekly}</option>
+                    <option value="biweekly">{t.jobDetails.everyTwoWeeks}</option>
+                    <option value="monthly">{t.jobDetails.monthly}</option>
                   </select>
                 </div>
                 <div className="flex gap-2">
@@ -904,22 +901,22 @@ export default function JobDetails() {
                         });
                         setRecurrence(rule);
                         setShowRecurrenceSetup(false);
-                        toast.success('Recurrence activated');
+                        toast.success(t.jobDetails.recurrenceActivated);
                       } catch (err: any) {
-                        toast.error(err?.message || 'Failed to create recurrence');
+                        toast.error(err?.message || t.jobDetails.failedCreateRecurrence);
                       } finally {
                         setRecSaving(false);
                       }
                     }}
                     className="glass-button-primary !text-[12px]"
                   >
-                    {recSaving ? 'Saving...' : 'Activate'}
+                    {recSaving ? t.jobDetails.saving : t.jobDetails.activate}
                   </button>
-                  <button onClick={() => setShowRecurrenceSetup(false)} className="glass-button !text-[12px]">Cancel</button>
+                  <button onClick={() => setShowRecurrenceSetup(false)} className="glass-button !text-[12px]">{t.jobDetails.cancel}</button>
                 </div>
               </div>
             ) : (
-              <p className="text-[13px] text-text-tertiary">This is a one-time job.</p>
+              <p className="text-[13px] text-text-tertiary">{t.jobDetails.oneTimeJob}</p>
             )}
           </div>
         </div>
@@ -928,7 +925,7 @@ export default function JobDetails() {
         {job.attachments && job.attachments.length > 0 && (
           <div className="rounded-xl border border-outline bg-surface overflow-hidden">
             <div className="px-5 py-3.5 border-b border-outline-subtle">
-              <h2 className="text-[13px] font-semibold text-text-primary">Attachments</h2>
+              <h2 className="text-[13px] font-semibold text-text-primary">{t.jobDetails.attachments}</h2>
             </div>
             <div className="p-5 space-y-2">
               {job.attachments.map((file) => (
@@ -960,7 +957,7 @@ export default function JobDetails() {
           <ModalOverlay onClose={() => setShowSmsModal(false)} size="xl">
             <SendSmsModal
               phone={clientInfo?.phone}
-              defaultBody={`Confirmation rendez-vous ${clientInfo?.company || job.title}.\n\nLocation: ${job.property_address || 'TBD'}\nDate: ${job.scheduled_at ? formatDate(job.scheduled_at) : 'TBD'}`}
+              defaultBody={t.jobDetails.smsConfirmationBody.replace('${company}', clientInfo?.company || job.title).replace('${address}', job.property_address || t.jobDetails.tbd).replace('${date}', job.scheduled_at ? formatDate(job.scheduled_at) : t.jobDetails.tbd)}
               clientId={job.client_id}
               jobId={job.id}
               clientName={job.client_name || undefined}
@@ -980,8 +977,8 @@ export default function JobDetails() {
           <ModalOverlay onClose={() => setShowEmailModal(false)} size="2xl">
             <SendEmailModal
               email={clientInfo?.email}
-              defaultSubject={emailMode === 'confirmation' ? `Confirmation rendez-vous ${clientInfo?.company || job.title}` : emailMode === 'followup' ? `Follow-up — ${job.title}` : `Regarding ${job.title}`}
-              defaultBody={emailMode === 'confirmation' ? `Bonjour ${job.client_name || 'there'},\n\nMerci d'avoir fait affaire avec nous !\n\nLocation: ${job.property_address || 'TBD'}\nDate: ${job.scheduled_at ? formatDate(job.scheduled_at) : 'TBD'}\n\nCordialement,\n\n${clientInfo?.company || ''}` : emailMode === 'followup' ? `Hi ${job.client_name || 'there'},\n\nJust following up on "${job.title}". Please let us know if you have any questions.\n\nThank you!` : `Hi ${job.client_name || 'there'},\n\n`}
+              defaultSubject={emailMode === 'confirmation' ? t.jobDetails.emailConfirmationSubject.replace('${company}', clientInfo?.company || job.title) : emailMode === 'followup' ? t.jobDetails.emailFollowUpSubject.replace('${title}', job.title) : t.jobDetails.emailGenericSubject.replace('${title}', job.title)}
+              defaultBody={emailMode === 'confirmation' ? t.jobDetails.emailConfirmationBody.replace('${clientName}', job.client_name || '').replace('${address}', job.property_address || t.jobDetails.tbd).replace('${date}', job.scheduled_at ? formatDate(job.scheduled_at) : t.jobDetails.tbd).replace('${company}', clientInfo?.company || '') : emailMode === 'followup' ? t.jobDetails.emailFollowUpBody.replace('${clientName}', job.client_name || '').replace('${title}', job.title) : t.jobDetails.emailGenericBody.replace('${clientName}', job.client_name || '')}
               clientId={job.client_id}
               jobId={job.id}
               clientName={job.client_name || undefined}

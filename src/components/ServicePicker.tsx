@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Search, X, Plus, Package, Check, Loader2, Minus } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import { listPredefinedServices, createPredefinedService, PredefinedService } from '../lib/servicesApi';
+import { useTranslation } from '../i18n';
 
 interface ServicePickerProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ interface ServicePickerProps {
 }
 
 export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, addedIds = new Set() }: ServicePickerProps) {
+  const { t } = useTranslation();
   const [services, setServices] = useState<PredefinedService[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -64,7 +66,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
   const groupedByCategory = useMemo((): Record<string, PredefinedService[]> => {
     const groups: Record<string, PredefinedService[]> = {};
     filtered.forEach((s) => {
-      const cat = s.category || 'Other';
+      const cat = s.category || t.services.other;
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(s);
     });
@@ -122,13 +124,13 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
               <div className="w-8 h-8 rounded-lg bg-text-primary text-surface flex items-center justify-center">
                 <Package size={16} />
               </div>
-              <h2 className="text-[16px] font-bold text-text-primary">Add line item</h2>
+              <h2 className="text-[16px] font-bold text-text-primary">{t.services.addLineItem}</h2>
             </div>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setShowCreate(!showCreate)}
                 className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
-                title="Create new service"
+                title={t.services.createNewService}
               >
                 <Plus size={16} />
               </button>
@@ -144,7 +146,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search line items"
+              placeholder={t.services.searchLineItems}
               className="w-full bg-surface-secondary/60 border border-outline-subtle/60 rounded-lg pl-9 pr-3 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40 transition-colors"
               autoFocus
             />
@@ -171,7 +173,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
                   <input
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Service name *"
+                    placeholder="Nom du service *"
                     className="col-span-2 bg-surface border border-outline-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40"
                   />
                   <input

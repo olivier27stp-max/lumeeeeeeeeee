@@ -315,7 +315,7 @@ export default function Notes() {
                 {/* Entity type filter */}
                 <div>
                   <label className="text-[11px] font-medium text-text-tertiary mb-1.5 block">
-                    {language === 'fr' ? 'Type d\'objet' : 'Entity type'}
+                    {t.advancedNotes.entityType}
                   </label>
                   <div className="flex flex-wrap gap-1">
                     {Object.entries(ENTITY_TYPE_META).map(([key, meta]) => (
@@ -370,9 +370,7 @@ export default function Notes() {
                 : (t.advancedNotes.noNotesYet)
               }
               description={!hasFilters && !search
-                ? (language === 'fr'
-                  ? 'Créez votre première note pour commencer à collaborer.'
-                  : 'Create your first note to start collaborating.')
+                ? t.advancedNotes.createFirstNoteDesc
                 : undefined
               }
               action={!hasFilters && !search ? (

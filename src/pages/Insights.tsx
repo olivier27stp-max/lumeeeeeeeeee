@@ -314,7 +314,7 @@ export default function Insights() {
                     <div className="text-right">
                       <p className="text-xs text-text-tertiary">{t.insights.avgPaymentTime}</p>
                       <p className="text-2xl font-bold text-text-primary tabular-nums">
-                        {invoicesSummary?.avg_payment_time_days == null ? '--' : `${invoicesSummary.avg_payment_time_days.toFixed(1)} days`}
+                        {invoicesSummary?.avg_payment_time_days == null ? '--' : `${invoicesSummary.avg_payment_time_days.toFixed(1)} ${t.insights.daysUnit}`}
                       </p>
                     </div>
                   </div>

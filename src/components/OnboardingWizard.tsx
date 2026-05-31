@@ -23,13 +23,13 @@ interface OnboardingWizardProps {
 }
 
 const STEPS = [
-  { id: 'company', icon: Building2, labelEn: 'Your Business', labelFr: 'Votre entreprise' },
-  { id: 'client', icon: Users, labelEn: 'First Client', labelFr: 'Premier client' },
-  { id: 'done', icon: Sparkles, labelEn: 'Ready!', labelFr: 'Pret !' },
+  { id: 'company', icon: Building2 },
+  { id: 'client', icon: Users },
+  { id: 'done', icon: Sparkles },
 ] as const;
 
 export default function OnboardingWizard({ userId, orgId, language, onComplete }: OnboardingWizardProps) {
-  const fr = language === 'fr';
+  const { t } = useTranslation();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
@@ -46,7 +46,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
 
   const handleSaveCompany = useCallback(async () => {
     if (!companyName.trim()) {
-      toast.error(fr ? 'Le nom de l\'entreprise est requis' : 'Company name is required');
+      toast.error(t.onboarding.companyNameIsRequired);
       return false;
     }
     setSaving(true);
@@ -70,7 +70,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
     } finally {
       setSaving(false);
     }
-  }, [companyName, companyPhone, companyEmail, orgId, fr]);
+  }, [companyName, companyPhone, companyEmail, orgId, t]);
 
   const handleSaveClient = useCallback(async () => {
     if (!clientFirst.trim()) {
@@ -94,7 +94,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
     } finally {
       setSaving(false);
     }
-  }, [clientFirst, clientLast, clientPhone, clientEmail, fr]);
+  }, [clientFirst, clientLast, clientPhone, clientEmail, t]);
 
   const handleNext = async () => {
     if (step === 0) {
@@ -194,7 +194,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                   </div>
                   <div>
                     <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                      {fr ? 'Nom de l\'entreprise' : 'Company name'} *
+                      {t.onboarding.companyName} *
                     </label>
                     <div className="relative mt-1">
                       <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" size={15} />
@@ -249,7 +249,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                       {t.onboarding.addYourFirstClient}
                     </h2>
                     <p className="text-[13px] text-text-tertiary mt-1">
-                      {fr ? 'Vous pourrez en ajouter d\'autres plus tard.' : 'You can add more later.'}
+                      {t.onboarding.youCanAddMoreLater}
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -315,9 +315,7 @@ export default function OnboardingWizard({ userId, orgId, language, onComplete }
                     {t.onboarding.youreAllSet}
                   </h2>
                   <p className="text-[13px] text-text-tertiary mt-2 max-w-xs mx-auto">
-                    {fr
-                      ? 'Votre espace de travail est configure. Explorez le CRM et commencez a gerer vos clients.'
-                      : 'Your workspace is set up. Explore the CRM and start managing your clients.'}
+                    {t.onboarding.workspaceSetUp}
                   </p>
                   <div className="mt-6 flex flex-wrap justify-center gap-2 text-[12px]">
                     <span className="px-3 py-1.5 rounded-full bg-surface-secondary text-text-secondary">

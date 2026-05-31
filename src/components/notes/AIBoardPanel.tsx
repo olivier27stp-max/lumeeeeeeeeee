@@ -12,7 +12,7 @@ import {
   Loader2, Layers, Brain, Wand2,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 export interface AIBoardAction {
   id: string;
@@ -84,6 +84,7 @@ interface AIBoardPanelProps {
 }
 
 function AIBoardPanel({ language, loading, result, onAction, onClose, onApplyResult }: AIBoardPanelProps) {
+  const { t } = useTranslation();
   const fr = language === 'fr';
 
   return (
@@ -107,7 +108,7 @@ function AIBoardPanel({ language, loading, result, onAction, onClose, onApplyRes
           <div className="flex flex-col items-center justify-center py-8 gap-3">
             <Loader2 size={24} className="text-purple-500 animate-spin" />
             <p className="text-[12px] text-text-secondary">
-              {fr ? 'L\'IA analyse le board...' : 'AI is analyzing the board...'}
+              {t.noteCanvas.aiIsAnalyzingTheBoard}
             </p>
           </div>
         ) : result ? (

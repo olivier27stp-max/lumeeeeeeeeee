@@ -7,7 +7,7 @@ import {
   Scissors, ClipboardPaste, MoveRight,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 export interface ContextMenuAction {
   id: string;
@@ -32,6 +32,7 @@ interface CanvasContextMenuProps {
 export default function CanvasContextMenu({
   x, y, isNodeMenu, isLocked, language, onAction, onClose,
 }: CanvasContextMenuProps) {
+  const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
   const fr = language === 'fr';
 

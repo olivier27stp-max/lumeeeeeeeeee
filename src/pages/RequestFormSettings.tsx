@@ -58,6 +58,7 @@ function FieldEditor({
   onUpdate: (updated: FormField) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   const needsOptions = field.type === 'dropdown' || field.type === 'multiselect';
 
   return (
@@ -146,6 +147,7 @@ function FormPreview({
   customFields: FormField[];
   isFr: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="section-card p-6 space-y-5 max-w-lg mx-auto">
       <div className="text-center space-y-1">
@@ -324,7 +326,7 @@ export default function RequestFormSettings() {
 
   // Regenerate API key
   const handleRegenKey = async () => {
-    if (!confirm(isFr ? 'Regénérer la clé API ? L\'ancien code embed cessera de fonctionner.' : 'Regenerate API key? The old embed code will stop working.')) return;
+    if (!confirm(t.requestForm.confirmRegenerateApiKey)) return;
     try {
       const newKey = await regenerateApiKey();
       setApiKey(newKey);
@@ -533,7 +535,7 @@ export default function RequestFormSettings() {
               <div className="flex flex-wrap gap-2">
                 {[
                   t.requestForm.streetAddress,
-                  isFr ? 'Unité' : 'Unit / Apt',
+                  t.requestForm.unitApt,
                   t.requestForm.city,
                   t.requestForm.country,
                   t.requestForm.stateProvince,
@@ -562,7 +564,7 @@ export default function RequestFormSettings() {
               {customFields.filter(f => f.section === 'service_details').length === 0 ? (
                 <div className="section-card p-6 text-center">
                   <p className="text-[12px] text-text-tertiary">
-                    {isFr ? 'Aucun champ personnalisé. Cliquez "Ajouter un champ" pour commencer.' : 'No custom fields yet. Click "Add Field" to start.'}
+                    {t.requestForm.noCustomFieldsYet}
                   </p>
                 </div>
               ) : (
@@ -607,7 +609,7 @@ export default function RequestFormSettings() {
               {customFields.filter(f => f.section === 'final_notes').length === 0 ? (
                 <div className="section-card p-6 text-center">
                   <p className="text-[12px] text-text-tertiary">
-                    {isFr ? 'Aucun champ de notes. Un champ "Notes supplémentaires" est toujours inclus par défaut.' : 'No custom note fields. A default "Additional notes" field is always included.'}
+                    {t.requestForm.noCustomNoteFields}
                   </p>
                 </div>
               ) : (
@@ -647,7 +649,7 @@ export default function RequestFormSettings() {
                   className="accent-primary"
                 />
                 <span className="text-[13px] text-text-secondary">
-                  {isFr ? 'Notification par courriel lors d\'une nouvelle demande' : 'Email notification on new submission'}
+                  {t.requestForm.emailNotificationOnSubmission}
                 </span>
               </label>
               <label className="flex items-center gap-2.5 cursor-pointer">
@@ -658,7 +660,7 @@ export default function RequestFormSettings() {
                   className="accent-primary"
                 />
                 <span className="text-[13px] text-text-secondary">
-                  {isFr ? 'Notification dans l\'application' : 'In-app notification'}
+                  {t.requestForm.inAppNotification}
                 </span>
               </label>
             </div>
@@ -678,7 +680,7 @@ export default function RequestFormSettings() {
               <div className="section-card p-8 text-center">
                 <Code size={28} className="text-text-tertiary mx-auto mb-3 opacity-30" />
                 <p className="text-[13px] text-text-tertiary">
-                  {isFr ? 'Sauvegardez d\'abord votre formulaire pour obtenir le code d\'intégration.' : 'Save your form first to get the embed code.'}
+                  {t.requestForm.saveFormFirstForEmbedCode}
                 </p>
               </div>
             ) : (

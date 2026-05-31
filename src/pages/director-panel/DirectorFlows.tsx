@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Workflow, Search, Copy, Pencil, Trash2, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 import { PageHeader } from '../../components/ui';
 import type { DirectorFlow } from '../../types/director';
 
@@ -10,6 +11,7 @@ type StatusFilter = 'all' | 'draft' | 'active' | 'archived';
 type SortBy = 'newest' | 'oldest' | 'alpha';
 
 export default function DirectorFlows({ orgId }: { orgId: string }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [flows, setFlows] = useState<DirectorFlow[]>([]);
   const [search, setSearch] = useState('');
@@ -39,23 +41,23 @@ export default function DirectorFlows({ orgId }: { orgId: string }) {
       const { updateFlow } = await import('../../lib/directorApi');
       await updateFlow(renameId, { title: renameValue.trim() });
       setFlows((prev) => prev.map((f) => f.id === renameId ? { ...f, title: renameValue.trim() } : f));
-      toast.success('Flow renamed');
+      toast.success(t.directorPanel.flowRenamed);
     } catch {
-      toast.error('Failed to rename flow');
+      toast.error(t.directorPanel.flowRenameFailed);
     } finally {
       setRenameId(null);
     }
   };
 
   const handleDeleteFlow = async (flowId: string, title: string) => {
-    if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
+    if (!confirm(`Delete "${title}"? ${t.directorPanel.deleteConfirm}`)) return;
     try {
       const { deleteFlow } = await import('../../lib/directorApi');
       await deleteFlow(flowId);
       setFlows((prev) => prev.filter((f) => f.id !== flowId));
-      toast.success(`"${title}" deleted`);
+      toast.success(`"${title}" ${t.directorPanel.deleted}`);
     } catch {
-      toast.error('Failed to delete flow');
+      toast.error(t.directorPanel.deleteFailed);
     }
   };
 
@@ -94,9 +96,9 @@ export default function DirectorFlows({ orgId }: { orgId: string }) {
         await upsertEdges(newEdges);
       }
       setFlows((prev) => [newFlow, ...prev]);
-      toast.success(`"${flow.title}" duplicated`);
+      toast.success(`"${flow.title}" ${t.directorPanel.duplicated}`);
     } catch {
-      toast.error('Failed to duplicate flow');
+      toast.error(t.directorPanel.duplicateFailed);
     }
   };
 
@@ -124,17 +126,17 @@ export default function DirectorFlows({ orgId }: { orgId: string }) {
   };
 
   const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
-    { value: 'all', label: 'All' },
-    { value: 'draft', label: 'Draft' },
-    { value: 'active', label: 'Active' },
-    { value: 'archived', label: 'Archived' },
+    { value: 'all', label: t.directorPanel.all },
+    { value: 'draft', label: t.directorPanel.draft },
+    { value: 'active', label: t.directorPanel.active },
+    { value: 'archived', label: t.directorPanel.archived },
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Flows" icon={Workflow} iconColor="blue">
+      <PageHeader title={t.directorPanel.flowsTitle} icon={Workflow} iconColor="blue">
         <button onClick={() => navigate('/director-panel/flows/new')} className="glass-button-primary flex items-center gap-1.5 text-[13px]">
-          <Plus className="w-4 h-4" /> New Flow
+          <Plus className="w-4 h-4" /> {t.directorPanel.newFlow}
         </button>
       </PageHeader>
 
@@ -146,7 +148,7 @@ export default function DirectorFlows({ orgId }: { orgId: string }) {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search flows..."
+            placeholder={t.directorPanel.searchFlows}
             className="w-full pl-8 pr-3 py-2 rounded-md bg-surface border border-outline text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:border-primary"
           />
         </div>
@@ -176,9 +178,9 @@ export default function DirectorFlows({ orgId }: { orgId: string }) {
             onChange={(e) => setSortBy(e.target.value as SortBy)}
             className="appearance-none pl-3 pr-7 py-1.5 rounded-md bg-surface border border-outline text-[12px] text-text-secondary cursor-pointer outline-none focus:border-primary"
           >
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="alpha">A-Z</option>
+            <option value="newest">{t.directorPanel.newest}</option>
+            <option value="oldest">{t.directorPanel.oldest}</option>
+            <option value="alpha">{t.directorPanel.az}</option>
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-text-tertiary pointer-events-none" />
         </div>
@@ -191,7 +193,7 @@ export default function DirectorFlows({ orgId }: { orgId: string }) {
       ) : sorted.length === 0 ? (
         <div className="section-card flex flex-col items-center justify-center py-16">
           <Workflow className="w-10 h-10 text-text-tertiary mb-3" />
-          <p className="text-[13px] text-text-tertiary">{search || statusFilter !== 'all' ? 'No matching flows' : 'No flows yet'}</p>
+          <p className="text-[13px] text-text-tertiary">{search || statusFilter !== 'all' ? t.directorPanel.noMatchingFlows : t.directorPanel.noFlowsYet}</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
@@ -220,7 +222,7 @@ export default function DirectorFlows({ orgId }: { orgId: string }) {
                       {flow.title}
                     </p>
                   )}
-                  <p className="text-[11px] text-text-tertiary mt-0.5">Last edited {timeAgo(flow.updated_at)}</p>
+                  <p className="text-[11px] text-text-tertiary mt-0.5">{t.directorPanel.lastEdited} {timeAgo(flow.updated_at)}</p>
                 </div>
               </button>
               {/* Action buttons */}
@@ -256,18 +258,18 @@ export default function DirectorFlows({ orgId }: { orgId: string }) {
       {renameId && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setRenameId(null)}>
           <div className="w-full max-w-sm rounded-2xl bg-surface border border-outline p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-[14px] font-semibold text-text-primary mb-3">Rename Flow</h3>
+            <h3 className="text-[14px] font-semibold text-text-primary mb-3">{t.directorPanel.renameFlow}</h3>
             <input
               autoFocus
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') void handleRenameSubmit(); if (e.key === 'Escape') setRenameId(null); }}
               className="glass-input w-full mb-4"
-              placeholder="Flow title..."
+              placeholder={t.directorPanel.flowTitlePlaceholder}
             />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setRenameId(null)} className="glass-button text-[12px]">Cancel</button>
-              <button onClick={() => void handleRenameSubmit()} className="glass-button-primary text-[12px]">Rename</button>
+              <button onClick={() => setRenameId(null)} className="glass-button text-[12px]">{t.directorPanel.cancel}</button>
+              <button onClick={() => void handleRenameSubmit()} className="glass-button-primary text-[12px]">{t.directorPanel.rename}</button>
             </div>
           </div>
         </div>

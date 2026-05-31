@@ -1,6 +1,7 @@
 // @ts-nocheck — React class component requires @types/react which this project omits
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { getTranslations } from '../i18n';
 
 interface Props {
   children: ReactNode;
@@ -9,6 +10,7 @@ interface Props {
     description?: string;
     tryAgain?: string;
   };
+  language?: string;
 }
 
 interface State {
@@ -33,11 +35,11 @@ class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      const title = this.props.labels?.title || 'Something went wrong';
+      const t = getTranslations(this.props.language || 'en');
+      const title = this.props.labels?.title || t.errorBoundary.title;
       const description =
-        this.props.labels?.description ||
-        'An unexpected error occurred while rendering this section.';
-      const tryAgain = this.props.labels?.tryAgain || 'Try Again';
+        this.props.labels?.description || t.errorBoundary.description;
+      const tryAgain = this.props.labels?.tryAgain || t.errorBoundary.tryAgain;
 
       return (
         <div className="flex items-center justify-center py-20 px-6">

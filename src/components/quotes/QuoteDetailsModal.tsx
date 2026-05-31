@@ -14,6 +14,7 @@ import {
 } from '../../lib/quotesApi';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { useTranslation } from '../../i18n';
 
 interface QuoteDetailsModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ interface QuoteDetailsModalProps {
 export default function QuoteDetailsModal({
   isOpen, onClose, detail, onRefresh, onConvertedToJob, onDuplicated,
 }: QuoteDetailsModalProps) {
+  const { t } = useTranslation();
   const [moreOpen, setMoreOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -34,7 +36,7 @@ export default function QuoteDetailsModal({
 
   const { quote, line_items, sections, lead, client } = detail;
   const entity = client || lead;
-  const entityName = entity ? `${entity.first_name || ''} ${entity.last_name || ''}`.trim() : 'Unknown';
+  const entityName = entity ? `${entity.first_name || ''} ${entity.last_name || ''}`.trim() : '';
   const entityEmail = entity?.email || null;
   const entityPhone = entity?.phone || null;
   const entityAddress = (entity as any)?.address || null;
@@ -44,45 +46,45 @@ export default function QuoteDetailsModal({
 
   async function handleAction(action: () => Promise<void>) {
     setBusy(true);
-    try { await action(); } catch (err: any) { toast.error(err?.message || 'Action failed.'); }
+    try { await action(); } catch (err: any) { toast.error(err?.message || t.quoteDetailsModal.actionFailed); }
     finally { setBusy(false); setMoreOpen(false); }
   }
 
   const handleSendEmail = () => handleAction(async () => {
     await sendQuoteEmail(quote.id);
-    toast.success('Quote sent via email.');
+    toast.success(t.quoteDetailsModal.sentViaEmail);
     onRefresh();
   });
 
   const handleSendSms = () => handleAction(async () => {
     await sendQuoteSms(quote.id);
-    toast.success('Quote sent via SMS.');
+    toast.success(t.quoteDetailsModal.sentViaSms);
     onRefresh();
   });
 
   const handleMarkStatus = (status: QuoteStatus) => () => handleAction(async () => {
     await updateQuoteStatus(quote.id, status);
-    toast.success(`Quote marked as ${QUOTE_STATUS_LABELS[status]}.`);
+    toast.success(t.quoteDetailsModal.markedAs.replace('${status}', QUOTE_STATUS_LABELS[status]));
     onRefresh();
   });
 
   const handleConvert = () => handleAction(async () => {
     const { jobId } = await convertQuoteToJob(quote.id);
-    toast.success('Quote converted to job.');
+    toast.success(t.quoteDetailsModal.convertedToJob);
     onConvertedToJob?.(jobId);
     onRefresh();
   });
 
   const handleDuplicate = () => handleAction(async () => {
     const dup = await duplicateQuote(quote.id);
-    toast.success('Similar quote created.');
+    toast.success(t.quoteDetailsModal.similarQuoteCreated);
     onDuplicated?.(dup);
   });
 
   const handleDelete = () => handleAction(async () => {
-    if (!window.confirm('Delete this quote?')) return;
+    if (!window.confirm(t.quoteDetailsModal.deleteConfirm)) return;
     await deleteQuote(quote.id);
-    toast.success('Quote deleted.');
+    toast.success(t.quoteDetailsModal.quoteDeleted);
     onClose();
   });
 
@@ -114,7 +116,7 @@ export default function QuoteDetailsModal({
               {QUOTE_STATUS_LABELS[quote.status as QuoteStatus] || quote.status}
             </span>
             {quote.context_type === 'lead' && (
-              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-surface-tertiary text-text-primary border border-outline">Lead</span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-surface-tertiary text-text-primary border border-outline">{t.quoteDetailsModal.lead}</span>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -122,59 +124,59 @@ export default function QuoteDetailsModal({
             <div className="relative">
               <button onClick={() => setMoreOpen(!moreOpen)} disabled={busy}
                 className="px-3 py-2 text-sm font-medium border border-outline rounded-lg hover:bg-surface-secondary flex items-center gap-1.5">
-                <MoreHorizontal size={14} /> More
+                <MoreHorizontal size={14} /> {t.quoteDetailsModal.more}
               </button>
               {moreOpen && (
                 <div className="absolute right-0 top-full mt-1 w-56 bg-surface border border-outline rounded-xl shadow-xl z-50 py-1 text-sm">
                   <button onClick={handleConvert} disabled={quote.status === 'converted' || busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2 disabled:opacity-40">
-                    <Briefcase size={14} /> Convert to Job
+                    <Briefcase size={14} /> {t.quoteDetailsModal.convertToJob}
                   </button>
                   <button onClick={handleDuplicate} disabled={busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                    <Copy size={14} /> Create Similar Quote
+                    <Copy size={14} /> {t.quoteDetailsModal.createSimilarQuote}
                   </button>
                   <div className="border-t border-outline my-1" />
-                  <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">Send as...</p>
+                  <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{t.quoteDetailsModal.sendAs}</p>
                   <button onClick={handleSendEmail} disabled={!entityEmail || busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2 disabled:opacity-40">
-                    <Mail size={14} /> Email
+                    <Mail size={14} /> {t.quoteDetailsModal.email}
                   </button>
                   <button onClick={handleSendSms} disabled={!entityPhone || busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2 disabled:opacity-40">
-                    <MessageSquare size={14} /> Text
+                    <MessageSquare size={14} /> {t.quoteDetailsModal.text}
                   </button>
                   <div className="border-t border-outline my-1" />
-                  <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">Mark as...</p>
+                  <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{t.quoteDetailsModal.markAs}</p>
                   <button onClick={handleMarkStatus('awaiting_response')} disabled={busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                    <Clock size={14} /> Awaiting Response
+                    <Clock size={14} /> {t.quoteDetailsModal.awaitingResponse}
                   </button>
                   <button onClick={handleMarkStatus('approved')} disabled={busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                    <CheckCircle2 size={14} /> Approved
+                    <CheckCircle2 size={14} /> {t.quoteDetailsModal.approved}
                   </button>
                   <div className="border-t border-outline my-1" />
                   <button onClick={handlePreview}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                    <Eye size={14} /> Preview as Client
+                    <Eye size={14} /> {t.quoteDetailsModal.previewAsClient}
                   </button>
                   <button onClick={handlePrint}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                    <Printer size={14} /> Print or Save PDF
+                    <Printer size={14} /> {t.quoteDetailsModal.printOrSavePdf}
                   </button>
                   <button onClick={() => {
                     const url = `${window.location.origin}/quote/${quote.view_token}`;
-                    navigator.clipboard.writeText(url).then(() => toast.success('Signature link copied to clipboard')).catch(() => toast.error('Failed to copy link'));
+                    navigator.clipboard.writeText(url).then(() => toast.success(t.quoteDetailsModal.signatureLinkCopied)).catch(() => toast.error(t.quoteDetailsModal.failedToCopyLink));
                     setMoreOpen(false);
                   }}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                    <FileSignature size={14} /> Collect Signature
+                    <FileSignature size={14} /> {t.quoteDetailsModal.collectSignature}
                   </button>
                   <div className="border-t border-outline my-1" />
                   <button onClick={handleDelete} disabled={busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-danger-light text-danger flex items-center gap-2">
-                    <Trash2 size={14} /> Delete
+                    <Trash2 size={14} /> {t.quoteDetailsModal.delete}
                   </button>
                 </div>
               )}
@@ -182,7 +184,7 @@ export default function QuoteDetailsModal({
             {entityPhone && (
               <button onClick={handleSendSms} disabled={busy}
                 className="px-3 py-2 text-sm font-semibold text-white bg-text-primary hover:bg-text-primary/90 rounded-lg flex items-center gap-1.5">
-                <MessageSquare size={14} /> Send Text
+                <MessageSquare size={14} /> {t.quoteDetailsModal.sendText}
               </button>
             )}
             <button onClick={onClose} className="p-2 hover:bg-surface-tertiary rounded-full text-text-tertiary hover:text-text-secondary">
@@ -195,7 +197,7 @@ export default function QuoteDetailsModal({
         <div className="flex-1 overflow-y-auto">
           <div className="px-6 py-6 space-y-6">
             {/* Title */}
-            <h1 className="text-2xl font-bold text-text-primary">{quote.title || `Quote for ${entityName}`}</h1>
+            <h1 className="text-2xl font-bold text-text-primary">{quote.title || t.quoteDetailsModal.quoteFor.replace('${name}', entityName)}</h1>
 
             {/* Identity + Meta */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -228,22 +230,22 @@ export default function QuoteDetailsModal({
               {/* Meta */}
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-text-tertiary">Quote #</span>
+                  <span className="text-text-tertiary">{t.quoteDetailsModal.quoteNumber}</span>
                   <span className="font-semibold">{quote.quote_number}</span>
                 </div>
                 {quote.salesperson_id && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-text-tertiary">Salesperson</span>
-                    <span className="font-medium">Assigned</span>
+                    <span className="text-text-tertiary">{t.quoteDetailsModal.salesperson}</span>
+                    <span className="font-medium">{t.quoteDetailsModal.assigned}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
-                  <span className="text-text-tertiary">Created</span>
+                  <span className="text-text-tertiary">{t.quoteDetailsModal.created}</span>
                   <span className="font-medium">{format(new Date(quote.created_at), 'MMM d, yyyy')}</span>
                 </div>
                 {quote.valid_until && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-text-tertiary">Valid until</span>
+                    <span className="text-text-tertiary">{t.quoteDetailsModal.validUntil}</span>
                     <span className="font-medium">{format(new Date(quote.valid_until), 'MMM d, yyyy')}</span>
                   </div>
                 )}
@@ -253,7 +255,7 @@ export default function QuoteDetailsModal({
             {/* Introduction */}
             {introSection && (
               <div className="border border-outline rounded-xl p-4">
-                <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">Introduction</h4>
+                <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">{t.quoteDetailsModal.introduction}</h4>
                 <p className="text-sm text-text-secondary whitespace-pre-wrap">{introSection.content}</p>
               </div>
             )}
@@ -261,15 +263,15 @@ export default function QuoteDetailsModal({
             {/* Line Items Table */}
             <div className="border border-outline rounded-xl overflow-hidden">
               <div className="px-5 py-3 border-b border-outline flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-text-primary">Product / Service</h4>
+                <h4 className="text-sm font-semibold text-text-primary">{t.quoteDetailsModal.productService}</h4>
               </div>
               <table className="w-full text-sm">
                 <thead className="bg-surface-secondary border-b border-outline">
                   <tr>
-                    <th className="px-5 py-2.5 text-left text-xs font-semibold text-text-tertiary uppercase">Line Item</th>
-                    <th className="px-5 py-2.5 text-center text-xs font-semibold text-text-tertiary uppercase">Quantity</th>
-                    <th className="px-5 py-2.5 text-right text-xs font-semibold text-text-tertiary uppercase">Unit Price</th>
-                    <th className="px-5 py-2.5 text-right text-xs font-semibold text-text-tertiary uppercase">Total</th>
+                    <th className="px-5 py-2.5 text-left text-xs font-semibold text-text-tertiary uppercase">{t.quoteDetailsModal.lineItem}</th>
+                    <th className="px-5 py-2.5 text-center text-xs font-semibold text-text-tertiary uppercase">{t.quoteDetailsModal.quantity}</th>
+                    <th className="px-5 py-2.5 text-right text-xs font-semibold text-text-tertiary uppercase">{t.quoteDetailsModal.unitPrice}</th>
+                    <th className="px-5 py-2.5 text-right text-xs font-semibold text-text-tertiary uppercase">{t.quoteDetailsModal.total}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline/50">
@@ -277,7 +279,7 @@ export default function QuoteDetailsModal({
                     <tr key={item.id} className={item.is_optional ? 'opacity-60' : ''}>
                       <td className="px-5 py-3">
                         <span className="font-medium text-text-primary">{item.name}</span>
-                        {item.is_optional && <span className="ml-2 text-[10px] text-text-tertiary uppercase">Optional</span>}
+                        {item.is_optional && <span className="ml-2 text-[10px] text-text-tertiary uppercase">{t.quoteDetailsModal.optional}</span>}
                         {item.description && <p className="text-xs text-text-tertiary mt-0.5">{item.description}</p>}
                       </td>
                       <td className="px-5 py-3 text-center text-text-primary font-medium">{item.quantity}</td>
@@ -290,21 +292,21 @@ export default function QuoteDetailsModal({
               {/* Totals */}
               <div className="bg-surface-secondary border-t border-outline px-5 py-3 space-y-1.5">
                 <div className="flex justify-between text-sm">
-                  <span className="text-text-tertiary">Subtotal</span>
+                  <span className="text-text-tertiary">{t.quoteDetailsModal.subtotal}</span>
                   <span>{formatQuoteMoney(quote.subtotal_cents)}</span>
                 </div>
                 {quote.discount_cents > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-text-tertiary">Discount</span>
+                    <span className="text-text-tertiary">{t.quoteDetailsModal.discount}</span>
                     <span className="text-danger">-{formatQuoteMoney(quote.discount_cents)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
-                  <span className="text-text-tertiary">{quote.tax_rate_label || 'Tax'}</span>
+                  <span className="text-text-tertiary">{quote.tax_rate_label || t.quoteDetailsModal.tax}</span>
                   <span>{formatQuoteMoney(quote.tax_cents)}</span>
                 </div>
                 <div className="flex justify-between text-base font-bold border-t border-outline pt-2">
-                  <span>Total</span>
+                  <span>{t.quoteDetailsModal.total}</span>
                   <span>{formatQuoteMoney(quote.total_cents)}</span>
                 </div>
               </div>
@@ -313,12 +315,12 @@ export default function QuoteDetailsModal({
             {/* Deposit settings */}
             {(quote.deposit_required || quote.require_payment_method) && (
               <div className="border border-outline rounded-xl p-4 space-y-2">
-                <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Deposit</h4>
+                <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">{t.quoteDetailsModal.deposit}</h4>
                 {quote.deposit_required && (
                   <>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-text-secondary">
-                        {quote.deposit_type === 'percentage' ? `${quote.deposit_value}% deposit` : 'Fixed deposit'}
+                        {quote.deposit_type === 'percentage' ? t.quoteDetailsModal.percentDeposit.replace('${value}', String(quote.deposit_value)) : t.quoteDetailsModal.fixedDeposit}
                       </span>
                       <span className="font-semibold text-text-primary">
                         {quote.deposit_type === 'percentage'
@@ -327,7 +329,7 @@ export default function QuoteDetailsModal({
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-text-secondary">Deposit status</span>
+                      <span className="text-text-secondary">{t.quoteDetailsModal.depositStatus}</span>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                         (quote as any).deposit_status === 'paid'
                           ? 'bg-emerald-50 text-emerald-700'
@@ -335,17 +337,17 @@ export default function QuoteDetailsModal({
                           ? 'bg-amber-50 text-amber-700'
                           : 'bg-surface-tertiary text-text-primary'
                       }`}>
-                        {(quote as any).deposit_status === 'paid' ? 'Paid' :
-                         (quote as any).deposit_status === 'pending' ? 'Pending' :
-                         (quote as any).deposit_status === 'waived' ? 'Waived' : 'Not required'}
+                        {(quote as any).deposit_status === 'paid' ? t.quoteDetailsModal.paid :
+                         (quote as any).deposit_status === 'pending' ? t.quoteDetailsModal.pending :
+                         (quote as any).deposit_status === 'waived' ? t.quoteDetailsModal.waived : t.quoteDetailsModal.notRequired}
                       </span>
                     </div>
                   </>
                 )}
                 {quote.require_payment_method && (
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-text-secondary">Require payment method on file</span>
-                    <span className="text-xs font-bold text-text-primary bg-surface-tertiary px-2 py-0.5 rounded-full">ON</span>
+                    <span className="text-text-secondary">{t.quoteDetailsModal.requirePaymentMethod}</span>
+                    <span className="text-xs font-bold text-text-primary bg-surface-tertiary px-2 py-0.5 rounded-full">{t.quoteDetailsModal.on}</span>
                   </div>
                 )}
               </div>
@@ -354,7 +356,7 @@ export default function QuoteDetailsModal({
             {/* Contract / Disclaimer */}
             {disclaimerSection && (
               <div className="border border-outline rounded-xl p-4">
-                <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">Contract / Disclaimer</h4>
+                <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">{t.quoteDetailsModal.contractDisclaimer}</h4>
                 <p className="text-sm text-text-secondary italic">{disclaimerSection.content || quote.contract_disclaimer}</p>
               </div>
             )}
@@ -362,7 +364,7 @@ export default function QuoteDetailsModal({
             {/* Notes */}
             {quote.notes && (
               <div className="border border-dashed border-outline rounded-xl p-4">
-                <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">Notes</h4>
+                <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">{t.quoteDetailsModal.notes}</h4>
                 <p className="text-sm text-text-secondary whitespace-pre-wrap">{quote.notes}</p>
               </div>
             )}

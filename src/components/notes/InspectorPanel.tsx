@@ -11,7 +11,7 @@ import { cn } from '../../lib/utils';
 import { STICKY_COLORS } from '../../types/noteBoard';
 import type { NoteItem, EntityType } from '../../types/noteBoard';
 import EntityBadge from './EntityBadge';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../../i18n';
 
 interface InspectorPanelProps {
   item: NoteItem | null;
@@ -23,6 +23,7 @@ interface InspectorPanelProps {
 }
 
 export default function InspectorPanel({ item, onClose, onUpdate, onLinkEntity, onUnlinkEntity, language }: InspectorPanelProps) {
+  const { t } = useTranslation();
   const [linkType, setLinkType] = useState<EntityType>('lead');
   const [linkId, setLinkId] = useState('');
 

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, Code, Eye, Mail } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { listEmailTemplates, EmailTemplate } from '../lib/emailTemplatesApi';
+import { useTranslation } from '../i18n';
 
 interface Props {
   type: 'invoice_sent' | 'invoice_reminder' | 'quote_sent' | 'review_request' | 'generic';
@@ -32,6 +33,7 @@ export default function EmailTemplatePicker({
   onBodyChange,
   variables,
 }: Props) {
+  const { t } = useTranslation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -85,7 +87,7 @@ export default function EmailTemplatePicker({
       <div className="space-y-1.5">
         <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary flex items-center gap-1.5">
           <Mail size={12} />
-          Email Template
+          {t.email.emailTemplate}
         </label>
         <div className="relative">
           <button
@@ -94,7 +96,7 @@ export default function EmailTemplatePicker({
             className="glass-input w-full text-left flex items-center justify-between"
           >
             <span className="text-sm text-text-secondary truncate">
-              {templates.length > 0 ? 'Select a template...' : 'No templates available'}
+              {templates.length > 0 ? t.email.selectATemplate : t.email.noTemplatesAvailable}
             </span>
             <ChevronDown
               size={14}
@@ -116,7 +118,7 @@ export default function EmailTemplatePicker({
                     <span className="truncate">{tpl.name}</span>
                     {tpl.is_default && (
                       <span className="shrink-0 ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary uppercase">
-                        Default
+                        {t.email.default}
                       </span>
                     )}
                   </button>
@@ -130,12 +132,12 @@ export default function EmailTemplatePicker({
       {/* Subject */}
       <div className="space-y-1.5">
         <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-          Subject
+          {t.email.subject}
         </label>
         <input
           value={subject}
           onChange={(e) => onSubjectChange(e.target.value)}
-          placeholder="Email subject line"
+          placeholder={t.email.emailSubjectLine}
           className="glass-input w-full"
         />
       </div>
@@ -144,7 +146,7 @@ export default function EmailTemplatePicker({
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
-            Body
+            {t.email.body}
           </label>
           <button
             type="button"

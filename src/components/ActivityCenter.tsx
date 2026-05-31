@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
-import { useTranslation } from '../i18n';
+import { useTranslation, getTranslations } from '../i18n';
 
 interface ActivityItem {
   id: string;
@@ -34,6 +34,7 @@ interface ActivityItem {
 }
 
 function timeAgo(dateStr: string, lang: string): string {
+  const t = getTranslations(lang);
   const now = new Date();
   const date = new Date(dateStr);
   const diffMs = now.getTime() - date.getTime();
@@ -43,23 +44,13 @@ function timeAgo(dateStr: string, lang: string): string {
   const diffDay = Math.floor(diffHour / 24);
   const diffWeek = Math.floor(diffDay / 7);
 
-  if (lang === 'fr') {
-    if (diffSec < 60) return 'À l\'instant';
-    if (diffMin < 60) return `Il y a ${diffMin} min`;
-    if (diffHour < 24) return `Il y a ${diffHour}h`;
-    if (diffDay === 1) return 'Hier';
-    if (diffDay < 7) return `Il y a ${diffDay} jours`;
-    if (diffWeek < 4) return `Il y a ${diffWeek} sem.`;
-    return date.toLocaleDateString('fr-CA', { month: 'short', day: 'numeric' });
-  }
-
-  if (diffSec < 60) return 'Just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHour < 24) return `${diffHour}h ago`;
-  if (diffDay === 1) return 'Yesterday';
-  if (diffDay < 7) return `${diffDay}d ago`;
-  if (diffWeek < 4) return `${diffWeek}w ago`;
-  return date.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+  if (diffSec < 60) return t.activityCenter.justNow;
+  if (diffMin < 60) return t.activityCenter.minutesAgo.replace('${count}', String(diffMin));
+  if (diffHour < 24) return t.activityCenter.hoursAgo.replace('${count}', String(diffHour));
+  if (diffDay === 1) return t.activityCenter.yesterday;
+  if (diffDay < 7) return t.activityCenter.daysAgo.replace('${count}', String(diffDay));
+  if (diffWeek < 4) return t.activityCenter.weeksAgo.replace('${count}', String(diffWeek));
+  return date.toLocaleDateString(lang === 'fr' ? 'fr-CA' : 'en-CA', { month: 'short', day: 'numeric' });
 }
 
 const ICON_MAP: Record<string, { icon: typeof Activity; color: string }> = {
@@ -107,7 +98,7 @@ function getLabel(type: string, name: string, lang: string): { title: string; su
 }
 
 export default function ActivityCenter({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const navigate = useNavigate();
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -349,7 +340,7 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
                   <Activity size={16} className="text-primary" />
                 </div>
                 <h2 className="text-[15px] font-bold text-text-primary">
-                  {language === 'fr' ? 'Centre d\'activités' : 'Activity Center'}
+                  {t.activityCenter.activityCenter}
                 </h2>
               </div>
               <button

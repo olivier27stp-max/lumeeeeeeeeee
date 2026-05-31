@@ -3,6 +3,7 @@ import { Mail, MessageSquare, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { fetchCommunications, type CommunicationMessage } from '../../lib/communicationsApi';
 import StatusBadge from '../ui/StatusBadge';
+import { useTranslation } from '../../i18n';
 
 interface CommunicationsTimelineProps {
   jobId?: string;
@@ -12,6 +13,7 @@ interface CommunicationsTimelineProps {
 }
 
 export default function CommunicationsTimeline({ jobId, clientId, refreshKey }: CommunicationsTimelineProps) {
+  const { t } = useTranslation();
   const [messages, setMessages] = useState<CommunicationMessage[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -28,7 +30,7 @@ export default function CommunicationsTimeline({ jobId, clientId, refreshKey }: 
     return (
       <div className="rounded-xl border border-outline bg-surface overflow-hidden">
         <div className="px-5 py-3.5 border-b border-outline-subtle">
-          <h2 className="text-[13px] font-semibold text-text-primary">Communications</h2>
+          <h2 className="text-[13px] font-semibold text-text-primary">{t.clientDetails.communications}</h2>
         </div>
         <div className="p-5 space-y-3">
           <div className="h-4 w-48 bg-surface-secondary rounded animate-pulse" />
@@ -56,7 +58,7 @@ export default function CommunicationsTimeline({ jobId, clientId, refreshKey }: 
 
       <div className="p-5">
         {messages.length === 0 ? (
-          <p className="text-[13px] text-text-tertiary py-4 text-center">No communications yet</p>
+          <p className="text-[13px] text-text-tertiary py-4 text-center">{t.clientDetails.noCommunicationsYet}</p>
         ) : (
           <div className="space-y-2.5">
             {messages.map((msg) => (

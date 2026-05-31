@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Loader2, Star, MessageSquare } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useTranslation } from '../i18n';
 
 interface Props {
   orgId?: string;
@@ -54,18 +55,20 @@ function StarRating({ rating, size = 14 }: { rating: number; size?: number }) {
   );
 }
 
-function formatReviewDate(dateStr: string): string {
+function formatReviewDate(dateStr: string, tr: { today: string; yesterday: string; daysAgo: string; weekAgo: string; weeksAgo: string; monthsAgo: string }, language: string): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)} month${Math.floor(diffDays / 30) > 1 ? 's' : ''} ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  if (diffDays === 0) return tr.today;
+  if (diffDays === 1) return tr.yesterday;
+  if (diffDays < 7) return `${diffDays} ${tr.daysAgo}`;
+  const weeks = Math.floor(diffDays / 7);
+  if (diffDays < 30) return `${weeks} ${weeks > 1 ? tr.weeksAgo : tr.weekAgo}`;
+  const months = Math.floor(diffDays / 30);
+  if (diffDays < 365) return `${months} ${tr.monthsAgo}`;
+  return date.toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-US', { month: 'short', year: 'numeric' });
 }
 
 export default function GoogleReviewsWidget({
@@ -75,6 +78,7 @@ export default function GoogleReviewsWidget({
   layout = 'cards',
   maxDisplay = 6,
 }: Props) {
+  const { t, language } = useTranslation();
   const [carouselIndex, setCarouselIndex] = useState(0);
 
   const { data: allReviews = [], isLoading } = useQuery({
@@ -136,7 +140,7 @@ export default function GoogleReviewsWidget({
     return (
       <div className={`rounded-2xl p-8 text-center ${containerClass}`}>
         <Loader2 size={24} className={`animate-spin mx-auto ${tertiaryClass}`} />
-        <p className={`text-sm mt-2 ${subtextClass}`}>Loading reviews...</p>
+        <p className={`text-sm mt-2 ${subtextClass}`}>{t.reviews.loadingReviews}</p>
       </div>
     );
   }
@@ -146,10 +150,10 @@ export default function GoogleReviewsWidget({
       <div className={`rounded-2xl p-10 text-center ${containerClass}`}>
         <MessageSquare size={32} className={`mx-auto mb-3 opacity-30 ${tertiaryClass}`} />
         <p className={`text-sm font-semibold ${isDark ? 'text-gray-200' : 'text-text-primary'}`}>
-          No reviews yet
+          {t.reviews.noReviewsYet}
         </p>
         <p className={`text-xs mt-1 ${subtextClass}`}>
-          Reviews from satisfied clients will appear here.
+          {t.reviews.noReviewsYetDesc}
         </p>
       </div>
     );
@@ -221,7 +225,7 @@ export default function GoogleReviewsWidget({
                 <div>
                   <p className="text-sm font-semibold">{currentReview.client_first_name}</p>
                   <p className={`text-[11px] ${tertiaryClass}`}>
-                    {formatReviewDate(currentReview.submitted_at)}
+                    {formatReviewDate(currentReview.submitted_at, t.reviews, language)}
                   </p>
                 </div>
               </div>
@@ -275,7 +279,7 @@ export default function GoogleReviewsWidget({
               </p>
             )}
             <p className={`text-[10px] mt-2 ${tertiaryClass}`}>
-              {formatReviewDate(review.submitted_at)}
+              {formatReviewDate(review.submitted_at, t.reviews, language)}
             </p>
           </div>
         ))}

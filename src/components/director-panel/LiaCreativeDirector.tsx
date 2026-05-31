@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 import { streamMessageToAI, analyzeImageWithVision } from '../../lib/aiApi';
 import { loadLiaContext, buildContextBlock, type LiaContext } from '../../lib/director-panel/lia-context';
 import { buildMemoryBlock, saveBrief, saveDecision, saveCampaign, updateCampaignStep, getCampaigns, deleteCampaign, savePromptResult, getSavedPrompts, savePrompt, deleteSavedPrompt, type CampaignPlan, type CampaignStep, type SavedPrompt } from '../../lib/director-panel/lia-memory';
@@ -142,6 +143,7 @@ FORBIDDEN: Generic descriptions, agency language, vague lighting/environments, s
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default function LiaCreativeDirector() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   // ─── Chat state ─────────────────────────────────────────────────────
@@ -304,12 +306,12 @@ export default function LiaCreativeDirector() {
         const enhanced = response.outputs[0].data || response.outputs[0].url;
         if (enhanced && typeof enhanced === 'string') {
           setGeneratePrompt(enhanced);
-          toast.success('Prompt enhanced');
+          toast.success(t.directorPanel.promptEnhanced);
         }
       } else {
-        toast.error('Enhancement failed');
+        toast.error(t.directorPanel.enhancementFailed);
       }
-    } catch { toast.error('Enhancement failed'); }
+    } catch { toast.error(t.directorPanel.enhancementFailed); }
     finally { setEnhancingPrompt(false); }
   }, [generatePrompt, enhancingPrompt]);
 
@@ -432,7 +434,7 @@ export default function LiaCreativeDirector() {
     setSeed(null);
     setSeedLocked(false);
     setActiveTab('generate');
-    toast.success('Prompt loaded — modify and regenerate');
+    toast.success(t.directorPanel.promptLoadedModify);
   };
 
   const [pendingVariation, setPendingVariation] = useState(false);
@@ -507,7 +509,7 @@ export default function LiaCreativeDirector() {
 
         setOutputs((prev) => [upscaled, ...prev]);
         setOutputIndex(0);
-        toast.success('Upscale complete');
+        toast.success(t.directorPanel.upscaleComplete);
       } else {
         toast.error(response.error?.message || 'Upscale failed');
       }
@@ -612,7 +614,7 @@ export default function LiaCreativeDirector() {
         setOutputs((prev) => [inpainted, ...prev]);
         setOutputIndex(0);
         setDrawMode(false);
-        toast.success('Inpaint complete');
+        toast.success(t.directorPanel.inpaintComplete);
       } else {
         toast.error(response.error?.message || 'Inpaint failed');
       }
@@ -633,8 +635,8 @@ export default function LiaCreativeDirector() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) { toast.error('Only images'); return; }
-    if (file.size > 10 * 1024 * 1024) { toast.error('Max 10MB'); return; }
+    if (!file.type.startsWith('image/')) { toast.error(t.directorPanel.onlyImages); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error(t.directorPanel.max10MB); return; }
     const url = URL.createObjectURL(file);
     setUploadedImage({ url, name: file.name });
   };
@@ -762,7 +764,7 @@ export default function LiaCreativeDirector() {
       status: 'planning',
     });
     setCampaignsState(getCampaigns());
-    toast.success('Campaign saved');
+    toast.success(t.directorPanel.campaignSaved);
   };
 
   const handleStepAction = (campaignId: string, stepId: string, action: 'start' | 'complete' | 'skip') => {
@@ -789,7 +791,7 @@ export default function LiaCreativeDirector() {
   const toggleCompareItem = (gen: DirectorGeneration) => {
     setCompareItems((prev) => {
       if (prev.find((g) => g.id === gen.id)) return prev.filter((g) => g.id !== gen.id);
-      if (prev.length >= 4) { toast.error('Max 4'); return prev; }
+      if (prev.length >= 4) { toast.error(t.directorPanel.max4); return prev; }
       return [...prev, gen];
     });
   };
@@ -806,7 +808,7 @@ export default function LiaCreativeDirector() {
     a.href = URL.createObjectURL(blob);
     a.download = `creative-brief-${Date.now()}.txt`;
     a.click();
-    toast.success('Brief exported');
+    toast.success(t.directorPanel.briefExported);
   };
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -929,7 +931,7 @@ export default function LiaCreativeDirector() {
                     </>
                   )}
                   <div className="w-px h-4 bg-outline" />
-                  <button onClick={() => { navigator.clipboard.writeText(currentOutput.prompt); toast.success('Prompt copied'); }}
+                  <button onClick={() => { navigator.clipboard.writeText(currentOutput.prompt); toast.success(t.directorPanel.promptCopied); }}
                     className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors" title="Copy prompt">
                     <Copy className="w-3.5 h-3.5" />
                   </button>
@@ -1008,7 +1010,7 @@ export default function LiaCreativeDirector() {
             <div className="mx-4 mt-3 max-h-[200px] overflow-y-auto rounded-xl border border-outline bg-surface-secondary p-2 space-y-1">
               {savedPrompts.map((sp) => (
                 <div key={sp.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-tertiary group transition-colors">
-                  <button onClick={() => { setGeneratePrompt(sp.prompt); if (sp.negativePrompt) setNegativePrompt(sp.negativePrompt); if (sp.model) setSelectedModel(sp.model); if (sp.aspectRatio) setSelectedAspect(sp.aspectRatio as any); setShowPromptLibrary(false); toast.success('Prompt loaded'); }}
+                  <button onClick={() => { setGeneratePrompt(sp.prompt); if (sp.negativePrompt) setNegativePrompt(sp.negativePrompt); if (sp.model) setSelectedModel(sp.model); if (sp.aspectRatio) setSelectedAspect(sp.aspectRatio as any); setShowPromptLibrary(false); toast.success(t.directorPanel.promptLoaded); }}
                     className="flex-1 text-left min-w-0">
                     <p className="text-[12px] font-medium text-text-primary truncate">{sp.title}</p>
                     <p className="text-[10px] text-text-tertiary truncate">{sp.prompt.slice(0, 80)}...</p>
@@ -1180,7 +1182,7 @@ export default function LiaCreativeDirector() {
               const title = generatePrompt.slice(0, 40);
               savePrompt({ title, prompt: generatePrompt, negativePrompt, model: selectedModel, aspectRatio: selectedAspect, tags: [] });
               setSavedPrompts(getSavedPrompts());
-              toast.success('Prompt saved');
+              toast.success(t.directorPanel.promptSaved);
             }} disabled={!generatePrompt.trim()}
               className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-surface-secondary border border-outline text-[11px] font-medium text-text-tertiary hover:text-text-primary transition-colors"
               title="Save prompt to library">
@@ -1254,11 +1256,11 @@ export default function LiaCreativeDirector() {
                   </button>
                   {detectedPrompt && (
                     <div className="flex gap-2 ml-1">
-                      <button onClick={() => { setGeneratePrompt(detectedPrompt); setActiveTab('generate'); toast.success('Prompt loaded in Generate tab'); }}
+                      <button onClick={() => { setGeneratePrompt(detectedPrompt); setActiveTab('generate'); toast.success(t.directorPanel.promptLoadedInGenerateTab); }}
                         className="flex items-center gap-1.5 text-[11px] text-purple-600 hover:text-purple-700 transition-colors font-medium">
                         <Sparkles className="w-3 h-3" /> Generate directly
                       </button>
-                      <button onClick={() => { navigator.clipboard.writeText(detectedPrompt); toast.success('Copied'); }}
+                      <button onClick={() => { navigator.clipboard.writeText(detectedPrompt); toast.success(t.directorPanel.copied); }}
                         className="flex items-center gap-1.5 text-[11px] text-text-tertiary hover:text-text-primary transition-colors">
                         <Copy className="w-3 h-3" /> Copy
                       </button>

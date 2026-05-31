@@ -101,7 +101,7 @@ export default function ManageTeam() {
       setInvitations(data.invitations);
     } catch (err: any) {
       console.error('Failed to load team:', err.message);
-      toast.error(isFr ? 'Erreur lors du chargement de l\'équipe.' : 'Failed to load team.');
+      toast.error(t.manageTeam.failedToLoadTeam);
     } finally {
       setLoading(false);
     }
@@ -142,7 +142,7 @@ export default function ManageTeam() {
       if (result.invite_link) {
         try {
           await navigator.clipboard.writeText(result.invite_link);
-          toast.info(isFr ? 'Lien d\'invitation copié.' : 'Invite link copied to clipboard.');
+          toast.info(t.manageTeam.inviteLinkCopied);
         } catch {}
       }
 
@@ -204,7 +204,7 @@ export default function ManageTeam() {
     <PermissionGate permission="team.view">
     <div className="space-y-5">
       <PageHeader
-        title={isFr ? 'Gérer l\'équipe' : 'Manage Team'}
+        title={t.manageTeam.manageTeam}
         subtitle={isFr
           ? 'Invitez et gérez les membres de votre équipe. Assignez des rôles et des permissions.'
           : 'Invite and manage your team members. Assign roles and permissions.'}
@@ -469,6 +469,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
   onRemove,
   isSuspended,
 }) => {
+  const { t } = useTranslation();
   const isFr = language === 'fr';
   const cfg = ROLE_CONFIG[member.role] || ROLE_CONFIG.technician;
   const RoleIcon = cfg.icon;
@@ -555,7 +556,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-danger hover:bg-danger-light transition-colors"
                     >
                       <UserX size={13} />
-                      {isFr ? 'Retirer de l\'équipe' : 'Remove from team'}
+                      {t.manageTeam.removeFromTeam}
                     </button>
                   </>
                 )}
@@ -578,6 +579,7 @@ function InviteForm({
   onSend: (email: string, role: MemberRole) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const isFr = language === 'fr';
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<MemberRole>('technician');
@@ -653,7 +655,7 @@ function InviteForm({
           {sending ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />}
           {sending
             ? (t.invoiceDetails.sending)
-            : (isFr ? 'Envoyer l\'invitation' : 'Send Invitation')}
+            : (t.manageTeam.sendInvitation)}
         </button>
       </div>
     </div>

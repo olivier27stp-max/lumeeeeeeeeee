@@ -21,27 +21,23 @@ import {
 } from '../lib/customFieldsApi';
 import { useTranslation } from '../i18n';
 
-// ─── Column type icons & labels ─────────────────────────────────
-const COL_TYPE_META: Record<ColumnType, { icon: typeof Type; label: string; labelFr: string }> = {
-  text:     { icon: Type,        label: 'Text',      labelFr: 'Texte' },
-  number:   { icon: Hash,        label: 'Number',    labelFr: 'Nombre' },
-  status:   { icon: List,        label: 'Status',    labelFr: 'Statut' },
-  dropdown: { icon: ChevronDown, label: 'Dropdown',  labelFr: 'Liste déroulante' },
-  date:     { icon: Calendar,    label: 'Date',      labelFr: 'Date' },
-  checkbox: { icon: CheckSquare, label: 'Checkbox',  labelFr: 'Case à cocher' },
-  email:    { icon: Mail,        label: 'Email',     labelFr: 'Email' },
-  phone:    { icon: Phone,       label: 'Phone',     labelFr: 'Téléphone' },
-  url:      { icon: Link,        label: 'URL',       labelFr: 'URL' },
-  currency: { icon: DollarSign,  label: 'Currency',  labelFr: 'Monnaie' },
-  rating:   { icon: Star,        label: 'Rating',    labelFr: 'Évaluation' },
-  label:    { icon: Tag,         label: 'Label',     labelFr: 'Étiquette' },
+// ─── Column type icons (labels come from translation keys) ───────
+const COL_TYPE_ICONS: Record<ColumnType, typeof Type> = {
+  text:     Type,
+  number:   Hash,
+  status:   List,
+  dropdown: ChevronDown,
+  date:     Calendar,
+  checkbox: CheckSquare,
+  email:    Mail,
+  phone:    Phone,
+  url:      Link,
+  currency: DollarSign,
+  rating:   Star,
+  label:    Tag,
 };
 
-const ENTITY_TABS: { key: EntityType; label: string; labelFr: string }[] = [
-  { key: 'clients',  label: 'Clients',  labelFr: 'Clients' },
-  { key: 'jobs',     label: 'Jobs',     labelFr: 'Travaux' },
-  { key: 'invoices', label: 'Invoices', labelFr: 'Factures' },
-];
+const ENTITY_TAB_KEYS: EntityType[] = ['clients', 'jobs', 'invoices'];
 
 const STATUS_COLORS = [
   '#94a3b8', '#3b82f6', '#22c55e', '#ef4444', '#f59e0b',
@@ -50,8 +46,7 @@ const STATUS_COLORS = [
 
 // ─── Main Component ─────────────────────────────────────────────
 export default function CustomFieldsSettings() {
-  const { language } = useTranslation();
-  const isFr = language === 'fr';
+  const { t } = useTranslation();
 
   const [entity, setEntity] = useState<EntityType>('clients');
   const [columns, setColumns] = useState<CustomColumn[]>([]);
@@ -115,18 +110,18 @@ export default function CustomFieldsSettings() {
     <div className="space-y-5">
       {/* Entity tabs */}
       <div className="flex items-center gap-1 p-1 bg-surface-secondary/80 rounded-xl w-fit border border-outline-subtle/40">
-        {ENTITY_TABS.map((tab) => (
+        {ENTITY_TAB_KEYS.map((key) => (
           <button
-            key={tab.key}
-            onClick={() => setEntity(tab.key)}
+            key={key}
+            onClick={() => setEntity(key)}
             className={cn(
               'px-4 py-2 rounded-lg text-[13px] font-semibold transition-all',
-              entity === tab.key
+              entity === key
                 ? 'bg-surface text-text-primary shadow-sm border border-outline-subtle/50'
                 : 'text-text-tertiary hover:text-text-primary border border-transparent'
             )}
           >
-            {isFr ? tab.labelFr : tab.label}
+            {t.customFields[key as 'clients' | 'jobs' | 'invoices']}
           </button>
         ))}
       </div>
@@ -139,12 +134,10 @@ export default function CustomFieldsSettings() {
             <h3 className="text-[14px] font-semibold text-text-primary">
               {t.customFields.customColumns}
               {' '}
-              <span className="text-text-tertiary font-normal">— {isFr ? ENTITY_TABS.find((t) => t.key === entity)!.labelFr : ENTITY_TABS.find((t) => t.key === entity)!.label}</span>
+              <span className="text-text-tertiary font-normal">— {t.customFields[entity as 'clients' | 'jobs' | 'invoices']}</span>
             </h3>
             <p className="text-[12px] text-text-tertiary mt-0.5">
-              {isFr
-                ? 'Glissez pour réordonner. Cliquez sur l\'icône crayon pour modifier.'
-                : 'Drag to reorder. Click the pencil icon to edit.'}
+              {t.customFields.dragInstruction}
             </p>
           </div>
           <button
@@ -177,8 +170,7 @@ export default function CustomFieldsSettings() {
         ) : (
           <div className="divide-y divide-border">
             {columns.map((col, idx) => {
-              const meta = COL_TYPE_META[col.col_type as ColumnType];
-              const Icon = meta?.icon || Type;
+              const Icon = COL_TYPE_ICONS[col.col_type as ColumnType] || Type;
               return (
                 <div
                   key={col.id}
@@ -207,7 +199,7 @@ export default function CustomFieldsSettings() {
                     <p className="text-[11px] text-text-tertiary mt-0.5 flex items-center gap-1.5">
                       <span className="inline-flex items-center gap-1 rounded-md bg-surface-secondary/80 px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">
                         <Icon size={10} />
-                        {isFr ? meta?.labelFr : meta?.label}
+                        {t.customFields[col.col_type as ColumnType]}
                       </span>
                       {!col.visible && (
                         <span className="inline-flex items-center gap-0.5 text-[10px] text-text-tertiary/70">
@@ -257,7 +249,6 @@ export default function CustomFieldsSettings() {
         {showAddModal && (
           <AddColumnModal
             entity={entity}
-            isFr={isFr}
             onClose={() => setShowAddModal(false)}
             onCreated={(col) => {
               setColumns((prev) => [...prev, col]);
@@ -268,7 +259,6 @@ export default function CustomFieldsSettings() {
         {editingColumn && (
           <EditColumnModal
             column={editingColumn}
-            isFr={isFr}
             onClose={() => setEditingColumn(null)}
             onUpdated={(updated) => {
               setColumns((prev) => prev.map((c) => c.id === updated.id ? updated : c));
@@ -284,15 +274,14 @@ export default function CustomFieldsSettings() {
 // ─── Add Column Modal ───────────────────────────────────────────
 function AddColumnModal({
   entity,
-  isFr,
   onClose,
   onCreated,
 }: {
   entity: EntityType;
-  isFr: boolean;
   onClose: () => void;
   onCreated: (col: CustomColumn) => void;
 }) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<'type' | 'name'>('type');
   const [selectedType, setSelectedType] = useState<ColumnType | null>(null);
   const [name, setName] = useState('');
@@ -334,15 +323,15 @@ function AddColumnModal({
 
         {step === 'type' ? (
           <div className="p-4 grid grid-cols-4 gap-2">
-            {(Object.entries(COL_TYPE_META) as [ColumnType, typeof COL_TYPE_META[ColumnType]][]).map(([type, meta]) => {
-              const Icon = meta.icon;
+            {(Object.keys(COL_TYPE_ICONS) as ColumnType[]).map((type) => {
+              const Icon = COL_TYPE_ICONS[type];
               return (
                 <button
                   key={type}
                   onClick={() => {
                     setSelectedType(type);
                     setStep('name');
-                    setName(isFr ? meta.labelFr : meta.label);
+                    setName(t.customFields[type]);
                   }}
                   className={cn(
                     'flex flex-col items-center gap-2 p-3 rounded-xl border transition-all text-center group/type',
@@ -353,7 +342,7 @@ function AddColumnModal({
                     <Icon size={17} className="text-text-secondary group-hover/type:text-primary transition-colors" />
                   </div>
                   <span className="text-[11px] font-semibold text-text-secondary group-hover/type:text-text-primary transition-colors">
-                    {isFr ? meta.labelFr : meta.label}
+                    {t.customFields[type]}
                   </span>
                 </button>
               );
@@ -401,15 +390,14 @@ function AddColumnModal({
 // ─── Edit Column Modal (name, config, required) ─────────────────
 function EditColumnModal({
   column,
-  isFr,
   onClose,
   onUpdated,
 }: {
   column: CustomColumn;
-  isFr: boolean;
   onClose: () => void;
   onUpdated: (col: CustomColumn) => void;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(column.name);
   const [required, setRequired] = useState(column.required);
   const [config, setConfig] = useState<ColumnConfig>(column.config || {});
@@ -516,8 +504,8 @@ function EditColumnModal({
               {t.customFields.type}
             </label>
             <div className="mt-1 flex items-center gap-2 px-3 py-2 rounded-md bg-surface-secondary text-[13px] text-text-secondary">
-              {React.createElement(COL_TYPE_META[column.col_type as ColumnType]?.icon || Type, { size: 14 })}
-              {isFr ? COL_TYPE_META[column.col_type as ColumnType]?.labelFr : COL_TYPE_META[column.col_type as ColumnType]?.label}
+              {React.createElement(COL_TYPE_ICONS[column.col_type as ColumnType] || Type, { size: 14 })}
+              {t.customFields[column.col_type as ColumnType]}
             </div>
           </div>
 

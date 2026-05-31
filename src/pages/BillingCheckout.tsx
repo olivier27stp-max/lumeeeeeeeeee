@@ -30,7 +30,7 @@ type Step = 'plan' | 'onboarding' | 'payment';
 export default function BillingCheckout() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const isFr = language === 'fr';
 
   // URL params
@@ -244,7 +244,7 @@ export default function BillingCheckout() {
         </div>
         <div>
           <h1 className="text-[20px] font-bold text-text-primary tracking-tight">
-            {isFr ? 'Finaliser l\'abonnement' : 'Complete your subscription'}
+            {t.billing.completeYourSubscription}
           </h1>
           <p className="text-[12px] text-text-tertiary">
             {t.billing.unlockPremiumFeaturesForYourBusiness}
@@ -408,7 +408,7 @@ export default function BillingCheckout() {
             <div className="flex items-center gap-2">
               <Building2 size={14} className="text-text-tertiary" />
               <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">
-                {isFr ? 'Informations de l\'entreprise' : 'Business Information'}
+                {t.billing.businessInformation}
               </p>
             </div>
 
@@ -418,7 +418,7 @@ export default function BillingCheckout() {
                 <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} className="glass-input w-full mt-1" placeholder="John Doe" />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Nom de l\'entreprise' : 'Company Name'} *</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.billing.companyName} *</label>
                 <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="glass-input w-full mt-1" placeholder="Acme Corp" />
               </div>
             </div>
@@ -481,7 +481,7 @@ export default function BillingCheckout() {
                 </select>
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Taille de l\'entreprise' : 'Company Size'}</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.billing.companySize}</label>
                 <select value={companySize} onChange={(e) => setCompanySize(e.target.value)} className="glass-input w-full mt-1">
                   <option value="">{t.billing.select}</option>
                   <option value="1">1 ({t.billing.solo})</option>
@@ -645,7 +645,7 @@ export default function BillingCheckout() {
                   {processing ? (
                     <><Loader2 size={14} className="animate-spin" /> {t.billing.processing}</>
                   ) : (
-                    <><Zap size={14} /> {isFr ? `S'abonner — $${finalPrice} ${currency}` : `Subscribe — $${finalPrice} ${currency}`}</>
+                    <><Zap size={14} /> {`${t.billing.subscribe} — $${finalPrice} ${currency}`}</>
                   )}
                 </button>
 
