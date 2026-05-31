@@ -255,7 +255,7 @@ function RowActionMenu({ children, items }: { children: React.ReactNode; items: 
       <AnimatePresence>
         {open && (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.1 }}
-            className="absolute right-0 top-full mt-1 w-48 bg-surface border border-outline rounded-lg shadow-xl z-50 py-1 overflow-hidden">
+            className="absolute right-0 top-full mt-1 w-48 bg-surface-card border border-outline rounded-lg shadow-xl z-50 py-1 overflow-hidden">
             {items.map((it, i) => (
               <React.Fragment key={i}>
                 {it.danger && i > 0 && <div className="border-t border-outline my-1" />}
@@ -281,7 +281,7 @@ function ModalShell({ open, onClose, width, children }: { open: boolean; onClose
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/40" onClick={onClose}>
       <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-        className={cn('bg-surface border border-outline rounded-xl shadow-2xl', width || 'w-[420px]')} onClick={e => e.stopPropagation()}>
+        className={cn('bg-surface-card border border-outline rounded-xl shadow-2xl', width || 'w-[420px]')} onClick={e => e.stopPropagation()}>
         {children}
       </motion.div>
     </motion.div>
@@ -681,7 +681,7 @@ export default function Timesheets() {
           <div className="flex rounded-md border border-outline overflow-hidden">
             {([['feuilles', fr ? 'Feuilles' : 'Timesheets'], ['carte', fr ? 'Carte' : 'Map'], ['disponibilites', fr ? 'Disponibilités' : 'Availability'], ['profils', fr ? 'Profils' : 'Profiles']] as [HubTab, string][]).map(([key, label]) => (
               <button key={key} onClick={() => setHubTab(key)}
-                className={cn('px-4 py-2 text-[13px] font-medium transition-all', hubTab === key ? 'bg-text-primary text-white' : 'bg-surface text-text-secondary hover:bg-surface-secondary')}>
+                className={cn('px-4 py-2 text-[13px] font-medium transition-all', hubTab === key ? 'bg-text-primary text-white' : 'bg-surface-card text-text-secondary hover:bg-surface-secondary')}>
                 {label}
               </button>
             ))}
@@ -691,12 +691,12 @@ export default function Timesheets() {
             <>
               <div className="flex rounded-md border border-outline overflow-hidden">
                 {(['day', 'week', 'month'] as ViewMode[]).map(m => (
-                  <button key={m} onClick={() => setViewMode(m)} className={cn('px-3.5 py-2 text-[13px] font-medium transition-all', viewMode === m ? 'bg-text-primary text-white' : 'bg-surface text-text-secondary hover:bg-surface-secondary')}>
+                  <button key={m} onClick={() => setViewMode(m)} className={cn('px-3.5 py-2 text-[13px] font-medium transition-all', viewMode === m ? 'bg-text-primary text-white' : 'bg-surface-card text-text-secondary hover:bg-surface-secondary')}>
                     {m === 'day' ? (fr ? 'Jour' : 'Day') : m === 'week' ? (fr ? 'Semaine' : 'Week') : (fr ? 'Mois' : 'Month')}
                   </button>
                 ))}
               </div>
-              <button onClick={() => handleExport()} className="inline-flex items-center gap-2 h-9 px-4 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">
+              <button onClick={() => handleExport()} className="inline-flex items-center gap-2 h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">
                 <Download size={14} /> {fr ? 'Exporter' : 'Export'}
               </button>
             </>
@@ -722,10 +722,10 @@ export default function Timesheets() {
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => nav(-1)} className="h-9 w-9 flex items-center justify-center bg-surface border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronLeft size={16} /></button>
+            <button onClick={() => nav(-1)} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronLeft size={16} /></button>
             <span className="text-[14px] font-semibold text-text-primary min-w-[220px] text-center tabular-nums">{dateLabel}</span>
-            <button onClick={() => nav(1)} className="h-9 w-9 flex items-center justify-center bg-surface border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronRight size={16} /></button>
-            <button onClick={() => setCurrentDate(new Date())} className="h-9 px-4 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">{fr ? "Aujourd'hui" : 'Today'}</button>
+            <button onClick={() => nav(1)} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronRight size={16} /></button>
+            <button onClick={() => setCurrentDate(new Date())} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">{fr ? "Aujourd'hui" : 'Today'}</button>
           </div>
         </div>
       )}
@@ -793,7 +793,7 @@ export default function Timesheets() {
                   <>
                     <button onClick={handlePauseToggle} disabled={timerLoading}
                       className={cn('inline-flex items-center gap-2 h-11 px-5 rounded-xl font-semibold text-[14px] transition-colors shadow-sm disabled:opacity-50',
-                        isOnBreak ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-surface border border-outline text-text-primary hover:bg-surface-secondary')}>
+                        isOnBreak ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-surface-card border border-outline text-text-primary hover:bg-surface-secondary')}>
                       {timerLoading ? <Loader2 size={16} className="animate-spin" /> : isOnBreak ? <Play size={16} /> : <PauseIcon size={16} />}
                       {isOnBreak ? (fr ? 'Reprendre' : 'Resume') : (fr ? 'Pause' : 'Pause')}
                     </button>
@@ -827,7 +827,7 @@ export default function Timesheets() {
                         )}>{item.reason}</span>
                       </div>
                     </div>
-                    <button onClick={() => forceClockOut(item.id)} className="h-7 px-2.5 text-[11px] font-medium rounded-md bg-surface border border-outline text-text-primary hover:bg-surface-secondary transition-colors opacity-0 group-hover:opacity-100">
+                    <button onClick={() => forceClockOut(item.id)} className="h-7 px-2.5 text-[11px] font-medium rounded-md bg-surface-card border border-outline text-text-primary hover:bg-surface-secondary transition-colors opacity-0 group-hover:opacity-100">
                       {fr ? 'Forcer punch-out' : 'Force clock-out'}
                     </button>
                   </div>
@@ -855,10 +855,10 @@ export default function Timesheets() {
             <div className="relative">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
               <input value={tableSearch} onChange={e => setTableSearch(e.target.value)} placeholder={fr ? 'Rechercher un employé...' : 'Search employees...'}
-                className="h-9 w-[220px] pl-9 pr-3 text-[14px] bg-surface border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary transition-all" />
+                className="h-9 w-[220px] pl-9 pr-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary transition-all" />
             </div>
             <button onClick={() => setStatusFilter(statusFilter === 'all' ? 'active' : statusFilter === 'active' ? 'pause' : statusFilter === 'pause' ? 'inactive' : 'all')}
-              className={cn('inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors', statusFilter !== 'all' ? 'bg-text-primary text-white border-text-primary' : 'bg-surface text-text-primary border-outline hover:bg-surface-secondary')}>
+              className={cn('inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors', statusFilter !== 'all' ? 'bg-text-primary text-white border-text-primary' : 'bg-surface-card text-text-primary border-outline hover:bg-surface-secondary')}>
               <CirclePlus size={15} className={statusFilter !== 'all' ? 'text-white' : 'text-[#64748b]'} />
               {fr ? 'Statut' : 'Status'}
               {statusFilter !== 'all' && <span className="text-[11px] opacity-80">({statusFilter === 'active' ? (fr ? 'Actif' : 'Active') : statusFilter === 'pause' ? 'Pause' : (fr ? 'Inactif' : 'Inactive')})</span>}
@@ -866,7 +866,7 @@ export default function Timesheets() {
           </div>
 
           {/* Table */}
-          <div className="border border-outline rounded-md overflow-hidden bg-surface">
+          <div className="border border-outline rounded-md overflow-hidden bg-surface-card">
             <table className="w-full text-left table-fixed">
               <colgroup>
                 <col style={{ width: '48px' }} />
@@ -941,8 +941,8 @@ export default function Timesheets() {
           <div className="flex items-center justify-between">
             <span className="text-[14px] text-[#64748b]">{t.common.rowsSelected.replace('{selected}', String(selected.size)).replace('{total}', String(filteredRows.length))}</span>
             <div className="flex items-center gap-2">
-              <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary disabled:opacity-40 hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.previous}</button>
-              <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary disabled:opacity-40 hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.next}</button>
+              <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary disabled:opacity-40 hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.previous}</button>
+              <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary disabled:opacity-40 hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.next}</button>
             </div>
           </div>
         </>
@@ -991,7 +991,7 @@ export default function Timesheets() {
             <AnimatePresence>
               {selectedRep && (
                 <motion.div initial={{ x: 400, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 400, opacity: 0 }}
-                  className="absolute right-0 top-0 bottom-0 w-[340px] bg-surface border-l border-outline shadow-2xl z-[500] flex flex-col">
+                  className="absolute right-0 top-0 bottom-0 w-[340px] bg-surface-card border-l border-outline shadow-2xl z-[500] flex flex-col">
                   <div className="p-5 border-b border-outline">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3"><UnifiedAvatar id={selectedRep.user_id} name={selectedRep.user_name || 'Unknown'} size={36} /><div><h3 className="text-[14px] font-bold text-text-primary">{selectedRep.user_name || 'Unknown'}</h3><p className="text-[11px] text-text-tertiary">{selectedRep.team_name || ''}</p></div></div>
@@ -1004,8 +1004,8 @@ export default function Timesheets() {
                     <div><p className="text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{fr ? 'Dernière activité' : 'Last activity'}</p><p className="text-[14px] font-medium text-text-primary mt-1">{new Date(selectedRep.recorded_at).toLocaleTimeString()}</p></div>
                   </div>
                   <div className="p-4 border-t border-outline space-y-2">
-                    <a href={`tel:${selectedRep.user_name}`} className="w-full flex items-center justify-center gap-2 h-9 rounded-md bg-surface border border-outline text-text-primary text-[13px] font-medium hover:bg-surface-secondary transition-colors"><Phone size={13} /> {fr ? 'Contacter' : 'Contact'}</a>
-                    <button onClick={() => setHubTab('feuilles')} className="w-full flex items-center justify-center gap-2 h-9 rounded-md bg-surface border border-outline text-text-primary text-[13px] font-medium hover:bg-surface-secondary transition-colors"><Eye size={13} /> {fr ? 'Voir feuille de temps' : 'View timesheet'}</button>
+                    <a href={`tel:${selectedRep.user_name}`} className="w-full flex items-center justify-center gap-2 h-9 rounded-md bg-surface-card border border-outline text-text-primary text-[13px] font-medium hover:bg-surface-secondary transition-colors"><Phone size={13} /> {fr ? 'Contacter' : 'Contact'}</a>
+                    <button onClick={() => setHubTab('feuilles')} className="w-full flex items-center justify-center gap-2 h-9 rounded-md bg-surface-card border border-outline text-text-primary text-[13px] font-medium hover:bg-surface-secondary transition-colors"><Eye size={13} /> {fr ? 'Voir feuille de temps' : 'View timesheet'}</button>
                   </div>
                 </motion.div>
               )}
@@ -1034,7 +1034,7 @@ export default function Timesheets() {
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
                 <input value={avTeamSearch} onChange={e => setAvTeamSearch(e.target.value)} placeholder={fr ? 'Rechercher une équipe...' : 'Search teams...'}
-                  className="h-8 w-full pl-8 pr-3 text-[13px] bg-surface border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary transition-all" />
+                  className="h-8 w-full pl-8 pr-3 text-[13px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary transition-all" />
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
@@ -1085,12 +1085,12 @@ export default function Timesheets() {
                       {selectedTeam && !selectedTeam.is_active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-600 font-medium">{fr ? 'Inactive' : 'Inactive'}</span>}
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => setAvWeekStart(avAddDays(avWeekStart, -7))} className="h-9 w-9 flex items-center justify-center bg-surface border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronLeft size={16} /></button>
+                      <button onClick={() => setAvWeekStart(avAddDays(avWeekStart, -7))} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronLeft size={16} /></button>
                       <span className="text-[13px] font-semibold text-text-primary min-w-[200px] text-center tabular-nums">{avFormatDate(avToDateStr(avWeekStart), fr)} — {avFormatDate(avToDateStr(avWeekEnd), fr)}</span>
-                      <button onClick={() => setAvWeekStart(avAddDays(avWeekStart, 7))} className="h-9 w-9 flex items-center justify-center bg-surface border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronRight size={16} /></button>
-                      <button onClick={() => setAvWeekStart(avStartOfWeek(new Date()))} className="h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">{fr ? 'Cette semaine' : 'This week'}</button>
+                      <button onClick={() => setAvWeekStart(avAddDays(avWeekStart, 7))} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronRight size={16} /></button>
+                      <button onClick={() => setAvWeekStart(avStartOfWeek(new Date()))} className="h-9 px-3 bg-surface-card border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">{fr ? 'Cette semaine' : 'This week'}</button>
                       <button onClick={() => { setBulkDays([true,true,true,true,true,false,false]); setBulkStart('08:00'); setBulkEnd('17:00'); setBulkModalOpen(true); }}
-                        className="h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">{fr ? 'Ajout en lot' : 'Bulk add'}</button>
+                        className="h-9 px-3 bg-surface-card border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">{fr ? 'Ajout en lot' : 'Bulk add'}</button>
                       <button onClick={() => openCreateSlot()} className="inline-flex items-center gap-1.5 h-9 px-4 bg-text-primary text-white rounded-md text-[13px] font-medium hover:opacity-90 transition-all">
                         <Plus size={14} /> {fr ? 'Ajouter un créneau' : 'Add slot'}
                       </button>
@@ -1108,7 +1108,7 @@ export default function Timesheets() {
                     <div className="flex items-center gap-2">
                       {weeklySlots.length === 0 && (
                         <button onClick={() => setDefaultMut.mutate()} disabled={setDefaultMut.isPending}
-                          className="h-8 px-3 bg-surface border border-outline rounded-md text-[12px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">
+                          className="h-8 px-3 bg-surface-card border border-outline rounded-md text-[12px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">
                           {fr ? 'Définir lun-ven 8–17' : 'Set Mon-Fri 8-17'}
                         </button>
                       )}
@@ -1139,7 +1139,7 @@ export default function Timesheets() {
                               ) : daySlots.map(s => (
                                 <div key={s.id} className="group relative bg-emerald-100/60 rounded px-1.5 py-1 mb-1">
                                   <span className="text-[11px] font-medium text-emerald-700 tabular-nums">{minutesToTime(s.start_minute)}–{minutesToTime(s.end_minute)}</span>
-                                  <button onClick={() => deleteWeeklyMut.mutate(s.id)} className="absolute -top-1.5 -right-1.5 p-0.5 rounded-full bg-surface border border-outline text-text-tertiary hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"><X size={8} /></button>
+                                  <button onClick={() => deleteWeeklyMut.mutate(s.id)} className="absolute -top-1.5 -right-1.5 p-0.5 rounded-full bg-surface-card border border-outline text-text-tertiary hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"><X size={8} /></button>
                                 </div>
                               ))}
                             </div>
@@ -1217,7 +1217,7 @@ export default function Timesheets() {
                 <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Départ' : 'Clock-out'}</label><input type="time" value={editPunchOut} onChange={e => setEditPunchOut(e.target.value)} className="glass-input w-full mt-1.5" /></div>
               </div>
               <div className="flex justify-end gap-2 mt-6">
-                <button onClick={() => setEditingId(null)} className="h-9 px-4 bg-surface border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
+                <button onClick={() => setEditingId(null)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
                 <button onClick={saveEdit} className="h-9 px-4 bg-text-primary text-white rounded-md text-[13px] font-medium hover:opacity-90">{fr ? 'Sauvegarder' : 'Save'}</button>
               </div>
             </div>
@@ -1233,7 +1233,7 @@ export default function Timesheets() {
               <h3 className="text-[16px] font-bold text-text-primary mb-4">Note</h3>
               <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={4} placeholder={fr ? 'Ajouter une note...' : 'Add a note...'} className="glass-input w-full resize-none" />
               <div className="flex justify-end gap-2 mt-4">
-                <button onClick={() => setNoteId(null)} className="h-9 px-4 bg-surface border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
+                <button onClick={() => setNoteId(null)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
                 <button onClick={saveNote} className="h-9 px-4 bg-text-primary text-white rounded-md text-[13px] font-medium hover:opacity-90">{fr ? 'Sauvegarder' : 'Save'}</button>
               </div>
             </div>
@@ -1256,7 +1256,7 @@ export default function Timesheets() {
               </div>
             )}
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setTeamModal({ open: false })} className="h-9 px-4 bg-surface border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
+              <button onClick={() => setTeamModal({ open: false })} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
               <button onClick={handleTeamSubmit} disabled={!teamForm.name.trim() || createTeamMut.isPending || updateTeamMut.isPending} className="h-9 px-4 bg-text-primary text-white rounded-md text-[13px] font-medium hover:opacity-90 disabled:opacity-50">{createTeamMut.isPending || updateTeamMut.isPending ? '...' : teamModal.editing ? (fr ? 'Sauvegarder' : 'Save') : (fr ? 'Créer' : 'Create')}</button>
             </div>
           </div>
@@ -1275,13 +1275,13 @@ export default function Timesheets() {
             </div>
             <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Statut' : 'Status'}</label>
               <div className="flex gap-2 mt-1.5">
-                <button onClick={() => setSlotStatus('available')} className={cn('flex-1 text-[13px] py-2 rounded-md font-medium border transition-colors', slotStatus === 'available' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-surface text-text-tertiary border-outline hover:bg-surface-secondary')}>{fr ? 'Disponible' : 'Available'}</button>
-                <button onClick={() => setSlotStatus('blocked')} className={cn('flex-1 text-[13px] py-2 rounded-md font-medium border transition-colors', slotStatus === 'blocked' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-surface text-text-tertiary border-outline hover:bg-surface-secondary')}>{fr ? 'Bloqué' : 'Blocked'}</button>
+                <button onClick={() => setSlotStatus('available')} className={cn('flex-1 text-[13px] py-2 rounded-md font-medium border transition-colors', slotStatus === 'available' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-surface-card text-text-tertiary border-outline hover:bg-surface-secondary')}>{fr ? 'Disponible' : 'Available'}</button>
+                <button onClick={() => setSlotStatus('blocked')} className={cn('flex-1 text-[13px] py-2 rounded-md font-medium border transition-colors', slotStatus === 'blocked' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-surface-card text-text-tertiary border-outline hover:bg-surface-secondary')}>{fr ? 'Bloqué' : 'Blocked'}</button>
               </div>
             </div>
             <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Notes' : 'Notes'}</label><input value={slotNotes} onChange={e => setSlotNotes(e.target.value)} className="glass-input mt-1.5 w-full" placeholder={fr ? 'Optionnel...' : 'Optional...'} /></div>
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setSlotModal({ open: false })} className="h-9 px-4 bg-surface border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
+              <button onClick={() => setSlotModal({ open: false })} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
               <button onClick={handleSlotSubmit} disabled={createSlotMut.isPending || updateSlotMut.isPending} className="h-9 px-4 bg-text-primary text-white rounded-md text-[13px] font-medium hover:opacity-90 disabled:opacity-50">{createSlotMut.isPending || updateSlotMut.isPending ? '...' : slotModal.editing ? (fr ? 'Sauvegarder' : 'Save') : (fr ? 'Ajouter' : 'Add')}</button>
             </div>
           </div>
@@ -1295,7 +1295,7 @@ export default function Timesheets() {
             <h3 className="text-[16px] font-bold text-text-primary">{fr ? 'Supprimer l\'équipe' : 'Delete Team'}</h3>
             <p className="text-[13px] text-text-secondary">{fr ? 'Cette action est irréversible. Continuer ?' : 'This action cannot be undone. Continue?'}</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmDeleteTeam(null)} className="h-9 px-4 bg-surface border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
+              <button onClick={() => setConfirmDeleteTeam(null)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
               <button onClick={() => deleteTeamMut.mutate(confirmDeleteTeam)} disabled={deleteTeamMut.isPending} className="h-9 px-4 bg-red-600 text-white rounded-md text-[13px] font-medium hover:bg-red-700 disabled:opacity-50">{deleteTeamMut.isPending ? '...' : (fr ? 'Supprimer' : 'Delete')}</button>
             </div>
           </div>
@@ -1313,7 +1313,7 @@ export default function Timesheets() {
               <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Fin' : 'End'}</label><input type="time" value={weeklyEnd} onChange={e => setWeeklyEnd(e.target.value)} className="glass-input mt-1.5 w-full" /></div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setWeeklyModalOpen(false)} className="h-9 px-4 bg-surface border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
+              <button onClick={() => setWeeklyModalOpen(false)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
               <button disabled={addWeeklyMut.isPending} onClick={() => addWeeklyMut.mutate({ team_id: avSelectedTeamId, weekday: weeklyDay, start_minute: timeToMinutes(weeklyStart), end_minute: timeToMinutes(weeklyEnd) })} className="h-9 px-4 bg-text-primary text-white rounded-md text-[13px] font-medium hover:opacity-90 disabled:opacity-50">{addWeeklyMut.isPending ? '...' : (fr ? 'Ajouter' : 'Add')}</button>
             </div>
           </div>
@@ -1330,7 +1330,7 @@ export default function Timesheets() {
               <div className="flex gap-2 mt-2">
                 {(fr ? ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'] : ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']).map((d, i) => (
                   <button key={i} onClick={() => { const n = [...bulkDays]; n[i] = !n[i]; setBulkDays(n); }}
-                    className={cn('h-9 w-11 rounded-md text-[12px] font-medium border transition-colors', bulkDays[i] ? 'bg-text-primary text-white border-text-primary' : 'bg-surface text-text-secondary border-outline hover:bg-surface-secondary')}>
+                    className={cn('h-9 w-11 rounded-md text-[12px] font-medium border transition-colors', bulkDays[i] ? 'bg-text-primary text-white border-text-primary' : 'bg-surface-card text-text-secondary border-outline hover:bg-surface-secondary')}>
                     {d}
                   </button>
                 ))}
@@ -1341,7 +1341,7 @@ export default function Timesheets() {
               <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Fin' : 'End'}</label><input type="time" value={bulkEnd} onChange={e => setBulkEnd(e.target.value)} className="glass-input mt-1.5 w-full" /></div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setBulkModalOpen(false)} className="h-9 px-4 bg-surface border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
+              <button onClick={() => setBulkModalOpen(false)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
               <button onClick={handleBulkSubmit} disabled={bulkMut.isPending} className="h-9 px-4 bg-text-primary text-white rounded-md text-[13px] font-medium hover:opacity-90 disabled:opacity-50">{bulkMut.isPending ? '...' : (fr ? 'Appliquer' : 'Apply')}</button>
             </div>
           </div>

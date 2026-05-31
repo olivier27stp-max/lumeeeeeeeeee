@@ -135,7 +135,7 @@ function FilterDropdown({ label, options, value, onChange }: {
           'inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors',
           isActive
             ? 'bg-primary text-white border-primary'
-            : 'bg-surface text-text-primary border-outline hover:bg-surface-secondary'
+            : 'bg-surface-card text-text-primary border-outline hover:bg-surface-secondary'
         )}
       >
         <CirclePlus size={15} strokeWidth={1.5} className={isActive ? 'text-white' : 'text-[#64748b]'} />
@@ -490,7 +490,7 @@ export default function Tasks() {
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             placeholder="Filter tasks..."
-            className="h-9 w-[200px] pl-9 pr-3 text-[14px] bg-surface border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary focus:border-text-tertiary transition-all"
+            className="h-9 w-[200px] pl-9 pr-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary focus:border-text-tertiary transition-all"
           />
         </div>
         <FilterDropdown
@@ -517,7 +517,7 @@ export default function Tasks() {
       </div>
 
       {/* ── TABLE ── */}
-      <div className="border border-outline rounded-md overflow-hidden bg-surface">
+      <div className="border border-outline rounded-md overflow-hidden bg-surface-card">
         <div className="grid" style={{ gridTemplateColumns: '48px 90px 90px 1fr 100px 100px 80px 48px' }}>
           {/* Header */}
           <div className="pl-4 py-3 border-b border-outline flex items-center">
@@ -669,14 +669,14 @@ export default function Tasks() {
           <button
             disabled={page <= 1}
             onClick={() => setPage(page - 1)}
-            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer"
+            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer"
           >
             {t.common.previous}
           </button>
           <button
             disabled={page >= totalPages}
             onClick={() => setPage(page + 1)}
-            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer"
+            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer"
           >
             {t.common.next}
           </button>

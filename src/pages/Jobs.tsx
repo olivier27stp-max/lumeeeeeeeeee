@@ -363,7 +363,7 @@ function JobStatusDropdown({ value, onChange, fr }: { value: string; onChange: (
           'inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors',
           isActive
             ? 'bg-primary text-white border-primary'
-            : 'bg-surface text-text-primary border-outline hover:bg-surface-secondary'
+            : 'bg-surface-card text-text-primary border-outline hover:bg-surface-secondary'
         )}
       >
         <Filter size={14} className={isActive ? 'text-white' : 'text-[#64748b]'} />
@@ -635,7 +635,7 @@ export default function Jobs() {
       <div className="flex items-center gap-2 mt-5 mb-4">
         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
           placeholder={fr ? 'Rechercher jobs...' : 'Search jobs...'}
-          className="h-9 w-[200px] px-3 text-[14px] bg-surface border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all" />
+          className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all" />
         <JobStatusDropdown
           value={statusFilter}
           onChange={(v) => { setStatusFilter(v); setPage(1); }}
@@ -644,7 +644,7 @@ export default function Jobs() {
       </div>
 
       {/* ── TABLE (grid layout — identical structure to Clients & Devis) ── */}
-      <div className="border border-outline rounded-md overflow-hidden bg-surface">
+      <div className="border border-outline rounded-md overflow-hidden bg-surface-card">
         <div className="grid" style={{ gridTemplateColumns: '40px 1fr 1fr 1fr 1fr 100px 48px' }}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
@@ -727,9 +727,9 @@ export default function Jobs() {
         <span className="text-[14px] text-text-secondary">{t.common.rowsSelected.replace('{selected}', String(selectedJobIds.size)).replace('{total}', String(total))}</span>
         <div className="flex items-center gap-2">
           <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
-            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.previous}</button>
+            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.previous}</button>
           <button disabled={page >= pageCount} onClick={() => setPage(p => Math.min(pageCount, p + 1))}
-            className="h-9 px-4 bg-surface border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.next}</button>
+            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.next}</button>
         </div>
       </div>
 
@@ -738,7 +738,7 @@ export default function Jobs() {
         {jobToDelete && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !isDeletingJob && setJobToDelete(null)}>
             <motion.div
-              className="bg-surface rounded-2xl border border-outline/40 shadow-2xl max-w-sm w-full mx-4"
+              className="bg-surface-card rounded-2xl border border-outline/40 shadow-2xl max-w-sm w-full mx-4"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
