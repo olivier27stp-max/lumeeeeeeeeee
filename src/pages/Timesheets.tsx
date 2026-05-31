@@ -202,7 +202,10 @@ function avFormatTime(time: string): string { return time.slice(0, 5); }
 // MAP HELPERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const TILE_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+// Satellite tiles (Esri) — same basemap as the Field Sales / calendar map.
+const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const SAT_LABELS_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}';
+const SAT_ATTR = '&copy; Esri, Maxar, Earthstar Geographics';
 
 function repMarkerIcon(name: string, color: string, status: string): L.DivIcon {
   const dot = status === 'active' ? '#22c55e' : status === 'idle' ? '#f59e0b' : '#6b7280';
@@ -979,7 +982,8 @@ export default function Timesheets() {
               </div>
             )}
             <MapContainer center={[45.5017, -73.5673]} zoom={11} className="h-full w-full" style={{ background: '#f0f0f0' }} zoomControl={false}>
-              <TileLayer url={TILE_URL} attribution="&copy; OpenStreetMap &copy; CARTO" />
+              <TileLayer url={SAT_URL} attribution={SAT_ATTR} maxZoom={19} />
+              <TileLayer url={SAT_LABELS_URL} attribution="" maxZoom={19} />
               {flyTarget && <FlyTo lat={flyTarget.lat} lng={flyTarget.lng} />}
               {liveReps.map(rep => (
                 <Marker key={rep.user_id} position={[rep.latitude, rep.longitude]} icon={repMarkerIcon(rep.user_name || '?', rep.team_color || '#3b82f6', rep.tracking_status)}
