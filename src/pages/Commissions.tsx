@@ -13,6 +13,7 @@ import {
 import { fetchTeamList, type OrgMember } from '../lib/invitationsApi';
 import type { FsCommissionRule } from '../types';
 import PersonalCommissionView from '../components/commissions/PersonalCommissionView';
+import PayrollSummaryCard from '../components/payroll/PayrollSummaryCard';
 import AdminCommissionOverview from '../components/commissions/AdminCommissionOverview';
 import RepCommissionSummary from '../components/commissions/RepCommissionSummary';
 import CommissionFilters, { type CommissionFiltersValue } from '../components/commissions/CommissionFilters';
@@ -67,6 +68,7 @@ export default function Commissions() {
             <p className="text-xs text-text-tertiary">Your closes, commission earnings and next payouts</p>
           </div>
         </div>
+        <PayrollSummaryCard />
         <PersonalCommissionView />
       </div>
     );
@@ -172,10 +174,13 @@ function AdminCommissionsLayout() {
       )}
 
       {tab === 'my' && (
-        <PersonalCommissionView
-          title="My commissions"
-          subtitle="Your own commissions, if any"
-        />
+        <div className="space-y-6">
+          <PayrollSummaryCard />
+          <PersonalCommissionView
+            title="My commissions"
+            subtitle="Your own commissions, if any"
+          />
+        </div>
       )}
 
       {tab === 'rates' && <RatesPanel />}

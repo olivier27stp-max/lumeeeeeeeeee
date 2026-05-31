@@ -688,10 +688,36 @@ const fr: TranslationKeys = {
     ssoApiDedicatedManager: 'SSO, API, gestionnaire dédié',
     team: 'Équipe',
     unlimitedIntegrationsPrioritySupport: 'Illimité, intégrations, support prioritaire',
+    payroll: 'Paie',
 
   },
 
   // Archives
+  payroll: {
+    title: 'Paie',
+    subtitle: 'Configurez les périodes et jours de paie de votre équipe',
+    currentPeriod: 'Période de paie actuelle',
+    payday: 'Versement',
+    hoursWorked: 'Heures travaillées',
+    commissionComing: 'Commission à venir',
+    pending: 'En attente',
+    approved: 'Approuvé',
+    paid: 'Payé',
+    payPeriod: 'Période de paie',
+    payPeriodType: 'Fréquence des périodes de paie',
+    weekly: 'Hebdomadaire',
+    biweekly: 'Aux 2 semaines',
+    semimonthly: 'Bimensuel (1–15, 16–fin)',
+    monthly: 'Mensuel',
+    anchorDate: 'Date de début de cycle',
+    anchorDateHint: 'Date de référence marquant le début d\'une période connue (hebdo / aux 2 semaines seulement).',
+    payDayOffset: 'Délai de versement (jours après la fin de la période)',
+    payDayOffsetHint: 'ex. la période se termine vendredi, payée 5 jours plus tard = 5.',
+    timezone: 'Fuseau horaire',
+    saveSettings: 'Enregistrer les paramètres de paie',
+    adminOnly: 'Seuls les propriétaires et administrateurs peuvent modifier la paie.',
+  },
+
   archives: {
     title: 'Archives',
     subtitle: 'Clients, devis et jobs archivés',

@@ -64,6 +64,7 @@ import coursesRouter from './routes/courses';
 import fieldSalesRouter from './routes/field-sales';
 import leaderboardRouter from './routes/leaderboard';
 import commissionsRouter from './routes/commissions';
+import payrollRouter from './routes/payroll';
 import gamificationRouter from './routes/gamification';
 import fieldSessionsRouter from './routes/field-sessions';
 import platformAdminRouter from './routes/platform-admin';
@@ -370,6 +371,7 @@ app.use('/api', coursesRouter);
 app.use('/api/field-sales', fieldSalesRouter);
 app.use('/api', leaderboardRouter);
 app.use('/api', commissionsRouter);
+app.use('/api', payrollRouter);
 app.use('/api', gamificationRouter);
 app.use('/api', fieldSessionsRouter);
 

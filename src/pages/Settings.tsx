@@ -36,6 +36,7 @@ import LocationServices from '../components/LocationServices';
 import ArchivesPanel from '../components/ArchivesPanel';
 import SeatsBanner from '../components/SeatsBanner';
 import SupportPanel from '../components/SupportPanel';
+import PayrollSettingsPanel from '../components/payroll/PayrollSettingsPanel';
 import { fetchPlans, fetchCurrentBilling, cancelSubscription, changePlan, openCustomerPortal, cancelScheduledChange, type Plan, type Subscription } from '../lib/billingApi';
 import { toast } from 'sonner';
 import { usePlatformOwner } from '../hooks/usePlatformOwner';
@@ -46,7 +47,7 @@ type SettingsTab =
   | 'company' | 'products' | 'payments' | 'reminders' | 'messaging' | 'taxes' | 'automations' | 'request-form'
   | 'checklists' | 'booking' | 'webhooks' | 'support'
   | 'team' | 'manage-team' | 'location'
-  | 'archives' | 'referrals'
+  | 'archives' | 'referrals' | 'payroll'
   | 'roles' | 'd2d-config';
 
 interface NavItem {
@@ -1167,6 +1168,7 @@ export default function Settings() {
       heading: t.settings.team,
       items: [
         { id: 'manage-team', label: isFr ? 'Membres' : 'Members',                icon: Users, link: '/settings/team' },
+        { id: 'payroll',     label: t.settings.payroll,                          icon: CalendarIcon },
         { id: 'roles',       label: isFr ? 'Rôles & Permissions' : 'Roles & Permissions', icon: Shield, link: '/settings/roles' },
         { id: 'd2d-config',  label: isFr ? 'Config Vente' : 'Sales Config',      icon: MapPin, link: '/d2d-settings/general' },
         { id: 'referrals' as SettingsTab, label: t.referFriend.referAFriend,     icon: Gift, link: '/settings/referrals' },
@@ -1331,6 +1333,9 @@ export default function Settings() {
             )}
             {activeTab === 'support' && (
               <SupportPanel />
+            )}
+            {activeTab === 'payroll' && (
+              <PayrollSettingsPanel />
             )}
           </motion.div>
         </div>

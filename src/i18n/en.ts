@@ -687,7 +687,34 @@ const en = {
     ssoApiDedicatedManager: 'SSO, API, dedicated manager',
     team: 'Team',
     unlimitedIntegrationsPrioritySupport: 'Unlimited, integrations, priority support',
+    payroll: 'Payroll',
 
+  },
+
+  // Payroll
+  payroll: {
+    title: 'Payroll',
+    subtitle: 'Configure pay periods and pay days for your team',
+    currentPeriod: 'Current Pay Period',
+    payday: 'Pay day',
+    hoursWorked: 'Hours worked',
+    commissionComing: 'Commission coming',
+    pending: 'Pending',
+    approved: 'Approved',
+    paid: 'Paid',
+    payPeriod: 'Pay period',
+    payPeriodType: 'Pay period frequency',
+    weekly: 'Weekly',
+    biweekly: 'Bi-weekly (every 2 weeks)',
+    semimonthly: 'Semi-monthly (1st–15th, 16th–end)',
+    monthly: 'Monthly',
+    anchorDate: 'Cycle start date',
+    anchorDateHint: 'Reference date marking the start of a known pay period (weekly/bi-weekly only).',
+    payDayOffset: 'Pay day offset (days after period ends)',
+    payDayOffsetHint: 'e.g. period ends Friday, paid 5 days later = 5.',
+    timezone: 'Timezone',
+    saveSettings: 'Save payroll settings',
+    adminOnly: 'Only owners and admins can change payroll settings.',
   },
 
   // Archives
