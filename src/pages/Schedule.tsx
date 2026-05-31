@@ -230,32 +230,34 @@ function TimeGrid({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header row */}
-      <div className="grid shrink-0 border-b-[1.5px] border-border" style={{ gridTemplateColumns: gridCols }}>
-        <div className="border-r-[1.5px] border-border" />
-        {columns.map((d, i) => {
-          const today = isSameDay(d, new Date());
-          return (
-            <div key={i} className={cn('border-r-[1.5px] border-border px-2 py-2.5 text-center', today && 'bg-primary/[0.03]')}>
-              <div className={cn('text-[11px] font-semibold uppercase tracking-wider', today ? 'text-primary' : 'text-text-tertiary')}>
-                {format(d, 'EEE', _LOC)}
-              </div>
-              <div className={cn('mx-auto mt-0.5 flex h-8 w-8 items-center justify-center rounded-full text-[15px]',
-                today ? 'bg-primary font-bold text-white' : 'font-medium text-text-primary')}>
-                {format(d, 'd')}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Scrollable time grid */}
+      {/* Scrollable time grid — the day header lives inside this same scroll
+          container (sticky) so its columns always line up with the grid below
+          it, regardless of the scrollbar width. */}
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto"
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       >
+        {/* Header row (sticky) */}
+        <div className="sticky top-0 z-20 grid border-b-[1.5px] border-border bg-surface" style={{ gridTemplateColumns: gridCols }}>
+          <div className="border-r-[1.5px] border-border" />
+          {columns.map((d, i) => {
+            const today = isSameDay(d, new Date());
+            return (
+              <div key={i} className={cn('border-r-[1.5px] border-border px-2 py-2.5 text-center', today && 'bg-primary/[0.03]')}>
+                <div className={cn('text-[11px] font-semibold uppercase tracking-wider', today ? 'text-primary' : 'text-text-tertiary')}>
+                  {format(d, 'EEE', _LOC)}
+                </div>
+                <div className={cn('mx-auto mt-0.5 flex h-8 w-8 items-center justify-center rounded-full text-[15px]',
+                  today ? 'bg-primary font-bold text-white' : 'font-medium text-text-primary')}>
+                  {format(d, 'd')}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         <div ref={gridRef} className="relative" style={{ touchAction: isAnyDragActive ? 'none' : 'auto' }}>
           {/* Hour rows */}
           {HOURS.map((h) => (
