@@ -289,9 +289,12 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', isDark);
+    // Dark mode applies ONLY to the authenticated CRM dashboard — never to the
+    // public landing / marketing / auth pages. We still persist the user's
+    // preference so it sticks once they're back in the app.
+    document.documentElement.classList.toggle('dark', isDark && !!user);
     localStorage.setItem('lume-theme', isDark ? 'dark' : 'light');
-  }, [isDark]);
+  }, [isDark, user]);
 
   useEffect(() => {
     // OAuth (PKCE) callback: Supabase returns to the app with ?code=...
