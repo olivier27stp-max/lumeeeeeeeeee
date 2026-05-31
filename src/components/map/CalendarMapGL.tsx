@@ -1,8 +1,13 @@
 import { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { MAP_CONFIG } from '../../config/map';
 import type { MapJobPin } from '../../lib/mapApi';
+
+/** Mapbox config (same token + satellite style as the Field Sales / D2D map). */
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
+const MAPBOX_STYLE = 'mapbox://styles/mapbox/satellite-streets-v12';
+const DEFAULT_CENTER: [number, number] = [-73.5673, 45.5017]; // Montréal
+const DEFAULT_ZOOM = 10;
 
 /** Gold pins over the satellite basemap (matches the calendar map design). */
 const GOLD = '#E0A82E';
@@ -96,14 +101,14 @@ export default function CalendarMapGL({
   // Create the map once.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    if (!MAP_CONFIG.token) return;
+    if (!MAPBOX_TOKEN) return;
 
-    mapboxgl.accessToken = MAP_CONFIG.token;
+    mapboxgl.accessToken = MAPBOX_TOKEN;
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: MAP_CONFIG.styleSatellite,
-      center: MAP_CONFIG.defaultCenter,
-      zoom: MAP_CONFIG.defaultZoom,
+      style: MAPBOX_STYLE,
+      center: DEFAULT_CENTER,
+      zoom: DEFAULT_ZOOM,
       attributionControl: false,
       dragRotate: false,
       pitchWithRotate: false,
@@ -180,7 +185,7 @@ export default function CalendarMapGL({
     }
   }, [pins, openJobLabel]);
 
-  if (!MAP_CONFIG.token) {
+  if (!MAPBOX_TOKEN) {
     return (
       <div className={`flex items-center justify-center rounded-2xl border border-outline bg-surface-tertiary text-sm text-text-secondary ${heightClassName}`}>
         Mapbox token manquant (VITE_MAPBOX_TOKEN).

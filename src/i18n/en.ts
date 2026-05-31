@@ -807,6 +807,7 @@ const en = {
     mapError: 'Could not load the map.',
     mapJobsShown: 'jobs shown',
     mapMissingLocation: 'missing location',
+    mapOpenJob: 'Open job',
     all: 'All',
     endingWithin30: 'Ending within 30 days',
     requiresInvoicing: 'Requires invoicing',

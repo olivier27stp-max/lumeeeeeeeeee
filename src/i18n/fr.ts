@@ -807,6 +807,7 @@ const fr: TranslationKeys = {
     mapError: 'Impossible de charger la carte.',
     mapJobsShown: 'contrats affichés',
     mapMissingLocation: 'sans localisation',
+    mapOpenJob: 'Ouvrir le contrat',
     all: 'Tous',
     endingWithin30: 'Se termine dans 30 jours',
     requiresInvoicing: 'Facturation requise',
