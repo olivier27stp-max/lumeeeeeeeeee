@@ -11,7 +11,9 @@ const OSM_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
 // Satellite tiles (Esri) — same basemap as the Field Sales map.
 const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-const SAT_LABELS_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}';
+// Place/city labels only (no highway shields, no airports) — keeps geographic
+// context on the satellite basemap without the transportation overlay clutter.
+const SAT_LABELS_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
 const SAT_ATTR = '&copy; Esri, Maxar, Earthstar Geographics';
 
 function createPinIcon(color: string, selected: boolean, completed = false): L.DivIcon {
