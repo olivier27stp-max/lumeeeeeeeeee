@@ -33,6 +33,18 @@ const PLANS = [
 export default function Landing({ onStart }: LandingProps) {
   const { t } = useTranslation();
 
+  // The landing page is designed for light mode only. Strip the global `dark`
+  // class while it's mounted so dark-mode users still see black text and the
+  // intended black sections, then restore their preference on unmount.
+  React.useEffect(() => {
+    const root = document.documentElement;
+    const wasDark = root.classList.contains('dark');
+    if (wasDark) root.classList.remove('dark');
+    return () => {
+      if (wasDark) root.classList.add('dark');
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-surface text-text-primary antialiased selection:bg-black/10">
       {/* ── Navbar ── */}
