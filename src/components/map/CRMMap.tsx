@@ -9,6 +9,10 @@ const DEFAULT_CENTER: L.LatLngTuple = [45.5017, -73.5673];
 const DEFAULT_ZOOM = 10;
 const OSM_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
+// Satellite tiles (Esri) — same basemap as the Field Sales map.
+const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const SAT_LABELS_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}';
+const SAT_ATTR = '&copy; Esri, Maxar, Earthstar Geographics';
 
 function createPinIcon(color: string, selected: boolean, completed = false): L.DivIcon {
   // Teardrop pin: rounded head centered at (15,14), pointing down to the tip
@@ -76,6 +80,10 @@ interface CRMMapProps {
   missingLocationCount?: number;
   /** When true, completed jobs render with a checkmark pin. */
   showCompletionCheck?: boolean;
+  /** Basemap style. 'voyager' (default) keeps the existing map; 'satellite' uses Esri imagery like Field Sales. */
+  tileStyle?: 'voyager' | 'satellite';
+  /** Force a single pin color (e.g. gold) instead of per-team colors. */
+  pinColor?: string;
 }
 
 export default function CRMMap({
@@ -86,6 +94,8 @@ export default function CRMMap({
   showJobCount = true,
   missingLocationCount = 0,
   showCompletionCheck = false,
+  tileStyle = 'voyager',
+  pinColor,
 }: CRMMapProps) {
   const [selectedPin, setSelectedPin] = useState<MapJobPin | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -97,7 +107,7 @@ export default function CRMMap({
 
   const icons = useMemo(() => {
     return pins.map((pin) => {
-      const color = isHexColor(pin.teamColor) ? pin.teamColor! : FALLBACK_COLOR;
+      const color = pinColor ?? (isHexColor(pin.teamColor) ? pin.teamColor! : FALLBACK_COLOR);
       const done = showCompletionCheck && isCompletedStatus(pin.status);
       return {
         id: pin.id,
@@ -105,7 +115,7 @@ export default function CRMMap({
         selected: createPinIcon(color, true, done),
       };
     });
-  }, [pins, showCompletionCheck]);
+  }, [pins, showCompletionCheck, pinColor]);
 
   return (
     <div className={cn('relative overflow-hidden rounded-2xl border border-outline bg-surface-tertiary', heightClassName, className)}>
@@ -117,7 +127,14 @@ export default function CRMMap({
         zoomControl={false}
         attributionControl={false}
       >
-        <TileLayer url={OSM_URL} attribution={OSM_ATTR} />
+        {tileStyle === 'satellite' ? (
+          <>
+            <TileLayer url={SAT_URL} attribution={SAT_ATTR} maxZoom={19} />
+            <TileLayer url={SAT_LABELS_URL} attribution="" maxZoom={19} />
+          </>
+        ) : (
+          <TileLayer url={OSM_URL} attribution={OSM_ATTR} />
+        )}
         <FitBounds pins={pins} />
 
         {/* Zoom control top-right */}

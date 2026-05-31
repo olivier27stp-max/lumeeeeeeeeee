@@ -15,9 +15,12 @@ interface CalendarMapModalProps {
   onOpenJob?: (jobId: string) => void;
 }
 
+/** Gold used for the calendar map pins (over the satellite basemap). */
+const GOLD = '#E0A82E';
+
 /** Small teardrop pin swatch for the legend, mirroring the map markers. */
 function LegendPin({ completed }: { completed: boolean }) {
-  const color = '#2563eb';
+  const color = GOLD;
   return (
     <svg width="16" height="21" viewBox="0 0 30 40" className="shrink-0">
       <path d="M15 1.5 C8.1 1.5 2.5 7.1 2.5 14 C2.5 22.6 15 38.5 15 38.5 C15 38.5 27.5 22.6 27.5 14 C27.5 7.1 21.9 1.5 15 1.5 Z" fill={color} stroke="#2d2d2d" strokeWidth="1.5" />
@@ -87,6 +90,8 @@ export default function CalendarMapModal({ start, end, periodLabel, onClose, onO
               pins={pins}
               showCompletionCheck
               showJobCount={false}
+              tileStyle="satellite"
+              pinColor={GOLD}
               heightClassName="h-[60vh]"
               onOpenJob={onOpenJob}
             />
