@@ -11,6 +11,8 @@ const DEFAULT_ZOOM = 10;
 
 /** Gold pins over the satellite basemap (matches the calendar map design). */
 const GOLD = '#E0A82E';
+/** Paler gold for completed jobs, so they recede next to the pending ones. */
+const GOLD_COMPLETED = '#EBD08A';
 
 /**
  * Past this zoom the city/place labels are hidden — once you're close enough to
@@ -169,7 +171,7 @@ export default function CalendarMapGL({
         if (btn) btn.onclick = () => onOpenJobRef.current?.(btn.dataset.openJob || pin.jobId);
       });
 
-      const marker = new mapboxgl.Marker({ element: createPinElement(GOLD, done), anchor: 'bottom' })
+      const marker = new mapboxgl.Marker({ element: createPinElement(done ? GOLD_COMPLETED : GOLD, done), anchor: 'bottom' })
         .setLngLat([pin.longitude, pin.latitude])
         .setPopup(popup)
         .addTo(map);
