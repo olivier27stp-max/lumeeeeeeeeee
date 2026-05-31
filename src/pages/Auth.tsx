@@ -114,12 +114,11 @@ export default function Auth({ onBack }: AuthProps) {
             {t.auth.welcomeBack}
           </h2>
           <p className="mt-4 text-lg font-light text-white/80 max-w-md">
-            Gérez vos clients, devis, jobs et paiements — tout au même endroit.
-            Bienvenue dans votre espace de travail Lume.
+            {t.auth.welcomeTagline}
           </p>
           <div className="mt-8 flex items-center gap-3 text-sm text-white/60">
             <span className="h-px w-12 bg-white/40" />
-            Le système d'exploitation de votre entreprise
+            {t.auth.companyOS}
           </div>
         </motion.div>
       </div>

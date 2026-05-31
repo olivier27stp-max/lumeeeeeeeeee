@@ -1157,6 +1157,8 @@ const fr: TranslationKeys = {
     backToHome: '← Retour à l\'accueil',
     createWorkspace: 'Crée ton espace de travail',
     welcomeBack: 'Bon retour dans ton espace de travail',
+    welcomeTagline: 'Gérez vos clients, devis, jobs et paiements — tout au même endroit. Bienvenue dans votre espace de travail Lume.',
+    companyOS: "Le système d'exploitation de votre entreprise",
     emailLabel: 'Courriel',
     passwordLabel: 'Mot de passe',
     emailPlaceholder: 'nom@entreprise.com',

@@ -1156,6 +1156,8 @@ const en = {
     backToHome: '← Back to Home',
     createWorkspace: 'Create your workspace',
     welcomeBack: 'Welcome back to your workspace',
+    welcomeTagline: 'Manage your clients, quotes, jobs and payments — all in one place. Welcome to your Lume workspace.',
+    companyOS: 'The operating system for your business',
     emailLabel: 'Email',
     passwordLabel: 'Password',
     emailPlaceholder: 'name@company.com',
