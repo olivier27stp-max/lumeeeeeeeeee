@@ -12,7 +12,7 @@ const DEFAULT_ZOOM = 10;
 /** Gold pins over the satellite basemap (matches the calendar map design). */
 const GOLD = '#E0A82E';
 /** Paler gold for completed jobs, so they recede next to the pending ones. */
-const GOLD_COMPLETED = '#EBD08A';
+const GOLD_COMPLETED = '#F5E6B8';
 
 /**
  * Past this zoom the city/place labels are hidden — once you're close enough to
@@ -56,6 +56,8 @@ function createPinElement(color: string, completed: boolean): HTMLElement {
   const drop = `<path d="M15 1.5 C8.1 1.5 2.5 7.1 2.5 14 C2.5 22.6 15 38.5 15 38.5 C15 38.5 27.5 22.6 27.5 14 C27.5 7.1 21.9 1.5 15 1.5 Z" fill="${color}" stroke="#2d2d2d" stroke-width="1.5"/>`;
   const el = document.createElement('div');
   el.style.cursor = 'pointer';
+  // Completed jobs recede: paler fill + lower opacity so pending pins pop.
+  if (completed) el.style.opacity = '0.65';
   el.innerHTML = `<svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg">${drop}${inner}</svg>`;
   return el;
 }
