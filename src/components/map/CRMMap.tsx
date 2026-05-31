@@ -46,6 +46,9 @@ function isCompletedStatus(status: string | null | undefined): boolean {
 
 const FALLBACK_COLOR = '#2563eb';
 
+/** Past this zoom level the city/place labels are hidden (you're close enough). */
+const LABEL_HIDE_ZOOM = 13;
+
 function isHexColor(value: string | null | undefined) {
   if (!value) return false;
   return /^#[0-9a-f]{3,8}$/i.test(value);
@@ -100,6 +103,7 @@ export default function CRMMap({
   pinColor,
 }: CRMMapProps) {
   const [selectedPin, setSelectedPin] = useState<MapJobPin | null>(null);
+  const [labelsVisible, setLabelsVisible] = useState(true);
   const mapRef = useRef<L.Map | null>(null);
 
   // Clear stale selection when pins change (e.g. switching date filters)
@@ -141,7 +145,8 @@ export default function CRMMap({
         {tileStyle === 'satellite' ? (
           <>
             <TileLayer url={SAT_URL} attribution={SAT_ATTR} maxZoom={19} />
-            <TileLayer url={SAT_LABELS_URL} attribution="" maxZoom={19} />
+            {labelsVisible && <TileLayer url={SAT_LABELS_URL} attribution="" maxZoom={19} />}
+            <LabelZoomToggle threshold={LABEL_HIDE_ZOOM} onChange={setLabelsVisible} />
           </>
         ) : (
           <TileLayer url={OSM_URL} attribution={OSM_ATTR} />
@@ -190,6 +195,22 @@ export default function CRMMap({
       )}
     </div>
   );
+}
+
+/* Hides the city/place label overlay once you zoom in past the threshold. */
+function LabelZoomToggle({ threshold, onChange }: { threshold: number; onChange: (visible: boolean) => void }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const update = () => onChange(map.getZoom() < threshold);
+    update();
+    map.on('zoomend', update);
+    return () => {
+      map.off('zoomend', update);
+    };
+  }, [map, threshold, onChange]);
+
+  return null;
 }
 
 /* Zoom-only control positioned top-right */
