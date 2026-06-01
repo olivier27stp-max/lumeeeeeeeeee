@@ -34,7 +34,6 @@ import {
 } from '../lib/availabilityApi';
 import { punchIn as apiPunchIn, punchOut as apiPunchOut, startBreak as apiStartBreak, endBreak as apiEndBreak } from '../lib/timesheetsApi';
 import { useGpsTracker } from '../hooks/useGpsTracker';
-import TeamProfilesGrid from '../components/TeamProfilesGrid';
 import TechnicianTimesheetTable from '../components/timesheets/TechnicianTimesheetTable';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -42,7 +41,7 @@ import TechnicianTimesheetTable from '../components/timesheets/TechnicianTimeshe
 // ═══════════════════════════════════════════════════════════════════════════════
 
 type ViewMode = 'day' | 'week' | 'month';
-type HubTab = 'feuilles' | 'carte' | 'disponibilites' | 'profils';
+type HubTab = 'feuilles' | 'carte' | 'disponibilites';
 
 interface TimeEntry {
   id: string;
@@ -684,7 +683,7 @@ export default function Timesheets() {
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Hub tabs */}
           <div className="flex rounded-md border border-outline overflow-hidden">
-            {([['feuilles', fr ? 'Feuilles' : 'Timesheets'], ['carte', fr ? 'Carte' : 'Map'], ['disponibilites', fr ? 'Disponibilités' : 'Availability'], ['profils', fr ? 'Profils' : 'Profiles']] as [HubTab, string][]).map(([key, label]) => (
+            {([['feuilles', fr ? 'Feuilles' : 'Timesheets'], ['carte', fr ? 'Carte' : 'Map'], ['disponibilites', fr ? 'Disponibilités' : 'Availability']] as [HubTab, string][]).map(([key, label]) => (
               <button key={key} onClick={() => setHubTab(key)}
                 className={cn('px-4 py-2 text-[13px] font-medium transition-all', hubTab === key ? 'bg-text-primary text-white' : 'bg-surface-card text-text-secondary hover:bg-surface-secondary')}>
                 {label}
@@ -692,7 +691,7 @@ export default function Timesheets() {
             ))}
           </div>
           {/* Date controls for feuilles/carte */}
-          {hubTab !== 'disponibilites' && hubTab !== 'profils' && (
+          {hubTab !== 'disponibilites' && (
             <>
               <div className="flex rounded-md border border-outline overflow-hidden">
                 {((hubTab === 'feuilles' ? ['day', 'week'] : ['day', 'week', 'month']) as ViewMode[]).map(m => (
@@ -719,7 +718,7 @@ export default function Timesheets() {
       </div>
 
       {/* ── Secondary bar: date nav (feuilles/carte) or nothing (dispo/profils) ── */}
-      {hubTab !== 'disponibilites' && hubTab !== 'profils' && (
+      {hubTab !== 'disponibilites' && (
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2.5">
             <div className="inline-flex items-center gap-1.5 rounded-md border border-outline bg-surface px-3 py-[7px]">
@@ -750,78 +749,6 @@ export default function Timesheets() {
 
       {hubTab === 'feuilles' && (
         <>
-          {/* KPI */}
-          <div className="grid grid-cols-4 gap-4">
-            <KpiCard icon={Clock} label={fr ? "Heures aujourd'hui" : 'Hours today'} value={analytics.totalHours} />
-            <KpiCard icon={Users} label={fr ? 'Employés actifs' : 'Active employees'} value={analytics.activeEmployees} accent={analytics.activeEmployees > 0 ? 'green' : undefined} />
-            <KpiCard icon={Activity} label={fr ? 'En service' : 'Currently working'} value={analytics.currentlyWorking} accent={analytics.currentlyWorking > 0 ? 'green' : undefined} />
-            <KpiCard icon={Coffee} label={fr ? 'Pauses totales' : 'Total breaks'} value={analytics.totalBreaks} accent={analytics.onBreak > 0 ? 'orange' : undefined} />
-          </div>
-
-          {/* ── Punch Timer Card ── */}
-          <div className="rounded-2xl bg-surface-card border border-border shadow-card p-5">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-4">
-                <div className={cn('w-12 h-12 rounded-full flex items-center justify-center', myActiveEntry ? (isOnBreak ? 'bg-amber-100' : 'bg-emerald-100') : 'bg-surface-tertiary')}>
-                  {myActiveEntry ? (isOnBreak ? <PauseIcon size={22} className="text-amber-600" /> : <Timer size={22} className="text-emerald-600 animate-pulse" />) : <Timer size={22} className="text-text-tertiary" />}
-                </div>
-                <div>
-                  <p className="text-[13px] font-medium text-text-tertiary uppercase tracking-wider">
-                    {myActiveEntry ? (isOnBreak ? (fr ? 'En pause' : 'On Break') : (fr ? 'En service' : 'Working')) : (fr ? 'Hors service' : 'Not Clocked In')}
-                  </p>
-                  <p className={cn('text-[28px] font-bold tabular-nums tracking-tight leading-none mt-1', myActiveEntry ? (isOnBreak ? 'text-amber-600' : 'text-emerald-600') : 'text-text-tertiary')}>
-                    {timerElapsed}
-                  </p>
-                  {myActiveEntry && (
-                    <p className="text-[11px] text-text-tertiary mt-1">
-                      {fr ? 'Début' : 'Started'}: {new Date(myActiveEntry.punch_in_at).toLocaleTimeString(fr ? 'fr-CA' : 'en-CA', { hour: '2-digit', minute: '2-digit' })}
-                      {myActiveEntry.breaks.length > 0 && ` · ${myActiveEntry.breaks.length} ${fr ? 'pause(s)' : 'break(s)'}`}
-                    </p>
-                  )}
-                  {myActiveEntry && !isOnBreak && (
-                    <p className={cn(
-                      'text-[10px] mt-1 flex items-center gap-1',
-                      gps.status === 'active' ? 'text-emerald-600' :
-                      gps.status === 'denied' ? 'text-red-600' :
-                      gps.status === 'error' ? 'text-amber-600' : 'text-text-tertiary'
-                    )}>
-                      <MapPin size={10} />
-                      {gps.status === 'active' && (fr ? 'GPS actif' : 'GPS active')}
-                      {gps.status === 'requesting' && (fr ? 'GPS: demande de permission…' : 'GPS: requesting permission…')}
-                      {gps.status === 'denied' && (fr ? 'GPS refusé — autorisez la localisation' : 'GPS denied — allow location')}
-                      {gps.status === 'no-session' && (fr ? 'GPS: session manquante' : 'GPS: missing session')}
-                      {gps.status === 'error' && `GPS: ${gps.lastError || 'error'}`}
-                      {gps.status === 'idle' && (fr ? 'GPS: en attente…' : 'GPS: starting…')}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {!myActiveEntry ? (
-                  <button onClick={handlePunchIn} disabled={timerLoading}
-                    className="inline-flex items-center gap-2 h-11 px-6 rounded-xl bg-emerald-600 text-white font-semibold text-[14px] hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-sm">
-                    {timerLoading ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-                    {fr ? 'Punch In' : 'Punch In'}
-                  </button>
-                ) : (
-                  <>
-                    <button onClick={handlePauseToggle} disabled={timerLoading}
-                      className={cn('inline-flex items-center gap-2 h-11 px-5 rounded-xl font-semibold text-[14px] transition-colors shadow-sm disabled:opacity-50',
-                        isOnBreak ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-surface-card border border-outline text-text-primary hover:bg-surface-secondary')}>
-                      {timerLoading ? <Loader2 size={16} className="animate-spin" /> : isOnBreak ? <Play size={16} /> : <PauseIcon size={16} />}
-                      {isOnBreak ? (fr ? 'Reprendre' : 'Resume') : (fr ? 'Pause' : 'Pause')}
-                    </button>
-                    <button onClick={handlePunchOut} disabled={timerLoading}
-                      className="inline-flex items-center gap-2 h-11 px-6 rounded-xl bg-red-600 text-white font-semibold text-[14px] hover:bg-red-700 disabled:opacity-50 transition-colors shadow-sm">
-                      {timerLoading ? <Loader2 size={16} className="animate-spin" /> : <Square size={16} />}
-                      {fr ? 'Punch Out' : 'Punch Out'}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
           {/* To review */}
           {toReview.length > 0 && (
             <div className="rounded-2xl bg-surface-card border border-border shadow-card">
@@ -938,11 +865,6 @@ export default function Timesheets() {
             </AnimatePresence>
           </div>
         </>
-      )}
-
-      {hubTab === 'profils' && currentOrgId && (
-        /* ════ PROFILS VIEW ════ */
-        <TeamProfilesGrid orgId={currentOrgId} fr={fr} />
       )}
 
       {hubTab === 'disponibilites' && (

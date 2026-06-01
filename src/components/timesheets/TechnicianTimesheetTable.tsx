@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import { useCompany } from '../../contexts/CompanyContext';
 import { useTranslation } from '../../i18n';
+import { fetchTeamList } from '../../lib/invitationsApi';
 import UnifiedAvatar from '../ui/UnifiedAvatar';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -110,6 +111,9 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
   const [entries, setEntries] = useState<RawEntry[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [jobs, setJobs] = useState<Record<string, string>>({});
+  // All technicians in the org, so they show even with zero hours. For a
+  // non-manager this is just themselves.
+  const [technicians, setTechnicians] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -183,6 +187,32 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
 
   useEffect(() => { void load(); }, [load]);
 
+  // Load the technician roster once (managers: all techs; others: just self).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isManager) {
+        if (!userId) { setTechnicians([]); return; }
+        const { data: self } = await supabase.from('profiles').select('full_name').eq('id', userId).maybeSingle();
+        if (!cancelled) setTechnicians([{ id: userId, name: self?.full_name || (fr ? 'Moi' : 'Me') }]);
+        return;
+      }
+      try {
+        const { members } = await fetchTeamList();
+        if (cancelled) return;
+        const techs = members
+          .filter((m) => m.role === 'technician' && m.status !== 'suspended')
+          .map((m) => ({ id: m.user_id, name: m.full_name || (fr ? 'Inconnu' : 'Unknown') }));
+        setTechnicians(techs);
+      } catch {
+        // Roster is best-effort; the table still renders techs that have punches.
+        if (!cancelled) setTechnicians([]);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isManager, userId, fr]);
+
   // Realtime refresh + 30s ticker for live durations.
   useEffect(() => {
     let ch: any;
@@ -199,9 +229,15 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
     return () => { if (ch) supabase.removeChannel(ch); clearInterval(iv); };
   }, [load, rangeStart]);
 
+  const rosterNames = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const t of technicians) m[t.id] = t.name;
+    return m;
+  }, [technicians]);
+
   const nameFor = useCallback(
-    (id: string, fallback: string | null) => names[id] || fallback || (fr ? 'Inconnu' : 'Unknown'),
-    [names, fr],
+    (id: string, fallback: string | null) => names[id] || rosterNames[id] || fallback || (fr ? 'Inconnu' : 'Unknown'),
+    [names, rosterNames, fr],
   );
   const jobLabel = useCallback(
     (jobId: string | null) => (jobId && jobs[jobId]) || (fr ? 'Aucun contrat' : 'No contract'),
@@ -220,6 +256,10 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
 
   const techRows: TechAgg[] = useMemo(() => {
     const byTech = new Map<string, RawEntry[]>();
+    // Seed with every technician so they appear even with zero hours.
+    for (const tech of technicians) {
+      if (!byTech.has(tech.id)) byTech.set(tech.id, []);
+    }
     for (const e of entries) {
       const arr = byTech.get(e.employee_id) || [];
       arr.push(e);
