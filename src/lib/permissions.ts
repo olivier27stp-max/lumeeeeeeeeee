@@ -434,8 +434,8 @@ export const ROLE_PRESETS: Record<TeamRole, PermissionsMap> = {
     'commissions.read',
     // Search
     'search.global',
-    // Timesheets (own)
-    'timesheets.read',
+    // NOTE: sales reps intentionally have NO timesheets access — the page is
+    // hidden from them (see migration 20260618000000_sync_role_permissions).
   ]),
 
   technician: pick([
