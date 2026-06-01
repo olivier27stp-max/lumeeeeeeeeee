@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Loader2, CalendarClock, Clock, Wallet } from 'lucide-react';
+import { Loader2, CalendarClock, Clock, Wallet, Handshake } from 'lucide-react';
 import { getCurrentPayPeriod, type CurrentPeriodResult } from '../../lib/payrollApi';
 import { useTranslation } from '../../i18n';
 
 interface Props {
   /** Admin drilldown: inspect a specific rep. Omitted → the caller's own data. */
   userId?: string;
+  /**
+   * Which left metric to show. Sales reps are paid on commission, never on
+   * hours, so the Commissions page passes 'deals'. Timesheet-driven contexts
+   * (e.g. Settings → Payroll, hourly employees) keep 'hours'.
+   */
+  metric?: 'hours' | 'deals';
 }
 
 function fmtMoney(n: number) {
@@ -24,7 +30,7 @@ function fmtDate(iso: string, fr: boolean) {
  * commission landing on the next paycheque. Driven by the org's payroll
  * settings (Settings → Payroll). Also reused in the admin per-rep drilldown.
  */
-export default function PayrollSummaryCard({ userId }: Props) {
+export default function PayrollSummaryCard({ userId, metric = 'hours' }: Props) {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
   const tp = (t as any).payroll || {};
@@ -92,14 +98,24 @@ export default function PayrollSummaryCard({ userId }: Props) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {/* Hours worked */}
-        <div className="rounded-xl border border-border bg-surface p-4">
-          <div className="flex items-center gap-1.5 text-text-tertiary">
-            <Clock size={13} />
-            <span className="text-[11px] font-medium uppercase tracking-wide">{tp.hoursWorked || (fr ? 'Heures travaillées' : 'Hours worked')}</span>
+        {/* Left metric — deals (commission-paid reps) or hours (hourly staff) */}
+        {metric === 'deals' ? (
+          <div className="rounded-xl border border-border bg-surface p-4">
+            <div className="flex items-center gap-1.5 text-text-tertiary">
+              <Handshake size={13} />
+              <span className="text-[11px] font-medium uppercase tracking-wide">{tp.deals || (fr ? 'Ventes' : 'Deals')}</span>
+            </div>
+            <p className="mt-1.5 text-2xl font-bold tabular-nums text-text-primary">{commission.count}</p>
           </div>
-          <p className="mt-1.5 text-2xl font-bold tabular-nums text-text-primary">{hours.toFixed(2)}<span className="text-sm font-medium text-text-tertiary ml-1">h</span></p>
-        </div>
+        ) : (
+          <div className="rounded-xl border border-border bg-surface p-4">
+            <div className="flex items-center gap-1.5 text-text-tertiary">
+              <Clock size={13} />
+              <span className="text-[11px] font-medium uppercase tracking-wide">{tp.hoursWorked || (fr ? 'Heures travaillées' : 'Hours worked')}</span>
+            </div>
+            <p className="mt-1.5 text-2xl font-bold tabular-nums text-text-primary">{hours.toFixed(2)}<span className="text-sm font-medium text-text-tertiary ml-1">h</span></p>
+          </div>
+        )}
 
         {/* Commission coming */}
         <div className="rounded-xl border border-border bg-surface p-4">

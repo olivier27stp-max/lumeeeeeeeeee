@@ -68,7 +68,7 @@ export default function Commissions() {
             <p className="text-xs text-text-tertiary">Your closes, commission earnings and next payouts</p>
           </div>
         </div>
-        <PayrollSummaryCard />
+        <PayrollSummaryCard metric="deals" />
         <PersonalCommissionView />
       </div>
     );
@@ -175,7 +175,7 @@ function AdminCommissionsLayout() {
 
       {tab === 'my' && (
         <div className="space-y-6">
-          <PayrollSummaryCard />
+          <PayrollSummaryCard metric="deals" />
           <PersonalCommissionView
             title="My commissions"
             subtitle="Your own commissions, if any"

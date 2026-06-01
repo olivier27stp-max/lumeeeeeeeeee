@@ -699,6 +699,7 @@ const fr: TranslationKeys = {
     currentPeriod: 'Période de paie actuelle',
     payday: 'Versement',
     hoursWorked: 'Heures travaillées',
+    deals: 'Ventes',
     commissionComing: 'Commission à venir',
     pending: 'En attente',
     approved: 'Approuvé',

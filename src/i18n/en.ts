@@ -698,6 +698,7 @@ const en = {
     currentPeriod: 'Current Pay Period',
     payday: 'Pay day',
     hoursWorked: 'Hours worked',
+    deals: 'Deals',
     commissionComing: 'Commission coming',
     pending: 'Pending',
     approved: 'Approved',
