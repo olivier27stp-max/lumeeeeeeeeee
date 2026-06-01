@@ -40,6 +40,7 @@ import {
   Map,
   Repeat,
   CalendarCheck,
+  Brain,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -111,12 +112,9 @@ import { useCurrentPlan } from './hooks/usePlanFeature';
 import Courses from './pages/Courses';
 import CourseView from './pages/CourseView';
 import CourseBuilder from './pages/CourseBuilder';
-// Lume Agent icon for sidebar
+// Lume Agent icon for sidebar — brain
 const LumeAgentIcon = ({ size = 20, className = '' }: { size?: number; className?: string }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 3L20 7.5V16.5L12 21L4 16.5V7.5L12 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
-  </svg>
+  <Brain size={size} className={className} />
 );
 import SatisfactionSurvey from './pages/SatisfactionSurvey';
 import ClientPortal from './pages/ClientPortal';
