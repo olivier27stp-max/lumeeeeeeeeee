@@ -325,107 +325,88 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
     );
   }
 
-  // ── Week view ──
+  // ── Week view — one thin, wide card per technician ──
   if (view === 'week') {
+    // Shared grid template aligns the header strip with every card.
+    const gridStyle: React.CSSProperties = {
+      gridTemplateColumns: `minmax(200px, 1.4fr) repeat(7, minmax(60px, 1fr)) 110px`,
+    };
     return (
-      <div className="border border-outline rounded-xl overflow-hidden bg-surface-card overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[760px]">
-          <thead>
-            <tr className="border-b border-outline bg-surface-secondary/40">
-              <th className="px-4 py-3 text-[13px] font-semibold text-text-primary sticky left-0 bg-surface-secondary/40">{tt.technician || (fr ? 'Technicien' : 'Technician')}</th>
-              {days.map((d, i) => (
-                <th key={i} className="px-3 py-3 text-center text-[12px] font-semibold text-text-secondary tabular-nums">
-                  {dowLabels[i]} {d.getDate()}
-                </th>
-              ))}
-              <th className="px-4 py-3 text-right text-[13px] font-semibold text-text-primary">{tt.weekTotal || (fr ? 'Total sem.' : 'Week total')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {techRows.map((row) => {
-              const open = expanded.has(row.techId);
-              return (
-                <FragmentRow key={row.techId}>
-                  <tr
-                    onClick={() => toggle(row.techId)}
-                    className={cn('border-b border-outline/60 cursor-pointer transition-colors', open ? 'bg-surface-secondary/50' : 'hover:bg-surface-secondary/30')}
-                  >
-                    <td className="px-4 py-3 sticky left-0 bg-inherit">
-                      <div className="flex items-center gap-2.5">
-                        {open ? <ChevronDown size={15} className="text-text-tertiary shrink-0" /> : <ChevronRight size={15} className="text-text-tertiary shrink-0" />}
-                        <UnifiedAvatar id={row.techId} name={row.name} size={30} />
-                        <span className="text-[14px] font-medium text-text-primary">{row.name}</span>
-                        {row.running && <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">{tt.inProgress || (fr ? 'En cours' : 'In progress')}</span>}
-                      </div>
-                    </td>
-                    {row.perDayMinutes.map((m, i) => (
-                      <td key={i} className="px-3 py-3 text-center text-[13px] tabular-nums text-text-secondary">
-                        {m > 0 ? fmtDuration(m, timeFormat) : <span className="text-text-tertiary">—</span>}
-                      </td>
-                    ))}
-                    <td className="px-4 py-3 text-right text-[14px] font-semibold tabular-nums text-text-primary">{fmtDuration(row.totalMinutes, timeFormat)}</td>
-                  </tr>
-                  {open && <WeekExpanded row={row} days={days} timeFormat={timeFormat} jobLabel={jobLabel} fr={fr} tt={tt} />}
-                </FragmentRow>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-outline bg-surface-secondary/40">
-              <td className="px-4 py-3 text-[13px] font-semibold text-text-primary sticky left-0 bg-surface-secondary/40">{tt.dailyTotals || (fr ? 'Totaux' : 'Totals')}</td>
-              {dayColumnTotals.map((m, i) => (
-                <td key={i} className="px-3 py-3 text-center text-[13px] font-semibold tabular-nums text-text-secondary">{m > 0 ? fmtDuration(m, timeFormat) : '—'}</td>
-              ))}
-              <td className="px-4 py-3 text-right text-[14px] font-bold tabular-nums text-text-primary">{fmtDuration(grandTotal, timeFormat)}</td>
-            </tr>
-          </tfoot>
-        </table>
+      <div className="space-y-2 overflow-x-auto">
+        {/* Header strip */}
+        <div className="grid items-center px-4 py-2 min-w-[820px]" style={gridStyle}>
+          <span className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wide">{tt.technician || (fr ? 'Technicien' : 'Technician')}</span>
+          {days.map((d, i) => (
+            <span key={i} className="text-center text-[12px] font-semibold text-text-tertiary tabular-nums">{dowLabels[i]} {d.getDate()}</span>
+          ))}
+          <span className="text-right text-[12px] font-semibold text-text-tertiary uppercase tracking-wide">{tt.weekTotal || (fr ? 'Total sem.' : 'Week total')}</span>
+        </div>
+
+        {/* One card per technician */}
+        {techRows.map((row) => {
+          const open = expanded.has(row.techId);
+          return (
+            <div key={row.techId} className="border border-outline rounded-xl bg-surface-card shadow-card overflow-hidden min-w-[820px]">
+              <div
+                onClick={() => toggle(row.techId)}
+                className={cn('grid items-center px-4 py-2.5 cursor-pointer transition-colors', open ? 'bg-surface-secondary/50' : 'hover:bg-surface-secondary/30')}
+                style={gridStyle}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {open ? <ChevronDown size={15} className="text-text-tertiary shrink-0" /> : <ChevronRight size={15} className="text-text-tertiary shrink-0" />}
+                  <UnifiedAvatar id={row.techId} name={row.name} size={28} />
+                  <span className="text-[14px] font-medium text-text-primary truncate">{row.name}</span>
+                  {row.running && <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 shrink-0">{tt.inProgress || (fr ? 'En cours' : 'In progress')}</span>}
+                </div>
+                {row.perDayMinutes.map((m, i) => (
+                  <span key={i} className="text-center text-[13px] tabular-nums text-text-secondary">
+                    {m > 0 ? fmtDuration(m, timeFormat) : <span className="text-text-tertiary">—</span>}
+                  </span>
+                ))}
+                <span className="text-right text-[14px] font-semibold tabular-nums text-text-primary">{fmtDuration(row.totalMinutes, timeFormat)}</span>
+              </div>
+              {open && <WeekExpanded row={row} days={days} timeFormat={timeFormat} jobLabel={jobLabel} fr={fr} tt={tt} />}
+            </div>
+          );
+        })}
+
+        {/* Totals card */}
+        <div className="grid items-center px-4 py-2.5 min-w-[820px] border-t-2 border-outline" style={gridStyle}>
+          <span className="text-[13px] font-semibold text-text-primary">{tt.dailyTotals || (fr ? 'Totaux' : 'Totals')}</span>
+          {dayColumnTotals.map((m, i) => (
+            <span key={i} className="text-center text-[13px] font-semibold tabular-nums text-text-secondary">{m > 0 ? fmtDuration(m, timeFormat) : '—'}</span>
+          ))}
+          <span className="text-right text-[14px] font-bold tabular-nums text-text-primary">{fmtDuration(grandTotal, timeFormat)}</span>
+        </div>
       </div>
     );
   }
 
-  // ── Day view ──
+  // ── Day view — one thin, wide card per technician ──
   return (
-    <div className="border border-outline rounded-xl overflow-hidden bg-surface-card">
-      <table className="w-full text-left border-collapse">
-        <thead>
-          <tr className="border-b border-outline bg-surface-secondary/40">
-            <th className="px-4 py-3 text-[13px] font-semibold text-text-primary">{tt.technician || (fr ? 'Technicien' : 'Technician')}</th>
-            <th className="px-4 py-3 text-right text-[13px] font-semibold text-text-primary">{tt.dayTotal || (fr ? 'Total du jour' : 'Day total')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {techRows.map((row) => {
-            const open = expanded.has(row.techId);
-            return (
-              <FragmentRow key={row.techId}>
-                <tr
-                  onClick={() => toggle(row.techId)}
-                  className={cn('border-b border-outline/60 cursor-pointer transition-colors', open ? 'bg-surface-secondary/50' : 'hover:bg-surface-secondary/30')}
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      {open ? <ChevronDown size={15} className="text-text-tertiary shrink-0" /> : <ChevronRight size={15} className="text-text-tertiary shrink-0" />}
-                      <UnifiedAvatar id={row.techId} name={row.name} size={30} />
-                      <span className="text-[14px] font-medium text-text-primary">{row.name}</span>
-                      {row.running && <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">{tt.inProgress || (fr ? 'En cours' : 'In progress')}</span>}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right text-[14px] font-semibold tabular-nums text-text-primary">{fmtDuration(row.totalMinutes, timeFormat)}</td>
-                </tr>
-                {open && <DayExpanded row={row} timeFormat={timeFormat} jobLabel={jobLabel} fr={fr} tt={tt} />}
-              </FragmentRow>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="space-y-2">
+      {techRows.map((row) => {
+        const open = expanded.has(row.techId);
+        return (
+          <div key={row.techId} className="border border-outline rounded-xl bg-surface-card shadow-card overflow-hidden">
+            <div
+              onClick={() => toggle(row.techId)}
+              className={cn('flex items-center justify-between px-4 py-2.5 cursor-pointer transition-colors', open ? 'bg-surface-secondary/50' : 'hover:bg-surface-secondary/30')}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                {open ? <ChevronDown size={15} className="text-text-tertiary shrink-0" /> : <ChevronRight size={15} className="text-text-tertiary shrink-0" />}
+                <UnifiedAvatar id={row.techId} name={row.name} size={28} />
+                <span className="text-[14px] font-medium text-text-primary truncate">{row.name}</span>
+                {row.running && <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 shrink-0">{tt.inProgress || (fr ? 'En cours' : 'In progress')}</span>}
+              </div>
+              <span className="text-right text-[14px] font-semibold tabular-nums text-text-primary shrink-0">{fmtDuration(row.totalMinutes, timeFormat)}</span>
+            </div>
+            {open && <DayExpanded row={row} timeFormat={timeFormat} jobLabel={jobLabel} fr={fr} tt={tt} />}
+          </div>
+        );
+      })}
     </div>
   );
-}
-
-// React fragment wrapper that is valid inside <tbody> (keeps key on the group).
-function FragmentRow({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
 }
 
 // ── Week expanded: jobs × days matrix ────────────────────────────────────────
@@ -453,47 +434,43 @@ function WeekExpanded({
   const colTotals = dayKeys.map((_, i) => jobEntries.reduce((s, [, arr]) => s + arr[i], 0));
   const grand = colTotals.reduce((s, m) => s + m, 0);
 
+  const gridStyle: React.CSSProperties = {
+    gridTemplateColumns: `minmax(180px, 1.4fr) repeat(${days.length}, minmax(48px, 1fr)) 90px`,
+  };
   return (
-    <tr>
-      <td colSpan={days.length + 2} className="p-0">
-        <div className="bg-surface-secondary/20 border-l-2 border-primary/30 px-4 py-3">
-          <table className="w-full text-left border-collapse min-w-[720px]">
-            <thead>
-              <tr className="border-b border-outline/50">
-                <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.jobContract || (fr ? 'Contrat / Job' : 'Job / Contract')}</th>
-                {days.map((d, i) => (
-                  <th key={i} className="px-2 py-2 text-center text-[11px] font-medium text-text-tertiary tabular-nums">{d.getDate()}</th>
-                ))}
-                <th className="px-3 py-2 text-right text-[12px] font-semibold text-text-secondary">{tt.total || (fr ? 'Total' : 'Total')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {jobEntries.map(([jobId, arr]) => {
-                const rowTotal = arr.reduce((s, m) => s + m, 0);
-                return (
-                  <tr key={jobId} className="border-b border-outline/30">
-                    <td className="px-3 py-2 text-[13px] text-text-primary">{jobId === '__none__' ? (fr ? 'Aucun contrat' : 'No contract') : jobLabel(jobId)}</td>
-                    {arr.map((m, i) => (
-                      <td key={i} className="px-2 py-2 text-center text-[12px] tabular-nums text-text-secondary">{m > 0 ? fmtDuration(m, timeFormat) : <span className="text-text-tertiary">—</span>}</td>
-                    ))}
-                    <td className="px-3 py-2 text-right text-[13px] font-medium tabular-nums text-text-primary">{fmtDuration(rowTotal, timeFormat)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="border-t border-outline/50">
-                <td className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.dailyTotals || (fr ? 'Totaux quotidiens' : 'Daily totals')}</td>
-                {colTotals.map((m, i) => (
-                  <td key={i} className="px-2 py-2 text-center text-[12px] font-semibold tabular-nums text-text-secondary">{m > 0 ? fmtDuration(m, timeFormat) : '—'}</td>
-                ))}
-                <td className="px-3 py-2 text-right text-[13px] font-bold tabular-nums text-text-primary">{fmtDuration(grand, timeFormat)}</td>
-              </tr>
-            </tfoot>
-          </table>
+    <div className="bg-surface-secondary/20 border-t border-outline/50 px-4 py-3 overflow-x-auto">
+      <div className="min-w-[680px]">
+        {/* header */}
+        <div className="grid items-center py-1.5 border-b border-outline/50" style={gridStyle}>
+          <span className="text-[12px] font-semibold text-text-secondary">{tt.jobContract || (fr ? 'Contrat / Job' : 'Job / Contract')}</span>
+          {days.map((d, i) => (
+            <span key={i} className="text-center text-[11px] font-medium text-text-tertiary tabular-nums">{d.getDate()}</span>
+          ))}
+          <span className="text-right text-[12px] font-semibold text-text-secondary">{tt.total || (fr ? 'Total' : 'Total')}</span>
         </div>
-      </td>
-    </tr>
+        {/* job rows */}
+        {jobEntries.map(([jobId, arr]) => {
+          const rowTotal = arr.reduce((s, m) => s + m, 0);
+          return (
+            <div key={jobId} className="grid items-center py-1.5 border-b border-outline/30" style={gridStyle}>
+              <span className="text-[13px] text-text-primary truncate pr-2">{jobId === '__none__' ? (fr ? 'Aucun contrat' : 'No contract') : jobLabel(jobId)}</span>
+              {arr.map((m, i) => (
+                <span key={i} className="text-center text-[12px] tabular-nums text-text-secondary">{m > 0 ? fmtDuration(m, timeFormat) : <span className="text-text-tertiary">—</span>}</span>
+              ))}
+              <span className="text-right text-[13px] font-medium tabular-nums text-text-primary">{fmtDuration(rowTotal, timeFormat)}</span>
+            </div>
+          );
+        })}
+        {/* daily totals */}
+        <div className="grid items-center py-1.5 border-t border-outline/50" style={gridStyle}>
+          <span className="text-[12px] font-semibold text-text-secondary">{tt.dailyTotals || (fr ? 'Totaux quotidiens' : 'Daily totals')}</span>
+          {colTotals.map((m, i) => (
+            <span key={i} className="text-center text-[12px] font-semibold tabular-nums text-text-secondary">{m > 0 ? fmtDuration(m, timeFormat) : '—'}</span>
+          ))}
+          <span className="text-right text-[13px] font-bold tabular-nums text-text-primary">{fmtDuration(grand, timeFormat)}</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -510,39 +487,42 @@ function DayExpanded({
   // Only the punches that actually fall on the shown day are in row.entries
   // already (day view loads a single date). Sort by start time.
   const sorted = [...row.entries].sort((a, b) => parseHM(a.punch_in) - parseHM(b.punch_in));
+  if (sorted.length === 0) {
+    return (
+      <div className="bg-surface-secondary/20 border-t border-outline/50 px-4 py-4 text-[13px] text-text-tertiary">
+        {tt.empty || (fr ? 'Aucun temps suivi pour cette période.' : 'No time tracked for this period.')}
+      </div>
+    );
+  }
   return (
-    <tr>
-      <td colSpan={2} className="p-0">
-        <div className="bg-surface-secondary/20 border-l-2 border-primary/30 px-4 py-3">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-outline/50">
-                <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.jobContract || (fr ? 'Contrat / Job' : 'Job / Contract')}</th>
-                <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.notes || (fr ? 'Notes' : 'Notes')}</th>
-                <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.start || (fr ? 'Début' : 'Start')}</th>
-                <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.end || (fr ? 'Fin' : 'End')}</th>
-                <th className="px-3 py-2 text-right text-[12px] font-semibold text-text-secondary">{tt.duration || (fr ? 'Durée' : 'Duration')}</th>
+    <div className="bg-surface-secondary/20 border-t border-outline/50 px-4 py-3 overflow-x-auto">
+      <table className="w-full text-left border-collapse min-w-[560px]">
+        <thead>
+          <tr className="border-b border-outline/50">
+            <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.jobContract || (fr ? 'Contrat / Job' : 'Job / Contract')}</th>
+            <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.notes || (fr ? 'Notes' : 'Notes')}</th>
+            <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.start || (fr ? 'Début' : 'Start')}</th>
+            <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.end || (fr ? 'Fin' : 'End')}</th>
+            <th className="px-3 py-2 text-right text-[12px] font-semibold text-text-secondary">{tt.duration || (fr ? 'Durée' : 'Duration')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((e) => {
+            const { minutes, running } = entryMinutes(e);
+            return (
+              <tr key={e.id} className="border-b border-outline/30">
+                <td className="px-3 py-2 text-[13px] text-text-primary">{jobLabel(e.job_id)}</td>
+                <td className="px-3 py-2 text-[13px] text-text-secondary max-w-[280px] truncate">{e.notes ? e.notes : <span className="text-text-tertiary">—</span>}</td>
+                <td className="px-3 py-2 text-[13px] tabular-nums text-text-secondary">{fmtClock(e, 'in')}</td>
+                <td className="px-3 py-2 text-[13px] tabular-nums text-text-secondary">
+                  {running ? <span className="text-emerald-600 font-medium">{tt.inProgress || (fr ? 'En cours' : 'In progress')}</span> : fmtClock(e, 'out')}
+                </td>
+                <td className="px-3 py-2 text-right text-[13px] font-medium tabular-nums text-text-primary">{fmtDuration(minutes, timeFormat)}</td>
               </tr>
-            </thead>
-            <tbody>
-              {sorted.map((e) => {
-                const { minutes, running } = entryMinutes(e);
-                return (
-                  <tr key={e.id} className="border-b border-outline/30">
-                    <td className="px-3 py-2 text-[13px] text-text-primary">{jobLabel(e.job_id)}</td>
-                    <td className="px-3 py-2 text-[13px] text-text-secondary max-w-[280px] truncate">{e.notes ? e.notes : <span className="text-text-tertiary">—</span>}</td>
-                    <td className="px-3 py-2 text-[13px] tabular-nums text-text-secondary">{fmtClock(e, 'in')}</td>
-                    <td className="px-3 py-2 text-[13px] tabular-nums text-text-secondary">
-                      {running ? <span className="text-emerald-600 font-medium">{tt.inProgress || (fr ? 'En cours' : 'In progress')}</span> : fmtClock(e, 'out')}
-                    </td>
-                    <td className="px-3 py-2 text-right text-[13px] font-medium tabular-nums text-text-primary">{fmtDuration(minutes, timeFormat)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </td>
-    </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
