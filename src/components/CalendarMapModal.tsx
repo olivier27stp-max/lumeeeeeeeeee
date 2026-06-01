@@ -17,12 +17,14 @@ interface CalendarMapModalProps {
 
 /** Gold used for the calendar map pins (over the satellite basemap). */
 const GOLD = '#E0A82E';
+/** Paler gold for completed jobs — kept in sync with CalendarMapGL. */
+const GOLD_COMPLETED = '#F5E6B8';
 
 /** Small teardrop pin swatch for the legend, mirroring the map markers. */
 function LegendPin({ completed }: { completed: boolean }) {
-  const color = GOLD;
+  const color = completed ? GOLD_COMPLETED : GOLD;
   return (
-    <svg width="16" height="21" viewBox="0 0 30 40" className="shrink-0">
+    <svg width="16" height="21" viewBox="0 0 30 40" className="shrink-0" style={{ opacity: completed ? 0.65 : 1 }}>
       <path d="M15 1.5 C8.1 1.5 2.5 7.1 2.5 14 C2.5 22.6 15 38.5 15 38.5 C15 38.5 27.5 22.6 27.5 14 C27.5 7.1 21.9 1.5 15 1.5 Z" fill={color} stroke="#2d2d2d" strokeWidth="1.5" />
       {completed ? (
         <path d="M10.4 14.2 L13.4 17.2 L19.2 10.4" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
