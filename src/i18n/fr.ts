@@ -692,7 +692,22 @@ const fr: TranslationKeys = {
 
   },
 
-  // Archives
+  // Technician timesheet table
+  timesheetTable: {
+    technician: 'Technicien',
+    weekTotal: 'Total sem.',
+    dayTotal: 'Total du jour',
+    dailyTotals: 'Totaux quotidiens',
+    total: 'Total',
+    jobContract: 'Contrat / Job',
+    notes: 'Notes',
+    start: 'Début',
+    end: 'Fin',
+    duration: 'Durée',
+    inProgress: 'En cours',
+    empty: 'Aucun temps suivi pour cette période.',
+  },
+
   payroll: {
     title: 'Paie',
     subtitle: 'Configurez les périodes et jours de paie de votre équipe',

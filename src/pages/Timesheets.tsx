@@ -35,6 +35,7 @@ import {
 import { punchIn as apiPunchIn, punchOut as apiPunchOut, startBreak as apiStartBreak, endBreak as apiEndBreak } from '../lib/timesheetsApi';
 import { useGpsTracker } from '../hooks/useGpsTracker';
 import TeamProfilesGrid from '../components/TeamProfilesGrid';
+import TechnicianTimesheetTable from '../components/timesheets/TechnicianTimesheetTable';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -332,6 +333,7 @@ export default function Timesheets() {
   const tickRef = useRef<any>(null);
   const PAGE_SIZE = 15;
   const [tick, setTick] = useState(0);
+  const [timeFormat, setTimeFormat] = useState<'decimal' | 'hm'>('hm');
 
   // ── Map state ──
   const [liveReps, setLiveReps] = useState<LiveLocation[]>([]);
@@ -693,12 +695,21 @@ export default function Timesheets() {
           {hubTab !== 'disponibilites' && hubTab !== 'profils' && (
             <>
               <div className="flex rounded-md border border-outline overflow-hidden">
-                {(['day', 'week', 'month'] as ViewMode[]).map(m => (
+                {((hubTab === 'feuilles' ? ['day', 'week'] : ['day', 'week', 'month']) as ViewMode[]).map(m => (
                   <button key={m} onClick={() => setViewMode(m)} className={cn('px-3.5 py-2 text-[13px] font-medium transition-all', viewMode === m ? 'bg-text-primary text-white' : 'bg-surface-card text-text-secondary hover:bg-surface-secondary')}>
                     {m === 'day' ? (fr ? 'Jour' : 'Day') : m === 'week' ? (fr ? 'Semaine' : 'Week') : (fr ? 'Mois' : 'Month')}
                   </button>
                 ))}
               </div>
+              {hubTab === 'feuilles' && (
+                <div className="flex rounded-md border border-outline overflow-hidden">
+                  {(['hm', 'decimal'] as const).map(f => (
+                    <button key={f} onClick={() => setTimeFormat(f)} className={cn('px-3.5 py-2 text-[13px] font-medium transition-all', timeFormat === f ? 'bg-text-primary text-white' : 'bg-surface-card text-text-secondary hover:bg-surface-secondary')}>
+                      {f === 'hm' ? (fr ? 'Heures & min' : 'Hours & minutes') : (fr ? 'Décimal' : 'Decimal')}
+                    </button>
+                  ))}
+                </div>
+              )}
               <button onClick={() => handleExport()} className="inline-flex items-center gap-2 h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">
                 <Download size={14} /> {fr ? 'Exporter' : 'Export'}
               </button>
@@ -853,101 +864,12 @@ export default function Timesheets() {
             )}
           </AnimatePresence>
 
-          {/* Filters */}
-          <div className="flex items-center gap-2.5">
-            <div className="relative">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
-              <input value={tableSearch} onChange={e => setTableSearch(e.target.value)} placeholder={fr ? 'Rechercher un employé...' : 'Search employees...'}
-                className="h-9 w-[220px] pl-9 pr-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary transition-all" />
-            </div>
-            <button onClick={() => setStatusFilter(statusFilter === 'all' ? 'active' : statusFilter === 'active' ? 'pause' : statusFilter === 'pause' ? 'inactive' : 'all')}
-              className={cn('inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors', statusFilter !== 'all' ? 'bg-text-primary text-white border-text-primary' : 'bg-surface-card text-text-primary border-outline hover:bg-surface-secondary')}>
-              <CirclePlus size={15} className={statusFilter !== 'all' ? 'text-white' : 'text-[#64748b]'} />
-              {fr ? 'Statut' : 'Status'}
-              {statusFilter !== 'all' && <span className="text-[11px] opacity-80">({statusFilter === 'active' ? (fr ? 'Actif' : 'Active') : statusFilter === 'pause' ? 'Pause' : (fr ? 'Inactif' : 'Inactive')})</span>}
-            </button>
-          </div>
-
-          {/* Table */}
-          <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-            <table className="w-full text-left table-fixed">
-              <colgroup>
-                <col style={{ width: '48px' }} />
-                <col />
-                <col style={{ width: '140px' }} />
-                <col style={{ width: '110px' }} />
-                <col style={{ width: '110px' }} />
-                <col style={{ width: '110px' }} />
-                <col style={{ width: '130px' }} />
-                <col style={{ width: '140px' }} />
-                <col style={{ width: '100px' }} />
-              </colgroup>
-              <thead>
-                <tr className="border-b border-outline">
-                  <th style={{ width: '48px' }} className="pl-4 pr-1 py-3 text-left align-middle"><input type="checkbox" checked={selected.size === pagedRows.length && pagedRows.length > 0} onChange={() => selected.size === pagedRows.length ? selectNone() : setSelected(new Set(pagedRows.map(r => r.id)))} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer align-middle" /></th>
-                  <th className="px-4 py-3 text-[14px] font-medium text-text-primary">{fr ? 'Employé' : 'Employee'}</th>
-                  <th className="px-4 py-3 text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} <ArrowUpDown size={14} className="text-text-tertiary" /></span></th>
-                  <th className="px-4 py-3 text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Arrivée' : 'Clock-in'} <ArrowUpDown size={14} className="text-text-tertiary" /></span></th>
-                  <th className="px-4 py-3 text-[14px] font-medium text-text-primary">{fr ? 'Départ' : 'Clock-out'}</th>
-                  <th className="px-4 py-3 text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Travaillé' : 'Worked'} <ArrowUpDown size={14} className="text-text-tertiary" /></span></th>
-                  <th className="px-4 py-3 text-[14px] font-medium text-text-primary">{fr ? 'Pauses' : 'Breaks'}</th>
-                  <th className="px-4 py-3 text-[14px] font-medium text-text-primary">{fr ? 'Problème' : 'Issue'}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {loading && Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={`sk-${i}`} className="border-b border-outline/30">
-                    <td className="pl-4 pr-1 py-[13px] align-middle"><div className="w-4 h-4 bg-surface-tertiary rounded animate-pulse" /></td>
-                    {Array.from({ length: 7 }).map((_, j) => <td key={j} className="px-4 py-[13px]"><div className="h-[18px] w-24 bg-surface-tertiary rounded animate-pulse" /></td>)}
-                    <td className="pr-4 py-[13px]" />
-                  </tr>
-                ))}
-                {!loading && pagedRows.length === 0 && (
-                  <tr><td colSpan={9} className="py-20 text-center"><Timer size={32} className="mx-auto text-text-tertiary opacity-20 mb-3" /><p className="text-[15px] font-semibold text-text-primary">{fr ? 'Aucune feuille de temps' : 'No timesheets'}</p><p className="text-[13px] text-text-tertiary mt-1">{fr ? 'Aucune entrée trouvée pour cette période.' : 'No entries found for this period.'}</p></td></tr>
-                )}
-                {!loading && pagedRows.map(row => (
-                  <tr key={row.id} className={cn('border-b border-[#f1f5f9] transition-colors', selected.has(row.id) ? 'bg-[#f0f4ff]' : 'hover:bg-surface-secondary', row.issue && !selected.has(row.id) && 'bg-red-500/[0.02]')}>
-                    <td style={{ width: '48px' }} className="pl-4 pr-1 py-[13px] align-middle" onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(row.id)} onChange={() => toggleSelect(row.id)} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer align-middle" /></td>
-                    <td className="px-4 py-[13px]"><div className="flex items-center gap-3"><UnifiedAvatar id={row.employee_id} name={row.employee_name} size={34} /><span className="text-[14px] font-medium text-text-primary">{row.employee_name}</span></div></td>
-                    <td className="px-4 py-[13px]"><StatusBadgePill statusKey={row.statusKey} label={row.status} /></td>
-                    <td className="px-4 py-[13px] text-[14px] text-text-secondary tabular-nums">{fmt12(row.punch_in)}</td>
-                    <td className="px-4 py-[13px] text-[14px] text-text-secondary tabular-nums">{row.punch_out ? fmt12(row.punch_out) : <span className="text-text-tertiary">—</span>}</td>
-                    <td className="px-4 py-[13px] text-[14px] font-medium text-text-primary tabular-nums">{row.liveWorked}</td>
-                    <td className="px-4 py-[13px] text-[14px] text-text-secondary tabular-nums">{row.breakCount > 0 ? `${row.breakCount} (${formatH(row.breakMinutes)})` : <span className="text-text-tertiary">—</span>}</td>
-                    <td className="px-4 py-[13px]"><IssueBadge issue={row.issue} /></td>
-                    <td className="pr-4 py-[13px]" onClick={e => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => { setEditingId(row.id); setEditPunchIn(row.punch_in); setEditPunchOut(row.punch_out || ''); }}
-                          className="p-1.5 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
-                          title={fr ? 'Modifier' : 'Edit'}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          onClick={() => { if (window.confirm(fr ? 'Supprimer cette entrée ?' : 'Delete this entry?')) deleteEntry(row.id); }}
-                          className="p-1.5 rounded text-text-tertiary hover:text-red-600 hover:bg-red-50 transition-colors"
-                          title={fr ? 'Supprimer' : 'Delete'}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <div className="flex items-center justify-between">
-            <span className="text-[14px] text-[#64748b]">{t.common.rowsSelected.replace('{selected}', String(selected.size)).replace('{total}', String(filteredRows.length))}</span>
-            <div className="flex items-center gap-2">
-              <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary disabled:opacity-40 hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.previous}</button>
-              <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary disabled:opacity-40 hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.next}</button>
-            </div>
-          </div>
+          {/* Technician timesheet table — one row per technician, expandable */}
+          <TechnicianTimesheetTable
+            currentDate={currentDate}
+            view={viewMode === 'week' ? 'week' : 'day'}
+            timeFormat={timeFormat}
+          />
         </>
       )}
 

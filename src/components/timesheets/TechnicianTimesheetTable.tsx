@@ -1,0 +1,508 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronRight, ChevronDown, Loader2, Clock, AlertTriangle } from 'lucide-react';
+import { cn } from '../../lib/utils';
+import { supabase } from '../../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
+import { useCompany } from '../../contexts/CompanyContext';
+import { useTranslation } from '../../i18n';
+import UnifiedAvatar from '../ui/UnifiedAvatar';
+
+// ── Types ───────────────────────────────────────────────────────────────────
+type View = 'day' | 'week';
+type TimeFormat = 'decimal' | 'hm';
+
+interface RawEntry {
+  id: string;
+  employee_id: string;
+  employee_name: string | null;
+  date: string;                 // YYYY-MM-DD
+  punch_in: string | null;      // HH:MM[:SS]
+  punch_out: string | null;
+  punch_in_at: string | null;   // ISO
+  punch_out_at: string | null;  // ISO
+  breaks: Array<{ start?: string; end?: string }>;
+  notes: string | null;
+  job_id: string | null;
+  status: string | null;
+}
+
+interface Props {
+  /** Reference date controlling the day / week window. */
+  currentDate: Date;
+  view: View;
+  timeFormat: TimeFormat;
+}
+
+// ── Date helpers (local, date-only) ──────────────────────────────────────────
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function weekDates(date: Date): Date[] {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday-start
+  const monday = new Date(d);
+  monday.setDate(diff);
+  monday.setHours(0, 0, 0, 0);
+  return Array.from({ length: 7 }, (_, i) => {
+    const n = new Date(monday);
+    n.setDate(monday.getDate() + i);
+    return n;
+  });
+}
+
+// ── Duration helpers — everything in minutes, formatted on render ────────────
+function parseHM(t: string | null): number {
+  if (!t) return 0;
+  if (t.includes('T')) { const d = new Date(t); return d.getHours() * 60 + d.getMinutes(); }
+  const [h, m] = t.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+/** Net worked minutes for one entry (gross minus closed breaks). Live if running. */
+function entryMinutes(e: RawEntry): { minutes: number; running: boolean } {
+  // Prefer precise ISO timestamps; fall back to HH:MM columns.
+  const startMs = e.punch_in_at ? Date.parse(e.punch_in_at) : null;
+  const running = !e.punch_out && !e.punch_out_at;
+  let gross: number;
+  if (startMs != null) {
+    const endMs = e.punch_out_at ? Date.parse(e.punch_out_at) : (running ? Date.now() : startMs);
+    gross = Math.max(0, (endMs - startMs) / 60000);
+  } else {
+    const now = new Date();
+    const end = (e.punch_out) ? parseHM(e.punch_out) : (now.getHours() * 60 + now.getMinutes());
+    gross = Math.max(0, end - parseHM(e.punch_in));
+  }
+  let brk = 0;
+  for (const b of e.breaks || []) {
+    if (!b?.start) continue;
+    const bs = b.start.includes('T') ? Date.parse(b.start) / 60000 : parseHM(b.start);
+    const be = b.end ? (b.end.includes('T') ? Date.parse(b.end) / 60000 : parseHM(b.end)) : null;
+    if (be != null && be > bs) brk += be - bs;
+  }
+  return { minutes: Math.max(0, gross - brk), running };
+}
+
+function fmtDuration(minutes: number, format: TimeFormat): string {
+  if (!minutes || minutes <= 0) return format === 'decimal' ? '0.00' : '0h 00m';
+  if (format === 'decimal') return (minutes / 60).toFixed(2);
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return `${h}h ${String(m).padStart(2, '0')}m`;
+}
+
+function fmtClock(e: RawEntry, which: 'in' | 'out'): string {
+  const iso = which === 'in' ? e.punch_in_at : e.punch_out_at;
+  const hm = which === 'in' ? e.punch_in : e.punch_out;
+  if (iso) return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (hm) { const [h, m] = hm.split(':'); const H = +h; const ap = H >= 12 ? 'PM' : 'AM'; const h12 = H % 12 || 12; return `${h12}:${m} ${ap}`; }
+  return '—';
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
+export default function TechnicianTimesheetTable({ currentDate, view, timeFormat }: Props) {
+  const { t, language } = useTranslation();
+  const fr = language === 'fr';
+  const tt = (t as any).timesheetTable || {};
+  const { currentRole, userId } = useCompany();
+  const isManager = currentRole === 'owner' || currentRole === 'admin';
+
+  const [entries, setEntries] = useState<RawEntry[]>([]);
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [jobs, setJobs] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Live ticker so running timers update without a refetch.
+  const [, setTick] = useState(0);
+
+  const days = useMemo(() => (view === 'week' ? weekDates(currentDate) : [new Date(currentDate)]), [currentDate, view]);
+  const rangeStart = useMemo(() => ymd(days[0]), [days]);
+  const rangeEnd = useMemo(() => ymd(days[days.length - 1]), [days]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const orgId = await getCurrentOrgIdOrThrow();
+      let q = supabase
+        .from('time_entries')
+        .select('id, employee_id, employee_name, date, punch_in, punch_out, punch_in_at, punch_out_at, breaks, notes, job_id, status')
+        .eq('org_id', orgId)
+        .gte('date', rangeStart)
+        .lte('date', rangeEnd);
+      // Technicians (and any non-manager) only ever see their own rows.
+      if (!isManager && userId) q = q.eq('employee_id', userId);
+
+      const { data, error: qErr } = await q;
+      if (qErr) throw new Error(qErr.message);
+
+      const rows: RawEntry[] = (data || []).map((e: any) => ({
+        id: e.id,
+        employee_id: e.employee_id || e.id,
+        employee_name: e.employee_name || null,
+        date: e.date,
+        punch_in: e.punch_in ?? null,
+        punch_out: e.punch_out ?? null,
+        punch_in_at: e.punch_in_at ?? null,
+        punch_out_at: e.punch_out_at ?? null,
+        breaks: Array.isArray(e.breaks) ? e.breaks : [],
+        notes: e.notes || null,
+        job_id: e.job_id || null,
+        status: e.status || null,
+      }));
+      setEntries(rows);
+
+      // Resolve technician names (profiles override stored employee_name).
+      const ids = [...new Set(rows.map((r) => r.employee_id).filter(Boolean))];
+      if (ids.length) {
+        const { data: profs } = await supabase.from('profiles').select('id, full_name').in('id', ids);
+        const map: Record<string, string> = {};
+        for (const p of profs || []) map[p.id] = p.full_name || '';
+        setNames(map);
+      } else {
+        setNames({});
+      }
+
+      // Resolve job/contract titles.
+      const jobIds = [...new Set(rows.map((r) => r.job_id).filter(Boolean))] as string[];
+      if (jobIds.length) {
+        const { data: jrows } = await supabase.from('jobs').select('id, title, job_number').in('id', jobIds);
+        const jmap: Record<string, string> = {};
+        for (const j of jrows || []) jmap[j.id] = j.title || (j.job_number ? `#${j.job_number}` : '');
+        setJobs(jmap);
+      } else {
+        setJobs({});
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load timesheets');
+    } finally {
+      setLoading(false);
+    }
+  }, [rangeStart, rangeEnd, isManager, userId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  // Realtime refresh + 30s ticker for live durations.
+  useEffect(() => {
+    let ch: any;
+    (async () => {
+      try {
+        const orgId = await getCurrentOrgIdOrThrow();
+        ch = supabase
+          .channel(`tech-ts-${orgId}-${rangeStart}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries', filter: `org_id=eq.${orgId}` }, () => load())
+          .subscribe();
+      } catch { /* ignore */ }
+    })();
+    const iv = setInterval(() => setTick((n) => n + 1), 30000);
+    return () => { if (ch) supabase.removeChannel(ch); clearInterval(iv); };
+  }, [load, rangeStart]);
+
+  const nameFor = useCallback(
+    (id: string, fallback: string | null) => names[id] || fallback || (fr ? 'Inconnu' : 'Unknown'),
+    [names, fr],
+  );
+  const jobLabel = useCallback(
+    (jobId: string | null) => (jobId && jobs[jobId]) || (fr ? 'Aucun contrat' : 'No contract'),
+    [jobs, fr],
+  );
+
+  // ── Aggregate into one row per technician ──
+  interface TechAgg {
+    techId: string;
+    name: string;
+    perDayMinutes: number[];      // aligned to `days`
+    totalMinutes: number;
+    running: boolean;
+    entries: RawEntry[];
+  }
+
+  const techRows: TechAgg[] = useMemo(() => {
+    const byTech = new Map<string, RawEntry[]>();
+    for (const e of entries) {
+      const arr = byTech.get(e.employee_id) || [];
+      arr.push(e);
+      byTech.set(e.employee_id, arr);
+    }
+    const dayKeys = days.map(ymd);
+    const aggs: TechAgg[] = [];
+    for (const [techId, list] of byTech) {
+      const perDay = dayKeys.map(() => 0);
+      let total = 0;
+      let running = false;
+      for (const e of list) {
+        const idx = dayKeys.indexOf(e.date);
+        const { minutes, running: r } = entryMinutes(e);
+        if (idx >= 0) perDay[idx] += minutes;
+        total += minutes;
+        if (r) running = true;
+      }
+      aggs.push({ techId, name: nameFor(techId, list[0]?.employee_name), perDayMinutes: perDay, totalMinutes: total, running, entries: list });
+    }
+    return aggs.sort((a, b) => a.name.localeCompare(b.name));
+  }, [entries, days, nameFor]);
+
+  const dayColumnTotals = useMemo(() => {
+    const totals = days.map(() => 0);
+    for (const r of techRows) r.perDayMinutes.forEach((m, i) => { totals[i] += m; });
+    return totals;
+  }, [techRows, days]);
+  const grandTotal = useMemo(() => techRows.reduce((s, r) => s + r.totalMinutes, 0), [techRows]);
+
+  const toggle = (id: string) => setExpanded((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const dowLabels = fr
+    ? ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM']
+    : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+  // ── States ──
+  if (loading) {
+    return (
+      <div className="border border-outline rounded-xl bg-surface-card p-16 flex items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="border border-outline rounded-xl bg-surface-card p-10 flex flex-col items-center text-center gap-2">
+        <AlertTriangle className="h-7 w-7 text-amber-500" />
+        <p className="text-[14px] font-semibold text-text-primary">{fr ? 'Erreur de chargement' : 'Failed to load'}</p>
+        <p className="text-[13px] text-text-tertiary">{error}</p>
+        <button onClick={() => load()} className="mt-2 h-8 px-4 rounded-md bg-surface border border-outline text-[13px] text-text-primary hover:bg-surface-secondary transition-colors">
+          {fr ? 'Réessayer' : 'Retry'}
+        </button>
+      </div>
+    );
+  }
+  if (techRows.length === 0) {
+    return (
+      <div className="border border-outline rounded-xl bg-surface-card p-16 flex flex-col items-center text-center gap-2">
+        <Clock className="h-8 w-8 text-text-tertiary opacity-30" />
+        <p className="text-[14px] font-medium text-text-primary">{tt.empty || (fr ? 'Aucun temps suivi pour cette période.' : 'No time tracked for this period.')}</p>
+      </div>
+    );
+  }
+
+  // ── Week view ──
+  if (view === 'week') {
+    return (
+      <div className="border border-outline rounded-xl overflow-hidden bg-surface-card overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[760px]">
+          <thead>
+            <tr className="border-b border-outline bg-surface-secondary/40">
+              <th className="px-4 py-3 text-[13px] font-semibold text-text-primary sticky left-0 bg-surface-secondary/40">{tt.technician || (fr ? 'Technicien' : 'Technician')}</th>
+              {days.map((d, i) => (
+                <th key={i} className="px-3 py-3 text-center text-[12px] font-semibold text-text-secondary tabular-nums">
+                  {dowLabels[i]} {d.getDate()}
+                </th>
+              ))}
+              <th className="px-4 py-3 text-right text-[13px] font-semibold text-text-primary">{tt.weekTotal || (fr ? 'Total sem.' : 'Week total')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {techRows.map((row) => {
+              const open = expanded.has(row.techId);
+              return (
+                <FragmentRow key={row.techId}>
+                  <tr
+                    onClick={() => toggle(row.techId)}
+                    className={cn('border-b border-outline/60 cursor-pointer transition-colors', open ? 'bg-surface-secondary/50' : 'hover:bg-surface-secondary/30')}
+                  >
+                    <td className="px-4 py-3 sticky left-0 bg-inherit">
+                      <div className="flex items-center gap-2.5">
+                        {open ? <ChevronDown size={15} className="text-text-tertiary shrink-0" /> : <ChevronRight size={15} className="text-text-tertiary shrink-0" />}
+                        <UnifiedAvatar id={row.techId} name={row.name} size={30} />
+                        <span className="text-[14px] font-medium text-text-primary">{row.name}</span>
+                        {row.running && <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">{tt.inProgress || (fr ? 'En cours' : 'In progress')}</span>}
+                      </div>
+                    </td>
+                    {row.perDayMinutes.map((m, i) => (
+                      <td key={i} className="px-3 py-3 text-center text-[13px] tabular-nums text-text-secondary">
+                        {m > 0 ? fmtDuration(m, timeFormat) : <span className="text-text-tertiary">—</span>}
+                      </td>
+                    ))}
+                    <td className="px-4 py-3 text-right text-[14px] font-semibold tabular-nums text-text-primary">{fmtDuration(row.totalMinutes, timeFormat)}</td>
+                  </tr>
+                  {open && <WeekExpanded row={row} days={days} timeFormat={timeFormat} jobLabel={jobLabel} fr={fr} tt={tt} />}
+                </FragmentRow>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-outline bg-surface-secondary/40">
+              <td className="px-4 py-3 text-[13px] font-semibold text-text-primary sticky left-0 bg-surface-secondary/40">{tt.dailyTotals || (fr ? 'Totaux' : 'Totals')}</td>
+              {dayColumnTotals.map((m, i) => (
+                <td key={i} className="px-3 py-3 text-center text-[13px] font-semibold tabular-nums text-text-secondary">{m > 0 ? fmtDuration(m, timeFormat) : '—'}</td>
+              ))}
+              <td className="px-4 py-3 text-right text-[14px] font-bold tabular-nums text-text-primary">{fmtDuration(grandTotal, timeFormat)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    );
+  }
+
+  // ── Day view ──
+  return (
+    <div className="border border-outline rounded-xl overflow-hidden bg-surface-card">
+      <table className="w-full text-left border-collapse">
+        <thead>
+          <tr className="border-b border-outline bg-surface-secondary/40">
+            <th className="px-4 py-3 text-[13px] font-semibold text-text-primary">{tt.technician || (fr ? 'Technicien' : 'Technician')}</th>
+            <th className="px-4 py-3 text-right text-[13px] font-semibold text-text-primary">{tt.dayTotal || (fr ? 'Total du jour' : 'Day total')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {techRows.map((row) => {
+            const open = expanded.has(row.techId);
+            return (
+              <FragmentRow key={row.techId}>
+                <tr
+                  onClick={() => toggle(row.techId)}
+                  className={cn('border-b border-outline/60 cursor-pointer transition-colors', open ? 'bg-surface-secondary/50' : 'hover:bg-surface-secondary/30')}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      {open ? <ChevronDown size={15} className="text-text-tertiary shrink-0" /> : <ChevronRight size={15} className="text-text-tertiary shrink-0" />}
+                      <UnifiedAvatar id={row.techId} name={row.name} size={30} />
+                      <span className="text-[14px] font-medium text-text-primary">{row.name}</span>
+                      {row.running && <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">{tt.inProgress || (fr ? 'En cours' : 'In progress')}</span>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right text-[14px] font-semibold tabular-nums text-text-primary">{fmtDuration(row.totalMinutes, timeFormat)}</td>
+                </tr>
+                {open && <DayExpanded row={row} timeFormat={timeFormat} jobLabel={jobLabel} fr={fr} tt={tt} />}
+              </FragmentRow>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// React fragment wrapper that is valid inside <tbody> (keeps key on the group).
+function FragmentRow({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
+
+// ── Week expanded: jobs × days matrix ────────────────────────────────────────
+function WeekExpanded({
+  row, days, timeFormat, jobLabel, fr, tt,
+}: {
+  row: { entries: RawEntry[] };
+  days: Date[];
+  timeFormat: TimeFormat;
+  jobLabel: (id: string | null) => string;
+  fr: boolean;
+  tt: any;
+}) {
+  const dayKeys = days.map(ymd);
+  // Group by job_id → per-day minutes.
+  const byJob = new Map<string, number[]>();
+  for (const e of row.entries) {
+    const key = e.job_id || '__none__';
+    const arr = byJob.get(key) || dayKeys.map(() => 0);
+    const idx = dayKeys.indexOf(e.date);
+    if (idx >= 0) arr[idx] += entryMinutes(e).minutes;
+    byJob.set(key, arr);
+  }
+  const jobEntries = [...byJob.entries()];
+  const colTotals = dayKeys.map((_, i) => jobEntries.reduce((s, [, arr]) => s + arr[i], 0));
+  const grand = colTotals.reduce((s, m) => s + m, 0);
+
+  return (
+    <tr>
+      <td colSpan={days.length + 2} className="p-0">
+        <div className="bg-surface-secondary/20 border-l-2 border-primary/30 px-4 py-3">
+          <table className="w-full text-left border-collapse min-w-[720px]">
+            <thead>
+              <tr className="border-b border-outline/50">
+                <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.jobContract || (fr ? 'Contrat / Job' : 'Job / Contract')}</th>
+                {days.map((d, i) => (
+                  <th key={i} className="px-2 py-2 text-center text-[11px] font-medium text-text-tertiary tabular-nums">{d.getDate()}</th>
+                ))}
+                <th className="px-3 py-2 text-right text-[12px] font-semibold text-text-secondary">{tt.total || (fr ? 'Total' : 'Total')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobEntries.map(([jobId, arr]) => {
+                const rowTotal = arr.reduce((s, m) => s + m, 0);
+                return (
+                  <tr key={jobId} className="border-b border-outline/30">
+                    <td className="px-3 py-2 text-[13px] text-text-primary">{jobId === '__none__' ? (fr ? 'Aucun contrat' : 'No contract') : jobLabel(jobId)}</td>
+                    {arr.map((m, i) => (
+                      <td key={i} className="px-2 py-2 text-center text-[12px] tabular-nums text-text-secondary">{m > 0 ? fmtDuration(m, timeFormat) : <span className="text-text-tertiary">—</span>}</td>
+                    ))}
+                    <td className="px-3 py-2 text-right text-[13px] font-medium tabular-nums text-text-primary">{fmtDuration(rowTotal, timeFormat)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-outline/50">
+                <td className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.dailyTotals || (fr ? 'Totaux quotidiens' : 'Daily totals')}</td>
+                {colTotals.map((m, i) => (
+                  <td key={i} className="px-2 py-2 text-center text-[12px] font-semibold tabular-nums text-text-secondary">{m > 0 ? fmtDuration(m, timeFormat) : '—'}</td>
+                ))}
+                <td className="px-3 py-2 text-right text-[13px] font-bold tabular-nums text-text-primary">{fmtDuration(grand, timeFormat)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// ── Day expanded: per-punch breakdown ────────────────────────────────────────
+function DayExpanded({
+  row, timeFormat, jobLabel, fr, tt,
+}: {
+  row: { entries: RawEntry[] };
+  timeFormat: TimeFormat;
+  jobLabel: (id: string | null) => string;
+  fr: boolean;
+  tt: any;
+}) {
+  // Only the punches that actually fall on the shown day are in row.entries
+  // already (day view loads a single date). Sort by start time.
+  const sorted = [...row.entries].sort((a, b) => parseHM(a.punch_in) - parseHM(b.punch_in));
+  return (
+    <tr>
+      <td colSpan={2} className="p-0">
+        <div className="bg-surface-secondary/20 border-l-2 border-primary/30 px-4 py-3">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-outline/50">
+                <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.jobContract || (fr ? 'Contrat / Job' : 'Job / Contract')}</th>
+                <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.notes || (fr ? 'Notes' : 'Notes')}</th>
+                <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.start || (fr ? 'Début' : 'Start')}</th>
+                <th className="px-3 py-2 text-[12px] font-semibold text-text-secondary">{tt.end || (fr ? 'Fin' : 'End')}</th>
+                <th className="px-3 py-2 text-right text-[12px] font-semibold text-text-secondary">{tt.duration || (fr ? 'Durée' : 'Duration')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((e) => {
+                const { minutes, running } = entryMinutes(e);
+                return (
+                  <tr key={e.id} className="border-b border-outline/30">
+                    <td className="px-3 py-2 text-[13px] text-text-primary">{jobLabel(e.job_id)}</td>
+                    <td className="px-3 py-2 text-[13px] text-text-secondary max-w-[280px] truncate">{e.notes ? e.notes : <span className="text-text-tertiary">—</span>}</td>
+                    <td className="px-3 py-2 text-[13px] tabular-nums text-text-secondary">{fmtClock(e, 'in')}</td>
+                    <td className="px-3 py-2 text-[13px] tabular-nums text-text-secondary">
+                      {running ? <span className="text-emerald-600 font-medium">{tt.inProgress || (fr ? 'En cours' : 'In progress')}</span> : fmtClock(e, 'out')}
+                    </td>
+                    <td className="px-3 py-2 text-right text-[13px] font-medium tabular-nums text-text-primary">{fmtDuration(minutes, timeFormat)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </td>
+    </tr>
+  );
+}

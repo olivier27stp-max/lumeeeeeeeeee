@@ -691,6 +691,22 @@ const en = {
 
   },
 
+  // Technician timesheet table
+  timesheetTable: {
+    technician: 'Technician',
+    weekTotal: 'Week total',
+    dayTotal: 'Day total',
+    dailyTotals: 'Daily totals',
+    total: 'Total',
+    jobContract: 'Job / Contract',
+    notes: 'Notes',
+    start: 'Start',
+    end: 'End',
+    duration: 'Duration',
+    inProgress: 'In progress',
+    empty: 'No time tracked for this period.',
+  },
+
   // Payroll
   payroll: {
     title: 'Payroll',
