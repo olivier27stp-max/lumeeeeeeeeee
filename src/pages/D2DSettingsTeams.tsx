@@ -3,6 +3,7 @@ import { Card, CardContent } from '../components/d2d/card';
 import { Avatar } from '../components/d2d/avatar';
 import { Plus, X, Users, ChevronDown, Loader2 } from 'lucide-react';
 import BackToSettings from '../components/ui/BackToSettings';
+import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
 import {
   listTeams as apiListTeams,
@@ -41,6 +42,8 @@ const fallbackReps: Rep[] = [];
 // ---------------------------------------------------------------------------
 
 export default function D2DSettingsTeams() {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const [teams, setTeams] = useState<Team[]>([]);
   const [reps, setReps] = useState<Rep[]>([]);
   const [loading, setLoading] = useState(true);
@@ -238,14 +241,14 @@ export default function D2DSettingsTeams() {
     return (
       <div className="mx-auto max-w-3xl space-y-5">
         <div>
-          <h2 className="text-lg font-semibold text-text-primary">Équipes</h2>
+          <h2 className="text-lg font-semibold text-text-primary">{fr ? 'Équipes' : 'Teams'}</h2>
           <p className="text-xs text-text-tertiary">
-            Créez des équipes et assignez vos reps.
+            {fr ? 'Créez des équipes et assignez vos reps.' : 'Create teams and assign your reps.'}
           </p>
         </div>
         <div className="flex items-center justify-center py-16">
           <Loader2 size={24} className="animate-spin text-text-muted" />
-          <span className="ml-2 text-[13px] text-text-muted">Chargement...</span>
+          <span className="ml-2 text-[13px] text-text-muted">{fr ? 'Chargement...' : 'Loading...'}</span>
         </div>
       </div>
     );
@@ -257,9 +260,9 @@ export default function D2DSettingsTeams() {
       <div className="flex items-center gap-3">
         <BackToSettings />
         <div className="flex-1">
-          <h2 className="text-lg font-semibold text-text-primary">Équipes</h2>
+          <h2 className="text-lg font-semibold text-text-primary">{fr ? 'Équipes' : 'Teams'}</h2>
           <p className="text-xs text-text-tertiary">
-            Créez des équipes et assignez vos reps.
+            {fr ? 'Créez des équipes et assignez vos reps.' : 'Create teams and assign your reps.'}
           </p>
         </div>
       </div>
@@ -267,14 +270,14 @@ export default function D2DSettingsTeams() {
       {/* Create team */}
       <Card>
         <CardContent className="p-4">
-          <p className="mb-3 text-[13px] font-bold text-text-primary">Nouvelle équipe</p>
+          <p className="mb-3 text-[13px] font-bold text-text-primary">{fr ? 'Nouvelle équipe' : 'New team'}</p>
           <div className="flex gap-2">
             <input
               type="text"
               value={newTeamName}
               onChange={(e) => setNewTeamName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleCreateTeam()}
-              placeholder="Nom de l'équipe..."
+              placeholder={fr ? "Nom de l'équipe..." : 'Team name...'}
               className="flex-1 rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-[13px] text-text-primary placeholder-text-muted outline-none focus:border-outline-strong"
             />
             <button
@@ -418,7 +421,7 @@ export default function D2DSettingsTeams() {
                       }}
                       className="rounded-lg border border-border-subtle bg-surface px-2 py-1 text-[11px] text-text-secondary outline-none"
                     >
-                      <option value="">Assigner à...</option>
+                      <option value="">{fr ? 'Assigner à...' : 'Assign to...'}</option>
                       {teams.map((t) => (
                         <option key={t.id} value={t.id}>{t.name}</option>
                       ))}
@@ -434,8 +437,8 @@ export default function D2DSettingsTeams() {
       {teams.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border-subtle py-12 text-center">
           <Users size={32} className="text-text-muted/30" />
-          <p className="mt-3 text-[13px] font-medium text-text-secondary">Aucune équipe</p>
-          <p className="mt-0.5 text-[11px] text-text-muted">Créez votre première équipe ci-dessus.</p>
+          <p className="mt-3 text-[13px] font-medium text-text-secondary">{fr ? 'Aucune équipe' : 'No teams'}</p>
+          <p className="mt-0.5 text-[11px] text-text-muted">{fr ? 'Créez votre première équipe ci-dessus.' : 'Create your first team above.'}</p>
         </div>
       )}
     </div>

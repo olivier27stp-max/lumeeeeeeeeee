@@ -133,8 +133,17 @@ export function createLeadPinPopupHTML(
   editBtnId: string,
   deleteBtnId: string,
   crmBtnId?: string,
+  lang: 'fr' | 'en' = 'fr',
 ): string {
   const cfg = PIN_STATUS_CONFIG[pin.status];
+  const fr = lang === 'fr';
+  const L = {
+    createJob: fr ? '+ Créer une Job' : '+ Create Job',
+    jobLinked: fr ? '✓ Job liée' : '✓ Job linked',
+    createQuote: fr ? '+ Créer un Devis' : '+ Create Quote',
+    quoteLinked: fr ? '✓ Devis lié' : '✓ Quote linked',
+    edit: fr ? '✎ Modifier' : '✎ Edit',
+  };
 
   // CRM action button based on pin status
   let crmRow = '';
@@ -145,12 +154,12 @@ export function createLeadPinPopupHTML(
           width:100%;padding:7px 0;border-radius:8px;margin-top:6px;
           border:1px solid rgba(34,197,94,.3);background:rgba(34,197,94,.1);color:#4ade80;
           font-size:11px;font-weight:600;cursor:pointer;
-        ">+ Créer une Job</button>
+        ">${L.createJob}</button>
       `;
     } else if (pin.status === 'closed_won' && pin.job_id) {
       crmRow = `
         <div style="margin-top:6px;padding:5px 8px;border-radius:8px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.15);font-size:10px;color:rgba(34,197,94,.7);text-align:center;">
-          ✓ Job liée
+          ${L.jobLinked}
         </div>
       `;
     } else if (pin.status === 'appointment' && !pin.quote_id) {
@@ -159,12 +168,12 @@ export function createLeadPinPopupHTML(
           width:100%;padding:7px 0;border-radius:8px;margin-top:6px;
           border:1px solid rgba(107,114,128,.3);background:rgba(107,114,128,.1);color:#9CA3AF;
           font-size:11px;font-weight:600;cursor:pointer;
-        ">+ Créer un Devis</button>
+        ">${L.createQuote}</button>
       `;
     } else if (pin.status === 'appointment' && pin.quote_id) {
       crmRow = `
         <div style="margin-top:6px;padding:5px 8px;border-radius:8px;background:rgba(107,114,128,.08);border:1px solid rgba(107,114,128,.15);font-size:10px;color:rgba(107,114,128,.7);text-align:center;">
-          ✓ Devis lié
+          ${L.quoteLinked}
         </div>
       `;
     }
@@ -190,7 +199,7 @@ export function createLeadPinPopupHTML(
           flex:1;padding:7px 0;border-radius:8px;
           border:1px solid ${cfg.color}30;background:${cfg.color}12;color:${cfg.color};
           font-size:11px;font-weight:600;cursor:pointer;
-        ">✎ Modifier</button>
+        ">${L.edit}</button>
         <button id="${deleteBtnId}" style="
           padding:7px 12px;border-radius:8px;
           border:1px solid rgba(239,68,68,.25);background:rgba(239,68,68,.08);color:#f87171;

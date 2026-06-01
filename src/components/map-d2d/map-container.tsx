@@ -10,6 +10,7 @@ import {
 } from './lead-pin';
 import { type ZoneData, getZoneColor } from './zone-types';
 import { getRepAvatar } from '../../lib/constants/avatars';
+import { useTranslation } from '../../i18n';
 
 // LocalStorage caching removed — was causing ghost pins (deleted pins reappearing).
 // Pins and zones are loaded fresh from the API on each page load.
@@ -99,6 +100,8 @@ export interface MapContainerProps {
 }
 
 export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, onPinCreated, onPinDeleted, onPinUpdated, liveReps: liveRepsProp, pinLinkUpdates }: MapContainerProps = {}) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
 
@@ -439,7 +442,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
 
     function refreshPopupHTML() {
       const current = markersRef.current.get(pin.id)?.pin || pin;
-      popup.setHTML(createLeadPinPopupHTML(current, editId, delId, crmId));
+      popup.setHTML(createLeadPinPopupHTML(current, editId, delId, crmId, fr ? 'fr' : 'en'));
     }
 
     popup.on('open', () => {
@@ -1050,7 +1053,9 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
   markersRef.current.forEach(({ pin }) => { counts[pin.status]++; });
   const totalZones = zonesRef.current.length;
 
-  const dateLabels: Record<DateFilter, string> = { today: "Aujourd'hui", yesterday: 'Hier', this_month: 'Ce mois', this_year: 'Cette année', all: 'Tout' };
+  const dateLabels: Record<DateFilter, string> = fr
+    ? { today: "Aujourd'hui", yesterday: 'Hier', this_month: 'Ce mois', this_year: 'Cette année', all: 'Tout' }
+    : { today: 'Today', yesterday: 'Yesterday', this_month: 'This month', this_year: 'This year', all: 'All' };
 
   return (
     <div
@@ -1107,14 +1112,14 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
               onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
               onFocus={() => setSearchOpen(true)}
               onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
-              placeholder="Rechercher une rue, un quartier, un code postal…"
+              placeholder={fr ? 'Rechercher une rue, un quartier, un code postal…' : 'Search a street, neighborhood, postal code…'}
               className="w-full rounded-xl border border-white/10 bg-black/70 py-2.5 pl-9 pr-9 text-[13px] text-white placeholder-white/35 shadow-xl outline-none backdrop-blur-xl focus:border-indigo-400/40"
             />
             {searchQuery && (
               <button
                 onClick={() => { setSearchQuery(''); setSearchResults([]); }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-white/40 hover:bg-white/10 hover:text-white"
-                aria-label="Effacer"
+                aria-label={fr ? 'Effacer' : 'Clear'}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
@@ -1155,7 +1160,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
             );
           }}
           className="pointer-events-auto absolute bottom-20 right-3 z-10 flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-white/10 bg-black/70 text-white/60 shadow-xl backdrop-blur-xl transition-all hover:bg-white/15 hover:text-white"
-          title="Centrer sur ma position"
+          title={fr ? 'Centrer sur ma position' : 'Center on my location'}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3" /><path d="M12 2v4m0 12v4m-10-10h4m12 0h4" />
@@ -1167,7 +1172,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
       {showTokenMsg && (
         <div className="flex h-full w-full items-center justify-center bg-[#080b10]">
           <div className="max-w-md rounded-2xl border border-white/8 bg-white/[.03] p-8 text-center">
-            <h2 className="text-lg font-semibold text-white">Token Mapbox requis</h2>
+            <h2 className="text-lg font-semibold text-white">{fr ? 'Token Mapbox requis' : 'Mapbox token required'}</h2>
             <div className="mt-4 rounded-lg border border-white/8 bg-black/40 p-3 text-left">
               <code className="text-xs text-indigo-300">VITE_MAPBOX_TOKEN=pk.eyJ1Ijo...</code>
             </div>
@@ -1315,7 +1320,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
                 <div className="absolute right-0 top-full mt-2 w-[280px] rounded-xl border border-white/10 bg-black/85 p-3 shadow-2xl backdrop-blur-xl">
                   {/* --- PINS section --- */}
                   <div className="mb-2 flex items-center justify-between">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Pins — Statut</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-white/30">{fr ? 'Pins — Statut' : 'Pins — Status'}</p>
                     <button
                       onClick={() => {
                         const allStatuses: PinStatus[] = statuses.map(([k]) => k);
@@ -1326,7 +1331,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
                       }}
                       className="text-[9px] font-medium text-white/40 hover:text-white/70 transition-colors"
                     >
-                      {statuses.every(([k]) => activeFilters.has(k)) ? 'Tout désélectionner' : 'Tout sélectionner'}
+                      {statuses.every(([k]) => activeFilters.has(k)) ? (fr ? 'Tout désélectionner' : 'Deselect all') : (fr ? 'Tout sélectionner' : 'Select all')}
                     </button>
                   </div>
                   <div className="space-y-0.5">
@@ -1366,13 +1371,13 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
                       <span className="text-[11px] font-semibold text-white/80 flex-1">
                         {navIndex + 1} / {navPinsRef.current.length}
                       </span>
-                      <button onClick={navPrev} className="rounded p-1 text-white/50 hover:bg-white/10 hover:text-white transition-colors" title="Précédent (Shift+Espace)">
+                      <button onClick={navPrev} className="rounded p-1 text-white/50 hover:bg-white/10 hover:text-white transition-colors" title={fr ? 'Précédent (Shift+Espace)' : 'Previous (Shift+Space)'}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
                       </button>
-                      <button onClick={navNext} className="rounded p-1 text-white/50 hover:bg-white/10 hover:text-white transition-colors" title="Suivant (Espace)">
+                      <button onClick={navNext} className="rounded p-1 text-white/50 hover:bg-white/10 hover:text-white transition-colors" title={fr ? 'Suivant (Espace)' : 'Next (Space)'}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                       </button>
-                      <button onClick={stopPinNavigation} className="rounded p-1 text-white/30 hover:bg-white/10 hover:text-white/70 transition-colors" title="Fermer (Escape)">
+                      <button onClick={stopPinNavigation} className="rounded p-1 text-white/30 hover:bg-white/10 hover:text-white/70 transition-colors" title={fr ? 'Fermer (Échap)' : 'Close (Escape)'}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                       </button>
                     </div>
@@ -1387,12 +1392,12 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
                     >
                       {showNotes && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
                     </span>
-                    <span className="text-[12px] font-medium">Afficher notes</span>
+                    <span className="text-[12px] font-medium">{fr ? 'Afficher notes' : 'Show notes'}</span>
                   </button>
 
                   {/* Pins date filter */}
                   <div className="mt-3 border-t border-white/8 pt-3">
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">Pins — Période</p>
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">{fr ? 'Pins — Période' : 'Pins — Period'}</p>
                     <div className="flex flex-wrap gap-1">
                       {(['today', 'yesterday', 'this_month', 'this_year', 'all'] as DateFilter[]).map((d) => (
                         <button key={d} onClick={() => setPinDateFilter(d)}
@@ -1404,7 +1409,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
 
                   {/* --- ZONES section --- */}
                   <div className="mt-3 border-t border-white/8 pt-3">
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-indigo-300/50">Zones</p>
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-indigo-300/50">{fr ? 'Zones' : 'Zones'}</p>
 
                     {/* Show zones toggle */}
                     <button onClick={() => setShowZones(!showZones)}
@@ -1415,11 +1420,11 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
                       >
                         {showZones && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
                       </span>
-                      <span className="text-[12px] font-medium">Afficher les zones</span>
+                      <span className="text-[12px] font-medium">{fr ? 'Afficher les zones' : 'Show zones'}</span>
                     </button>
 
                     {/* Zone date filter */}
-                    <p className="mb-1.5 mt-2.5 text-[10px] font-medium text-white/25">Période</p>
+                    <p className="mb-1.5 mt-2.5 text-[10px] font-medium text-white/25">{fr ? 'Période' : 'Period'}</p>
                     <div className="flex flex-wrap gap-1">
                       {(['today', 'this_month', 'this_year', 'all'] as DateFilter[]).map((d) => (
                         <button key={d} onClick={() => setZoneDateFilter(d)}
@@ -1429,20 +1434,20 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
                     </div>
 
                     {/* Filter by rep */}
-                    <p className="mb-1.5 mt-2.5 text-[10px] font-medium text-white/25">Par représentant</p>
+                    <p className="mb-1.5 mt-2.5 text-[10px] font-medium text-white/25">{fr ? 'Par représentant' : 'By rep'}</p>
                     <select
                       value={filterByRep}
                       onChange={(e) => setFilterByRep(e.target.value)}
                       className="w-full rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[12px] text-white outline-none"
                     >
-                      <option value="all">Tous</option>
+                      <option value="all">{fr ? 'Tous' : 'All'}</option>
                       {SALES_REPS.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </select>
                   </div>
 
                   {/* --- REPS section --- */}
                   <div className="mt-3 border-t border-white/8 pt-3">
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-300/50">Représentants</p>
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-300/50">{fr ? 'Représentants' : 'Reps'}</p>
                     <button onClick={() => setShowReps(!showReps)}
                       className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left transition-all ${showReps ? 'bg-white/8 text-white' : 'text-white/30 hover:text-white/50'}`}
                     >
@@ -1451,8 +1456,8 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
                       >
                         {showReps && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
                       </span>
-                      <span className="text-[12px] font-medium">Voir les représentants</span>
-                      <span className="ml-auto text-[10px] font-medium text-emerald-400/60">{liveRepsProp?.length || 0} en ligne</span>
+                      <span className="text-[12px] font-medium">{fr ? 'Voir les représentants' : 'Show reps'}</span>
+                      <span className="ml-auto text-[10px] font-medium text-emerald-400/60">{liveRepsProp?.length || 0} {fr ? 'en ligne' : 'online'}</span>
                     </button>
                   </div>
                 </div>
@@ -1469,11 +1474,11 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
         <div className="pointer-events-none absolute bottom-8 left-1/2 z-20 -translate-x-1/2">
           <div className="pointer-events-auto flex items-center gap-3 rounded-xl border border-white/10 bg-black/70 px-5 py-3 shadow-2xl backdrop-blur-xl">
             {selectedPinIds.size === 0 ? (
-              <span className="text-[13px] text-white/50">Dessinez un rectangle pour sélectionner des pins</span>
+              <span className="text-[13px] text-white/50">{fr ? 'Dessinez un rectangle pour sélectionner des pins' : 'Draw a rectangle to select pins'}</span>
             ) : (
               <>
                 <span className="text-[13px] font-medium text-white">
-                  {selectedPinIds.size} pin{selectedPinIds.size > 1 ? 's' : ''} sélectionné{selectedPinIds.size > 1 ? 's' : ''}
+                  {selectedPinIds.size} pin{selectedPinIds.size > 1 ? 's' : ''} {fr ? `sélectionné${selectedPinIds.size > 1 ? 's' : ''}` : 'selected'}
                 </span>
                 <button onClick={handleBulkDelete}
                   className="flex items-center gap-1.5 rounded-lg bg-red-500 px-4 py-2 text-[12px] font-semibold text-white shadow-lg shadow-red-500/25 transition-all hover:bg-red-400"
@@ -1500,11 +1505,11 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
       {showZoneConfirm && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="w-[380px] rounded-2xl border border-white/10 bg-[#0c0c14] p-6 shadow-2xl">
-            <h3 className="text-[15px] font-semibold text-white">Nouvelle zone</h3>
-            <p className="mt-1 text-[12px] text-white/40">{drawingPoints.length} points tracés</p>
+            <h3 className="text-[15px] font-semibold text-white">{fr ? 'Nouvelle zone' : 'New zone'}</h3>
+            <p className="mt-1 text-[12px] text-white/40">{drawingPoints.length} {fr ? 'points tracés' : 'points drawn'}</p>
 
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Nom de la zone</label>
+              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Nom de la zone' : 'Zone name'}</label>
               <input type="text" value={zoneNameInput} onChange={(e) => setZoneNameInput(e.target.value)}
                 placeholder={`Zone ${zonesRef.current.length + 1}`}
                 className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white outline-none focus:border-indigo-500/50"
@@ -1513,11 +1518,11 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
 
             {canAssignZone(CURRENT_USER.role) && (
               <div className="mt-4">
-                <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Assigner à un représentant</label>
+                <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Assigner à un représentant' : 'Assign to a rep'}</label>
                 <select value={zoneAssignInput} onChange={(e) => setZoneAssignInput(e.target.value)}
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white outline-none focus:border-indigo-500/50"
                 >
-                  <option value="">Non assigné</option>
+                  <option value="">{fr ? 'Non assigné' : 'Unassigned'}</option>
                   {SALES_REPS.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </div>
@@ -1525,10 +1530,10 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
 
             <div className="mt-6 flex gap-2">
               <button onClick={confirmZone} className="flex-1 rounded-lg bg-indigo-500 py-2.5 text-[12px] font-semibold text-white hover:bg-indigo-400">
-                Créer la zone
+                {fr ? 'Créer la zone' : 'Create zone'}
               </button>
               <button onClick={cancelDrawing} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-[12px] text-white/50 hover:bg-white/10">
-                Annuler
+                {fr ? 'Annuler' : 'Cancel'}
               </button>
             </div>
           </div>
@@ -1547,10 +1552,10 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
                 <h3 className="text-[14px] font-semibold text-white">{selectedZone.name}</h3>
               </div>
               <p className="mt-1.5 text-[11px] text-white/40">
-                Assigné à: <span className="text-white/60">{selectedZone.assigned_to_name || 'Non assigné'}</span>
+                {fr ? 'Assigné à' : 'Assigned to'}: <span className="text-white/60">{selectedZone.assigned_to_name || (fr ? 'Non assigné' : 'Unassigned')}</span>
               </p>
               <p className="mt-1 text-[11px] text-white/30">
-                Créé le {new Date(selectedZone.created_at).toLocaleDateString('fr-CA')}
+                {fr ? 'Créé le' : 'Created'} {new Date(selectedZone.created_at).toLocaleDateString(fr ? 'fr-CA' : 'en-US')}
               </p>
             </div>
             <button onClick={() => setSelectedZone(null)} className="rounded-lg p-1 text-white/30 transition-colors hover:bg-white/10 hover:text-white/60">
@@ -1560,13 +1565,13 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
 
           {canAssignZone(CURRENT_USER.role) && (
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Assigné à</label>
+              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Assigné à' : 'Assigned to'}</label>
               <select
                 value={selectedZone.assigned_to || ''}
                 onChange={(e) => reassignZone(selectedZone.id, e.target.value)}
                 className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white outline-none focus:border-indigo-500/50"
               >
-                <option value="" className="bg-[#0c0c14]">Non assigné</option>
+                <option value="" className="bg-[#0c0c14]">{fr ? 'Non assigné' : 'Unassigned'}</option>
                 {SALES_REPS.map((rep) => (
                   <option key={rep.id} value={rep.id} className="bg-[#0c0c14]">{rep.name}</option>
                 ))}
@@ -1578,7 +1583,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
             <button onClick={() => deleteZone(selectedZone.id)}
               className="mt-4 w-full rounded-lg border border-red-500/20 bg-red-500/10 py-2 text-[12px] font-medium text-red-400 transition-all hover:bg-red-500/20"
             >
-              Supprimer la zone
+              {fr ? 'Supprimer la zone' : 'Delete zone'}
             </button>
           )}
         </div>
@@ -1590,24 +1595,24 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
       {editingPin && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="w-[340px] rounded-2xl border border-white/10 bg-[#0c0c14] p-6 shadow-2xl">
-            <h3 className="text-[15px] font-semibold text-white">Modifier le pin</h3>
+            <h3 className="text-[15px] font-semibold text-white">{fr ? 'Modifier le pin' : 'Edit pin'}</h3>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Nom</label>
+              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Nom' : 'Name'}</label>
               <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
                 className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white outline-none focus:border-indigo-500/50" />
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Téléphone</label>
+              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Téléphone' : 'Phone'}</label>
               <input type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="819-555-0100"
                 className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white placeholder-white/20 outline-none focus:border-indigo-500/50" />
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Courriel</label>
+              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Courriel' : 'Email'}</label>
               <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="client@email.com"
                 className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white placeholder-white/20 outline-none focus:border-indigo-500/50" />
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Statut</label>
+              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Statut' : 'Status'}</label>
               <div className="flex flex-wrap gap-1.5">
                 {statuses.map(([key, cfg]) => (
                   <button key={key} onClick={() => setEditStatus(key)}
@@ -1621,18 +1626,18 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
             </div>
             <div className="mt-4">
               <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Note</label>
-              <textarea value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="Ajouter une note..." rows={3}
+              <textarea value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder={fr ? 'Ajouter une note...' : 'Add a note...'} rows={3}
                 className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white placeholder-white/20 outline-none focus:border-indigo-500/50" />
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Adresse</label>
+              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Adresse' : 'Address'}</label>
               <p className="text-[12px] text-white/40">{editingPin.address}</p>
             </div>
             <div className="mt-6 flex gap-2">
-              <button onClick={handleSaveEdit} className="flex-1 rounded-lg bg-indigo-500 py-2 text-[12px] font-semibold text-white hover:bg-indigo-400">Sauvegarder</button>
-              <button onClick={() => setEditingPin(null)} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-[12px] text-white/50">Annuler</button>
+              <button onClick={handleSaveEdit} className="flex-1 rounded-lg bg-indigo-500 py-2 text-[12px] font-semibold text-white hover:bg-indigo-400">{fr ? 'Sauvegarder' : 'Save'}</button>
+              <button onClick={() => setEditingPin(null)} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-[12px] text-white/50">{fr ? 'Annuler' : 'Cancel'}</button>
               <button onClick={() => { removePin(editingPin.id); setEditingPin(null); }}
-                className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2 text-[12px] font-medium text-red-400">Supprimer</button>
+                className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2 text-[12px] font-medium text-red-400">{fr ? 'Supprimer' : 'Delete'}</button>
             </div>
           </div>
         </div>
