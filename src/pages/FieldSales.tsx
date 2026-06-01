@@ -282,8 +282,8 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
         {/* Header */}
         <div className="px-4 py-3 border-b border-outline flex items-center justify-between sticky top-0 bg-surface z-10">
           <div className="flex-1 min-w-0">
-            <h3 className="text-[13px] font-bold text-text-primary">New Pin</h3>
-            <p className="text-[10px] text-text-tertiary mt-0.5 truncate">{geocoding ? 'Resolving address...' : address}</p>
+            <h3 className="text-[13px] font-bold text-text-primary">{language === 'fr' ? 'Nouveau pin' : 'New Pin'}</h3>
+            <p className="text-[10px] text-text-tertiary mt-0.5 truncate">{geocoding ? (language === 'fr' ? 'Résolution de l\'adresse...' : 'Resolving address...') : address}</p>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={14} /></button>
         </div>
@@ -291,20 +291,20 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
         <div className="px-4 py-3 space-y-3">
           {/* Customer Info */}
           <div>
-            <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">Customer Info</p>
+            <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">{language === 'fr' ? 'Infos client' : 'Customer Info'}</p>
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <User size={12} className="text-text-tertiary shrink-0" />
-                <input ref={nameRef} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Name" className={inputCls} />
+                <input ref={nameRef} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder={language === 'fr' ? 'Nom' : 'Name'} className={inputCls} />
               </div>
               <div className="flex gap-1.5">
                 <div className="flex items-center gap-1.5 flex-1">
                   <PhoneIcon size={12} className="text-text-tertiary shrink-0" />
-                  <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Phone" type="tel" className={inputCls} />
+                  <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder={language === 'fr' ? 'Téléphone' : 'Phone'} type="tel" className={inputCls} />
                 </div>
                 <div className="flex items-center gap-1.5 flex-1">
                   <Mail size={12} className="text-text-tertiary shrink-0" />
-                  <input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Email" type="email" className={inputCls} />
+                  <input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder={language === 'fr' ? 'Courriel' : 'Email'} type="email" className={inputCls} />
                 </div>
               </div>
             </div>
@@ -312,7 +312,7 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
 
           {/* Pin Status */}
           <div>
-            <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">Status</p>
+            <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">{language === 'fr' ? 'Statut' : 'Status'}</p>
             <div className="grid grid-cols-4 gap-1">
               {Object.entries(STATUS_CONFIG).filter(([k]) => k !== 'unknown').map(([key, cfg]) => (
                 <button key={key} onClick={() => setPinType(key)}
@@ -326,10 +326,10 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
               ))}
             </div>
             {pinType === 'sale' && (
-              <p className="text-[10px] text-green-400 mt-1.5 flex items-center gap-1"><Briefcase size={10} /> Will open Job creation after saving</p>
+              <p className="text-[10px] text-green-400 mt-1.5 flex items-center gap-1"><Briefcase size={10} /> {language === 'fr' ? 'Ouvrira la création de job après l\'enregistrement' : 'Will open Job creation after saving'}</p>
             )}
             {pinType === 'quote_sent' && (
-              <p className="text-[10px] text-slate-400 mt-1.5 flex items-center gap-1"><FileText size={10} /> Will open Quote creation after saving</p>
+              <p className="text-[10px] text-slate-400 mt-1.5 flex items-center gap-1"><FileText size={10} /> {language === 'fr' ? 'Ouvrira la création de devis après l\'enregistrement' : 'Will open Quote creation after saving'}</p>
             )}
           </div>
 
@@ -338,7 +338,7 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
             <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1.5">Note</p>
             <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)}
               className={cn(inputCls, 'resize-none')}
-              rows={2} placeholder="e.g. Dog in yard, call before coming, pays cash..." />
+              rows={2} placeholder={language === 'fr' ? 'ex. Chien dans la cour, appeler avant de passer, paie comptant...' : 'e.g. Dog in yard, call before coming, pays cash...'} />
           </div>
 
           {/* Create */}
@@ -348,7 +348,7 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
               {submitting ? (language === 'fr' ? 'Création...' : 'Creating...') : pinType === 'sale' ? (language === 'fr' ? 'Créer et ouvrir le job' : 'Create & Open Job') : pinType === 'quote_sent' ? (language === 'fr' ? 'Créer et ouvrir le devis' : 'Create & Open Quote') : `${language === 'fr' ? 'Créer' : 'Create'} ${statusLabel(pinType, language) ?? 'Pin'}`}
             </button>
             <button onClick={onClose} className="px-3 py-2.5 rounded-lg border border-outline text-text-tertiary text-[11px] font-medium hover:text-text-secondary">
-              Cancel
+              {language === 'fr' ? 'Annuler' : 'Cancel'}
             </button>
           </div>
         </div>
@@ -374,6 +374,7 @@ function TerritorySetupPanel({ onSave, onCancel, reps }: {
   onCancel: () => void;
   reps: Array<{ id: string; display_name: string }>;
 }) {
+  const { language } = useTranslation();
   const [name, setName] = useState('');
   const [color, setColor] = useState('#6366f1');
   const [repId, setRepId] = useState('');
@@ -387,21 +388,21 @@ function TerritorySetupPanel({ onSave, onCancel, reps }: {
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
       className="fixed right-0 top-0 bottom-0 w-[380px] bg-surface border-l border-outline z-[1000] flex flex-col shadow-2xl">
       <div className="px-5 py-4 border-b border-outline">
-        <h2 className="text-[15px] font-bold text-text-primary">Territory Setup</h2>
-        <p className="text-[11px] text-text-tertiary mt-0.5">Configure the new territory zone</p>
+        <h2 className="text-[15px] font-bold text-text-primary">{language === 'fr' ? 'Configuration du territoire' : 'Territory Setup'}</h2>
+        <p className="text-[11px] text-text-tertiary mt-0.5">{language === 'fr' ? 'Configurer la nouvelle zone de territoire' : 'Configure the new territory zone'}</p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
         {/* Name */}
         <div>
-          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">Name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. North District"
+          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">{language === 'fr' ? 'Nom' : 'Name'}</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={language === 'fr' ? 'ex. Secteur Nord' : 'e.g. North District'}
             className="w-full px-3 py-2.5 bg-surface-secondary border border-outline rounded-lg text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20" />
         </div>
 
         {/* Color */}
         <div>
-          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-2">Color</label>
+          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-2">{language === 'fr' ? 'Couleur' : 'Color'}</label>
           <div className="flex gap-2">
             {COLORS.map((c) => (
               <button key={c} onClick={() => setColor(c)}
@@ -413,10 +414,10 @@ function TerritorySetupPanel({ onSave, onCancel, reps }: {
 
         {/* Assign Rep */}
         <div>
-          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">Assign to Rep</label>
+          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">{language === 'fr' ? 'Assigner à un rep' : 'Assign to Rep'}</label>
           <select value={repId} onChange={(e) => setRepId(e.target.value)}
             className="w-full px-3 py-2.5 bg-surface-secondary border border-outline rounded-lg text-[13px] text-text-primary outline-none focus:border-white/20">
-            <option value="">Unassigned</option>
+            <option value="">{language === 'fr' ? 'Non assigné' : 'Unassigned'}</option>
             {reps.map((r) => (
               <option key={r.id} value={r.id}>{r.display_name}</option>
             ))}
@@ -426,8 +427,8 @@ function TerritorySetupPanel({ onSave, onCancel, reps }: {
         {/* Exclusive toggle */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[12px] font-semibold text-text-primary">Exclusive Territory</p>
-            <p className="text-[10px] text-text-tertiary mt-0.5">Only assigned rep can operate here</p>
+            <p className="text-[12px] font-semibold text-text-primary">{language === 'fr' ? 'Territoire exclusif' : 'Exclusive Territory'}</p>
+            <p className="text-[10px] text-text-tertiary mt-0.5">{language === 'fr' ? 'Seul le rep assigné peut opérer ici' : 'Only assigned rep can operate here'}</p>
           </div>
           <button onClick={() => setExclusive(!exclusive)}
             className={cn('w-10 h-5 rounded-full transition-colors relative', exclusive ? 'bg-white' : 'bg-outline')}>
@@ -438,18 +439,18 @@ function TerritorySetupPanel({ onSave, onCancel, reps }: {
         {/* Notes */}
         <div>
           <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">Notes</label>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Instructions for the rep..."
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={language === 'fr' ? 'Instructions pour le rep...' : 'Instructions for the rep...'}
             rows={3} className="w-full px-3 py-2 bg-surface-secondary border border-outline rounded-lg text-[12px] text-text-primary placeholder:text-text-tertiary resize-none outline-none focus:border-white/20" />
         </div>
       </div>
 
       <div className="px-5 py-4 border-t border-outline flex items-center gap-2">
-        <button onClick={() => { if (!name.trim()) { toast.error('Name required'); return; } onSave({ name, color, assigned_rep_id: repId || null, is_exclusive: exclusive, notes }); }}
+        <button onClick={() => { if (!name.trim()) { toast.error(language === 'fr' ? 'Nom requis' : 'Name required'); return; } onSave({ name, color, assigned_rep_id: repId || null, is_exclusive: exclusive, notes }); }}
           className="flex-1 py-2.5 rounded-lg bg-white text-black text-[12px] font-semibold hover:bg-white/90 transition-colors">
-          Save Territory
+          {language === 'fr' ? 'Enregistrer le territoire' : 'Save Territory'}
         </button>
         <button onClick={onCancel} className="px-4 py-2.5 rounded-lg border border-outline text-text-tertiary text-[12px] font-medium hover:text-text-secondary">
-          Cancel
+          {language === 'fr' ? 'Annuler' : 'Cancel'}
         </button>
       </div>
     </motion.div>
@@ -464,6 +465,7 @@ function TerritoryDetailPanel({ territory, reps, onClose, onDelete, onUpdate }: 
   onDelete: (id: string) => void;
   onUpdate: (id: string, data: any) => void;
 }) {
+  const { language } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(territory.name);
   const [color, setColor] = useState(territory.color || '#6366f1');
@@ -494,12 +496,12 @@ function TerritoryDetailPanel({ territory, reps, onClose, onDelete, onUpdate }: 
             {/* View mode */}
             <div className="space-y-3">
               <div>
-                <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Assigned Rep</p>
-                <p className="text-[13px] text-text-primary mt-0.5">{assignedRep?.display_name || 'Unassigned'}</p>
+                <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Rep assigné' : 'Assigned Rep'}</p>
+                <p className="text-[13px] text-text-primary mt-0.5">{assignedRep?.display_name || (language === 'fr' ? 'Non assigné' : 'Unassigned')}</p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Exclusive</p>
-                <p className="text-[13px] text-text-primary mt-0.5">{exclusive ? 'Yes' : 'No'}</p>
+                <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Exclusif' : 'Exclusive'}</p>
+                <p className="text-[13px] text-text-primary mt-0.5">{exclusive ? (language === 'fr' ? 'Oui' : 'Yes') : (language === 'fr' ? 'Non' : 'No')}</p>
               </div>
               {notes && (
                 <div>
@@ -513,12 +515,12 @@ function TerritoryDetailPanel({ territory, reps, onClose, onDelete, onUpdate }: 
           <>
             {/* Edit mode */}
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">Name</label>
+              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">{language === 'fr' ? 'Nom' : 'Name'}</label>
               <input value={name} onChange={(e) => setName(e.target.value)}
                 className="w-full px-3 py-2.5 bg-surface-secondary border border-outline rounded-lg text-[13px] text-text-primary outline-none focus:border-white/20" />
             </div>
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-2">Color</label>
+              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-2">{language === 'fr' ? 'Couleur' : 'Color'}</label>
               <div className="flex gap-2">
                 {COLORS.map((c) => (
                   <button key={c} onClick={() => setColor(c)}
@@ -528,17 +530,17 @@ function TerritoryDetailPanel({ territory, reps, onClose, onDelete, onUpdate }: 
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">Assign Rep</label>
+              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">{language === 'fr' ? 'Assigner un rep' : 'Assign Rep'}</label>
               <select value={repId} onChange={(e) => setRepId(e.target.value)}
                 className="w-full px-3 py-2.5 bg-surface-secondary border border-outline rounded-lg text-[13px] text-text-primary outline-none">
-                <option value="">Unassigned</option>
+                <option value="">{language === 'fr' ? 'Non assigné' : 'Unassigned'}</option>
                 {reps.map((r) => <option key={r.id} value={r.id}>{r.display_name}</option>)}
               </select>
             </div>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[12px] font-semibold text-text-primary">Exclusive</p>
-                <p className="text-[10px] text-text-tertiary">Only assigned rep can work here</p>
+                <p className="text-[12px] font-semibold text-text-primary">{language === 'fr' ? 'Exclusif' : 'Exclusive'}</p>
+                <p className="text-[10px] text-text-tertiary">{language === 'fr' ? 'Seul le rep assigné peut travailler ici' : 'Only assigned rep can work here'}</p>
               </div>
               <button onClick={() => setExclusive(!exclusive)}
                 className={cn('w-10 h-5 rounded-full transition-colors relative', exclusive ? 'bg-white' : 'bg-outline')}>
@@ -548,6 +550,7 @@ function TerritoryDetailPanel({ territory, reps, onClose, onDelete, onUpdate }: 
             <div>
               <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">Notes</label>
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
+                placeholder={language === 'fr' ? 'Instructions pour le rep...' : 'Instructions for the rep...'}
                 className="w-full px-3 py-2 bg-surface-secondary border border-outline rounded-lg text-[12px] text-text-primary placeholder:text-text-tertiary resize-none outline-none" />
             </div>
           </>
@@ -560,22 +563,22 @@ function TerritoryDetailPanel({ territory, reps, onClose, onDelete, onUpdate }: 
           <div className="flex items-center gap-2">
             <button onClick={() => setEditing(true)}
               className="flex-1 py-2.5 rounded-lg border border-outline text-text-primary text-[12px] font-semibold hover:bg-surface-secondary transition-colors">
-              Edit
+              {language === 'fr' ? 'Modifier' : 'Edit'}
             </button>
             <button onClick={() => setDeleting(true)}
               className="px-4 py-2.5 rounded-lg border border-red-500/30 text-red-400 text-[12px] font-medium hover:bg-red-500/10 transition-colors">
-              Delete
+              {language === 'fr' ? 'Supprimer' : 'Delete'}
             </button>
           </div>
         ) : (
           <div className="flex items-center gap-2">
             <button onClick={() => { onUpdate(territory.id, { name, color, assigned_rep_id: repId || null, is_exclusive: exclusive, notes }); setEditing(false); }}
               className="flex-1 py-2.5 rounded-lg bg-white text-black text-[12px] font-semibold hover:bg-white/90 transition-colors">
-              Save Changes
+              {language === 'fr' ? 'Enregistrer' : 'Save Changes'}
             </button>
             <button onClick={() => setEditing(false)}
               className="px-4 py-2.5 rounded-lg border border-outline text-text-tertiary text-[12px] font-medium">
-              Cancel
+              {language === 'fr' ? 'Annuler' : 'Cancel'}
             </button>
           </div>
         )}
@@ -586,15 +589,15 @@ function TerritoryDetailPanel({ territory, reps, onClose, onDelete, onUpdate }: 
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden">
               <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <p className="text-[12px] text-red-400 font-medium mb-2">Delete this territory permanently?</p>
+                <p className="text-[12px] text-red-400 font-medium mb-2">{language === 'fr' ? 'Supprimer ce territoire définitivement ?' : 'Delete this territory permanently?'}</p>
                 <div className="flex gap-2">
                   <button onClick={() => { onDelete(territory.id); }}
                     className="px-4 py-1.5 rounded-lg bg-red-500 text-white text-xs font-medium hover:bg-red-600">
-                    Yes, Delete
+                    {language === 'fr' ? 'Oui, supprimer' : 'Yes, Delete'}
                   </button>
                   <button onClick={() => setDeleting(false)}
                     className="px-4 py-1.5 rounded-lg border border-outline text-text-tertiary text-[11px]">
-                    Cancel
+                    {language === 'fr' ? 'Annuler' : 'Cancel'}
                   </button>
                 </div>
               </div>
@@ -643,6 +646,7 @@ function CenterOnUser({ position }: { position: L.LatLngTuple }) {
 
 // ── Timeline event component ──────────────────────────────────
 function TimelineEvent({ event, isLast, onDelete }: { event: FieldHouseEvent; isLast: boolean; onDelete?: (eventId: string) => void }) {
+  const { language } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const cfg = STATUS_CONFIG[event.event_type] || STATUS_CONFIG.unknown;
@@ -678,14 +682,14 @@ function TimelineEvent({ event, isLast, onDelete }: { event: FieldHouseEvent; is
             <span className="text-[10px] text-text-tertiary ml-2">{timeAgo}</span>
           </div>
           {onDelete && !confirming && (
-            <button onClick={() => setConfirming(true)} className="p-1 rounded hover:bg-red-500/10 text-text-tertiary hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100" title="Delete">
+            <button onClick={() => setConfirming(true)} className="p-1 rounded hover:bg-red-500/10 text-text-tertiary hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100" title={language === 'fr' ? 'Supprimer' : 'Delete'}>
               <X size={11} />
             </button>
           )}
           {confirming && (
             <div className="flex items-center gap-1">
-              <button onClick={() => { onDelete(event.id); setConfirming(false); }} className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-semibold hover:bg-red-500/30">Delete</button>
-              <button onClick={() => setConfirming(false)} className="text-[9px] px-1.5 py-0.5 rounded text-text-tertiary hover:text-text-secondary">Cancel</button>
+              <button onClick={() => { onDelete(event.id); setConfirming(false); }} className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-semibold hover:bg-red-500/30">{language === 'fr' ? 'Supprimer' : 'Delete'}</button>
+              <button onClick={() => setConfirming(false)} className="text-[9px] px-1.5 py-0.5 rounded text-text-tertiary hover:text-text-secondary">{language === 'fr' ? 'Annuler' : 'Cancel'}</button>
             </div>
           )}
         </div>
@@ -717,6 +721,7 @@ function TimelineEvent({ event, isLast, onDelete }: { event: FieldHouseEvent; is
 
 // ── Add Event Form ────────────────────────────────────────────
 function AddEventForm({ houseId, onSuccess }: { houseId: string; onSuccess: () => void }) {
+  const { language } = useTranslation();
   const [open, setOpen] = useState(false);
   const [eventType, setEventType] = useState('knock');
   const [noteText, setNoteText] = useState('');
@@ -729,12 +734,12 @@ function AddEventForm({ houseId, onSuccess }: { houseId: string; onSuccess: () =
         event_type: eventType,
         note_text: noteText || undefined,
       });
-      toast.success('Event logged');
+      toast.success(language === 'fr' ? 'Activité enregistrée' : 'Event logged');
       setNoteText('');
       setOpen(false);
       onSuccess();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed');
+      toast.error(err?.message || (language === 'fr' ? 'Échec' : 'Failed'));
     }
     setSubmitting(false);
   };
@@ -742,7 +747,7 @@ function AddEventForm({ houseId, onSuccess }: { houseId: string; onSuccess: () =
   if (!open) {
     return (
       <button onClick={() => setOpen(true)} className="w-full py-2 rounded-lg border-2 border-dashed border-outline text-text-tertiary text-[12px] font-medium hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-1.5">
-        <Plus size={13} /> Log Activity
+        <Plus size={13} /> {language === 'fr' ? 'Journaliser une activité' : 'Log Activity'}
       </button>
     );
   }
@@ -760,14 +765,14 @@ function AddEventForm({ houseId, onSuccess }: { houseId: string; onSuccess: () =
           ))}
         </div>
         <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)}
-          placeholder="Add a note..." rows={2}
+          placeholder={language === 'fr' ? 'Ajouter une note...' : 'Add a note...'} rows={2}
           className="w-full px-3 py-2 text-[12px] bg-surface border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary resize-none outline-none focus:border-primary" />
         <div className="flex items-center gap-2">
           <button onClick={handleSubmit} disabled={submitting}
             className="glass-button-primary text-[11px] px-4 py-1.5 disabled:opacity-50">
-            {submitting ? 'Saving...' : 'Save'}
+            {submitting ? (language === 'fr' ? 'Enregistrement...' : 'Saving...') : (language === 'fr' ? 'Enregistrer' : 'Save')}
           </button>
-          <button onClick={() => setOpen(false)} className="glass-button text-[11px] px-3 py-1.5">Cancel</button>
+          <button onClick={() => setOpen(false)} className="glass-button text-[11px] px-3 py-1.5">{language === 'fr' ? 'Annuler' : 'Cancel'}</button>
         </div>
       </div>
     </motion.div>
@@ -785,6 +790,7 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
   onOpenInvoice: () => void;
   onOpenClient: () => void;
 }) {
+  const { language } = useTranslation();
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showLinkMenu, setShowLinkMenu] = useState(false);
@@ -922,12 +928,12 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
 
         {/* Meta */}
         <div className="flex items-center gap-3 mt-2.5 text-[10px] text-text-tertiary flex-wrap">
-          <span className="flex items-center gap-1"><Hash size={10} /> {house.visit_count} visits</span>
-          {house.last_activity_at && <span className="flex items-center gap-1"><Clock size={10} /> {new Date(house.last_activity_at).toLocaleDateString()}</span>}
-          {(house as any).client_id && <span className="flex items-center gap-1 text-blue-400"><User size={10} /> Client linked</span>}
-          {(house as any).quote_id && <span className="flex items-center gap-1 text-slate-400"><FileText size={10} /> Quote linked</span>}
-          {(house as any).job_id && <span className="flex items-center gap-1 text-green-400"><Briefcase size={10} /> Job linked</span>}
-          {(house as any).closed_by_name && <span className="flex items-center gap-1 text-text-secondary"><CheckCircle2 size={10} /> Closed by {(house as any).closed_by_name} ({(house as any).closed_by_role})</span>}
+          <span className="flex items-center gap-1"><Hash size={10} /> {house.visit_count} {language === 'fr' ? 'visites' : 'visits'}</span>
+          {house.last_activity_at && <span className="flex items-center gap-1"><Clock size={10} /> {new Date(house.last_activity_at).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-US')}</span>}
+          {(house as any).client_id && <span className="flex items-center gap-1 text-blue-400"><User size={10} /> {language === 'fr' ? 'Client lié' : 'Client linked'}</span>}
+          {(house as any).quote_id && <span className="flex items-center gap-1 text-slate-400"><FileText size={10} /> {language === 'fr' ? 'Devis lié' : 'Quote linked'}</span>}
+          {(house as any).job_id && <span className="flex items-center gap-1 text-green-400"><Briefcase size={10} /> {language === 'fr' ? 'Job lié' : 'Job linked'}</span>}
+          {(house as any).closed_by_name && <span className="flex items-center gap-1 text-text-secondary"><CheckCircle2 size={10} /> {language === 'fr' ? 'Fermé par' : 'Closed by'} {(house as any).closed_by_name} ({(house as any).closed_by_role})</span>}
         </div>
 
         {/* Quick Actions — call, text, navigate */}
@@ -935,16 +941,16 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
           {editPhone && (
             <>
               <a href={`tel:${editPhone}`} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-semibold hover:bg-green-500/20 transition-colors">
-                <PhoneIcon size={12} /> Call
+                <PhoneIcon size={12} /> {language === 'fr' ? 'Appeler' : 'Call'}
               </a>
               <a href={`sms:${editPhone}`} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-semibold hover:bg-blue-500/20 transition-colors">
-                <Mail size={12} /> Text
+                <Mail size={12} /> {language === 'fr' ? 'Texto' : 'Text'}
               </a>
             </>
           )}
           <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(house.address)}`} target="_blank" rel="noopener noreferrer"
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-neutral-500/10 border border-neutral-500/20 text-neutral-400 text-[10px] font-semibold hover:bg-neutral-500/20 transition-colors">
-            <Navigation size={12} /> Navigate
+            <Navigation size={12} /> {language === 'fr' ? 'Naviguer' : 'Navigate'}
           </a>
           <a href={`https://waze.com/ul?q=${encodeURIComponent(house.address)}&navigate=yes`} target="_blank" rel="noopener noreferrer"
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-semibold hover:bg-cyan-500/20 transition-colors">
@@ -956,15 +962,15 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
       {/* Customer Contact Info */}
       <div className="px-4 py-3 border-b border-outline">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider">Contact Info</p>
+          <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Coordonnées' : 'Contact Info'}</p>
           {!editingContact ? (
-            <button onClick={() => setEditingContact(true)} className="text-[10px] text-primary font-medium hover:underline">Edit</button>
+            <button onClick={() => setEditingContact(true)} className="text-[10px] text-primary font-medium hover:underline">{language === 'fr' ? 'Modifier' : 'Edit'}</button>
           ) : (
             <div className="flex gap-1.5">
               <button onClick={() => { setEditingContact(false); const m = meta; setEditName(m.customer_name || ''); setEditPhone(m.customer_phone || ''); setEditEmail(m.customer_email || ''); }}
-                className="text-[10px] text-text-tertiary hover:text-text-secondary">Cancel</button>
+                className="text-[10px] text-text-tertiary hover:text-text-secondary">{language === 'fr' ? 'Annuler' : 'Cancel'}</button>
               <button onClick={handleSaveContact} disabled={savingContact}
-                className="text-[10px] text-primary font-semibold hover:underline disabled:opacity-50">{savingContact ? 'Saving...' : 'Save'}</button>
+                className="text-[10px] text-primary font-semibold hover:underline disabled:opacity-50">{savingContact ? (language === 'fr' ? 'Enregistrement...' : 'Saving...') : (language === 'fr' ? 'Enregistrer' : 'Save')}</button>
             </div>
           )}
         </div>
@@ -972,18 +978,18 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5">
               <User size={11} className="text-text-tertiary shrink-0" />
-              <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Customer name"
+              <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder={language === 'fr' ? 'Nom du client' : 'Customer name'}
                 className="flex-1 px-2.5 py-1.5 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20" />
             </div>
             <div className="flex gap-1.5">
               <div className="flex items-center gap-1.5 flex-1">
                 <PhoneIcon size={11} className="text-text-tertiary shrink-0" />
-                <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="Phone" type="tel"
+                <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder={language === 'fr' ? 'Téléphone' : 'Phone'} type="tel"
                   className="flex-1 px-2.5 py-1.5 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20" />
               </div>
               <div className="flex items-center gap-1.5 flex-1">
                 <Mail size={11} className="text-text-tertiary shrink-0" />
-                <input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="Email" type="email"
+                <input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder={language === 'fr' ? 'Courriel' : 'Email'} type="email"
                   className="flex-1 px-2.5 py-1.5 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20" />
               </div>
             </div>
@@ -993,7 +999,7 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
             {editName ? (
               <p className="text-[12px] font-semibold text-text-primary flex items-center gap-1.5"><User size={11} className="text-text-tertiary" />{editName}</p>
             ) : (
-              <p className="text-[11px] text-text-tertiary italic flex items-center gap-1.5"><User size={11} />No name</p>
+              <p className="text-[11px] text-text-tertiary italic flex items-center gap-1.5"><User size={11} />{language === 'fr' ? 'Sans nom' : 'No name'}</p>
             )}
             <div className="flex gap-4">
               {editPhone ? (
@@ -1023,7 +1029,7 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
 
       {/* Quick Status Actions — 1 tap */}
       <div className="px-4 py-3 border-b border-outline">
-        <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">Quick Action</p>
+        <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">{language === 'fr' ? 'Action rapide' : 'Quick Action'}</p>
         <div className="grid grid-cols-3 gap-1.5">
           {quickStatuses.map((qs) => {
             const cfg = STATUS_CONFIG[qs.key] || STATUS_CONFIG[qs.event] || STATUS_CONFIG.unknown;
@@ -1045,24 +1051,24 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
         <div className="flex gap-2">
           <input value={noteText} onChange={(e) => setNoteText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleQuickNote(); } }}
-            placeholder="Add a note... (Enter to save)"
+            placeholder={language === 'fr' ? 'Ajouter une note... (Entrée pour enregistrer)' : 'Add a note... (Enter to save)'}
             className="flex-1 px-3 py-2 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20" />
           <button onClick={handleQuickNote} disabled={savingNote || !noteText.trim()}
             className="px-3 py-2 rounded-lg bg-white text-black text-[10px] font-semibold hover:bg-white/90 transition-colors disabled:opacity-30">
-            {savingNote ? '...' : 'Save'}
+            {savingNote ? '...' : (language === 'fr' ? 'Enregistrer' : 'Save')}
           </button>
         </div>
       </div>
 
       {/* Link & Create Actions */}
       <div className="px-4 py-3 border-b border-outline">
-        <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">Create & Link</p>
+        <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">{language === 'fr' ? 'Créer et lier' : 'Create & Link'}</p>
         <div className="flex gap-1.5">
           {[
-            { key: 'quote', label: 'Create Quote', icon: FileText, color: '#64748b' },
-            { key: 'job', label: 'Create Job', icon: Briefcase, color: '#22c55e' },
-            { key: 'client', label: 'Create Client', icon: UserPlus, color: '#3b82f6' },
-            { key: 'invoice', label: 'Invoice', icon: Receipt, color: '#f59e0b' },
+            { key: 'quote', label: language === 'fr' ? 'Créer un devis' : 'Create Quote', icon: FileText, color: '#64748b' },
+            { key: 'job', label: language === 'fr' ? 'Créer un job' : 'Create Job', icon: Briefcase, color: '#22c55e' },
+            { key: 'client', label: language === 'fr' ? 'Créer un client' : 'Create Client', icon: UserPlus, color: '#3b82f6' },
+            { key: 'invoice', label: language === 'fr' ? 'Facture' : 'Invoice', icon: Receipt, color: '#f59e0b' },
           ].map((item) => {
             const Icon = item.icon;
             return (
@@ -1083,7 +1089,7 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
 
       {/* Timeline */}
       <div className="flex-1 overflow-y-auto px-4 py-3">
-        <h3 className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-3">Activity Timeline</h3>
+        <h3 className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-3">{language === 'fr' ? 'Historique d\'activité' : 'Activity Timeline'}</h3>
         {house.events && house.events.length > 0 ? (
           <div>
             {house.events.map((event, i) => (
@@ -1091,10 +1097,10 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
                 try {
                   const { deleteHouseEvent } = await import('../lib/fieldSalesApi');
                   await deleteHouseEvent(eventId);
-                  toast.success('Event deleted');
+                  toast.success(language === 'fr' ? 'Activité supprimée' : 'Event deleted');
                   onRefresh();
                 } catch (err: any) {
-                  toast.error(err?.message || 'Failed to delete');
+                  toast.error(err?.message || (language === 'fr' ? 'Échec de la suppression' : 'Failed to delete'));
                 }
               }} />
             ))}
@@ -1102,7 +1108,7 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
         ) : (
           <div className="text-center py-6">
             <CircleDot size={20} className="mx-auto text-text-tertiary opacity-30 mb-1.5" />
-            <p className="text-[11px] text-text-tertiary">No activity yet</p>
+            <p className="text-[11px] text-text-tertiary">{language === 'fr' ? 'Aucune activité pour le moment' : 'No activity yet'}</p>
           </div>
         )}
       </div>
@@ -1112,16 +1118,16 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
         {!showDelete ? (
           <button onClick={() => setShowDelete(true)}
             className="w-full py-2 rounded-lg border border-red-500/20 text-red-400 text-[11px] font-medium hover:bg-red-500/5 transition-colors">
-            Delete Pin
+            {language === 'fr' ? 'Supprimer le pin' : 'Delete Pin'}
           </button>
         ) : (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="overflow-hidden">
             <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-              <p className="text-[11px] text-red-400 font-medium mb-2">Delete this pin permanently?</p>
+              <p className="text-[11px] text-red-400 font-medium mb-2">{language === 'fr' ? 'Supprimer ce pin définitivement ?' : 'Delete this pin permanently?'}</p>
               <div className="flex gap-2">
                 <button onClick={handleDelete} disabled={deleting}
                   className="px-4 py-1.5 rounded-lg bg-red-500 text-white text-[10px] font-semibold hover:bg-red-600 disabled:opacity-50">
-                  {deleting ? 'Deleting...' : 'Yes, Delete'}
+                  {deleting ? (language === 'fr' ? 'Suppression...' : 'Deleting...') : (language === 'fr' ? 'Oui, supprimer' : 'Yes, Delete')}
                 </button>
                 <button onClick={() => setShowDelete(false)}
                   className="px-4 py-1.5 rounded-lg border border-outline text-text-tertiary text-[10px]">
@@ -1923,7 +1929,7 @@ export default function FieldSales() {
           </div>
           {(territoryStats as any).status_counts && Object.keys((territoryStats as any).status_counts).length > 0 && (
             <div className="mt-2 pt-2 border-t border-outline">
-              <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-1">Pin Status Breakdown</p>
+              <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-1">{fr ? 'Répartition des statuts de pins' : 'Pin Status Breakdown'}</p>
               <div className="flex gap-1 flex-wrap">
                 {Object.entries((territoryStats as any).status_counts).map(([status, count]) => (
                   <span key={status} className="text-[9px] px-1.5 py-0.5 rounded-md border border-outline text-text-secondary">
@@ -1961,7 +1967,7 @@ export default function FieldSales() {
           {compareStats[0] && compareStats[1] && (
             <div className="grid grid-cols-[1fr_auto_1fr] gap-x-3 gap-y-1 text-[11px]">
               <div className="text-right font-bold text-text-primary">{compareStats[0].name}</div>
-              <div className="text-center text-text-tertiary text-[9px]">vs</div>
+              <div className="text-center text-text-tertiary text-[9px]">{fr ? 'vs' : 'vs'}</div>
               <div className="font-bold text-text-primary">{compareStats[1].name}</div>
               {['knocks', 'leads', 'sales', 'callbacks', 'no_answers'].map((key) => {
                 const v0 = compareStats[0].totals?.[key] ?? 0;
@@ -1976,7 +1982,7 @@ export default function FieldSales() {
                 );
               })}
               <div className={cn('text-right', (compareStats[0].conversion_rate ?? 0) >= (compareStats[1].conversion_rate ?? 0) ? 'text-green-400 font-bold' : 'text-text-secondary')}>{compareStats[0].conversion_rate ?? 0}%</div>
-              <div className="text-center text-text-tertiary text-[9px]">conversion</div>
+              <div className="text-center text-text-tertiary text-[9px]">{fr ? 'conversion' : 'conversion'}</div>
               <div className={cn((compareStats[1].conversion_rate ?? 0) >= (compareStats[0].conversion_rate ?? 0) ? 'text-green-400 font-bold' : 'text-text-secondary')}>{compareStats[1].conversion_rate ?? 0}%</div>
             </div>
           )}
@@ -2198,8 +2204,8 @@ export default function FieldSales() {
                   <div className="flex items-center gap-3 mt-2 text-[10px] text-text-tertiary">
                     <span>{t.total_pins} pins</span>
                     <span>{t.active_leads} leads</span>
-                    <span>{t.close_rate}% close</span>
-                    {t.fatigue_score > 50 && <span className="text-amber-400">Fatigued</span>}
+                    <span>{t.close_rate}% {fr ? 'conclus' : 'close'}</span>
+                    {t.fatigue_score > 50 && <span className="text-amber-400">{fr ? 'Sursollicité' : 'Fatigued'}</span>}
                   </div>
                 </div>
               ))}
