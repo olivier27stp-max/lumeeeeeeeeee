@@ -14,7 +14,6 @@ import { useTranslation } from '../i18n';
 import type { LeaderboardEntry, RepPerformanceDetail } from '../types';
 import {
   Users,
-  DollarSign,
   Banknote,
   Target,
   TrendingUp,
@@ -22,9 +21,11 @@ import {
   GitBranch,
   Trophy,
   Zap,
-  MapPin,
   Clock,
   Loader2,
+  DoorOpen,
+  CheckCircle2,
+  Wallet,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -62,17 +63,17 @@ const fallbackRecentWins: { rep: string; deal: string; value: string; time: stri
 
 const fallbackRepStats = [
   {
-    icon: <MapPin className="h-4 w-4" strokeWidth={2.5} />,
+    icon: <DoorOpen className="h-4 w-4" strokeWidth={2.5} />,
     label: 'Doors Knocked',
     value: '0',
   },
   {
-    icon: <Target className="h-4 w-4" strokeWidth={2.5} />,
+    icon: <CheckCircle2 className="h-4 w-4" strokeWidth={2.5} />,
     label: 'Closes',
     value: '0',
   },
   {
-    icon: <DollarSign className="h-4 w-4" strokeWidth={2.5} />,
+    icon: <Wallet className="h-4 w-4" strokeWidth={2.5} />,
     label: 'Revenue',
     value: '$0',
   },
@@ -519,25 +520,25 @@ function RepDashboard({ userId }: { userId: string | null }) {
     ? fallbackRepStats
     : [
         {
-          icon: <MapPin className="h-4 w-4" strokeWidth={2.5} />,
+          icon: <DoorOpen className="h-4 w-4" strokeWidth={2.5} />,
           label: 'Doors Knocked',
           value: String(stats.doors_knocked),
           change: { value: '', direction: 'up' as const },
         },
         {
-          icon: <Target className="h-4 w-4" strokeWidth={2.5} />,
+          icon: <CheckCircle2 className="h-4 w-4" strokeWidth={2.5} />,
           label: 'Closes',
           value: String(stats.closes),
           change: { value: '', direction: 'up' as const },
         },
         {
-          icon: <DollarSign className="h-4 w-4" strokeWidth={2.5} />,
+          icon: <Wallet className="h-4 w-4" strokeWidth={2.5} />,
           label: 'Revenue',
           value: formatCurrency(stats.revenue),
           change: { value: '', direction: 'up' as const },
         },
         {
-          icon: <Clock className="h-4 w-4" strokeWidth={2.5} />,
+          icon: <TrendingUp className="h-4 w-4" strokeWidth={2.5} />,
           label: 'Conversion',
           value: `${Math.round(stats.conversion_rate)}%`,
           subtitle: `${stats.quotes_sent} quotes sent`,
