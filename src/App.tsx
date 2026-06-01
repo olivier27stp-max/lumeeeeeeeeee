@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
+  BarChart3,
   Users,
   Settings,
   LogOut,
@@ -721,7 +722,7 @@ function AuthenticatedApp({
       label: t.nav.d2d,
       items: venteModule.isEnabled
         ? [
-            { id: 'd2d-dashboard', label: t.nav.venteDashboard, icon: LayoutDashboard, path: '/d2d-dashboard', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
+            { id: 'd2d-dashboard', label: t.nav.venteDashboard, icon: BarChart3, path: '/d2d-dashboard', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
             { id: 'field-sales', label: t.nav.venteMap, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
             { id: 'd2d-pipeline', label: t.nav.ventePipeline, icon: GitBranch, path: '/d2d-pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
             { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'financial.view_reports', requiredPlanFlag: 'includes_d2d' },
