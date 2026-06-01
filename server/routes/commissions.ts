@@ -12,6 +12,7 @@ import {
   getPayrollPreview,
   markCommissionPaid,
   generateCommissionsForInvoice,
+  projectCommissionForJob,
 } from '../lib/field-sales/commission-engine';
 
 const router = Router();
@@ -40,6 +41,26 @@ router.get('/commissions', async (req, res) => {
       dateRange: from && to ? { from, to } : undefined,
     });
     res.json(entries);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+  }
+});
+
+// POST /api/commissions/project-for-job
+// Creates a PENDING (estimated) commission for the job's rep when a job is
+// created. Any org member may call it; the recipient is derived from the job
+// (salesperson/creator), not the caller, so it can't be used to credit others.
+router.post('/commissions/project-for-job', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  const { jobId } = req.body || {};
+  if (!jobId || typeof jobId !== 'string') {
+    return res.status(400).json({ error: 'jobId is required.' });
+  }
+  try {
+    const sc = getServiceClient();
+    const result = await projectCommissionForJob(sc, auth.orgId, jobId);
+    res.json(result);
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }

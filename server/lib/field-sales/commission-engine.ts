@@ -131,6 +131,88 @@ export function calculateCommissionAmount(rule: any, input: CalcInput): CalcResu
 }
 
 // ---------------------------------------------------------------------------
+// Trigger: job created → project a PENDING (estimated) commission entry.
+// The amount is an estimate from the job total; it is recomputed and the entry
+// is confirmed (→ approved) when the linked invoice is paid.
+// ---------------------------------------------------------------------------
+export async function projectCommissionForJob(
+  supabase: SupabaseClient,
+  orgId: string,
+  jobId: string
+): Promise<{ created: number; skipped: string | null }> {
+  // 1. Load the job
+  const { data: job, error: jobErr } = await supabase
+    .from('jobs')
+    .select('id, org_id, salesperson_id, created_by, total_cents, total, deleted_at')
+    .eq('id', jobId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (jobErr || !job) return { created: 0, skipped: 'job_not_found' };
+  if (job.deleted_at) return { created: 0, skipped: 'job_deleted' };
+
+  // 2. Rep = job salesperson, else its creator
+  const repUserId: string | null = job.salesperson_id || job.created_by || null;
+  if (!repUserId) return { created: 0, skipped: 'no_rep' };
+
+  // 3. Skip if any entry already exists for this job (avoid duplicates)
+  const { data: dup } = await supabase
+    .from('fs_commission_entries')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('job_id', jobId)
+    .is('deleted_at', null)
+    .limit(1);
+  if (dup && dup.length > 0) return { created: 0, skipped: 'already_projected' };
+
+  // 4. Resolve rule (same logic as the invoice flow)
+  const { data: rules } = await supabase.from('fs_commission_rules')
+    .select('*').eq('org_id', orgId).eq('is_active', true).is('deleted_at', null)
+    .order('priority', { ascending: false });
+  let rule = (rules ?? []).find((r: any) => Array.isArray(r.assigned_user_ids) && r.assigned_user_ids.includes(repUserId));
+  if (!rule) {
+    const { data: settings } = await supabase.from('commission_settings')
+      .select('default_rule_id').eq('org_id', orgId).maybeSingle();
+    if (settings?.default_rule_id) rule = (rules ?? []).find((r: any) => r.id === settings.default_rule_id);
+  }
+  if (!rule) return { created: 0, skipped: 'no_rule' };
+
+  // 5. Estimate base from the job total
+  const baseCents = Number(job.total_cents || 0) || Math.round(Number(job.total || 0) * 100);
+  if (baseCents <= 0) return { created: 0, skipped: 'no_amount' };
+
+  // 6. Rep period stats (calendar month) up to now
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const { data: priorEntries } = await supabase.from('fs_commission_entries')
+    .select('base_amount').eq('org_id', orgId).eq('user_id', repUserId)
+    .is('deleted_at', null).gte('triggered_at', periodStart).lt('triggered_at', nowIso);
+  const repPeriodRevenueCents = (priorEntries ?? []).reduce((s: number, e: any) => s + Number(e.base_amount || 0), 0);
+  const repPeriodSaleCount = (priorEntries ?? []).length;
+
+  // 7. Calculate the estimate
+  const calc = calculateCommissionAmount(rule, {
+    invoiceTotalCents: baseCents,
+    invoicePaidAt: nowIso,
+    lineItems: [],
+    repPeriodRevenueCents,
+    repPeriodSaleCount,
+  });
+  if (calc.amountCents <= 0) return { created: 0, skipped: 'zero_amount' };
+
+  // 8. Insert the pending (estimated) entry — confirmed when the invoice is paid
+  const { error } = await supabase.from('fs_commission_entries').insert({
+    org_id: orgId, user_id: repUserId, rule_id: rule.id,
+    invoice_id: null, job_id: jobId, lead_id: null,
+    status: 'pending', amount: calc.amountCents / 100, base_amount: baseCents / 100,
+    description: 'Estimation — en attente du paiement de la facture', triggered_at: nowIso,
+    calc_breakdown: { ...calc.breakdown, projected: true, total_calculated_cents: calc.amountCents },
+  });
+  if (error) return { created: 0, skipped: 'insert_failed' };
+  return { created: 1, skipped: null };
+}
+
+// ---------------------------------------------------------------------------
 // Trigger: invoice paid → create commission entries
 // ---------------------------------------------------------------------------
 
@@ -152,7 +234,7 @@ export async function generateCommissionsForInvoice(
   // 2. Load invoice + line items
   const { data: invoice, error: invErr } = await supabase
     .from('invoices')
-    .select('id, org_id, total_cents, paid_at, status, client_id, quote_id, line_items')
+    .select('id, org_id, total_cents, paid_at, status, client_id, quote_id, job_id, line_items')
     .eq('id', invoiceId)
     .eq('org_id', orgId)
     .single();
@@ -171,6 +253,14 @@ export async function generateCommissionsForInvoice(
         .select('assigned_to').eq('id', q.lead_id).eq('org_id', orgId).maybeSingle();
       repUserId = l?.assigned_to || null;
     }
+  }
+  // Fallback: attribute to the job's salesperson (or its creator) when no
+  // quote/lead rep was found.
+  if (!repUserId && invoice.job_id) {
+    const { data: j } = await supabase.from('jobs')
+      .select('salesperson_id, created_by')
+      .eq('id', invoice.job_id).eq('org_id', orgId).maybeSingle();
+    repUserId = j?.salesperson_id || j?.created_by || null;
   }
   if (!repUserId) return { created: 0, skipped: 'no_rep' };
 
@@ -211,19 +301,47 @@ export async function generateCommissionsForInvoice(
     : [{ user_id: repUserId, pct: 100 }];
   const sumPct = recipients.reduce((s, r) => s + r.pct, 0) || 100;
 
-  // 8. Insert one entry per recipient
+  // 8. Insert/confirm one entry per recipient.
+  //    When the invoice is tied to a job, confirm the rep's pre-projected
+  //    pending entry (created at job creation) instead of inserting a duplicate,
+  //    and mark it approved (= earned) since the invoice is now paid.
+  const confirmStatus = invoice.job_id ? 'approved' : 'pending';
   let created = 0;
   for (const r of recipients) {
     const share = Math.round(calc.amountCents * (r.pct / sumPct));
     if (share <= 0) continue;
-    const { error } = await supabase.from('fs_commission_entries').insert({
-      org_id: orgId, user_id: r.user_id, rule_id: rule.id,
-      invoice_id: invoiceId, job_id: null, lead_id: null,
-      status: 'pending', amount: share / 100, base_amount: Number(invoice.total_cents || 0) / 100,
-      description: `Commission on invoice payment`, triggered_at: invoice.paid_at,
+
+    const entryFields = {
+      rule_id: rule.id,
+      invoice_id: invoiceId,
+      job_id: invoice.job_id || null,
+      status: confirmStatus,
+      amount: share / 100,
+      base_amount: Number(invoice.total_cents || 0) / 100,
+      description: 'Commission on invoice payment',
+      triggered_at: invoice.paid_at,
       calc_breakdown: { ...calc.breakdown, split_pct: r.pct, total_calculated_cents: calc.amountCents },
-    });
-    if (!error) created++;
+    };
+
+    // Confirm an existing projected (pending, no invoice) entry for this rep+job.
+    let confirmed = false;
+    if (invoice.job_id) {
+      const { data: projected } = await supabase.from('fs_commission_entries')
+        .select('id')
+        .eq('org_id', orgId).eq('job_id', invoice.job_id).eq('user_id', r.user_id)
+        .is('invoice_id', null).is('deleted_at', null).limit(1);
+      if (projected && projected.length > 0) {
+        const { error } = await supabase.from('fs_commission_entries')
+          .update(entryFields).eq('id', projected[0].id);
+        if (!error) { created++; confirmed = true; }
+      }
+    }
+
+    if (!confirmed) {
+      const { error } = await supabase.from('fs_commission_entries')
+        .insert({ org_id: orgId, user_id: r.user_id, lead_id: null, ...entryFields });
+      if (!error) created++;
+    }
   }
   return { created, skipped: null };
 }

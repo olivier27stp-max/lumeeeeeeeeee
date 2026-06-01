@@ -865,7 +865,31 @@ export async function createJob(payload: {
   });
   invalidateScheduleCache();
 
+  // Project a pending (estimated) commission for the job's rep. Fire-and-forget:
+  // never block job creation on it. Confirmed/recomputed when the invoice is paid.
+  void projectJobCommission(data.id);
+
   return mapJob(data, clientName);
+}
+
+/**
+ * Ask the server to create a pending (estimated) commission entry for the
+ * newly created job's rep. Non-blocking; errors are swallowed (e.g. no rule
+ * configured, no rep) — they should never break job creation.
+ */
+async function projectJobCommission(jobId: string): Promise<void> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return;
+    await fetch('/api/commissions/project-for-job', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId }),
+    });
+  } catch {
+    // Best-effort only.
+  }
 }
 
 export async function getActiveJobByLeadId(leadId: string): Promise<Job | null> {
