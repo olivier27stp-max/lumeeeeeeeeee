@@ -254,13 +254,64 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
     entries: RawEntry[];
   }
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // TEMPORARY DEMO DATA — 4 imaginary technicians with fake punches.
+  // Display-only (never written to the DB). Delete this whole block + the
+  // `...DEMO_ENTRIES` spread below to remove them.
+  // ───────────────────────────────────────────────────────────────────────────
+  const DEMO_ENTRIES = useMemo<RawEntry[]>(() => {
+    if (!isManager) return []; // only managers see the imaginary techs
+    const demoTechs = [
+      { id: 'demo-tech-1', name: 'Marc Tremblay' },
+      { id: 'demo-tech-2', name: 'Sophie Gagnon' },
+      { id: 'demo-tech-3', name: 'David Roy' },
+      { id: 'demo-tech-4', name: 'Émilie Bouchard' },
+    ];
+    const rows: RawEntry[] = [];
+    // Deterministic pseudo-random so totals stay stable across renders.
+    const rand = (seed: number) => {
+      const x = Math.sin(seed * 99.13) * 10000;
+      return x - Math.floor(x);
+    };
+    days.forEach((d, di) => {
+      const dow = d.getDay();
+      if (dow === 0 || dow === 6) return; // weekdays only
+      demoTechs.forEach((tech, ti) => {
+        const seed = di * 10 + ti;
+        if (rand(seed) < 0.15) return; // occasional day off
+        const startH = 7 + Math.floor(rand(seed + 1) * 2);          // 7–8h
+        const lenH = 6 + Math.floor(rand(seed + 2) * 4);            // 6–9h
+        const dateStr = ymd(d);
+        const pin = `${String(startH).padStart(2, '0')}:00:00`;
+        const poutH = startH + lenH;
+        const pout = `${String(poutH).padStart(2, '0')}:00:00`;
+        rows.push({
+          id: `demo-${tech.id}-${dateStr}`,
+          employee_id: tech.id,
+          employee_name: tech.name,
+          date: dateStr,
+          punch_in: pin,
+          punch_out: pout,
+          punch_in_at: `${dateStr}T${pin}`,
+          punch_out_at: `${dateStr}T${pout}`,
+          breaks: [{ start: `${dateStr}T12:00:00`, end: `${dateStr}T12:30:00` }],
+          notes: rand(seed + 3) < 0.4 ? (fr ? 'Contrat terminé à temps' : 'Job completed on time') : null,
+          job_id: null,
+          status: 'completed',
+        });
+      });
+    });
+    return rows;
+  }, [days, fr, isManager]);
+  // ─── END TEMPORARY DEMO DATA ───────────────────────────────────────────────
+
   const techRows: TechAgg[] = useMemo(() => {
     const byTech = new Map<string, RawEntry[]>();
     // Seed with every technician so they appear even with zero hours.
     for (const tech of technicians) {
       if (!byTech.has(tech.id)) byTech.set(tech.id, []);
     }
-    for (const e of entries) {
+    for (const e of [...entries, ...DEMO_ENTRIES]) {
       const arr = byTech.get(e.employee_id) || [];
       arr.push(e);
       byTech.set(e.employee_id, arr);
@@ -281,7 +332,7 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
       aggs.push({ techId, name: nameFor(techId, list[0]?.employee_name), perDayMinutes: perDay, totalMinutes: total, running, entries: list });
     }
     return aggs.sort((a, b) => a.name.localeCompare(b.name));
-  }, [entries, days, nameFor]);
+  }, [entries, DEMO_ENTRIES, days, nameFor]);
 
   const dayColumnTotals = useMemo(() => {
     const totals = days.map(() => 0);
