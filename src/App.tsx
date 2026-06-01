@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
-  BarChart3,
   Users,
   Settings,
   LogOut,
@@ -128,7 +127,6 @@ import RepProfile from './pages/RepProfile';
 import FieldSales from './pages/FieldSales';
 import D2DMap from './pages/D2DMap';
 import D2DPipeline from './pages/D2DPipeline';
-import D2DDashboard from './pages/D2DDashboard';
 import D2DReports from './pages/D2DReports';
 import D2DSettingsGeneral from './pages/D2DSettingsGeneral';
 import D2DSettingsTeams from './pages/D2DSettingsTeams';
@@ -722,14 +720,13 @@ function AuthenticatedApp({
       label: t.nav.d2d,
       items: venteModule.isEnabled
         ? [
-            { id: 'd2d-dashboard', label: t.nav.venteDashboard, icon: BarChart3, path: '/d2d-dashboard', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
             { id: 'field-sales', label: t.nav.venteMap, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
             { id: 'd2d-pipeline', label: t.nav.ventePipeline, icon: GitBranch, path: '/d2d-pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
             { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'financial.view_reports', requiredPlanFlag: 'includes_d2d' },
             { id: 'commissions', label: t.nav.commissions, icon: Wallet, path: '/commissions', tileColor: 'blue', requiredPermission: 'commissions.read', requiredPlanFlag: 'includes_d2d' },
           ]
         : [
-            { id: 'vente-locked', label: t.nav.d2d, icon: Lock, path: '/d2d-dashboard', tileColor: 'blue', requiredPlanFlag: 'includes_d2d' },
+            { id: 'vente-locked', label: t.nav.d2d, icon: Lock, path: '/field-sales', tileColor: 'blue', requiredPlanFlag: 'includes_d2d' },
           ],
     },
   ] as NavSection[];
@@ -1154,7 +1151,8 @@ function AuthenticatedApp({
                     <Route path="/dispatch" element={<Gated permission="map.access"><DispatchMap /></Gated>} />
                     {/* Vente (ex-D2D) — gated by plan flag + module activation */}
                     <Route path="/field-sales" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DMap /></ModuleGate></PlanFeatureGate></Gated>} />
-                    <Route path="/d2d-dashboard" element={<PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DDashboard /></PageWrapper></ModuleGate></PlanFeatureGate>} />
+                    {/* Dashboard page removed for all roles — redirect to Sales Map */}
+                    <Route path="/d2d-dashboard" element={<Navigate to="/field-sales" replace />} />
                     <Route path="/d2d-pipeline" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DPipeline /></ModuleGate></PlanFeatureGate></Gated>} />
                     <Route path="/leaderboard" element={<Gated permission="reports.read"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Leaderboard /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
                     {/* Commissions: role-based dashboard from main — not restricted to the Vente module/plan flag */}
