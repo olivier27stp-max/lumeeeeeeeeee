@@ -1099,7 +1099,30 @@ export async function softDeleteJob(jobId: string): Promise<SoftDeleteJobResult>
 
   invalidateScheduleCache();
 
+  // Remove the job's unconfirmed projected (pending) commission, if any.
+  // Fire-and-forget; confirmed commissions (invoice paid) are left intact.
+  void voidJobCommission(jobId);
+
   return {
     job: Number((data as any)?.job || 0),
   };
+}
+
+/**
+ * Ask the server to void the job's pending (unconfirmed) projected commission
+ * when the job is deleted. Non-blocking; errors are swallowed.
+ */
+async function voidJobCommission(jobId: string): Promise<void> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return;
+    await fetch('/api/commissions/void-for-job', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId }),
+    });
+  } catch {
+    // Best-effort only.
+  }
 }

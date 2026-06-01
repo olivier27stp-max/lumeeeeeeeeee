@@ -631,6 +631,29 @@ export async function markInvoicePaidManually(invoiceId: string) {
 
   // Emit automation event to stop invoice reminders and trigger payment workflows
   emitInvoicePaidManually({ invoiceId });
+
+  // Generate/confirm sales commissions for this now-paid invoice (Stripe does
+  // this via webhook; manual payments need this explicit trigger). Best-effort.
+  void generateCommissionsForPaidInvoice(invoiceId);
+}
+
+/**
+ * Trigger server-side commission generation for a manually-paid invoice.
+ * Non-blocking; errors are swallowed so they never break the payment flow.
+ */
+async function generateCommissionsForPaidInvoice(invoiceId: string): Promise<void> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return;
+    await fetch('/api/commissions/generate-for-invoice', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ invoiceId }),
+    });
+  } catch {
+    // Best-effort only.
+  }
 }
 
 // ── Job line items for invoice prefill ──

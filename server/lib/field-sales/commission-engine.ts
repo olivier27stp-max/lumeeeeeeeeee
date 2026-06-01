@@ -213,6 +213,30 @@ export async function projectCommissionForJob(
 }
 
 // ---------------------------------------------------------------------------
+// Trigger: job deleted/cancelled → void its UNCONFIRMED projected commission.
+// Only removes pending estimates (invoice_id IS NULL). Confirmed commissions
+// (invoice already paid → status approved/paid) are left untouched.
+// ---------------------------------------------------------------------------
+export async function voidProjectedCommissionForJob(
+  supabase: SupabaseClient,
+  orgId: string,
+  jobId: string
+): Promise<{ voided: number }> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('fs_commission_entries')
+    .update({ status: 'reversed', deleted_at: nowIso })
+    .eq('org_id', orgId)
+    .eq('job_id', jobId)
+    .eq('status', 'pending')
+    .is('invoice_id', null)
+    .is('deleted_at', null)
+    .select('id');
+  if (error) return { voided: 0 };
+  return { voided: (data ?? []).length };
+}
+
+// ---------------------------------------------------------------------------
 // Trigger: invoice paid → create commission entries
 // ---------------------------------------------------------------------------
 

@@ -13,6 +13,7 @@ import {
   markCommissionPaid,
   generateCommissionsForInvoice,
   projectCommissionForJob,
+  voidProjectedCommissionForJob,
 } from '../lib/field-sales/commission-engine';
 
 const router = Router();
@@ -60,6 +61,25 @@ router.post('/commissions/project-for-job', async (req, res) => {
   try {
     const sc = getServiceClient();
     const result = await projectCommissionForJob(sc, auth.orgId, jobId);
+    res.json(result);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+  }
+});
+
+// POST /api/commissions/void-for-job
+// Removes the UNCONFIRMED projected (pending, no-invoice) commission for a job
+// when it is deleted/cancelled. Derived from the job + caller's org.
+router.post('/commissions/void-for-job', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  const { jobId } = req.body || {};
+  if (!jobId || typeof jobId !== 'string') {
+    return res.status(400).json({ error: 'jobId is required.' });
+  }
+  try {
+    const sc = getServiceClient();
+    const result = await voidProjectedCommissionForJob(sc, auth.orgId, jobId);
     res.json(result);
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
