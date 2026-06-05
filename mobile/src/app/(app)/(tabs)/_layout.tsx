@@ -16,6 +16,7 @@ export default function TabsLayout() {
   // Same permission keys as the desktop app, so visibility matches per role.
   const showJobs = can('jobs.read');
   const showClients = can('clients.read');
+  const showTime = can('timesheets.update');
 
   return (
     <Tabs
@@ -42,6 +43,14 @@ export default function TabsLayout() {
           title: 'Clients',
           href: showClients ? undefined : null,
           tabBarIcon: ({ focused }) => <TabIcon label="👥" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="time"
+        options={{
+          title: 'Time',
+          href: showTime ? undefined : null,
+          tabBarIcon: ({ focused }) => <TabIcon label="⏱️" focused={focused} />,
         }}
       />
       <Tabs.Screen
