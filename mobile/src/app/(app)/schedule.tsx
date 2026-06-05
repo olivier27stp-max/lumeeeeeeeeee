@@ -60,7 +60,7 @@ export default function ScheduleScreen() {
 
   const navigateDay = (dayJobs: Job[]) => {
     const stops = dayJobs
-      .map((j) => j.property_address ?? j.address)
+      .map((j) => j.property_address)
       .filter((a): a is string => !!a);
     if (stops.length === 0) return;
     // Google Maps multi-stop: origin current location, waypoints, last as destination.

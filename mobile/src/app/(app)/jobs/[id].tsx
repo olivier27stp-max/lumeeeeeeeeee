@@ -120,7 +120,7 @@ export default function JobDetail() {
   }
 
   const when = job.scheduled_at ?? job.start_at ?? null;
-  const address = job.property_address ?? job.address;
+  const address = job.property_address;
   const isDone = job.status === 'completed';
   const isActive = job.status === 'in_progress';
   const hasSignature = (job.attachments ?? []).some((a) => a.kind === 'signature');

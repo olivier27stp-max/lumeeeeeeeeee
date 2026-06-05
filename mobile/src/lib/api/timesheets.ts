@@ -19,7 +19,7 @@ export interface TimeEntryRow {
   notes: string | null;
   job_id: string | null;
   team_id: string | null;
-  status: 'active' | 'on_break' | 'completed' | string;
+  status: 'active' | 'paused' | 'completed' | string;
 }
 
 function localDate(d = new Date()): string {
@@ -41,7 +41,7 @@ export async function getActiveTimesheet(employeeId: string): Promise<TimeEntryR
     .from('time_entries')
     .select('*')
     .eq('employee_id', employeeId)
-    .in('status', ['active', 'on_break'])
+    .in('status', ['active', 'paused'])
     .order('punch_in_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -129,7 +129,7 @@ export async function startBreak(entryId: string): Promise<TimeEntryRow> {
 
   const { data, error } = await supabase
     .from('time_entries')
-    .update({ breaks, status: 'on_break' })
+    .update({ breaks, status: 'paused' })
     .eq('id', entryId)
     .select('*')
     .single();

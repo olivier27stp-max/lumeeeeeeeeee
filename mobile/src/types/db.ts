@@ -24,7 +24,6 @@ export interface Job {
   description: string | null;
   client_id: string | null;
   client_name: string | null;
-  address: string | null;
   property_address: string | null;
   scheduled_at: string | null;
   start_at: string | null;

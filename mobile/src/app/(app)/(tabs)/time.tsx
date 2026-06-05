@@ -66,7 +66,7 @@ export default function TimeTab() {
   });
 
   const active = activeQ.data ?? null;
-  const onBreak = active?.status === 'on_break';
+  const onBreak = active?.status === 'paused';
   const busy =
     punchInMut.isPending ||
     punchOutMut.isPending ||

@@ -120,7 +120,13 @@ export interface JobInput {
 export async function createJob(orgId: string, input: JobInput): Promise<Job> {
   const { data, error } = await supabase
     .from('jobs')
-    .insert({ org_id: orgId, status: 'scheduled', ...input })
+    .insert({
+      org_id: orgId,
+      status: 'scheduled',
+      ...input,
+      // property_address is NOT NULL in the DB.
+      property_address: input.property_address ?? '',
+    })
     .select('*')
     .single();
   if (error) throw new Error(error.message);

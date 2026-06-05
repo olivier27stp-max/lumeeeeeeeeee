@@ -37,7 +37,13 @@ export interface ClientInput {
 export async function createClient(orgId: string, input: ClientInput): Promise<ClientRecord> {
   const { data, error } = await supabase
     .from('clients')
-    .insert({ org_id: orgId, ...input })
+    .insert({
+      org_id: orgId,
+      ...input,
+      // first_name / last_name are NOT NULL in the DB.
+      first_name: input.first_name ?? '',
+      last_name: input.last_name ?? '',
+    })
     .select('*')
     .single();
   if (error) throw new Error(error.message);

@@ -210,13 +210,15 @@ export async function createHouseAt(params: {
   status?: HouseStatus;
 }): Promise<FieldHouse> {
   const { orgId, userId, lat, lng, address, status = 'unknown' } = params;
+  // address is NOT NULL in the DB — fall back to the coordinates.
+  const safeAddress = address?.trim() || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
   const { data, error } = await supabase
     .from('field_house_profiles')
     .insert({
       org_id: orgId,
       lat,
       lng,
-      address: address ?? null,
+      address: safeAddress,
       current_status: status,
       assigned_user_id: userId,
       visit_count: 0,
