@@ -7,6 +7,8 @@ import {
   listInvoicesForJob,
   listQuotesForJob,
   markInvoiceSent,
+  markQuoteSent,
+  quoteShareLink,
 } from '@/lib/api/billing';
 import { logOutboundMessage } from '@/lib/api/messaging';
 import { textNumber } from '@/lib/contact';
@@ -62,6 +64,34 @@ export function JobBillingCard({
     }
   };
 
+  // Send a quote the client can view + approve on the web (/quote/:view_token).
+  const sendQuote = async (
+    quoteId: string,
+    quoteNumber: string | null,
+    viewToken: string | null,
+    amountCents: number,
+  ) => {
+    try {
+      if (!viewToken) throw new Error('This quote has no shareable link yet.');
+      const url = quoteShareLink(viewToken);
+      const label = quoteNumber ? `quote ${quoteNumber}` : 'your quote';
+      const body = `Here's ${label} for ${formatCurrencyCents(amountCents, currency)}. View and approve it here: ${url}`;
+      if (clientPhone) {
+        await textNumber(clientPhone, body);
+        if (userId) {
+          logOutboundMessage({ orgId, phone: clientPhone, text: body, userId, clientId, clientName }).catch(
+            () => {},
+          );
+        }
+      } else {
+        await Share.share({ message: body, url });
+      }
+      markQuoteSent(quoteId).catch(() => {});
+    } catch (e) {
+      Alert.alert('Send quote', (e as Error).message);
+    }
+  };
+
   const { data: invoices } = useQuery({
     queryKey: ['billing', 'invoices', jobId],
     queryFn: () => listInvoicesForJob(jobId),
@@ -83,17 +113,32 @@ export function JobBillingCard({
         <Text className="text-sm text-ink-subtle">No quotes or invoices yet.</Text>
       ) : null}
 
-      {(quotes ?? []).map((q) => (
-        <View key={q.id} className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-sm font-medium text-ink">Quote {q.quote_number ?? ''}</Text>
-            <Text className="text-xs text-ink-muted">{q.status ?? '—'}</Text>
+      {(quotes ?? []).map((q) => {
+        const sendable = !['approved', 'declined', 'converted', 'expired'].includes(q.status ?? '');
+        return (
+          <View key={q.id} className="gap-2">
+            <View className="flex-row items-center justify-between">
+              <View>
+                <Text className="text-sm font-medium text-ink">Quote {q.quote_number ?? ''}</Text>
+                <Text className="text-xs text-ink-muted">{q.status ?? '—'}</Text>
+              </View>
+              <Text className="text-sm text-ink">
+                {formatCurrencyCents(q.total_cents ?? 0, currency)}
+              </Text>
+            </View>
+            {sendable ? (
+              <Pressable
+                onPress={() => sendQuote(q.id, q.quote_number, q.view_token, q.total_cents ?? 0)}
+                className="self-start rounded-full border border-brand px-4 py-1.5"
+              >
+                <Text className="text-xs font-medium text-brand">
+                  {clientPhone ? 'Send quote to client' : 'Send quote'}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
-          <Text className="text-sm text-ink">
-            {formatCurrencyCents(q.total_cents ?? 0, currency)}
-          </Text>
-        </View>
-      ))}
+        );
+      })}
 
       {(invoices ?? []).map((inv) => {
         const due = inv.balance_cents != null && inv.balance_cents > 0 ? inv.balance_cents : 0;

@@ -23,12 +23,14 @@ export interface QuoteRow {
   total_cents: number | null;
   job_id: string | null;
   client_id: string | null;
+  view_token: string | null;
   created_at: string | null;
 }
 
 const INVOICE_COLS =
   'id, invoice_number, status, total_cents, balance_cents, due_date, job_id, client_id, created_at';
-const QUOTE_COLS = 'id, quote_number, status, total_cents, job_id, client_id, created_at';
+const QUOTE_COLS =
+  'id, quote_number, status, total_cents, job_id, client_id, view_token, created_at';
 
 export async function listInvoicesForJob(jobId: string): Promise<InvoiceRow[]> {
   const { data, error } = await supabase
@@ -99,6 +101,33 @@ export async function getOrCreatePaymentLink(params: {
   }
 
   return `${webUrl.replace(/\/$/, '')}/pay/${token}`;
+}
+
+/**
+ * Public link a client opens to view + approve/decline a quote:
+ * `${EXPO_PUBLIC_WEB_URL}/quote/:view_token`. The quote's view_token is
+ * DB-generated; org members can read it under RLS.
+ */
+export function quoteShareLink(viewToken: string): string {
+  const webUrl = process.env.EXPO_PUBLIC_WEB_URL;
+  if (!webUrl) {
+    throw new Error('Set EXPO_PUBLIC_WEB_URL (your deployed Lume web app URL) to send quotes.');
+  }
+  return `${webUrl.replace(/\/$/, '')}/quote/${viewToken}`;
+}
+
+/** Mark a quote as sent (org members can update under RLS; never downgrades). */
+export async function markQuoteSent(quoteId: string): Promise<void> {
+  await supabase
+    .from('quotes')
+    .update({ sent_via_sms_at: new Date().toISOString(), last_sent_channel: 'sms' })
+    .eq('id', quoteId);
+  // Only flip to 'sent' from a pre-send status, so an approved quote isn't reset.
+  await supabase
+    .from('quotes')
+    .update({ status: 'sent' })
+    .eq('id', quoteId)
+    .in('status', ['draft', 'action_required']);
 }
 
 /** Best-effort: stamp the invoice as sent (mirrors the web's server behavior). */
