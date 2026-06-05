@@ -21,6 +21,40 @@ export async function listClients(search?: string, limit = 50): Promise<ClientRe
   return (data ?? []) as ClientRecord[];
 }
 
+export interface ClientInput {
+  first_name?: string;
+  last_name?: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  province?: string;
+  postal_code?: string;
+  notes?: string;
+}
+
+export async function createClient(orgId: string, input: ClientInput): Promise<ClientRecord> {
+  const { data, error } = await supabase
+    .from('clients')
+    .insert({ org_id: orgId, ...input })
+    .select('*')
+    .single();
+  if (error) throw new Error(error.message);
+  return data as ClientRecord;
+}
+
+export async function updateClient(id: string, input: ClientInput): Promise<ClientRecord> {
+  const { data, error } = await supabase
+    .from('clients')
+    .update(input)
+    .eq('id', id)
+    .select('*')
+    .single();
+  if (error) throw new Error(error.message);
+  return data as ClientRecord;
+}
+
 export async function getClient(id: string): Promise<ClientRecord | null> {
   const { data, error } = await supabase
     .from('clients')

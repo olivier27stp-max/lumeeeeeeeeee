@@ -107,6 +107,37 @@ export async function getJob(id: string, access?: JobAccess): Promise<Job | null
   return maskJob(data as Job, access);
 }
 
+export interface JobInput {
+  title: string;
+  description?: string | null;
+  client_id?: string | null;
+  client_name?: string | null;
+  property_address?: string | null;
+  scheduled_at?: string | null;
+  team_id?: string | null;
+}
+
+export async function createJob(orgId: string, input: JobInput): Promise<Job> {
+  const { data, error } = await supabase
+    .from('jobs')
+    .insert({ org_id: orgId, status: 'scheduled', ...input })
+    .select('*')
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Job;
+}
+
+export async function updateJob(id: string, input: Partial<JobInput>): Promise<Job> {
+  const { data, error } = await supabase
+    .from('jobs')
+    .update(input)
+    .eq('id', id)
+    .select('*')
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Job;
+}
+
 export async function markJobInProgress(id: string): Promise<Job> {
   const { data, error } = await supabase
     .from('jobs')

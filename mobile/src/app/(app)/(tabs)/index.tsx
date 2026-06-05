@@ -10,7 +10,7 @@ import { usePermissions } from '@/lib/usePermissions';
 
 export default function TodaysJobs() {
   const [refreshing, setRefreshing] = useState(false);
-  const { orgId, teamId, scope, permissions, role, canSeePricing } = usePermissions();
+  const { orgId, teamId, scope, permissions, role, canSeePricing, canCreateJobs } = usePermissions();
   const access = { teamId, scope, permissions, role };
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['jobs', 'today', orgId, role, teamId],
@@ -33,9 +33,19 @@ export default function TodaysJobs() {
             {data?.length ?? 0} job{(data?.length ?? 0) === 1 ? '' : 's'} scheduled
           </Text>
         </View>
-        <Pressable onPress={() => router.push('/(app)/schedule')} className="px-3 py-2">
-          <Text className="text-sm font-medium text-brand">Week ›</Text>
-        </Pressable>
+        <View className="flex-row items-center gap-2">
+          <Pressable onPress={() => router.push('/(app)/schedule')} className="px-3 py-2">
+            <Text className="text-sm font-medium text-brand">Week ›</Text>
+          </Pressable>
+          {canCreateJobs ? (
+            <Pressable
+              onPress={() => router.push('/(app)/jobs/new')}
+              className="h-9 w-9 items-center justify-center rounded-full bg-brand"
+            >
+              <Text className="text-xl text-white">+</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       <FlatList

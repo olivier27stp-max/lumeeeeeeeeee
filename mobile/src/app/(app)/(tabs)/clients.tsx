@@ -1,16 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, RefreshControl, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
 import { ClientCard } from '@/components/ClientCard';
 import { Input } from '@/components/ui/Input';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { listClients } from '@/lib/api/clients';
+import { usePermissions } from '@/lib/usePermissions';
 
 export default function ClientsTab() {
   const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const { canCreateClients } = usePermissions();
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['clients', search],
@@ -26,7 +28,17 @@ export default function ClientsTab() {
   return (
     <ScreenContainer padded={false}>
       <View className="px-5 pt-2 pb-3 gap-3">
-        <Text className="text-3xl font-bold text-ink">Clients</Text>
+        <View className="flex-row items-center justify-between">
+          <Text className="text-3xl font-bold text-ink">Clients</Text>
+          {canCreateClients ? (
+            <Pressable
+              onPress={() => router.push('/(app)/clients/new')}
+              className="h-9 w-9 items-center justify-center rounded-full bg-brand"
+            >
+              <Text className="text-xl text-white">+</Text>
+            </Pressable>
+          ) : null}
+        </View>
         <Input
           value={search}
           onChangeText={setSearch}
