@@ -15,6 +15,10 @@ export default function RootLayout() {
       <PersistQueryClientProvider
         client={queryClient}
         persistOptions={{ persister: asyncPersister, maxAge: 24 * 60 * 60_000 }}
+        onSuccess={() => {
+          // Resume any writes that were queued while offline in a previous run.
+          queryClient.resumePausedMutations();
+        }}
       >
         <AuthProvider>
           <MembershipProvider>

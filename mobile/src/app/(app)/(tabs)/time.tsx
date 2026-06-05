@@ -8,15 +8,8 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
-import {
-  endBreak,
-  getActiveTimesheet,
-  listTodaysEntries,
-  punchIn,
-  punchOut,
-  startBreak,
-  workedMs,
-} from '@/lib/api/timesheets';
+import { MK } from '@/lib/offline/mutationKeys';
+import { getActiveTimesheet, listTodaysEntries, workedMs } from '@/lib/api/timesheets';
 
 function fmtDuration(ms: number): string {
   const total = Math.floor(ms / 1000);
@@ -50,36 +43,25 @@ export default function TimeTab() {
     enabled: !!employeeId,
   });
 
-  const refresh = () => {
-    qc.invalidateQueries({ queryKey: ['timesheet'] });
-  };
-
   const onErr = (e: Error) => Alert.alert('Time tracking', e.message);
 
-  const punchInMut = useMutation({
-    mutationFn: () =>
-      punchIn({
-        orgId: orgId ?? '',
-        employeeId,
-        employeeName: current?.fullName ?? session?.user.email ?? null,
-        teamId: teamId ?? null,
-      }),
-    onSuccess: refresh,
+  // Offline-capable: these share mutation keys (registerMutationDefaults) so a
+  // punch made without signal is queued and synced when back online.
+  const punchInMut = useMutation<
+    unknown,
+    Error,
+    { orgId: string; employeeId: string; employeeName: string | null; teamId: string | null }
+  >({ mutationKey: MK.punchIn, onError: onErr });
+  const punchOutMut = useMutation<unknown, Error, { entryId: string }>({
+    mutationKey: MK.punchOut,
     onError: onErr,
   });
-  const punchOutMut = useMutation({
-    mutationFn: (id: string) => punchOut(id),
-    onSuccess: refresh,
+  const startBreakMut = useMutation<unknown, Error, { entryId: string }>({
+    mutationKey: MK.startBreak,
     onError: onErr,
   });
-  const startBreakMut = useMutation({
-    mutationFn: (id: string) => startBreak(id),
-    onSuccess: refresh,
-    onError: onErr,
-  });
-  const endBreakMut = useMutation({
-    mutationFn: (id: string) => endBreak(id),
-    onSuccess: refresh,
+  const endBreakMut = useMutation<unknown, Error, { entryId: string }>({
+    mutationKey: MK.endBreak,
     onError: onErr,
   });
 
@@ -116,19 +98,30 @@ export default function TimeTab() {
         ) : !active ? (
           <Button
             title="Punch in"
-            onPress={() => punchInMut.mutate()}
+            onPress={() =>
+              punchInMut.mutate({
+                orgId: orgId ?? '',
+                employeeId,
+                employeeName: current?.fullName ?? session?.user.email ?? null,
+                teamId: teamId ?? null,
+              })
+            }
             loading={busy}
             disabled={!orgId}
           />
         ) : (
           <View className="gap-3">
             {onBreak ? (
-              <Button title="End break" onPress={() => endBreakMut.mutate(active.id)} loading={busy} />
+              <Button
+                title="End break"
+                onPress={() => endBreakMut.mutate({ entryId: active.id })}
+                loading={busy}
+              />
             ) : (
               <Button
                 title="Start break"
                 variant="secondary"
-                onPress={() => startBreakMut.mutate(active.id)}
+                onPress={() => startBreakMut.mutate({ entryId: active.id })}
                 loading={busy}
               />
             )}
@@ -138,7 +131,11 @@ export default function TimeTab() {
               onPress={() =>
                 Alert.alert('Punch out', 'End your shift now?', [
                   { text: 'Cancel', style: 'cancel' },
-                  { text: 'Punch out', style: 'destructive', onPress: () => punchOutMut.mutate(active.id) },
+                  {
+                    text: 'Punch out',
+                    style: 'destructive',
+                    onPress: () => punchOutMut.mutate({ entryId: active.id }),
+                  },
                 ])
               }
               loading={busy}

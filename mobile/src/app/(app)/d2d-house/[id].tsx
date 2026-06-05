@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
@@ -11,12 +11,12 @@ import {
   HouseEventType,
   HouseStatus,
   listHouseEvents,
-  logHouseEvent,
   STATUS_COLOR,
   STATUS_LABEL,
 } from '@/lib/api/fieldSales';
 import { useAuth } from '@/lib/auth';
 import { usePermissions } from '@/lib/usePermissions';
+import { MK } from '@/lib/offline/mutationKeys';
 
 const QUICK_ACTIONS: { type: HouseEventType; label: string; status?: HouseStatus }[] = [
   { type: 'knock', label: 'Knock' },
@@ -31,7 +31,6 @@ const QUICK_ACTIONS: { type: HouseEventType; label: string; status?: HouseStatus
 
 export default function HouseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const qc = useQueryClient();
   const { session } = useAuth();
   const { orgId } = usePermissions();
 
@@ -50,24 +49,35 @@ export default function HouseDetail() {
     enabled: !!id,
   });
 
-  const logMut = useMutation({
-    mutationFn: (action: { type: HouseEventType; status?: HouseStatus }) =>
-      logHouseEvent({
-        orgId: orgId ?? '',
-        houseId: String(id),
-        userId: session?.user.id ?? '',
-        eventType: action.type,
-        statusOverride: action.status ?? null,
-        noteText: note.trim() || null,
-        customer:
-          name || phone ? { name: name || undefined, phone: phone || undefined } : null,
-      }),
-    onSuccess: () => {
-      setNote('');
-      qc.invalidateQueries({ queryKey: ['d2d'] });
-    },
+  // Offline-capable (shared key): a knock/lead logged with no signal is queued.
+  const logMut = useMutation<
+    unknown,
+    Error,
+    {
+      orgId: string;
+      houseId: string;
+      userId: string;
+      eventType: HouseEventType;
+      statusOverride: HouseStatus | null;
+      noteText: string | null;
+      customer: { name?: string; phone?: string } | null;
+    }
+  >({
+    mutationKey: MK.d2dLogEvent,
+    onSuccess: () => setNote(''),
     onError: (e: Error) => Alert.alert('Could not log', e.message),
   });
+
+  const logAction = (action: { type: HouseEventType; status?: HouseStatus }) =>
+    logMut.mutate({
+      orgId: orgId ?? '',
+      houseId: String(id),
+      userId: session?.user.id ?? '',
+      eventType: action.type,
+      statusOverride: action.status ?? null,
+      noteText: note.trim() || null,
+      customer: name || phone ? { name: name || undefined, phone: phone || undefined } : null,
+    });
 
   const status = house?.current_status ?? 'unknown';
 
@@ -124,7 +134,7 @@ export default function HouseDetail() {
               <Pressable
                 key={a.type}
                 disabled={logMut.isPending}
-                onPress={() => logMut.mutate({ type: a.type, status: a.status })}
+                onPress={() => logAction({ type: a.type, status: a.status })}
                 className="rounded-full border border-slate-300 bg-white px-4 py-2"
               >
                 <Text className="text-sm text-ink">{a.label}</Text>

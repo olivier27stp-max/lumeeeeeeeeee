@@ -10,8 +10,9 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { JobPhotoGrid } from '@/components/JobPhotoGrid';
 import { JobBillingCard } from '@/components/JobBillingCard';
 import { SignaturePad } from '@/components/SignaturePad';
-import { getJob, markJobCompleted, markJobInProgress } from '@/lib/api/jobs';
+import { getJob } from '@/lib/api/jobs';
 import { getClient } from '@/lib/api/clients';
+import { MK } from '@/lib/offline/mutationKeys';
 import { uploadJobSignature } from '@/lib/api/jobPhotos';
 import { callNumber, sendOnMyWay, textNumber } from '@/lib/contact';
 import { formatCurrencyCents, formatDateTime } from '@/lib/format';
@@ -58,18 +59,16 @@ export default function JobDetail() {
     }
   };
 
-  const startMut = useMutation({
-    mutationFn: () => markJobInProgress(String(id)),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['jobs'] });
-    },
+  // These use shared mutation keys (see registerMutationDefaults) so they pause
+  // and queue when offline, then resume automatically when back online.
+  const startMut = useMutation<unknown, Error, { id: string }>({
+    mutationKey: MK.jobStart,
     onError: (e: Error) => Alert.alert('Could not start job', e.message),
   });
 
-  const completeMut = useMutation({
-    mutationFn: () => markJobCompleted(String(id), notes),
+  const completeMut = useMutation<unknown, Error, { id: string; notes?: string }>({
+    mutationKey: MK.jobComplete,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['jobs'] });
       Alert.alert('Job completed', 'Nice work!', [
         { text: 'OK', onPress: () => router.back() },
       ]);
@@ -218,14 +217,14 @@ export default function JobDetail() {
             {!isActive ? (
               <Button
                 title="Start job"
-                onPress={() => startMut.mutate()}
+                onPress={() => startMut.mutate({ id: String(id) })}
                 loading={startMut.isPending}
               />
             ) : null}
             <Button
               title="Mark complete"
               variant={isActive ? 'primary' : 'secondary'}
-              onPress={() => completeMut.mutate()}
+              onPress={() => completeMut.mutate({ id: String(id), notes })}
               loading={completeMut.isPending}
             />
           </View>
