@@ -166,7 +166,9 @@ export default function JobDetail() {
           </Card>
         ) : null}
 
-        {canSeePricing ? <JobBillingCard jobId={job.id} currency={job.currency} /> : null}
+        {canSeePricing && orgId ? (
+          <JobBillingCard jobId={job.id} orgId={orgId} currency={job.currency} />
+        ) : null}
 
         {job.description ? (
           <Card>

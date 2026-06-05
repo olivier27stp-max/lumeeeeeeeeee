@@ -1,17 +1,31 @@
 import { useQuery } from '@tanstack/react-query';
-import { Text, View } from 'react-native';
+import { Alert, Pressable, Share, Text, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
-import { listInvoicesForJob, listQuotesForJob } from '@/lib/api/billing';
+import {
+  getOrCreatePaymentLink,
+  listInvoicesForJob,
+  listQuotesForJob,
+} from '@/lib/api/billing';
 import { formatCurrencyCents } from '@/lib/format';
 
 type Props = {
   jobId: string;
+  orgId: string;
   currency: string;
 };
 
 /** Admin/owner billing summary for a job. Rendered only behind canSeePricing. */
-export function JobBillingCard({ jobId, currency }: Props) {
+export function JobBillingCard({ jobId, orgId, currency }: Props) {
+  const sharePaymentLink = async (invoiceId: string, amountCents: number) => {
+    try {
+      const url = await getOrCreatePaymentLink({ orgId, invoiceId, amountCents, currency });
+      await Share.share({ message: `Pay your invoice securely: ${url}`, url });
+    } catch (e) {
+      Alert.alert('Payment link', (e as Error).message);
+    }
+  };
+
   const { data: invoices } = useQuery({
     queryKey: ['billing', 'invoices', jobId],
     queryFn: () => listInvoicesForJob(jobId),
@@ -45,24 +59,35 @@ export function JobBillingCard({ jobId, currency }: Props) {
         </View>
       ))}
 
-      {(invoices ?? []).map((inv) => (
-        <View key={inv.id} className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-sm font-medium text-ink">
-              Invoice {inv.invoice_number ?? ''}
-            </Text>
-            <Text className="text-xs text-ink-muted">
-              {inv.status ?? '—'}
-              {inv.balance_cents != null && inv.balance_cents > 0
-                ? ` · ${formatCurrencyCents(inv.balance_cents, currency)} due`
-                : ''}
-            </Text>
+      {(invoices ?? []).map((inv) => {
+        const due = inv.balance_cents != null && inv.balance_cents > 0 ? inv.balance_cents : 0;
+        return (
+          <View key={inv.id} className="gap-2">
+            <View className="flex-row items-center justify-between">
+              <View>
+                <Text className="text-sm font-medium text-ink">
+                  Invoice {inv.invoice_number ?? ''}
+                </Text>
+                <Text className="text-xs text-ink-muted">
+                  {inv.status ?? '—'}
+                  {due > 0 ? ` · ${formatCurrencyCents(due, currency)} due` : ''}
+                </Text>
+              </View>
+              <Text className="text-sm text-ink">
+                {formatCurrencyCents(inv.total_cents ?? 0, currency)}
+              </Text>
+            </View>
+            {due > 0 ? (
+              <Pressable
+                onPress={() => sharePaymentLink(inv.id, due)}
+                className="self-start rounded-full bg-brand px-4 py-1.5"
+              >
+                <Text className="text-xs font-medium text-white">Send payment link</Text>
+              </Pressable>
+            ) : null}
           </View>
-          <Text className="text-sm text-ink">
-            {formatCurrencyCents(inv.total_cents ?? 0, currency)}
-          </Text>
-        </View>
-      ))}
+        );
+      })}
     </Card>
   );
 }

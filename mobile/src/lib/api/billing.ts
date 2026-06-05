@@ -50,6 +50,57 @@ export async function listQuotesForJob(jobId: string): Promise<QuoteRow[]> {
   return (data ?? []) as QuoteRow[];
 }
 
+/**
+ * Get (or create) a public payment link for an invoice, then return the full
+ * URL the client opens to pay: `${EXPO_PUBLIC_WEB_URL}/pay/:public_token`.
+ * Works against Supabase directly (payment_requests RLS allows org members to
+ * read/insert); the secure web page handles Stripe. Requires EXPO_PUBLIC_WEB_URL.
+ */
+export async function getOrCreatePaymentLink(params: {
+  orgId: string;
+  invoiceId: string;
+  amountCents: number;
+  currency: string;
+}): Promise<string> {
+  const webUrl = process.env.EXPO_PUBLIC_WEB_URL;
+  if (!webUrl) {
+    throw new Error(
+      'Set EXPO_PUBLIC_WEB_URL (your deployed Lume web app URL) to generate payment links.',
+    );
+  }
+  if (!params.amountCents || params.amountCents <= 0) {
+    throw new Error('This invoice has nothing left to pay.');
+  }
+
+  // Reuse an existing open request for this invoice if there is one.
+  const { data: existing } = await supabase
+    .from('payment_requests')
+    .select('public_token, status')
+    .eq('org_id', params.orgId)
+    .eq('invoice_id', params.invoiceId)
+    .in('status', ['pending', 'sent'])
+    .maybeSingle();
+
+  let token = existing?.public_token as string | undefined;
+
+  if (!token) {
+    const { data, error } = await supabase
+      .from('payment_requests')
+      .insert({
+        org_id: params.orgId,
+        invoice_id: params.invoiceId,
+        amount_cents: params.amountCents,
+        currency: params.currency || 'CAD',
+      })
+      .select('public_token')
+      .single();
+    if (error) throw new Error(error.message);
+    token = data.public_token as string;
+  }
+
+  return `${webUrl.replace(/\/$/, '')}/pay/${token}`;
+}
+
 export async function listInvoicesForClient(clientId: string): Promise<InvoiceRow[]> {
   const { data, error } = await supabase
     .from('invoices')
