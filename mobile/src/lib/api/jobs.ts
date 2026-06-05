@@ -74,6 +74,26 @@ export async function listUpcomingJobs(access?: JobAccess, limit = 50): Promise<
   return (data ?? []).map((j) => maskJob(j as Job, access));
 }
 
+export async function listJobsInRange(
+  startISO: string,
+  endISO: string,
+  access?: JobAccess,
+): Promise<Job[]> {
+  let query = supabase
+    .from('jobs')
+    .select('*')
+    .is('deleted_at', null)
+    .gte('scheduled_at', startISO)
+    .lte('scheduled_at', endISO)
+    .order('scheduled_at', { ascending: true, nullsFirst: false });
+
+  query = applyScope(query, access);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((j) => maskJob(j as Job, access));
+}
+
 export async function getJob(id: string, access?: JobAccess): Promise<Job | null> {
   const { data, error } = await supabase
     .from('jobs')

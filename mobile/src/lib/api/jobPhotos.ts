@@ -88,6 +88,31 @@ export async function uploadJobPhoto(params: {
   return attachment;
 }
 
+/** Upload a captured client signature (base64 PNG) and attach it to the job. */
+export async function uploadJobSignature(params: {
+  jobId: string;
+  orgId: string;
+  base64Png: string;
+  userId?: string | null;
+}): Promise<JobAttachment> {
+  const { jobId, orgId, base64Png, userId } = params;
+  const bucket = STORAGE_BUCKETS.JOB_PHOTOS;
+  const id = randomId();
+  const path = `${orgId}/${jobId}/signature_${id}.png`;
+  await uploadBase64(bucket, path, base64Png, 'image/png');
+
+  const attachment: JobAttachment = {
+    url: getPublicUrl(bucket, path),
+    path,
+    name: `signature_${id}.png`,
+    uploaded_by: userId ?? undefined,
+    created_at: new Date().toISOString(),
+    kind: 'signature',
+  };
+  await appendAttachment(jobId, attachment);
+  return attachment;
+}
+
 /** Read-modify-write append to jobs.attachments (jsonb array). */
 export async function appendAttachment(
   jobId: string,

@@ -8,9 +8,14 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { JobPhotoGrid } from '@/components/JobPhotoGrid';
+import { SignaturePad } from '@/components/SignaturePad';
 import { getJob, markJobCompleted, markJobInProgress } from '@/lib/api/jobs';
+import { getClient } from '@/lib/api/clients';
+import { uploadJobSignature } from '@/lib/api/jobPhotos';
+import { callNumber, sendOnMyWay, textNumber } from '@/lib/contact';
 import { formatCurrencyCents, formatDateTime } from '@/lib/format';
 import { useAuth } from '@/lib/auth';
+import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
 
 export default function JobDetail() {
@@ -18,7 +23,10 @@ export default function JobDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
   const [notes, setNotes] = useState('');
+  const [showSignature, setShowSignature] = useState(false);
+  const [savingSig, setSavingSig] = useState(false);
   const { session } = useAuth();
+  const { current } = useMembership();
   const { teamId, scope, permissions, role, canSeePricing, orgId, can } = usePermissions();
   const access = { teamId, scope, permissions, role };
 
@@ -27,6 +35,27 @@ export default function JobDetail() {
     queryFn: () => getJob(String(id), access),
     enabled: !!id,
   });
+
+  const { data: client } = useQuery({
+    queryKey: ['clients', job?.client_id],
+    queryFn: () => getClient(String(job?.client_id)),
+    enabled: !!job?.client_id,
+  });
+
+  const phone = client?.phone ?? null;
+
+  const saveSignature = async (base64Png: string) => {
+    if (!orgId || !job) return;
+    setSavingSig(true);
+    try {
+      await uploadJobSignature({ jobId: job.id, orgId, base64Png, userId: session?.user.id });
+      qc.invalidateQueries({ queryKey: ['jobs', id] });
+    } catch (e) {
+      Alert.alert('Signature', (e as Error).message);
+    } finally {
+      setSavingSig(false);
+    }
+  };
 
   const startMut = useMutation({
     mutationFn: () => markJobInProgress(String(id)),
@@ -69,6 +98,7 @@ export default function JobDetail() {
   const address = job.property_address ?? job.address;
   const isDone = job.status === 'completed';
   const isActive = job.status === 'in_progress';
+  const hasSignature = (job.attachments ?? []).some((a) => a.kind === 'signature');
 
   return (
     <ScrollView className="flex-1 bg-surface-alt">
@@ -112,6 +142,30 @@ export default function JobDetail() {
           ) : null}
         </Card>
 
+        {phone ? (
+          <Card className="gap-3">
+            <Text className="text-xs text-ink-muted uppercase">Client contact</Text>
+            <View className="flex-row gap-2">
+              <View className="flex-1">
+                <Button title="Call" variant="secondary" onPress={() => callNumber(phone)} />
+              </View>
+              <View className="flex-1">
+                <Button title="Text" variant="secondary" onPress={() => textNumber(phone)} />
+              </View>
+            </View>
+            {!isDone ? (
+              <Button
+                title="I'm on my way 🚗"
+                onPress={() =>
+                  sendOnMyWay({ phone, companyName: current?.companyName }).catch((e) =>
+                    Alert.alert('On my way', (e as Error).message),
+                  )
+                }
+              />
+            ) : null}
+          </Card>
+        ) : null}
+
         {job.description ? (
           <Card>
             <Text className="text-xs text-ink-muted uppercase mb-1">Description</Text>
@@ -150,6 +204,14 @@ export default function JobDetail() {
               numberOfLines={4}
               style={{ height: 100, textAlignVertical: 'top', paddingTop: 12 }}
             />
+            {can('jobs.update') ? (
+              <Button
+                title={hasSignature ? 'Signature captured ✓' : 'Capture client signature'}
+                variant="secondary"
+                onPress={() => setShowSignature(true)}
+                loading={savingSig}
+              />
+            ) : null}
             {!isActive ? (
               <Button
                 title="Start job"
@@ -165,13 +227,22 @@ export default function JobDetail() {
             />
           </View>
         ) : (
-          <Card className="bg-emerald-50 border-emerald-200">
+          <Card className="bg-emerald-50 border-emerald-200 gap-1">
             <Text className="text-emerald-700 font-semibold">
               Completed {formatDateTime(job.completed_at)}
             </Text>
+            {hasSignature ? (
+              <Text className="text-emerald-700 text-sm">Signed by client ✓</Text>
+            ) : null}
           </Card>
         )}
       </View>
+
+      <SignaturePad
+        visible={showSignature}
+        onClose={() => setShowSignature(false)}
+        onSave={saveSignature}
+      />
     </ScrollView>
   );
 }

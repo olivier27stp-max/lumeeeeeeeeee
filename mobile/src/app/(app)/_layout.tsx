@@ -30,6 +30,10 @@ export default function AppLayout() {
         name="clients/[id]"
         options={{ headerShown: true, headerTitle: 'Client', headerBackTitle: 'Back' }}
       />
+      <Stack.Screen
+        name="schedule"
+        options={{ headerShown: true, headerTitle: 'Schedule', headerBackTitle: 'Back' }}
+      />
     </Stack>
   );
 }

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, RefreshControl, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
 import { JobCard } from '@/components/JobCard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -26,11 +26,16 @@ export default function TodaysJobs() {
 
   return (
     <ScreenContainer padded={false}>
-      <View className="px-5 pt-2 pb-3">
-        <Text className="text-3xl font-bold text-ink">Today</Text>
-        <Text className="text-sm text-ink-muted">
-          {data?.length ?? 0} job{(data?.length ?? 0) === 1 ? '' : 's'} scheduled
-        </Text>
+      <View className="px-5 pt-2 pb-3 flex-row items-end justify-between">
+        <View>
+          <Text className="text-3xl font-bold text-ink">Today</Text>
+          <Text className="text-sm text-ink-muted">
+            {data?.length ?? 0} job{(data?.length ?? 0) === 1 ? '' : 's'} scheduled
+          </Text>
+        </View>
+        <Pressable onPress={() => router.push('/(app)/schedule')} className="px-3 py-2">
+          <Text className="text-sm font-medium text-brand">Week ›</Text>
+        </Pressable>
       </View>
 
       <FlatList
