@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { JobPhotoGrid } from '@/components/JobPhotoGrid';
+import { JobBillingCard } from '@/components/JobBillingCard';
 import { SignaturePad } from '@/components/SignaturePad';
 import { getJob, markJobCompleted, markJobInProgress } from '@/lib/api/jobs';
 import { getClient } from '@/lib/api/clients';
@@ -165,6 +166,8 @@ export default function JobDetail() {
             ) : null}
           </Card>
         ) : null}
+
+        {canSeePricing ? <JobBillingCard jobId={job.id} currency={job.currency} /> : null}
 
         {job.description ? (
           <Card>
