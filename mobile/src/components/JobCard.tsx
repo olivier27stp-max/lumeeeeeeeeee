@@ -8,9 +8,14 @@ import { StatusPill } from './ui/StatusPill';
 type Props = {
   job: Job;
   onPress?: () => void;
+  /**
+   * Whether to show the job total. Defaults to false so pricing never leaks to
+   * technicians. M1 wires this to `canSeePricing` from the permission layer.
+   */
+  showPricing?: boolean;
 };
 
-export function JobCard({ job, onPress }: Props) {
+export function JobCard({ job, onPress, showPricing = false }: Props) {
   const when = job.scheduled_at ?? job.start_at ?? null;
   return (
     <Card onPress={onPress} className="gap-2">
@@ -32,9 +37,11 @@ export function JobCard({ job, onPress }: Props) {
 
       <View className="flex-row items-center justify-between pt-1">
         <Text className="text-sm text-ink-muted">{formatTime(when)}</Text>
-        <Text className="text-sm font-medium text-ink">
-          {formatCurrencyCents(job.total_cents, job.currency)}
-        </Text>
+        {showPricing ? (
+          <Text className="text-sm font-medium text-ink">
+            {formatCurrencyCents(job.total_cents, job.currency)}
+          </Text>
+        ) : null}
       </View>
     </Card>
   );

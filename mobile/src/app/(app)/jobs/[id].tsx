@@ -63,6 +63,9 @@ export default function JobDetail() {
   const address = job.property_address ?? job.address;
   const isDone = job.status === 'completed';
   const isActive = job.status === 'in_progress';
+  // M0: pricing hidden by default so it never leaks to technicians.
+  // M1 wires this to `canSeePricing` from the permission layer.
+  const canSeePricing = false;
 
   return (
     <ScrollView className="flex-1 bg-surface-alt">
@@ -96,12 +99,14 @@ export default function JobDetail() {
               <Text className="text-base text-brand underline">{address}</Text>
             </Pressable>
           ) : null}
-          <View>
-            <Text className="text-xs text-ink-muted uppercase mb-1">Total</Text>
-            <Text className="text-base font-semibold text-ink">
-              {formatCurrencyCents(job.total_cents, job.currency)}
-            </Text>
-          </View>
+          {canSeePricing ? (
+            <View>
+              <Text className="text-xs text-ink-muted uppercase mb-1">Total</Text>
+              <Text className="text-base font-semibold text-ink">
+                {formatCurrencyCents(job.total_cents, job.currency)}
+              </Text>
+            </View>
+          ) : null}
         </Card>
 
         {job.description ? (
