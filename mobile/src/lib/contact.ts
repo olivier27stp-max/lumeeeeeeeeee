@@ -25,15 +25,18 @@ export async function textNumber(phone: string, body?: string): Promise<void> {
   await Linking.openURL(url);
 }
 
+/** The "on my way" message body (exported so callers can also log it to CRM). */
+export function onMyWayMessage(companyName?: string | null, etaMinutes?: number | null): string {
+  const who = companyName ? ` from ${companyName}` : '';
+  const eta = etaMinutes ? ` I should arrive in about ${etaMinutes} minutes.` : '';
+  return `Hi! This is your technician${who}. I'm on my way to your appointment.${eta}`;
+}
+
 /** Compose an "on my way" text to the client. */
 export async function sendOnMyWay(params: {
   phone: string;
   companyName?: string | null;
   etaMinutes?: number | null;
 }): Promise<void> {
-  const { phone, companyName, etaMinutes } = params;
-  const who = companyName ? ` from ${companyName}` : '';
-  const eta = etaMinutes ? ` I should arrive in about ${etaMinutes} minutes.` : '';
-  const body = `Hi! This is your technician${who}. I'm on my way to your appointment.${eta}`;
-  await textNumber(phone, body);
+  await textNumber(params.phone, onMyWayMessage(params.companyName, params.etaMinutes));
 }

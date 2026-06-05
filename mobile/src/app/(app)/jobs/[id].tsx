@@ -14,7 +14,8 @@ import { getJob } from '@/lib/api/jobs';
 import { getClient } from '@/lib/api/clients';
 import { MK } from '@/lib/offline/mutationKeys';
 import { uploadJobSignature } from '@/lib/api/jobPhotos';
-import { callNumber, sendOnMyWay, textNumber } from '@/lib/contact';
+import { logOutboundMessage } from '@/lib/api/messaging';
+import { callNumber, onMyWayMessage, textNumber } from '@/lib/contact';
 import { formatCurrencyCents, formatDateTime } from '@/lib/format';
 import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
@@ -45,6 +46,30 @@ export default function JobDetail() {
   });
 
   const phone = client?.phone ?? null;
+
+  // Send the native "on my way" SMS, then log it to the CRM thread (best effort).
+  const handleOnMyWay = async () => {
+    if (!phone) return;
+    const body = onMyWayMessage(current?.companyName);
+    try {
+      await textNumber(phone, body);
+    } catch (e) {
+      Alert.alert('On my way', (e as Error).message);
+      return;
+    }
+    if (orgId && session?.user.id) {
+      logOutboundMessage({
+        orgId,
+        phone,
+        text: body,
+        userId: session.user.id,
+        clientId: job?.client_id ?? null,
+        clientName: job?.client_name ?? null,
+      }).catch(() => {
+        // logging is best-effort; the SMS already went out natively
+      });
+    }
+  };
 
   const saveSignature = async (base64Png: string) => {
     if (!orgId || !job) return;
@@ -154,14 +179,7 @@ export default function JobDetail() {
               </View>
             </View>
             {!isDone ? (
-              <Button
-                title="I'm on my way 🚗"
-                onPress={() =>
-                  sendOnMyWay({ phone, companyName: current?.companyName }).catch((e) =>
-                    Alert.alert('On my way', (e as Error).message),
-                  )
-                }
-              />
+              <Button title="I'm on my way 🚗" onPress={handleOnMyWay} />
             ) : null}
           </Card>
         ) : null}
