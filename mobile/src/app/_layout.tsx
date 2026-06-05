@@ -1,18 +1,21 @@
 import '../global.css';
 
-import { QueryClientProvider } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider } from '@/lib/auth';
 import { MembershipProvider } from '@/lib/membership-context';
-import { queryClient } from '@/lib/queryClient';
+import { asyncPersister, queryClient } from '@/lib/queryClient';
 
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <QueryClientProvider client={queryClient}>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{ persister: asyncPersister, maxAge: 24 * 60 * 60_000 }}
+      >
         <AuthProvider>
           <MembershipProvider>
             <StatusBar style="dark" />
@@ -23,7 +26,7 @@ export default function RootLayout() {
             </Stack>
           </MembershipProvider>
         </AuthProvider>
-      </QueryClientProvider>
+      </PersistQueryClientProvider>
     </GestureHandlerRootView>
   );
 }

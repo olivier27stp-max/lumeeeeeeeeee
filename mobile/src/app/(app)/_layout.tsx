@@ -1,6 +1,7 @@
 import { Redirect, Stack } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
 
@@ -20,7 +21,10 @@ export default function AppLayout() {
   if (!session) return <Redirect href="/(auth)/sign-in" />;
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <View className="flex-1">
+      <OfflineBanner />
+      <View className="flex-1">
+        <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen
         name="jobs/[id]"
@@ -46,6 +50,8 @@ export default function AppLayout() {
         name="d2d-house/[id]"
         options={{ headerShown: true, headerTitle: 'House', headerBackTitle: 'Map' }}
       />
-    </Stack>
+        </Stack>
+      </View>
+    </View>
   );
 }
