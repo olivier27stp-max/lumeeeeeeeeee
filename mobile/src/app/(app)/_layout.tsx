@@ -34,6 +34,10 @@ export default function AppLayout() {
         name="schedule"
         options={{ headerShown: true, headerTitle: 'Schedule', headerBackTitle: 'Back' }}
       />
+      <Stack.Screen
+        name="d2d-house/[id]"
+        options={{ headerShown: true, headerTitle: 'House', headerBackTitle: 'Map' }}
+      />
     </Stack>
   );
 }
