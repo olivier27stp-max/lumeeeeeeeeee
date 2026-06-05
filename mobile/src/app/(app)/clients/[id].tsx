@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 
+import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { getClient } from '@/lib/api/clients';
 import { clientFullName } from '@/lib/format';
+import { usePermissions } from '@/lib/usePermissions';
 
 function Row({
   label,
@@ -28,6 +30,7 @@ function Row({
 
 export default function ClientDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { can } = usePermissions();
   const { data: client, isLoading, error } = useQuery({
     queryKey: ['clients', id],
     queryFn: () => getClient(String(id)),
@@ -96,6 +99,14 @@ export default function ClientDetail() {
             <Text className="text-xs text-ink-muted uppercase mb-1">Notes</Text>
             <Text className="text-base text-ink leading-6">{client.notes}</Text>
           </Card>
+        ) : null}
+
+        {can('clients.update') ? (
+          <Button
+            title="Edit client"
+            variant="secondary"
+            onPress={() => router.push(`/(app)/clients/edit?id=${client.id}`)}
+          />
         ) : null}
       </View>
     </ScrollView>

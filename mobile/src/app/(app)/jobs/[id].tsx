@@ -129,7 +129,14 @@ export default function JobDetail() {
     <ScrollView className="flex-1 bg-surface-alt">
       <View className="p-5 gap-4">
         <View className="gap-2">
-          <Text className="text-xs text-ink-muted">#{job.job_number}</Text>
+          <View className="flex-row items-start justify-between">
+            <Text className="text-xs text-ink-muted">#{job.job_number}</Text>
+            {can('jobs.update') ? (
+              <Pressable onPress={() => router.push(`/(app)/jobs/edit?id=${job.id}`)}>
+                <Text className="text-sm font-medium text-brand">Edit</Text>
+              </Pressable>
+            ) : null}
+          </View>
           <Text className="text-2xl font-bold text-ink">{job.title}</Text>
           <StatusPill status={job.status} />
         </View>

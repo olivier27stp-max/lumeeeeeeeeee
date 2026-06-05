@@ -1,33 +1,62 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Redirect, router } from 'expo-router';
-import { useState } from 'react';
-import { Alert, View } from 'react-native';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
-import { ClientInput, createClient } from '@/lib/api/clients';
+import { ClientInput, getClient, updateClient } from '@/lib/api/clients';
 import { usePermissions } from '@/lib/usePermissions';
 
-export default function NewClient() {
+export default function EditClient() {
+  const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
-  const { orgId, canCreateClients } = usePermissions();
+  const { can } = usePermissions();
   const [form, setForm] = useState<ClientInput>({});
+
+  const { data: client, isLoading } = useQuery({
+    queryKey: ['clients', id],
+    queryFn: () => getClient(String(id)),
+    enabled: !!id,
+  });
+
+  useEffect(() => {
+    if (client) {
+      setForm({
+        first_name: client.first_name ?? '',
+        last_name: client.last_name ?? '',
+        company: client.company ?? '',
+        phone: client.phone ?? '',
+        email: client.email ?? '',
+        address: client.address ?? '',
+        city: client.city ?? '',
+        province: client.province ?? '',
+        postal_code: client.postal_code ?? '',
+        notes: client.notes ?? '',
+      });
+    }
+  }, [client]);
 
   const set = (k: keyof ClientInput) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const saveMut = useMutation({
-    mutationFn: () => createClient(orgId ?? '', form),
-    onSuccess: (client) => {
+    mutationFn: () => updateClient(String(id), form),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['clients'] });
-      router.replace(`/(app)/clients/${client.id}`);
+      router.back();
     },
-    onError: (e: Error) => Alert.alert('Could not create client', e.message),
+    onError: (e: Error) => Alert.alert('Could not save', e.message),
   });
 
-  if (!canCreateClients) return <Redirect href="/(app)/(tabs)/clients" />;
-
-  const valid = !!(form.first_name?.trim() || form.last_name?.trim() || form.company?.trim());
+  if (!can('clients.update')) return <Redirect href="/(app)/(tabs)/clients" />;
+  if (isLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-surface-alt">
+        <ActivityIndicator color="#208AEF" />
+      </View>
+    );
+  }
 
   return (
     <ScreenContainer scroll>
@@ -67,12 +96,7 @@ export default function NewClient() {
           style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }}
         />
 
-        <Button
-          title="Create client"
-          onPress={() => saveMut.mutate()}
-          loading={saveMut.isPending}
-          disabled={!valid || !orgId}
-        />
+        <Button title="Save changes" onPress={() => saveMut.mutate()} loading={saveMut.isPending} />
       </View>
     </ScreenContainer>
   );
