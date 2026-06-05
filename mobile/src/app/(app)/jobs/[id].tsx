@@ -9,16 +9,19 @@ import { Input } from '@/components/ui/Input';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { getJob, markJobCompleted, markJobInProgress } from '@/lib/api/jobs';
 import { formatCurrencyCents, formatDateTime } from '@/lib/format';
+import { usePermissions } from '@/lib/usePermissions';
 
 export default function JobDetail() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
   const [notes, setNotes] = useState('');
+  const { teamId, scope, permissions, role, canSeePricing } = usePermissions();
+  const access = { teamId, scope, permissions, role };
 
   const { data: job, isLoading, error } = useQuery({
-    queryKey: ['jobs', id],
-    queryFn: () => getJob(String(id)),
+    queryKey: ['jobs', id, role],
+    queryFn: () => getJob(String(id), access),
     enabled: !!id,
   });
 
@@ -63,9 +66,6 @@ export default function JobDetail() {
   const address = job.property_address ?? job.address;
   const isDone = job.status === 'completed';
   const isActive = job.status === 'in_progress';
-  // M0: pricing hidden by default so it never leaks to technicians.
-  // M1 wires this to `canSeePricing` from the permission layer.
-  const canSeePricing = false;
 
   return (
     <ScrollView className="flex-1 bg-surface-alt">

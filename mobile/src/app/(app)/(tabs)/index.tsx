@@ -6,12 +6,16 @@ import { FlatList, RefreshControl, Text, View } from 'react-native';
 import { JobCard } from '@/components/JobCard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { listTodaysJobs } from '@/lib/api/jobs';
+import { usePermissions } from '@/lib/usePermissions';
 
 export default function TodaysJobs() {
   const [refreshing, setRefreshing] = useState(false);
+  const { orgId, teamId, scope, permissions, role, canSeePricing } = usePermissions();
+  const access = { teamId, scope, permissions, role };
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['jobs', 'today'],
-    queryFn: listTodaysJobs,
+    queryKey: ['jobs', 'today', orgId, role, teamId],
+    queryFn: () => listTodaysJobs(access),
+    enabled: !!orgId,
   });
 
   const onRefresh = async () => {
@@ -34,7 +38,11 @@ export default function TodaysJobs() {
         keyExtractor={(j) => j.id}
         contentContainerStyle={{ padding: 20, gap: 12 }}
         renderItem={({ item }) => (
-          <JobCard job={item} onPress={() => router.push(`/(app)/jobs/${item.id}`)} />
+          <JobCard
+            job={item}
+            showPricing={canSeePricing}
+            onPress={() => router.push(`/(app)/jobs/${item.id}`)}
+          />
         )}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#208AEF" />
