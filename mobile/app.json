@@ -10,7 +10,12 @@
     "ios": {
       "icon": "./assets/expo.icon",
       "supportsTablet": true,
-      "bundleIdentifier": "com.lume.crm"
+      "bundleIdentifier": "com.lume.crm",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Lume uses the camera to attach before/after photos to your jobs.",
+        "NSPhotoLibraryUsageDescription": "Lume lets you attach photos from your library to your jobs.",
+        "NSLocationWhenInUseUsageDescription": "Lume uses your location to show nearby jobs and houses on the map and to get directions."
+      }
     },
     "android": {
       "package": "com.lume.crm",
@@ -29,6 +34,13 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Lume lets you attach photos from your library to your jobs.",
+          "cameraPermission": "Lume uses the camera to attach before/after photos to your jobs."
+        }
+      ],
       [
         "expo-splash-screen",
         {

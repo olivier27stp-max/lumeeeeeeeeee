@@ -7,8 +7,10 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { JobPhotoGrid } from '@/components/JobPhotoGrid';
 import { getJob, markJobCompleted, markJobInProgress } from '@/lib/api/jobs';
 import { formatCurrencyCents, formatDateTime } from '@/lib/format';
+import { useAuth } from '@/lib/auth';
 import { usePermissions } from '@/lib/usePermissions';
 
 export default function JobDetail() {
@@ -16,7 +18,8 @@ export default function JobDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
   const [notes, setNotes] = useState('');
-  const { teamId, scope, permissions, role, canSeePricing } = usePermissions();
+  const { session } = useAuth();
+  const { teamId, scope, permissions, role, canSeePricing, orgId, can } = usePermissions();
   const access = { teamId, scope, permissions, role };
 
   const { data: job, isLoading, error } = useQuery({
@@ -120,6 +123,19 @@ export default function JobDetail() {
           <Card>
             <Text className="text-xs text-ink-muted uppercase mb-1">Existing notes</Text>
             <Text className="text-base text-ink leading-6">{job.notes}</Text>
+          </Card>
+        ) : null}
+
+        {orgId ? (
+          <Card>
+            <JobPhotoGrid
+              jobId={job.id}
+              orgId={orgId}
+              userId={session?.user.id}
+              attachments={job.attachments ?? []}
+              editable={can('jobs.update')}
+              onChange={() => qc.invalidateQueries({ queryKey: ['jobs', id] })}
+            />
           </Card>
         ) : null}
 

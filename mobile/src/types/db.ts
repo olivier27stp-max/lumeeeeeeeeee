@@ -1,5 +1,21 @@
 export type JobDbStatus = 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
+/**
+ * One photo/file on a job. Mirrors the web's `jobs.attachments` jsonb shape
+ * ({ url, path }) so photos taken on mobile show up on desktop and vice-versa.
+ * Extra fields (thumb_path, uploaded_by, created_at, kind) are additive and
+ * ignored by the web.
+ */
+export interface JobAttachment {
+  url: string;
+  path: string;
+  name?: string;
+  thumb_path?: string;
+  uploaded_by?: string;
+  created_at?: string;
+  kind?: 'photo' | 'signature' | 'file';
+}
+
 export interface Job {
   id: string;
   org_id: string;
@@ -21,6 +37,7 @@ export interface Job {
   longitude: number | null;
   completed_at: string | null;
   deleted_at: string | null;
+  attachments: JobAttachment[] | null;
   created_at: string;
   updated_at: string;
 }
