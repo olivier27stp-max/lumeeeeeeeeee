@@ -185,7 +185,15 @@ export default function JobDetail() {
         ) : null}
 
         {canSeePricing && orgId ? (
-          <JobBillingCard jobId={job.id} orgId={orgId} currency={job.currency} />
+          <JobBillingCard
+            jobId={job.id}
+            orgId={orgId}
+            currency={job.currency}
+            userId={session?.user.id}
+            clientId={job.client_id}
+            clientName={job.client_name}
+            clientPhone={phone}
+          />
         ) : null}
 
         {job.description ? (

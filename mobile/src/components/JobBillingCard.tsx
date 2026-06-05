@@ -6,23 +6,59 @@ import {
   getOrCreatePaymentLink,
   listInvoicesForJob,
   listQuotesForJob,
+  markInvoiceSent,
 } from '@/lib/api/billing';
+import { logOutboundMessage } from '@/lib/api/messaging';
+import { textNumber } from '@/lib/contact';
 import { formatCurrencyCents } from '@/lib/format';
 
 type Props = {
   jobId: string;
   orgId: string;
   currency: string;
+  userId?: string | null;
+  clientId?: string | null;
+  clientName?: string | null;
+  clientPhone?: string | null;
 };
 
 /** Admin/owner billing summary for a job. Rendered only behind canSeePricing. */
-export function JobBillingCard({ jobId, orgId, currency }: Props) {
-  const sharePaymentLink = async (invoiceId: string, amountCents: number) => {
+export function JobBillingCard({
+  jobId,
+  orgId,
+  currency,
+  userId,
+  clientId,
+  clientName,
+  clientPhone,
+}: Props) {
+  // Send the invoice to the client: the /pay/:token page shows the full invoice
+  // (number, line items, total, branding) + a Stripe pay button, so this both
+  // delivers the invoice and lets them pay it.
+  const sendInvoice = async (invoiceId: string, invoiceNumber: string | null, amountCents: number) => {
     try {
       const url = await getOrCreatePaymentLink({ orgId, invoiceId, amountCents, currency });
-      await Share.share({ message: `Pay your invoice securely: ${url}`, url });
+      const label = invoiceNumber ? `invoice ${invoiceNumber}` : 'your invoice';
+      const body = `Here's ${label} for ${formatCurrencyCents(amountCents, currency)}. View and pay it here: ${url}`;
+
+      if (clientPhone) {
+        await textNumber(clientPhone, body);
+        if (userId) {
+          logOutboundMessage({
+            orgId,
+            phone: clientPhone,
+            text: body,
+            userId,
+            clientId,
+            clientName,
+          }).catch(() => {});
+        }
+      } else {
+        await Share.share({ message: body, url });
+      }
+      markInvoiceSent(invoiceId).catch(() => {});
     } catch (e) {
-      Alert.alert('Payment link', (e as Error).message);
+      Alert.alert('Send invoice', (e as Error).message);
     }
   };
 
@@ -79,10 +115,12 @@ export function JobBillingCard({ jobId, orgId, currency }: Props) {
             </View>
             {due > 0 ? (
               <Pressable
-                onPress={() => sharePaymentLink(inv.id, due)}
+                onPress={() => sendInvoice(inv.id, inv.invoice_number, due)}
                 className="self-start rounded-full bg-brand px-4 py-1.5"
               >
-                <Text className="text-xs font-medium text-white">Send payment link</Text>
+                <Text className="text-xs font-medium text-white">
+                  {clientPhone ? 'Send invoice to client' : 'Send invoice'}
+                </Text>
               </Pressable>
             ) : null}
           </View>

@@ -101,6 +101,14 @@ export async function getOrCreatePaymentLink(params: {
   return `${webUrl.replace(/\/$/, '')}/pay/${token}`;
 }
 
+/** Best-effort: stamp the invoice as sent (mirrors the web's server behavior). */
+export async function markInvoiceSent(invoiceId: string): Promise<void> {
+  await supabase
+    .from('invoices')
+    .update({ sent_at: new Date().toISOString() })
+    .eq('id', invoiceId);
+}
+
 export async function listInvoicesForClient(clientId: string): Promise<InvoiceRow[]> {
   const { data, error } = await supabase
     .from('invoices')
