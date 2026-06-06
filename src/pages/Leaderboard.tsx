@@ -59,7 +59,7 @@ function demoToKPIs(rep: DemoRep): { key: string; value: string }[] {
     { key: 'contacted', value: String(rep.conversations) },
     { key: 'deals', value: String(rep.demosSet) },
     { key: 'quotes_sent', value: String(rep.quotesSent) },
-    { key: 'closes', value: String(rep.closes) },
+    { key: 'accounts', value: String(rep.closes) },
     { key: 'revenue', value: `$${rep.revenue.toLocaleString()}` },
     { key: 'conversion_rate', value: `${Math.round(conv)}%` },
     { key: 'avg_ticket', value: `$${Math.round(avg).toLocaleString()}` },
@@ -73,7 +73,7 @@ function demoToFunnel(rep: DemoRep): { key: string; value: number; max: number }
     { key: 'contacted', value: rep.conversations, max },
     { key: 'deals_open', value: rep.demosSet, max },
     { key: 'quotes_sent', value: rep.quotesSent, max },
-    { key: 'closes', value: rep.closes, max },
+    { key: 'accounts', value: rep.closes, max },
   ];
 }
 
@@ -126,7 +126,7 @@ function perfToKPIs(perf: RepPerformanceDetail): { key: string; value: string }[
     { key: 'contacted', value: String(perf.conversations) },
     { key: 'deals', value: String(perf.demos_set) },
     { key: 'quotes_sent', value: String(perf.quotes_sent) },
-    { key: 'closes', value: String(perf.closes) },
+    { key: 'accounts', value: String(perf.closes) },
     { key: 'revenue', value: `$${perf.revenue.toLocaleString()}` },
     { key: 'conversion_rate', value: `${Math.round(perf.conversion_rate)}%` },
     { key: 'avg_ticket', value: `$${Math.round(perf.average_ticket || 0).toLocaleString()}` },
@@ -140,7 +140,7 @@ function perfToFunnel(perf: RepPerformanceDetail): { key: string; value: number;
     { key: 'contacted', value: perf.conversations, max },
     { key: 'deals_open', value: perf.demos_set, max },
     { key: 'quotes_sent', value: perf.quotes_sent, max },
-    { key: 'closes', value: perf.closes, max },
+    { key: 'accounts', value: perf.closes, max },
   ];
 }
 
@@ -387,7 +387,7 @@ export default function D2DLeaderboard() {
 
                   {/* Closes */}
                   <p className="relative mt-4 text-center text-sm font-semibold text-white/90">
-                    {rep.closes} {fr ? 'ventes' : 'closes'}
+                    {rep.closes} {fr ? 'comptes' : 'accounts'}
                   </p>
 
                   {/* Revenue */}
@@ -433,7 +433,7 @@ export default function D2DLeaderboard() {
 
                   <div className="text-right w-16">
                     <p className="text-lg font-bold text-text-primary">{rep.closes}</p>
-                    <p className="text-[10px] text-text-muted font-medium">{fr ? 'ventes' : 'closes'}</p>
+                    <p className="text-[10px] text-text-muted font-medium">{fr ? 'comptes' : 'accounts'}</p>
                   </div>
 
                   <div className="text-right w-20">
