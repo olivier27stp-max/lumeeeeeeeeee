@@ -17,8 +17,16 @@ set search_path = public
 as $$
 declare
   v_target text;
+  v_current text;
 begin
   if p_client_id is null then
+    return;
+  end if;
+
+  select status into v_current from public.clients where id = p_client_id;
+
+  -- Archivage manuel : on ne touche jamais un client 'inactive'.
+  if v_current is null or v_current = 'inactive' then
     return;
   end if;
 
@@ -69,17 +77,17 @@ create trigger trg_jobs_sync_client_status
 -- ─── Nouveau client sans job => 'lead' par défaut ────────────────
 alter table public.clients alter column status set default 'lead';
 
--- ─── Backfill des clients existants ──────────────────────────────
+-- ─── Backfill des clients existants (sauf 'inactive' archivés à la main) ──
 update public.clients c
    set status = 'active'
  where c.deleted_at is null
-   and c.status is distinct from 'active'
+   and c.status not in ('active', 'inactive')
    and exists (select 1 from public.jobs j where j.client_id = c.id and j.deleted_at is null);
 
 update public.clients c
    set status = 'lead'
  where c.deleted_at is null
-   and c.status is distinct from 'lead'
+   and c.status not in ('lead', 'inactive')
    and not exists (select 1 from public.jobs j where j.client_id = c.id and j.deleted_at is null);
 
 commit;

@@ -270,7 +270,10 @@ export default function Clients() {
       const clientsWithJobs = new Set((jobsRes.data || []).map(j => j.client_id));
 
       const enriched = res.items.map(c => {
-        const computed: string = clientsWithJobs.has(c.id) ? 'active' : 'lead';
+        // Archivage manuel : on préserve un client 'inactive' tel quel.
+        const computed: string = c.status === 'inactive'
+          ? 'inactive'
+          : (clientsWithJobs.has(c.id) ? 'active' : 'lead');
 
         // Update DB if status changed (best-effort — log failures but don't block UI)
         if (c.status !== computed) {
