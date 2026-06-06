@@ -858,7 +858,7 @@ function AuthenticatedApp({
               title={!sidebarExpanded ? 'Switch Plan' : undefined}
               className={cn(
                 'mt-1 w-full flex items-center gap-2.5 px-2.5 py-[8px] rounded-lg text-[14px] font-medium transition-colors',
-                'text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active',
+                'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
                 !sidebarExpanded && 'justify-center'
               )}
             >
