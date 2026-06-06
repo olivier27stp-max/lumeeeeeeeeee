@@ -45,6 +45,7 @@ import {
 } from '../lib/invitationsApi';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgId } from '../lib/orgApi';
+import { useCompany } from '../contexts/CompanyContext';
 import { fetchSeatUsage, fetchCurrentBilling, setExtraSeats } from '../lib/billingApi';
 import SeatChargeConfirmModal from '../components/SeatChargeConfirmModal';
 
@@ -141,7 +142,7 @@ export default function ManageTeam() {
   const [pendingInvite, setPendingInvite] = useState<{
     email: string;
     role: MemberRole;
-    options?: { scope?: InviteScope; team_id?: string | null };
+    options?: { scope?: InviteScope; team_id?: string | null; org_id?: string };
   } | null>(null);
   const [seatChargeData, setSeatChargeData] = useState<{
     extraPriceCents: number;
@@ -153,7 +154,7 @@ export default function ManageTeam() {
   const doSendInvite = async (
     email: string,
     role: MemberRole,
-    options?: { scope?: InviteScope; team_id?: string | null },
+    options?: { scope?: InviteScope; team_id?: string | null; org_id?: string },
   ) => {
     const result = await sendInvitation(email, role, options);
     toast.success(t.manageTeam.invitationSent);
@@ -171,7 +172,7 @@ export default function ManageTeam() {
   const handleInvite = async (
     email: string,
     role: MemberRole,
-    options?: { scope?: InviteScope; team_id?: string | null },
+    options?: { scope?: InviteScope; team_id?: string | null; org_id?: string },
   ) => {
     try {
       // Check seat usage before sending
@@ -679,18 +680,22 @@ function InviteForm({
   onCancel,
 }: {
   language: string;
-  onSend: (email: string, role: MemberRole, options?: { scope?: InviteScope; team_id?: string | null }) => void;
+  onSend: (email: string, role: MemberRole, options?: { scope?: InviteScope; team_id?: string | null; org_id?: string }) => void;
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
   const isFr = language === 'fr';
+  const { companies, current } = useCompany();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<MemberRole>('technician');
   const [scope, setScope] = useState<InviteScope>('self');
   const [teamId, setTeamId] = useState<string | null>(null);
   const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
+  // Office (= org) auquel assigner le nouvel utilisateur. Défaut : office courant.
+  const [officeId, setOfficeId] = useState<string>(current?.orgId || '');
   const [sending, setSending] = useState(false);
   const roleDescriptions = isFr ? ROLE_DESCRIPTIONS_FR : ROLE_DESCRIPTIONS_EN;
+  const isMultiOffice = companies.length > 1;
 
   // Auto-pick a sensible scope when role changes (user can still override)
   useEffect(() => {
@@ -698,11 +703,12 @@ function InviteForm({
     if (role === 'admin') setTeamId(null);
   }, [role]);
 
-  // Load teams for the current org so we can assign at invite time
+  // Load teams for the SELECTED office so we can assign at invite time.
+  // Re-query whenever the office changes — teams are office-scoped.
   useEffect(() => {
     (async () => {
       try {
-        const orgId = await getCurrentOrgId();
+        const orgId = officeId || (await getCurrentOrgId());
         if (!orgId) return;
         const { data } = await supabase
           .from('teams')
@@ -710,11 +716,12 @@ function InviteForm({
           .eq('org_id', orgId)
           .order('name', { ascending: true });
         setTeams((data || []) as Array<{ id: string; name: string }>);
+        setTeamId(null); // l'équipe précédente n'appartient pas forcément au nouvel office
       } catch (err) {
         console.warn('Could not load teams:', err);
       }
     })();
-  }, []);
+  }, [officeId]);
 
   const handleSubmit = () => {
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
@@ -725,6 +732,7 @@ function InviteForm({
     onSend(email.trim(), role, {
       scope,
       team_id: scope === 'team' ? teamId : null,
+      org_id: officeId || undefined,
     });
     // Parent closes modal on success; setSending cleared on unmount
   };
@@ -733,6 +741,26 @@ function InviteForm({
 
   return (
     <div className="space-y-5">
+      {/* Office picker — only when the user belongs to multiple offices */}
+      {isMultiOffice && (
+        <div>
+          <label className="text-xs font-medium text-text-tertiary">
+            {isFr ? 'Assigner au bureau' : 'Assign to office'}
+          </label>
+          <select
+            value={officeId}
+            onChange={(e) => setOfficeId(e.target.value)}
+            className="glass-input w-full mt-1.5"
+          >
+            {companies.map((office) => (
+              <option key={office.orgId} value={office.orgId}>
+                {office.companyName || (isFr ? 'Bureau sans nom' : 'Unnamed office')}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div>
         <label className="text-xs font-medium text-text-tertiary">
           {t.companySettings.emailAddress}

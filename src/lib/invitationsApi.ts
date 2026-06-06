@@ -65,7 +65,7 @@ export type InviteScope = 'self' | 'assigned' | 'team' | 'company';
 export async function sendInvitation(
   email: string,
   role: MemberRole,
-  options?: { scope?: InviteScope; team_id?: string | null },
+  options?: { scope?: InviteScope; team_id?: string | null; org_id?: string },
 ): Promise<{ invitation: Invitation; invite_link: string }> {
   const res = await fetch(`${API_BASE}/invitations/send`, {
     method: 'POST',
@@ -75,6 +75,7 @@ export async function sendInvitation(
       role,
       scope: options?.scope,
       team_id: options?.team_id ?? null,
+      ...(options?.org_id ? { org_id: options.org_id } : {}),
     }),
   });
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to send invitation.');

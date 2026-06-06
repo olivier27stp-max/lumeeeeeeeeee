@@ -39,18 +39,21 @@ function dealValue(deal: any): number {
 
 export async function getLeaderboard(
   supabase: SupabaseClient,
-  orgId: string,
+  orgId: string | string[],
   period: PeriodType,
   date?: Date,
   teamId?: string
 ) {
+  // Un "office" = un org. Le leaderboard mélange tous les offices d'une
+  // même compagnie : on accepte donc un ou plusieurs org_id.
+  const orgIds = Array.isArray(orgId) ? orgId : [orgId];
   const range = periodRange(period, date);
 
   // Current period: closed_won deals
   const { data: wonDeals, error } = await supabase
     .from('pipeline_deals')
     .select('id, rep_id, created_by, value, value_cents, won_at, stage')
-    .eq('org_id', orgId)
+    .in('org_id', orgIds)
     .eq('stage', 'closed_won')
     .is('deleted_at', null)
     .gte('won_at', range.start)
@@ -83,12 +86,12 @@ export async function getLeaderboard(
     supabase
       .from('memberships')
       .select('user_id, full_name, avatar_url, role, team_name, team_id')
-      .eq('org_id', orgId)
+      .in('org_id', orgIds)
       .in('user_id', userIds),
     supabase
       .from('pipeline_deals')
       .select('rep_id, created_by, value, value_cents')
-      .eq('org_id', orgId)
+      .in('org_id', orgIds)
       .eq('stage', 'closed_won')
       .is('deleted_at', null)
       .gte('won_at', prevRange.start)
@@ -97,7 +100,7 @@ export async function getLeaderboard(
     supabase
       .from('leads')
       .select('assigned_to, user_id, created_by')
-      .eq('org_id', orgId)
+      .in('org_id', orgIds)
       .is('deleted_at', null)
       .gte('created_at', range.start)
       .lte('created_at', range.end),
@@ -159,10 +162,13 @@ export async function getLeaderboard(
 
 export async function getRepPerformance(
   supabase: SupabaseClient,
-  orgId: string,
+  orgId: string | string[],
   userId: string,
   dateRange: { from: string; to: string }
 ) {
+  // Accepte un ou plusieurs offices (compagnie) pour que le détail d'un rep
+  // fonctionne même s'il appartient à un autre office du leaderboard combiné.
+  const orgIds = Array.isArray(orgId) ? orgId : [orgId];
   const fromIso = new Date(dateRange.from).toISOString();
   const toIso = endOfDay(new Date(dateRange.to)).toISOString();
 
@@ -170,28 +176,28 @@ export async function getRepPerformance(
     supabase
       .from('leads')
       .select('id, status, created_at, assigned_to, user_id, created_by')
-      .eq('org_id', orgId)
+      .in('org_id', orgIds)
       .is('deleted_at', null)
       .gte('created_at', fromIso)
       .lte('created_at', toIso),
     supabase
       .from('quotes')
       .select('id, status, salesperson_id, created_by, sent_via_email_at, sent_via_sms_at, created_at, total_cents')
-      .eq('org_id', orgId)
+      .in('org_id', orgIds)
       .is('deleted_at', null)
       .gte('created_at', fromIso)
       .lte('created_at', toIso),
     supabase
       .from('pipeline_deals')
       .select('id, stage, rep_id, created_by, value, value_cents, won_at, created_at')
-      .eq('org_id', orgId)
+      .in('org_id', orgIds)
       .is('deleted_at', null)
       .gte('created_at', fromIso)
       .lte('created_at', toIso),
     supabase
       .from('jobs')
       .select('id, status, salesperson_id, created_by, completed_at, total_cents')
-      .eq('org_id', orgId)
+      .in('org_id', orgIds)
       .is('deleted_at', null)
       .gte('completed_at', fromIso)
       .lte('completed_at', toIso),
@@ -237,7 +243,7 @@ export async function getRepPerformance(
 
 export async function calculateRepStats(
   supabase: SupabaseClient,
-  orgId: string,
+  orgId: string | string[],
   userId: string,
   date: Date = new Date()
 ) {

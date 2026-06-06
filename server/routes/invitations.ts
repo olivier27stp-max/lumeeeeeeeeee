@@ -73,6 +73,9 @@ const inviteSchema = z.object({
   role: z.enum(['admin', 'sales_rep', 'technician'], {
     error: 'Role must be admin, sales_rep, or technician.',
   }),
+  // Office cible (= org). Optionnel : défaut = office courant. Doit appartenir
+  // à la même compagnie (company_group_id) et l'inviteur doit y être admin/owner.
+  org_id: z.string().uuid().optional(),
   scope: z.enum(['self', 'assigned', 'team', 'company'], { error: 'Invalid scope.' }).optional(),
   team_id: z.string().uuid().nullable().optional(),
   custom_permissions: z.record(z.string(), z.boolean()).optional(),
@@ -190,6 +193,32 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
 
     const { email, role } = req.body;
 
+    // Résoudre l'office cible. Par défaut l'office courant. Si un autre office
+    // est choisi, il doit appartenir à la même compagnie ET l'inviteur doit y
+    // être admin/owner.
+    let targetOrgId = auth.orgId;
+    if (req.body.org_id && req.body.org_id !== auth.orgId) {
+      const [{ data: callerOrg }, { data: targetOrg }] = await Promise.all([
+        admin.from('orgs').select('company_group_id').eq('id', auth.orgId).maybeSingle(),
+        admin.from('orgs').select('company_group_id').eq('id', req.body.org_id).maybeSingle(),
+      ]);
+
+      const sameCompany =
+        !!callerOrg?.company_group_id &&
+        callerOrg.company_group_id === targetOrg?.company_group_id;
+
+      if (!sameCompany) {
+        return res.status(403).json({ error: 'Target office is not part of your company.' });
+      }
+
+      const isAdminOfTarget = await isOrgAdminOrOwner(admin, auth.user.id, req.body.org_id);
+      if (!isAdminOfTarget) {
+        return res.status(403).json({ error: 'You are not an admin or owner of the selected office.' });
+      }
+
+      targetOrgId = req.body.org_id;
+    }
+
     // Check if user is already a member
     const { data: existingMember } = await admin
       .from('memberships')
@@ -206,7 +235,7 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
     const { data: existingInvite } = await admin
       .from('invitations')
       .select('id, status')
-      .eq('org_id', auth.orgId)
+      .eq('org_id', targetOrgId)
       .eq('email', email.toLowerCase())
       .eq('status', 'pending')
       .maybeSingle();
@@ -224,7 +253,7 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
     const { data: invitation, error: createError } = await admin
       .from('invitations')
       .insert({
-        org_id: auth.orgId,
+        org_id: targetOrgId,
         email: email.toLowerCase(),
         role,
         scope: req.body.scope || 'self',
@@ -248,8 +277,8 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
 
     // Get org + branding + inviter info in parallel
     const [{ data: org }, { data: branding }, { data: inviter }] = await Promise.all([
-      admin.from('orgs').select('name').eq('id', auth.orgId).maybeSingle(),
-      admin.from('company_settings').select('company_name, logo_url, primary_color, website').eq('org_id', auth.orgId).maybeSingle(),
+      admin.from('orgs').select('name').eq('id', targetOrgId).maybeSingle(),
+      admin.from('company_settings').select('company_name, logo_url, primary_color, website').eq('org_id', targetOrgId).maybeSingle(),
       admin.from('profiles').select('full_name').eq('id', auth.user.id).maybeSingle(),
     ]);
 

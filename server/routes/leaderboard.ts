@@ -23,15 +23,47 @@ router.get('/leaderboard', async (req, res) => {
 
   try {
     const sc = getServiceClient();
-    const cacheKey = `leaderboard:${auth.orgId}:${period}:${teamId || 'all'}`;
+
+    // Un "office" = un org. Le leaderboard mélange tous les offices de la
+    // même compagnie (company_group_id) pour créer l'esprit de compétition.
+    const { orgIds, groupId } = await resolveCompanyOrgIds(sc, auth.orgId);
+
+    const cacheKey = `leaderboard:group:${groupId}:${period}:${teamId || 'all'}`;
     const entries = await cached(cacheKey, 45, () =>
-      getLeaderboard(sc, auth.orgId, period as 'daily' | 'weekly' | 'monthly', undefined, teamId)
+      getLeaderboard(sc, orgIds, period as 'daily' | 'weekly' | 'monthly', undefined, teamId)
     );
     res.json(entries);
   } catch (err: any) {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+/**
+ * Résout l'ensemble des org_id appartenant à la même compagnie que `orgId`
+ * (offices partageant le même company_group_id). Renvoie le groupe et la
+ * liste d'orgs. Fallback sur l'org seul si aucun groupe.
+ */
+async function resolveCompanyOrgIds(
+  sc: ReturnType<typeof getServiceClient>,
+  orgId: string
+): Promise<{ orgIds: string[]; groupId: string }> {
+  const { data: org } = await sc
+    .from('orgs')
+    .select('company_group_id')
+    .eq('id', orgId)
+    .maybeSingle();
+
+  const groupId = org?.company_group_id as string | undefined;
+  if (!groupId) return { orgIds: [orgId], groupId: orgId };
+
+  const { data: siblings } = await sc
+    .from('orgs')
+    .select('id')
+    .eq('company_group_id', groupId);
+
+  const orgIds = (siblings || []).map((o: any) => o.id);
+  return { orgIds: orgIds.length > 0 ? orgIds : [orgId], groupId };
+}
 
 // GET /api/leaderboard/rep/:userId?from=...&to=...
 router.get('/leaderboard/rep/:userId', async (req, res) => {
@@ -48,10 +80,13 @@ router.get('/leaderboard/rep/:userId', async (req, res) => {
 
   try {
     const sc = getServiceClient();
-    const cacheKey = `rep-perf:${auth.orgId}:${userId}:${from}:${to}`;
+    // Le leaderboard mélange les offices d'une compagnie : un rep cliqué peut
+    // appartenir à un autre office. On résout le groupe pour ses stats.
+    const { orgIds, groupId } = await resolveCompanyOrgIds(sc, auth.orgId);
+    const cacheKey = `rep-perf:group:${groupId}:${userId}:${from}:${to}`;
     const payload = await cached(cacheKey, 60, async () => {
       const [performance, badges] = await Promise.all([
-        getRepPerformance(sc, auth.orgId, userId, { from, to }),
+        getRepPerformance(sc, orgIds, userId, { from, to }),
         getRepBadges(sc, auth.orgId, userId),
       ]);
       return { performance, badges };
@@ -69,7 +104,8 @@ router.get('/leaderboard/realtime/:userId', async (req, res) => {
 
   try {
     const sc = getServiceClient();
-    const stats = await calculateRepStats(sc, auth.orgId, req.params.userId);
+    const { orgIds } = await resolveCompanyOrgIds(sc, auth.orgId);
+    const stats = await calculateRepStats(sc, orgIds, req.params.userId);
     res.json(stats);
   } catch (err: any) {
     res.status(500).json({ error: 'Internal server error' });
