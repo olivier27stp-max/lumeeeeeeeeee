@@ -64,7 +64,7 @@ const EMPTY_FORM: ClientFormState = {
   latitude: null,
   longitude: null,
   place_id: '',
-  status: 'active',
+  status: 'lead',
 };
 
 export default function Clients() {
@@ -254,33 +254,23 @@ export default function Clients() {
         sort: sortBy,
       });
 
-      // Compute status for each client based on quotes/jobs
+      // Statut dérivé des jobs : un client avec ≥1 job (non supprimé) est
+      // 'active', sinon 'lead'. (Le trigger DB jobs_sync_client_status fait
+      // autorité ; ce calcul garde la liste cohérente immédiatement.)
       const clientIds = res.items.map(c => c.id);
 
-      // Batch fetch: all jobs and quotes for these clients (scoped to current org)
       const orgId = await getCurrentOrgIdOrThrow();
-      const [jobsRes, quotesRes] = await Promise.all([
-        supabase.from('jobs').select('client_id').eq('org_id', orgId).in('client_id', clientIds).is('deleted_at', null),
-        supabase.from('quotes').select('client_id').eq('org_id', orgId).in('client_id', clientIds).is('deleted_at', null),
-      ]);
+      const jobsRes = await supabase
+        .from('jobs')
+        .select('client_id')
+        .eq('org_id', orgId)
+        .in('client_id', clientIds)
+        .is('deleted_at', null);
 
       const clientsWithJobs = new Set((jobsRes.data || []).map(j => j.client_id));
-      const clientsWithQuotes = new Set((quotesRes.data || []).map(q => q.client_id));
 
-      const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-      const now = Date.now();
       const enriched = res.items.map(c => {
-        let computed: string;
-        if (clientsWithJobs.has(c.id)) {
-          computed = 'active';
-        } else if (clientsWithQuotes.has(c.id)) {
-          computed = 'lead';
-        } else {
-          // Grace period: clients created within the last 7 days default to active
-          const createdAtMs = c.created_at ? new Date(c.created_at).getTime() : 0;
-          const isRecent = createdAtMs > 0 && (now - createdAtMs) < SEVEN_DAYS_MS;
-          computed = isRecent ? 'active' : 'inactive';
-        }
+        const computed: string = clientsWithJobs.has(c.id) ? 'active' : 'lead';
 
         // Update DB if status changed (best-effort — log failures but don't block UI)
         if (c.status !== computed) {
