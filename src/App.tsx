@@ -852,6 +852,19 @@ function AuthenticatedApp({
           {/* Dev role switcher — quick role swap from the sidebar header (temporary) */}
           <div className="px-2.5 pb-2">
             <DevRoleSwitcher expanded={sidebarExpanded} />
+            {/* Temporary plan switcher — sits right under the role switcher */}
+            <button
+              onClick={() => navigate('/dev/plan-switch')}
+              title={!sidebarExpanded ? 'Switch Plan' : undefined}
+              className={cn(
+                'mt-1 w-full flex items-center gap-2.5 px-2.5 py-[8px] rounded-lg text-[14px] font-medium transition-colors',
+                'text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active',
+                !sidebarExpanded && 'justify-center'
+              )}
+            >
+              <CreditCard size={17} strokeWidth={1.8} />
+              {sidebarExpanded && <span className="truncate text-left flex-1">Switch Plan</span>}
+            </button>
           </div>
 
           {/* Navigation */}
