@@ -603,6 +603,39 @@ router.post('/quotes/convert-to-job', async (req, res) => {
       reason: `Converted to job ${jobId}`,
     });
 
+    // Sales map: the quote's pin (🩵 Suivi) becomes 🟢 Fermé/close and is linked
+    // to the new job. Matched by quote_id so it works even though the new job has
+    // no address yet. Non-blocking — never fail the conversion on pin sync.
+    try {
+      const nowIso = new Date().toISOString();
+      const { data: house } = await admin
+        .from('field_house_profiles')
+        .select('id')
+        .eq('org_id', auth.orgId)
+        .eq('quote_id', quoteId)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (house) {
+        await admin.from('field_house_profiles')
+          .update({ current_status: 'sale', job_id: jobId, last_activity_at: nowIso, updated_at: nowIso })
+          .eq('id', house.id);
+        await admin.from('field_pins')
+          .update({ status: 'sale', pin_color: '#22C55E', updated_at: nowIso })
+          .eq('house_id', house.id);
+        await admin.from('field_pin_entity_links').upsert({
+          org_id: auth.orgId, house_id: house.id,
+          entity_type: 'job', entity_id: jobId, linked_at: nowIso,
+        }, { onConflict: 'org_id,house_id,entity_type,entity_id' });
+        await admin.from('field_house_events').insert({
+          org_id: auth.orgId, house_id: house.id, user_id: auth.user.id,
+          event_type: 'sale', note_text: `Devis converti en job ${jobId}`,
+          metadata: { quote_id: quoteId, job_id: jobId },
+        });
+      }
+    } catch (pinErr) {
+      console.warn('[quotes/convert-to-job] pin sync failed (non-blocking):', pinErr);
+    }
+
     return res.json({ ok: true, jobId, quoteId });
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to convert quote.', '[quotes/convert-to-job]');
@@ -1187,6 +1220,29 @@ router.post('/quotes/public/decline', async (req, res) => {
       changed_by: null,
       reason: reason || 'Declined by client',
     });
+
+    // Sales map: turn the quote's pin 🔴 Refusé. Matched by quote_id (the house
+    // already exists from quote creation). No event row here: field_house_events
+    // requires a non-null user_id and this is an unauthenticated public flow.
+    try {
+      const { data: house } = await admin
+        .from('field_house_profiles')
+        .select('id')
+        .eq('org_id', quote.org_id)
+        .eq('quote_id', quote.id)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (house) {
+        await admin.from('field_house_profiles')
+          .update({ current_status: 'not_interested', last_activity_at: now, updated_at: now })
+          .eq('id', house.id);
+        await admin.from('field_pins')
+          .update({ status: 'not_interested', pin_color: '#EF4444', updated_at: now })
+          .eq('house_id', house.id);
+      }
+    } catch (pinErr) {
+      console.warn('[quotes/public/decline] pin sync failed (non-blocking):', pinErr);
+    }
 
     // Resolve client name
     let clientName = 'Client';

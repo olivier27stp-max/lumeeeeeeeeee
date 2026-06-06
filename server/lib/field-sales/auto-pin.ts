@@ -26,7 +26,36 @@ export interface AutoPinInput {
   lead_id?: string;
   quote_id?: string;
   job_id?: string;
+  /**
+   * Explicit field-house / pin status to write. Must be a value allowed by the
+   * DB CHECK constraint: unknown | not_interested | no_answer | lead |
+   * quote_sent | sale | callback | do_not_knock | revisit.
+   * When omitted, a sensible default is derived from entity_type.
+   * Maps to the pin colour on the sales map:
+   *   'sale' = 🟢 Fermé   'lead' = 🩵 Suivi   'not_interested' = 🔴 Refusé.
+   */
+  status?: string;
 }
+
+// Event types allowed by the field_house_events.event_type CHECK constraint.
+// A status that is not itself a valid event type is logged as 'status_change'.
+const PIN_EVENT_TYPES = new Set([
+  'no_answer', 'lead', 'quote_sent', 'sale', 'revisit', 'callback', 'do_not_knock',
+]);
+
+// Pin colours aligned with the map UI (PIN_STATUS_CONFIG in src/components/map-d2d/lead-pin.ts).
+// NOTE: only DB-CHECK-valid statuses appear here ('sale', not the invalid 'sold').
+const PIN_STATUS_COLORS: Record<string, string> = {
+  sale: '#22C55E',          // closed_won → green (Fermé)
+  lead: '#06B6D4',          // follow_up → cyan (Suivi)
+  callback: '#06B6D4',      // follow_up → cyan
+  revisit: '#06B6D4',       // follow_up → cyan
+  not_interested: '#EF4444',// rejected → red (Refusé)
+  do_not_knock: '#EF4444',  // rejected → red
+  quote_sent: '#6B7280',    // appointment → grey
+  no_answer: '#EAB308',     // no_answer → amber
+  unknown: '#9CA3AF',
+};
 
 export interface AutoPinResult {
   house_id: string;
@@ -78,6 +107,12 @@ export async function autoCreateOrMergePin(
   const now = new Date().toISOString();
   const addressNorm = address.toLowerCase().trim();
 
+  // Resolve the status to write. Explicit input wins; otherwise derive a
+  // DB-CHECK-valid default from the entity type (job → 'sale', quote → 'lead').
+  const resolvedStatus =
+    input.status ??
+    (entity_type === 'job' ? 'sale' : entity_type === 'quote' ? 'lead' : 'lead');
+
   // 1. Check for existing house within 50m
   const { data: nearby } = await admin
     .from('field_house_profiles')
@@ -110,6 +145,10 @@ export async function autoCreateOrMergePin(
     if (entity_type === 'quote') updates.quote_id = entity_id;
     if (entity_type === 'job') updates.job_id = entity_id;
 
+    // Reflect the latest lifecycle status on the existing house (drives pin colour).
+    updates.current_status = resolvedStatus;
+    updates.last_activity_at = now;
+
     await admin.from('field_house_profiles').update(updates).eq('id', houseId);
   } else {
     // Create new house
@@ -139,7 +178,7 @@ export async function autoCreateOrMergePin(
       lng,
       territory_id: territoryId,
       assigned_user_id: user_id,
-      current_status: entity_type === 'job' ? 'sold' : entity_type === 'quote' ? 'quote_sent' : 'lead',
+      current_status: resolvedStatus,
       visit_count: 0,
       last_activity_at: now,
       metadata: {},
@@ -165,12 +204,8 @@ export async function autoCreateOrMergePin(
   }
 
   // 2. Upsert pin
-  const STATUS_COLORS: Record<string, string> = {
-    sold: '#10B981', lead: '#3B82F6', quote_sent: '#A855F7',
-    callback: '#F59E0B', new: '#9CA3AF', unknown: '#6B7280',
-  };
-
-  const pinStatus = entity_type === 'job' ? 'sold' : entity_type === 'quote' ? 'quote_sent' : 'lead';
+  const pinStatus = resolvedStatus;
+  const pinColor = PIN_STATUS_COLORS[pinStatus] ?? '#9CA3AF';
 
   const { data: existingPin } = await admin
     .from('field_pins')
@@ -182,7 +217,7 @@ export async function autoCreateOrMergePin(
   if (existingPin) {
     await admin.from('field_pins').update({
       status: pinStatus,
-      pin_color: STATUS_COLORS[pinStatus] ?? '#9CA3AF',
+      pin_color: pinColor,
       updated_at: now,
     }).eq('id', existingPin.id);
     pinId = existingPin.id;
@@ -192,7 +227,7 @@ export async function autoCreateOrMergePin(
       house_id: houseId,
       user_id,
       status: pinStatus,
-      pin_color: STATUS_COLORS[pinStatus] ?? '#9CA3AF',
+      pin_color: pinColor,
       has_note: false,
     }).select('id').single();
     pinId = pin?.id ?? '';
@@ -212,9 +247,9 @@ export async function autoCreateOrMergePin(
     org_id,
     house_id: houseId,
     user_id,
-    event_type: entity_type === 'job' ? 'sale' : entity_type === 'quote' ? 'quote_sent' : 'lead',
-    note_text: `Auto-linked from ${entity_type} creation`,
-    metadata: { auto_linked: true, entity_type, entity_id },
+    event_type: PIN_EVENT_TYPES.has(resolvedStatus) ? resolvedStatus : 'status_change',
+    note_text: `Auto-synced from ${entity_type} (${resolvedStatus})`,
+    metadata: { auto_linked: true, entity_type, entity_id, status: resolvedStatus },
     created_at: now,
   });
 

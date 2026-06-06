@@ -8,6 +8,7 @@ import { getFollowUpRecommendations } from '../lib/field-sales/followup-engine';
 import { generateDailyPlan } from '../lib/field-sales/daily-plan-engine';
 import { getAssignmentRecommendations } from '../lib/field-sales/territory-assignment-engine';
 import { autoCreateOrMergePin } from '../lib/field-sales/auto-pin';
+import { geocodeAddress } from '../lib/helpers';
 import { cached, cacheDelete } from '../lib/cache';
 
 const router = Router();
@@ -1498,6 +1499,100 @@ router.post('/auto-pin', async (req: Request, res: Response) => {
       lead_id,
       quote_id,
       job_id,
+    });
+
+    return res.status(201).json(result);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /field-sales/pin-from-entity
+// Places (or refreshes) the sales-map pin for a freshly created/updated job or
+// quote. Resolves the entity's address + coordinates (geocoding on demand) and
+// writes the requested pin status:
+//   job created        → status 'sale'           → 🟢 Fermé/close
+//   quote created      → status 'lead'           → 🩵 Suivi
+//   quote declined     → status 'not_interested' → 🔴 Refusé
+// Missing address/coords is a no-op (returns { skipped }) — never an error,
+// because pin sync must never block the primary CRM operation.
+// ---------------------------------------------------------------------------
+router.post('/pin-from-entity', async (req: Request, res: Response) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  const admin = getServiceClient();
+
+  const { entity_type, entity_id, status } = req.body as {
+    entity_type?: string; entity_id?: string; status?: string;
+  };
+  if (!entity_id || (entity_type !== 'job' && entity_type !== 'quote')) {
+    return res.status(400).json({ error: 'entity_type (job|quote) and entity_id are required' });
+  }
+
+  try {
+    let address: string | null = null;
+    let lat: number | null = null;
+    let lng: number | null = null;
+    const links: { client_id?: string; lead_id?: string; quote_id?: string; job_id?: string } = {};
+
+    if (entity_type === 'job') {
+      const { data: job } = await admin
+        .from('jobs')
+        .select('id, property_address, latitude, longitude, client_id, lead_id')
+        .eq('id', entity_id).eq('org_id', auth.orgId).is('deleted_at', null)
+        .maybeSingle();
+      if (!job) return res.json({ skipped: 'entity_not_found' });
+      address = job.property_address;
+      lat = job.latitude;
+      lng = job.longitude;
+      if (job.client_id) links.client_id = job.client_id;
+      if (job.lead_id) links.lead_id = job.lead_id;
+      links.job_id = job.id;
+    } else {
+      const { data: quote } = await admin
+        .from('quotes')
+        .select('id, client_id, lead_id')
+        .eq('id', entity_id).eq('org_id', auth.orgId).is('deleted_at', null)
+        .maybeSingle();
+      if (!quote) return res.json({ skipped: 'entity_not_found' });
+      links.quote_id = quote.id;
+      if (quote.client_id) links.client_id = quote.client_id;
+      if (quote.lead_id) links.lead_id = quote.lead_id;
+
+      // A quote has no address of its own — resolve from its client, then lead.
+      if (quote.client_id) {
+        const { data: c } = await admin.from('clients').select('address').eq('id', quote.client_id).maybeSingle();
+        address = c?.address ?? null;
+      }
+      if (!address && quote.lead_id) {
+        const { data: l } = await admin.from('leads').select('address').eq('id', quote.lead_id).maybeSingle();
+        address = l?.address ?? null;
+      }
+    }
+
+    const trimmedAddress = address ? String(address).trim() : '';
+    if (!trimmedAddress || trimmedAddress === '-') {
+      return res.json({ skipped: 'no_address' });
+    }
+
+    if (lat == null || lng == null) {
+      const geo = await geocodeAddress(trimmedAddress);
+      if (!geo) return res.json({ skipped: 'geocode_failed' });
+      lat = geo.latitude;
+      lng = geo.longitude;
+    }
+
+    const result = await autoCreateOrMergePin(admin, {
+      org_id: auth.orgId,
+      user_id: auth.user.id,
+      address: trimmedAddress,
+      lat,
+      lng,
+      entity_type: entity_type as 'job' | 'quote',
+      entity_id,
+      status: status || undefined,
+      ...links,
     });
 
     return res.status(201).json(result);

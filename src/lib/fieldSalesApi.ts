@@ -26,6 +26,32 @@ async function apiFetch<T>(
   return res.json() as Promise<T>;
 }
 
+/**
+ * Fire-and-forget: place or refresh the D2D sales-map pin for a freshly
+ * created/updated job or quote. The server resolves the entity's address,
+ * geocodes it if needed, and writes the pin status.
+ *
+ * Pin status → colour on the map:
+ *   'sale'           → 🟢 Fermé/close  (a job exists at the property)
+ *   'lead'           → 🩵 Suivi        (a quote is in progress)
+ *   'not_interested' → 🔴 Refusé       (the quote was declined)
+ *
+ * Never throws — pin sync must never block or fail the primary CRM operation.
+ */
+export function syncEntityPin(
+  entityType: 'job' | 'quote',
+  entityId: string,
+  status: 'sale' | 'lead' | 'not_interested',
+): void {
+  if (!entityId) return;
+  void apiFetch('/pin-from-entity', {
+    method: 'POST',
+    body: JSON.stringify({ entity_type: entityType, entity_id: entityId, status }),
+  }).catch((err) => {
+    console.warn('[syncEntityPin] pin sync failed (non-blocking):', err);
+  });
+}
+
 function qs(params: Record<string, string | number | undefined | null>): string {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {

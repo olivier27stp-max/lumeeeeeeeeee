@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 import { emitQuoteDeclined, emitQuoteSent, emitQuoteApproved } from './automationEventsApi';
+import { syncEntityPin } from './fieldSalesApi';
 
 // ── Types ──
 
@@ -306,6 +307,9 @@ export async function createQuote(payload: {
   // 6. Automation: new quote created → move deal to "New Prospect"
   moveLeadDealToStage(payload.lead_id || null, 'new_prospect');
 
+  // 6b. Sales map: drop a 🩵 Suivi pin at the quote's property (non-blocking).
+  syncEntityPin('quote', quoteId, 'lead');
+
   // 7. Return full detail
   return getQuoteById(quoteId) as Promise<QuoteDetail>;
 }
@@ -424,6 +428,8 @@ export async function updateQuoteStatus(
   }
   if (newStatus === 'declined') {
     emitQuoteDeclined({ quoteId, leadId: quoteData.lead_id || undefined });
+    // Sales map: turn the linked pin 🔴 Refusé (non-blocking).
+    syncEntityPin('quote', quoteId, 'not_interested');
   }
   if (newStatus === 'sent') {
     emitQuoteSent({ quoteId, leadId: quoteData.lead_id || undefined, channel: 'email' });

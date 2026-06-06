@@ -6,6 +6,7 @@ import { calculateJobFinancials, type CalcLineItem, type TaxLine } from './jobCa
 import { resolveClientIdForLead } from './leadsApi';
 import { emitJobCompleted } from './automationEventsApi';
 import { invalidateScheduleCache } from './scheduleApi';
+import { syncEntityPin } from './fieldSalesApi';
 
 export type JobSort = 'client' | 'job_number' | 'schedule' | 'status' | 'total';
 export type JobSortDirection = 'asc' | 'desc';
@@ -868,6 +869,10 @@ export async function createJob(payload: {
   // Project a pending (estimated) commission for the job's rep. Fire-and-forget:
   // never block job creation on it. Confirmed/recomputed when the invoice is paid.
   void projectJobCommission(data.id);
+
+  // Sales map: a brand-new job drops a 🟢 Fermé/close pin at its property
+  // (non-blocking). Skipped for edits — those keep their existing pin status.
+  if (!payload.id) syncEntityPin('job', data.id, 'sale');
 
   return mapJob(data, clientName);
 }
