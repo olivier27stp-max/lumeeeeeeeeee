@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Search, X, Plus, Package, Check, Loader2, Minus } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import { listPredefinedServices, createPredefinedService, PredefinedService } from '../lib/servicesApi';
+import { useTranslation } from '../i18n';
 
 interface ServicePickerProps {
   isOpen: boolean;
@@ -12,9 +13,13 @@ interface ServicePickerProps {
   onRemove?: (serviceId: string) => void;
   /** IDs of services already added (to show check marks) */
   addedIds?: Set<string>;
+  /** When true, picking a service selects it and closes immediately (one item per line). */
+  singleSelect?: boolean;
 }
 
-export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, addedIds = new Set() }: ServicePickerProps) {
+export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, addedIds = new Set(), singleSelect = false }: ServicePickerProps) {
+  const { t } = useTranslation();
+  const tp = t.servicePicker;
   const [services, setServices] = useState<PredefinedService[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -89,6 +94,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
       setNewPrice('');
       setNewCategory('');
       setShowCreate(false);
+      if (singleSelect) onClose();
     } catch {
       // silently fail
     } finally {
@@ -97,6 +103,11 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
   };
 
   const handleToggle = (service: PredefinedService) => {
+    if (singleSelect) {
+      onSelect(service);
+      onClose();
+      return;
+    }
     if (addedIds.has(service.id)) {
       onRemove?.(service.id);
     } else {
@@ -122,20 +133,11 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
               <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center">
                 <Package size={16} />
               </div>
-              <h2 className="text-[16px] font-bold text-text-primary">Add line item</h2>
+              <h2 className="text-[16px] font-bold text-text-primary">{tp.title}</h2>
             </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setShowCreate(!showCreate)}
-                className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
-                title="Create new service"
-              >
-                <Plus size={16} />
-              </button>
-              <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
-                <X size={16} />
-              </button>
-            </div>
+            <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
+              <X size={16} />
+            </button>
           </div>
 
           {/* Search */}
@@ -144,7 +146,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search line items"
+              placeholder={tp.search}
               className="w-full bg-surface-secondary/60 border border-outline-subtle/60 rounded-lg pl-9 pr-3 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40 transition-colors"
               autoFocus
             />
@@ -154,6 +156,19 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
               </button>
             )}
           </div>
+
+          {/* Create product/service — the only way to add a custom item */}
+          <button
+            onClick={() => setShowCreate((v) => !v)}
+            className={cn(
+              'mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-[13px] font-semibold border transition-colors',
+              showCreate
+                ? 'bg-primary/10 text-primary border-primary/30'
+                : 'bg-primary text-white border-primary hover:bg-primary/90'
+            )}
+          >
+            <Plus size={14} /> {tp.createProductService}
+          </button>
         </div>
 
         {/* Create new service form */}
@@ -166,24 +181,24 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
               className="overflow-hidden border-b border-outline-subtle/60"
             >
               <div className="p-4 space-y-3 bg-surface-secondary/30">
-                <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">New service</p>
+                <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">{tp.newProductService}</p>
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Service name *"
+                    placeholder={tp.namePlaceholder}
                     className="col-span-2 bg-surface border border-outline-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40"
                   />
                   <input
                     value={newDesc}
                     onChange={(e) => setNewDesc(e.target.value)}
-                    placeholder="Description"
+                    placeholder={tp.descPlaceholder}
                     className="col-span-2 bg-surface border border-outline-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40"
                   />
                   <input
                     value={newPrice}
                     onChange={(e) => setNewPrice(e.target.value)}
-                    placeholder="Price (e.g. 475.00)"
+                    placeholder={tp.pricePlaceholder}
                     type="text"
                     inputMode="decimal"
                     className="bg-surface border border-outline-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40"
@@ -191,19 +206,19 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
                   <input
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
-                    placeholder="Category"
+                    placeholder={tp.categoryPlaceholder}
                     className="bg-surface border border-outline-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40"
                   />
                 </div>
                 <div className="flex justify-end gap-2">
-                  <button onClick={() => setShowCreate(false)} className="glass-button !text-[12px] !py-1.5">Cancel</button>
+                  <button onClick={() => setShowCreate(false)} className="glass-button !text-[12px] !py-1.5">{tp.cancel}</button>
                   <button
                     onClick={handleCreate}
                     disabled={!newName.trim() || creating}
                     className="glass-button-primary !text-[12px] !py-1.5 inline-flex items-center gap-1.5"
                   >
                     {creating ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
-                    Create & Add
+                    {tp.createAndAdd}
                   </button>
                 </div>
               </div>
@@ -216,19 +231,19 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
           {loading ? (
             <div className="p-8 text-center">
               <Loader2 size={20} className="animate-spin text-text-tertiary mx-auto" />
-              <p className="text-[12px] text-text-tertiary mt-2">Loading services...</p>
+              <p className="text-[12px] text-text-tertiary mt-2">{tp.loading}</p>
             </div>
           ) : filtered.length === 0 ? (
             <div className="p-8 text-center">
               <Package size={24} className="text-text-tertiary mx-auto mb-2 opacity-40" />
               <p className="text-[13px] text-text-secondary">
-                {search ? 'No services match your search.' : 'No predefined services yet.'}
+                {search ? tp.noMatch : tp.empty}
               </p>
               <button
                 onClick={() => setShowCreate(true)}
                 className="mt-3 text-[12px] text-primary font-semibold hover:underline inline-flex items-center gap-1"
               >
-                <Plus size={11} /> Create a new service
+                <Plus size={11} /> {tp.createProductService}
               </button>
             </div>
           ) : (
@@ -244,7 +259,8 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
                       <ServiceRow
                         key={service.id}
                         service={service}
-                        isAdded={addedIds.has(service.id)}
+                        isAdded={!singleSelect && addedIds.has(service.id)}
+                        singleSelect={singleSelect}
                         onToggle={() => handleToggle(service)}
                       />
                     ))}
@@ -256,7 +272,8 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
                   <ServiceRow
                     key={service.id}
                     service={service}
-                    isAdded={addedIds.has(service.id)}
+                    isAdded={!singleSelect && addedIds.has(service.id)}
+                    singleSelect={singleSelect}
                     onToggle={() => handleToggle(service)}
                   />
                 ))
@@ -268,7 +285,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
         {/* Footer hint */}
         <div className="px-5 py-2.5 border-t border-outline-subtle/60 bg-surface-secondary/30">
           <p className="text-[11px] text-text-tertiary text-center">
-            Click to add or remove a service. You can edit qty & price after.
+            {tp.footerHint}
           </p>
         </div>
       </motion.div>
@@ -281,9 +298,10 @@ interface ServiceRowProps {
   service: PredefinedService;
   isAdded: boolean;
   onToggle: () => void;
+  singleSelect?: boolean;
 }
 
-const ServiceRow: React.FC<ServiceRowProps> = ({ service, isAdded, onToggle }) => {
+const ServiceRow: React.FC<ServiceRowProps> = ({ service, isAdded, onToggle, singleSelect = false }) => {
   return (
     <button
       onClick={onToggle}
@@ -294,19 +312,21 @@ const ServiceRow: React.FC<ServiceRowProps> = ({ service, isAdded, onToggle }) =
           : 'hover:bg-surface-secondary/50'
       )}
     >
-      {/* Toggle checkbox */}
-      <div
-        className={cn(
-          'w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all',
-          isAdded
-            ? 'bg-primary border-text-primary'
-            : 'border-outline bg-surface group-hover:border-text-tertiary'
-        )}
-      >
-        {isAdded ? (
-          <Check size={11} className="text-white" />
-        ) : null}
-      </div>
+      {/* Toggle checkbox (multi-select only) */}
+      {!singleSelect && (
+        <div
+          className={cn(
+            'w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all',
+            isAdded
+              ? 'bg-primary border-text-primary'
+              : 'border-outline bg-surface group-hover:border-text-tertiary'
+          )}
+        >
+          {isAdded ? (
+            <Check size={11} className="text-white" />
+          ) : null}
+        </div>
+      )}
 
       <div className="flex-1 min-w-0">
         <p className={cn('text-[14px] font-semibold leading-snug', isAdded ? 'text-text-primary' : 'text-text-primary')}>

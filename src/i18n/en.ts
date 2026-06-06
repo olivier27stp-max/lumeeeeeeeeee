@@ -1540,6 +1540,25 @@ const en = {
 
   },
 
+  // Service / catalog picker (shared by quote & job line items)
+  servicePicker: {
+    title: 'Choose a product/service',
+    search: 'Search the catalog',
+    createProductService: 'Create product/service',
+    newProductService: 'New product/service',
+    namePlaceholder: 'Name *',
+    descPlaceholder: 'Description',
+    pricePlaceholder: 'Price (e.g. 475.00)',
+    categoryPlaceholder: 'Category',
+    cancel: 'Cancel',
+    createAndAdd: 'Create & add',
+    loading: 'Loading the catalog...',
+    empty: 'No product/service in the catalog yet.',
+    noMatch: 'No product/service matches your search.',
+    footerHint: 'Pick an item to fill the line. You can adjust qty & price after.',
+    choosePlaceholder: 'Choose a product/service',
+  },
+
   // Address autocomplete
   address: {
     placeholder: 'Start typing an address...',

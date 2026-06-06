@@ -1532,6 +1532,25 @@ const fr: TranslationKeys = {
 
   },
 
+  // Service / catalog picker (partagé par les lignes de devis & job)
+  servicePicker: {
+    title: 'Choisir un produit/service',
+    search: 'Rechercher dans le catalogue',
+    createProductService: 'Créer produit/service',
+    newProductService: 'Nouveau produit/service',
+    namePlaceholder: 'Nom *',
+    descPlaceholder: 'Description',
+    pricePlaceholder: 'Prix (ex. 475.00)',
+    categoryPlaceholder: 'Catégorie',
+    cancel: 'Annuler',
+    createAndAdd: 'Créer et ajouter',
+    loading: 'Chargement du catalogue...',
+    empty: 'Aucun produit/service dans le catalogue pour le moment.',
+    noMatch: 'Aucun produit/service ne correspond à votre recherche.',
+    footerHint: 'Cliquez sur un item pour remplir la ligne. Vous pourrez ajuster la qté et le prix ensuite.',
+    choosePlaceholder: 'Choisir un produit/service',
+  },
+
   // Address autocomplete
   address: {
     placeholder: 'Commence à taper une adresse...',

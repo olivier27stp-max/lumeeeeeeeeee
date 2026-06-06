@@ -256,6 +256,8 @@ export default function NewJobModal({
   const [calendarHint, setCalendarHint] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [servicePickerOpen, setServicePickerOpen] = useState(false);
+  // Per-line catalog picker: id of the line whose product/service is being chosen
+  const [lineEditId, setLineEditId] = useState<string | null>(null);
   const [addedServiceIds, setAddedServiceIds] = useState<Set<string>>(new Set());
   const [orgCurrency, setOrgCurrency] = useState('CAD');
   const [resolvedTaxConfigs, setResolvedTaxConfigs] = useState<TaxConfig[]>([]);
@@ -603,6 +605,19 @@ export default function NewJobModal({
       return [...prev, newItem];
     });
     setAddedServiceIds((prev) => new Set([...prev, service.id]));
+  };
+
+  // Fill a single line with the chosen catalog product/service (name, default price)
+  const handleServiceForLine = (service: PredefinedService) => {
+    if (!lineEditId) return;
+    setLineItems((prev) => prev.map((item) => item.id === lineEditId ? {
+      ...item,
+      source_service_id: service.id,
+      name: service.name,
+      unitPriceInput: String(service.default_price_cents / 100),
+    } : item));
+    setAddedServiceIds((prev) => new Set([...prev, service.id]));
+    setLineEditId(null);
   };
 
   const handleServiceRemoved = (serviceId: string) => {
@@ -1247,12 +1262,16 @@ export default function NewJobModal({
                               className="h-4 w-4 shrink-0 rounded cursor-pointer accent-primary"
                               title={item.included ? 'Click to exclude from total' : 'Click to include in total'}
                             />
-                            <input
-                              value={item.name}
-                              onChange={(event) => updateLineItem(item.id, { name: event.target.value })}
-                              className={cn('glass-input w-full', !item.included && 'line-through')}
-                              placeholder={t.modals.serviceNamePlaceholder}
-                            />
+                            <button
+                              type="button"
+                              onClick={() => setLineEditId(item.id)}
+                              className={cn('glass-input w-full text-left flex items-center justify-between gap-2',
+                                !item.included && 'line-through',
+                                !item.name.trim() && 'text-text-tertiary')}
+                            >
+                              <span className="truncate">{item.name.trim() || t.servicePicker.choosePlaceholder}</span>
+                              <Package size={13} className="text-text-tertiary shrink-0" />
+                            </button>
                           </div>
                         </div>
                         <div className="md:col-span-2 space-y-1">
@@ -1312,7 +1331,7 @@ export default function NewJobModal({
                     className="glass-button !py-2 !px-4 inline-flex items-center gap-2 text-sm"
                   >
                     <Plus size={14} />
-                    {t.modals.customLineItem}
+                    {t.modals.addLineItem}
                   </button>
                 </div>
               </section>
@@ -1500,6 +1519,14 @@ export default function NewJobModal({
           onSelect={handleServiceSelected}
           onRemove={handleServiceRemoved}
           addedIds={addedServiceIds}
+        />
+      )}
+      {lineEditId && (
+        <ServicePicker
+          isOpen
+          singleSelect
+          onClose={() => setLineEditId(null)}
+          onSelect={handleServiceForLine}
         />
       )}
     </AnimatePresence>
