@@ -8,7 +8,7 @@ import {
   ArrowLeft, MoreHorizontal, Mail, MessageSquare, Briefcase, Copy,
   Eye, Printer, FileSignature, Trash2, Clock, CheckCircle2,
   MapPin, Phone as PhoneIcon, Mail as MailIcon, Pencil, FileText,
-  Plus, Check, X, Save, Ruler,
+  Plus, Check, X, Save, Ruler, Package,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePermissions } from '../hooks/usePermissions';
@@ -30,6 +30,8 @@ import { format } from 'date-fns';
 import { frCA as dfFr, enCA as dfEn } from 'date-fns/locale';
 import { useTranslation } from '../i18n';
 import { displayEmail, displayPhone, displayAddress } from '../lib/piiSanitizer';
+import ServicePicker from '../components/ServicePicker';
+import type { PredefinedService } from '../lib/servicesApi';
 
 type EditMode = null | 'title' | 'intro' | 'lineItems' | 'disclaimer' | 'notes' | 'deposit';
 
@@ -56,8 +58,23 @@ export default function QuoteDetails() {
   const [editRequirePayment, setEditRequirePayment] = useState(false);
   const [editLineItems, setEditLineItems] = useState<Array<{
     id: string; name: string; description: string; quantity: string;
-    unit_price: string; is_optional: boolean;
+    unit_price: string; is_optional: boolean; source_service_id?: string | null;
   }>>([]);
+  // Per-line catalog picker: id of the line whose product/service is being chosen
+  const [lineEditId, setLineEditId] = useState<string | null>(null);
+
+  // Fill a single line with the chosen catalog product/service (name, description, default price)
+  const handleServiceForLine = (service: PredefinedService) => {
+    if (!lineEditId) return;
+    setEditLineItems(prev => prev.map(i => i.id === lineEditId ? {
+      ...i,
+      source_service_id: service.id,
+      name: service.name,
+      description: service.description || '',
+      unit_price: String(service.default_price_cents / 100),
+    } : i));
+    setLineEditId(null);
+  };
 
   useEffect(() => { if (id) loadQuote(); }, [id]);
   useEffect(() => {
@@ -114,7 +131,7 @@ export default function QuoteDetails() {
       setEditLineItems(line_items.filter(i => i.item_type === 'service').map(i => ({
         id: i.id, name: i.name, description: i.description || '',
         quantity: String(i.quantity), unit_price: String(i.unit_price_cents / 100),
-        is_optional: i.is_optional,
+        is_optional: i.is_optional, source_service_id: (i as any).source_service_id ?? null,
       })));
     }
   }
@@ -150,6 +167,7 @@ export default function QuoteDetails() {
         const items: QuoteLineItemInput[] = editLineItems
           .filter(i => i.name.trim())
           .map((i, idx) => ({
+            source_service_id: i.source_service_id ?? null,
             name: i.name.trim(),
             description: i.description.trim() || null,
             quantity: Math.max(0.01, parseFloat(i.quantity) || 1),
@@ -348,8 +366,11 @@ export default function QuoteDetails() {
                 {editLineItems.map((item, idx) => (
                   <div key={item.id} className="grid grid-cols-12 gap-2 items-start p-3 rounded-lg border border-outline">
                     <div className="col-span-5">
-                      <input value={item.name} onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], name: e.target.value }; setEditLineItems(u); }}
-                        className={cn(inputCls, 'py-1.5')} placeholder="Name" />
+                      <button type="button" onClick={() => setLineEditId(item.id)}
+                        className={cn(inputCls, 'py-1.5 text-left flex items-center justify-between gap-2', !item.name.trim() && 'text-text-tertiary')}>
+                        <span className="truncate">{item.name.trim() || t.servicePicker.choosePlaceholder}</span>
+                        <Package size={13} className="text-text-tertiary shrink-0" />
+                      </button>
                     </div>
                     <div className="col-span-2">
                       <input value={item.quantity} onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], quantity: e.target.value }; setEditLineItems(u); }}
@@ -373,6 +394,9 @@ export default function QuoteDetails() {
                   className="glass-button text-xs flex items-center gap-1.5 px-3 py-1.5">
                   <Plus size={12} /> {language === 'fr' ? 'Ajouter une ligne' : 'Add Line Item'}
                 </button>
+                {lineEditId && (
+                  <ServicePicker isOpen singleSelect onClose={() => setLineEditId(null)} onSelect={handleServiceForLine} />
+                )}
               </div>
             ) : (
               <>

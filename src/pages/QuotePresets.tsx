@@ -59,7 +59,7 @@ const inputCls = 'glass-input w-full mt-1.5';
 
 export default function QuotePresets() {
   const navigate = useNavigate();
-  const { language } = useTranslation();
+  const { language, t } = useTranslation();
   const fr = language === 'fr';
 
   const [presets, setPresets] = useState<QuotePreset[]>([]);
@@ -75,6 +75,8 @@ export default function QuotePresets() {
   const [lineItems, setLineItems] = useState<LineItemForm[]>([emptyLine()]);
   const [addedServiceIds, setAddedServiceIds] = useState<Set<string>>(new Set());
   const [servicePickerOpen, setServicePickerOpen] = useState(false);
+  // Per-line catalog picker: id of the line whose product/service is being chosen
+  const [lineEditId, setLineEditId] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [introText, setIntroText] = useState('');
   const [saving, setSaving] = useState(false);
@@ -208,6 +210,20 @@ export default function QuotePresets() {
       return filtered.length > 0 ? filtered : [emptyLine()];
     });
     setAddedServiceIds(p => { const n = new Set(p); n.delete(serviceId); return n; });
+  };
+
+  // Fill a single line with the chosen catalog product/service (name, description)
+  const handleServiceForLine = (service: PredefinedService) => {
+    if (!lineEditId) return;
+    setLineItems(p => p.map(i => i.id === lineEditId ? {
+      ...i,
+      source_service_id: service.id,
+      name: service.name,
+      description: service.description || '',
+      item_type: 'service',
+    } : i));
+    setAddedServiceIds(p => new Set([...p, service.id]));
+    setLineEditId(null);
   };
 
   // ── Build preview data ──
@@ -358,8 +374,11 @@ export default function QuotePresets() {
                     )}>
                       {/* Name + Description */}
                       <div className="col-span-8 space-y-1">
-                        <input value={item.name} onChange={e => updateLine(item.id, { name: e.target.value })}
-                          className={cn(inputCls, 'py-2')} placeholder={fr ? 'Nom' : 'Name'} />
+                        <button type="button" onClick={() => setLineEditId(item.id)}
+                          className={cn(inputCls, 'py-2 text-left flex items-center justify-between gap-2', !item.name.trim() && 'text-text-tertiary')}>
+                          <span className="truncate">{item.name.trim() || t.servicePicker.choosePlaceholder}</span>
+                          <Package size={13} className="text-text-tertiary shrink-0" />
+                        </button>
                         <textarea value={item.description} onChange={e => updateLine(item.id, { description: e.target.value })}
                           className={cn(inputCls, 'py-1.5 text-xs min-h-[40px] resize-none')} placeholder="Description" />
                       </div>
@@ -389,10 +408,6 @@ export default function QuotePresets() {
                     <button type="button" onClick={() => setLineItems(p => [...p, emptyLine()])}
                       className="glass-button-primary px-3 py-2 text-xs font-semibold flex items-center gap-1.5">
                       <Plus size={12} /> {fr ? 'Ajouter un service' : 'Add Line Item'}
-                    </button>
-                    <button type="button" onClick={() => setLineItems(p => [...p, { ...emptyLine(), item_type: 'text', name: '' }])}
-                      className="glass-button px-3 py-2 text-xs font-medium">
-                      {fr ? 'Ajouter texte' : 'Add Text'}
                     </button>
                   </div>
                 </div>
@@ -490,6 +505,9 @@ export default function QuotePresets() {
         onRemove={handleServiceRemoved}
         addedIds={addedServiceIds}
       />
+      {lineEditId && (
+        <ServicePicker isOpen singleSelect onClose={() => setLineEditId(null)} onSelect={handleServiceForLine} />
+      )}
     </>
   );
 
