@@ -30,7 +30,52 @@ interface RepData {
   streak: number;
 }
 
-// No fallback data — empty state shown when API returns no results
+// ---------------------------------------------------------------------------
+// Demo fallback — 5 fictional reps shown when the API returns no results
+// (e.g. fresh org / no closed deals yet). userId prefixed `demo-` so the
+// drawer renders local stats instead of calling the API.
+// ---------------------------------------------------------------------------
+
+interface DemoRep extends RepData {
+  doorsKnocked: number;
+  conversations: number;
+  demosSet: number;
+  quotesSent: number;
+}
+
+const DEMO_REPS: DemoRep[] = [
+  { rank: 1, name: 'Marc Tremblay',  userId: 'demo-rep-1', avatar: 'https://i.pravatar.cc/80?u=demo-rep-1', closes: 24, revenue: 96000, trend: 12,  streak: 7, doorsKnocked: 210, conversations: 140, demosSet: 52, quotesSent: 38 },
+  { rank: 2, name: 'Sophie Gagné',   userId: 'demo-rep-2', avatar: 'https://i.pravatar.cc/80?u=demo-rep-2', closes: 21, revenue: 84500, trend: 8,   streak: 4, doorsKnocked: 198, conversations: 128, demosSet: 47, quotesSent: 33 },
+  { rank: 3, name: "Liam O'Connor",  userId: 'demo-rep-3', avatar: 'https://i.pravatar.cc/80?u=demo-rep-3', closes: 18, revenue: 71200, trend: -3,  streak: 0, doorsKnocked: 176, conversations: 110, demosSet: 40, quotesSent: 29 },
+  { rank: 4, name: 'Emma Roy',       userId: 'demo-rep-4', avatar: 'https://i.pravatar.cc/80?u=demo-rep-4', closes: 15, revenue: 58900, trend: 5,   streak: 2, doorsKnocked: 154, conversations: 95,  demosSet: 33, quotesSent: 24 },
+  { rank: 5, name: 'Noah Bélanger',  userId: 'demo-rep-5', avatar: 'https://i.pravatar.cc/80?u=demo-rep-5', closes: 11, revenue: 42300, trend: -6,  streak: 0, doorsKnocked: 132, conversations: 78,  demosSet: 26, quotesSent: 19 },
+];
+
+function demoToKPIs(rep: DemoRep): { key: string; value: string }[] {
+  const conv = rep.doorsKnocked ? (rep.closes / rep.doorsKnocked) * 100 : 0;
+  const avg = rep.closes ? rep.revenue / rep.closes : 0;
+  return [
+    { key: 'leads', value: String(rep.doorsKnocked) },
+    { key: 'contacted', value: String(rep.conversations) },
+    { key: 'deals', value: String(rep.demosSet) },
+    { key: 'quotes_sent', value: String(rep.quotesSent) },
+    { key: 'closes', value: String(rep.closes) },
+    { key: 'revenue', value: `$${rep.revenue.toLocaleString()}` },
+    { key: 'conversion_rate', value: `${Math.round(conv)}%` },
+    { key: 'avg_ticket', value: `$${Math.round(avg).toLocaleString()}` },
+  ];
+}
+
+function demoToFunnel(rep: DemoRep): { key: string; value: number; max: number }[] {
+  const max = rep.doorsKnocked || 1;
+  return [
+    { key: 'leads', value: rep.doorsKnocked, max },
+    { key: 'contacted', value: rep.conversations, max },
+    { key: 'deals_open', value: rep.demosSet, max },
+    { key: 'quotes_sent', value: rep.quotesSent, max },
+    { key: 'closes', value: rep.closes, max },
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // Convert API LeaderboardEntry[] -> RepData[]
@@ -187,8 +232,9 @@ export default function D2DLeaderboard() {
       .then((entries) => {
         if (cancelled) return;
         if (!entries || entries.length === 0) {
-          setPodiumData([]);
-          setLeaderboardData([]);
+          // No real data yet — fall back to fictional demo reps
+          setPodiumData(DEMO_REPS.slice(0, 3));
+          setLeaderboardData(DEMO_REPS.slice(3));
         } else {
           const all = apiToRepData(entries);
           setPodiumData(all.slice(0, 3));
@@ -197,8 +243,8 @@ export default function D2DLeaderboard() {
       })
       .catch(() => {
         if (cancelled) return;
-        setPodiumData([]);
-        setLeaderboardData([]);
+        setPodiumData(DEMO_REPS.slice(0, 3));
+        setLeaderboardData(DEMO_REPS.slice(3));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -211,6 +257,15 @@ export default function D2DLeaderboard() {
   const openRepDrawer = useCallback((rep: RepData) => {
     setSelectedRep(rep);
     setDetailLoading(true);
+
+    // Demo reps have no DB record — render their local stats directly
+    const demo = DEMO_REPS.find((d) => d.userId === rep.userId);
+    if (demo) {
+      setDetailKPIs(demoToKPIs(demo));
+      setFunnelSteps(demoToFunnel(demo));
+      setDetailLoading(false);
+      return;
+    }
 
     const { from, to } = getPeriodDates(period);
 
