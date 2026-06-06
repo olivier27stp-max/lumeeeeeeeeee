@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Users,
+  Inbox,
   Settings,
   LogOut,
   Menu,
@@ -87,7 +88,6 @@ import ActivityCenter from './components/ActivityCenter';
 import SupportFAB from './components/SupportFAB';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProductsServices from './pages/ProductsServices';
-import DevPlanSwitch from './pages/DevPlanSwitch';
 import AppMarketplace from './pages/AppMarketplace';
 import SettingsMessaging from './pages/SettingsMessaging';
 import RequestFormSettings from './pages/RequestFormSettings';
@@ -120,6 +120,8 @@ const LumeAgentIcon = ({ size = 20, className = '' }: { size?: number; className
 import SatisfactionSurvey from './pages/SatisfactionSurvey';
 import ClientPortal from './pages/ClientPortal';
 import PublicPayment from './pages/PublicPayment';
+import PublicRequestForm from './pages/PublicRequestForm';
+import Requests from './pages/Requests';
 import Leaderboard from './pages/Leaderboard';
 import Commissions from './pages/Commissions';
 import RepProfile from './pages/RepProfile';
@@ -497,6 +499,13 @@ export default function App() {
     return <TokenRoute kind={tokenKind} />;
   }
 
+  // Public embeddable request form (iframe target — works without auth, for any
+  // visitor logged in or not, so it can be embedded on external sites).
+  const formKeyMatch = location.pathname.match(/^\/form\/([a-f0-9]{32,})$/i);
+  if (formKeyMatch) {
+    return <PublicRequestForm apiKey={formKeyMatch[1]} />;
+  }
+
   if (!user) {
     if (view === 'auth') {
       return <Auth onBack={() => setView('landing')} />;
@@ -704,6 +713,7 @@ function AuthenticatedApp({
       label: language === 'fr' ? 'Principal' : 'Main',
       items: [
         { id: 'clients', label: t.nav.clients, icon: Users, path: '/clients', tileColor: 'blue', requiredPermission: 'clients.read' },
+        { id: 'requests', label: t.nav.requests, icon: Inbox, path: '/requests', tileColor: 'blue', requiredPermission: 'clients.read' },
         { id: 'quotes', label: language === 'fr' ? 'Devis' : 'Quotes', icon: ClipboardList, path: '/quotes', tileColor: 'blue', requiredPermission: 'quotes.read' },
         { id: 'invoices', label: t.nav.invoices, icon: FileText, path: '/invoices', tileColor: 'blue', requiredPermission: 'financial.view_invoices' },
         { id: 'jobs', label: t.nav.jobs, icon: Briefcase, path: '/jobs', tileColor: 'blue', requiredPermission: 'jobs.read' },
@@ -1112,6 +1122,7 @@ function AuthenticatedApp({
                     <Route path="/pipeline" element={<Navigate to="/lume-agent" replace />} />
                     <Route path="/clients" element={<Gated permission="clients.read"><div className="px-8 py-6"><Clients /></div></Gated>} />
                     <Route path="/clients/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><ClientDetails /></div></Gated>} />
+                    <Route path="/requests" element={<Gated permission="clients.read"><div className="px-8 py-6"><Requests /></div></Gated>} />
                     <Route path="/jobs" element={<Gated permission="jobs.read"><div className="px-8 py-6"><Jobs /></div></Gated>} />
                     <Route path="/jobs/:id" element={<Gated permission="jobs.read"><PageWrapper><JobDetails /></PageWrapper></Gated>} />
                     <Route path="/calendar" element={<Gated permission="calendar.read"><Schedule /></Gated>} />
@@ -1139,8 +1150,6 @@ function AuthenticatedApp({
                     <Route path="/settings/payments" element={<Gated permission="settings.read"><PageWrapper><PaymentSettings /></PageWrapper></Gated>} />
                     <Route path="/settings/messaging" element={<Gated permission="settings.read"><PageWrapper><SettingsMessaging /></PageWrapper></Gated>} />
                     <Route path="/settings/products" element={<Gated permission="settings.update"><PageWrapper><ProductsServices /></PageWrapper></Gated>} />
-                    {/* TEMPORARY: plan switcher for testing plan-gated UI */}
-                    <Route path="/dev/plan-switch" element={<Gated permission="settings.read"><DevPlanSwitch /></Gated>} />
                     <Route path="/automations" element={<Gated permission="automations.read"><PageWrapper><Automations /></PageWrapper></Gated>} />
                     <Route path="/tasks" element={<Gated permission="settings.read"><PageWrapper><TasksPage /></PageWrapper></Gated>} />
                     <Route path="/courses" element={<Gated permission="settings.read"><PlanFeatureGate flag="includes_courses"><div className="px-8 py-6"><Courses /></div></PlanFeatureGate></Gated>} />

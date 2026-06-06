@@ -289,6 +289,19 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
       dealId = dealInsert?.id ? String(dealInsert.id) : null;
     }
 
+    // 3b. Promote the prospect to a full client automatically.
+    // ensure_client_for_lead creates the client with status 'lead'; a request-form
+    // submission is an inbound prospect we want to surface as an active client.
+    const { error: promoteErr } = await admin
+      .from('clients')
+      .update({ status: 'active', updated_at: new Date().toISOString() })
+      .eq('id', clientId)
+      .eq('org_id', orgId);
+    if (promoteErr) {
+      console.error('[public/form] client promotion failed:', promoteErr.message);
+      // Non-fatal — lead/deal/client already exist
+    }
+
     // 4. Save submission record
     const { data: submission, error: subError } = await admin
       .from('form_submissions')

@@ -7,6 +7,7 @@ const fr: TranslationKeys = {
     leads: 'Devis',
     pipeline: 'Pipeline',
     clients: 'Clients',
+    requests: 'Demandes',
     jobs: 'Jobs',
     calendar: 'Calendrier',
     findTime: 'Trouver un créneau',

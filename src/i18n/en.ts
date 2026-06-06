@@ -5,6 +5,7 @@ const en = {
     leads: 'Quotes',
     pipeline: 'Pipeline',
     clients: 'Clients',
+    requests: 'Requests',
     jobs: 'Jobs',
     calendar: 'Calendar',
     findTime: 'Find Time',

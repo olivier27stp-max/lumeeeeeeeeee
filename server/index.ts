@@ -96,8 +96,12 @@ app.disable('x-powered-by');
 initSentry(app);
 
 // ── Security headers (hardened) ──
-app.use((_req, res, next) => {
-  res.setHeader('X-Frame-Options', 'DENY');
+app.use((req, res, next) => {
+  // The public request form (`/form/:apiKey`) is meant to be embedded in an
+  // <iframe> on external sites (Squarespace, Wix, etc.), so it must NOT send
+  // frame-blocking headers. Everything else stays locked down.
+  const framable = req.path.startsWith('/form/');
+  if (!framable) res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-XSS-Protection', '0'); // Disabled: modern CSP is preferred over broken XSS filter
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -127,7 +131,7 @@ app.use((_req, res, next) => {
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
-      "frame-ancestors 'none'",
+      framable ? 'frame-ancestors *' : "frame-ancestors 'none'",
       "upgrade-insecure-requests",
       "report-uri /api/security/csp-report",
     ].join('; '),
