@@ -1,30 +1,45 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, Inbox, Mail, Phone, MapPin, Building2, ExternalLink, RefreshCw, Clock } from 'lucide-react';
+import { Loader2, Inbox, Mail, Phone, MapPin, Building2, ExternalLink, RefreshCw, Clock, Copy, Check } from 'lucide-react';
 import { useTranslation } from '../i18n';
-import { fetchFormSubmissions } from '../lib/requestFormsApi';
-import type { FormSubmission } from '../types';
+import { fetchFormSubmissions, fetchRequestForm } from '../lib/requestFormsApi';
+import type { FormSubmission, RequestForm } from '../types';
 
 export default function Requests() {
   const { language } = useTranslation();
   const fr = language === 'fr';
 
   const [submissions, setSubmissions] = useState<FormSubmission[]>([]);
+  const [form, setForm] = useState<RequestForm | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchFormSubmissions();
+      // Form config is best-effort — never block the submissions list on it
+      const [data, formCfg] = await Promise.all([
+        fetchFormSubmissions(),
+        fetchRequestForm().catch(() => null),
+      ]);
       setSubmissions(data);
+      setForm(formCfg);
     } catch (err: any) {
       setError(err.message || (fr ? 'Impossible de charger les demandes.' : 'Unable to load requests.'));
     } finally {
       setLoading(false);
     }
   }, [fr]);
+
+  const formUrl = form?.api_key ? `${window.location.origin}/form/${form.api_key}` : null;
+  const copyUrl = () => {
+    if (!formUrl) return;
+    navigator.clipboard.writeText(formUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -68,14 +83,55 @@ export default function Requests() {
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Inbox className="h-10 w-10 text-text-muted/30" />
           <p className="mt-3 text-sm font-medium text-text-secondary">{fr ? 'Aucune demande' : 'No requests yet'}</p>
-          <p className="mt-1 max-w-sm text-xs text-text-muted">
-            {fr
-              ? 'Les demandes apparaîtront ici dès qu’un prospect remplira votre formulaire. Configurez-le dans Réglages → Formulaire de demande.'
-              : 'Requests will appear here as soon as a prospect fills out your form. Configure it in Settings → Request Form.'}
-          </p>
-          <Link to="/settings/request-form" className="mt-4 text-xs font-semibold text-primary hover:underline">
-            {fr ? 'Configurer le formulaire' : 'Configure form'}
-          </Link>
+          {formUrl ? (
+            <>
+              <p className="mt-1 max-w-sm text-xs text-text-muted">
+                {fr
+                  ? 'Les demandes apparaîtront ici dès qu’un prospect remplira votre formulaire. Partagez ce lien ou intégrez-le à votre site :'
+                  : 'Requests will appear here as soon as a prospect fills out your form. Share this link or embed it on your site:'}
+              </p>
+              <div className="mt-3 flex w-full max-w-md items-center gap-2">
+                <code className="flex-1 truncate rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-left text-[11px] font-mono text-text-secondary">
+                  {formUrl}
+                </code>
+                <button
+                  onClick={copyUrl}
+                  className="flex items-center gap-1 rounded-lg border border-border-subtle px-2.5 py-2 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-elevated"
+                  title={fr ? 'Copier' : 'Copy'}
+                >
+                  {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                </button>
+                <a
+                  href={formUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 rounded-lg border border-border-subtle px-2.5 py-2 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-elevated"
+                  title={fr ? 'Ouvrir' : 'Open'}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+              {form && !form.enabled && (
+                <p className="mt-3 text-xs font-medium text-amber-600">
+                  {fr ? '⚠️ Ce formulaire est actuellement désactivé.' : '⚠️ This form is currently disabled.'}
+                </p>
+              )}
+              <Link to="/settings/request-form" className="mt-4 text-xs font-semibold text-primary hover:underline">
+                {fr ? 'Modifier le formulaire' : 'Edit form'}
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 max-w-sm text-xs text-text-muted">
+                {fr
+                  ? 'Les demandes apparaîtront ici dès qu’un prospect remplira votre formulaire. Configurez-le dans Réglages → Formulaire de demande.'
+                  : 'Requests will appear here as soon as a prospect fills out your form. Configure it in Settings → Request Form.'}
+              </p>
+              <Link to="/settings/request-form" className="mt-4 text-xs font-semibold text-primary hover:underline">
+                {fr ? 'Configurer le formulaire' : 'Configure form'}
+              </Link>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
