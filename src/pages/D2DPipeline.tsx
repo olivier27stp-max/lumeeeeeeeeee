@@ -300,7 +300,7 @@ function DealDetailPanel({ deal, reps, fr, onClose, onReassign }: {
             <select
               value={deal.repId || ''}
               onChange={(e) => { if (e.target.value) onReassign(deal.id, e.target.value); }}
-              className="w-full appearance-none px-3 py-2 rounded-lg border border-outline bg-surface-tertiary text-[12px] text-text-primary font-medium outline-none cursor-pointer"
+              className="w-full px-3 py-2 rounded-lg border border-outline bg-surface-tertiary text-[12px] text-text-primary font-medium outline-none cursor-pointer"
             >
               <option value="" disabled>{fr ? 'Choisir un rep...' : 'Select rep...'}</option>
               {reps.map(r => (
