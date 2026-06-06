@@ -102,7 +102,10 @@ export default function QuoteMeasure() {
   const [ready, setReady] = useState(false);
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
-  const [tool, setTool] = useState<Tool>('select');
+  // Default to the Area (polygon) tool so a click on the map immediately starts
+  // a measurement — matching the "click to measure" expectation of the workspace.
+  // Press 1 (or the Select tool) to switch to editing/panning mode.
+  const [tool, setTool] = useState<Tool>('polygon');
   const [pts, setPts] = useState<LatLng[]>([]);
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [selId, setSelId] = useState<string | null>(null);
@@ -150,11 +153,15 @@ export default function QuoteMeasure() {
       map3dRef.current = map3d;
       setIs3dMode(true);
 
-      // Wait for element to be ready (fallback to 2D after 5s)
+      // Wait for the custom element to be defined AND initialized (fallback to 2D
+      // after 5s). Requiring the element registration ensures the 3D overlay
+      // primitives (gmp-polygon-3d / gmp-polyline-3d) used for drawing are ready.
+      const elementReady = () =>
+        Boolean((window as any).customElements?.get('gmp-map-3d')) && map3d.center !== undefined;
       let elapsed = 0;
       const check = setInterval(() => {
         elapsed += 200;
-        if (map3d.center !== undefined) {
+        if (elementReady()) {
           clearInterval(check);
           gcRef.current = new google.maps.Geocoder();
           setReady(true);
@@ -338,19 +345,15 @@ export default function QuoteMeasure() {
     if (tool === 'select') return;
 
     const handler = (e: any) => {
-      // gmp-map-3d click event gives position in the detail
-      const detail = e.detail || e;
-      let lat: number, lng: number;
-
-      if (detail?.position) {
-        lat = detail.position.lat;
-        lng = detail.position.lng;
-      } else if (detail?.latLng) {
-        lat = typeof detail.latLng.lat === 'function' ? detail.latLng.lat() : detail.latLng.lat;
-        lng = typeof detail.latLng.lng === 'function' ? detail.latLng.lng() : detail.latLng.lng;
-      } else {
-        return;
-      }
+      // The gmp-click event payload differs across Maps 3D API channels:
+      // the position can live on the event itself or in e.detail, and lat/lng
+      // can be plain numbers OR accessor functions. Normalise all cases.
+      const read = (v: any): number => (typeof v === 'function' ? v() : v);
+      const src = e?.position ?? e?.detail?.position ?? e?.latLng ?? e?.detail?.latLng;
+      if (!src) return;
+      const lat = read(src.lat);
+      const lng = read(src.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
       const pt: LatLng = { lat, lng };
       setPts(prev => {
@@ -444,7 +447,14 @@ export default function QuoteMeasure() {
     overlays3d.current.forEach(o => o.remove());
     overlays3d.current = [];
 
-    // Render active drawing points
+    // Render active drawing — a vertex dot at EVERY clicked point (so the very
+    // first click gives immediate feedback) plus the connecting line/polygon.
+    if (pts.length >= 1 && tool !== 'select') {
+      pts.forEach((p) => {
+        const dot = make3dVertex(el, p.lat, p.lng, '#FF4444', 16);
+        if (dot) overlays3d.current.push(dot);
+      });
+    }
     if (pts.length >= 2) {
       const coords = pts.map(p => ({ lat: p.lat, lng: p.lng, altitude: 15 }));
 
@@ -495,6 +505,14 @@ export default function QuoteMeasure() {
         line.coordinates = coords;
         el.appendChild(line);
         overlays3d.current.push(line);
+      }
+
+      // Vertex dots for the saved shape (skip when a huge number of points).
+      if (s.result.points.length <= 60) {
+        s.result.points.forEach((p) => {
+          const dot = make3dVertex(el, p.lat, p.lng, s.color, 13);
+          if (dot) overlays3d.current.push(dot);
+        });
       }
     });
   }, [pts, shapes, selId, tool, is3dMode]);
@@ -831,9 +849,9 @@ export default function QuoteMeasure() {
           )}
           {tool !== 'select' && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/80 text-white text-[11px] px-3 py-1.5 rounded-full z-20 pointer-events-none backdrop-blur-sm">
-              {tool === 'line' && (fr ? 'Cliquez 2 points' : 'Click 2 points')}
-              {tool === 'path' && (fr ? 'Cliquez, Enter pour terminer' : 'Click, Enter to finish')}
-              {tool === 'polygon' && (fr ? 'Cliquez, Enter pour fermer' : 'Click, Enter to close')}
+              {tool === 'line' && (fr ? 'Cliquez 2 points sur la carte' : 'Click 2 points on the map')}
+              {tool === 'path' && (fr ? 'Cliquez pour placer des points • Entrée pour terminer' : 'Click to place points • Enter to finish')}
+              {tool === 'polygon' && (fr ? 'Cliquez pour placer des points • Entrée pour fermer la zone' : 'Click to place points • Enter to close the area')}
               {pts.length > 0 && ` • ${pts.length} pt${pts.length > 1 ? 's' : ''}`}
             </div>
           )}
@@ -891,6 +909,36 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/**
+ * Builds a small white vertex dot on the 3D map by drawing a tiny filled circle
+ * with <gmp-polygon-3d> (reliable across API channels, unlike Marker3D pins).
+ * Returns the appended element, or null if 3D polygons aren't available.
+ */
+function make3dVertex(parent: HTMLElement, lat: number, lng: number, color: string, altitude: number): HTMLElement | null {
+  try {
+    const dot = document.createElement('gmp-polygon-3d') as any;
+    dot.setAttribute('altitude-mode', 'relative-to-ground');
+    dot.setAttribute('fill-color', '#FFFFFF');
+    dot.setAttribute('stroke-color', color);
+    dot.setAttribute('stroke-width', '2');
+    dot.setAttribute('draws-occluded-segments', '');
+    const radiusM = 0.5; // ~0.5 m radius — visible but not obtrusive at house scale
+    const dLat = radiusM / 111_320;
+    const dLng = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180));
+    const ring: Array<{ lat: number; lng: number; altitude: number }> = [];
+    const segments = 12;
+    for (let i = 0; i < segments; i++) {
+      const a = (i / segments) * 2 * Math.PI;
+      ring.push({ lat: lat + dLat * Math.sin(a), lng: lng + dLng * Math.cos(a), altitude });
+    }
+    dot.outerCoordinates = ring;
+    parent.appendChild(dot);
+    return dot;
+  } catch {
+    return null;
+  }
 }
 
 function r2(n: number) { return Math.round(n * 100) / 100; }
