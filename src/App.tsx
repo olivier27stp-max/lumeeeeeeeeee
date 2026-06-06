@@ -87,6 +87,7 @@ import ActivityCenter from './components/ActivityCenter';
 import SupportFAB from './components/SupportFAB';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProductsServices from './pages/ProductsServices';
+import DevPlanSwitch from './pages/DevPlanSwitch';
 import AppMarketplace from './pages/AppMarketplace';
 import SettingsMessaging from './pages/SettingsMessaging';
 import RequestFormSettings from './pages/RequestFormSettings';
@@ -620,6 +621,10 @@ function AuthenticatedApp({
   const { unreadCount: unreadNotifs, resetCount: resetNotifCount } = useRealtimeNotifications(!!user);
   // Current plan — used to hide locked features from sidebar
   const { currentPlan } = useCurrentPlan();
+  // Hide "Discover features" on the top plan (nothing left to unlock).
+  // Mirrors the feature flags surfaced by ExploreFeaturesModal.
+  const DISCOVER_FEATURE_FLAGS = ['includes_sms', 'includes_ai', 'includes_d2d', 'includes_courses', 'includes_api'] as const;
+  const allFeaturesUnlocked = !!currentPlan && DISCOVER_FEATURE_FLAGS.every((f) => Boolean((currentPlan as any)[f]));
   const [exploreFeaturesOpen, setExploreFeaturesOpen] = useState(false);
 
   // Sidebar counters: pending quotes + overdue invoices
@@ -973,23 +978,26 @@ function AuthenticatedApp({
           <div className="p-2.5 space-y-0.5 border-t border-sidebar-text/10">
             {/* Company switcher — only visible for multi-company users */}
             {sidebarExpanded && <CompanySwitcher />}
-            {/* Discover premium features — surfaces locked tabs as a polished modal */}
-            <button
-              onClick={() => setExploreFeaturesOpen(true)}
-              title={!sidebarExpanded ? (language === 'fr' ? 'Découvrir les fonctionnalités' : 'Discover features') : undefined}
-              className={cn(
-                "group w-full flex items-center gap-2.5 px-2.5 py-[8px] rounded-lg text-[14px] font-medium transition-colors",
-                "bg-gradient-to-r from-primary/10 via-primary/5 to-transparent hover:from-primary/15 hover:via-primary/10 text-text-primary border border-primary/20 hover:border-primary/40",
-                !sidebarExpanded && "justify-center"
-              )}
-            >
-              <Sparkles size={16} strokeWidth={2} className="text-primary shrink-0" />
-              {sidebarExpanded && (
-                <span className="truncate">
-                  {language === 'fr' ? 'Découvrir les fonctionnalités' : 'Discover features'}
-                </span>
-              )}
-            </button>
+            {/* Discover premium features — surfaces locked tabs as a polished modal.
+                Hidden on the top plan, where everything is already unlocked. */}
+            {!allFeaturesUnlocked && (
+              <button
+                onClick={() => setExploreFeaturesOpen(true)}
+                title={!sidebarExpanded ? (language === 'fr' ? 'Découvrir les fonctionnalités' : 'Discover features') : undefined}
+                className={cn(
+                  "group w-full flex items-center gap-2.5 px-2.5 py-[8px] rounded-lg text-[14px] font-medium transition-colors",
+                  "bg-gradient-to-r from-primary/10 via-primary/5 to-transparent hover:from-primary/15 hover:via-primary/10 text-text-primary border border-primary/20 hover:border-primary/40",
+                  !sidebarExpanded && "justify-center"
+                )}
+              >
+                <Sparkles size={16} strokeWidth={2} className="text-primary shrink-0" />
+                {sidebarExpanded && (
+                  <span className="truncate">
+                    {language === 'fr' ? 'Découvrir les fonctionnalités' : 'Discover features'}
+                  </span>
+                )}
+              </button>
+            )}
             <button
               onClick={() => setIsDark(!isDark)}
               title={!sidebarExpanded ? (isDark ? t.nav.lightMode : t.nav.darkMode) : undefined}
@@ -1131,6 +1139,8 @@ function AuthenticatedApp({
                     <Route path="/settings/payments" element={<Gated permission="settings.read"><PageWrapper><PaymentSettings /></PageWrapper></Gated>} />
                     <Route path="/settings/messaging" element={<Gated permission="settings.read"><PageWrapper><SettingsMessaging /></PageWrapper></Gated>} />
                     <Route path="/settings/products" element={<Gated permission="settings.update"><PageWrapper><ProductsServices /></PageWrapper></Gated>} />
+                    {/* TEMPORARY: plan switcher for testing plan-gated UI */}
+                    <Route path="/dev/plan-switch" element={<Gated permission="settings.read"><DevPlanSwitch /></Gated>} />
                     <Route path="/automations" element={<Gated permission="automations.read"><PageWrapper><Automations /></PageWrapper></Gated>} />
                     <Route path="/tasks" element={<Gated permission="settings.read"><PageWrapper><TasksPage /></PageWrapper></Gated>} />
                     <Route path="/courses" element={<Gated permission="settings.read"><PlanFeatureGate flag="includes_courses"><div className="px-8 py-6"><Courses /></div></PlanFeatureGate></Gated>} />

@@ -147,6 +147,23 @@ export async function cancelSubscription(): Promise<void> {
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to cancel subscription.');
 }
 
+/**
+ * TEMPORARY test-only helper: switch the org's plan directly (bypasses Stripe).
+ * Used by the temporary /dev/plan-switch page to test plan-gated UI.
+ */
+export async function devSwitchPlan(input: { plan_slug: string; interval: 'monthly' | 'yearly' }): Promise<{
+  message: string;
+  plan?: { slug: string; name: string; interval: string; amount_cents: number };
+}> {
+  const res = await fetch(`${API_BASE}/billing/dev-switch-plan`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to switch plan.');
+  return res.json();
+}
+
 export async function changePlan(input: { plan_slug: string; interval: 'monthly' | 'yearly' }): Promise<{
   message: string;
   no_change?: boolean;

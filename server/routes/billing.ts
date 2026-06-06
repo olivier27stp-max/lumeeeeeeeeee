@@ -844,6 +844,88 @@ router.post('/billing/change-plan', validate(changePlanSchema), async (req, res)
   }
 });
 
+// ─── POST /billing/dev-switch-plan — TEMPORARY test-only plan switcher ──────
+// Switches the org's plan directly in the DB, bypassing Stripe entirely.
+// Intended for testing plan-gated UI (locked tabs, "Discover features", etc.).
+// Admin/owner only. Remove before relying on real billing flows.
+const devSwitchPlanSchema = z.object({
+  plan_slug: z.string().trim().min(1, 'Plan is required.'),
+  interval: z.enum(['monthly', 'yearly']).default('monthly'),
+});
+
+router.post('/billing/dev-switch-plan', validate(devSwitchPlanSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const admin = getServiceClient();
+    const isAdmin = await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only admins or owners can switch plans.' });
+    }
+
+    const { plan_slug, interval } = req.body as { plan_slug: string; interval: 'monthly' | 'yearly' };
+
+    const { data: targetPlan } = await admin
+      .from('plans')
+      .select('*')
+      .eq('slug', plan_slug)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (!targetPlan) return res.status(404).json({ error: 'Plan not found.' });
+
+    // Existing active/trialing sub for this org, if any
+    const { data: subRow } = await admin
+      .from('subscriptions')
+      .select('id, currency')
+      .eq('org_id', auth.orgId)
+      .in('status', ['active', 'trialing'])
+      .maybeSingle();
+
+    const currency = (subRow?.currency || 'CAD').toUpperCase();
+    const priceField = interval === 'yearly'
+      ? (currency === 'USD' ? 'yearly_price_usd' : 'yearly_price_cad')
+      : (currency === 'USD' ? 'monthly_price_usd' : 'monthly_price_cad');
+    const amountCents = (targetPlan as any)[priceField] || 0;
+
+    const now = new Date();
+    const periodEnd = new Date(now);
+    if (interval === 'yearly') periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+    else periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+    if (subRow) {
+      await admin.from('subscriptions').update({
+        plan_id: targetPlan.id,
+        interval,
+        amount_cents: amountCents,
+        status: 'active',
+        current_period_start: now.toISOString(),
+        current_period_end: periodEnd.toISOString(),
+        updated_at: now.toISOString(),
+      }).eq('id', subRow.id);
+    } else {
+      await admin.from('subscriptions').insert({
+        org_id: auth.orgId,
+        plan_id: targetPlan.id,
+        interval,
+        currency,
+        amount_cents: amountCents,
+        status: 'active',
+        current_period_start: now.toISOString(),
+        current_period_end: periodEnd.toISOString(),
+      });
+    }
+
+    return res.json({
+      message: `Switched to ${targetPlan.name} (${interval}).`,
+      plan: { slug: targetPlan.slug, name: targetPlan.name, interval, amount_cents: amountCents },
+    });
+  } catch (err: any) {
+    console.error('[billing/dev-switch-plan]', err.message);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 // ─── POST /billing/cancel-scheduled-change — Cancel a scheduled plan change ──
 // Releases the Stripe Subscription Schedule so the current plan continues unchanged.
 
