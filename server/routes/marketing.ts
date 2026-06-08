@@ -37,6 +37,7 @@ const bookDemoSchema = z.object({
   source: z.string().trim().max(80).optional().nullable(),
   availability: z.string().trim().max(80).optional().nullable(),
   message: z.string().trim().max(2000).optional().nullable(),
+  referral_code: z.string().trim().max(40).optional().nullable(),
 }).refine((d) => !!(d.company_name || d.company), {
   message: 'Company is required.',
   path: ['company_name'],
@@ -115,6 +116,7 @@ router.post('/public/book-demo', validate(bookDemoSchema), async (req, res) => {
           <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Taille équipe</td><td style="padding:10px 14px">${escape(body.employee_count || '—')}</td></tr>
           <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Disponibilités</td><td style="padding:10px 14px">${escape(body.availability || '—')}</td></tr>
           <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Source</td><td style="padding:10px 14px">${escape(body.source || '—')}</td></tr>
+          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Parrainage (referral)</td><td style="padding:10px 14px">${escape(body.referral_code || '—')}</td></tr>
         </table>
 
         ${messageBlock}
