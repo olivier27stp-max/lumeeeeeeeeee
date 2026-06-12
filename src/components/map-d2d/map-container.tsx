@@ -670,26 +670,51 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
       gpsMarkerRef.current = null;
     }
 
-    // Init map centered on user GPS position
+    // Last-known GPS position, cached so the map opens on (or very near) the
+    // user's blue pin instantly instead of blanking while a fresh fix loads.
+    let cached: [number, number] | null = null;
+    try {
+      const raw = localStorage.getItem('d2d-last-gps');
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (typeof p?.lng === 'number' && typeof p?.lat === 'number') cached = [p.lng, p.lat];
+      }
+    } catch {}
+
+    // Open immediately — on the cached user position if we have one, else the
+    // regional fallback. The map never waits on the GPS lookup to render.
+    const map = initMap(cached ?? fallback, cached ? 17 : 14);
+    if (cached) {
+      const c = cached;
+      map.on('load', () => placeGpsDot(map, c[0], c[1]));
+    }
+
+    // Drop/refresh the blue pin on the user's live position and remember it.
+    function centerOnUser(lng: number, lat: number, fly: boolean) {
+      placeGpsDot(map, lng, lat);
+      if (fly) map.flyTo({ center: [lng, lat], zoom: 17, duration: 800 });
+      else map.jumpTo({ center: [lng, lat], zoom: 17 });
+      try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng, lat })); } catch {}
+    }
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const map = initMap([pos.coords.longitude, pos.coords.latitude], 17);
-          if (map) {
-            map.on('load', () => placeGpsDot(map, pos.coords.longitude, pos.coords.latitude));
-          }
-          // Live GPS updates — moves the single dot, never creates a second
+          const { longitude: lng, latitude: lat } = pos.coords;
+          // Smooth fly-in if we already opened near the user (cache); otherwise
+          // jump straight to them so we don't animate across the whole region.
+          const apply = () => centerOnUser(lng, lat, !!cached);
+          if (map.loaded()) apply(); else map.on('load', apply);
+          // Live GPS updates — moves the single dot, never creates a second.
           gpsWatchRef.current = navigator.geolocation.watchPosition(
-            (p) => { if (mapRef.current) placeGpsDot(mapRef.current, p.coords.longitude, p.coords.latitude); },
+            (p) => { if (mapRef.current) { placeGpsDot(map, p.coords.longitude, p.coords.latitude); try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng: p.coords.longitude, lat: p.coords.latitude })); } catch {} } },
             () => {},
             { enableHighAccuracy: true }
           );
         },
-        () => { initMap(fallback, 14); },
+        () => {},
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
       );
-    } else {
-      initMap(fallback, 14);
     }
 
     return () => {
