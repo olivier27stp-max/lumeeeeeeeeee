@@ -9,6 +9,17 @@ const MAPBOX_STYLE = 'mapbox://styles/mapbox/satellite-streets-v12';
 const DEFAULT_CENTER: [number, number] = [-73.5673, 45.5017]; // Montréal
 const DEFAULT_ZOOM = 10;
 
+/**
+ * The map opens on a deliberately wide / "from far away" view, centred on the
+ * jobs of the selected period rather than zoomed in tight. Capping fitBounds at
+ * this zoom (with generous padding) keeps the whole job cluster in a far,
+ * bird's-eye framing even when the pins are close together.
+ */
+const FAR_FIT_MAX_ZOOM = 9.5;
+const FAR_FIT_PADDING = 80;
+/** Zoom used when a single job is on the map — still a far, contextual view. */
+const FAR_SINGLE_ZOOM = 9.5;
+
 /** Gold pins over the satellite basemap (matches the calendar map design). */
 const GOLD = '#E0A82E';
 /** Paler gold for completed jobs, so they recede next to the pending ones. */
@@ -182,10 +193,11 @@ export default function CalendarMapGL({
       bounds.extend([pin.longitude, pin.latitude]);
     }
 
+    // Open on a far / zoomed-out view, centred on the jobs of the period.
     if (pins.length === 1) {
-      map.flyTo({ center: [pins[0].longitude, pins[0].latitude], zoom: 13, duration: 600 });
+      map.flyTo({ center: [pins[0].longitude, pins[0].latitude], zoom: FAR_SINGLE_ZOOM, duration: 600 });
     } else {
-      map.fitBounds(bounds, { padding: 48, maxZoom: 14, duration: 600 });
+      map.fitBounds(bounds, { padding: FAR_FIT_PADDING, maxZoom: FAR_FIT_MAX_ZOOM, duration: 600 });
     }
   }, [pins, openJobLabel]);
 
