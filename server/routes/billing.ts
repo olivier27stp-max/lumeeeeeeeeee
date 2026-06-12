@@ -1158,6 +1158,173 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
   }
 });
 
+// ─── GET /billing/offices — Included offices vs extras billed ──
+// Returns { included, extras_charged, extra_price_cents, currency }
+// Offices have no usage entity (unlike seats); extras are a manual purchase.
+
+router.get('/billing/offices', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const admin = getServiceClient();
+
+    const { data: subRow } = await admin
+      .from('subscriptions')
+      .select('id, plan_id, currency, extra_offices')
+      .eq('org_id', auth.orgId)
+      .in('status', ['active', 'trialing'])
+      .maybeSingle();
+
+    if (!subRow) {
+      return res.json({ included: 0, extras_charged: 0, extra_price_cents: 0, currency: 'USD' });
+    }
+
+    const { data: plan } = await admin
+      .from('plans')
+      .select('included_offices, extra_office_price_usd, extra_office_price_cad')
+      .eq('id', subRow.plan_id)
+      .maybeSingle();
+
+    const currency = (subRow.currency || 'CAD').toUpperCase();
+    const extraPrice = currency === 'USD'
+      ? plan?.extra_office_price_usd ?? 0
+      : plan?.extra_office_price_cad ?? 0;
+
+    return res.json({
+      included: plan?.included_offices ?? 0,
+      extras_charged: subRow.extra_offices ?? 0,
+      extra_price_cents: extraPrice,
+      currency,
+    });
+  } catch (err: any) {
+    console.error('[billing/offices]', err.message);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─── POST /billing/offices — Set extra office count (auto-syncs Stripe sub item) ──
+
+const setOfficesSchema = z.object({
+  extra_offices: z.number().int().min(0).max(1000),
+});
+
+router.post('/billing/offices', validate(setOfficesSchema), async (req, res) => {
+  try {
+    if (!stripe) return res.status(500).json({ error: 'Stripe not configured.' });
+
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const admin = getServiceClient();
+    const isAdmin = await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only admins or owners can update office counts.' });
+    }
+
+    const { extra_offices } = req.body as { extra_offices: number };
+
+    const { data: subRow } = await admin
+      .from('subscriptions')
+      .select('id, plan_id, currency, interval, stripe_subscription_id, stripe_office_item_id, extra_offices')
+      .eq('org_id', auth.orgId)
+      .in('status', ['active', 'trialing'])
+      .maybeSingle();
+    if (!subRow) return res.status(404).json({ error: 'No active subscription found.' });
+
+    if (subRow.extra_offices === extra_offices) {
+      return res.json({ message: 'Already at requested office count.', no_change: true });
+    }
+
+    const { data: plan } = await admin
+      .from('plans')
+      .select('name, slug, extra_office_price_usd, extra_office_price_cad')
+      .eq('id', subRow.plan_id)
+      .maybeSingle();
+    if (!plan) return res.status(404).json({ error: 'Plan not found.' });
+
+    const currency = (subRow.currency || 'CAD').toUpperCase();
+    const unitAmount = currency === 'USD'
+      ? plan.extra_office_price_usd
+      : plan.extra_office_price_cad;
+    if (!unitAmount) return res.status(400).json({ error: 'Plan does not support extra offices.' });
+
+    // If no Stripe sub linked, just update DB
+    if (!subRow.stripe_subscription_id) {
+      await admin.from('subscriptions').update({ extra_offices }).eq('id', subRow.id);
+      return res.json({ message: 'Offices updated (no Stripe link).', no_stripe: true, extra_offices });
+    }
+
+    // If we already have an office line item on Stripe, just update its quantity
+    if (subRow.stripe_office_item_id && extra_offices > 0) {
+      try {
+        await stripe.subscriptionItems.update(subRow.stripe_office_item_id, {
+          quantity: extra_offices,
+          proration_behavior: 'always_invoice',
+        });
+      } catch (err: any) {
+        console.error('[billing/offices] Stripe office item update failed', err.message);
+        return res.status(502).json({ error: `Stripe update failed: ${err.message}` });
+      }
+
+      await admin.from('subscriptions').update({ extra_offices }).eq('id', subRow.id);
+      return res.json({ message: 'Office quantity updated.', extra_offices });
+    }
+
+    // Remove the office line item if going down to 0
+    if (subRow.stripe_office_item_id && extra_offices === 0) {
+      try {
+        await stripe.subscriptionItems.del(subRow.stripe_office_item_id, {
+          proration_behavior: 'always_invoice',
+        });
+      } catch (err: any) {
+        console.error('[billing/offices] Stripe office item delete failed', err.message);
+        return res.status(502).json({ error: `Stripe delete failed: ${err.message}` });
+      }
+
+      await admin.from('subscriptions').update({
+        extra_offices: 0,
+        stripe_office_item_id: null,
+      }).eq('id', subRow.id);
+      return res.json({ message: 'Extra offices removed.', extra_offices: 0 });
+    }
+
+    // First-time add: create Stripe Product + Price for the office, then attach to sub
+    try {
+      const product = await stripe.products.create({
+        name: `Lume ${plan.name} — Extra office`,
+        metadata: { plan_slug: plan.slug, type: 'extra_office' },
+      });
+      const price = await stripe.prices.create({
+        product: product.id,
+        currency: currency.toLowerCase(),
+        unit_amount: unitAmount,
+        recurring: { interval: subRow.interval === 'yearly' ? 'year' : 'month' },
+      });
+
+      const newItem = await stripe.subscriptionItems.create({
+        subscription: subRow.stripe_subscription_id,
+        price: price.id,
+        quantity: extra_offices,
+        proration_behavior: 'always_invoice',
+      });
+
+      await admin.from('subscriptions').update({
+        extra_offices,
+        stripe_office_item_id: newItem.id,
+      }).eq('id', subRow.id);
+
+      return res.json({ message: 'Extra offices added and billed.', extra_offices });
+    } catch (err: any) {
+      console.error('[billing/offices] Stripe office item create failed', err.message);
+      return res.status(502).json({ error: `Stripe create failed: ${err.message}` });
+    }
+  } catch (err: any) {
+    console.error('[billing/offices POST]', err.message);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 // ─── POST /billing/customer-portal — Open Stripe Customer Portal ──
 // User can manage card, view invoices, download receipts directly on Stripe.
 

@@ -65,7 +65,9 @@ export async function runAgent(opts: {
         try {
           response = await tool.handler(call.args || {}, opts.ctx);
         } catch (err: any) {
-          response = { error: err?.message || 'Tool execution failed.' };
+          // Never leak raw error text (may contain DB internals) to the model.
+          console.error(`[agent-orchestrator:${call.name}]`, err?.message || err);
+          response = { error: 'Tool execution failed.' };
         }
       }
       responseParts.push({

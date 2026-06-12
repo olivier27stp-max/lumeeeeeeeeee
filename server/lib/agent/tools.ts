@@ -35,6 +35,13 @@ const clamp = (n: any, def: number, max: number) => {
 
 const fullName = (r: any) => `${r.first_name || ''} ${r.last_name || ''}`.trim();
 
+// Never surface raw DB/Postgres error text to the model (it can leak table
+// names, column names, and RLS policy details). Log server-side, return generic.
+function toolError(scope: string, err: any): { error: string } {
+  console.error(`[agent-tool:${scope}]`, err?.message || err);
+  return { error: 'That lookup could not be completed. Try rephrasing or narrowing the request.' };
+}
+
 // ─────────────────────────────────────────────────────────────────
 // READ TOOLS
 // ─────────────────────────────────────────────────────────────────
@@ -69,7 +76,7 @@ const searchClients: AgentTool = {
       );
     }
     const { data, error } = await q;
-    if (error) return { error: error.message };
+    if (error) return toolError('db', error);
     return {
       count: data?.length || 0,
       clients: (data || []).map((c) => ({
@@ -114,7 +121,7 @@ const searchLeads: AgentTool = {
       );
     }
     const { data, error } = await q;
-    if (error) return { error: error.message };
+    if (error) return toolError('db', error);
     return {
       count: data?.length || 0,
       leads: (data || []).map((l) => ({
@@ -160,7 +167,7 @@ const listJobs: AgentTool = {
       q = q.or(`job_number.ilike.%${t}%,title.ilike.%${t}%,property_address.ilike.%${t}%,client_name.ilike.%${t}%`);
     }
     const { data, error } = await q;
-    if (error) return { error: error.message };
+    if (error) return toolError('db', error);
     return { count: data?.length || 0, jobs: data || [] };
   },
 };
@@ -183,7 +190,7 @@ const getJob: AgentTool = {
       .eq('org_id', ctx.orgId)
       .eq('id', String(args.job_id))
       .maybeSingle();
-    if (error) return { error: error.message };
+    if (error) return toolError('db', error);
     if (!data) return { error: 'Job not found.' };
     return data;
   },
@@ -208,7 +215,7 @@ async function fetchScheduleEvents(
     .lte('start_at', endIso)
     .order('start_at', { ascending: true })
     .limit(200);
-  if (evErr) return { error: evErr.message };
+  if (evErr) return toolError('db', evErr);
 
   const jobIds = Array.from(new Set((events || []).map((e) => e.job_id).filter(Boolean)));
   if (jobIds.length === 0) return { count: 0, events: [] };
@@ -222,7 +229,7 @@ async function fetchScheduleEvents(
   const loc = String(opts.location || '').trim();
   if (loc) jobsQ = jobsQ.ilike('property_address', `%${loc.replace(/[%,()]/g, ' ')}%`);
   const { data: jobs, error: jobErr } = await jobsQ;
-  if (jobErr) return { error: jobErr.message };
+  if (jobErr) return toolError('db', jobErr);
 
   const jobMap = new Map((jobs || []).map((j) => [j.id, j]));
   const result = (events || [])
@@ -312,7 +319,7 @@ const listQuotes: AgentTool = {
       q = q.or(`quote_number.ilike.%${t}%,title.ilike.%${t}%`);
     }
     const { data, error } = await q;
-    if (error) return { error: error.message };
+    if (error) return toolError('db', error);
     return { count: data?.length || 0, quotes: data || [] };
   },
 };
@@ -343,7 +350,7 @@ const listInvoices: AgentTool = {
       p_to: null,
       p_org: null,
     });
-    if (error) return { error: error.message };
+    if (error) return toolError('db', error);
     const rows = Array.isArray(data) ? data : (data as any)?.items || [];
     return {
       count: rows.length,
@@ -373,7 +380,7 @@ const getCompanyInfo: AgentTool = {
       .select('company_name, email, phone, website, street1, city, province, postal_code')
       .eq('org_id', ctx.orgId)
       .maybeSingle();
-    if (error) return { error: error.message };
+    if (error) return toolError('db', error);
     return data || { company_name: null };
   },
 };
@@ -402,7 +409,7 @@ const getOverduePayments: AgentTool = {
       p_to: null,
       p_org: null,
     });
-    if (error) return { error: error.message };
+    if (error) return toolError('db', error);
     const rows = (Array.isArray(data) ? data : (data as any)?.items || []) as any[];
 
     const clientIds = Array.from(new Set(rows.map((r) => r.client_id).filter(Boolean)));
@@ -469,7 +476,7 @@ const getRevenueSummary: AgentTool = {
       p_to: toStr,
       p_granularity: 'month',
     });
-    if (error) return { error: error.message };
+    if (error) return toolError('db', error);
     const rows = (Array.isArray(series) ? series : []) as any[];
     const revenueCents = rows.reduce((s, r) => s + (Number(r.revenue_cents) || 0), 0);
     const invoicedCents = rows.reduce((s, r) => s + (Number(r.invoiced_cents) || 0), 0);
@@ -522,7 +529,7 @@ const getDayRoute: AgentTool = {
       .lte('start_at', dayEnd.toISOString())
       .order('start_at', { ascending: true })
       .limit(50);
-    if (error) return { error: error.message };
+    if (error) return toolError('db', error);
 
     const jobIds = Array.from(new Set((events || []).map((e) => e.job_id).filter(Boolean)));
     if (jobIds.length === 0) return { date: dayStart.toISOString().slice(0, 10), count: 0, stops: [] };
@@ -536,7 +543,7 @@ const getDayRoute: AgentTool = {
     const loc = String(args.location || '').trim();
     if (loc) jobsQ = jobsQ.ilike('property_address', `%${loc.replace(/[%,()]/g, ' ')}%`);
     const { data: jobs, error: jobErr } = await jobsQ;
-    if (jobErr) return { error: jobErr.message };
+    if (jobErr) return toolError('db', jobErr);
 
     const jobMap = new Map((jobs || []).map((j) => [j.id, j]));
     const stops = (events || [])
