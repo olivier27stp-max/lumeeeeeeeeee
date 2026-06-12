@@ -340,12 +340,9 @@ export const publicFormSubmissionSchema = z.object({
 });
 
 // ─── AI / Agent ─────────────────────────────────────────────────
-
-export const agentChatSchema = z.object({
-  message: z.string().trim().min(1, 'Message is required.').max(10_000, 'Message too long.'),
-  sessionId: optionalString,
-  context: z.any().optional(),
-}).passthrough();
+// Note: agentChatSchema (POST /agent/chat) is declared above, near the
+// other Lume Agent schemas. The duplicate that lived here was removed —
+// it shadowed the real one and broke the esbuild transform.
 
 export const aiChatSchema = z.object({
   messages: z.array(z.object({
