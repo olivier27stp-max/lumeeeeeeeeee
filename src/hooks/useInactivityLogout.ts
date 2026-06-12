@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { endTrackingAndSignOut } from './useLiveLocationTracking';
 
 /**
  * Signs the user out after `inactivityMs` of no user activity
@@ -13,7 +13,7 @@ export function useInactivityLogout(enabled: boolean, inactivityMs: number = 30 
     const reset = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        supabase.auth.signOut();
+        void endTrackingAndSignOut();
       }, inactivityMs);
     };
 

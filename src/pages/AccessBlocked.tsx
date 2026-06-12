@@ -1,5 +1,5 @@
 import { AlertTriangle, LogOut, Mail, RefreshCw, CreditCard } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { endTrackingAndSignOut } from '../hooks/useLiveLocationTracking';
 
 export type AccessBlockedReason =
   | 'no_membership'
@@ -43,7 +43,7 @@ export default function AccessBlocked({ reason, userEmail, detail }: AccessBlock
   const copy = COPY[reason];
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await endTrackingAndSignOut();
     // Hard reload to clear all in-memory state and URL params.
     window.location.href = '/';
   };

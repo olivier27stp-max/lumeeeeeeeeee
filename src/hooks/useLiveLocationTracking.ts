@@ -18,15 +18,20 @@ const IS_MOBILE =
  * The browser shows its native location-permission prompt on first run. If the
  * user denies it, tracking simply stays off (no crash).
  *
- * Pass `userId`/`orgId` from the authenticated shell. When either is null,
- * tracking is off.
+ * Pass `userId`/`orgId` from the authenticated shell. `allowed` gates the whole
+ * thing on org switch + user consent (Loi 25) — when false, or either id is
+ * null, tracking is off and no session is created.
  */
-export function useLiveLocationTracking(userId: string | null, orgId: string | null) {
+export function useLiveLocationTracking(
+  userId: string | null,
+  orgId: string | null,
+  allowed: boolean,
+) {
   const [sessionReady, setSessionReady] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!userId || !orgId) {
+    if (!userId || !orgId || !allowed) {
       setSessionReady(false);
       return;
     }
@@ -65,7 +70,7 @@ export function useLiveLocationTracking(userId: string | null, orgId: string | n
         sessionIdRef.current = null;
       }
     };
-  }, [userId, orgId]);
+  }, [userId, orgId, allowed]);
 
   return useGpsTracker({ enabled: sessionReady });
 }

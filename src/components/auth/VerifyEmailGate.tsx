@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Mail, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../lib/supabase';
+import { endTrackingAndSignOut } from '../../hooks/useLiveLocationTracking';
 import { useTranslation } from '../../i18n';
 
 const RESEND_COOLDOWN_SECONDS = 30;
@@ -43,7 +44,7 @@ export default function VerifyEmailGate({ email }: Props) {
 
   const onSignOut = async () => {
     try {
-      await supabase.auth.signOut();
+      await endTrackingAndSignOut();
     } catch {
       // ignore — onAuthStateChange will tear down the gate
     }

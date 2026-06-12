@@ -11,6 +11,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { endTrackingAndSignOut } from '../../hooks/useLiveLocationTracking';
 import { Shield, Loader2 } from 'lucide-react';
 
 interface Props {
@@ -75,7 +76,7 @@ export default function AaL2Guard({ children }: Props) {
             Your account has MFA enabled. Please sign in again and complete the verification step.
           </p>
           <button
-            onClick={async () => { await supabase.auth.signOut(); window.location.href = '/'; }}
+            onClick={async () => { await endTrackingAndSignOut(); window.location.href = '/'; }}
             className="glass-button-primary"
           >
             Sign out and retry

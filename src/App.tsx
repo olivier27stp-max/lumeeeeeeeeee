@@ -146,6 +146,8 @@ import CommandPalette from './components/CommandPalette';
 import DevRoleSwitcher from './components/DevRoleSwitcher';
 import { CompanyProvider, useCompany } from './contexts/CompanyContext';
 import { useLiveLocationTracking, endTrackingAndSignOut } from './hooks/useLiveLocationTracking';
+import { useLocationTrackingConsent } from './hooks/useLocationTrackingConsent';
+import LocationConsentModal from './components/LocationConsentModal';
 import { CompanySelectorPage, CompanySwitcher, NoCompanyState } from './components/CompanySelector';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import { usePlatformOwner } from './hooks/usePlatformOwner';
@@ -661,7 +663,10 @@ function AuthenticatedApp({
 
   // Auto-locate every signed-in user (desktop + mobile web) for the whole
   // session, so they appear as a live blue pin on the dispatch / sales maps.
-  useLiveLocationTracking(user?.id ?? null, currentOrgId);
+  // Gated on the org switch + per-user consent (Loi 25); the modal below
+  // collects consent on first login.
+  const locationConsent = useLocationTrackingConsent(user?.id ?? null, currentOrgId);
+  useLiveLocationTracking(user?.id ?? null, currentOrgId, locationConsent.allowed);
 
   // Still loading company memberships
   if (companyLoading) {
@@ -1226,6 +1231,12 @@ function AuthenticatedApp({
         )}
       </AnimatePresence>
       <ExploreFeaturesModal open={exploreFeaturesOpen} onClose={() => setExploreFeaturesOpen(false)} />
+      <LocationConsentModal
+        open={locationConsent.needsPrompt}
+        language={language}
+        onAccept={locationConsent.accept}
+        onDecline={locationConsent.decline}
+      />
     </JobModalControllerProvider>
   );
 }

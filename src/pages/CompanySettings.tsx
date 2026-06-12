@@ -25,6 +25,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import PermissionGate from '../components/PermissionGate';
 import FileUpload from '../components/FileUpload';
 import { STORAGE_BUCKETS, deleteFile } from '../lib/storage';
+import LocationTrackingSettingCard from '../components/settings/LocationTrackingSettingCard';
 
 interface CompanyDetails {
   id?: string;
@@ -586,6 +587,10 @@ export default function CompanySettings() {
             </div>
           </div>
         </div>
+
+        <PermissionGate permission="settings.update">
+          <LocationTrackingSettingCard language={language === 'fr' ? 'fr' : 'en'} />
+        </PermissionGate>
 
         {/* Save bar */}
         <div className={cn(

@@ -4,7 +4,7 @@
  * Resets the timer on mouse, keyboard, touch, and scroll events.
  */
 import { useEffect, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import { endTrackingAndSignOut } from './useLiveLocationTracking';
 
 // 30 minutes of inactivity before auto-signout
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
@@ -34,7 +34,7 @@ export function useSessionTimeout(userId: string | null) {
       // Set signout timer
       timeoutRef.current = setTimeout(async () => {
         console.warn('[session] Inactivity timeout — signing out');
-        await supabase.auth.signOut();
+        await endTrackingAndSignOut();
         window.location.href = '/';
       }, SESSION_TIMEOUT_MS);
     };
