@@ -44,8 +44,8 @@ export default function MrLumeChat() {
   const placeholder = fr ? 'Pose-moi une question ou donne-moi une instruction…' : 'Ask a question or give an instruction…';
 
   const suggestions = fr
-    ? ['Quelles sont nos dates à Bromont ?', 'Combien de clients avons-nous ?', 'Montre les factures impayées', 'Soumissions envoyées récemment']
-    : ['What are our dates in Bromont?', 'How many clients do we have?', 'Show unpaid invoices', 'Recently sent quotes'];
+    ? ['Quelles sont nos dates à (city) ?', 'Combien de clients avons-nous ?', 'Montre les factures impayées', 'Soumissions envoyées récemment']
+    : ['What are our dates in (city)?', 'How many clients do we have?', 'Show unpaid invoices', 'Recently sent quotes'];
 
   async function send(text: string) {
     const trimmed = text.trim();
