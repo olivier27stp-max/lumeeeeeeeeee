@@ -373,8 +373,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     return res.json({ ok: true, submission_id: submission?.id || null });
   } catch (err: any) {
     console.error('[public/form] submit failed:', err.message);
-    // TEMP DIAGNOSTIC — remove after confirming the fix.
-    return res.status(500).json({ error: 'Unable to process submission.', _debug: { message: err?.message, code: err?.code, details: err?.details } });
+    return res.status(500).json({ error: 'Unable to process submission.' });
   }
 });
 
