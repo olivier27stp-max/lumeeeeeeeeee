@@ -165,8 +165,8 @@ export default function QuoteMeasure() {
           clearInterval(check);
           gcRef.current = new google.maps.Geocoder();
           setReady(true);
-          if (addr && !savedCamera) { setSearch(addr); doGeocode3d(addr); }
-          else if (!savedCamera) { centerOnUserIfNoTarget(); }
+          if (addr) setSearch(addr);
+          if (!savedCamera) centerOnUserIfNoTarget();
         } else if (elapsed >= 5000) {
           clearInterval(check);
           console.warn('[gmaps] 3D map failed to initialize, falling back to 2D');
@@ -185,8 +185,8 @@ export default function QuoteMeasure() {
           mapRef.current = map;
           gcRef.current = new google.maps.Geocoder();
           setReady(true);
-          if (addr && !savedCamera) { setSearch(addr); doGeocode(addr, map); }
-          else if (!savedCamera) { centerOnUserIfNoTarget(); }
+          if (addr) setSearch(addr);
+          if (!savedCamera) centerOnUserIfNoTarget();
         }
       }, 200);
       return () => clearInterval(check);
@@ -203,8 +203,8 @@ export default function QuoteMeasure() {
       mapRef.current = map;
       gcRef.current = new google.maps.Geocoder();
       setReady(true);
-      if (addr && !savedCamera) { setSearch(addr); doGeocode(addr, map); }
-      else if (!savedCamera) { centerOnUserIfNoTarget(); }
+      if (addr) setSearch(addr);
+      if (!savedCamera) centerOnUserIfNoTarget();
     }
   }, [mapsOk]);
 
@@ -252,9 +252,10 @@ export default function QuoteMeasure() {
 
   useEffect(() => {
     if (!addr || !ready || search || savedCamera) return;
+    // Fill the search field with the client address for a quick manual lookup,
+    // but do NOT recenter the map — the rep is on site, so it stays on their
+    // live GPS position. They can hit search if they want to jump to the address.
     setSearch(addr);
-    if (is3dMode) doGeocode3d(addr);
-    else if (mapRef.current) doGeocode(addr, mapRef.current);
   }, [addr, ready]);
 
   function flyTo3d(lat: number, lng: number) {
@@ -306,7 +307,9 @@ export default function QuoteMeasure() {
   }
 
   function centerOnUserIfNoTarget() {
-    if (addr || savedCamera) return;
+    // Always center on the rep's live position when opening — they're on site
+    // measuring the property. A previously saved camera for this quote still wins.
+    if (savedCamera) return;
     // Instant: last-known position shared with the D2D map (key 'd2d-last-gps').
     try {
       const raw = localStorage.getItem('d2d-last-gps');
@@ -320,7 +323,7 @@ export default function QuoteMeasure() {
       (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
         try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng, lat })); } catch {}
-        if (addr || savedCamera) return; // a real target appeared meanwhile
+        if (savedCamera) return; // a saved camera appeared meanwhile
         applyUserCenter(lat, lng);
       },
       () => {},
