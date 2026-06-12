@@ -195,7 +195,31 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
 
     const body = req.body;
     const orgId = form.org_id;
-    const createdBy = form.created_by;
+
+    // ── Resolve a VALID actor (auth.users id) for created_by ──
+    // clients/leads/pipeline_deals.created_by is NOT NULL with an FK to
+    // auth.users(id). A public form submission has no authenticated user,
+    // so the work must be attributed to a real member of the org — NOT the
+    // org id. Passing org_id here triggered a 23503 FK violation → 500.
+    // Prefer the form's creator if they are still a member, else the org owner.
+    const { data: members } = await admin
+      .from('memberships')
+      .select('user_id, role')
+      .eq('org_id', orgId);
+    const memberIds = new Set((members || []).map((m: any) => String(m.user_id)));
+    let actorId: string | null = null;
+    if (form.created_by && memberIds.has(String(form.created_by))) {
+      actorId = String(form.created_by);
+    } else {
+      const owner = (members || []).find((m: any) => m.role === 'owner');
+      actorId = owner?.user_id
+        ? String(owner.user_id)
+        : (members?.[0]?.user_id ? String(members[0].user_id) : null);
+    }
+    if (!actorId) {
+      console.error('[public/form] no valid org member to attribute submission', { orgId, formId: form.id });
+      return res.status(500).json({ error: 'Form is misconfigured (no org owner).' });
+    }
 
     // ── Build address string for lead ──
     const addressParts = [body.street_address, body.unit, body.city, body.region, body.postal_code, body.country].filter(Boolean);
@@ -226,7 +250,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     // 1. Ensure linked client
     const clientId = await ensureClientForLead(admin, {
       orgId,
-      createdBy: createdBy || orgId,
+      createdBy: actorId,
       firstName: body.first_name,
       lastName: body.last_name,
       email: body.email || null,
@@ -238,7 +262,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     // 2. Create lead via RPC
     const { data: leadId, error: leadErr } = await admin.rpc('create_lead_with_client', {
       p_org_id: orgId,
-      p_created_by: createdBy || orgId,
+      p_created_by: actorId,
       p_client_id: clientId,
       p_first_name: body.first_name,
       p_last_name: body.last_name,
@@ -271,7 +295,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
         .from('pipeline_deals')
         .insert({
           org_id: orgId,
-          created_by: createdBy || orgId,
+          created_by: actorId,
           lead_id: leadIdStr,
           stage: 'new',
           title: body.company || fullName,
@@ -340,7 +364,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
       orgId,
       entityType: 'lead',
       entityId: leadIdStr,
-      actorId: createdBy || 'form_submission',
+      actorId: actorId,
       metadata: { name: fullName, email: body.email, phone: body.phone, source: 'request_form' },
     });
 
@@ -349,7 +373,8 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     return res.json({ ok: true, submission_id: submission?.id || null });
   } catch (err: any) {
     console.error('[public/form] submit failed:', err.message);
-    return res.status(500).json({ error: 'Unable to process submission.' });
+    // TEMP DIAGNOSTIC — remove after confirming the fix.
+    return res.status(500).json({ error: 'Unable to process submission.', _debug: { message: err?.message, code: err?.code, details: err?.details } });
   }
 });
 
