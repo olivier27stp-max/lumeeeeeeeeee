@@ -166,6 +166,7 @@ export default function QuoteMeasure() {
           gcRef.current = new google.maps.Geocoder();
           setReady(true);
           if (addr && !savedCamera) { setSearch(addr); doGeocode3d(addr); }
+          else if (!savedCamera) { centerOnUserIfNoTarget(); }
         } else if (elapsed >= 5000) {
           clearInterval(check);
           console.warn('[gmaps] 3D map failed to initialize, falling back to 2D');
@@ -185,6 +186,7 @@ export default function QuoteMeasure() {
           gcRef.current = new google.maps.Geocoder();
           setReady(true);
           if (addr && !savedCamera) { setSearch(addr); doGeocode(addr, map); }
+          else if (!savedCamera) { centerOnUserIfNoTarget(); }
         }
       }, 200);
       return () => clearInterval(check);
@@ -202,6 +204,7 @@ export default function QuoteMeasure() {
       gcRef.current = new google.maps.Geocoder();
       setReady(true);
       if (addr && !savedCamera) { setSearch(addr); doGeocode(addr, map); }
+      else if (!savedCamera) { centerOnUserIfNoTarget(); }
     }
   }, [mapsOk]);
 
@@ -292,6 +295,37 @@ export default function QuoteMeasure() {
         else if (mapRef.current) { mapRef.current.setCenter(loc); mapRef.current.setZoom(20); }
       } else { toast.error(fr ? 'Adresse introuvable' : 'Address not found'); }
     });
+  }
+
+  // Center on the user's current location when there's no address / saved camera
+  // to target — same principle as the D2D sales map. Opens near the rep instantly
+  // via the shared last-known-position cache, then refines with a live GPS fix.
+  function applyUserCenter(lat: number, lng: number) {
+    if (map3dRef.current) flyTo3d(lat, lng);
+    else if (mapRef.current) { mapRef.current.setCenter({ lat, lng }); mapRef.current.setZoom(20); }
+  }
+
+  function centerOnUserIfNoTarget() {
+    if (addr || savedCamera) return;
+    // Instant: last-known position shared with the D2D map (key 'd2d-last-gps').
+    try {
+      const raw = localStorage.getItem('d2d-last-gps');
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (typeof p?.lat === 'number' && typeof p?.lng === 'number') applyUserCenter(p.lat, p.lng);
+      }
+    } catch {}
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng, lat })); } catch {}
+        if (addr || savedCamera) return; // a real target appeared meanwhile
+        applyUserCenter(lat, lng);
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
+    );
   }
 
   // ════════════════════════════════════════════
