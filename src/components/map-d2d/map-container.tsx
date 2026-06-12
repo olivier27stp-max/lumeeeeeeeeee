@@ -120,6 +120,8 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
   // Single GPS marker — useRef so cleanup always finds it
   const gpsMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const gpsWatchRef = useRef<number | null>(null);
+  // Re-center on the live position + (re)start tracking — used by the "Enable" banner.
+  const gpsRecenterRef = useRef<((lng: number, lat: number) => void) | null>(null);
 
   // Markers stored in a plain Map — never in React state
   const markersRef = useRef(new Map<string, {
@@ -133,6 +135,9 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
   const [selectedPinIds, setSelectedPinIds] = useState<Set<string>>(new Set());
   const [selectedStatus, setSelectedStatus] = useState<PinStatus>('closed_won');
   const [showTokenMsg, setShowTokenMsg] = useState(false);
+  // GPS permission refused/unavailable → discreet, dismissible banner.
+  const [gpsDenied, setGpsDenied] = useState(false);
+  const [gpsBannerDismissed, setGpsBannerDismissed] = useState(false);
   const [, forceUpdate] = useState(0);
 
   // --- Filters ---
@@ -697,24 +702,41 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
       try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng, lat })); } catch {}
     }
 
+    // Live GPS updates — moves the single dot, never creates a second.
+    function startWatch() {
+      if (gpsWatchRef.current != null) return;
+      gpsWatchRef.current = navigator.geolocation.watchPosition(
+        (p) => { if (mapRef.current) { setGpsDenied(false); placeGpsDot(map, p.coords.longitude, p.coords.latitude); try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng: p.coords.longitude, lat: p.coords.latitude })); } catch {} } },
+        (err) => { if (err.code === err.PERMISSION_DENIED) setGpsDenied(true); },
+        { enableHighAccuracy: true }
+      );
+    }
+
+    // Exposed to the "Enable" banner: re-center + (re)start tracking after the
+    // user turns their location back on.
+    gpsRecenterRef.current = (lng, lat) => { setGpsDenied(false); centerOnUser(lng, lat, true); startWatch(); };
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
+          setGpsDenied(false);
           const { longitude: lng, latitude: lat } = pos.coords;
           // Smooth fly-in if we already opened near the user (cache); otherwise
           // jump straight to them so we don't animate across the whole region.
           const apply = () => centerOnUser(lng, lat, !!cached);
           if (map.loaded()) apply(); else map.on('load', apply);
-          // Live GPS updates — moves the single dot, never creates a second.
-          gpsWatchRef.current = navigator.geolocation.watchPosition(
-            (p) => { if (mapRef.current) { placeGpsDot(map, p.coords.longitude, p.coords.latitude); try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng: p.coords.longitude, lat: p.coords.latitude })); } catch {} } },
-            () => {},
-            { enableHighAccuracy: true }
-          );
+          startWatch();
         },
-        () => {},
+        (err) => {
+          // Permission denied, position unavailable or timed out — surface the
+          // non-intrusive banner so the user knows their pin isn't live.
+          if (err.code === err.PERMISSION_DENIED || err.code === err.POSITION_UNAVAILABLE) setGpsDenied(true);
+        },
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
       );
+    } else {
+      // Browser has no geolocation API at all.
+      setGpsDenied(true);
     }
 
     return () => {
@@ -1191,6 +1213,42 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
             <circle cx="12" cy="12" r="3" /><path d="M12 2v4m0 12v4m-10-10h4m12 0h4" />
           </svg>
         </button>
+      )}
+
+      {/* Discreet banner when the user's location is off / refused */}
+      {!showTokenMsg && gpsDenied && !gpsBannerDismissed && (
+        <div className="pointer-events-auto absolute bottom-5 left-1/2 z-30 w-[min(360px,calc(100vw-2rem))] -translate-x-1/2">
+          <div className="flex items-center gap-2.5 rounded-xl border border-amber-400/20 bg-black/80 px-3 py-2.5 shadow-xl backdrop-blur-xl">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-amber-400">
+              <path d="M12 2v4m0 12v4m-10-10h4m12 0h4" /><circle cx="12" cy="12" r="3" />
+            </svg>
+            <p className="flex-1 text-[12px] leading-snug text-white/80">
+              {fr
+                ? 'Votre localisation est désactivée — votre position n’apparaît pas sur la carte.'
+                : 'Your location is off — your position isn’t showing on the map.'}
+            </p>
+            <button
+              onClick={() => {
+                if (!navigator.geolocation) return;
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => gpsRecenterRef.current?.(pos.coords.longitude, pos.coords.latitude),
+                  () => {},
+                  { enableHighAccuracy: true, timeout: 8000 },
+                );
+              }}
+              className="shrink-0 rounded-lg bg-amber-400/15 px-2.5 py-1 text-[11px] font-medium text-amber-300 transition-colors hover:bg-amber-400/25"
+            >
+              {fr ? 'Activer' : 'Enable'}
+            </button>
+            <button
+              onClick={() => setGpsBannerDismissed(true)}
+              className="shrink-0 rounded-md p-1 text-white/40 transition-colors hover:bg-white/10 hover:text-white"
+              aria-label={fr ? 'Fermer' : 'Dismiss'}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
       )}
 
       {/* No token */}
