@@ -145,6 +145,7 @@ import SetupChecklist from './components/SetupChecklist';
 import CommandPalette from './components/CommandPalette';
 import DevRoleSwitcher from './components/DevRoleSwitcher';
 import { CompanyProvider, useCompany } from './contexts/CompanyContext';
+import { useLiveLocationTracking, endTrackingAndSignOut } from './hooks/useLiveLocationTracking';
 import { CompanySelectorPage, CompanySwitcher, NoCompanyState } from './components/CompanySelector';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import { usePlatformOwner } from './hooks/usePlatformOwner';
@@ -658,6 +659,10 @@ function AuthenticatedApp({
   const isPlatformOwner = usePlatformOwner();
   const venteModule = useModuleAccess('module_vente');
 
+  // Auto-locate every signed-in user (desktop + mobile web) for the whole
+  // session, so they appear as a live blue pin on the dispatch / sales maps.
+  useLiveLocationTracking(user?.id ?? null, currentOrgId);
+
   // Still loading company memberships
   if (companyLoading) {
     return (
@@ -1052,7 +1057,7 @@ function AuthenticatedApp({
               {sidebarExpanded && <span>{t.nav.settings}</span>}
             </button>
             <button
-              onClick={() => supabase.auth.signOut()}
+              onClick={() => endTrackingAndSignOut()}
               title={!sidebarExpanded ? t.nav.signOut : undefined}
               className={cn(
                 "w-full flex items-center gap-2.5 px-2.5 py-[8px] rounded-lg text-[14px] font-medium text-sidebar-text hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-400 transition-colors",
