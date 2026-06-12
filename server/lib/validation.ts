@@ -111,6 +111,21 @@ export const messageSendSchema = z.object({
   client_name: optionalString,
 });
 
+// ─── Lume Agent ───────────────────────────────────────────────────────────────
+
+export const agentChatSchema = z.object({
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string().max(8000, 'Message too long.'),
+      }),
+    )
+    .min(1, 'At least one message is required.')
+    .max(40, 'Conversation too long.'),
+  language: z.enum(['fr', 'en']).optional(),
+});
+
 // ─── Payments: keys ───────────────────────────────────────────────────────────
 
 export const paymentKeysSchema = z.object({

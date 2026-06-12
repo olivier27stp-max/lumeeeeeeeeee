@@ -24,6 +24,12 @@ export const twilioClient = twilioAccountSid && twilioAuthToken && twilioAccount
 
 export const stripeWebhookClient = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
+// ── Lume Agent (Google Gemini) ──
+// Free API key from Google AI Studio (https://aistudio.google.com/apikey).
+// Model is configurable; gemini-2.5-flash supports function calling on the free tier.
+export const geminiApiKey = process.env.GEMINI_API_KEY || '';
+export const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY for API server.');
 }

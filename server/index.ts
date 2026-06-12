@@ -54,6 +54,7 @@ import goalsRouter from './routes/goals';
 import auditLogRouter from './routes/audit-log';
 import orgKnowledgeRouter from './routes/org-knowledge';
 import agentAuthRouter from './routes/agent-auth';
+import agentRouter from './routes/agent';
 import invitationsRouter from './routes/invitations';
 import orgsRouter from './routes/orgs';
 import rolePresetsRouter from './routes/role-presets';
@@ -334,6 +335,8 @@ app.use('/api', auditLogRouter);
 app.use('/api', orgKnowledgeRouter);
 // External agent auth (API-key → short-lived JWT) + webhook — owns its auth
 app.use('/api', agentAuthRouter);
+// Lume Agent — in-app AI chat (Gemini). Auth per-request via requireAuthedClient.
+app.use('/api', agentRouter);
 
 // Quote redirect at root level (/q/:token), API routes under /api — rate limited.
 // Per-token limiter on top of IP limiter to block token brute-force via IP rotation.
