@@ -9,6 +9,7 @@ const PLANS = [
     slug: 'starter',
     users: 'Includes 3 users',
     extraUserPrice: '+$35/extra user/mo',
+    offices: '1 office',
     originalPrice: 150,
     price: 105,
     desc: 'Perfect for small teams getting started and staying organized.',
@@ -32,6 +33,8 @@ const PLANS = [
     slug: 'pro',
     users: 'Includes 10 users',
     extraUserPrice: '+$30/extra user/mo',
+    offices: '2 offices',
+    extraOfficePrice: '+$100/extra office',
     originalPrice: 340,
     price: 240,
     badge: 'Most Popular',
@@ -39,7 +42,11 @@ const PLANS = [
     promoNote: 'For 3 months, then $340/mo',
     features: [
       'Everything in Minimum',
+      'Lume AI Agent (voice + unlimited)',
       'Two-way SMS texting with customers (dedicated number)',
+      'Door-to-door sales suite (map, pipeline, leaderboard, commissions)',
+      'Courses / LMS for team training',
+      'Full API access',
       'Automated quote & invoice follow-ups',
       'Quote templates, presets & satellite measure tool',
       'Employee timesheets',
@@ -60,18 +67,16 @@ const PLANS = [
     slug: 'autopilot',
     users: 'Includes 20 users',
     extraUserPrice: '+$25/extra user/mo',
+    offices: '5 offices',
+    extraOfficePrice: '+$100/extra office',
     originalPrice: 495,
     price: 360,
     desc: 'For high-performance teams that want full automation and control.',
     promoNote: 'For 3 months, then $495/mo',
     features: [
       'Everything in Scale',
-      'Lume AI Agent (voice + unlimited)',
-      'Door-to-door sales suite (map, pipeline, leaderboard, commissions)',
-      'Courses / LMS for team training',
       'Multi-team management',
       'Advanced roles & permissions',
-      'Full API access',
       'Team availability management',
       'Automated satisfaction surveys',
       'Premium support',
@@ -181,6 +186,14 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
                     {plan.users}
                     {plan.extraUserPrice && (
                       <span className="ml-1 font-medium normal-case tracking-normal text-text-secondary">· {plan.extraUserPrice}</span>
+                    )}
+                  </p>
+                )}
+                {plan.offices && (
+                  <p className="text-[11px] uppercase tracking-[0.15em] font-bold text-[#111] mb-1">
+                    {plan.offices}
+                    {plan.extraOfficePrice && (
+                      <span className="ml-1 font-medium normal-case tracking-normal text-text-secondary">· {plan.extraOfficePrice}</span>
                     )}
                   </p>
                 )}

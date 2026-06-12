@@ -378,6 +378,185 @@ const getCompanyInfo: AgentTool = {
   },
 };
 
+const getOverduePayments: AgentTool = {
+  kind: 'read',
+  declaration: {
+    name: 'get_overdue_payments',
+    description:
+      'List overdue (past due) invoices with the client name, phone number, balance owing and days overdue. Use this to prepare payment reminders — then propose send_sms for the chosen clients.',
+    parameters: {
+      type: 'object',
+      properties: { limit: { type: 'integer', description: 'Max results (default 50, max 100).' } },
+    },
+  },
+  handler: async (args, ctx) => {
+    const limit = clamp(args.limit, 50, 100);
+    const { data, error } = await ctx.client.rpc('rpc_list_invoices', {
+      p_status: 'past_due',
+      p_range: 'all',
+      p_q: null,
+      p_sort: 'due_date_desc',
+      p_limit: limit,
+      p_offset: 0,
+      p_from: null,
+      p_to: null,
+      p_org: null,
+    });
+    if (error) return { error: error.message };
+    const rows = (Array.isArray(data) ? data : (data as any)?.items || []) as any[];
+
+    const clientIds = Array.from(new Set(rows.map((r) => r.client_id).filter(Boolean)));
+    const phoneMap = new Map<string, string | null>();
+    if (clientIds.length > 0) {
+      const { data: clients } = await ctx.client
+        .from('clients')
+        .select('id, phone')
+        .eq('org_id', ctx.orgId)
+        .in('id', clientIds);
+      for (const c of clients || []) phoneMap.set(c.id, c.phone);
+    }
+
+    const today = Date.now();
+    return {
+      count: rows.length,
+      overdue: rows.map((r) => ({
+        invoice_number: r.invoice_number,
+        client_id: r.client_id,
+        client_name: r.client_name,
+        phone: r.client_id ? phoneMap.get(r.client_id) || null : null,
+        balance_cents: r.balance_cents,
+        due_date: r.due_date,
+        days_overdue: r.due_date ? Math.max(0, Math.floor((today - new Date(r.due_date).getTime()) / 86400000)) : null,
+      })),
+    };
+  },
+};
+
+const getRevenueSummary: AgentTool = {
+  kind: 'read',
+  declaration: {
+    name: 'get_revenue_summary',
+    description:
+      "Get collected revenue for a period versus the company's revenue goal. Use for questions about CA / revenue / objectives / how we're tracking.",
+    parameters: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', description: "One of: this_month, this_year, last_30_days. Default this_month." },
+      },
+    },
+  },
+  handler: async (args, ctx) => {
+    const now = new Date();
+    let from: Date;
+    let to: Date;
+    const period = String(args.period || 'this_month');
+    if (period === 'this_year') {
+      from = new Date(now.getFullYear(), 0, 1);
+      to = new Date(now.getFullYear(), 11, 31);
+    } else if (period === 'last_30_days') {
+      to = now;
+      from = new Date(now.getTime() - 30 * 86400000);
+    } else {
+      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    }
+    const fromStr = from.toISOString().slice(0, 10);
+    const toStr = to.toISOString().slice(0, 10);
+
+    const { data: series, error } = await ctx.client.rpc('rpc_insights_revenue_series', {
+      p_org: null,
+      p_from: fromStr,
+      p_to: toStr,
+      p_granularity: 'month',
+    });
+    if (error) return { error: error.message };
+    const rows = (Array.isArray(series) ? series : []) as any[];
+    const revenueCents = rows.reduce((s, r) => s + (Number(r.revenue_cents) || 0), 0);
+    const invoicedCents = rows.reduce((s, r) => s + (Number(r.invoiced_cents) || 0), 0);
+
+    const { data: settings } = await ctx.client
+      .from('company_settings')
+      .select('revenue_goal_cents')
+      .eq('org_id', ctx.orgId)
+      .maybeSingle();
+    const goalCents = Number(settings?.revenue_goal_cents) || 0;
+
+    return {
+      period,
+      from: fromStr,
+      to: toStr,
+      revenue_cents: revenueCents,
+      invoiced_cents: invoicedCents,
+      goal_cents: goalCents,
+      goal_progress_pct: goalCents > 0 ? Math.round((revenueCents / goalCents) * 1000) / 10 : null,
+    };
+  },
+};
+
+const getDayRoute: AgentTool = {
+  kind: 'read',
+  declaration: {
+    name: 'get_day_route',
+    description:
+      "Get the planned route for a given day: the scheduled jobs in time order with their addresses, clients and times. Optionally filtered to a city. Use for 'what's my route today?' or 'my stops in Bromont tomorrow'.",
+    parameters: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'ISO date for the day (YYYY-MM-DD). Default: today.' },
+        location: { type: 'string', description: 'Optional city/location filter (matches the job address).' },
+      },
+    },
+  },
+  handler: async (args, ctx) => {
+    const base = args.date ? new Date(String(args.date)) : new Date();
+    if (isNaN(base.getTime())) return { error: 'Invalid date.' };
+    const dayStart = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 0, 0, 0);
+    const dayEnd = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59);
+
+    const { data: events, error } = await ctx.client
+      .from('schedule_events')
+      .select('id, job_id, start_at, end_at, status')
+      .eq('org_id', ctx.orgId)
+      .is('deleted_at', null)
+      .gte('start_at', dayStart.toISOString())
+      .lte('start_at', dayEnd.toISOString())
+      .order('start_at', { ascending: true })
+      .limit(50);
+    if (error) return { error: error.message };
+
+    const jobIds = Array.from(new Set((events || []).map((e) => e.job_id).filter(Boolean)));
+    if (jobIds.length === 0) return { date: dayStart.toISOString().slice(0, 10), count: 0, stops: [] };
+
+    let jobsQ = ctx.client
+      .from('jobs')
+      .select('id, title, client_name, property_address, latitude, longitude, status, total_cents')
+      .eq('org_id', ctx.orgId)
+      .is('deleted_at', null)
+      .in('id', jobIds);
+    const loc = String(args.location || '').trim();
+    if (loc) jobsQ = jobsQ.ilike('property_address', `%${loc.replace(/[%,()]/g, ' ')}%`);
+    const { data: jobs, error: jobErr } = await jobsQ;
+    if (jobErr) return { error: jobErr.message };
+
+    const jobMap = new Map((jobs || []).map((j) => [j.id, j]));
+    const stops = (events || [])
+      .filter((e) => jobMap.has(e.job_id))
+      .map((e, i) => {
+        const j = jobMap.get(e.job_id)!;
+        return {
+          order: i + 1,
+          start_at: e.start_at,
+          end_at: e.end_at,
+          job_title: j.title,
+          client_name: j.client_name,
+          address: j.property_address,
+          status: e.status || j.status,
+        };
+      });
+    return { date: dayStart.toISOString().slice(0, 10), count: stops.length, stops };
+  },
+};
+
 // ─────────────────────────────────────────────────────────────────
 // WRITE TOOLS (proposal-only — never executed server-side)
 // ─────────────────────────────────────────────────────────────────
@@ -513,6 +692,9 @@ export const AGENT_TOOLS: AgentTool[] = [
   listQuotes,
   listInvoices,
   getCompanyInfo,
+  getOverduePayments,
+  getRevenueSummary,
+  getDayRoute,
   createQuote,
   createInvoice,
   createJob,
