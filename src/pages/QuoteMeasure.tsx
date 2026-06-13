@@ -50,7 +50,7 @@ function useGMaps3D() {
     const s = document.createElement('script');
     s.id = id; s.async = true; s.defer = true;
     // Load beta channel for 3D tiles support (alpha is restricted to dev environments)
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places,geometry,elevation,maps3d&v=beta`;
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places,geometry,maps3d&v=beta`;
     s.onload = async () => {
       try {
         const g = (window as any).google;
@@ -59,7 +59,9 @@ function useGMaps3D() {
             g.maps.importLibrary('maps'),
             g.maps.importLibrary('places'),
             g.maps.importLibrary('geometry'),
-            g.maps.importLibrary('elevation'),
+            // Elevation + maps3d are optional enrichments — never let their absence
+            // block the core map init, or the whole workspace fails to load.
+            g.maps.importLibrary('elevation').catch((e: any) => console.warn('[gmaps] elevation unavailable:', e)),
             g.maps.importLibrary('maps3d').catch((e: any) => console.warn('[gmaps] maps3d unavailable:', e)),
           ]);
         }
