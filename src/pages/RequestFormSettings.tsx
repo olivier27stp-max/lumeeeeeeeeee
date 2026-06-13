@@ -120,19 +120,52 @@ function FieldEditor({
       </div>
 
       {(needsOptions || isCheckbox) && (
-        <div className="ml-7">
+        <div className="ml-7 space-y-2">
           <label className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
             {isCheckbox ? t.requestForm.checkboxOptions : t.requestForm.optionsOnePerLine}
           </label>
-          <textarea
-            value={(field.options || []).join('\n')}
-            onChange={(e) => onUpdate({ ...field, options: e.target.value.split('\n').filter(Boolean) })}
-            className="glass-input w-full mt-1 min-h-[72px]"
-            placeholder={t.requestForm.housenchaletnmultiunit}
-          />
           {isCheckbox && (
-            <p className="mt-1 text-[11px] text-text-tertiary">{t.requestForm.checkboxOptionsHint}</p>
+            <p className="text-[11px] text-text-tertiary">{t.requestForm.checkboxOptionsHint}</p>
           )}
+          {(field.options || []).length > 0 && (
+            <div className="space-y-1.5">
+              {(field.options || []).map((opt, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  {isCheckbox && <input type="checkbox" disabled className="accent-primary shrink-0" />}
+                  <input
+                    type="text"
+                    value={opt}
+                    onChange={(e) =>
+                      onUpdate({
+                        ...field,
+                        options: (field.options || []).map((o, idx) => (idx === i ? e.target.value : o)),
+                      })
+                    }
+                    className="glass-input flex-1"
+                    placeholder={`${t.requestForm.option} ${i + 1}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdate({ ...field, options: (field.options || []).filter((_, idx) => idx !== i) })
+                    }
+                    className="p-1.5 rounded-lg text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
+                    title={t.companySettings.remove}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => onUpdate({ ...field, options: [...(field.options || []), ''] })}
+            className="glass-button text-[11px] inline-flex items-center gap-1"
+          >
+            <Plus size={12} />
+            {isCheckbox ? t.requestForm.addCheckbox : t.requestForm.addOption}
+          </button>
         </div>
       )}
     </div>
@@ -207,9 +240,9 @@ function FormPreview({
               {f.type === 'paragraph' ? (
                 <textarea className="glass-input w-full mt-1 min-h-[60px]" disabled />
               ) : f.type === 'checkbox' ? (
-                (f.options && f.options.length > 0) ? (
+                (f.options || []).filter(Boolean).length > 0 ? (
                   <div className="mt-1 space-y-1.5">
-                    {f.options.map((o) => (
+                    {(f.options || []).filter(Boolean).map((o) => (
                       <div key={o} className="flex items-center gap-2">
                         <input type="checkbox" disabled className="accent-primary" />
                         <span className="text-[12px] text-text-tertiary">{o}</span>
@@ -336,7 +369,11 @@ export default function RequestFormSettings() {
         description: description || null,
         success_message: successMessage,
         enabled,
-        custom_fields: customFields,
+        // Drop blank option rows left behind in the editor before saving.
+        custom_fields: customFields.map((f) => ({
+          ...f,
+          options: (f.options || []).map((o) => o.trim()).filter(Boolean),
+        })),
         notify_email: notifyEmail,
         notify_in_app: notifyInApp,
       });
