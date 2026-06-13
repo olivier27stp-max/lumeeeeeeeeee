@@ -1,43 +1,39 @@
 /**
- * HeightTool3D — full-screen photorealistic 3D modal to measure a REAL building
- * height. The user clicks the BASE of a building, then its TOP; we read the
- * clicked surface altitude from the 3D mesh (DSM, includes buildings) via the
- * gmp-click `position.altitude` (meters above sea level). Height = |topAlt − baseAlt|.
+ * HeightTool3D — measure a building's REAL height in a full-screen 3D view.
  *
- * This is fully isolated from the 2D drawing workspace: it mounts its OWN
- * <gmp-map-3d>, shares no refs/state with the main map, and only hands a finished
- * Shape back via onComplete. The height is stored as an ordinary 2-point 'line'
- * with metadata.kind === 'height', so no DB schema change is required.
+ * The user clicks once on a building. We read its true height from Google's DSM
+ * data via the Solar API (highest roof plane − ground elevation) — the Elevation
+ * API and the 3D click only return bare-earth terrain and can't see buildings.
+ * If Google has no Solar coverage for that building, we fall back to manual entry
+ * (number of floors × ~3 m, or an exact height).
  *
- * NOTE: the Maps 3D API (beta) is the only source of building-inclusive altitude —
- * the Elevation API returns bare-earth terrain and cannot measure building height.
+ * Fully isolated from the 2D drawing workspace: own <gmp-map-3d>, hands a finished
+ * Shape back via onComplete. Stored as an ordinary 2-point 'line' with
+ * metadata.kind === 'height' (no DB schema change).
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Search, Loader2, RotateCcw, Check, MoveVertical } from 'lucide-react';
+import { ArrowLeft, Search, Loader2, RotateCcw, Check, MoveVertical, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { LatLng, UnitSystem, Shape } from '../../lib/measurementTypes';
 import { nextColor, elevationStats, formatElevation } from '../../lib/measurementEngine';
+import { fetchBuildingHeight, type BuildingHeightResult } from '../../lib/buildingHeightApi';
 import { useGMaps3D } from './useGMaps3D';
 
-const M_TO_FT = 1 / 0.3048;
-// Reject implausible reads (sky / adjacent-tile mis-picks): a height below this is
-// likely two ground clicks or a failed altitude read; above this is almost
-// certainly a bad pick. Tallest buildings on earth are < 830 m.
-const MIN_HEIGHT_M = 1;
-const MAX_HEIGHT_M = 830;
-
-type Pt3D = { lat: number; lng: number; alt: number };
+const FT_TO_M = 0.3048;
+const M_TO_FT = 1 / FT_TO_M;
+const M_PER_FLOOR = 3; // typical storey height for the floor-count estimate
 
 interface Props {
   quoteAddress: string;
   fr: boolean;
   unitSystem: UnitSystem;
-  /** Running shape counter from the parent, for a unique id + colour. */
   index: number;
   onComplete: (shape: Shape) => void;
   onClose: () => void;
 }
+
+type Picked = { lat: number; lng: number };
 
 export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onComplete, onClose }: Props) {
   const { ok: mapsOk, key } = useGMaps3D();
@@ -47,23 +43,23 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   const gcRef = useRef<any>(null);
   const overlays = useRef<HTMLElement[]>([]);
   const lastClick = useRef<{ t: number; lat: number; lng: number } | null>(null);
-  const baseRef = useRef<Pt3D | null>(null);
-  const topRef = useRef<Pt3D | null>(null);
+  const reqId = useRef(0);
 
   const [ready, setReady] = useState(false);
   const [search, setSearch] = useState(quoteAddress || '');
   const [searching, setSearching] = useState(false);
-  const [base, setBase] = useState<Pt3D | null>(null);
-  const [top, setTop] = useState<Pt3D | null>(null);
-
-  const step: 'base' | 'top' = base ? 'top' : 'base';
+  const [picked, setPicked] = useState<Picked | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<BuildingHeightResult | { found: false; reason: string } | null>(null);
+  const [floors, setFloors] = useState('');
+  const [manualH, setManualH] = useState('');
 
   // ── Geocode / fly helpers ──
   function flyTo(lat: number, lng: number) {
     const el = map3dRef.current;
     if (!el) return;
     el.center = { lat, lng, altitude: 120 };
-    el.range = 220;
+    el.range = 230;
     el.tilt = 67;
   }
   function doGeocode(a: string) {
@@ -85,13 +81,13 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     );
   }
 
-  // ── Init the 3D map (own instance) ──
+  // ── Init the 3D map ──
   useEffect(() => {
     if (!mapsOk || !mapDiv.current || map3dRef.current) return;
     const map3d = document.createElement('gmp-map-3d') as any;
     map3d.setAttribute('center', '45.5017,-73.5673,120');
     map3d.setAttribute('tilt', '67');
-    map3d.setAttribute('range', '220');
+    map3d.setAttribute('range', '230');
     map3d.setAttribute('default-labels-disabled', '');
     map3d.style.width = '100%';
     map3d.style.height = '100%';
@@ -109,7 +105,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         if (quoteAddress) doGeocode(quoteAddress); else centerOnUser();
       } else if (elapsed >= 6000) {
         clearInterval(poll);
-        setReady(true); // let the map show even if registration is slow
+        setReady(true);
       }
     }, 200);
     return () => {
@@ -121,35 +117,35 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapsOk]);
 
-  // ── Click capture (base → top) ──
+  // ── Single click → pick a building → query its height ──
   useEffect(() => {
     const el = map3dRef.current;
     if (!el || !ready) return;
-
     const read = (v: any): number => (typeof v === 'function' ? v() : v);
+
     const handler = (e: any) => {
       e.preventDefault?.();
       const src = e?.position ?? e?.detail?.position ?? e?.latLng ?? e?.detail?.latLng;
-      if (!src) return; // clicked sky / no surface
+      if (!src) return;
       const lat = read(src.lat);
       const lng = read(src.lng);
-      const alt = read(src.altitude);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-      if (!Number.isFinite(alt)) {
-        toast.error(fr ? 'Surface non détectée — zoomez et recliquez' : 'No surface detected — zoom in and retry');
-        return;
-      }
-      // De-dupe the beta map's occasional double-fire for one tap.
       const now = Date.now();
       const l = lastClick.current;
       if (l && now - l.t < 350 && Math.hypot(lat - l.lat, lng - l.lng) < 0.00002) return;
       lastClick.current = { t: now, lat, lng };
 
-      const pt: Pt3D = { lat, lng, alt };
-      if (!baseRef.current) { baseRef.current = pt; setBase(pt); }
-      else if (!topRef.current) { topRef.current = pt; setTop(pt); }
+      setPicked({ lat, lng });
+      setResult(null);
+      setLoading(true);
+      const id = ++reqId.current;
+      fetchBuildingHeight(lat, lng, key).then((r) => {
+        if (id !== reqId.current) return; // a newer click superseded this
+        setLoading(false);
+        setResult(r);
+        if (!r.found) toast.message(fr ? 'Pas de données Google pour ce bâtiment — entre la hauteur' : 'No Google data for this building — enter the height');
+      });
     };
-    // Swallow the 3D map's native double-click-to-zoom while measuring.
     const blockDbl = (ev: Event) => { ev.preventDefault(); ev.stopPropagation(); };
 
     el.addEventListener('gmp-click', handler);
@@ -158,42 +154,35 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
       el.removeEventListener('gmp-click', handler);
       el.removeEventListener('dblclick', blockDbl, true);
     };
-  }, [ready, fr]);
+  }, [ready, key, fr]);
 
-  // ── Render base/top dots + vertical connector at ABSOLUTE altitude ──
+  // ── Marker on the picked building ──
   useEffect(() => {
     const el = map3dRef.current;
     if (!el) return;
     overlays.current.forEach(o => { try { o.remove(); } catch {} });
     overlays.current = [];
-    if (base) { const d = makeDot(el, base, '#FF4444'); if (d) overlays.current.push(d); }
-    if (top) { const d = makeDot(el, top, '#44BB44'); if (d) overlays.current.push(d); }
-    if (base && top) {
-      try {
-        const line = document.createElement('gmp-polyline-3d') as any;
-        line.setAttribute('altitude-mode', 'absolute');
-        line.setAttribute('stroke-color', '#FFCC00');
-        line.setAttribute('stroke-width', '8');
-        line.setAttribute('draws-occluded-segments', '');
-        // Draw the vertical: base point, then straight up to the top's altitude.
-        line.coordinates = [
-          { lat: base.lat, lng: base.lng, altitude: base.alt },
-          { lat: top.lat, lng: top.lng, altitude: top.alt },
-        ];
-        el.appendChild(line);
-        overlays.current.push(line);
-      } catch {}
-    }
-  }, [base, top]);
+    if (picked) { const d = makeDot(el, picked.lat, picked.lng, '#FF4444'); if (d) overlays.current.push(d); }
+  }, [picked]);
 
-  // ── Height computation ──
-  const heightMeters = base && top ? Math.abs(top.alt - base.alt) : 0;
-  const heightValid = base && top && heightMeters >= MIN_HEIGHT_M && heightMeters <= MAX_HEIGHT_M;
+  // ── Resolve the height to commit (solar result OR manual entry) ──
+  const manualMeters = (() => {
+    const h = parseFloat(manualH);
+    if (Number.isFinite(h) && h > 0) return unitSystem === 'metric' ? h : h * FT_TO_M;
+    const f = parseFloat(floors);
+    if (Number.isFinite(f) && f > 0) return f * M_PER_FLOOR;
+    return 0;
+  })();
+
+  const solarFound = result?.found === true;
+  const heightMeters = solarFound ? (result as BuildingHeightResult).heightMeters : manualMeters;
+  const canAdd = !!picked && heightMeters > 0;
 
   function reset() {
-    baseRef.current = null; topRef.current = null;
-    setBase(null); setTop(null);
+    setPicked(null); setResult(null); setLoading(false);
+    setFloors(''); setManualH('');
     lastClick.current = null;
+    reqId.current++;
   }
 
   function handleSearch(e: React.FormEvent) {
@@ -208,16 +197,15 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   }
 
   function add() {
-    if (!base || !top || !heightValid) return;
-    // Lower altitude is the base, higher is the top — order-independent.
-    const lower = base.alt <= top.alt ? base : top;
-    const higher = base.alt <= top.alt ? top : base;
-    const points: LatLng[] = [
-      { lat: lower.lat, lng: lower.lng, elevation: lower.alt },
-      { lat: higher.lat, lng: higher.lng, elevation: higher.alt },
-    ];
+    if (!picked || heightMeters <= 0) return;
+    const ground = solarFound ? (result as BuildingHeightResult).groundMeters : undefined;
+    const point: LatLng = typeof ground === 'number'
+      ? { lat: picked.lat, lng: picked.lng, elevation: ground }
+      : { lat: picked.lat, lng: picked.lng };
+    const points: LatLng[] = [point, point]; // 2-point degenerate line keeps GeoJSON valid
     const heightFt = heightMeters * M_TO_FT;
-    const geojson: any = { type: 'LineString', coordinates: points.map(p => [p.lng, p.lat, p.elevation]) };
+    const coord = typeof ground === 'number' ? [picked.lng, picked.lat, ground] : [picked.lng, picked.lat];
+    const geojson: any = { type: 'LineString', coordinates: [coord, coord] };
     const shape: Shape = {
       id: `sh-${index}`,
       label: fr ? `Hauteur ${index + 1}` : `Height ${index + 1}`,
@@ -233,13 +221,22 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
       },
       notes: '',
       visible: true,
-      metadata: { kind: 'height', heightMeters, baseAltitude: lower.alt, topAltitude: higher.alt },
+      metadata: {
+        kind: 'height',
+        heightMeters,
+        source: solarFound ? 'solar' : 'manual',
+        ...(solarFound ? {
+          roofMaxMeters: (result as BuildingHeightResult).roofMaxMeters,
+          groundMeters: (result as BuildingHeightResult).groundMeters,
+        } : {}),
+      },
     };
     onComplete(shape);
     onClose();
   }
 
-  const fmtAlt = (m: number) => formatElevation(m, unitSystem);
+  const fmt = (m: number) => formatElevation(m, unitSystem);
+  const missReason = result && !result.found ? (result as any).reason : null;
 
   return (
     <div className="fixed inset-0 z-[60] bg-background flex flex-col">
@@ -250,7 +247,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         </button>
         <div className="flex items-center gap-2 min-w-0">
           <MoveVertical size={15} className="text-text-primary shrink-0" />
-          <span className="text-[13px] font-bold text-text-primary truncate">{fr ? 'Mesurer la hauteur' : 'Measure height'}</span>
+          <span className="text-[13px] font-bold text-text-primary truncate">{fr ? 'Hauteur du bâtiment' : 'Building height'}</span>
           <span className="text-[9px] font-bold bg-text-primary text-surface px-1.5 py-0.5 rounded">3D</span>
         </div>
         <form onSubmit={handleSearch} className="flex-1 max-w-md mx-4">
@@ -275,46 +272,59 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         )}
 
         {/* Instruction pill */}
-        {!(base && top) && (
+        {!picked && ready && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/80 text-white text-[12px] px-4 py-1.5 rounded-full z-20 pointer-events-none backdrop-blur-sm font-medium">
-            {step === 'base'
-              ? (fr ? '1. Cliquez la BASE du bâtiment (au sol)' : '1. Click the building BASE (ground)')
-              : (fr ? '2. Cliquez le SOMMET du bâtiment (toit)' : '2. Click the building TOP (roof)')}
+            {fr ? 'Cliquez sur le bâtiment à mesurer' : 'Click the building to measure'}
           </div>
         )}
 
-        {/* Live altitude readout (also serves as the empirical sanity check) */}
-        {(base || top) && (
-          <div className="absolute top-3 left-3 bg-surface/90 backdrop-blur-sm border border-outline/30 rounded-lg px-3 py-2 z-20 text-[11px] font-mono space-y-0.5">
-            <div className="flex justify-between gap-4"><span className="text-text-muted">{fr ? 'Base' : 'Base'}</span><span className="text-text-primary">{base ? fmtAlt(base.alt) : '—'}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-text-muted">{fr ? 'Sommet' : 'Top'}</span><span className="text-text-primary">{top ? fmtAlt(top.alt) : '—'}</span></div>
-          </div>
-        )}
-
-        {/* Result / confirm card */}
-        {base && top && (
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-sm border border-outline/30 rounded-2xl px-5 py-4 z-20 shadow-xl text-center min-w-[260px]">
-            {heightValid ? (
+        {/* Result / manual card */}
+        {picked && (
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-sm border border-outline/30 rounded-2xl px-5 py-4 z-20 shadow-xl text-center min-w-[280px]">
+            {loading ? (
+              <div className="flex items-center gap-2 justify-center py-3 text-text-muted text-[12px]">
+                <Loader2 size={16} className="animate-spin" /> {fr ? 'Lecture de la hauteur…' : 'Reading height…'}
+              </div>
+            ) : solarFound ? (
               <>
-                <p className="text-[11px] text-text-muted font-medium uppercase tracking-wide">{fr ? 'Hauteur' : 'Height'}</p>
-                <p className="text-3xl font-bold text-text-primary my-1">{fmtAlt(heightMeters)}</p>
+                <p className="text-[11px] text-text-muted font-medium uppercase tracking-wide flex items-center gap-1 justify-center">
+                  <Building2 size={12} /> {fr ? 'Hauteur (Google)' : 'Height (Google)'}
+                </p>
+                <p className="text-3xl font-bold text-text-primary my-1">{fmt(heightMeters)}</p>
+                <p className="text-[10px] text-text-muted/70">
+                  {fr ? 'Toit' : 'Roof'} {fmt((result as BuildingHeightResult).roofMaxMeters)} − {fr ? 'sol' : 'ground'} {fmt((result as BuildingHeightResult).groundMeters)}
+                </p>
               </>
             ) : (
-              <p className="text-[12px] text-danger font-medium my-2 max-w-[240px]">
-                {fr
-                  ? 'Mesure invalide — assurez-vous de cliquer la base puis le sommet du bâtiment, bien zoomé.'
-                  : 'Invalid reading — click the base then the top of the building, zoomed in.'}
-              </p>
+              <div className="space-y-2">
+                <p className="text-[11px] text-text-secondary font-medium">
+                  {fr ? 'Pas de données Google pour ce bâtiment.' : 'No Google data for this building.'}
+                </p>
+                <div className="flex items-center gap-2 justify-center">
+                  <label className="text-[10px] text-text-muted">{fr ? 'Étages' : 'Floors'}</label>
+                  <input type="number" min="0" value={floors} onChange={e => { setFloors(e.target.value); setManualH(''); }}
+                    className="w-16 text-[12px] rounded-md border border-outline/30 bg-surface-card px-2 py-1 text-center" />
+                  <span className="text-[10px] text-text-muted/60">{fr ? `→ ${fmt(manualMeters || 0)}` : `→ ${fmt(manualMeters || 0)}`}</span>
+                </div>
+                <div className="flex items-center gap-2 justify-center">
+                  <label className="text-[10px] text-text-muted">{fr ? `Ou hauteur exacte (${unitSystem === 'metric' ? 'm' : 'pi'})` : `Or exact height (${unitSystem === 'metric' ? 'm' : 'ft'})`}</label>
+                  <input type="number" min="0" step="0.1" value={manualH} onChange={e => { setManualH(e.target.value); setFloors(''); }}
+                    className="w-20 text-[12px] rounded-md border border-outline/30 bg-surface-card px-2 py-1 text-center" />
+                </div>
+              </div>
             )}
-            <div className="flex items-center gap-2 justify-center mt-2">
-              <button onClick={reset} className="glass-button flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium">
-                <RotateCcw size={13} /> {fr ? 'Refaire' : 'Redo'}
-              </button>
-              <button onClick={add} disabled={!heightValid}
-                className="glass-button-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40">
-                <Check size={13} /> {fr ? 'Ajouter la mesure' : 'Add measurement'}
-              </button>
-            </div>
+
+            {!loading && (
+              <div className="flex items-center gap-2 justify-center mt-3">
+                <button onClick={reset} className="glass-button flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium">
+                  <RotateCcw size={13} /> {fr ? 'Refaire' : 'Redo'}
+                </button>
+                <button onClick={add} disabled={!canAdd}
+                  className="glass-button-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40">
+                  <Check size={13} /> {fr ? 'Ajouter la mesure' : 'Add measurement'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -322,22 +332,22 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   );
 }
 
-/** Small filled circle hugging the clicked surface at its ABSOLUTE altitude. */
-function makeDot(parent: HTMLElement, p: Pt3D, color: string): HTMLElement | null {
+/** Small filled circle clamped to the ground marking the picked building. */
+function makeDot(parent: HTMLElement, lat: number, lng: number, color: string): HTMLElement | null {
   try {
     const dot = document.createElement('gmp-polygon-3d') as any;
-    dot.setAttribute('altitude-mode', 'absolute');
+    dot.setAttribute('altitude-mode', 'clamp-to-ground');
     dot.setAttribute('fill-color', '#FFFFFF');
     dot.setAttribute('stroke-color', color);
     dot.setAttribute('stroke-width', '2');
     dot.setAttribute('draws-occluded-segments', '');
-    const radiusM = 0.8;
+    const radiusM = 1.2;
     const dLat = radiusM / 111_320;
-    const dLng = radiusM / (111_320 * Math.cos((p.lat * Math.PI) / 180));
-    const ring: Array<{ lat: number; lng: number; altitude: number }> = [];
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * 2 * Math.PI;
-      ring.push({ lat: p.lat + dLat * Math.sin(a), lng: p.lng + dLng * Math.cos(a), altitude: p.alt });
+    const dLng = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180));
+    const ring: Array<{ lat: number; lng: number }> = [];
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * 2 * Math.PI;
+      ring.push({ lat: lat + dLat * Math.sin(a), lng: lng + dLng * Math.cos(a) });
     }
     dot.outerCoordinates = ring;
     parent.appendChild(dot);
