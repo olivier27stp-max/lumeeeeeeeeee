@@ -307,6 +307,12 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     const photoUrls: string[] = Array.isArray(body.photos) ? body.photos.filter(Boolean) : [];
     if (photoUrls.length) noteLines.push(`Photos:\n${photoUrls.join('\n')}`);
 
+    // Persist photos on the submission itself (under a reserved key in the
+    // custom_responses jsonb — form_submissions has no dedicated column) so the
+    // Requests detail view can render them as a gallery.
+    const submissionResponses: Record<string, unknown> = { ...(body.custom_responses || {}) };
+    if (photoUrls.length) submissionResponses.__photos = photoUrls;
+
     const fullNotes = noteLines.length > 0 ? noteLines.join('\n') : null;
     const fullName = `${body.first_name} ${body.last_name}`.trim();
 
@@ -407,7 +413,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
         country: body.country || null,
         region: body.region || null,
         postal_code: body.postal_code || null,
-        custom_responses: body.custom_responses || {},
+        custom_responses: submissionResponses,
         notes: body.notes || null,
         lead_id: leadIdStr,
         deal_id: dealId,

@@ -16,11 +16,19 @@ import {
   Calendar,
   Activity,
   Eye,
+  BellRing,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useTranslation } from '../i18n';
+import {
+  desktopNotificationsSupported,
+  desktopNotificationPermission,
+  desktopNotificationsEnabled,
+  setDesktopNotificationsEnabled,
+  requestDesktopNotificationPermission,
+} from '../lib/desktopNotifications';
 
 interface ActivityItem {
   id: string;

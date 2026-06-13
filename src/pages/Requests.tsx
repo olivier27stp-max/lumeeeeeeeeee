@@ -1,9 +1,26 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, Inbox, Mail, Phone, MapPin, Building2, ExternalLink, RefreshCw, Clock, Copy, Check } from 'lucide-react';
+import { Loader2, Inbox, Mail, Phone, MapPin, Building2, ExternalLink, RefreshCw, Clock, Copy, Check, ImageIcon, X, ChevronRight } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { fetchFormSubmissions, fetchRequestForm } from '../lib/requestFormsApi';
 import type { FormSubmission, RequestForm } from '../types';
+
+/** Reserved custom_responses key where the public form stores uploaded photo URLs. */
+const PHOTOS_KEY = '__photos';
+
+const photosOf = (s: FormSubmission): string[] => {
+  const v = s.custom_responses?.[PHOTOS_KEY];
+  return Array.isArray(v) ? v.filter((u) => typeof u === 'string') : [];
+};
+
+/** Visible custom answers, excluding reserved (`__`) keys and empties. */
+const customEntriesOf = (s: FormSubmission): Array<[string, unknown]> =>
+  Object.entries(s.custom_responses || {}).filter(
+    ([k, v]) => !k.startsWith('__') && v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0),
+  );
+
+const fullAddress = (s: FormSubmission) =>
+  [s.street_address, s.unit, s.city, s.region, s.postal_code, s.country].filter(Boolean).join(', ');
 
 export default function Requests() {
   const { language } = useTranslation();
@@ -14,6 +31,7 @@ export default function Requests() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [selected, setSelected] = useState<FormSubmission | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,8 +66,8 @@ export default function Requests() {
       year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
     });
 
-  const fullAddress = (s: FormSubmission) =>
-    [s.street_address, s.unit, s.city, s.region, s.postal_code, s.country].filter(Boolean).join(', ');
+  /** Map a custom_responses key to its human label using the form config. */
+  const labelFor = (key: string) => form?.custom_fields.find((f) => f.id === key)?.label || key;
 
   return (
     <div className="space-y-6">
@@ -137,11 +155,14 @@ export default function Requests() {
         <div className="space-y-3">
           {submissions.map((s) => {
             const addr = fullAddress(s);
-            const customEntries = Object.entries(s.custom_responses || {}).filter(
-              ([, v]) => v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0),
-            );
+            const customEntries = customEntriesOf(s);
+            const photos = photosOf(s);
             return (
-              <div key={s.id} className="rounded-xl border border-border-subtle bg-surface p-4">
+              <div
+                key={s.id}
+                onClick={() => setSelected(s)}
+                className="group cursor-pointer rounded-xl border border-border-subtle bg-surface p-4 transition-colors hover:border-primary/40 hover:bg-surface-elevated"
+              >
                 {/* Top row */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -154,20 +175,28 @@ export default function Requests() {
                       </p>
                     )}
                   </div>
-                  <span className="flex shrink-0 items-center gap-1 text-[11px] text-text-muted">
-                    <Clock className="h-3 w-3" /> {fmtDate(s.created_at)}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {photos.length > 0 && (
+                      <span className="flex items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-text-tertiary">
+                        <ImageIcon className="h-3 w-3" /> {photos.length}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1 text-[11px] text-text-muted">
+                      <Clock className="h-3 w-3" /> {fmtDate(s.created_at)}
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                  </div>
                 </div>
 
                 {/* Contact */}
                 <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-text-secondary">
                   {s.email && (
-                    <a href={`mailto:${s.email}`} className="flex items-center gap-1.5 hover:text-text-primary">
+                    <a href={`mailto:${s.email}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 hover:text-text-primary">
                       <Mail className="h-3.5 w-3.5 text-text-muted" /> {s.email}
                     </a>
                   )}
                   {s.phone && (
-                    <a href={`tel:${s.phone}`} className="flex items-center gap-1.5 hover:text-text-primary">
+                    <a href={`tel:${s.phone}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 hover:text-text-primary">
                       <Phone className="h-3.5 w-3.5 text-text-muted" /> {s.phone}
                     </a>
                   )}
@@ -178,39 +207,172 @@ export default function Requests() {
                   )}
                 </div>
 
-                {/* Custom responses */}
+                {/* Photo thumbnails preview */}
+                {photos.length > 0 && (
+                  <div className="mt-3 flex gap-2">
+                    {photos.slice(0, 4).map((url) => (
+                      <div key={url} className="h-14 w-14 overflow-hidden rounded-lg border border-border-subtle">
+                        <img src={url} alt="" className="h-full w-full object-cover" />
+                      </div>
+                    ))}
+                    {photos.length > 4 && (
+                      <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-border-subtle bg-surface text-xs font-medium text-text-tertiary">
+                        +{photos.length - 4}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Custom responses (labeled) */}
                 {customEntries.length > 0 && (
                   <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                     {customEntries.map(([k, v]) => (
-                      <div key={k} className="rounded-lg bg-surface-elevated px-2.5 py-1.5">
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{k}</p>
+                      <div key={k} className="rounded-lg bg-surface px-2.5 py-1.5">
+                        <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{labelFor(k)}</p>
                         <p className="text-xs text-text-primary">{Array.isArray(v) ? v.join(', ') : String(v)}</p>
                       </div>
                     ))}
                   </div>
-                )}
-
-                {/* Notes */}
-                {s.notes && (
-                  <p className="mt-3 whitespace-pre-wrap rounded-lg bg-surface-elevated px-3 py-2 text-xs text-text-secondary">
-                    {s.notes}
-                  </p>
-                )}
-
-                {/* Linked client */}
-                {s.client_id && (
-                  <Link
-                    to={`/clients/${s.client_id}`}
-                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-                  >
-                    {fr ? 'Voir le client' : 'View client'} <ExternalLink className="h-3 w-3" />
-                  </Link>
                 )}
               </div>
             );
           })}
         </div>
       )}
+
+      {/* Detail modal */}
+      {selected && (
+        <SubmissionDetail
+          submission={selected}
+          fr={fr}
+          fmtDate={fmtDate}
+          labelFor={labelFor}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Submission detail modal ──────────────────────────────────
+function SubmissionDetail({
+  submission: s,
+  fr,
+  fmtDate,
+  labelFor,
+  onClose,
+}: {
+  submission: FormSubmission;
+  fr: boolean;
+  fmtDate: (iso: string) => string;
+  labelFor: (key: string) => string;
+  onClose: () => void;
+}) {
+  const addr = fullAddress(s);
+  const customEntries = customEntriesOf(s);
+  const photos = photosOf(s);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 flex items-start justify-between gap-3 border-b border-border-subtle bg-surface px-5 py-4">
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold text-text-primary">{s.first_name} {s.last_name}</h3>
+            <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
+              <Clock className="h-3 w-3" /> {fmtDate(s.created_at)}
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-primary">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-5 px-5 py-5">
+          {/* Contact */}
+          <Section title={fr ? 'Contact' : 'Contact'}>
+            {s.company && <Row icon={<Building2 className="h-3.5 w-3.5" />} value={s.company} />}
+            <Row icon={<Mail className="h-3.5 w-3.5" />} value={<a href={`mailto:${s.email}`} className="text-primary hover:underline">{s.email}</a>} />
+            <Row icon={<Phone className="h-3.5 w-3.5" />} value={<a href={`tel:${s.phone}`} className="text-primary hover:underline">{s.phone}</a>} />
+            {addr && <Row icon={<MapPin className="h-3.5 w-3.5" />} value={addr} />}
+          </Section>
+
+          {/* Custom fields */}
+          {customEntries.length > 0 && (
+            <Section title={fr ? 'Détails' : 'Details'}>
+              {customEntries.map(([k, v]) => (
+                <div key={k} className="rounded-lg bg-surface-elevated px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{labelFor(k)}</p>
+                  <p className="mt-0.5 text-sm text-text-primary">{Array.isArray(v) ? v.join(', ') : String(v)}</p>
+                </div>
+              ))}
+            </Section>
+          )}
+
+          {/* Notes */}
+          {s.notes && (
+            <Section title={fr ? 'Notes' : 'Notes'}>
+              <p className="whitespace-pre-wrap rounded-lg bg-surface-elevated px-3 py-2 text-sm text-text-secondary">{s.notes}</p>
+            </Section>
+          )}
+
+          {/* Photos */}
+          {photos.length > 0 && (
+            <Section title={`${fr ? 'Photos' : 'Photos'} (${photos.length})`}>
+              <div className="grid grid-cols-3 gap-2">
+                {photos.map((url) => (
+                  <a
+                    key={url}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group relative aspect-square overflow-hidden rounded-lg border border-border-subtle"
+                  >
+                    <img src={url} alt="" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity group-hover:bg-black/30 group-hover:opacity-100">
+                      <ExternalLink className="h-4 w-4 text-white" />
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Linked CRM entities */}
+          {s.client_id && (
+            <Link
+              to={`/clients/${s.client_id}`}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+            >
+              {fr ? 'Voir le client dans le CRM' : 'View client in CRM'} <ExternalLink className="h-3.5 w-3.5" />
+            </Link>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <h4 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">{title}</h4>
+      <div className="space-y-1.5">{children}</div>
+    </div>
+  );
+}
+
+function Row({ icon, value }: { icon: React.ReactNode; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 text-sm text-text-secondary">
+      <span className="text-text-muted">{icon}</span>
+      <span className="min-w-0 break-words">{value}</span>
     </div>
   );
 }

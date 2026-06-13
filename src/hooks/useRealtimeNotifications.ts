@@ -2,11 +2,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import type { RealtimePostgresInsertPayload, RealtimePostgresUpdatePayload } from '@supabase/supabase-js';
 import { useCompany } from '../contexts/CompanyContext';
+import { showDesktopNotification } from '../lib/desktopNotifications';
 
 interface Notification {
   id: string;
   is_read: boolean;
   org_id?: string;
+  title?: string;
+  body?: string | null;
   [key: string]: unknown;
 }
 
@@ -48,6 +51,12 @@ export function useRealtimeNotifications(enabled: boolean) {
         (payload: RealtimePostgresInsertPayload<Notification>) => {
           if (!payload.new.is_read) {
             setUnreadCount((prev) => prev + 1);
+            // Surface a native OS notification when Lume isn't the active tab.
+            showDesktopNotification({
+              title: payload.new.title || 'Lume',
+              body: payload.new.body,
+              tag: payload.new.id,
+            });
           }
         }
       )
