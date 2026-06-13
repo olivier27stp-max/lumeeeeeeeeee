@@ -5,12 +5,12 @@
 
 import React from 'react';
 import {
-  Eye, EyeOff, X, Ruler, Pentagon, PenLine, ChevronRight,
+  Eye, EyeOff, X, Ruler, Pentagon, PenLine, ChevronRight, Mountain,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { Shape, UnitSystem } from '../../lib/measurementTypes';
 import {
-  formatLength, formatArea, haversineDistanceFt,
+  formatLength, formatArea, haversineDistanceFt, formatElevation,
 } from '../../lib/measurementEngine';
 
 interface Props {
@@ -35,6 +35,7 @@ export default function MeasureSidebar({
 }: Props) {
   const fmtLen = (ft: number) => formatLength(ft, unitSystem);
   const fmtArea = (sqft: number) => formatArea(sqft, unitSystem);
+  const fmtElev = (m: number) => formatElevation(m, unitSystem);
 
   // Totals
   const totalLinear = shapes.filter(s => s.result.type !== 'polygon').reduce((a, s) => a + s.result.value, 0);
@@ -109,6 +110,15 @@ export default function MeasureSidebar({
                     </p>
                   )}
 
+                  {/* Elevation / height delta */}
+                  {s.result.elevation && (
+                    <p className="text-[10px] text-text-muted mt-0.5 ml-[20px] flex items-center gap-1">
+                      <Mountain size={10} className="shrink-0" />
+                      {fr ? 'Dénivelé' : 'Elevation Δ'}: <span className="font-semibold text-text-secondary">{fmtElev(s.result.elevation.gain)}</span>
+                      <span className="text-text-muted/60">({fmtElev(s.result.elevation.min)} – {fmtElev(s.result.elevation.max)})</span>
+                    </p>
+                  )}
+
                   {/* Segment breakdown (expanded) */}
                   {sel && s.result.points.length >= 2 && (
                     <div className="mt-2 ml-[20px] space-y-0.5">
@@ -123,6 +133,23 @@ export default function MeasureSidebar({
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+
+                  {/* Per-point elevation (expanded) */}
+                  {sel && s.result.elevation && (
+                    <div className="mt-2 ml-[20px] space-y-0.5">
+                      <p className="text-[9px] text-text-muted/70 font-semibold uppercase tracking-wide">
+                        {fr ? 'Élévation par point' : 'Per-point elevation'}
+                      </p>
+                      {s.result.points.map((p, i) =>
+                        typeof p.elevation === 'number' ? (
+                          <div key={i} className="text-[9px] text-text-muted font-mono flex items-center gap-1">
+                            <Mountain size={8} className="shrink-0" />
+                            {fr ? 'Pt' : 'Pt'} {i + 1}: {fmtElev(p.elevation)}
+                          </div>
+                        ) : null,
+                      )}
                     </div>
                   )}
 

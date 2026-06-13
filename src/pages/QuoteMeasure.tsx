@@ -22,7 +22,7 @@ import {
 import {
   computeMeasurement, formatLength, formatArea,
   haversineDistanceFt, midpoint, centroid, nextColor,
-  geoJsonToPoints, formatMeasurementValue,
+  geoJsonToPoints, formatMeasurementValue, fetchElevations, elevationStats,
 } from '../lib/measurementEngine';
 import type {
   LatLng, MeasurementType, Tool, UnitSystem, Shape, CameraState,
@@ -50,7 +50,7 @@ function useGMaps3D() {
     const s = document.createElement('script');
     s.id = id; s.async = true; s.defer = true;
     // Load beta channel for 3D tiles support (alpha is restricted to dev environments)
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places,geometry,maps3d&v=beta`;
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places,geometry,elevation,maps3d&v=beta`;
     s.onload = async () => {
       try {
         const g = (window as any).google;
@@ -59,6 +59,7 @@ function useGMaps3D() {
             g.maps.importLibrary('maps'),
             g.maps.importLibrary('places'),
             g.maps.importLibrary('geometry'),
+            g.maps.importLibrary('elevation'),
             g.maps.importLibrary('maps3d').catch((e: any) => console.warn('[gmaps] maps3d unavailable:', e)),
           ]);
         }
@@ -337,15 +338,20 @@ export default function QuoteMeasure() {
 
   useEffect(() => {
     if (!saved || shapes.length) return;
-    const loaded = saved.map(m => ({
-      id: `s-${m.id}`, label: m.label, color: m.color,
-      result: {
-        type: m.measurement_type, value: m.value,
-        areaValue: m.area_value, perimeterValue: m.perimeter_value,
-        geojson: m.geojson, points: geoJsonToPoints(m.geojson),
-      } as any,
-      notes: m.notes || '', visible: true,
-    }));
+    const loaded = saved.map(m => {
+      const points = geoJsonToPoints(m.geojson);
+      return {
+        id: `s-${m.id}`, label: m.label, color: m.color,
+        result: {
+          type: m.measurement_type, value: m.value,
+          areaValue: m.area_value, perimeterValue: m.perimeter_value,
+          geojson: m.geojson, points,
+          // Elevation round-trips through the GeoJSON altitude on each point.
+          elevation: elevationStats(points),
+        } as any,
+        notes: m.notes || '', visible: true,
+      };
+    });
     if (loaded.length) { setShapes(loaded); cnt.current = loaded.length; }
   }, [saved]);
 
@@ -649,11 +655,12 @@ export default function QuoteMeasure() {
         if (!sel) marker.addListener('click', () => setSelId(s.id));
         else marker.addListener('dragend', (e: google.maps.MapMouseEvent) => {
           if (!e.latLng) return;
-          setShapes(prev => prev.map(sh => {
-            if (sh.id !== s.id) return sh;
-            const newPts = [...sh.result.points]; newPts[vi] = { lat: e.latLng!.lat(), lng: e.latLng!.lng() };
-            return { ...sh, result: computeMeasurement(sh.result.type, newPts) };
-          }));
+          const newPts = [...s.result.points]; newPts[vi] = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+          setShapes(prev => prev.map(sh =>
+            sh.id === s.id ? { ...sh, result: computeMeasurement(sh.result.type, newPts) } : sh,
+          ));
+          // The moved vertex lost its elevation — re-query so height stays accurate.
+          enrichElevation(s.id, s.result.type, newPts);
         });
         shapeOv.current.push(marker);
       });
@@ -678,6 +685,16 @@ export default function QuoteMeasure() {
     }]);
     setPts([]); setSelId(newId);
     clearDrawOverlays();
+    enrichElevation(newId, type, points);
+  }
+
+  // Query ground elevation for a shape's points (one batched Google Elevation
+  // request) and fold the result back in so the sidebar can show height/grade.
+  // Non-blocking: the measurement is already usable; elevation just enriches it.
+  async function enrichElevation(id: string, type: MeasurementType, points: LatLng[]) {
+    const withElev = await fetchElevations(points);
+    if (!withElev.some(p => typeof p.elevation === 'number')) return;
+    setShapes(prev => prev.map(s => s.id === id ? { ...s, result: computeMeasurement(type, withElev) } : s));
   }
 
   function handleToolChange(t: Tool) {
@@ -747,7 +764,7 @@ export default function QuoteMeasure() {
           area_value: s.result.areaValue ? r2(s.result.areaValue) : null,
           perimeter_value: s.result.perimeterValue ? r2(s.result.perimeterValue) : null,
           geojson: s.result.geojson, notes: s.notes || null, color: s.color, sort_order: i,
-          camera_state: camState, metadata: null,
+          camera_state: camState, metadata: s.result.elevation ? { elevation: s.result.elevation } : null,
         });
       }
       await saveQuoteCamera(quoteId, camState, search, unitSystem);

@@ -4,18 +4,19 @@
  */
 
 import type {
-  LatLng, MeasurementType, MeasurementResult, UnitSystem, CameraState,
+  LatLng, MeasurementType, MeasurementResult, UnitSystem, CameraState, ElevationStats,
 } from './measurementTypes';
 import { MEASUREMENT_COLORS } from './measurementTypes';
 
 // Re-export types for backward compatibility
-export type { LatLng, MeasurementType, MeasurementResult };
+export type { LatLng, MeasurementType, MeasurementResult, ElevationStats };
 export { MEASUREMENT_COLORS };
 
 // ── Constants ──
 
 const EARTH_RADIUS_FT = 20_902_231;
 const FT_TO_M = 0.3048;
+const M_TO_FT = 1 / FT_TO_M;
 const SQ_FT_TO_SQ_M = 0.092903;
 
 // ── Core distance calculation ──
@@ -71,27 +72,72 @@ export function polygonPerimeterFt(points: LatLng[]): number {
   return total;
 }
 
+// ── Elevation ──
+
+/**
+ * Summarise the ground elevation across a set of points (meters above sea level).
+ * Returns null when no point carries elevation data yet (i.e. before the
+ * Google Elevation API has been queried via fetchElevations).
+ */
+export function elevationStats(points: LatLng[]): ElevationStats | null {
+  const elevs = points.filter((p) => typeof p.elevation === 'number').map((p) => p.elevation as number);
+  if (!elevs.length) return null;
+  const min = Math.min(...elevs);
+  const max = Math.max(...elevs);
+  const first = points.find((p) => typeof p.elevation === 'number')?.elevation ?? min;
+  const last = [...points].reverse().find((p) => typeof p.elevation === 'number')?.elevation ?? max;
+  return { min, max, gain: max - min, start: first, end: last };
+}
+
+/**
+ * Query the Google Elevation API for every point in one batched request and
+ * return a new array with `elevation` (meters) filled in. On any failure the
+ * original points are returned unchanged so the measurement still works.
+ * Requires the `elevation` library to be loaded on the Maps JS API.
+ */
+export async function fetchElevations(points: LatLng[]): Promise<LatLng[]> {
+  if (!points.length) return points;
+  try {
+    const svc = new google.maps.ElevationService();
+    const { results } = await svc.getElevationForLocations({
+      locations: points.map((p) => ({ lat: p.lat, lng: p.lng })),
+    });
+    if (!results?.length) return points;
+    return points.map((p, i) => {
+      const e = results[i]?.elevation;
+      return typeof e === 'number' ? { ...p, elevation: e } : p;
+    });
+  } catch {
+    return points;
+  }
+}
+
 // ── Measurement computation ──
 
 export function computeMeasurement(type: MeasurementType, points: LatLng[]): MeasurementResult {
   const geojson = pointsToGeoJSON(type, points);
+  const elevation = elevationStats(points);
 
   if (type === 'line') {
     const value = points.length === 2 ? haversineDistanceFt(points[0], points[1]) : 0;
-    return { type, value, areaValue: null, perimeterValue: null, geojson, points };
+    return { type, value, areaValue: null, perimeterValue: null, geojson, points, elevation };
   }
   if (type === 'path') {
-    return { type, value: pathLengthFt(points), areaValue: null, perimeterValue: null, geojson, points };
+    return { type, value: pathLengthFt(points), areaValue: null, perimeterValue: null, geojson, points, elevation };
   }
   const area = polygonAreaSqFt(points);
   const perimeter = polygonPerimeterFt(points);
-  return { type, value: area, areaValue: area, perimeterValue: perimeter, geojson, points };
+  return { type, value: area, areaValue: area, perimeterValue: perimeter, geojson, points, elevation };
 }
 
 // ── GeoJSON ──
 
 function pointsToGeoJSON(type: MeasurementType, points: LatLng[]): GeoJSON.Geometry {
-  const coords = points.map((p) => [p.lng, p.lat]);
+  // GeoJSON positions are [lng, lat] with an optional 3rd altitude element (meters).
+  // We emit the altitude when known so elevation survives save/reload.
+  const coords = points.map((p) =>
+    typeof p.elevation === 'number' ? [p.lng, p.lat, p.elevation] : [p.lng, p.lat],
+  );
   if (type === 'polygon') {
     return { type: 'Polygon', coordinates: [[...coords, coords[0]]] };
   }
@@ -128,6 +174,12 @@ export function formatArea(sqft: number, system: UnitSystem): string {
   }
   if (sqft >= 43560) return `${(sqft / 43560).toFixed(2)} acres`;
   return `${r2(sqft)} sq ft`;
+}
+
+/** Format an elevation/height value given in meters for the chosen unit system. */
+export function formatElevation(meters: number, system: UnitSystem): string {
+  if (system === 'metric') return `${r2(meters)} m`;
+  return `${r2(meters * M_TO_FT)} ft`;
 }
 
 export function formatMeasurementValue(type: MeasurementType, value: number, system: UnitSystem = 'imperial'): string {
@@ -181,8 +233,11 @@ export function applyCameraState(map: google.maps.Map, state: CameraState) {
 
 export function geoJsonToPoints(g: any): LatLng[] {
   if (!g?.coordinates) return [];
-  if (g.type === 'Polygon') return (g.coordinates[0] || []).slice(0, -1).map(([ln, lt]: number[]) => ({ lat: lt, lng: ln }));
-  return (g.coordinates || []).map(([ln, lt]: number[]) => ({ lat: lt, lng: ln }));
+  // Each position may carry a 3rd altitude element (meters) — restore it as elevation.
+  const toPt = ([ln, lt, alt]: number[]): LatLng =>
+    typeof alt === 'number' ? { lat: lt, lng: ln, elevation: alt } : { lat: lt, lng: ln };
+  if (g.type === 'Polygon') return (g.coordinates[0] || []).slice(0, -1).map(toPt);
+  return (g.coordinates || []).map(toPt);
 }
 
 function r2(n: number) { return Math.round(n * 100) / 100; }

@@ -8,9 +8,25 @@
 export interface LatLng {
   lat: number;
   lng: number;
+  /** Ground elevation above sea level, in meters (Google Elevation API / GeoJSON altitude). Undefined until fetched. */
+  elevation?: number;
 }
 
 export type MeasurementType = 'line' | 'path' | 'polygon';
+
+/** Elevation summary for a measurement, all values in meters above sea level. */
+export interface ElevationStats {
+  /** Lowest point elevation (m). */
+  min: number;
+  /** Highest point elevation (m). */
+  max: number;
+  /** Vertical drop max − min, i.e. the total rise/fall across the shape (m). */
+  gain: number;
+  /** Elevation of the first point (m). */
+  start: number;
+  /** Elevation of the last point (m). */
+  end: number;
+}
 
 export type Tool = 'select' | 'line' | 'path' | 'polygon';
 
@@ -38,6 +54,8 @@ export interface MeasurementResult {
   geojson: GeoJSON.Geometry;
   /** Points used */
   points: LatLng[];
+  /** Elevation summary (m), or null when no point has elevation data yet. */
+  elevation: ElevationStats | null;
 }
 
 // ── Shape (in-memory representation of a measurement) ──
