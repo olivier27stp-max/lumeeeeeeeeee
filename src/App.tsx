@@ -630,7 +630,7 @@ function AuthenticatedApp({
 }: any) {
   const { current, currentRole, companies, loading: companyLoading, isMultiCompany, hasNoCompany, currentOrgId } = useCompany();
   // Call realtime notifications hook INSIDE CompanyProvider (it uses useCompany() internally)
-  const { unreadCount: unreadNotifs, resetCount: resetNotifCount } = useRealtimeNotifications(!!user);
+  const { unreadCount: unreadNotifs, resetCount: resetNotifCount, countsByNav: notifCountsByNav } = useRealtimeNotifications(!!user);
   // Current plan — used to hide locked features from sidebar
   const { currentPlan } = useCurrentPlan();
   // Hide "Discover features" on the top plan (nothing left to unlock).
@@ -921,6 +921,11 @@ function AuthenticatedApp({
                               {unreadSms > 9 ? '9+' : unreadSms}
                             </span>
                           )}
+                          {!['messages', 'quotes', 'invoices'].includes(item.id) && (notifCountsByNav[item.id] || 0) > 0 && !sidebarExpanded && (
+                            <span className="absolute -top-1.5 -right-1.5 bg-danger text-white text-[7px] font-bold rounded-full min-w-[12px] h-[12px] flex items-center justify-center px-0.5">
+                              {notifCountsByNav[item.id] > 9 ? '9+' : notifCountsByNav[item.id]}
+                            </span>
+                          )}
                         </span>
                         {sidebarExpanded && (
                           <>
@@ -938,6 +943,12 @@ function AuthenticatedApp({
                             {item.id === 'invoices' && overdueInvoices > 0 && (
                               <span className="ml-auto bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-[9px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-1 shrink-0">
                                 {overdueInvoices}
+                              </span>
+                            )}
+                            {/* Unread-notification count for pages without a domain-specific badge */}
+                            {!['messages', 'quotes', 'invoices'].includes(item.id) && (notifCountsByNav[item.id] || 0) > 0 && (
+                              <span className="ml-auto bg-danger text-white text-[9px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-1 shrink-0">
+                                {notifCountsByNav[item.id] > 9 ? '9+' : notifCountsByNav[item.id]}
                               </span>
                             )}
                           </>
