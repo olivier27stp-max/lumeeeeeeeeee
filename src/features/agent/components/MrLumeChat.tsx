@@ -89,7 +89,7 @@ export default function MrLumeChat() {
     try {
       const result = await executeProposedAction(item.action);
       setItems((prev) =>
-        prev.map((m) => (m.id === item.id ? { ...m, status: 'confirmed' } : m)).concat({
+        prev.map((m): ChatItem => (m.id === item.id ? { ...m, status: 'confirmed' } : m)).concat({
           id: nextId(),
           role: 'assistant',
           content:
@@ -109,7 +109,7 @@ export default function MrLumeChat() {
 
   function cancelAction(item: ChatItem) {
     setItems((prev) =>
-      prev.map((m) => (m.id === item.id ? { ...m, status: 'cancelled' } : m)).concat({
+      prev.map((m): ChatItem => (m.id === item.id ? { ...m, status: 'cancelled' } : m)).concat({
         id: nextId(),
         role: 'assistant',
         content: fr ? 'Action annulée.' : 'Action cancelled.',
