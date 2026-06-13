@@ -337,6 +337,7 @@ export const publicFormSubmissionSchema = z.object({
   postal_code: optionalString,
   custom_responses: z.record(z.string(), z.any()).optional().default({}),
   notes: optionalString,
+  photos: z.array(z.string().url()).max(20, 'Too many photos (max 20).').optional().default([]),
 });
 
 // ─── AI / Agent ─────────────────────────────────────────────────

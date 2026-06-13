@@ -2668,6 +2668,12 @@ const en = {
   // RequestForm
   requestForm: {
     active: 'Active',
+    photos: 'Photos',
+    addPhotos: 'Add photos',
+    addPhotosHint: 'Attach photos to help us understand your request (optional).',
+    uploadingPhotos: 'Uploading…',
+    photoTooLarge: 'Image is too large (max 15 MB).',
+    photoUploadFailed: 'Could not upload image. Please try again.',
     addField: 'Add Field',
     additionalNotes: 'Additional Notes',
     additionalNotes2: 'Additional notes',

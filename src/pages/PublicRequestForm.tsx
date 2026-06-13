@@ -1,8 +1,19 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, ImagePlus, X } from 'lucide-react';
 import { useTranslation } from '../i18n';
-import { fetchPublicForm, submitPublicForm, type PublicForm, type PublicFormSubmission } from '../lib/publicFormApi';
+import { fetchPublicForm, submitPublicForm, uploadPublicFormPhoto, type PublicForm, type PublicFormSubmission } from '../lib/publicFormApi';
 import type { FormField } from '../types';
+
+const MAX_PHOTO_BYTES = 15 * 1024 * 1024; // 15 MB — matches the server limit
+
+type PhotoItem = {
+  id: string;
+  file: File;
+  preview: string;
+  url: string | null;
+  uploading: boolean;
+  error: boolean;
+};
 
 /**
  * Public, embeddable request form rendered at `/form/:apiKey`.
@@ -35,6 +46,40 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
   const [postal, setPostal] = useState('');
   const [notes, setNotes] = useState('');
   const [responses, setResponses] = useState<Record<string, unknown>>({});
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+
+  const handlePhotos = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const items: PhotoItem[] = Array.from(files)
+      .filter((f) => f.type.startsWith('image/'))
+      .map((file) => ({
+        id: crypto.randomUUID(),
+        file,
+        preview: URL.createObjectURL(file),
+        url: null,
+        uploading: file.size <= MAX_PHOTO_BYTES,
+        error: file.size > MAX_PHOTO_BYTES,
+      }));
+    if (items.length === 0) return;
+    setPhotos((prev) => [...prev, ...items]);
+
+    for (const item of items) {
+      if (item.error) continue; // too large — skip upload
+      try {
+        const url = await uploadPublicFormPhoto(apiKey, item.file);
+        setPhotos((prev) => prev.map((p) => (p.id === item.id ? { ...p, url, uploading: false } : p)));
+      } catch {
+        setPhotos((prev) => prev.map((p) => (p.id === item.id ? { ...p, uploading: false, error: true } : p)));
+      }
+    }
+  }, [apiKey]);
+
+  const removePhoto = (id: string) =>
+    setPhotos((prev) => {
+      const target = prev.find((p) => p.id === id);
+      if (target) URL.revokeObjectURL(target.preview);
+      return prev.filter((p) => p.id !== id);
+    });
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +97,12 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
+
+    // Block while photos are still uploading
+    if (photos.some((p) => p.uploading)) {
+      setSubmitError(tr.uploadingPhotos);
+      return;
+    }
 
     // Validate required custom fields
     if (form) {
@@ -80,6 +131,7 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
       country: country.trim() || null,
       custom_responses: responses,
       notes: notes.trim() || null,
+      photos: photos.filter((p) => p.url).map((p) => p.url as string),
     };
 
     setSubmitting(true);
@@ -91,7 +143,7 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
     } finally {
       setSubmitting(false);
     }
-  }, [apiKey, form, responses, firstName, lastName, company, email, phone, street, unit, city, region, postal, country, notes, language]);
+  }, [apiKey, form, responses, firstName, lastName, company, email, phone, street, unit, city, region, postal, country, notes, photos, language, tr]);
 
   // ── Loading / error / disabled states ──
   if (loading) {
@@ -188,6 +240,49 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
           <textarea className="glass-input w-full mt-1 min-h-[60px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
 
+        {/* Photos (client uploads) */}
+        <Section title={tr.photos}>
+          <p className="text-[12px] text-text-tertiary">{tr.addPhotosHint}</p>
+          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-text-muted/30 py-3 text-[13px] font-medium text-text-secondary transition-colors hover:bg-surface-secondary">
+            <ImagePlus className="h-4 w-4" />
+            {tr.addPhotos}
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => { handlePhotos(e.target.files); e.target.value = ''; }}
+            />
+          </label>
+
+          {photos.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {photos.map((p) => (
+                <div key={p.id} className="relative aspect-square overflow-hidden rounded-lg border border-text-muted/20">
+                  <img src={p.preview} alt="" className="h-full w-full object-cover" />
+                  {p.uploading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                      <Loader2 className="h-5 w-5 animate-spin text-white" />
+                    </div>
+                  )}
+                  {p.error && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-red-600/60 px-1 text-center text-[10px] font-medium leading-tight text-white">
+                      {p.file.size > MAX_PHOTO_BYTES ? tr.photoTooLarge : tr.photoUploadFailed}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removePhoto(p.id)}
+                    className="absolute right-1 top-1 rounded-full bg-black/50 p-0.5 text-white transition-colors hover:bg-black/70"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
         {submitError && (
           <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700">
             <AlertCircle className="h-4 w-4 shrink-0" />
@@ -197,7 +292,7 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || photos.some((p) => p.uploading)}
           className="w-full py-2.5 rounded-xl bg-primary text-white font-semibold text-[14px] transition-opacity hover:opacity-90 disabled:opacity-60"
         >
           {submitting ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : tr.submitRequest}

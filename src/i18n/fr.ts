@@ -2660,6 +2660,12 @@ const fr: TranslationKeys = {
   // RequestForm
   requestForm: {
     active: 'Actif',
+    photos: 'Photos',
+    addPhotos: 'Ajouter des photos',
+    addPhotosHint: 'Joignez des photos pour nous aider à comprendre votre demande (optionnel).',
+    uploadingPhotos: 'Téléversement…',
+    photoTooLarge: 'Image trop volumineuse (max 15 Mo).',
+    photoUploadFailed: 'Téléversement de l’image impossible. Veuillez réessayer.',
     addField: 'Ajouter un champ',
     additionalNotes: 'Notes additionnelles',
     additionalNotes2: 'Notes supplémentaires',

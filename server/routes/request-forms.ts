@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
+import { randomBytes } from 'crypto';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { validate, upsertRequestFormSchema, publicFormSubmissionSchema } from '../lib/validation';
@@ -171,6 +172,65 @@ router.get('/public/form/:apiKey', async (req, res) => {
   }
 });
 
+// ── POST /public/form/:apiKey/upload — public photo upload ────────
+// Accepts a single raw image body (Content-Type: image/*). The visitor is
+// unauthenticated, so the upload runs through the service client (bypasses
+// RLS). Returns the public URL, which the client then includes in the
+// submission payload under `photos[]`.
+const PHOTO_BUCKET = 'attachments';
+router.post(
+  '/public/form/:apiKey/upload',
+  express.raw({ type: 'image/*', limit: '15mb' }),
+  async (req, res) => {
+    try {
+      const apiKey = String(req.params.apiKey || '').trim();
+      if (!apiKey || apiKey.length < 32) {
+        return res.status(400).json({ error: 'Invalid API key.' });
+      }
+
+      const buffer = req.body;
+      if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+        return res.status(400).json({ error: 'No image data received.' });
+      }
+
+      const contentType = String(req.headers['content-type'] || '').split(';')[0].trim();
+      if (!contentType.startsWith('image/')) {
+        return res.status(400).json({ error: 'Only image uploads are allowed.' });
+      }
+
+      const admin = getServiceClient();
+
+      // Resolve the org from the form so files are namespaced per-tenant.
+      const { data: form, error: formError } = await admin
+        .from('request_forms')
+        .select('org_id, enabled')
+        .eq('api_key', apiKey)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (formError) throw formError;
+      if (!form) return res.status(404).json({ error: 'Form not found.' });
+      if (!form.enabled) return res.status(403).json({ error: 'Form is currently disabled.' });
+
+      // Build a safe, unique object path.
+      const ext = contentType.split('/')[1]?.replace(/[^a-z0-9]/gi, '').slice(0, 8) || 'jpg';
+      const rawName = String(req.query.filename || '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60);
+      const baseName = rawName || `photo.${ext}`;
+      const path = `request-forms/${form.org_id}/${Date.now()}-${randomBytes(6).toString('hex')}-${baseName}`;
+
+      const { error: upErr } = await admin.storage
+        .from(PHOTO_BUCKET)
+        .upload(path, buffer, { contentType, upsert: true, cacheControl: '3600' });
+      if (upErr) throw upErr;
+
+      const { data: pub } = admin.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+      return res.json({ url: pub.publicUrl, path });
+    } catch (err: any) {
+      console.error('[public/form] upload failed:', err.message);
+      return res.status(500).json({ error: 'Unable to upload image.' });
+    }
+  },
+);
+
 // ── POST /public/form/:apiKey/submit — public submission ──────────
 router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema), async (req, res) => {
   try {
@@ -242,6 +302,10 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
 
     if (address) noteLines.push(`Address: ${address}`);
     if (body.company) noteLines.push(`Company: ${body.company}`);
+
+    // Photo URLs uploaded via /upload — surface them on the lead notes.
+    const photoUrls: string[] = Array.isArray(body.photos) ? body.photos.filter(Boolean) : [];
+    if (photoUrls.length) noteLines.push(`Photos:\n${photoUrls.join('\n')}`);
 
     const fullNotes = noteLines.length > 0 ? noteLines.join('\n') : null;
     const fullName = `${body.first_name} ${body.last_name}`.trim();
@@ -344,6 +408,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
         region: body.region || null,
         postal_code: body.postal_code || null,
         custom_responses: body.custom_responses || {},
+        attachments: photoUrls.map((url) => ({ url, type: 'image' })),
         notes: body.notes || null,
         lead_id: leadIdStr,
         deal_id: dealId,
