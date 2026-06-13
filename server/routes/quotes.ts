@@ -9,6 +9,7 @@ import { eventBus } from '../lib/eventBus';
 import { getConnectedAccount, createDestinationPaymentIntent, getPlatformStripe } from '../lib/stripe-connect';
 import { decryptSecret } from '../../src/lib/crypto';
 import { sendSafeError } from '../lib/error-handler';
+import { recordClientActivity } from '../lib/clientActivity';
 
 const router = Router();
 
@@ -205,6 +206,9 @@ router.post('/quotes/:id/track-view', async (req, res) => {
         ip_address: req.ip || req.headers['x-forwarded-for'] || null,
         user_agent: req.headers['user-agent'] || null,
       });
+
+    // Client opened a quote/invoice link — stamp last activity (fire-and-forget).
+    void recordClientActivity(serviceClient, invoice.client_id);
 
     if (isFirstView) {
       let clientName = 'Client';

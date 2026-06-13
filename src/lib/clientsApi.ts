@@ -21,6 +21,7 @@ export interface ClientRecord {
   display_as_company: boolean;
   notes: string | null;
   portal_token: string | null;
+  last_client_activity_at: string | null;
   org_id: string;
   created_at: string;
   updated_at: string;

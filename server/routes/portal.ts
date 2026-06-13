@@ -4,6 +4,7 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
+import { recordClientActivity } from '../lib/clientActivity';
 
 const router = Router();
 
@@ -59,6 +60,9 @@ router.get('/portal/:token', async (req, res) => {
       await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
       return res.status(404).json({ error: 'Not found' });
     }
+
+    // Client opened their portal link — stamp last activity (fire-and-forget).
+    void recordClientActivity(serviceClient, client.id);
 
     // Fetch company info
     const { data: company } = await serviceClient

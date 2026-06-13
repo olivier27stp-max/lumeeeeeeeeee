@@ -315,11 +315,22 @@ export default function Clients() {
             });
         }
 
+        // Dernière activité = la plus récente entre l'activité jobs, l'activité
+        // côté client (ouverture portail/devis/facture) et la date de création.
+        const activityCandidates = [
+          lastActivityByClient.get(c.id),
+          c.last_client_activity_at,
+          c.created_at,
+        ].filter(Boolean) as string[];
+        const last_activity = activityCandidates.length
+          ? activityCandidates.reduce((a, b) => (a > b ? a : b))
+          : null;
+
         return {
           ...c,
           status: computed,
           tags: tagsByClient.get(c.id) || [],
-          last_activity: lastActivityByClient.get(c.id) || c.created_at || null,
+          last_activity,
         };
       });
 
