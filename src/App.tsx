@@ -819,7 +819,7 @@ function AuthenticatedApp({
                   exit={{ opacity: 0 }}
                   className="pl-1"
                 >
-                  <img src="/lume-logo-v2.png" alt="Lume CRM" className="h-7 w-auto object-contain dark:invert" />
+                  <img src="/lume-logo-v2.png" alt="Lume CRM" onClick={() => navigate('/')} className="h-7 w-auto object-contain dark:invert cursor-pointer" />
                 </motion.div>
               ) : (
                 <motion.div
@@ -829,7 +829,7 @@ function AuthenticatedApp({
                   exit={{ opacity: 0 }}
                   className="mx-auto"
                 >
-                  <img src="/lume-logo-v2.png" alt="Lume CRM" className="h-6 w-auto object-contain dark:invert" />
+                  <img src="/lume-logo-v2.png" alt="Lume CRM" onClick={() => navigate('/')} className="h-6 w-auto object-contain dark:invert cursor-pointer" />
                 </motion.div>
               )}
             </AnimatePresence>
