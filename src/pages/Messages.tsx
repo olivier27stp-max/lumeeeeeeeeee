@@ -21,7 +21,6 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useTranslation } from '../i18n';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
-import { OfficeSwitcher } from '../components/OfficeSwitcher';
 import PermissionGate from '../components/PermissionGate';
 import { displayPhone } from '../lib/piiSanitizer';
 import {
@@ -483,9 +482,11 @@ export default function Messages() {
           "w-[300px] border-r border-border flex flex-col shrink-0 bg-surface",
           selectedConvo ? "hidden md:flex" : "flex w-full md:w-[300px]"
         )}>
-          {/* Header: Office switcher + New button */}
+          {/* Header: title + New button */}
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
-            <OfficeSwitcher />
+            <h2 className="text-[15px] font-semibold text-text-primary">
+              {language === 'fr' ? 'Messages' : 'Messages'}
+            </h2>
             <button
               onClick={() => setShowNewModal(true)}
               className="w-[30px] h-[30px] rounded-full border border-border flex items-center justify-center hover:bg-surface-secondary transition-colors"

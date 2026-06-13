@@ -79,6 +79,7 @@ import CompanySettings from './pages/CompanySettings';
 import ManageTeam from './pages/ManageTeam';
 import TeamMemberDetails from './pages/TeamMemberDetails';
 import GlobalSearch from './components/GlobalSearch';
+import { OfficeSwitcher } from './components/OfficeSwitcher';
 import SearchResultsPage from './pages/SearchResults';
 import Timesheets from './pages/Timesheets';
 import Quotes from './pages/Quotes';
@@ -1101,6 +1102,7 @@ function AuthenticatedApp({
                 <Menu size={17} />
               </button>
             )}
+            <OfficeSwitcher />
             <div className="flex-1 max-w-xl">
               <GlobalSearch />
             </div>
