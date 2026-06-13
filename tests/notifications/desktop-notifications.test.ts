@@ -84,7 +84,8 @@ describe('desktopNotifications — capability + permission', () => {
 describe('desktopNotifications — showDesktopNotification gating', () => {
   it('fires a native notification when backgrounded, granted and enabled', () => {
     setForeground(false, false);
-    showDesktopNotification({ title: 'New lead', body: 'Jean Tremblay', tag: 'n1' });
+    const fired = showDesktopNotification({ title: 'New lead', body: 'Jean Tremblay', tag: 'n1' });
+    expect(fired).toBe(true);
     expect(constructed).toHaveLength(1);
     expect(constructed[0].title).toBe('New lead');
     expect(constructed[0].options.body).toBe('Jean Tremblay');
@@ -93,7 +94,23 @@ describe('desktopNotifications — showDesktopNotification gating', () => {
 
   it('stays silent when Lume is the focused/visible tab', () => {
     setForeground(true, true);
-    showDesktopNotification({ title: 'New lead', body: 'x', tag: 'n2' });
+    const fired = showDesktopNotification({ title: 'New lead', body: 'x', tag: 'n2' });
+    expect(fired).toBe(false);
+    expect(constructed).toHaveLength(0);
+  });
+
+  it('force bypasses the foreground guard (confirmation notification)', () => {
+    setForeground(true, true);
+    const fired = showDesktopNotification({ title: 'Lume', body: 'enabled', tag: 't', force: true });
+    expect(fired).toBe(true);
+    expect(constructed).toHaveLength(1);
+  });
+
+  it('force still respects permission/opt-out', () => {
+    setForeground(true, true);
+    setDesktopNotificationsEnabled(false);
+    const fired = showDesktopNotification({ title: 'x', force: true });
+    expect(fired).toBe(false);
     expect(constructed).toHaveLength(0);
   });
 

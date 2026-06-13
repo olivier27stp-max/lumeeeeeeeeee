@@ -49,15 +49,21 @@ interface DesktopNotifyInput {
   title: string;
   body?: string | null;
   tag?: string;
+  // Bypass the "only when backgrounded" guard. Used for the confirmation
+  // notification fired right after the user enables the feature, so they get
+  // immediate proof it works even while looking at the Lume tab.
+  force?: boolean;
 }
 
-export function showDesktopNotification({ title, body, tag }: DesktopNotifyInput): void {
-  if (!desktopNotificationsEnabled()) return;
+export function showDesktopNotification({ title, body, tag, force }: DesktopNotifyInput): boolean {
+  if (!desktopNotificationsEnabled()) return false;
   // Only notify at the OS level when the user is NOT actively viewing Lume.
-  const inForeground =
-    document.visibilityState === 'visible' &&
-    (typeof document.hasFocus !== 'function' || document.hasFocus());
-  if (inForeground) return;
+  if (!force) {
+    const inForeground =
+      document.visibilityState === 'visible' &&
+      (typeof document.hasFocus !== 'function' || document.hasFocus());
+    if (inForeground) return false;
+  }
 
   try {
     const notif = new Notification(title, {
@@ -70,5 +76,9 @@ export function showDesktopNotification({ title, body, tag }: DesktopNotifyInput
       window.focus();
       notif.close();
     };
-  } catch { /* ignore — some browsers throw if invoked outside a SW */ }
+    return true;
+  } catch {
+    // Some browsers throw if invoked outside a service worker.
+    return false;
+  }
 }

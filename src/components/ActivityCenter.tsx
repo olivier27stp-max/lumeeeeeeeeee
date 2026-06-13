@@ -28,7 +28,9 @@ import {
   desktopNotificationsEnabled,
   setDesktopNotificationsEnabled,
   requestDesktopNotificationPermission,
+  showDesktopNotification,
 } from '../lib/desktopNotifications';
+import { toast } from 'sonner';
 
 interface ActivityItem {
   id: string;
@@ -406,13 +408,33 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
                 ) : (
                   <button
                     onClick={async () => {
-                      if (notifPerm === 'granted') {
+                      let perm: NotificationPermission = notifPerm;
+                      if (perm === 'granted') {
                         setDesktopNotificationsEnabled(true);
-                        setNotifOn(true);
                       } else {
-                        const result = await requestDesktopNotificationPermission();
-                        setNotifPerm(result);
-                        setNotifOn(desktopNotificationsEnabled());
+                        perm = await requestDesktopNotificationPermission();
+                        setNotifPerm(perm);
+                      }
+                      const enabled = desktopNotificationsEnabled();
+                      setNotifOn(enabled);
+
+                      if (enabled) {
+                        // Immediate proof it works — force past the foreground guard.
+                        showDesktopNotification({
+                          title: 'Lume',
+                          body: language === 'fr'
+                            ? 'Notifications bureau activées ✅'
+                            : 'Desktop notifications enabled ✅',
+                          tag: 'lume-notif-test',
+                          force: true,
+                        });
+                        toast.success(language === 'fr'
+                          ? 'Notifications bureau activées'
+                          : 'Desktop notifications enabled');
+                      } else if (perm === 'denied') {
+                        toast.error(language === 'fr'
+                          ? 'Notifications bloquées dans le navigateur. Autorisez-les dans les réglages du site.'
+                          : 'Notifications are blocked in the browser. Allow them in site settings.');
                       }
                     }}
                     className="text-[11px] font-semibold text-primary hover:underline shrink-0"
