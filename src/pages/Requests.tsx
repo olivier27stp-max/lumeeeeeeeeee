@@ -280,40 +280,19 @@ function SubmissionDetail({
         className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border-subtle bg-surface px-6 py-4">
-          <div className="min-w-0">
-            <h3 className="text-base font-semibold text-text-primary">{s.first_name} {s.last_name}</h3>
-            <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
-              <Clock className="h-3 w-3" /> {fr ? 'Soumise le' : 'Submitted'} {fmtDate(s.created_at)}
-            </p>
-          </div>
+        {/* Close bar */}
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border-subtle bg-surface px-6 py-3">
+          <p className="flex items-center gap-1.5 text-[11px] text-text-muted">
+            <Clock className="h-3 w-3" /> {fr ? 'Soumise le' : 'Submitted'} {fmtDate(s.created_at)}
+          </p>
           <button onClick={onClose} className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-primary">
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <div className="space-y-6 px-6 py-5">
-          {/* Contact */}
-          <Group title={fr ? 'Coordonnées' : 'Contact'}>
-            <InfoRow label={fr ? 'Prénom' : 'First name'} value={s.first_name} />
-            <InfoRow label={fr ? 'Nom' : 'Last name'} value={s.last_name} />
-            <InfoRow label={fr ? 'Entreprise' : 'Company'} value={s.company} />
-            <InfoRow label={fr ? 'Courriel' : 'Email'} value={s.email} href={s.email ? `mailto:${s.email}` : undefined} />
-            <InfoRow label={fr ? 'Téléphone' : 'Phone'} value={s.phone} href={s.phone ? `tel:${s.phone}` : undefined} />
-          </Group>
-
-          {/* Address */}
-          {(s.street_address || s.unit || s.city || s.region || s.postal_code || s.country) && (
-            <Group title={fr ? 'Adresse' : 'Address'}>
-              <InfoRow label={fr ? 'Adresse' : 'Street'} value={s.street_address} />
-              <InfoRow label={fr ? 'Unité / App.' : 'Unit / Apt'} value={s.unit} />
-              <InfoRow label={fr ? 'Ville' : 'City'} value={s.city} />
-              <InfoRow label={fr ? 'Province / État' : 'State / Region'} value={s.region} />
-              <InfoRow label={fr ? 'Code postal' : 'Postal code'} value={s.postal_code} />
-              <InfoRow label={fr ? 'Pays' : 'Country'} value={s.country} />
-            </Group>
-          )}
+          {/* Client info block */}
+          <ClientHeader submission={s} />
 
           {/* Custom fields — render each per its type, choices show all options */}
           {fields.length > 0 && (
@@ -377,15 +356,33 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-/** A simple label : value row. Hidden when the value is empty. */
-function InfoRow({ label, value, href }: { label: string; value?: string | null; href?: string }) {
-  if (value === null || value === undefined || value === '') return null;
+/** Client identity block shown at the top of the detail, address-card style. */
+function ClientHeader({ submission: s }: { submission: FormSubmission }) {
+  const line1 = [s.street_address, s.unit].filter(Boolean).join(', ');
+  const line2 = [s.city, [s.region, s.postal_code].filter(Boolean).join(' ').trim()]
+    .filter(Boolean)
+    .join(', ');
+  const addressLines = [line1, line2, s.country].filter(Boolean);
+
   return (
-    <div className="flex items-start justify-between gap-4 px-3 py-2.5">
-      <span className="shrink-0 text-sm text-text-tertiary">{label}</span>
-      <span className="min-w-0 break-words text-right text-sm font-medium text-text-primary">
-        {href ? <a href={href} className="text-primary hover:underline">{value}</a> : value}
-      </span>
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-lg font-bold text-text-primary">{s.first_name} {s.last_name}</h3>
+        {s.company && <p className="text-sm text-text-tertiary">{s.company}</p>}
+      </div>
+
+      {addressLines.length > 0 && (
+        <div className="text-sm leading-relaxed text-text-secondary">
+          {addressLines.map((l, i) => <div key={i}>{l}</div>)}
+        </div>
+      )}
+
+      {s.phone && (
+        <a href={`tel:${s.phone}`} className="block text-sm text-text-secondary hover:text-primary">{s.phone}</a>
+      )}
+      {s.email && (
+        <a href={`mailto:${s.email}`} className="block break-words text-sm text-primary hover:underline">{s.email}</a>
+      )}
     </div>
   );
 }
