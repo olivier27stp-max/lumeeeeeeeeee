@@ -418,9 +418,21 @@ export default function QuoteMeasure() {
       });
     };
 
+    // While a drawing tool is active, every map click must place exactly ONE
+    // point. The 3D map's native double-click-to-zoom hijacks rapid clicks and
+    // zooms instead — there's no API flag to disable it (verified against
+    // Map3DElement options), so we swallow dblclick at the capture phase.
+    const blockDblZoom = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
+
     el.addEventListener('gmp-click', handler);
-    return () => el.removeEventListener('gmp-click', handler);
-  }, [tool, ready, is3dMode, shapes]);
+    el.addEventListener('dblclick', blockDblZoom, true);
+    return () => {
+      el.removeEventListener('gmp-click', handler);
+      el.removeEventListener('dblclick', blockDblZoom, true);
+    };
+    // NOTE: `shapes` intentionally excluded — the handler never reads it, and
+    // re-binding the listener on every saved measurement dropped in-flight clicks.
+  }, [tool, ready, is3dMode]);
 
   // ════════════════════════════════════════════
   // 2D MAP EVENTS (fallback)

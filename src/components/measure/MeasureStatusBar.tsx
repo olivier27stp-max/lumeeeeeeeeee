@@ -52,14 +52,28 @@ export default function MeasureStatusBar({
           3D
         </button>
 
-        {/* Unit toggle */}
-        <button
-          onClick={onUnitToggle}
-          className="px-2 py-0.5 rounded bg-surface-secondary text-[10px] font-bold text-text-muted hover:text-text-primary transition-colors"
-          title={fr ? 'Changer les unités' : 'Toggle units'}
+        {/* Unit selector — explicit pi (ft) / m choice */}
+        <div
+          className="flex items-center rounded-md bg-surface-secondary p-0.5 text-[10px] font-bold"
+          title={fr ? 'Unités de mesure' : 'Measurement units'}
         >
-          {unitSystem === 'imperial' ? 'ft / sq ft' : 'm / m²'}
-        </button>
+          <button
+            onClick={() => { if (unitSystem !== 'imperial') onUnitToggle(); }}
+            className={`px-2 py-0.5 rounded transition-all ${
+              unitSystem === 'imperial' ? 'bg-text-primary text-surface' : 'text-text-muted hover:text-text-primary'
+            }`}
+          >
+            {fr ? 'pi' : 'ft'}
+          </button>
+          <button
+            onClick={() => { if (unitSystem !== 'metric') onUnitToggle(); }}
+            className={`px-2 py-0.5 rounded transition-all ${
+              unitSystem === 'metric' ? 'bg-text-primary text-surface' : 'text-text-muted hover:text-text-primary'
+            }`}
+          >
+            m
+          </button>
+        </div>
       </div>
     </div>
   );
