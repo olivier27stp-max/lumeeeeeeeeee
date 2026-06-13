@@ -16,7 +16,7 @@ import { ArrowLeft, Search, Loader2, RotateCcw, Check, MoveVertical } from 'luci
 import { toast } from 'sonner';
 import type { LatLng, UnitSystem, Shape } from '../../lib/measurementTypes';
 import { nextColor, elevationStats, formatElevation } from '../../lib/measurementEngine';
-import { getSurfaceElevation } from '../../lib/buildingHeightApi';
+import { groundElevation, roofElevation } from '../../lib/buildingHeightApi';
 import { useGMaps3D } from './useGMaps3D';
 
 const FT_TO_M = 0.3048;
@@ -55,10 +55,13 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   function setB(p: Pt | null) { bRef.current = p; setPtB(p); }
 
   async function resolve(which: 'A' | 'B', lat: number, lng: number) {
-    const s = await getSurfaceElevation(lat, lng, key).catch(() => null);
+    // Point 1 = base → ground/terrain; point 2 = top → roof (Solar DSM).
+    const elev = which === 'A'
+      ? await groundElevation(lat, lng).catch(() => null)
+      : await roofElevation(lat, lng, key).catch(() => null);
     const cur = which === 'A' ? aRef.current : bRef.current;
     if (!cur || cur.lat !== lat || cur.lng !== lng) return; // superseded by a redo
-    const done: Pt = { lat, lng, elev: s?.elevationMeters ?? null, onBuilding: s?.onBuilding ?? false, loading: false };
+    const done: Pt = { lat, lng, elev, onBuilding: which === 'B' && elev != null, loading: false };
     if (which === 'A') setA(done); else setB(done);
   }
 
@@ -137,15 +140,18 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     }
   }, [ptA, ptB]);
 
-  // ── Height = |elev(B) − elev(A)| (or manual) ──
-  const bothResolved = ptA && ptB && !ptA.loading && !ptB.loading && ptA.elev != null && ptB.elev != null;
-  const diffMeters = bothResolved ? Math.abs((ptB!.elev as number) - (ptA!.elev as number)) : 0;
+  // ── Height = roof(point 2) − ground(point 1), or manual ──
+  const bothDone = !!(ptA && ptB && !ptA.loading && !ptB.loading);
+  const haveElevs = bothDone && ptA!.elev != null && ptB!.elev != null;
+  const diffMeters = haveElevs ? Math.abs((ptB!.elev as number) - (ptA!.elev as number)) : 0;
   const manualMeters = (() => {
     const h = parseFloat(manualH);
     if (Number.isFinite(h) && h > 0) return unitSystem === 'metric' ? h : h * FT_TO_M;
     return 0;
   })();
-  const tooClose = bothResolved && diffMeters < MIN_HEIGHT_M;
+  const roofMissing = bothDone && ptB!.elev == null;       // no Solar roof data at point 2
+  const tooClose = haveElevs && diffMeters < MIN_HEIGHT_M;  // both points ~same level
+  const needManual = bothDone && (roofMissing || tooClose);
   const heightMeters = manualMeters > 0 ? manualMeters : diffMeters;
   const canAdd = !!ptA && !!ptB && heightMeters > 0;
 
@@ -232,27 +238,36 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         {(ptA || ptB) && (
           <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-sm border border-outline/30 rounded-2xl px-5 py-4 z-20 shadow-xl text-center min-w-[280px] space-y-1.5">
             <div className="flex items-center justify-between gap-6 text-[11px] font-mono">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#FF4444' }} />{fr ? 'Point 1' : 'Point 1'}</span>
-              <span>{ptA ? (ptA.loading ? '…' : ptA.elev != null ? fmt(ptA.elev) + (ptA.onBuilding ? ' 🏢' : '') : '—') : '—'}</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#FF4444' }} />{fr ? 'Base (sol)' : 'Base (ground)'}</span>
+              <span>{ptA ? (ptA.loading ? '…' : ptA.elev != null ? fmt(ptA.elev) : '—') : '—'}</span>
             </div>
             <div className="flex items-center justify-between gap-6 text-[11px] font-mono">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#44BB44' }} />{fr ? 'Point 2' : 'Point 2'}</span>
-              <span>{ptB ? (ptB.loading ? '…' : ptB.elev != null ? fmt(ptB.elev) + (ptB.onBuilding ? ' 🏢' : '') : '—') : '—'}</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#44BB44' }} />{fr ? 'Sommet (toit)' : 'Top (roof)'}</span>
+              <span>{ptB ? (ptB.loading ? '…' : ptB.elev != null ? fmt(ptB.elev) + ' 🏢' : (fr ? 'pas de toit' : 'no roof')) : '—'}</span>
             </div>
 
-            {bothResolved && (
+            {bothDone && (
               <>
                 <div className="border-t border-outline/20 my-1.5" />
-                <p className="text-[11px] text-text-muted font-medium uppercase tracking-wide">{fr ? 'Hauteur' : 'Height'}</p>
-                <p className="text-2xl font-bold text-text-primary">{fmt(heightMeters)}</p>
-                {tooClose && manualMeters <= 0 && (
-                  <div className="space-y-1.5 pt-1">
-                    <p className="text-[10px] text-danger">{fr ? 'Points au même niveau — mets-en un sur le toit, ou saisis :' : 'Points at the same level — put one on the roof, or enter:'}</p>
+                {!needManual && (
+                  <>
+                    <p className="text-[11px] text-text-muted font-medium uppercase tracking-wide">{fr ? 'Hauteur' : 'Height'}</p>
+                    <p className="text-2xl font-bold text-text-primary">{fmt(heightMeters)}</p>
+                  </>
+                )}
+                {needManual && (
+                  <div className="space-y-1.5 pt-0.5">
+                    <p className="text-[10px] text-danger">
+                      {roofMissing
+                        ? (fr ? 'Pas de données de toit ici — saisis la hauteur :' : 'No roof data here — enter the height:')
+                        : (fr ? 'Points au même niveau — mets le 2e sur le toit, ou saisis :' : 'Points at the same level — put point 2 on the roof, or enter:')}
+                    </p>
                     <div className="flex items-center gap-2 justify-center">
                       <label className="text-[10px] text-text-muted">{fr ? `Hauteur (${unitSystem === 'metric' ? 'm' : 'pi'})` : `Height (${unitSystem === 'metric' ? 'm' : 'ft'})`}</label>
                       <input type="number" min="0" step="0.1" value={manualH} onChange={e => setManualH(e.target.value)}
                         className="w-20 text-[12px] rounded-md border border-outline/30 bg-surface-card px-2 py-1 text-center" />
                     </div>
+                    {manualMeters > 0 && <p className="text-[13px] font-bold text-text-primary">{fmt(manualMeters)}</p>}
                   </div>
                 )}
               </>
