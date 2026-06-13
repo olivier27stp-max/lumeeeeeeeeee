@@ -1,30 +1,27 @@
 /**
- * HeightTool3D — measure a building's REAL height.
+ * HeightTool3D — measure a building's height by placing TWO points and taking the
+ * difference of their surface elevations.
  *
- * The user clicks once on a building (reliable 2D satellite map — the beta 3D
- * map's click was unreliable, and we only need the lat/lng anyway). We read the
- * building's true height from Google's DSM data via the Solar API
- * (highest roof plane − ground elevation) — the Elevation API and the 3D click
- * only return bare-earth terrain and can't see buildings. If Google has no Solar
- * coverage for that building, we fall back to manual entry (floors × ~3 m, or an
- * exact height).
+ * Reliable 2D satellite map (single-click). For each clicked point we read its
+ * surface elevation: a point on a roof returns the real roof height (Solar DSM),
+ * a point on the ground returns terrain elevation. Height = |elev(B) − elev(A)|.
  *
- * Fully isolated from the 2D drawing workspace: own map instance, hands a finished
- * Shape back via onComplete. Stored as an ordinary 2-point 'line' with
- * metadata.kind === 'height' (no DB schema change).
+ * Fully isolated from the drawing workspace. Stored as an ordinary 2-point 'line'
+ * with metadata.kind === 'height' (no DB schema change). Manual fallback when the
+ * two points end up too close (e.g. no Solar roof data → both read terrain).
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Search, Loader2, RotateCcw, Check, MoveVertical, Building2 } from 'lucide-react';
+import { ArrowLeft, Search, Loader2, RotateCcw, Check, MoveVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import type { LatLng, UnitSystem, Shape } from '../../lib/measurementTypes';
 import { nextColor, elevationStats, formatElevation } from '../../lib/measurementEngine';
-import { fetchBuildingHeight, type BuildingHeightResult } from '../../lib/buildingHeightApi';
+import { getSurfaceElevation } from '../../lib/buildingHeightApi';
 import { useGMaps3D } from './useGMaps3D';
 
 const FT_TO_M = 0.3048;
 const M_TO_FT = 1 / FT_TO_M;
-const M_PER_FLOOR = 3; // typical storey height for the floor-count estimate
+const MIN_HEIGHT_M = 1;
 
 interface Props {
   quoteAddress: string;
@@ -35,7 +32,7 @@ interface Props {
   onClose: () => void;
 }
 
-type Picked = { lat: number; lng: number };
+type Pt = { lat: number; lng: number; elev: number | null; onBuilding: boolean; loading: boolean };
 
 export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onComplete, onClose }: Props) {
   const { ok: mapsOk, key } = useGMaps3D();
@@ -43,41 +40,41 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   const mapDiv = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const gcRef = useRef<google.maps.Geocoder | null>(null);
-  const markerRef = useRef<google.maps.Marker | null>(null);
-  const reqId = useRef(0);
+  const markers = useRef<google.maps.Marker[]>([]);
+  const aRef = useRef<Pt | null>(null);
+  const bRef = useRef<Pt | null>(null);
 
   const [ready, setReady] = useState(false);
   const [search, setSearch] = useState(quoteAddress || '');
   const [searching, setSearching] = useState(false);
-  const [picked, setPicked] = useState<Picked | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<BuildingHeightResult | { found: false; reason: string } | null>(null);
-  const [floors, setFloors] = useState('');
+  const [ptA, setPtA] = useState<Pt | null>(null);
+  const [ptB, setPtB] = useState<Pt | null>(null);
   const [manualH, setManualH] = useState('');
 
-  function pick(lat: number, lng: number) {
-    setPicked({ lat, lng });
-    setResult(null);
-    setLoading(true);
-    setFloors(''); setManualH('');
-    const id = ++reqId.current;
-    fetchBuildingHeight(lat, lng, key).then((r) => {
-      if (id !== reqId.current) return;
-      setLoading(false);
-      setResult(r);
-      if (!r.found) toast.message(fr ? 'Pas de données Google pour ce bâtiment — entre la hauteur' : 'No Google data for this building — enter the height');
-    }).catch(() => {
-      if (id !== reqId.current) return;
-      setLoading(false);
-      setResult({ found: false, reason: 'error' });
-    });
+  function setA(p: Pt | null) { aRef.current = p; setPtA(p); }
+  function setB(p: Pt | null) { bRef.current = p; setPtB(p); }
+
+  async function resolve(which: 'A' | 'B', lat: number, lng: number) {
+    const s = await getSurfaceElevation(lat, lng, key).catch(() => null);
+    const cur = which === 'A' ? aRef.current : bRef.current;
+    if (!cur || cur.lat !== lat || cur.lng !== lng) return; // superseded by a redo
+    const done: Pt = { lat, lng, elev: s?.elevationMeters ?? null, onBuilding: s?.onBuilding ?? false, loading: false };
+    if (which === 'A') setA(done); else setB(done);
+  }
+
+  function onMapClick(lat: number, lng: number) {
+    if (!aRef.current) {
+      const p: Pt = { lat, lng, elev: null, onBuilding: false, loading: true };
+      setA(p); resolve('A', lat, lng);
+    } else if (!bRef.current) {
+      const p: Pt = { lat, lng, elev: null, onBuilding: false, loading: true };
+      setB(p); resolve('B', lat, lng);
+    }
   }
 
   function flyTo(lat: number, lng: number) {
-    const m = mapRef.current;
-    if (!m) return;
-    m.setCenter({ lat, lng });
-    m.setZoom(20);
+    const m = mapRef.current; if (!m) return;
+    m.setCenter({ lat, lng }); m.setZoom(20);
   }
   function centerOnUser() {
     try {
@@ -87,12 +84,11 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => flyTo(pos.coords.latitude, pos.coords.longitude),
-      () => {},
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
+      () => {}, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
     );
   }
 
-  // ── Init the 2D satellite map (reliable single-click) ──
+  // ── Init the 2D satellite map ──
   useEffect(() => {
     if (!mapsOk || !mapDiv.current || mapRef.current) return;
     const map = new google.maps.Map(mapDiv.current, {
@@ -107,7 +103,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     gcRef.current = new google.maps.Geocoder();
     map.setOptions({ draggableCursor: 'crosshair' });
     map.addListener('click', (e: google.maps.MapMouseEvent) => {
-      if (e.latLng) pick(e.latLng.lat(), e.latLng.lng());
+      if (e.latLng) onMapClick(e.latLng.lat(), e.latLng.lng());
     });
     setReady(true);
     if (quoteAddress) {
@@ -119,36 +115,41 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapsOk]);
 
-  // ── Marker on the picked building ──
+  // ── Markers for the two points ──
   useEffect(() => {
-    if (markerRef.current) { markerRef.current.setMap(null); markerRef.current = null; }
-    const map = mapRef.current;
-    if (!map || !picked) return;
-    markerRef.current = new google.maps.Marker({
-      position: { lat: picked.lat, lng: picked.lng }, map, clickable: false,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 7, fillColor: '#FF4444', fillOpacity: 1, strokeColor: '#FFF', strokeWeight: 2 },
+    markers.current.forEach(m => m.setMap(null));
+    markers.current = [];
+    const map = mapRef.current; if (!map) return;
+    const mk = (p: Pt, color: string, label: string) => new google.maps.Marker({
+      position: { lat: p.lat, lng: p.lng }, map, clickable: false,
+      label: { text: label, color: '#FFF', fontSize: '11px', fontWeight: '700' },
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 9, fillColor: color, fillOpacity: 1, strokeColor: '#FFF', strokeWeight: 2 },
       zIndex: 200,
     });
-  }, [picked]);
+    if (ptA) markers.current.push(mk(ptA, '#FF4444', '1'));
+    if (ptB) markers.current.push(mk(ptB, '#44BB44', '2'));
+    if (ptA && ptB) {
+      const line = new google.maps.Polyline({
+        path: [{ lat: ptA.lat, lng: ptA.lng }, { lat: ptB.lat, lng: ptB.lng }],
+        strokeColor: '#FFCC00', strokeWeight: 3, clickable: false, map,
+      });
+      markers.current.push(line as any);
+    }
+  }, [ptA, ptB]);
 
-  // ── Resolve the height to commit (solar result OR manual entry) ──
+  // ── Height = |elev(B) − elev(A)| (or manual) ──
+  const bothResolved = ptA && ptB && !ptA.loading && !ptB.loading && ptA.elev != null && ptB.elev != null;
+  const diffMeters = bothResolved ? Math.abs((ptB!.elev as number) - (ptA!.elev as number)) : 0;
   const manualMeters = (() => {
     const h = parseFloat(manualH);
     if (Number.isFinite(h) && h > 0) return unitSystem === 'metric' ? h : h * FT_TO_M;
-    const f = parseFloat(floors);
-    if (Number.isFinite(f) && f > 0) return f * M_PER_FLOOR;
     return 0;
   })();
+  const tooClose = bothResolved && diffMeters < MIN_HEIGHT_M;
+  const heightMeters = manualMeters > 0 ? manualMeters : diffMeters;
+  const canAdd = !!ptA && !!ptB && heightMeters > 0;
 
-  const solarFound = result?.found === true;
-  const heightMeters = solarFound ? (result as BuildingHeightResult).heightMeters : manualMeters;
-  const canAdd = !!picked && heightMeters > 0;
-
-  function reset() {
-    setPicked(null); setResult(null); setLoading(false);
-    setFloors(''); setManualH('');
-    reqId.current++;
-  }
+  function reset() { setA(null); setB(null); setManualH(''); }
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -162,38 +163,25 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   }
 
   function add() {
-    if (!picked || heightMeters <= 0) return;
-    const ground = solarFound ? (result as BuildingHeightResult).groundMeters : undefined;
-    const point: LatLng = typeof ground === 'number'
-      ? { lat: picked.lat, lng: picked.lng, elevation: ground }
-      : { lat: picked.lat, lng: picked.lng };
-    const points: LatLng[] = [point, point];
+    if (!ptA || !ptB || heightMeters <= 0) return;
+    const points: LatLng[] = [
+      { lat: ptA.lat, lng: ptA.lng, ...(ptA.elev != null ? { elevation: ptA.elev } : {}) },
+      { lat: ptB.lat, lng: ptB.lng, ...(ptB.elev != null ? { elevation: ptB.elev } : {}) },
+    ];
     const heightFt = heightMeters * M_TO_FT;
-    const coord = typeof ground === 'number' ? [picked.lng, picked.lat, ground] : [picked.lng, picked.lat];
-    const geojson: any = { type: 'LineString', coordinates: [coord, coord] };
+    const geojson: any = { type: 'LineString', coordinates: points.map(p => p.elevation != null ? [p.lng, p.lat, p.elevation] : [p.lng, p.lat]) };
     const shape: Shape = {
       id: `sh-${index}`,
       label: fr ? `Hauteur ${index + 1}` : `Height ${index + 1}`,
       color: nextColor(index),
-      result: {
-        type: 'line',
-        value: heightFt,
-        areaValue: null,
-        perimeterValue: null,
-        geojson,
-        points,
-        elevation: elevationStats(points),
-      },
+      result: { type: 'line', value: heightFt, areaValue: null, perimeterValue: null, geojson, points, elevation: elevationStats(points) },
       notes: '',
       visible: true,
       metadata: {
         kind: 'height',
         heightMeters,
-        source: solarFound ? 'solar' : 'manual',
-        ...(solarFound ? {
-          roofMaxMeters: (result as BuildingHeightResult).roofMaxMeters,
-          groundMeters: (result as BuildingHeightResult).groundMeters,
-        } : {}),
+        source: manualMeters > 0 ? 'manual' : 'solar',
+        elevA: ptA.elev, elevB: ptB.elev,
       },
     };
     onComplete(shape);
@@ -201,10 +189,10 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   }
 
   const fmt = (m: number) => formatElevation(m, unitSystem);
+  const step = !ptA ? 1 : !ptB ? 2 : 3;
 
   return (
     <div className="fixed inset-0 z-[60] bg-background flex flex-col">
-      {/* Top bar */}
       <div className="h-12 border-b border-outline/20 flex items-center px-4 gap-3 bg-surface-card shrink-0">
         <button onClick={onClose} className="p-1.5 hover:bg-surface-secondary rounded-lg transition-colors">
           <ArrowLeft size={16} className="text-text-secondary" />
@@ -225,7 +213,6 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         </form>
       </div>
 
-      {/* Map */}
       <div className="flex-1 relative">
         <div ref={mapDiv} className="absolute inset-0" />
         {!ready && (
@@ -234,60 +221,52 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
           </div>
         )}
 
-        {/* Instruction pill */}
-        {!picked && ready && (
+        {step < 3 && ready && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/80 text-white text-[12px] px-4 py-1.5 rounded-full z-20 pointer-events-none backdrop-blur-sm font-medium">
-            {fr ? 'Cliquez sur le bâtiment à mesurer' : 'Click the building to measure'}
+            {step === 1
+              ? (fr ? '1. Cliquez le 1er point (ex: la base au sol)' : '1. Click point 1 (e.g. the base on the ground)')
+              : (fr ? '2. Cliquez le 2e point (ex: le sommet du toit)' : '2. Click point 2 (e.g. the top of the roof)')}
           </div>
         )}
 
-        {/* Result / manual card */}
-        {picked && (
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-sm border border-outline/30 rounded-2xl px-5 py-4 z-20 shadow-xl text-center min-w-[280px]">
-            {loading ? (
-              <div className="flex items-center gap-2 justify-center py-3 text-text-muted text-[12px]">
-                <Loader2 size={16} className="animate-spin" /> {fr ? 'Lecture de la hauteur…' : 'Reading height…'}
-              </div>
-            ) : solarFound ? (
+        {(ptA || ptB) && (
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-sm border border-outline/30 rounded-2xl px-5 py-4 z-20 shadow-xl text-center min-w-[280px] space-y-1.5">
+            <div className="flex items-center justify-between gap-6 text-[11px] font-mono">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#FF4444' }} />{fr ? 'Point 1' : 'Point 1'}</span>
+              <span>{ptA ? (ptA.loading ? '…' : ptA.elev != null ? fmt(ptA.elev) + (ptA.onBuilding ? ' 🏢' : '') : '—') : '—'}</span>
+            </div>
+            <div className="flex items-center justify-between gap-6 text-[11px] font-mono">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#44BB44' }} />{fr ? 'Point 2' : 'Point 2'}</span>
+              <span>{ptB ? (ptB.loading ? '…' : ptB.elev != null ? fmt(ptB.elev) + (ptB.onBuilding ? ' 🏢' : '') : '—') : '—'}</span>
+            </div>
+
+            {bothResolved && (
               <>
-                <p className="text-[11px] text-text-muted font-medium uppercase tracking-wide flex items-center gap-1 justify-center">
-                  <Building2 size={12} /> {fr ? 'Hauteur (Google)' : 'Height (Google)'}
-                </p>
-                <p className="text-3xl font-bold text-text-primary my-1">{fmt(heightMeters)}</p>
-                <p className="text-[10px] text-text-muted/70">
-                  {fr ? 'Toit' : 'Roof'} {fmt((result as BuildingHeightResult).roofMaxMeters)} − {fr ? 'sol' : 'ground'} {fmt((result as BuildingHeightResult).groundMeters)}
-                </p>
+                <div className="border-t border-outline/20 my-1.5" />
+                <p className="text-[11px] text-text-muted font-medium uppercase tracking-wide">{fr ? 'Hauteur' : 'Height'}</p>
+                <p className="text-2xl font-bold text-text-primary">{fmt(heightMeters)}</p>
+                {tooClose && manualMeters <= 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <p className="text-[10px] text-danger">{fr ? 'Points au même niveau — mets-en un sur le toit, ou saisis :' : 'Points at the same level — put one on the roof, or enter:'}</p>
+                    <div className="flex items-center gap-2 justify-center">
+                      <label className="text-[10px] text-text-muted">{fr ? `Hauteur (${unitSystem === 'metric' ? 'm' : 'pi'})` : `Height (${unitSystem === 'metric' ? 'm' : 'ft'})`}</label>
+                      <input type="number" min="0" step="0.1" value={manualH} onChange={e => setManualH(e.target.value)}
+                        className="w-20 text-[12px] rounded-md border border-outline/30 bg-surface-card px-2 py-1 text-center" />
+                    </div>
+                  </div>
+                )}
               </>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-[11px] text-text-secondary font-medium">
-                  {fr ? 'Pas de données Google pour ce bâtiment.' : 'No Google data for this building.'}
-                </p>
-                <div className="flex items-center gap-2 justify-center">
-                  <label className="text-[10px] text-text-muted">{fr ? 'Étages' : 'Floors'}</label>
-                  <input type="number" min="0" value={floors} onChange={e => { setFloors(e.target.value); setManualH(''); }}
-                    className="w-16 text-[12px] rounded-md border border-outline/30 bg-surface-card px-2 py-1 text-center" />
-                  <span className="text-[10px] text-text-muted/60">→ {fmt(manualMeters || 0)}</span>
-                </div>
-                <div className="flex items-center gap-2 justify-center">
-                  <label className="text-[10px] text-text-muted">{fr ? `Ou hauteur (${unitSystem === 'metric' ? 'm' : 'pi'})` : `Or height (${unitSystem === 'metric' ? 'm' : 'ft'})`}</label>
-                  <input type="number" min="0" step="0.1" value={manualH} onChange={e => { setManualH(e.target.value); setFloors(''); }}
-                    className="w-20 text-[12px] rounded-md border border-outline/30 bg-surface-card px-2 py-1 text-center" />
-                </div>
-              </div>
             )}
 
-            {!loading && (
-              <div className="flex items-center gap-2 justify-center mt-3">
-                <button onClick={reset} className="glass-button flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium">
-                  <RotateCcw size={13} /> {fr ? 'Refaire' : 'Redo'}
-                </button>
-                <button onClick={add} disabled={!canAdd}
-                  className="glass-button-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40">
-                  <Check size={13} /> {fr ? 'Ajouter la mesure' : 'Add measurement'}
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-2 justify-center pt-1">
+              <button onClick={reset} className="glass-button flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium">
+                <RotateCcw size={13} /> {fr ? 'Refaire' : 'Redo'}
+              </button>
+              <button onClick={add} disabled={!canAdd}
+                className="glass-button-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-40">
+                <Check size={13} /> {fr ? 'Ajouter' : 'Add'}
+              </button>
+            </div>
           </div>
         )}
       </div>
