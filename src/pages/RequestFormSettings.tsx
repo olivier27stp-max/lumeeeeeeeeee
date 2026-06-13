@@ -17,6 +17,7 @@ import {
   ChevronDown,
   FileText,
   ImagePlus,
+  ExternalLink,
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { useTranslation } from '../i18n';
@@ -380,6 +381,7 @@ export default function RequestFormSettings() {
 
   // Embed code
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://loomapp.com';
+  const formUrl = `${baseUrl}/form/${apiKey}`;
   const scriptEmbed = `<script src="${baseUrl}/form.js" data-api-key="${apiKey}"></script>`;
   const iframeEmbed = `<iframe src="${baseUrl}/form/${apiKey}" style="width:100%;min-height:800px;border:none;" title="Service Request Form"></iframe>`;
 
@@ -693,6 +695,37 @@ export default function RequestFormSettings() {
               </div>
             ) : (
               <>
+                {/* Direct form link */}
+                <div className="section-card p-5 space-y-3">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
+                    {t.requestForm.formLink}
+                  </h3>
+                  <p className="text-[12px] text-text-tertiary">
+                    {t.requestForm.formLinkHint}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 bg-surface-secondary rounded-lg px-3 py-2 text-[12px] font-mono text-text-secondary break-all">
+                      {formUrl}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(formUrl, 'url')}
+                      className="glass-button p-2"
+                      title={t.noteCanvas.copy}
+                    >
+                      {copied === 'url' ? <ClipboardCheck size={14} className="text-green-600" /> : <Copy size={14} />}
+                    </button>
+                    <a
+                      href={formUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="glass-button p-2"
+                      title={t.requestForm.preview}
+                    >
+                      <ExternalLink size={14} />
+                    </a>
+                  </div>
+                </div>
+
                 {/* API Key */}
                 <div className="section-card p-5 space-y-3">
                   <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">

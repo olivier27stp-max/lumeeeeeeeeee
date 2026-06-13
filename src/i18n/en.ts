@@ -2668,6 +2668,8 @@ const en = {
   // RequestForm
   requestForm: {
     active: 'Active',
+    formLink: 'Form link',
+    formLinkHint: 'Share this link directly, or open it to test the form.',
     photos: 'Photos',
     addPhotos: 'Add photos',
     addPhotosHint: 'Attach photos to help us understand your request (optional).',

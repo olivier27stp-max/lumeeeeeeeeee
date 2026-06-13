@@ -2660,6 +2660,8 @@ const fr: TranslationKeys = {
   // RequestForm
   requestForm: {
     active: 'Actif',
+    formLink: 'Lien du formulaire',
+    formLinkHint: 'Partagez ce lien directement, ou ouvrez-le pour tester le formulaire.',
     photos: 'Photos',
     addPhotos: 'Ajouter des photos',
     addPhotosHint: 'Joignez des photos pour nous aider à comprendre votre demande (optionnel).',
