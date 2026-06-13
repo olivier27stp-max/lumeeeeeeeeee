@@ -586,7 +586,7 @@ export default function Clients() {
           className="inline-flex items-center gap-2 h-10 px-5 bg-primary text-white rounded-lg text-[14px] font-medium hover:bg-primary-hover active:scale-[0.98] transition-all"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
-          {fr ? 'Nouveau client' : 'Add New Client'}
+          {fr ? 'Nouveau client' : 'New Client'}
         </button>
       </div>
 
