@@ -119,6 +119,9 @@ export default function QuoteMeasure() {
   const [tilt3d, setTilt3d] = useState(true);
   const [is3dMode, setIs3dMode] = useState(false);
   const cnt = useRef(0);
+  // Last 3D click, to drop duplicate gmp-click events fired in quick succession
+  // (the beta 3D map sometimes emits 2 clicks for one tap → stray extra points).
+  const lastClick3d = useRef<{ t: number; lat: number; lng: number } | null>(null);
 
   // Overlay refs (for 2D fallback)
   const drawOv = useRef<google.maps.MVCObject[]>([]);
@@ -400,6 +403,13 @@ export default function QuoteMeasure() {
       const lng = read(src.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
+      // Drop duplicate clicks: same spot within 350 ms = one physical tap that
+      // the 3D map double-fired. Prevents the stray "second point" the user saw.
+      const now = Date.now();
+      const last = lastClick3d.current;
+      if (last && now - last.t < 350 && haversineDistanceFt({ lat, lng }, last) < 2) return;
+      lastClick3d.current = { t: now, lat, lng };
+
       const pt: LatLng = { lat, lng };
       setPts(prev => {
         const next = [...prev, pt];
@@ -506,18 +516,22 @@ export default function QuoteMeasure() {
 
     // Render active drawing — a vertex dot at EVERY clicked point (so the very
     // first click gives immediate feedback) plus the connecting line/polygon.
+    // Everything is clamped to the ground: floating overlays were stealing the
+    // click ray, so points landed on the overlay instead of the terrain.
     if (pts.length >= 1 && tool !== 'select') {
       pts.forEach((p) => {
-        const dot = make3dVertex(el, p.lat, p.lng, '#FF4444', 16);
+        const dot = make3dVertex(el, p.lat, p.lng, '#FF4444');
         if (dot) overlays3d.current.push(dot);
       });
     }
     if (pts.length >= 2) {
-      const coords = pts.map(p => ({ lat: p.lat, lng: p.lng, altitude: 15 }));
+      const coords = pts.map(p => ({ lat: p.lat, lng: p.lng }));
 
-      if (tool === 'polygon') {
+      // A polygon fill needs ≥3 points; with 2 it renders as a degenerate sliver
+      // that looked like a "stray shape". Until then, draw the connecting line.
+      if (tool === 'polygon' && pts.length >= 3) {
         const poly = document.createElement('gmp-polygon-3d') as any;
-        poly.setAttribute('altitude-mode', 'relative-to-ground');
+        poly.setAttribute('altitude-mode', 'clamp-to-ground');
         poly.setAttribute('fill-color', 'rgba(255,68,68,0.25)');
         poly.setAttribute('stroke-color', '#FF4444');
         poly.setAttribute('stroke-width', '4');
@@ -527,7 +541,7 @@ export default function QuoteMeasure() {
         overlays3d.current.push(poly);
       } else {
         const line = document.createElement('gmp-polyline-3d') as any;
-        line.setAttribute('altitude-mode', 'relative-to-ground');
+        line.setAttribute('altitude-mode', 'clamp-to-ground');
         line.setAttribute('stroke-color', '#FF4444');
         line.setAttribute('stroke-width', '6');
         line.setAttribute('draws-occluded-segments', '');
@@ -540,12 +554,12 @@ export default function QuoteMeasure() {
     // Render saved shapes
     shapes.forEach(s => {
       if (!s.visible) return;
-      const coords = s.result.points.map(p => ({ lat: p.lat, lng: p.lng, altitude: 12 }));
+      const coords = s.result.points.map(p => ({ lat: p.lat, lng: p.lng }));
       const sel = s.id === selId;
 
       if (s.result.type === 'polygon' && coords.length >= 3) {
         const poly = document.createElement('gmp-polygon-3d') as any;
-        poly.setAttribute('altitude-mode', 'relative-to-ground');
+        poly.setAttribute('altitude-mode', 'clamp-to-ground');
         poly.setAttribute('fill-color', hexToRgba(s.color, sel ? 0.35 : 0.18));
         poly.setAttribute('stroke-color', s.color);
         poly.setAttribute('stroke-width', sel ? '6' : '3');
@@ -555,7 +569,7 @@ export default function QuoteMeasure() {
         overlays3d.current.push(poly);
       } else if (coords.length >= 2) {
         const line = document.createElement('gmp-polyline-3d') as any;
-        line.setAttribute('altitude-mode', 'relative-to-ground');
+        line.setAttribute('altitude-mode', 'clamp-to-ground');
         line.setAttribute('stroke-color', s.color);
         line.setAttribute('stroke-width', sel ? '8' : '4');
         line.setAttribute('draws-occluded-segments', '');
@@ -567,7 +581,7 @@ export default function QuoteMeasure() {
       // Vertex dots for the saved shape (skip when a huge number of points).
       if (s.result.points.length <= 60) {
         s.result.points.forEach((p) => {
-          const dot = make3dVertex(el, p.lat, p.lng, s.color, 13);
+          const dot = make3dVertex(el, p.lat, p.lng, s.color);
           if (dot) overlays3d.current.push(dot);
         });
       }
@@ -984,10 +998,12 @@ function hexToRgba(hex: string, alpha: number): string {
  * with <gmp-polygon-3d> (reliable across API channels, unlike Marker3D pins).
  * Returns the appended element, or null if 3D polygons aren't available.
  */
-function make3dVertex(parent: HTMLElement, lat: number, lng: number, color: string, altitude: number): HTMLElement | null {
+function make3dVertex(parent: HTMLElement, lat: number, lng: number, color: string): HTMLElement | null {
   try {
     const dot = document.createElement('gmp-polygon-3d') as any;
-    dot.setAttribute('altitude-mode', 'relative-to-ground');
+    // Clamp to the ground so the dot hugs the terrain instead of floating — a
+    // floating dot intercepts the click ray and corrupts the next point.
+    dot.setAttribute('altitude-mode', 'clamp-to-ground');
     dot.setAttribute('fill-color', '#FFFFFF');
     dot.setAttribute('stroke-color', color);
     dot.setAttribute('stroke-width', '2');
@@ -995,11 +1011,11 @@ function make3dVertex(parent: HTMLElement, lat: number, lng: number, color: stri
     const radiusM = 0.5; // ~0.5 m radius — visible but not obtrusive at house scale
     const dLat = radiusM / 111_320;
     const dLng = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180));
-    const ring: Array<{ lat: number; lng: number; altitude: number }> = [];
+    const ring: Array<{ lat: number; lng: number }> = [];
     const segments = 12;
     for (let i = 0; i < segments; i++) {
       const a = (i / segments) * 2 * Math.PI;
-      ring.push({ lat: lat + dLat * Math.sin(a), lng: lng + dLng * Math.cos(a), altitude });
+      ring.push({ lat: lat + dLat * Math.sin(a), lng: lng + dLng * Math.cos(a) });
     }
     dot.outerCoordinates = ring;
     parent.appendChild(dot);
