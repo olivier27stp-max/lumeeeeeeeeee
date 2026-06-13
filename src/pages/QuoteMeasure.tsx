@@ -858,9 +858,8 @@ export default function QuoteMeasure() {
       if (e.key === 'Enter' && pts.length >= 2) finishShape(tool, pts);
       if (e.key === 'Backspace' || ((e.ctrlKey || e.metaKey) && e.key === 'z')) setPts(p => p.slice(0, -1));
       if (e.key === '1') handleToolChange('select');
-      if (e.key === '2') handleToolChange('line');
-      if (e.key === '3') handleToolChange('path');
-      if (e.key === '4') handleToolChange('polygon');
+      if (e.key === '2') handleToolChange('path');
+      if (e.key === '3') handleToolChange('polygon');
       if (e.key === 'Delete' && selId) { setShapes(p => p.filter(s => s.id !== selId)); setSelId(null); }
     };
     window.addEventListener('keydown', h);

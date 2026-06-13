@@ -5,7 +5,7 @@
 
 import React from 'react';
 import {
-  Move, Ruler, PenLine, Pentagon, RotateCcw, Trash2, Copy,
+  Move, PenLine, Pentagon, RotateCcw, Trash2, Copy,
 } from 'lucide-react';
 import type { Tool } from '../../lib/measurementTypes';
 
@@ -23,9 +23,8 @@ interface Props {
 
 const TOOLS: { t: Tool; icon: React.ElementType; label: string; labelFr: string; key: string }[] = [
   { t: 'select', icon: Move, label: 'Select', labelFr: 'Sélection', key: '1' },
-  { t: 'line', icon: Ruler, label: 'Line', labelFr: 'Ligne', key: '2' },
-  { t: 'path', icon: PenLine, label: 'Path', labelFr: 'Chemin', key: '3' },
-  { t: 'polygon', icon: Pentagon, label: 'Area', labelFr: 'Zone', key: '4' },
+  { t: 'path', icon: PenLine, label: 'Path', labelFr: 'Chemin', key: '2' },
+  { t: 'polygon', icon: Pentagon, label: 'Area', labelFr: 'Zone', key: '3' },
 ];
 
 export default function MeasureToolbar({
