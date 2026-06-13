@@ -75,6 +75,7 @@ const fr: TranslationKeys = {
     noEmail: 'Aucun courriel',
     noPhone: 'Aucun téléphone',
     noCompany: 'Aucune entreprise',
+    useCompanyAsName: 'Utiliser le nom de l\'entreprise comme nom principal',
     comingSoon: 'Bientôt disponible',
     page: 'Page',
     of: 'de',

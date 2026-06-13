@@ -73,6 +73,7 @@ const en = {
     noEmail: 'No email',
     noPhone: 'No phone',
     noCompany: 'No company',
+    useCompanyAsName: 'Use company name as the primary name',
     comingSoon: 'Coming soon',
     page: 'Page',
     of: 'of',

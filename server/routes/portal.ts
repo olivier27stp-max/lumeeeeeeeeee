@@ -36,7 +36,7 @@ router.get('/portal/:token', async (req, res) => {
     // Both paths then enforce expires_at + revoked_at.
     let { data: client, error: clientErr } = await serviceClient
       .from('clients')
-      .select('id, first_name, last_name, company, email, org_id, portal_token, portal_token_hash, portal_token_expires_at, portal_token_revoked_at')
+      .select('id, first_name, last_name, company, display_as_company, email, org_id, portal_token, portal_token_hash, portal_token_expires_at, portal_token_revoked_at')
       .eq('portal_token_hash', tokenHash)
       .is('deleted_at', null)
       .maybeSingle();
@@ -45,7 +45,7 @@ router.get('/portal/:token', async (req, res) => {
       // Fallback for tokens not yet backfilled to hash
       ({ data: client, error: clientErr } = await serviceClient
         .from('clients')
-        .select('id, first_name, last_name, company, email, org_id, portal_token, portal_token_hash, portal_token_expires_at, portal_token_revoked_at')
+        .select('id, first_name, last_name, company, display_as_company, email, org_id, portal_token, portal_token_hash, portal_token_expires_at, portal_token_revoked_at')
         .eq('portal_token', token)
         .is('deleted_at', null)
         .maybeSingle());
@@ -101,6 +101,7 @@ router.get('/portal/:token', async (req, res) => {
         first_name: client.first_name,
         last_name: client.last_name,
         company: client.company,
+        display_as_company: client.display_as_company,
         email: client.email,
       },
       company: {

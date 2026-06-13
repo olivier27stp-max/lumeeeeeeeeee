@@ -4,9 +4,10 @@ import { AlertTriangle, X } from 'lucide-react';
 import BatchMessageModal from '../components/BatchMessageModal';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { cn, formatCurrency, formatDate } from '../lib/utils';
-import { displayEmail, displayPhone } from '../lib/piiSanitizer';
+import { cn, formatCurrency, formatDate, timeAgo } from '../lib/utils';
+import { displayEmail } from '../lib/piiSanitizer';
 import {
+  clientDisplayName,
   createClient,
   createClientWithDuplicateHandling,
   findClientsByEmail,
@@ -33,6 +34,7 @@ interface ClientFormState {
   first_name: string;
   last_name: string;
   company: string;
+  display_as_company: boolean;
   email: string;
   phone: string;
   address: string;
@@ -52,6 +54,7 @@ const EMPTY_FORM: ClientFormState = {
   first_name: '',
   last_name: '',
   company: '',
+  display_as_company: false,
   email: '',
   phone: '',
   address: '',
@@ -191,6 +194,7 @@ export default function Clients() {
       first_name: selected.first_name || '',
       last_name: selected.last_name || '',
       company: selected.company || '',
+      display_as_company: !!selected.display_as_company,
       email: selected.email || '',
       phone: selected.phone || '',
       address: selected.address || '',
@@ -260,14 +264,38 @@ export default function Clients() {
       const clientIds = res.items.map(c => c.id);
 
       const orgId = await getCurrentOrgIdOrThrow();
-      const jobsRes = await supabase
-        .from('jobs')
-        .select('client_id')
-        .eq('org_id', orgId)
-        .in('client_id', clientIds)
-        .is('deleted_at', null);
+      const [jobsRes, tagsRes] = await Promise.all([
+        supabase
+          .from('jobs')
+          .select('client_id, created_at, updated_at')
+          .eq('org_id', orgId)
+          .in('client_id', clientIds)
+          .is('deleted_at', null),
+        supabase
+          .from('client_tags')
+          .select('client_id, tag')
+          .in('client_id', clientIds),
+      ]);
 
       const clientsWithJobs = new Set((jobsRes.data || []).map(j => j.client_id));
+
+      // Dernière activité = job le plus récent (created/updated) ; à défaut, la
+      // date de création du client. (Comparaison lexicographique d'ISO 8601.)
+      const lastActivityByClient = new Map<string, string>();
+      for (const j of (jobsRes.data || []) as any[]) {
+        const ts: string | null = j.updated_at || j.created_at || null;
+        if (!ts) continue;
+        const prev = lastActivityByClient.get(j.client_id);
+        if (!prev || ts > prev) lastActivityByClient.set(j.client_id, ts);
+      }
+
+      // Étiquettes — table client_tags (scoping org assuré par les RLS).
+      const tagsByClient = new Map<string, string[]>();
+      for (const r of (tagsRes.data || []) as any[]) {
+        const arr = tagsByClient.get(r.client_id) || [];
+        arr.push(r.tag);
+        tagsByClient.set(r.client_id, arr);
+      }
 
       const enriched = res.items.map(c => {
         // Archivage manuel : on préserve un client 'inactive' tel quel.
@@ -287,7 +315,12 @@ export default function Clients() {
             });
         }
 
-        return { ...c, status: computed };
+        return {
+          ...c,
+          status: computed,
+          tags: tagsByClient.get(c.id) || [],
+          last_activity: lastActivityByClient.get(c.id) || c.created_at || null,
+        };
       });
 
       // Apply status filter client-side
@@ -618,14 +651,14 @@ export default function Clients() {
 
       {/* ── TABLE ── */}
       <div className="border border-[var(--color-outline)] rounded-md bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: '40px 1.2fr 1fr 1fr 1.2fr 120px 48px' }}>
+        <div className="grid" style={{ gridTemplateColumns: '40px 1.4fr 1.6fr 1.3fr 110px 130px 48px' }}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-[var(--color-outline)] flex items-center"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="rounded-[3px] border-[var(--color-outline)] w-4 h-4 accent-[var(--color-text-primary)] cursor-pointer" /></div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Nom' : 'Name'} {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Entreprise' : 'Company'} {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Téléphone' : 'Phone'} {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{t.common.email} {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Adresse' : 'Address'}</div>
+          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Étiquettes' : 'Tags'}</div>
+          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Statut' : 'Status'}</div>
+          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Dernière activité' : 'Last activity'}</div>
           <div className="py-3 border-b border-[var(--color-outline)]" />
 
           {/* LOADING */}
@@ -657,14 +690,23 @@ export default function Clients() {
                 </div>
                 <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click}>
                   <div className="flex items-center gap-3 min-w-0">
-                    <UnifiedAvatar id={item.id} name={`${item.first_name || ''} ${item.last_name || ''}`.trim()} />
-                    <span className="text-[14px] text-[var(--color-text-primary)] truncate">{item.first_name} {item.last_name}</span>
+                    <UnifiedAvatar id={item.id} name={clientDisplayName(item)} />
+                    <span className="text-[14px] text-[var(--color-text-primary)] truncate">{clientDisplayName(item) || '—'}</span>
                   </div>
                 </div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] truncate">{item.company || '—'}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] tabular-nums truncate">{displayPhone(item.phone)}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] truncate">{displayEmail(item.email)}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] truncate">{item.address || '—'}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}>
+                  {item.tags && item.tags.length > 0 ? (
+                    <div className="flex items-center gap-1 overflow-hidden">
+                      {item.tags.slice(0, 2).map((tag: string) => (
+                        <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded-full bg-[var(--color-surface-tertiary)] text-[11px] font-medium text-[var(--color-text-secondary)] border border-[var(--color-outline)] whitespace-nowrap">{tag}</span>
+                      ))}
+                      {item.tags.length > 2 && <span className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">+{item.tags.length - 2}</span>}
+                    </div>
+                  ) : <span className="text-[14px] text-[var(--color-text-tertiary)]">—</span>}
+                </div>
                 <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}><Badge status={item.status} /></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-secondary)] truncate">{item.last_activity ? timeAgo(item.last_activity, fr) : '—'}</span></div>
                 <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`}>
                   <button className="p-1 rounded text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-tertiary)] transition-colors" onClick={e => { e.stopPropagation(); setActionMenuId(actionMenuId === item.id ? null : item.id); }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
@@ -759,12 +801,16 @@ export default function Clients() {
             >
               <div className="sticky top-0 bg-surface/95 backdrop-blur-sm z-10 flex items-center justify-between px-6 py-5 border-b border-outline/40">
                 <div className="flex items-center gap-3">
-                  <UnifiedAvatar id={selected.id} name={`${selected.first_name || ''} ${selected.last_name || ''}`.trim()} size={36} />
+                  <UnifiedAvatar id={selected.id} name={clientDisplayName(selected)} size={36} />
                   <div>
                     <h3 className="text-[16px] font-extrabold text-text-primary">
-                      {selected.first_name} {selected.last_name}
+                      {clientDisplayName(selected) || '—'}
                     </h3>
-                    <p className="text-[13px] text-text-muted">{selected.company || t.common.noCompany}</p>
+                    <p className="text-[13px] text-text-muted">
+                      {selected.display_as_company && selected.company
+                        ? (`${selected.first_name || ''} ${selected.last_name || ''}`.trim() || t.common.noCompany)
+                        : (selected.company || t.common.noCompany)}
+                    </p>
                   </div>
                 </div>
                 <button onClick={() => navigate('/clients')} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors">
@@ -933,7 +979,7 @@ function ClientForm({
   isEdit?: boolean;
 }) {
   const [showAddress, setShowAddress] = useState(isEdit || !!form.address);
-  const patch = (key: keyof ClientFormState, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+  const patch = <K extends keyof ClientFormState>(key: K, value: ClientFormState[K]) => setForm((prev) => ({ ...prev, [key]: value }));
   return (
     <div className="space-y-4">
       {/* Essential fields — always shown */}
@@ -950,6 +996,16 @@ function ClientForm({
       <div>
         <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.company}</label>
         <input value={form.company} onChange={(e) => patch('company', e.target.value)} className="glass-input w-full mt-1.5" placeholder="Acme Inc." />
+        <label className={`mt-2 flex items-center gap-2 text-[13px] text-text-secondary select-none ${form.company.trim() ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
+          <input
+            type="checkbox"
+            checked={form.display_as_company && !!form.company.trim()}
+            disabled={!form.company.trim()}
+            onChange={(e) => patch('display_as_company', e.target.checked)}
+            className="rounded-[3px] border-[var(--color-outline)] w-4 h-4 accent-[var(--color-text-primary)]"
+          />
+          {t.common.useCompanyAsName}
+        </label>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>

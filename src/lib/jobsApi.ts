@@ -4,6 +4,7 @@ import { Job } from '../types';
 import type { JobDraftInitialValues } from '../components/NewJobModal';
 import { calculateJobFinancials, type CalcLineItem, type TaxLine } from './jobCalc';
 import { resolveClientIdForLead } from './leadsApi';
+import { clientDisplayName } from './clientsApi';
 import { emitJobCompleted } from './automationEventsApi';
 import { invalidateScheduleCache } from './scheduleApi';
 import { syncEntityPin } from './fieldSalesApi';
@@ -275,7 +276,7 @@ async function loadClientNames(clientIds: string[]): Promise<Map<string, string>
   const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('clients')
-    .select('id, first_name, last_name, company')
+    .select('id, first_name, last_name, company, display_as_company')
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .in('id', clientIds);
@@ -284,7 +285,7 @@ async function loadClientNames(clientIds: string[]): Promise<Map<string, string>
 
   const map = new Map<string, string>();
   for (const row of data || []) {
-    const label = [row.first_name, row.last_name].filter(Boolean).join(' ').trim() || row.company || '-';
+    const label = clientDisplayName(row) || '-';
     map.set(row.id, label);
   }
   return map;
@@ -581,12 +582,12 @@ export async function createJob(payload: {
   if (payload.client_id) {
     const { data: clientRow, error: clientError } = await supabase
       .from('clients')
-      .select('id,first_name,last_name,company,address')
+      .select('id,first_name,last_name,company,display_as_company,address')
       .is('deleted_at', null)
       .eq('id', payload.client_id)
       .single();
     if (clientError) throw clientError;
-    clientName = [clientRow.first_name, clientRow.last_name].filter(Boolean).join(' ').trim() || clientRow.company || null;
+    clientName = clientDisplayName(clientRow) || null;
     clientAddress = clientRow.address || null;
   }
 

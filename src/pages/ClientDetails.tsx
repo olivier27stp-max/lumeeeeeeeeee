@@ -29,7 +29,7 @@ import {
   Contact,
 } from 'lucide-react';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
-import { getClientById, updateClient, listClientJobs, softDeleteClient } from '../lib/clientsApi';
+import { clientDisplayName, getClientById, updateClient, listClientJobs, softDeleteClient } from '../lib/clientsApi';
 import type { ClientRecord } from '../lib/clientsApi';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
@@ -261,7 +261,7 @@ export default function ClientDetails() {
       }
 
       setClient(clientData);
-      updateRecentLabel(`/clients/${id}`, `${clientData.first_name} ${clientData.last_name}`.trim());
+      updateRecentLabel(`/clients/${id}`, clientDisplayName(clientData));
       setJobs((jobsData || []) as JobRecord[]);
       setNotes((clientData as any).notes || '');
 
@@ -467,8 +467,11 @@ export default function ClientDetails() {
     );
   }
 
-  const fullName = `${client.first_name} ${client.last_name}`.trim();
-  const fullAddress = [client.address || [client.street_number, client.street_name].filter(Boolean).join(' '), client.city, client.province, client.postal_code].filter(Boolean).join(', ');
+  const personalName = `${client.first_name} ${client.last_name}`.trim();
+  const fullName = clientDisplayName(client) || personalName;
+  // When the company is used as the primary name, surface the personal name as the secondary line.
+  const secondaryName = client.display_as_company && client.company ? personalName : client.company;
+  const fullAddress =[client.address || [client.street_number, client.street_name].filter(Boolean).join(' '), client.city, client.province, client.postal_code].filter(Boolean).join(', ');
 
   const overviewTabs: { key: OverviewTab; label: string; count: number }[] = [
     { key: 'active', label: language === 'fr' ? 'Travaux actifs' : 'Active Work', count: activeJobs.length },
@@ -538,7 +541,7 @@ export default function ClientDetails() {
       <nav className="flex items-center gap-1.5 text-[12px]">
         <button onClick={() => navigate('/clients')} className="text-text-tertiary hover:text-text-primary transition-colors">{t.clients.title}</button>
         <span className="text-text-tertiary">/</span>
-        <span className="text-text-primary font-medium">{client?.first_name} {client?.last_name}</span>
+        <span className="text-text-primary font-medium">{fullName}</span>
       </nav>
 
       {/* ═══ UNIFIED GRID — header + content share the same column structure ═══ */}
@@ -548,13 +551,13 @@ export default function ClientDetails() {
         <div className="lg:col-span-2 section-card px-5 py-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <UnifiedAvatar id={client.id} name={`${client.first_name || ''} ${client.last_name || ''}`.trim()} size={40} />
+              <UnifiedAvatar id={client.id} name={fullName} size={40} />
               <div>
                 <div className="flex items-center gap-2.5">
                   <h1 className="text-[20px] font-bold text-text-primary leading-tight">{fullName}</h1>
                   <StatusBadge status={client.status} />
                 </div>
-                {client.company && <p className="text-[13px] text-text-secondary mt-0.5">{client.company}</p>}
+                {secondaryName && <p className="text-[13px] text-text-secondary mt-0.5">{secondaryName}</p>}
               </div>
             </div>
 

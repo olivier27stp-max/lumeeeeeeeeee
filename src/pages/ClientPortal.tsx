@@ -8,7 +8,7 @@ import { FileText, DollarSign, CheckCircle2, Clock, ExternalLink } from 'lucide-
 import { supabase } from '../lib/supabase';
 
 interface PortalData {
-  client: { id: string; first_name: string; last_name: string; company: string | null; email: string | null };
+  client: { id: string; first_name: string; last_name: string; company: string | null; display_as_company?: boolean; email: string | null };
   company: { company_name: string; company_logo_url: string | null; company_phone: string | null };
   invoices: Array<{
     id: string;
@@ -144,7 +144,9 @@ export default function ClientPortal() {
     );
   }
 
-  const clientName = `${data.client.first_name} ${data.client.last_name}`.trim();
+  const personalName = `${data.client.first_name} ${data.client.last_name}`.trim();
+  const companyName = (data.client.company || '').trim();
+  const clientName = data.client.display_as_company && companyName ? companyName : (personalName || companyName);
   const totalOwed = data.invoices.reduce((sum, inv) => sum + (inv.balance_cents || 0), 0);
   const paidInvoices = data.invoices.filter((inv) => inv.status === 'paid').length;
 

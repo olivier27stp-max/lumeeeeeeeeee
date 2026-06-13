@@ -362,6 +362,7 @@ create table if not exists public.clients (
   phone text null,
   address text null,
   status text not null default 'active',
+  display_as_company boolean not null default false,
   deleted_at timestamptz null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -10552,6 +10553,7 @@ declare
   v_phone text := nullif(trim(coalesce(p_payload->>'phone', '')), '');
   v_address text := nullif(trim(coalesce(p_payload->>'address', '')), '');
   v_status text := coalesce(nullif(trim(p_payload->>'status'), ''), 'active');
+  v_display_as_company boolean := coalesce((p_payload->>'display_as_company')::boolean, false);
   v_primary public.clients%rowtype;
   v_dup record;
 begin
@@ -10580,10 +10582,10 @@ begin
 
   if v_mode = 'add' then
     insert into public.clients (
-      org_id, first_name, last_name, company, email, phone, address, status, created_by, updated_at
+      org_id, first_name, last_name, company, email, phone, address, status, display_as_company, created_by, updated_at
     )
     values (
-      p_org_id, v_first_name, v_last_name, v_company, v_email, v_phone, v_address, v_status, v_uid, now()
+      p_org_id, v_first_name, v_last_name, v_company, v_email, v_phone, v_address, v_status, v_display_as_company, v_uid, now()
     )
     returning * into v_primary;
 
@@ -10605,10 +10607,10 @@ begin
 
   if v_primary.id is null then
     insert into public.clients (
-      org_id, first_name, last_name, company, email, phone, address, status, created_by, updated_at
+      org_id, first_name, last_name, company, email, phone, address, status, display_as_company, created_by, updated_at
     )
     values (
-      p_org_id, v_first_name, v_last_name, v_company, v_email, v_phone, v_address, v_status, v_uid, now()
+      p_org_id, v_first_name, v_last_name, v_company, v_email, v_phone, v_address, v_status, v_display_as_company, v_uid, now()
     )
     returning * into v_primary;
 
@@ -10624,6 +10626,7 @@ begin
     phone = v_phone,
     address = v_address,
     status = v_status,
+    display_as_company = v_display_as_company,
     updated_at = now()
   where id = v_primary.id
   returning * into v_primary;

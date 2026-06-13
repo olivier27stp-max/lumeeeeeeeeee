@@ -18,6 +18,7 @@ export interface ClientRecord {
   longitude: number | null;
   place_id: string | null;
   status: string;
+  display_as_company: boolean;
   notes: string | null;
   portal_token: string | null;
   org_id: string;
@@ -130,10 +131,27 @@ export interface ClientPayload {
   longitude?: number | null;
   place_id?: string;
   status?: string;
+  display_as_company?: boolean;
 }
 
 // Use the centralized version from orgApi instead of duplicating
 import { getCurrentOrgIdOrThrow } from './orgApi';
+
+/**
+ * The client's primary display name. When `display_as_company` is set and a
+ * company is present, the company name is the main name; otherwise the personal
+ * first/last name is used (falling back to company, then '' so callers can
+ * apply their own placeholder). Set by org staff, not by the client.
+ */
+export function clientDisplayName(
+  client: Partial<Pick<ClientRecord, 'first_name' | 'last_name' | 'company' | 'display_as_company'>> | null | undefined,
+): string {
+  if (!client) return '';
+  const personal = `${client.first_name || ''} ${client.last_name || ''}`.trim();
+  const company = (client.company || '').trim();
+  if (client.display_as_company && company) return company;
+  return personal || company;
+}
 
 export async function findClientsByEmail(email: string): Promise<ClientRecord[]> {
   const normalized = String(email || '').trim().toLowerCase();
@@ -187,6 +205,7 @@ export async function createClientWithDuplicateHandling(
       longitude: payload.longitude ?? null,
       place_id: payload.place_id?.trim() || null,
       status: payload.status || 'active',
+      display_as_company: payload.display_as_company ?? false,
     },
     p_merge_duplicates: true,
   });
@@ -219,6 +238,7 @@ export async function updateClient(id: string, payload: Partial<ClientPayload>):
   if (payload.longitude !== undefined) updatePayload.longitude = payload.longitude;
   if (payload.place_id !== undefined) updatePayload.place_id = payload.place_id?.trim() || null;
   if (payload.status !== undefined) updatePayload.status = payload.status;
+  if (payload.display_as_company !== undefined) updatePayload.display_as_company = payload.display_as_company;
 
   // Support optimistic locking if version provided in payload
   const expectedVersion = (payload as any).version;
