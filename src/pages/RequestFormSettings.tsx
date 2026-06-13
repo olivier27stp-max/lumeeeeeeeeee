@@ -16,6 +16,7 @@ import {
   ToggleRight,
   ChevronDown,
   FileText,
+  ImagePlus,
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { useTranslation } from '../i18n';
@@ -239,6 +240,18 @@ function FormPreview({
           {t.requestForm.additionalNotes2}
         </label>
         <textarea className="glass-input w-full mt-1 min-h-[60px]" disabled />
+      </div>
+
+      {/* Photos (always available on the public form) */}
+      <div className="space-y-3">
+        <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
+          {t.requestForm.photos}
+        </h3>
+        <p className="text-[12px] text-text-tertiary">{t.requestForm.addPhotosHint}</p>
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-text-muted/30 py-3 text-[13px] font-medium text-text-secondary opacity-70">
+          <ImagePlus className="h-4 w-4" />
+          {t.requestForm.addPhotos}
+        </div>
       </div>
 
       <button className="w-full py-2.5 rounded-xl bg-primary text-white font-semibold text-[14px] opacity-70 cursor-not-allowed">
