@@ -368,24 +368,16 @@ router.post('/messages/inbound', (req, res) => {
 
       // ── From here, we know exactly 1 message was inserted ──
 
-      // Update conversation: last_message_text + atomic unread increment
+      // Update conversation preview text only.
+      // NOTE: unread_count, last_message_at and updated_at are already handled atomically
+      // by the trg_message_insert trigger on the messages table (see 20260309120000_messaging.sql).
+      // Do NOT increment unread_count here — doing so double-counts and the badge shows 2 for a
+      // single inbound message. We only override last_message_text with a truncated preview.
       const truncatedBody = Body.length > 200 ? Body.substring(0, 200) + '...' : Body;
-      const { error: rpcError } = await serviceClient.rpc('increment_unread_count', { p_conversation_id: conversation.id });
-      if (rpcError) {
-        await serviceClient
-          .from('conversations')
-          .update({
-            last_message_text: truncatedBody,
-            last_message_at: new Date().toISOString(),
-            unread_count: 1,
-          })
-          .eq('id', conversation.id);
-      } else {
-        await serviceClient
-          .from('conversations')
-          .update({ last_message_text: truncatedBody })
-          .eq('id', conversation.id);
-      }
+      await serviceClient
+        .from('conversations')
+        .update({ last_message_text: truncatedBody })
+        .eq('id', conversation.id);
 
       // Create notification (1 per message, guaranteed by the upsert gate above)
       if (effectiveOrgId) {
