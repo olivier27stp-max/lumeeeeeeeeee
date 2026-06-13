@@ -619,7 +619,7 @@ export default function QuoteMeasure() {
       const allPts = [...pts, snapped];
       cursorOv.current.push(new google.maps.Polyline({
         path: [new google.maps.LatLng(snapped.lat, snapped.lng), new google.maps.LatLng(pts[0].lat, pts[0].lng)],
-        strokeColor: '#FF4444', strokeWeight: 2, strokeOpacity: 0.6, icons: dashIcon, map,
+        strokeColor: '#FF4444', strokeWeight: 2, strokeOpacity: 0.6, icons: dashIcon, clickable: false, map,
       }));
       const closeDist = haversineDistanceFt(snapped, pts[0]);
       if (closeDist > 0.5) cursorOv.current.push(mkLabel(map, midpoint(snapped, pts[0]), fmtLen(closeDist)));
@@ -638,9 +638,9 @@ export default function QuoteMeasure() {
     const path = pts.map(p => new google.maps.LatLng(p.lat, p.lng));
     if (path.length >= 2) {
       if (tool === 'polygon') {
-        drawOv.current.push(new google.maps.Polygon({ paths: path, strokeColor: '#FF4444', strokeWeight: 2, fillColor: '#FF4444', fillOpacity: 0.15, map }));
+        drawOv.current.push(new google.maps.Polygon({ paths: path, strokeColor: '#FF4444', strokeWeight: 2, fillColor: '#FF4444', fillOpacity: 0.15, clickable: false, map }));
       } else {
-        drawOv.current.push(new google.maps.Polyline({ path, strokeColor: '#FF4444', strokeWeight: 3, map }));
+        drawOv.current.push(new google.maps.Polyline({ path, strokeColor: '#FF4444', strokeWeight: 3, clickable: false, map }));
       }
       for (let i = 1; i < pts.length; i++) drawOv.current.push(mkLabel(map, midpoint(pts[i - 1], pts[i]), fmtLen(haversineDistanceFt(pts[i - 1], pts[i]))));
       if (tool === 'polygon' && pts.length >= 3) {
@@ -650,7 +650,7 @@ export default function QuoteMeasure() {
       if (tool === 'path' && pts.length > 2) drawOv.current.push(mkLabel(map, pts[pts.length - 1], `Total: ${fmtLen(computeMeasurement('path', pts).value)}`));
     }
     path.forEach(p => {
-      drawOv.current.push(new google.maps.Marker({ position: p, map, icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#FFF', fillOpacity: 1, strokeColor: '#FF4444', strokeWeight: 2 }, zIndex: 100 }));
+      drawOv.current.push(new google.maps.Marker({ position: p, map, clickable: false, icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#FFF', fillOpacity: 1, strokeColor: '#FF4444', strokeWeight: 2 }, zIndex: 100 }));
     });
   }, [pts, tool, unitSystem, is3dMode]);
 
@@ -987,7 +987,7 @@ export default function QuoteMeasure() {
 
 function mkLabel(map: google.maps.Map, pos: LatLng, text: string): google.maps.Marker {
   return new google.maps.Marker({
-    position: pos, map, zIndex: 200,
+    position: pos, map, clickable: false, zIndex: 200,
     icon: { path: google.maps.SymbolPath.CIRCLE, scale: 0 },
     label: { text, color: '#FFF', fontSize: '11px', fontWeight: '600', className: 'measurement-label' },
   });
