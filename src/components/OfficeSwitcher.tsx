@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, ChevronDown, Check, Plus, Loader2, X } from 'lucide-react';
+import { Building2, Check, Plus, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useCompany } from '../contexts/CompanyContext';
@@ -25,14 +25,14 @@ export function OfficeSwitcher() {
   const isMultiOffice = companies.length > 1;
   const canCreate = currentRole === 'owner';
 
-  // Pill statique pour les utilisateurs mono-office sans droit de création.
+  // Icône statique pour les utilisateurs mono-office sans droit de création.
   if (!isMultiOffice && !canCreate) {
     return (
-      <div className="flex items-center gap-1.5 h-[30px] px-2.5 rounded-full border border-border text-text-secondary">
-        <Building2 size={14} className="text-primary flex-shrink-0" />
-        <span className="text-[13px] font-medium text-text-primary truncate max-w-[140px]">
-          {officeName}
-        </span>
+      <div
+        className="p-2 rounded-lg text-text-tertiary"
+        title={officeName}
+      >
+        <Building2 size={17} strokeWidth={1.75} />
       </div>
     );
   }
@@ -41,20 +41,16 @@ export function OfficeSwitcher() {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 h-[30px] px-2.5 rounded-full border border-border hover:bg-surface-secondary transition-colors"
-        title={fr ? 'Changer de bureau' : 'Switch office'}
+        className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-all"
+        title={fr ? `${officeName} — changer de bureau` : `${officeName} — switch office`}
       >
-        <Building2 size={14} className="text-primary flex-shrink-0" />
-        <span className="text-[13px] font-medium text-text-primary truncate max-w-[140px]">
-          {officeName}
-        </span>
-        <ChevronDown size={13} className={cn('text-text-tertiary transition-transform', open && 'rotate-180')} />
+        <Building2 size={17} strokeWidth={1.75} />
       </button>
 
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-1 w-64 bg-surface-raised border border-outline rounded-xl shadow-lg z-50 py-1 max-h-72 overflow-y-auto">
+          <div className="absolute right-0 top-full mt-1 w-64 bg-surface-raised border border-outline rounded-xl shadow-lg z-50 py-1 max-h-72 overflow-y-auto">
             <div className="px-3 py-2 text-xs font-medium text-text-tertiary uppercase tracking-wider">
               {fr ? 'Changer de bureau' : 'Switch office'}
             </div>

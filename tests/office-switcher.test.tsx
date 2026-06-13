@@ -72,8 +72,18 @@ function clickByText(text: string) {
   });
 }
 
-describe('OfficeSwitcher (header)', () => {
-  it('shows the current office in the trigger', () => {
+// The header trigger is icon-only — click the first button (the only one
+// rendered while the dropdown is closed).
+function openTrigger() {
+  const trigger = container.querySelector('button');
+  if (!trigger) throw new Error('No trigger button rendered');
+  act(() => {
+    trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+}
+
+describe('OfficeSwitcher (header, icon-only)', () => {
+  it('renders an icon-only trigger that names the current office via title', () => {
     const switchCompany = vi.fn();
     act(() => {
       root.render(
@@ -82,7 +92,12 @@ describe('OfficeSwitcher (header)', () => {
         </CompanyContext.Provider>,
       );
     });
-    expect(container.textContent).toContain('Bureau Montréal');
+    const trigger = container.querySelector('button')!;
+    // Icon-only: no office name in the visible text, only an SVG icon.
+    expect(trigger.textContent?.trim()).toBe('');
+    expect(trigger.querySelector('svg')).toBeTruthy();
+    // The office name is still discoverable via the tooltip.
+    expect(trigger.getAttribute('title')).toContain('Bureau Montréal');
   });
 
   it('opens the dropdown and switches office on click', () => {
@@ -98,8 +113,8 @@ describe('OfficeSwitcher (header)', () => {
     // Dropdown closed initially → other office not yet in the DOM.
     expect(container.textContent).not.toContain('Bureau Québec');
 
-    // Open the dropdown (click the trigger pill showing the current office).
-    clickByText('Bureau Montréal');
+    // Open the dropdown (click the icon trigger).
+    openTrigger();
     expect(container.textContent).toContain('Bureau Québec');
 
     // Click the other office → must call switchCompany with its orgId.

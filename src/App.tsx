@@ -1102,11 +1102,11 @@ function AuthenticatedApp({
                 <Menu size={17} />
               </button>
             )}
-            <OfficeSwitcher />
             <div className="flex-1 max-w-xl">
               <GlobalSearch />
             </div>
             <div className="ml-auto flex items-center gap-0.5">
+              <OfficeSwitcher />
               <button
                 onClick={() => navigate('/messages')}
                 title={t.nav.messages}
