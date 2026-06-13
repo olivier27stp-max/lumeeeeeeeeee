@@ -5,13 +5,14 @@
 
 import React from 'react';
 import {
-  Move, PenLine, Pentagon, RotateCcw, Trash2, Copy,
+  Move, PenLine, Pentagon, RotateCcw, Trash2, Copy, MoveVertical,
 } from 'lucide-react';
 import type { Tool } from '../../lib/measurementTypes';
 
 interface Props {
   tool: Tool;
   onToolChange: (t: Tool) => void;
+  onOpenHeight: () => void;
   onUndo: () => void;
   onClearAll: () => void;
   onDuplicateSelected: () => void;
@@ -28,7 +29,7 @@ const TOOLS: { t: Tool; icon: React.ElementType; label: string; labelFr: string;
 ];
 
 export default function MeasureToolbar({
-  tool, onToolChange, onUndo, onClearAll, onDuplicateSelected,
+  tool, onToolChange, onOpenHeight, onUndo, onClearAll, onDuplicateSelected,
   hasPoints, hasShapes, hasSelection, fr,
 }: Props) {
   return (
@@ -53,6 +54,17 @@ export default function MeasureToolbar({
           <span className={`text-[7px] leading-none ${tool === t ? 'text-surface/60' : 'text-text-muted/50'}`}>{key}</span>
         </button>
       ))}
+
+      {/* Height — opens the dedicated 3D building-height modal (not a draw tool). */}
+      <button
+        onClick={onOpenHeight}
+        className="w-[46px] flex flex-col items-center gap-[2px] py-2 rounded-lg text-text-muted hover:bg-surface-secondary hover:text-text-primary transition-all"
+        title={fr ? 'Hauteur (bâtiment, 3D)' : 'Height (building, 3D)'}
+      >
+        <MoveVertical size={18} strokeWidth={1.8} />
+        <span className="text-[8px] font-semibold leading-none">{fr ? 'Hauteur' : 'Height'}</span>
+        <span className="text-[7px] leading-none text-text-muted/50">3D</span>
+      </button>
 
       <div className="w-8 border-t border-outline/20 my-2" />
 

@@ -67,6 +67,13 @@ export interface Shape {
   result: MeasurementResult;
   notes: string;
   visible: boolean;
+  /**
+   * Extra non-geometry data persisted to the DB `metadata` column.
+   * A building-height measurement (captured in the 3D modal) carries
+   * `{ kind: 'height', heightMeters, baseAltitude, topAltitude }` here while
+   * being stored as a normal 2-point 'line' — so no DB schema change is needed.
+   */
+  metadata?: Record<string, unknown> | null;
 }
 
 // ── Camera state ──

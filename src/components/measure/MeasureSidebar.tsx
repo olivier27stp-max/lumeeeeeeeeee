@@ -5,7 +5,7 @@
 
 import React from 'react';
 import {
-  Eye, EyeOff, X, Ruler, Pentagon, PenLine, ChevronRight, Mountain,
+  Eye, EyeOff, X, Ruler, Pentagon, PenLine, ChevronRight, Mountain, MoveVertical,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { Shape, UnitSystem } from '../../lib/measurementTypes';
@@ -37,8 +37,10 @@ export default function MeasureSidebar({
   const fmtArea = (sqft: number) => formatArea(sqft, unitSystem);
   const fmtElev = (m: number) => formatElevation(m, unitSystem);
 
-  // Totals
-  const totalLinear = shapes.filter(s => s.result.type !== 'polygon').reduce((a, s) => a + s.result.value, 0);
+  const isHeight = (s: Shape) => s.metadata?.kind === 'height';
+
+  // Totals — exclude height shapes from the horizontal-length total (height is vertical).
+  const totalLinear = shapes.filter(s => s.result.type !== 'polygon' && !isHeight(s)).reduce((a, s) => a + s.result.value, 0);
   const totalArea = shapes.filter(s => s.result.type === 'polygon').reduce((a, s) => a + s.result.value, 0);
 
   return (
@@ -61,7 +63,8 @@ export default function MeasureSidebar({
           <div className="divide-y divide-outline/10">
             {shapes.map((s) => {
               const sel = s.id === selectedId;
-              const Icon = TYPE_ICON[s.result.type] || Ruler;
+              const heightShape = isHeight(s);
+              const Icon = heightShape ? MoveVertical : (TYPE_ICON[s.result.type] || Ruler);
 
               return (
                 <div
@@ -110,8 +113,15 @@ export default function MeasureSidebar({
                     </p>
                   )}
 
-                  {/* Elevation / height delta */}
-                  {s.result.elevation && (
+                  {/* Height caption (the value above IS the building height) */}
+                  {heightShape && (
+                    <p className="text-[10px] text-text-muted mt-0.5 ml-[20px]">
+                      {fr ? 'Hauteur du bâtiment (3D)' : 'Building height (3D)'}
+                    </p>
+                  )}
+
+                  {/* Elevation / height delta — not for height shapes (redundant) */}
+                  {s.result.elevation && !heightShape && (
                     <p className="text-[10px] text-text-muted mt-0.5 ml-[20px] flex items-center gap-1">
                       <Mountain size={10} className="shrink-0" />
                       {fr ? 'Dénivelé' : 'Elevation Δ'}: <span className="font-semibold text-text-secondary">{fmtElev(s.result.elevation.gain)}</span>
@@ -119,8 +129,8 @@ export default function MeasureSidebar({
                     </p>
                   )}
 
-                  {/* Segment breakdown (expanded) */}
-                  {sel && s.result.points.length >= 2 && (
+                  {/* Segment breakdown (expanded) — not for height shapes */}
+                  {sel && !heightShape && s.result.points.length >= 2 && (
                     <div className="mt-2 ml-[20px] space-y-0.5">
                       {s.result.points.map((_, i) => {
                         const j = s.result.type === 'polygon' ? (i + 1) % s.result.points.length : i + 1;
@@ -136,8 +146,8 @@ export default function MeasureSidebar({
                     </div>
                   )}
 
-                  {/* Per-point elevation (expanded) */}
-                  {sel && s.result.elevation && (
+                  {/* Per-point elevation (expanded) — not for height shapes */}
+                  {sel && s.result.elevation && !heightShape && (
                     <div className="mt-2 ml-[20px] space-y-0.5">
                       <p className="text-[9px] text-text-muted/70 font-semibold uppercase tracking-wide">
                         {fr ? 'Élévation par point' : 'Per-point elevation'}

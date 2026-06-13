@@ -31,51 +31,9 @@ import { SNAP_PX } from '../lib/measurementTypes';
 import MeasureToolbar from '../components/measure/MeasureToolbar';
 import MeasureSidebar from '../components/measure/MeasureSidebar';
 import MeasureStatusBar from '../components/measure/MeasureStatusBar';
+import HeightTool3D from '../components/measure/HeightTool3D';
+import { useGMaps3D } from '../components/measure/useGMaps3D';
 import { toast } from 'sonner';
-
-// ── Google Maps 3D API loader ──
-function useGMaps3D() {
-  const [ok, setOk] = useState(false);
-  const key = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '') as string;
-  const mapId = (import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || '') as string;
-
-  useEffect(() => {
-    if (!key) return;
-    try { if (window.google?.maps) { setOk(true); return; } } catch {}
-    const id = 'gmap-measure';
-    if (document.getElementById(id)) {
-      const p = setInterval(() => { try { if (window.google?.maps) { setOk(true); clearInterval(p); } } catch {} }, 200);
-      return () => clearInterval(p);
-    }
-    const s = document.createElement('script');
-    s.id = id; s.async = true; s.defer = true;
-    // Load beta channel for 3D tiles support (alpha is restricted to dev environments)
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places,geometry,maps3d&v=beta`;
-    s.onload = async () => {
-      try {
-        const g = (window as any).google;
-        if (g?.maps?.importLibrary) {
-          await Promise.all([
-            g.maps.importLibrary('maps'),
-            g.maps.importLibrary('places'),
-            g.maps.importLibrary('geometry'),
-            // Elevation + maps3d are optional enrichments — never let their absence
-            // block the core map init, or the whole workspace fails to load.
-            g.maps.importLibrary('elevation').catch((e: any) => console.warn('[gmaps] elevation unavailable:', e)),
-            g.maps.importLibrary('maps3d').catch((e: any) => console.warn('[gmaps] maps3d unavailable:', e)),
-          ]);
-        }
-        setOk(true);
-      } catch (e) {
-        console.error('[gmaps] failed to init libraries:', e);
-      }
-    };
-    s.onerror = (e) => console.error('[gmaps] script load failed:', e);
-    document.head.appendChild(s);
-  }, [key]);
-
-  return { ok, key, mapId, has3d: Boolean(mapId) };
-}
 
 // ── Component ──
 export default function QuoteMeasure() {
@@ -118,6 +76,7 @@ export default function QuoteMeasure() {
   const [unitSystem, setUnitSystem] = useState<UnitSystem>('imperial');
   const [tilt3d, setTilt3d] = useState(true);
   const [is3dMode, setIs3dMode] = useState(false);
+  const [heightOpen, setHeightOpen] = useState(false);
   const cnt = useRef(0);
   // Last 3D click, to drop duplicate gmp-click events fired in quick succession
   // (the beta 3D map sometimes emits 2 clicks for one tap → stray extra points).
@@ -362,6 +321,7 @@ export default function QuoteMeasure() {
           elevation: elevationStats(points),
         } as any,
         notes: m.notes || '', visible: true,
+        metadata: m.metadata ?? null,
       };
     });
     if (loaded.length) { setShapes(loaded); cnt.current = loaded.length; }
@@ -663,6 +623,25 @@ export default function QuoteMeasure() {
     if (!map) return;
     shapes.forEach(s => {
       if (!s.visible) return;
+      // Height measurements are captured in the 3D modal: their 2 points have a
+      // near-zero horizontal footprint and altitudes that MUST NOT be re-derived.
+      // Render a single non-draggable pin + label so they never become a stray
+      // zero-length line and can't be dragged through computeMeasurement/enrichElevation.
+      if (s.metadata?.kind === 'height') {
+        const base = s.result.points[0];
+        if (base) {
+          const sel = s.id === selId;
+          const marker = new google.maps.Marker({
+            position: new google.maps.LatLng(base.lat, base.lng), map,
+            icon: { path: google.maps.SymbolPath.CIRCLE, scale: sel ? 7 : 5, fillColor: sel ? '#FFFFFF' : s.color, fillOpacity: 1, strokeColor: s.color, strokeWeight: sel ? 3 : 1.5 },
+            zIndex: sel ? 200 : 50, cursor: 'pointer',
+          });
+          marker.addListener('click', () => setSelId(s.id));
+          shapeOv.current.push(marker);
+          shapeOv.current.push(mkLabel(map, base, `↕ ${fmtLen(s.result.value)}`));
+        }
+        return;
+      }
       const path = s.result.points.map(p => new google.maps.LatLng(p.lat, p.lng));
       const sel = s.id === selId;
       if (s.result.type === 'polygon' && path.length >= 3) {
@@ -799,7 +778,12 @@ export default function QuoteMeasure() {
           area_value: s.result.areaValue ? r2(s.result.areaValue) : null,
           perimeter_value: s.result.perimeterValue ? r2(s.result.perimeterValue) : null,
           geojson: s.result.geojson, notes: s.notes || null, color: s.color, sort_order: i,
-          camera_state: camState, metadata: s.result.elevation ? { elevation: s.result.elevation } : null,
+          camera_state: camState,
+          // Keep the shape's own metadata (e.g. height: { kind:'height', … }) and
+          // fold in the elevation stats.
+          metadata: (s.metadata || s.result.elevation)
+            ? { ...(s.metadata || {}), ...(s.result.elevation ? { elevation: s.result.elevation } : {}) }
+            : null,
         });
       }
       await saveQuoteCamera(quoteId, camState, search, unitSystem);
@@ -832,7 +816,9 @@ export default function QuoteMeasure() {
         quantity: li.quantity, unit_price_cents: li.unit_price_cents, sort_order: i,
         is_optional: li.is_optional, item_type: li.item_type, image_url: li.image_url,
       }));
-      const items: QuoteLineItemInput[] = shapes.map((s, i) => ({
+      // Height measurements are informational (a building height isn't a billable
+      // per-foot quantity), so they're excluded from the quote line items.
+      const items: QuoteLineItemInput[] = shapes.filter(s => s.metadata?.kind !== 'height').map((s, i) => ({
         name: `${s.label} (${formatMeasurementValue(s.result.type, s.result.value, unitSystem)})`,
         description: `${formatMeasurementValue(s.result.type, s.result.value, unitSystem)}${
           s.result.type === 'polygon' && s.result.perimeterValue ? ` • ${fr ? 'Périmètre' : 'Perimeter'}: ${fmtLen(s.result.perimeterValue)}` : ''
@@ -923,6 +909,7 @@ export default function QuoteMeasure() {
       {/* ════ MAIN LAYOUT ════ */}
       <div className="flex-1 flex overflow-hidden relative">
         <MeasureToolbar tool={tool} onToolChange={handleToolChange}
+          onOpenHeight={() => setHeightOpen(true)}
           onUndo={() => setPts(p => p.slice(0, -1))}
           onClearAll={() => { setShapes([]); setPts([]); setSelId(null); clearDrawOverlays(); }}
           onDuplicateSelected={handleDuplicateSelected}
@@ -978,6 +965,17 @@ export default function QuoteMeasure() {
       <MeasureStatusBar tool={tool} pointCount={pts.length} unitSystem={unitSystem}
         onUnitToggle={() => setUnitSystem(u => u === 'imperial' ? 'metric' : 'imperial')}
         tilt3d={tilt3d} onTiltToggle={toggleTilt} fr={fr} />
+
+      {heightOpen && (
+        <HeightTool3D
+          quoteAddress={addr}
+          fr={fr}
+          unitSystem={unitSystem}
+          index={cnt.current}
+          onComplete={(shape) => { cnt.current++; setShapes(p => [...p, shape]); setSelId(shape.id); }}
+          onClose={() => setHeightOpen(false)}
+        />
+      )}
     </div>
   );
 }
