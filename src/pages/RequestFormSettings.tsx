@@ -61,6 +61,7 @@ function FieldEditor({
 }) {
   const { t } = useTranslation();
   const needsOptions = field.type === 'dropdown' || field.type === 'multiselect';
+  const isCheckbox = field.type === 'checkbox';
 
   return (
     <div className="section-card p-4 space-y-3">
@@ -118,10 +119,10 @@ function FieldEditor({
         </div>
       </div>
 
-      {needsOptions && (
+      {(needsOptions || isCheckbox) && (
         <div className="ml-7">
           <label className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-            {t.requestForm.optionsOnePerLine}
+            {isCheckbox ? t.requestForm.checkboxOptions : t.requestForm.optionsOnePerLine}
           </label>
           <textarea
             value={(field.options || []).join('\n')}
@@ -129,6 +130,9 @@ function FieldEditor({
             className="glass-input w-full mt-1 min-h-[72px]"
             placeholder={t.requestForm.housenchaletnmultiunit}
           />
+          {isCheckbox && (
+            <p className="mt-1 text-[11px] text-text-tertiary">{t.requestForm.checkboxOptionsHint}</p>
+          )}
         </div>
       )}
     </div>
@@ -203,10 +207,21 @@ function FormPreview({
               {f.type === 'paragraph' ? (
                 <textarea className="glass-input w-full mt-1 min-h-[60px]" disabled />
               ) : f.type === 'checkbox' ? (
-                <div className="flex items-center gap-2 mt-1">
-                  <input type="checkbox" disabled className="accent-primary" />
-                  <span className="text-[12px] text-text-tertiary">{f.label}</span>
-                </div>
+                (f.options && f.options.length > 0) ? (
+                  <div className="mt-1 space-y-1.5">
+                    {f.options.map((o) => (
+                      <div key={o} className="flex items-center gap-2">
+                        <input type="checkbox" disabled className="accent-primary" />
+                        <span className="text-[12px] text-text-tertiary">{o}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 mt-1">
+                    <input type="checkbox" disabled className="accent-primary" />
+                    <span className="text-[12px] text-text-tertiary">{f.label}</span>
+                  </div>
+                )
               ) : f.type === 'dropdown' ? (
                 <select className="glass-input w-full mt-1" disabled>
                   <option>{t.billing.select}</option>

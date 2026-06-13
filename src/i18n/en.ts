@@ -2709,6 +2709,8 @@ const en = {
     noCustomNoteFieldsADefaultAdditionalNote: 'No custom note fields. A default "Additional notes" field is always included.',
     notifications: 'Notifications',
     optionsOnePerLine: 'Options (one per line)',
+    checkboxOptions: 'Checkbox options (one per line)',
+    checkboxOptionsHint: 'One checkbox per line. Leave empty for a single yes/no checkbox.',
     phone: 'Phone *',
     postalCode: 'Postal Code *',
     preview: 'Preview',

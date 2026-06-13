@@ -348,6 +348,27 @@ function CustomFieldInput({
   }
 
   if (field.type === 'checkbox') {
+    const opts = field.options || [];
+    // With options → a group of checkboxes (multiple selectable, stored as string[]).
+    if (opts.length > 0) {
+      const selected = Array.isArray(value) ? (value as string[]) : [];
+      const toggle = (opt: string) =>
+        onChange(selected.includes(opt) ? selected.filter((s) => s !== opt) : [...selected, opt]);
+      return (
+        <div>
+          {label}
+          <div className="mt-1 space-y-1.5">
+            {opts.map((o) => (
+              <label key={o} className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" className="accent-primary" checked={selected.includes(o)} onChange={() => toggle(o)} />
+                <span className="text-[12px] text-text-secondary">{o}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    // No options → a single yes/no checkbox (stored as boolean).
     return (
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" className="accent-primary" checked={value === true} onChange={(e) => onChange(e.target.checked)} />

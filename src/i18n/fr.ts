@@ -2701,6 +2701,8 @@ const fr: TranslationKeys = {
     noCustomNoteFieldsADefaultAdditionalNote: 'Aucun champ de notes. Un champ "Notes supplémentaires" est toujours inclus par défaut.',
     notifications: 'Notifications',
     optionsOnePerLine: 'Options (une par ligne)',
+    checkboxOptions: 'Options des cases (une par ligne)',
+    checkboxOptionsHint: 'Une case à cocher par ligne. Laissez vide pour une seule case Oui/Non.',
     phone: 'Téléphone *',
     postalCode: 'Code postal *',
     preview: 'Aperçu',
