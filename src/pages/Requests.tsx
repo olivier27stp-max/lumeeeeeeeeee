@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, Inbox, Mail, Phone, MapPin, Building2, ExternalLink, RefreshCw, Clock, Copy, Check, ImageIcon, X, ChevronRight } from 'lucide-react';
+import { Loader2, Inbox, Mail, Phone, MapPin, Building2, ExternalLink, RefreshCw, Clock, Copy, Check, ImageIcon, X, ChevronRight, CheckSquare, Square, CheckCircle2, Circle } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { fetchFormSubmissions, fetchRequestForm } from '../lib/requestFormsApi';
 import type { FormSubmission, RequestForm, FormField } from '../types';
@@ -243,7 +243,7 @@ export default function Requests() {
         </div>
       )}
 
-      {/* Detail modal — rebuilds the filled-in form */}
+      {/* Detail modal */}
       {selected && (
         <SubmissionDetail
           submission={selected}
@@ -257,7 +257,7 @@ export default function Requests() {
   );
 }
 
-// ── Submission detail — read-only reconstruction of the filled form ──
+// ── Submission detail — full list of all entered elements ──
 function SubmissionDetail({
   submission: s,
   form,
@@ -273,10 +273,6 @@ function SubmissionDetail({
 }) {
   const photos = photosOf(s);
   const fields = form?.custom_fields || [];
-  const serviceFields = fields.filter((f) => f.section === 'service_details');
-  const noteFields = fields.filter((f) => f.section === 'final_notes');
-
-  const val = (f: FormField) => fmtValue(s.custom_responses?.[f.id]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -287,7 +283,7 @@ function SubmissionDetail({
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border-subtle bg-surface px-6 py-4">
           <div className="min-w-0">
-            <h3 className="text-base font-semibold text-text-primary">{form?.title || (fr ? 'Demande' : 'Request')}</h3>
+            <h3 className="text-base font-semibold text-text-primary">{s.first_name} {s.last_name}</h3>
             <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
               <Clock className="h-3 w-3" /> {fr ? 'Soumise le' : 'Submitted'} {fmtDate(s.created_at)}
             </p>
@@ -299,62 +295,45 @@ function SubmissionDetail({
 
         <div className="space-y-6 px-6 py-5">
           {/* Contact */}
-          <FormSection title={fr ? 'Coordonnées' : 'Contact details'}>
-            <div className="grid grid-cols-2 gap-3">
-              <FilledField label={fr ? 'Prénom' : 'First name'} value={s.first_name} />
-              <FilledField label={fr ? 'Nom' : 'Last name'} value={s.last_name} />
-            </div>
-            <FilledField label={fr ? 'Entreprise' : 'Company'} value={s.company} optional />
-            <div className="grid grid-cols-2 gap-3">
-              <FilledField label={fr ? 'Courriel' : 'Email'} value={s.email} href={s.email ? `mailto:${s.email}` : undefined} />
-              <FilledField label={fr ? 'Téléphone' : 'Phone'} value={s.phone} href={s.phone ? `tel:${s.phone}` : undefined} />
-            </div>
-          </FormSection>
+          <Group title={fr ? 'Coordonnées' : 'Contact'}>
+            <InfoRow label={fr ? 'Prénom' : 'First name'} value={s.first_name} />
+            <InfoRow label={fr ? 'Nom' : 'Last name'} value={s.last_name} />
+            <InfoRow label={fr ? 'Entreprise' : 'Company'} value={s.company} />
+            <InfoRow label={fr ? 'Courriel' : 'Email'} value={s.email} href={s.email ? `mailto:${s.email}` : undefined} />
+            <InfoRow label={fr ? 'Téléphone' : 'Phone'} value={s.phone} href={s.phone ? `tel:${s.phone}` : undefined} />
+          </Group>
 
           {/* Address */}
           {(s.street_address || s.unit || s.city || s.region || s.postal_code || s.country) && (
-            <FormSection title={fr ? 'Adresse' : 'Address'}>
-              <FilledField label={fr ? 'Adresse' : 'Street address'} value={s.street_address} optional />
-              <div className="grid grid-cols-2 gap-3">
-                <FilledField label={fr ? 'Unité / App.' : 'Unit / Apt'} value={s.unit} optional />
-                <FilledField label={fr ? 'Ville' : 'City'} value={s.city} optional />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <FilledField label={fr ? 'Pays' : 'Country'} value={s.country} optional />
-                <FilledField label={fr ? 'Province / État' : 'State / Region'} value={s.region} optional />
-                <FilledField label={fr ? 'Code postal' : 'Postal code'} value={s.postal_code} optional />
-              </div>
-            </FormSection>
+            <Group title={fr ? 'Adresse' : 'Address'}>
+              <InfoRow label={fr ? 'Adresse' : 'Street'} value={s.street_address} />
+              <InfoRow label={fr ? 'Unité / App.' : 'Unit / Apt'} value={s.unit} />
+              <InfoRow label={fr ? 'Ville' : 'City'} value={s.city} />
+              <InfoRow label={fr ? 'Province / État' : 'State / Region'} value={s.region} />
+              <InfoRow label={fr ? 'Code postal' : 'Postal code'} value={s.postal_code} />
+              <InfoRow label={fr ? 'Pays' : 'Country'} value={s.country} />
+            </Group>
           )}
 
-          {/* Service details (custom) */}
-          {serviceFields.length > 0 && (
-            <FormSection title={fr ? 'Détails du service' : 'Service details'}>
-              {serviceFields.map((f) => (
-                <FilledField key={f.id} label={f.label} value={val(f)} optional />
+          {/* Custom fields — render each per its type, choices show all options */}
+          {fields.length > 0 && (
+            <Group title={fr ? 'Réponses du formulaire' : 'Form answers'}>
+              {fields.map((f) => (
+                <CustomAnswer key={f.id} field={f} value={s.custom_responses?.[f.id]} fr={fr} />
               ))}
-            </FormSection>
-          )}
-
-          {/* Final notes (custom) */}
-          {noteFields.length > 0 && (
-            <FormSection title={fr ? 'Notes' : 'Notes'}>
-              {noteFields.map((f) => (
-                <FilledField key={f.id} label={f.label} value={val(f)} optional multiline />
-              ))}
-            </FormSection>
+            </Group>
           )}
 
           {/* Default notes */}
           {s.notes && (
-            <FormSection title={fr ? 'Notes additionnelles' : 'Additional notes'}>
-              <FilledField label="" value={s.notes} multiline />
-            </FormSection>
+            <Group title={fr ? 'Notes additionnelles' : 'Additional notes'}>
+              <p className="whitespace-pre-wrap text-sm text-text-primary">{s.notes}</p>
+            </Group>
           )}
 
           {/* Photos */}
           {photos.length > 0 && (
-            <FormSection title={`${fr ? 'Photos' : 'Photos'} (${photos.length})`}>
+            <Group title={`${fr ? 'Photos' : 'Photos'} (${photos.length})`}>
               <div className="grid grid-cols-3 gap-2">
                 {photos.map((url) => (
                   <a
@@ -371,7 +350,7 @@ function SubmissionDetail({
                   </a>
                 ))}
               </div>
-            </FormSection>
+            </Group>
           )}
 
           {/* Linked CRM entity */}
@@ -389,45 +368,82 @@ function SubmissionDetail({
   );
 }
 
-function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-3">
-      <h4 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">{title}</h4>
-      {children}
+    <div>
+      <h4 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-text-tertiary">{title}</h4>
+      <div className="divide-y divide-border-subtle/60 rounded-xl border border-border-subtle">{children}</div>
     </div>
   );
 }
 
-/** A read-only "filled input" that mirrors the public form's field styling. */
-function FilledField({
-  label,
-  value,
-  href,
-  optional,
-  multiline,
-}: {
-  label: string;
-  value?: string | null;
-  href?: string;
-  optional?: boolean;
-  multiline?: boolean;
-}) {
-  const empty = value === null || value === undefined || value === '';
-  if (empty && optional) return null;
+/** A simple label : value row. Hidden when the value is empty. */
+function InfoRow({ label, value, href }: { label: string; value?: string | null; href?: string }) {
+  if (value === null || value === undefined || value === '') return null;
   return (
-    <div>
-      {label && <label className="text-[12px] font-medium text-text-secondary">{label}</label>}
-      <div
-        className={`mt-1 rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-sm text-text-primary break-words ${multiline ? 'whitespace-pre-wrap min-h-[44px]' : ''}`}
-      >
-        {empty ? (
-          <span className="text-text-muted">—</span>
-        ) : href ? (
-          <a href={href} className="text-primary hover:underline">{value}</a>
-        ) : (
-          value
-        )}
+    <div className="flex items-start justify-between gap-4 px-3 py-2.5">
+      <span className="shrink-0 text-sm text-text-tertiary">{label}</span>
+      <span className="min-w-0 break-words text-right text-sm font-medium text-text-primary">
+        {href ? <a href={href} className="text-primary hover:underline">{value}</a> : value}
+      </span>
+    </div>
+  );
+}
+
+/** Renders one custom field answer; choice fields list every option with selection marks. */
+function CustomAnswer({ field, value, fr }: { field: FormField; value: unknown; fr: boolean }) {
+  const opts = field.options || [];
+  const isChoiceGroup =
+    field.type === 'multiselect' || (field.type === 'checkbox' && opts.length > 0) || (field.type === 'dropdown' && opts.length > 0);
+
+  // Choice field with a list of options → show all options, mark the selected ones.
+  if (isChoiceGroup) {
+    const isMulti = field.type === 'multiselect' || field.type === 'checkbox';
+    const selected = Array.isArray(value)
+      ? (value as unknown[]).map(String)
+      : value !== null && value !== undefined && value !== ''
+      ? [String(value)]
+      : [];
+    return (
+      <div className="px-3 py-2.5">
+        <p className="text-sm text-text-tertiary">{field.label}</p>
+        <div className="mt-1.5 space-y-1.5">
+          {opts.map((o) => {
+            const on = selected.includes(o);
+            const OnIcon = isMulti ? CheckSquare : CheckCircle2;
+            const OffIcon = isMulti ? Square : Circle;
+            return (
+              <div key={o} className="flex items-center gap-2 text-sm">
+                {on ? <OnIcon className="h-4 w-4 shrink-0 text-primary" /> : <OffIcon className="h-4 w-4 shrink-0 text-text-muted/40" />}
+                <span className={on ? 'font-medium text-text-primary' : 'text-text-tertiary'}>{o}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
+    );
+  }
+
+  // Single yes/no checkbox (no options) → show as checked/unchecked.
+  if (field.type === 'checkbox') {
+    const on = value === true;
+    return (
+      <div className="flex items-center gap-2 px-3 py-2.5 text-sm">
+        {on ? <CheckSquare className="h-4 w-4 shrink-0 text-primary" /> : <Square className="h-4 w-4 shrink-0 text-text-muted/40" />}
+        <span className={on ? 'font-medium text-text-primary' : 'text-text-tertiary'}>{field.label}</span>
+        <span className="ml-auto text-xs text-text-muted">{on ? (fr ? 'Oui' : 'Yes') : (fr ? 'Non' : 'No')}</span>
+      </div>
+    );
+  }
+
+  // Text / number / paragraph → label + value.
+  const text = value === null || value === undefined ? '' : String(value);
+  return (
+    <div className="px-3 py-2.5">
+      <p className="text-sm text-text-tertiary">{field.label}</p>
+      <p className="mt-0.5 whitespace-pre-wrap text-sm font-medium text-text-primary">
+        {text || <span className="font-normal text-text-muted">—</span>}
+      </p>
     </div>
   );
 }
