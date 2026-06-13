@@ -278,6 +278,14 @@ export interface QuotePreset {
   services: QuotePresetService[];
   notes: string | null;
   intro_text: string | null;
+  /** Contract / disclaimer text (maps to backend `terms`). */
+  terms: string | null;
+  deposit_required: boolean;
+  /** 'percent' | 'fixed' */
+  deposit_type: string | null;
+  deposit_value: number;
+  /** Section builder config + extra section data (reviews, attachments, ordering). */
+  custom_fields: Record<string, any>;
   is_active: boolean;
   deleted_at: string | null;
   created_at: string;

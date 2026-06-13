@@ -42,6 +42,13 @@ export type QuotePresetPayload = {
   services?: QuotePresetService[];
   notes?: string | null;
   intro_text?: string | null;
+  /** Contract / disclaimer text (backend `terms`). */
+  terms?: string | null;
+  deposit_required?: boolean;
+  deposit_type?: string | null;
+  deposit_value?: number;
+  /** Section builder config + extra section data. */
+  custom_fields?: Record<string, any>;
   is_active?: boolean;
 };
 
@@ -116,6 +123,11 @@ function mapToPreset(row: any): QuotePreset {
     })),
     notes: row.notes || null,
     intro_text: row.intro_text || row.quote_title || null,
+    terms: row.terms || null,
+    deposit_required: row.deposit_required || false,
+    deposit_type: row.deposit_type || null,
+    deposit_value: Number(row.deposit_value) || 0,
+    custom_fields: row.custom_fields || {},
     is_active: row.is_active !== false,
     deleted_at: row.deleted_at,
     created_at: row.created_at,
@@ -143,11 +155,13 @@ function mapToBackend(payload: QuotePresetPayload): Record<string, any> {
     })),
     notes: payload.notes || null,
     intro_text: payload.intro_text || null,
+    terms: payload.terms || null,
+    custom_fields: payload.custom_fields || {},
     is_active: payload.is_active !== false,
-    // Zero out all pricing/layout fields
-    deposit_required: false,
-    deposit_type: null,
-    deposit_value: 0,
+    // Deposit is content-level config (no amounts resolved until the quote is built)
+    deposit_required: payload.deposit_required || false,
+    deposit_type: payload.deposit_type || null,
+    deposit_value: payload.deposit_value ?? 0,
     tax_enabled: false,
     tax_rate: 0,
     tax_label: '',
