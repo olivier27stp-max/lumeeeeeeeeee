@@ -120,6 +120,8 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
   const navigate = useNavigate();
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission>(() => desktopNotificationPermission());
+  const [notifOn, setNotifOn] = useState<boolean>(() => desktopNotificationsEnabled());
 
   useEffect(() => {
     if (!open) return;
@@ -381,6 +383,45 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
                 <X size={16} />
               </button>
             </div>
+
+            {/* Desktop notifications opt-in — fires native OS alerts when Lume
+                is open but not the focused tab. Hidden once blocked at the browser level. */}
+            {desktopNotificationsSupported() && notifPerm !== 'denied' && (
+              <div className="px-6 py-3 border-b border-outline/60 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <BellRing size={14} className="text-primary shrink-0" />
+                  <span className="text-[12px] text-text-secondary truncate">
+                    {notifPerm === 'granted' && notifOn
+                      ? (language === 'fr' ? 'Notifications bureau activées' : 'Desktop notifications on')
+                      : (language === 'fr' ? 'Soyez alerté même sur un autre onglet' : 'Get alerted even on another tab')}
+                  </span>
+                </div>
+                {notifPerm === 'granted' && notifOn ? (
+                  <button
+                    onClick={() => { setDesktopNotificationsEnabled(false); setNotifOn(false); }}
+                    className="text-[11px] font-medium text-text-tertiary hover:text-text-primary shrink-0 transition-colors"
+                  >
+                    {language === 'fr' ? 'Désactiver' : 'Turn off'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      if (notifPerm === 'granted') {
+                        setDesktopNotificationsEnabled(true);
+                        setNotifOn(true);
+                      } else {
+                        const result = await requestDesktopNotificationPermission();
+                        setNotifPerm(result);
+                        setNotifOn(desktopNotificationsEnabled());
+                      }
+                    }}
+                    className="text-[11px] font-semibold text-primary hover:underline shrink-0"
+                  >
+                    {language === 'fr' ? 'Activer' : 'Enable'}
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Activity list */}
             <div className="flex-1 overflow-y-auto">
