@@ -144,6 +144,11 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         setLoading(false);
         setResult(r);
         if (!r.found) toast.message(fr ? 'Pas de données Google pour ce bâtiment — entre la hauteur' : 'No Google data for this building — enter the height');
+      }).catch(() => {
+        // Never leave the spinner stuck — fall back to manual entry on any failure.
+        if (id !== reqId.current) return;
+        setLoading(false);
+        setResult({ found: false, reason: 'error' });
       });
     };
     const blockDbl = (ev: Event) => { ev.preventDefault(); ev.stopPropagation(); };
