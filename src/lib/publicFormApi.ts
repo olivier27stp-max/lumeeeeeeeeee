@@ -53,7 +53,13 @@ export async function uploadPublicFormPhoto(apiKey: string, file: File): Promise
     `${API_BASE}/public/form/${encodeURIComponent(apiKey)}/upload?filename=${encodeURIComponent(file.name)}`,
     {
       method: 'POST',
-      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      // X-Requested-With satisfies the server's CSRF header check; the raw
+      // image Content-Type can't include application/json, so we must signal
+      // the JS origin explicitly.
+      headers: {
+        'Content-Type': file.type || 'application/octet-stream',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
       body: file,
     },
   );
