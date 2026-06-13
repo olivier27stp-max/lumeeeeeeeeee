@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Loader2, Inbox, Mail, Phone, MapPin, Building2, ExternalLink, RefreshCw, Clock, Copy, Check, ImageIcon, X, ChevronRight } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { fetchFormSubmissions, fetchRequestForm } from '../lib/requestFormsApi';
-import type { FormSubmission, RequestForm } from '../types';
+import type { FormSubmission, RequestForm, FormField } from '../types';
 
 /** Reserved custom_responses key where the public form stores uploaded photo URLs. */
 const PHOTOS_KEY = '__photos';
@@ -21,6 +21,9 @@ const customEntriesOf = (s: FormSubmission): Array<[string, unknown]> =>
 
 const fullAddress = (s: FormSubmission) =>
   [s.street_address, s.unit, s.city, s.region, s.postal_code, s.country].filter(Boolean).join(', ');
+
+const fmtValue = (v: unknown): string =>
+  Array.isArray(v) ? v.join(', ') : v === true ? '✓' : v === false ? '' : String(v ?? '');
 
 export default function Requests() {
   const { language } = useTranslation();
@@ -229,7 +232,7 @@ export default function Requests() {
                     {customEntries.map(([k, v]) => (
                       <div key={k} className="rounded-lg bg-surface px-2.5 py-1.5">
                         <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{labelFor(k)}</p>
-                        <p className="text-xs text-text-primary">{Array.isArray(v) ? v.join(', ') : String(v)}</p>
+                        <p className="text-xs text-text-primary">{fmtValue(v)}</p>
                       </div>
                     ))}
                   </div>
@@ -240,13 +243,13 @@ export default function Requests() {
         </div>
       )}
 
-      {/* Detail modal */}
+      {/* Detail modal — rebuilds the filled-in form */}
       {selected && (
         <SubmissionDetail
           submission={selected}
+          form={form}
           fr={fr}
           fmtDate={fmtDate}
-          labelFor={labelFor}
           onClose={() => setSelected(null)}
         />
       )}
@@ -254,39 +257,39 @@ export default function Requests() {
   );
 }
 
-// ── Submission detail modal ──────────────────────────────────
+// ── Submission detail — read-only reconstruction of the filled form ──
 function SubmissionDetail({
   submission: s,
+  form,
   fr,
   fmtDate,
-  labelFor,
   onClose,
 }: {
   submission: FormSubmission;
+  form: RequestForm | null;
   fr: boolean;
   fmtDate: (iso: string) => string;
-  labelFor: (key: string) => string;
   onClose: () => void;
 }) {
-  const addr = fullAddress(s);
-  const customEntries = customEntriesOf(s);
   const photos = photosOf(s);
+  const fields = form?.custom_fields || [];
+  const serviceFields = fields.filter((f) => f.section === 'service_details');
+  const noteFields = fields.filter((f) => f.section === 'final_notes');
+
+  const val = (f: FormField) => fmtValue(s.custom_responses?.[f.id]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface shadow-2xl"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 flex items-start justify-between gap-3 border-b border-border-subtle bg-surface px-5 py-4">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border-subtle bg-surface px-6 py-4">
           <div className="min-w-0">
-            <h3 className="text-base font-semibold text-text-primary">{s.first_name} {s.last_name}</h3>
+            <h3 className="text-base font-semibold text-text-primary">{form?.title || (fr ? 'Demande' : 'Request')}</h3>
             <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
-              <Clock className="h-3 w-3" /> {fmtDate(s.created_at)}
+              <Clock className="h-3 w-3" /> {fr ? 'Soumise le' : 'Submitted'} {fmtDate(s.created_at)}
             </p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-primary">
@@ -294,37 +297,64 @@ function SubmissionDetail({
           </button>
         </div>
 
-        <div className="space-y-5 px-5 py-5">
+        <div className="space-y-6 px-6 py-5">
           {/* Contact */}
-          <Section title={fr ? 'Contact' : 'Contact'}>
-            {s.company && <Row icon={<Building2 className="h-3.5 w-3.5" />} value={s.company} />}
-            <Row icon={<Mail className="h-3.5 w-3.5" />} value={<a href={`mailto:${s.email}`} className="text-primary hover:underline">{s.email}</a>} />
-            <Row icon={<Phone className="h-3.5 w-3.5" />} value={<a href={`tel:${s.phone}`} className="text-primary hover:underline">{s.phone}</a>} />
-            {addr && <Row icon={<MapPin className="h-3.5 w-3.5" />} value={addr} />}
-          </Section>
+          <FormSection title={fr ? 'Coordonnées' : 'Contact details'}>
+            <div className="grid grid-cols-2 gap-3">
+              <FilledField label={fr ? 'Prénom' : 'First name'} value={s.first_name} />
+              <FilledField label={fr ? 'Nom' : 'Last name'} value={s.last_name} />
+            </div>
+            <FilledField label={fr ? 'Entreprise' : 'Company'} value={s.company} optional />
+            <div className="grid grid-cols-2 gap-3">
+              <FilledField label={fr ? 'Courriel' : 'Email'} value={s.email} href={s.email ? `mailto:${s.email}` : undefined} />
+              <FilledField label={fr ? 'Téléphone' : 'Phone'} value={s.phone} href={s.phone ? `tel:${s.phone}` : undefined} />
+            </div>
+          </FormSection>
 
-          {/* Custom fields */}
-          {customEntries.length > 0 && (
-            <Section title={fr ? 'Détails' : 'Details'}>
-              {customEntries.map(([k, v]) => (
-                <div key={k} className="rounded-lg bg-surface-elevated px-3 py-2">
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{labelFor(k)}</p>
-                  <p className="mt-0.5 text-sm text-text-primary">{Array.isArray(v) ? v.join(', ') : String(v)}</p>
-                </div>
-              ))}
-            </Section>
+          {/* Address */}
+          {(s.street_address || s.unit || s.city || s.region || s.postal_code || s.country) && (
+            <FormSection title={fr ? 'Adresse' : 'Address'}>
+              <FilledField label={fr ? 'Adresse' : 'Street address'} value={s.street_address} optional />
+              <div className="grid grid-cols-2 gap-3">
+                <FilledField label={fr ? 'Unité / App.' : 'Unit / Apt'} value={s.unit} optional />
+                <FilledField label={fr ? 'Ville' : 'City'} value={s.city} optional />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <FilledField label={fr ? 'Pays' : 'Country'} value={s.country} optional />
+                <FilledField label={fr ? 'Province / État' : 'State / Region'} value={s.region} optional />
+                <FilledField label={fr ? 'Code postal' : 'Postal code'} value={s.postal_code} optional />
+              </div>
+            </FormSection>
           )}
 
-          {/* Notes */}
+          {/* Service details (custom) */}
+          {serviceFields.length > 0 && (
+            <FormSection title={fr ? 'Détails du service' : 'Service details'}>
+              {serviceFields.map((f) => (
+                <FilledField key={f.id} label={f.label} value={val(f)} optional />
+              ))}
+            </FormSection>
+          )}
+
+          {/* Final notes (custom) */}
+          {noteFields.length > 0 && (
+            <FormSection title={fr ? 'Notes' : 'Notes'}>
+              {noteFields.map((f) => (
+                <FilledField key={f.id} label={f.label} value={val(f)} optional multiline />
+              ))}
+            </FormSection>
+          )}
+
+          {/* Default notes */}
           {s.notes && (
-            <Section title={fr ? 'Notes' : 'Notes'}>
-              <p className="whitespace-pre-wrap rounded-lg bg-surface-elevated px-3 py-2 text-sm text-text-secondary">{s.notes}</p>
-            </Section>
+            <FormSection title={fr ? 'Notes additionnelles' : 'Additional notes'}>
+              <FilledField label="" value={s.notes} multiline />
+            </FormSection>
           )}
 
           {/* Photos */}
           {photos.length > 0 && (
-            <Section title={`${fr ? 'Photos' : 'Photos'} (${photos.length})`}>
+            <FormSection title={`${fr ? 'Photos' : 'Photos'} (${photos.length})`}>
               <div className="grid grid-cols-3 gap-2">
                 {photos.map((url) => (
                   <a
@@ -335,16 +365,16 @@ function SubmissionDetail({
                     className="group relative aspect-square overflow-hidden rounded-lg border border-border-subtle"
                   >
                     <img src={url} alt="" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity group-hover:bg-black/30 group-hover:opacity-100">
+                    <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:bg-black/30 group-hover:opacity-100">
                       <ExternalLink className="h-4 w-4 text-white" />
                     </span>
                   </a>
                 ))}
               </div>
-            </Section>
+            </FormSection>
           )}
 
-          {/* Linked CRM entities */}
+          {/* Linked CRM entity */}
           {s.client_id && (
             <Link
               to={`/clients/${s.client_id}`}
@@ -359,20 +389,45 @@ function SubmissionDetail({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <h4 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">{title}</h4>
-      <div className="space-y-1.5">{children}</div>
+      {children}
     </div>
   );
 }
 
-function Row({ icon, value }: { icon: React.ReactNode; value: React.ReactNode }) {
+/** A read-only "filled input" that mirrors the public form's field styling. */
+function FilledField({
+  label,
+  value,
+  href,
+  optional,
+  multiline,
+}: {
+  label: string;
+  value?: string | null;
+  href?: string;
+  optional?: boolean;
+  multiline?: boolean;
+}) {
+  const empty = value === null || value === undefined || value === '';
+  if (empty && optional) return null;
   return (
-    <div className="flex items-center gap-2 text-sm text-text-secondary">
-      <span className="text-text-muted">{icon}</span>
-      <span className="min-w-0 break-words">{value}</span>
+    <div>
+      {label && <label className="text-[12px] font-medium text-text-secondary">{label}</label>}
+      <div
+        className={`mt-1 rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-sm text-text-primary break-words ${multiline ? 'whitespace-pre-wrap min-h-[44px]' : ''}`}
+      >
+        {empty ? (
+          <span className="text-text-muted">—</span>
+        ) : href ? (
+          <a href={href} className="text-primary hover:underline">{value}</a>
+        ) : (
+          value
+        )}
+      </div>
     </div>
   );
 }

@@ -611,7 +611,7 @@ export default function QuoteMeasure() {
     const dashIcon = [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '15px' }];
     cursorOv.current.push(new google.maps.Polyline({
       path: [new google.maps.LatLng(lastPt.lat, lastPt.lng), new google.maps.LatLng(snapped.lat, snapped.lng)],
-      strokeColor: '#FF4444', strokeWeight: 2, strokeOpacity: 0.6, icons: dashIcon, map,
+      strokeColor: '#FF4444', strokeWeight: 2, strokeOpacity: 0.6, icons: dashIcon, clickable: false, map,
     }));
     const dist = haversineDistanceFt(lastPt, snapped);
     if (dist > 0.5) cursorOv.current.push(mkLabel(map, midpoint(lastPt, snapped), fmtLen(dist)));
