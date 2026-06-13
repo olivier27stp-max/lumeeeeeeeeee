@@ -824,7 +824,7 @@ export default function QuotePresets() {
         </div>
         <button onClick={startCreate}
           className="inline-flex items-center gap-2 h-10 px-5 bg-primary text-white rounded-md text-[14px] font-medium hover:bg-primary-hover active:scale-[0.98] transition-all">
-          <Plus size={15} /> {fr ? 'Nouveau modèle' : 'New Template'}
+          {fr ? 'Nouveau modèle' : 'New Template'}
         </button>
       </div>
 
