@@ -1,13 +1,15 @@
 /**
- * HeightTool3D — measure a building's REAL height in a full-screen 3D view.
+ * HeightTool3D — measure a building's REAL height.
  *
- * The user clicks once on a building. We read its true height from Google's DSM
- * data via the Solar API (highest roof plane − ground elevation) — the Elevation
- * API and the 3D click only return bare-earth terrain and can't see buildings.
- * If Google has no Solar coverage for that building, we fall back to manual entry
- * (number of floors × ~3 m, or an exact height).
+ * The user clicks once on a building (reliable 2D satellite map — the beta 3D
+ * map's click was unreliable, and we only need the lat/lng anyway). We read the
+ * building's true height from Google's DSM data via the Solar API
+ * (highest roof plane − ground elevation) — the Elevation API and the 3D click
+ * only return bare-earth terrain and can't see buildings. If Google has no Solar
+ * coverage for that building, we fall back to manual entry (floors × ~3 m, or an
+ * exact height).
  *
- * Fully isolated from the 2D drawing workspace: own <gmp-map-3d>, hands a finished
+ * Fully isolated from the 2D drawing workspace: own map instance, hands a finished
  * Shape back via onComplete. Stored as an ordinary 2-point 'line' with
  * metadata.kind === 'height' (no DB schema change).
  */
@@ -39,10 +41,9 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   const { ok: mapsOk, key } = useGMaps3D();
 
   const mapDiv = useRef<HTMLDivElement>(null);
-  const map3dRef = useRef<any>(null);
-  const gcRef = useRef<any>(null);
-  const overlays = useRef<HTMLElement[]>([]);
-  const lastClick = useRef<{ t: number; lat: number; lng: number } | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const gcRef = useRef<google.maps.Geocoder | null>(null);
+  const markerRef = useRef<google.maps.Marker | null>(null);
   const reqId = useRef(0);
 
   const [ready, setReady] = useState(false);
@@ -54,19 +55,29 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   const [floors, setFloors] = useState('');
   const [manualH, setManualH] = useState('');
 
-  // ── Geocode / fly helpers ──
-  function flyTo(lat: number, lng: number) {
-    const el = map3dRef.current;
-    if (!el) return;
-    el.center = { lat, lng, altitude: 120 };
-    el.range = 230;
-    el.tilt = 67;
-  }
-  function doGeocode(a: string) {
-    if (!gcRef.current || !a.trim()) return;
-    gcRef.current.geocode({ address: a }, (r: any, s: string) => {
-      if (s === 'OK' && r?.[0]) { const loc = r[0].geometry.location; flyTo(loc.lat(), loc.lng()); }
+  function pick(lat: number, lng: number) {
+    setPicked({ lat, lng });
+    setResult(null);
+    setLoading(true);
+    setFloors(''); setManualH('');
+    const id = ++reqId.current;
+    fetchBuildingHeight(lat, lng, key).then((r) => {
+      if (id !== reqId.current) return;
+      setLoading(false);
+      setResult(r);
+      if (!r.found) toast.message(fr ? 'Pas de données Google pour ce bâtiment — entre la hauteur' : 'No Google data for this building — enter the height');
+    }).catch(() => {
+      if (id !== reqId.current) return;
+      setLoading(false);
+      setResult({ found: false, reason: 'error' });
     });
+  }
+
+  function flyTo(lat: number, lng: number) {
+    const m = mapRef.current;
+    if (!m) return;
+    m.setCenter({ lat, lng });
+    m.setZoom(20);
   }
   function centerOnUser() {
     try {
@@ -81,93 +92,43 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     );
   }
 
-  // ── Init the 3D map ──
+  // ── Init the 2D satellite map (reliable single-click) ──
   useEffect(() => {
-    if (!mapsOk || !mapDiv.current || map3dRef.current) return;
-    const map3d = document.createElement('gmp-map-3d') as any;
-    map3d.setAttribute('center', '45.5017,-73.5673,120');
-    map3d.setAttribute('tilt', '67');
-    map3d.setAttribute('range', '230');
-    map3d.setAttribute('default-labels-disabled', '');
-    map3d.style.width = '100%';
-    map3d.style.height = '100%';
-    mapDiv.current.appendChild(map3d);
-    map3dRef.current = map3d;
-
-    let elapsed = 0;
-    const poll = setInterval(() => {
-      elapsed += 200;
-      const reg = (window as any).customElements?.get('gmp-map-3d');
-      if (reg && map3d.center !== undefined) {
-        clearInterval(poll);
-        try { gcRef.current = new (window as any).google.maps.Geocoder(); } catch {}
-        setReady(true);
-        if (quoteAddress) doGeocode(quoteAddress); else centerOnUser();
-      } else if (elapsed >= 6000) {
-        clearInterval(poll);
-        setReady(true);
-      }
-    }, 200);
-    return () => {
-      clearInterval(poll);
-      overlays.current.forEach(o => { try { o.remove(); } catch {} });
-      overlays.current = [];
-      try { map3d.remove(); } catch {}
-    };
+    if (!mapsOk || !mapDiv.current || mapRef.current) return;
+    const map = new google.maps.Map(mapDiv.current, {
+      center: { lat: 45.5017, lng: -73.5673 }, zoom: 19,
+      mapTypeId: 'hybrid', tilt: 45, heading: 0,
+      zoomControl: true, mapTypeControl: true,
+      mapTypeControlOptions: { position: google.maps.ControlPosition.TOP_RIGHT },
+      scaleControl: true, streetViewControl: false, fullscreenControl: false,
+      gestureHandling: 'greedy', rotateControl: true, clickableIcons: false,
+    });
+    mapRef.current = map;
+    gcRef.current = new google.maps.Geocoder();
+    map.setOptions({ draggableCursor: 'crosshair' });
+    map.addListener('click', (e: google.maps.MapMouseEvent) => {
+      if (e.latLng) pick(e.latLng.lat(), e.latLng.lng());
+    });
+    setReady(true);
+    if (quoteAddress) {
+      gcRef.current.geocode({ address: quoteAddress }, (r, s) => {
+        if (s === 'OK' && r?.[0]) { const loc = r[0].geometry.location; flyTo(loc.lat(), loc.lng()); }
+        else centerOnUser();
+      });
+    } else centerOnUser();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapsOk]);
 
-  // ── Single click → pick a building → query its height ──
-  useEffect(() => {
-    const el = map3dRef.current;
-    if (!el || !ready) return;
-    const read = (v: any): number => (typeof v === 'function' ? v() : v);
-
-    const handler = (e: any) => {
-      e.preventDefault?.();
-      const src = e?.position ?? e?.detail?.position ?? e?.latLng ?? e?.detail?.latLng;
-      if (!src) return;
-      const lat = read(src.lat);
-      const lng = read(src.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-      const now = Date.now();
-      const l = lastClick.current;
-      if (l && now - l.t < 350 && Math.hypot(lat - l.lat, lng - l.lng) < 0.00002) return;
-      lastClick.current = { t: now, lat, lng };
-
-      setPicked({ lat, lng });
-      setResult(null);
-      setLoading(true);
-      const id = ++reqId.current;
-      fetchBuildingHeight(lat, lng, key).then((r) => {
-        if (id !== reqId.current) return; // a newer click superseded this
-        setLoading(false);
-        setResult(r);
-        if (!r.found) toast.message(fr ? 'Pas de données Google pour ce bâtiment — entre la hauteur' : 'No Google data for this building — enter the height');
-      }).catch(() => {
-        // Never leave the spinner stuck — fall back to manual entry on any failure.
-        if (id !== reqId.current) return;
-        setLoading(false);
-        setResult({ found: false, reason: 'error' });
-      });
-    };
-    const blockDbl = (ev: Event) => { ev.preventDefault(); ev.stopPropagation(); };
-
-    el.addEventListener('gmp-click', handler);
-    el.addEventListener('dblclick', blockDbl, true);
-    return () => {
-      el.removeEventListener('gmp-click', handler);
-      el.removeEventListener('dblclick', blockDbl, true);
-    };
-  }, [ready, key, fr]);
-
   // ── Marker on the picked building ──
   useEffect(() => {
-    const el = map3dRef.current;
-    if (!el) return;
-    overlays.current.forEach(o => { try { o.remove(); } catch {} });
-    overlays.current = [];
-    if (picked) { const d = makeDot(el, picked.lat, picked.lng, '#FF4444'); if (d) overlays.current.push(d); }
+    if (markerRef.current) { markerRef.current.setMap(null); markerRef.current = null; }
+    const map = mapRef.current;
+    if (!map || !picked) return;
+    markerRef.current = new google.maps.Marker({
+      position: { lat: picked.lat, lng: picked.lng }, map, clickable: false,
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 7, fillColor: '#FF4444', fillOpacity: 1, strokeColor: '#FFF', strokeWeight: 2 },
+      zIndex: 200,
+    });
   }, [picked]);
 
   // ── Resolve the height to commit (solar result OR manual entry) ──
@@ -186,7 +147,6 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   function reset() {
     setPicked(null); setResult(null); setLoading(false);
     setFloors(''); setManualH('');
-    lastClick.current = null;
     reqId.current++;
   }
 
@@ -194,7 +154,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     e.preventDefault();
     if (!search.trim() || !gcRef.current) return;
     setSearching(true);
-    gcRef.current.geocode({ address: search }, (r: any, s: string) => {
+    gcRef.current.geocode({ address: search }, (r, s) => {
       setSearching(false);
       if (s === 'OK' && r?.[0]) { const loc = r[0].geometry.location; flyTo(loc.lat(), loc.lng()); }
       else toast.error(fr ? 'Adresse introuvable' : 'Address not found');
@@ -207,7 +167,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     const point: LatLng = typeof ground === 'number'
       ? { lat: picked.lat, lng: picked.lng, elevation: ground }
       : { lat: picked.lat, lng: picked.lng };
-    const points: LatLng[] = [point, point]; // 2-point degenerate line keeps GeoJSON valid
+    const points: LatLng[] = [point, point];
     const heightFt = heightMeters * M_TO_FT;
     const coord = typeof ground === 'number' ? [picked.lng, picked.lat, ground] : [picked.lng, picked.lat];
     const geojson: any = { type: 'LineString', coordinates: [coord, coord] };
@@ -241,7 +201,6 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   }
 
   const fmt = (m: number) => formatElevation(m, unitSystem);
-  const missReason = result && !result.found ? (result as any).reason : null;
 
   return (
     <div className="fixed inset-0 z-[60] bg-background flex flex-col">
@@ -253,7 +212,6 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         <div className="flex items-center gap-2 min-w-0">
           <MoveVertical size={15} className="text-text-primary shrink-0" />
           <span className="text-[13px] font-bold text-text-primary truncate">{fr ? 'Hauteur du bâtiment' : 'Building height'}</span>
-          <span className="text-[9px] font-bold bg-text-primary text-surface px-1.5 py-0.5 rounded">3D</span>
         </div>
         <form onSubmit={handleSearch} className="flex-1 max-w-md mx-4">
           <div className="relative">
@@ -309,10 +267,10 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
                   <label className="text-[10px] text-text-muted">{fr ? 'Étages' : 'Floors'}</label>
                   <input type="number" min="0" value={floors} onChange={e => { setFloors(e.target.value); setManualH(''); }}
                     className="w-16 text-[12px] rounded-md border border-outline/30 bg-surface-card px-2 py-1 text-center" />
-                  <span className="text-[10px] text-text-muted/60">{fr ? `→ ${fmt(manualMeters || 0)}` : `→ ${fmt(manualMeters || 0)}`}</span>
+                  <span className="text-[10px] text-text-muted/60">→ {fmt(manualMeters || 0)}</span>
                 </div>
                 <div className="flex items-center gap-2 justify-center">
-                  <label className="text-[10px] text-text-muted">{fr ? `Ou hauteur exacte (${unitSystem === 'metric' ? 'm' : 'pi'})` : `Or exact height (${unitSystem === 'metric' ? 'm' : 'ft'})`}</label>
+                  <label className="text-[10px] text-text-muted">{fr ? `Ou hauteur (${unitSystem === 'metric' ? 'm' : 'pi'})` : `Or height (${unitSystem === 'metric' ? 'm' : 'ft'})`}</label>
                   <input type="number" min="0" step="0.1" value={manualH} onChange={e => { setManualH(e.target.value); setFloors(''); }}
                     className="w-20 text-[12px] rounded-md border border-outline/30 bg-surface-card px-2 py-1 text-center" />
                 </div>
@@ -335,29 +293,4 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
       </div>
     </div>
   );
-}
-
-/** Small filled circle clamped to the ground marking the picked building. */
-function makeDot(parent: HTMLElement, lat: number, lng: number, color: string): HTMLElement | null {
-  try {
-    const dot = document.createElement('gmp-polygon-3d') as any;
-    dot.setAttribute('altitude-mode', 'clamp-to-ground');
-    dot.setAttribute('fill-color', '#FFFFFF');
-    dot.setAttribute('stroke-color', color);
-    dot.setAttribute('stroke-width', '2');
-    dot.setAttribute('draws-occluded-segments', '');
-    const radiusM = 1.2;
-    const dLat = radiusM / 111_320;
-    const dLng = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180));
-    const ring: Array<{ lat: number; lng: number }> = [];
-    for (let i = 0; i < 14; i++) {
-      const a = (i / 14) * 2 * Math.PI;
-      ring.push({ lat: lat + dLat * Math.sin(a), lng: lng + dLng * Math.cos(a) });
-    }
-    dot.outerCoordinates = ring;
-    parent.appendChild(dot);
-    return dot;
-  } catch {
-    return null;
-  }
 }
