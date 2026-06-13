@@ -2620,6 +2620,7 @@ const fr: TranslationKeys = {
     failedToSaveQuote: 'Échec de l\'enregistrement du devis.',
     quoteForPrefix: 'Devis pour',
     noTax: 'Aucune taxe',
+    preview: 'Aperçu',
     more: 'Plus',
     sendText: 'Envoyer un texto',
     addNote: '+ Ajouter une note',

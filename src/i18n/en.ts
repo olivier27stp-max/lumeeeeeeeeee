@@ -2628,6 +2628,7 @@ const en = {
     failedToSaveQuote: 'Failed to save quote.',
     quoteForPrefix: 'Quote for',
     noTax: 'No tax',
+    preview: 'Preview',
     more: 'More',
     sendText: 'Send Text',
     addNote: '+ Add Note',

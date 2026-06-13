@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { FileText, Plus, Trash2, X, Package, ChevronDown, User, Mail, Phone, MapPin, Download } from 'lucide-react';
+import { FileText, Plus, Trash2, X, Package, ChevronDown, User, Mail, Phone, MapPin, Download, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { listSalespeople } from '../../lib/jobsApi';
 import { listClients } from '../../lib/clientsApi';
@@ -8,9 +8,12 @@ import {
   createQuote, formatQuoteMoney, fetchLeadJobLineItems,
   type QuoteLineItemInput, type QuoteSectionInput, type QuoteDetail,
 } from '../../lib/quotesApi';
+import { getCompanySettings } from '../../lib/invoicesApi';
 import { createLeadScoped, fetchLeadsScoped } from '../../lib/leadsApi';
 import AddressAutocomplete, { type StructuredAddress } from '../AddressAutocomplete';
 import ServicePicker from '../ServicePicker';
+import QuoteRenderer from '../quote/QuoteRenderer';
+import type { QuoteRenderData } from '../quote/types';
 import type { PredefinedService } from '../../lib/servicesApi';
 import type { Lead, QuotePreset } from '../../types';
 import { resolveTaxes, calculateTaxes, type TaxConfig } from '../../lib/taxApi';
@@ -92,6 +95,10 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
   const [addedServiceIds, setAddedServiceIds] = useState<Set<string>>(new Set());
   const specificNotesRef = useRef<SpecificNotesInlineHandle>(null);
 
+  // ── Client-view preview ──
+  const [showPreview, setShowPreview] = useState(false);
+  const [companySettings, setCompanySettings] = useState<any>(null);
+
   // ── Auto-tax ──
   const [resolvedTaxes, setResolvedTaxes] = useState<TaxConfig[]>([]);
 
@@ -110,7 +117,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
   // ── Init ──
   useEffect(() => {
     if (!isOpen) return;
-    setError(null); setSaving(false);
+    setError(null); setSaving(false); setShowPreview(false);
     setContactMode('new'); setSelectedLeadId('');
     setLeadFirstName(''); setLeadLastName(''); setLeadEmail('');
     setLeadPhone(''); setLeadAddress(''); setLeadAddressSearch(''); setLeadCompany('');
@@ -161,6 +168,12 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
       })))).catch(() => setExistingLeads([]));
     }
   }, [isOpen, lead]);
+
+  // ── Load company info for the preview header ──
+  useEffect(() => {
+    if (!isOpen) return;
+    getCompanySettings().then(setCompanySettings).catch(() => {});
+  }, [isOpen]);
 
   // ── Auto-resolve taxes from Settings ──
   useEffect(() => {
@@ -217,6 +230,87 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
   [subtotalCents, discountCents, taxEnabled, taxRate, taxBreakdown]);
 
   const totalCents = subtotalCents - discountCents + taxCents;
+
+  const depositCents = useMemo(() => {
+    if (!depositRequired) return 0;
+    const v = parseFloat(depositValue) || 0;
+    return depositType === 'percentage' ? Math.round(totalCents * v / 100) : Math.round(v * 100);
+  }, [depositRequired, depositType, depositValue, totalCents]);
+
+  // ── Client-view preview data (mirrors the saved quote) ──
+  const previewData: QuoteRenderData = useMemo(() => {
+    const fr = language === 'fr';
+    // Resolve contact details from whichever input mode is active
+    const c = {
+      name: '' as string, email: null as string | null, phone: null as string | null,
+      company: null as string | null, address: null as string | null,
+    };
+    if (lead) {
+      c.name = `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
+      c.email = lead.email || null; c.phone = lead.phone || null;
+      c.company = lead.company || null; c.address = lead.address || null;
+    } else if (contactMode === 'new') {
+      c.name = `${leadFirstName} ${leadLastName}`.trim();
+      c.email = leadEmail || null; c.phone = leadPhone || null;
+      c.company = leadCompany || null; c.address = leadAddress || leadAddressSearch || null;
+    } else if (selectedLeadId) {
+      c.name = existingLeads.find(l => l.id === selectedLeadId)?.label || '';
+    } else if (clientId) {
+      c.name = clients.find(cl => cl.id === clientId)?.label || '';
+    }
+    if (!c.name) c.name = fr ? 'Client' : 'Client';
+
+    const validUntil = new Date(Date.now() + validDays * 86400000).toISOString();
+    const mapItem = (i: LineItemForm): QuoteRenderData['items'][number] => {
+      const qty = parseFloat(i.qtyInput) || 0;
+      const unit = Math.round((parseFloat(i.unitPriceInput) || 0) * 100);
+      return {
+        id: i.id, name: i.name, description: i.description || null,
+        qty, unit_price_cents: unit, total_cents: Math.round(qty * unit),
+        item_type: i.item_type,
+      };
+    };
+    const named = lineItems.filter(i => i.name.trim() || i.item_type !== 'service');
+
+    return {
+      quote_number: fr ? 'DEVIS-APERÇU' : 'QTE-PREVIEW',
+      title: title || (fr ? 'Aperçu du devis' : 'Quote Preview'),
+      status: 'draft',
+      valid_until: validUntil,
+      created_at: new Date().toISOString(),
+      notes: notes || null,
+      currency: 'CAD',
+      subtotal_cents: subtotalCents,
+      discount_cents: discountCents,
+      tax_cents: taxCents,
+      tax_rate: taxEnabled ? taxRate : 0,
+      tax_rate_label: taxEnabled ? taxLabel : tq.noTax,
+      total_cents: totalCents,
+      deposit_required: depositRequired,
+      deposit_cents: depositCents,
+      deposit_status: 'none',
+      contact_name: c.name,
+      contact_email: c.email,
+      contact_phone: c.phone,
+      contact_company: c.company,
+      contact_address: c.address,
+      company_name: companySettings?.company_name || (fr ? 'Votre entreprise' : 'Your Company'),
+      company_email: companySettings?.company_email || null,
+      company_phone: companySettings?.company_phone || null,
+      company_address: companySettings?.company_address || null,
+      company_logo_url: companySettings?.company_logo_url || null,
+      introduction: introEnabled ? (introContent || null) : null,
+      contract_disclaimer: disclaimerEnabled ? (contractDisclaimer || null) : null,
+      items: named.filter(i => !i.is_optional).map(mapItem),
+      optional_items: named.filter(i => i.is_optional).map(mapItem),
+    };
+  }, [
+    language, lead, contactMode, leadFirstName, leadLastName, leadEmail, leadPhone, leadCompany,
+    leadAddress, leadAddressSearch, selectedLeadId, clientId, existingLeads, clients,
+    validDays, lineItems, title, notes, subtotalCents, discountCents, taxCents, taxEnabled,
+    taxRate, taxLabel, totalCents, depositRequired, depositCents, introEnabled, introContent,
+    disclaimerEnabled, contractDisclaimer, companySettings, tq,
+  ]);
 
   // ── Handlers ──
   const handleServiceSelected = (service: PredefinedService) => {
@@ -388,7 +482,10 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
           initial={{ opacity: 0, y: 16, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 16, scale: 0.98 }}
-          className="w-full max-w-5xl max-h-[94vh] bg-surface rounded-2xl border border-outline shadow-2xl flex flex-col overflow-hidden"
+          className={cn(
+            'w-full max-h-[94vh] bg-surface rounded-2xl border border-outline shadow-2xl flex flex-col overflow-hidden transition-[max-width] duration-200',
+            showPreview ? 'max-w-7xl' : 'max-w-5xl',
+          )}
         >
           {/* ── Header ── */}
           <div className="px-6 py-5 border-b border-outline flex items-center justify-between bg-surface-secondary">
@@ -401,12 +498,25 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                 {lead && <p className="text-[13px] text-text-tertiary">{tq.forName} {lead.first_name} {lead.last_name}</p>}
               </div>
             </div>
-            <button onClick={onClose} className="p-2 rounded-xl border border-outline hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors">
-              <X size={18} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setShowPreview(v => !v)}
+                className={cn(
+                  'inline-flex items-center gap-2 h-9 px-3 rounded-xl text-[12px] font-medium border transition-all',
+                  showPreview
+                    ? 'bg-primary/10 text-primary border-primary/30'
+                    : 'border-outline text-text-secondary hover:bg-surface-tertiary',
+                )}>
+                {showPreview ? <EyeOff size={13} /> : <Eye size={13} />}
+                {tq.preview || (language === 'fr' ? 'Aperçu' : 'Preview')}
+              </button>
+              <button onClick={onClose} className="p-2 rounded-xl border border-outline hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors">
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
-          {/* ── Body ── */}
+          {/* ── Body (form + optional client-view preview) ── */}
+          <div className="flex-1 flex min-h-0 overflow-hidden">
           <form id="quote-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
 
             {/* ── Contact section (inline lead creation) ── */}
@@ -729,6 +839,26 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
               <div className="rounded-xl border border-danger bg-danger-light text-danger px-4 py-3 text-sm">{error}</div>
             )}
           </form>
+
+          {/* ── Client-view preview panel ── */}
+          {showPreview && (
+            <aside className="hidden lg:flex w-[440px] shrink-0 flex-col border-l border-outline bg-surface-secondary">
+              <div className="px-4 py-3 border-b border-outline flex items-center justify-between shrink-0">
+                <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
+                  {language === 'fr' ? 'Aperçu vue client' : 'Client View Preview'}
+                </p>
+                <span className="text-[9px] text-text-tertiary bg-surface px-2 py-0.5 rounded-full border border-outline">
+                  {language === 'fr' ? 'Mise à jour en direct' : 'Live'}
+                </span>
+              </div>
+              <div className="flex-1 overflow-y-auto bg-gray-100 p-4">
+                <div className="mx-auto max-w-[520px] rounded-lg bg-white shadow-md overflow-hidden">
+                  <QuoteRenderer data={previewData} />
+                </div>
+              </div>
+            </aside>
+          )}
+          </div>
 
           {/* ── Footer ── */}
           <div className="px-6 pt-4 pb-6 border-t border-border-light bg-surface-secondary flex items-center justify-end gap-3">
