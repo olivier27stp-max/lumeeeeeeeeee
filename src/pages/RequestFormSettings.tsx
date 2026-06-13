@@ -31,7 +31,6 @@ import BackToSettings from '../components/ui/BackToSettings';
 const FIELD_TYPE_OPTIONS: { value: FormFieldType; label: string; labelFr: string }[] = [
   { value: 'text', label: 'Text Input', labelFr: 'Champ texte' },
   { value: 'dropdown', label: 'Dropdown', labelFr: 'Liste déroulante' },
-  { value: 'multiselect', label: 'Multi-select', labelFr: 'Sélection multiple' },
   { value: 'checkbox', label: 'Checkbox', labelFr: 'Case à cocher' },
   { value: 'number', label: 'Number', labelFr: 'Nombre' },
   { value: 'paragraph', label: 'Paragraph / Long Text', labelFr: 'Paragraphe / Texte long' },
@@ -345,7 +344,13 @@ export default function RequestFormSettings() {
           setDescription(data.description || '');
           setSuccessMessage(data.success_message);
           setEnabled(data.enabled);
-          setCustomFields(data.custom_fields || []);
+          // 'multiselect' was merged into 'checkbox' (both render as a checkbox
+          // group). Normalize any legacy fields so they edit/save as checkbox.
+          setCustomFields(
+            (data.custom_fields || []).map((f) =>
+              (f.type as string) === 'multiselect' ? { ...f, type: 'checkbox' } : f
+            )
+          );
           setNotifyEmail(data.notify_email);
           setNotifyInApp(data.notify_in_app);
           setApiKey(data.api_key);
