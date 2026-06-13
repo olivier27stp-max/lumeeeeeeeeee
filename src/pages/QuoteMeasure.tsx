@@ -145,7 +145,14 @@ export default function QuoteMeasure() {
   useEffect(() => {
     if (!mapsOk || !mapDiv.current || map3dRef.current || mapRef.current) return;
 
-    if (has3d) {
+    // Google's photorealistic 3D map (beta) cannot reliably place a point on a
+    // single click — clicks miss the terrain or land on overlays, producing stray
+    // points and odd shapes, and there's no way to test it headlessly. We draw on
+    // the 2D satellite map instead: pixel-accurate single click, dbl-click to
+    // finish (no zoom). The status-bar "3D" button still tilts the view to 45°
+    // aerial. Flip ENABLE_3D back to true to revisit the 3D drawing path.
+    const ENABLE_3D = false;
+    if (has3d && ENABLE_3D) {
       // Create 3D photorealistic map
       const map3d = document.createElement('gmp-map-3d') as any;
       map3d.setAttribute('center', '45.5017,-73.5673,200');
