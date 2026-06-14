@@ -451,7 +451,7 @@ export default function GlobalSearch() {
   const showDropdown = open && normalizedQuery.length > 0;
 
   return (
-    <div ref={rootRef} className="relative w-full max-w-4xl" onBlur={handleBlur}>
+    <div ref={rootRef} className="relative w-48 md:w-56 transition-[width] duration-300 ease-out focus-within:w-[20rem] md:focus-within:w-[28rem]" onBlur={handleBlur}>
       {/* Search Input */}
       <div className="relative group">
         <Search size={15} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary transition-colors group-focus-within:text-primary" />
@@ -466,7 +466,7 @@ export default function GlobalSearch() {
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           placeholder={t.globalSearch.placeholder}
-          className="glass-input w-full rounded-xl pl-10 pr-20 py-2.5 text-[13px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+          className="glass-input w-full rounded-xl pl-10 pr-4 focus:pr-20 py-2.5 text-[13px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           aria-label="Global search"
           role="combobox"
           aria-expanded={showDropdown}
@@ -478,7 +478,7 @@ export default function GlobalSearch() {
           }
           aria-autocomplete="list"
         />
-        <kbd className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 hidden items-center gap-0.5 rounded-lg border border-outline/60 bg-surface-secondary/50 px-2 py-1 text-[10px] font-mono text-text-tertiary sm:inline-flex">
+        <kbd className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 hidden items-center gap-0.5 rounded-lg border border-outline/60 bg-surface-secondary/50 px-2 py-1 text-[10px] font-mono text-text-tertiary sm:group-focus-within:inline-flex">
           Ctrl K
         </kbd>
       </div>
