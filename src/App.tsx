@@ -1089,7 +1089,7 @@ function AuthenticatedApp({
         {/* ─── Main content ─── */}
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Top bar — premium, elevated */}
-          <header className="h-12 shrink-0 flex items-center gap-3 px-5 border-b border-border bg-surface-elevated">
+          <header className="h-11 shrink-0 flex items-center gap-3 px-5 border-b border-border bg-surface-elevated">
             {(!isSidebarOpen || true) && (
               <button
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
