@@ -320,23 +320,20 @@ router.post('/booking/:slug', async (req, res) => {
           company: null,
         });
 
-        const { data: leadRpc, error: leadErr } = await admin.rpc('create_lead_with_client', {
-          p_org_id: page.org_id,
-          p_created_by: createdBy,
-          p_client_id: clientId,
-          p_first_name: body.customer_first_name,
-          p_last_name: body.customer_last_name,
-          p_email: body.customer_email,
-          p_phone: body.customer_phone || null,
-          p_address: body.service_address || null,
-          p_title: page.title,
-          p_company: null,
-          p_notes: `Online booking — ${page.title} — ${slotStartIso}\n${body.notes || ''}`.trim(),
-          p_value: 0,
-          p_status: 'new',
-        });
-        if (!leadErr && leadRpc) {
-          leadId = String(leadRpc);
+        // A lead IS a client with status='lead' — stamp lead fields onto the client.
+        const { error: leadErr } = await admin
+          .from('clients')
+          .update({
+            status: 'lead',
+            lead_status: 'new_prospect',
+            title: page.title,
+            notes: `Online booking — ${page.title} — ${slotStartIso}\n${body.notes || ''}`.trim(),
+            value: 0,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', clientId);
+        if (!leadErr) {
+          leadId = String(clientId);
           await admin.from('bookings').update({ lead_id: leadId }).eq('id', bookingId);
         }
       }

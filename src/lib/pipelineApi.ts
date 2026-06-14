@@ -276,9 +276,9 @@ export async function listPipelineDeals(): Promise<PipelineDeal[]> {
     .select(
       `
         id,lead_id,client_id,job_id,stage,value,title,notes,lost_at,won_at,deleted_at,created_at,updated_at,
-        lead:leads!pipeline_deals_lead_id_fkey(
+        lead:clients!pipeline_deals_lead_id_fkey(
           id,first_name,last_name,email,phone,address,company,title,notes,tags,
-          contact:contacts!leads_contact_id_fkey(id,full_name,email,phone)
+          contact:contacts!clients_contact_id_fkey(id,full_name,email,phone)
         ),
         client:clients!pipeline_deals_client_id_fkey(
           id,first_name,last_name,email,phone,
@@ -299,9 +299,9 @@ export async function getPipelineDealById(id: string): Promise<PipelineDeal | nu
     .select(
       `
         id,lead_id,client_id,job_id,stage,value,title,notes,lost_at,won_at,deleted_at,created_at,updated_at,
-        lead:leads!pipeline_deals_lead_id_fkey(
+        lead:clients!pipeline_deals_lead_id_fkey(
           id,first_name,last_name,email,phone,address,company,title,notes,tags,
-          contact:contacts!leads_contact_id_fkey(id,full_name,email,phone)
+          contact:contacts!clients_contact_id_fkey(id,full_name,email,phone)
         ),
         client:clients!pipeline_deals_client_id_fkey(
           id,first_name,last_name,email,phone,
@@ -618,8 +618,9 @@ export async function getPendingIntentByLeadId(leadId: string): Promise<JobInten
 }
 
 export async function getLeadPrefillForIntent(intent: JobIntent): Promise<IntentLeadPrefill> {
+  // intent.lead_id now holds a client id (leads are clients with status='lead').
   const { data, error } = await supabase
-    .from('leads_active')
+    .from('clients')
     .select('id,first_name,last_name,email,phone,address,notes,schedule,company,title')
     .eq('id', intent.lead_id)
     .single();

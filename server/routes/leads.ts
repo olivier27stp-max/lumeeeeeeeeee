@@ -54,27 +54,24 @@ router.post('/leads/create', validate(createLeadSchema), async (req, res) => {
       company: title || null,
     });
 
-    // Use RPC to insert lead — bypasses PostgREST column cache issues with new client_id column
-    // Must use auth.client (user JWT) so that BEFORE INSERT triggers can resolve auth.uid() / org_id
-    const { data: leadId_rpc, error: leadInsertError } = await auth.client.rpc('create_lead_with_client', {
-      p_org_id: requestedOrgId,
-      p_created_by: auth.user.id,
-      p_client_id: clientId,
-      p_first_name: firstName,
-      p_last_name: lastName,
-      p_email: email || null,
-      p_phone: phone || null,
-      p_address: address || null,
-      p_title: title || null,
-      p_company: title || null,
-      p_notes: notes || null,
-      p_value: Number.isFinite(value) ? value : 0,
-      p_status: 'new',
-    });
-    if (leadInsertError) throw leadInsertError;
-    const leadInsert = { id: String(leadId_rpc) };
+    // A lead IS a client with status='lead'. Stamp the lead-specific fields
+    // onto the client that ensureClientForLead created/returned.
+    const { error: leadUpdateError } = await admin
+      .from('clients')
+      .update({
+        status: 'lead',
+        lead_status: 'new_prospect',
+        title: title || null,
+        company: title || null,
+        notes: notes || null,
+        value: Number.isFinite(value) ? value : 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', clientId);
+    if (leadUpdateError) throw leadUpdateError;
 
-    const leadId = String(leadInsert.id);
+    // The lead id is the client id.
+    const leadId = String(clientId);
 
     // Insert pipeline deal — use service_role to bypass RLS on pipeline_deals.
     // Error MUST be captured; a silent failure leaves the lead with no pipeline card.
@@ -108,9 +105,9 @@ router.post('/leads/create', validate(createLeadSchema), async (req, res) => {
         .single();
 
       if (dealError) {
-        // Roll back the lead to prevent partial state (lead exists but has no pipeline card).
+        // Roll back the lead-client to prevent partial state (lead exists but has no pipeline card).
         await admin
-          .from('leads')
+          .from('clients')
           .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
           .eq('id', leadId);
         // eslint-disable-next-line no-console
@@ -130,9 +127,10 @@ router.post('/leads/create', validate(createLeadSchema), async (req, res) => {
     }
 
     const { data: leadRow, error: leadError } = await auth.client
-      .from('leads_active')
+      .from('clients')
       .select('*')
       .eq('id', leadId)
+      .is('deleted_at', null)
       .maybeSingle();
     if (leadError) throw leadError;
     // PII decryption handled automatically by piiDecryptResponseMiddleware
@@ -205,7 +203,7 @@ router.post('/leads/soft-delete', validate(softDeleteLeadSchema), async (req, re
     // current_org_id() has no ORDER BY and can return the wrong org for multi-org users,
     // causing a false 404 that the client silently ignores (deletion appears to succeed but DB is unchanged).
     const { data: leadRow, error: fetchErr } = await admin
-      .from('leads')
+      .from('clients')
       .select('id, org_id')
       .eq('id', leadId)
       .is('deleted_at', null)
@@ -220,8 +218,9 @@ router.post('/leads/soft-delete', validate(softDeleteLeadSchema), async (req, re
 
     const now = new Date().toISOString();
 
+    // A lead is a client with status='lead' — soft-delete the client row.
     const { error: leadErr } = await admin
-      .from('leads')
+      .from('clients')
       .update({ deleted_at: now, updated_at: now })
       .eq('id', leadId)
       .is('deleted_at', null);
@@ -280,11 +279,11 @@ router.post('/deals/soft-delete', validate(softDeleteDealSchema), async (req, re
       .eq('id', dealId);
     if (delErr) throw delErr;
 
-    // Optionally soft-delete the lead too
+    // Optionally soft-delete the lead too (deal.lead_id is a client id now)
     let leadDeleted = false;
     if (alsoDeleteLead && deal.lead_id) {
       const { error: leadErr } = await admin
-        .from('leads')
+        .from('clients')
         .update({ deleted_at: now, updated_at: now })
         .eq('id', deal.lead_id)
         .is('deleted_at', null);
@@ -330,10 +329,9 @@ router.post('/clients/soft-delete', validate(softDeleteClientSchema), async (req
       .is('deleted_at', null);
     if (clientErr) throw clientErr;
 
-    // Cascade: soft-delete related entities
-    const [jobsRes, leadsRes, dealsRes, invoicesRes, quotesRes] = await Promise.all([
+    // Cascade: soft-delete related entities (leads are clients now — nothing extra)
+    const [jobsRes, dealsRes, invoicesRes, quotesRes] = await Promise.all([
       admin.from('jobs').update({ deleted_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
-      admin.from('leads').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
       admin.from('pipeline_deals').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
       admin.from('invoices').update({ deleted_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
       admin.from('quotes').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
@@ -362,7 +360,7 @@ router.post('/clients/soft-delete', validate(softDeleteClientSchema), async (req
       ok: true,
       client: 1,
       jobs: (jobsRes.data ?? []).length,
-      leads: (leadsRes.data ?? []).length,
+      leads: 0,
       pipeline_deals: (dealsRes.data ?? []).length,
       other_rows: (invoicesRes.data ?? []).length + (quotesRes.data ?? []).length,
     });
@@ -459,10 +457,10 @@ router.post('/leads/update-status', validate(updateLeadStatusSchema), async (req
     const member = await isOrgMember(auth.client, auth.user.id, requestedOrgId);
     if (!member) return res.status(403).json({ error: 'Forbidden for this organization.' });
 
-    // Get current lead
+    // Get current lead (a client with status='lead')
     const { data: lead, error: fetchError } = await auth.client
-      .from('leads')
-      .select('id, status, org_id')
+      .from('clients')
+      .select('id, lead_status, org_id')
       .eq('id', leadId)
       .eq('org_id', requestedOrgId)
       .maybeSingle();
@@ -470,25 +468,25 @@ router.post('/leads/update-status', validate(updateLeadStatusSchema), async (req
     if (fetchError) throw fetchError;
     if (!lead) return res.status(404).json({ error: 'Lead not found.' });
 
-    const oldStatus = lead.status;
+    const oldStatus = lead.lead_status;
     if (oldStatus === newStatus) {
       return res.json({ ok: true, status: newStatus, changed: false });
     }
 
-    // Update status
-    const updatePayload: Record<string, any> = { status: newStatus };
+    // Update the funnel status on the client
+    const updatePayload: Record<string, any> = { lead_status: newStatus };
 
     const { data: updated, error: updateError } = await auth.client
-      .from('leads')
+      .from('clients')
       .update(updatePayload)
       .eq('id', leadId)
       .select('*')
       .single();
     if (updateError) throw updateError;
 
-    // When lead moves to 'closed', promote linked client to 'active'
-    if (newStatus === 'closed' && updated.client_id) {
-      await promoteClientFromLead(getServiceClient(), updated.client_id);
+    // When the lead is won/closed, promote it to an active client
+    if (newStatus === 'closed' || newStatus === 'closed_won') {
+      await promoteClientFromLead(getServiceClient(), leadId);
     }
 
     // Sync pipeline deal stage (status and stage use the same slugs)
@@ -530,9 +528,9 @@ router.post('/leads/convert-to-job', validate(convertLeadToJobSchema), async (re
     const canManage = await isOrgAdminOrOwner(auth.client, auth.user.id, requestedOrgId);
     if (!canManage) return res.status(403).json({ error: 'Only owner/admin can convert leads.' });
 
-    // Get lead
+    // Get lead (a client with status='lead')
     const { data: lead, error: leadError } = await auth.client
-      .from('leads')
+      .from('clients')
       .select('*')
       .eq('id', leadId)
       .eq('org_id', requestedOrgId)
@@ -576,12 +574,12 @@ router.post('/leads/convert-to-job', validate(convertLeadToJobSchema), async (re
       .single();
     if (jobFetchError) throw jobFetchError;
 
-    // Mark lead as closed (converted)
+    // Mark lead as converted: promote the client to active
     await auth.client
-      .from('leads')
+      .from('clients')
       .update({
-        status: 'closed',
-        converted_to_client_id: clientId,
+        status: 'active',
+        lead_status: 'closed_won',
         updated_at: new Date().toISOString(),
       })
       .eq('id', leadId);

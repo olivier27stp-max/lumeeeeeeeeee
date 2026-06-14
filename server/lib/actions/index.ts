@@ -64,8 +64,8 @@ export async function resolveEntityVariables(
 
   if (entityType === 'lead') {
     const { data: lead } = await supabase
-      .from('leads')
-      .select('first_name, last_name, email, phone, title, client_id:converted_to_client_id')
+      .from('clients')
+      .select('first_name, last_name, email, phone, title, client_id:id')
       .eq('id', entityId)
       .maybeSingle();
     if (lead) {

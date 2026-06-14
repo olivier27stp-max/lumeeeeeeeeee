@@ -155,10 +155,12 @@ async function checkLowPipeline(sb: ReturnType<typeof getServiceClient>, rule: A
   const threshold = rule.threshold_count || 5;
 
   const { count } = await sb
-    .from('leads')
+    .from('clients')
     .select('id', { count: 'exact', head: true })
     .eq('org_id', rule.org_id)
-    .in('status', ['new', 'contacted', 'qualified']);
+    .eq('status', 'lead')
+    .is('deleted_at', null)
+    .in('lead_status', ['new', 'contacted', 'qualified']);
 
   if (count !== null && count < threshold) {
     await createNotificationIfNotExists(sb, {

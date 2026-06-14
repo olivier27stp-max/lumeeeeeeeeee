@@ -49,7 +49,6 @@ import Dashboard from './pages/Dashboard';
 import CrmWorkspace from './pages/CrmWorkspace';
 import Clients from './pages/Clients';
 import ClientDetails from './pages/ClientDetails';
-import Leads from './pages/Leads';
 import Schedule from './pages/Schedule';
 import SettingsPage from './pages/Settings';
 import Auth from './pages/Auth';

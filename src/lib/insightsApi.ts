@@ -380,9 +380,9 @@ export async function drilldownJobsByTeam(params: { teamId: string; from: string
 export async function drilldownLeadsBySource(params: { source: string; from: string; to: string }): Promise<any[]> {
   const orgId = await getCurrentOrgIdOrThrow();
   const { fromIso, toIsoExclusive } = toIsoRange(params.from, params.to);
-  const { data } = await supabase.from('leads')
-    .select('id, first_name, last_name, email, source, status, value, created_at')
-    .eq('org_id', orgId).is('deleted_at', null)
+  const { data } = await supabase.from('clients')
+    .select('id, first_name, last_name, email, source, status:lead_status, value, created_at')
+    .eq('org_id', orgId).eq('status', 'lead').is('deleted_at', null)
     .eq('source', params.source)
     .gte('created_at', fromIso).lt('created_at', toIsoExclusive)
     .order('created_at', { ascending: false }).limit(50);
@@ -574,12 +574,11 @@ export async function fetchRelationshipGraph(): Promise<{ nodes: GraphNode[]; ed
       if (inv.client_id && seen.has(inv.client_id)) edges.push({ source: inv.client_id, target: inv.id });
     }
 
-    // Leads (limit 30)
-    const { data: leads } = await supabase.from('leads')
-      .select('id, first_name, last_name, client_id').eq('org_id', orgId).is('deleted_at', null).order('created_at', { ascending: false }).limit(30);
+    // Leads (limit 30) — clients with status='lead'
+    const { data: leads } = await supabase.from('clients')
+      .select('id, first_name, last_name').eq('org_id', orgId).eq('status', 'lead').is('deleted_at', null).order('created_at', { ascending: false }).limit(30);
     for (const l of leads || []) {
       addNode(l.id, `${l.first_name || ''} ${l.last_name || ''}`.trim() || '?', 'lead');
-      if (l.client_id && seen.has(l.client_id)) edges.push({ source: l.id, target: l.client_id });
     }
 
     // Quotes (limit 30)

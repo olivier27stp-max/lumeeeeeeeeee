@@ -203,11 +203,13 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
         });
       }
 
-      // Fetch recent leads
+      // Fetch recent leads (clients with status='lead')
       const { data: leads } = await supabase
-        .from('leads')
+        .from('clients')
         .select('id, first_name, last_name, created_at')
         .eq('org_id', orgId)
+        .eq('status', 'lead')
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(8);
 

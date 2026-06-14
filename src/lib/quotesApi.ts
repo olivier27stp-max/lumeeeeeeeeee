@@ -341,7 +341,7 @@ export async function getQuoteById(quoteId: string): Promise<QuoteDetail | null>
   let client = null;
   if (quote.lead_id) {
     const { data } = await supabase
-      .from('leads').select('id,first_name,last_name,email,phone,address,company')
+      .from('clients').select('id,first_name,last_name,email,phone,address,company')
       .eq('id', quote.lead_id).maybeSingle();
     lead = data;
   }
@@ -670,7 +670,7 @@ export async function fetchQuoteKpis(): Promise<{
 
     const [leadsRes, clientsRes] = await Promise.all([
       leadIds.length > 0
-        ? supabase.from('leads').select('id, deleted_at').eq('org_id', orgId).in('id', leadIds)
+        ? supabase.from('clients').select('id, deleted_at').eq('org_id', orgId).in('id', leadIds)
         : Promise.resolve({ data: [] }),
       clientIds.length > 0
         ? supabase.from('clients').select('id, deleted_at').eq('org_id', orgId).in('id', clientIds)
@@ -716,7 +716,7 @@ export async function fetchPendingQuotes(): Promise<Array<Quote & { lead_name?: 
 
   const [leadsRes, clientsRes] = await Promise.all([
     leadIds.length > 0
-      ? supabase.from('leads').select('id, first_name, last_name, deleted_at').eq('org_id', orgId).in('id', leadIds)
+      ? supabase.from('clients').select('id, first_name, last_name, deleted_at').eq('org_id', orgId).in('id', leadIds)
       : Promise.resolve({ data: [] }),
     clientIds.length > 0
       ? supabase.from('clients').select('id, company, first_name, last_name, deleted_at').eq('org_id', orgId).in('id', clientIds)
@@ -769,7 +769,7 @@ export async function fetchAllQuotesWithContext(): Promise<Array<Quote & { lead_
   // Fetch leads and clients in parallel
   const [leadsRes, clientsRes] = await Promise.all([
     leadIds.length > 0
-      ? supabase.from('leads').select('id, first_name, last_name, deleted_at').eq('org_id', orgId).in('id', leadIds)
+      ? supabase.from('clients').select('id, first_name, last_name, deleted_at').eq('org_id', orgId).in('id', leadIds)
       : Promise.resolve({ data: [] }),
     clientIds.length > 0
       ? supabase.from('clients').select('id, company, first_name, last_name, deleted_at').eq('org_id', orgId).in('id', clientIds)

@@ -329,24 +329,21 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
       company: body.company || null,
     });
 
-    // 2. Create lead via RPC
-    const { data: leadId, error: leadErr } = await admin.rpc('create_lead_with_client', {
-      p_org_id: orgId,
-      p_created_by: actorId,
-      p_client_id: clientId,
-      p_first_name: body.first_name,
-      p_last_name: body.last_name,
-      p_email: body.email || null,
-      p_phone: body.phone || null,
-      p_address: address || null,
-      p_title: body.company || null,
-      p_company: body.company || null,
-      p_notes: fullNotes,
-      p_value: 0,
-      p_status: 'new',
-    });
+    // 2. A lead IS a client with status='lead' — stamp lead fields onto the client.
+    const { error: leadErr } = await admin
+      .from('clients')
+      .update({
+        status: 'lead',
+        lead_status: 'new_prospect',
+        title: body.company || null,
+        company: body.company || null,
+        notes: fullNotes,
+        value: 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', clientId);
     if (leadErr) throw leadErr;
-    const leadIdStr = String(leadId);
+    const leadIdStr = String(clientId);
 
     // 3. Create pipeline deal (new_prospect stage)
     const { data: existingDeal } = await admin
@@ -376,8 +373,8 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
         .single();
 
       if (dealError) {
-        // Roll back lead on deal failure
-        await admin.from('leads').update({ deleted_at: new Date().toISOString() }).eq('id', leadIdStr);
+        // Roll back lead-client on deal failure
+        await admin.from('clients').update({ deleted_at: new Date().toISOString() }).eq('id', leadIdStr);
         throw dealError;
       }
       dealId = dealInsert?.id ? String(dealInsert.id) : null;

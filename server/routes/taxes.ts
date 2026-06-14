@@ -113,9 +113,9 @@ router.get('/taxes/resolve', async (req, res) => {
         region = PROVINCE_MAP[region] || region;
       }
     }
-    // Fallback: try lead's address
+    // Fallback: try lead's address (a lead is a client now)
     if (!region && leadId) {
-      const { data: lead } = await admin.from('leads').select('address').eq('id', leadId).maybeSingle();
+      const { data: lead } = await admin.from('clients').select('address').eq('id', leadId).maybeSingle();
       if (lead?.address) {
         const addr = lead.address.toUpperCase();
         for (const [name, code] of Object.entries(PROVINCE_MAP)) {

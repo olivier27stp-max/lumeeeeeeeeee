@@ -1566,7 +1566,7 @@ router.post('/pin-from-entity', async (req: Request, res: Response) => {
         address = c?.address ?? null;
       }
       if (!address && quote.lead_id) {
-        const { data: l } = await admin.from('leads').select('address').eq('id', quote.lead_id).maybeSingle();
+        const { data: l } = await admin.from('clients').select('address').eq('id', quote.lead_id).maybeSingle();
         address = l?.address ?? null;
       }
     }

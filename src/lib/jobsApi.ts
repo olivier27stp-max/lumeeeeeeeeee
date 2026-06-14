@@ -835,12 +835,13 @@ export async function createJob(payload: {
   }
 
   if (payload.lead_id) {
-    const convertedAt = new Date().toISOString();
+    // A lead is a client with status='lead'; converting it to a job promotes it.
     const { error: leadUpdateError } = await supabase
-      .from('leads')
+      .from('clients')
       .update({
-        converted_job_id: data.id,
-        converted_at: convertedAt,
+        status: 'active',
+        lead_status: 'closed_won',
+        updated_at: new Date().toISOString(),
       })
       .eq('id', payload.lead_id)
       .is('deleted_at', null);

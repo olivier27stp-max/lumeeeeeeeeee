@@ -694,7 +694,7 @@ router.get('/quotes/public/:token', async (req, res) => {
     }
     if (quote.lead_id) {
       const { data: l } = await admin
-        .from('leads')
+        .from('clients')
         .select('first_name, last_name, company, email, phone')
         .eq('id', quote.lead_id)
         .is('deleted_at', null)
@@ -1257,7 +1257,7 @@ router.post('/quotes/public/decline', async (req, res) => {
       if (client) clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client';
     } else if (quote.lead_id) {
       const { data: lead } = await admin
-        .from('leads').select('first_name, last_name')
+        .from('clients').select('first_name, last_name')
         .eq('id', quote.lead_id).maybeSingle();
       if (lead) clientName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Client';
     }

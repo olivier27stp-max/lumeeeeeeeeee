@@ -109,8 +109,10 @@ const searchLeads: AgentTool = {
   handler: async (args, ctx) => {
     const limit = clamp(args.limit, 10, 25);
     let q = ctx.client
-      .from('leads_active')
-      .select('id, first_name, last_name, company, email, phone, status, value, address')
+      .from('clients')
+      .select('id, first_name, last_name, company, email, phone, status:lead_status, value, address')
+      .eq('status', 'lead')
+      .is('deleted_at', null)
       .eq('org_id', ctx.orgId)
       .limit(limit);
     const term = String(args.query || '').trim();

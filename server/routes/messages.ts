@@ -258,8 +258,9 @@ router.post('/messages/inbound', (req, res) => {
         let lead: any = null;
         if (!client) {
           const { data: leadMatch } = await serviceClient
-            .from('leads')
+            .from('clients')
             .select('id, org_id, first_name, last_name, phone')
+            .eq('status', 'lead')
             .or(phoneFilter)
             .is('deleted_at', null)
             .limit(1)

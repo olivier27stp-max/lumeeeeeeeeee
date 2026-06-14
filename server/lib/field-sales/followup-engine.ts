@@ -77,10 +77,11 @@ export async function getFollowUpRecommendations(
 
   // 2. Stale leads (no activity in > 3 days)
   let leadsQuery = admin
-    .from('leads')
-    .select('id, first_name, last_name, status, value, updated_at, phone, email')
+    .from('clients')
+    .select('id, first_name, last_name, status:lead_status, value, updated_at, phone, email')
     .eq('org_id', orgId)
-    .in('status', ['new', 'contacted', 'qualified', 'new_prospect'])
+    .eq('status', 'lead')
+    .in('lead_status', ['new', 'contacted', 'qualified', 'new_prospect'])
     .is('deleted_at', null)
     .order('updated_at', { ascending: true })
     .limit(20);

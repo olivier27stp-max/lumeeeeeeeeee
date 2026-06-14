@@ -273,7 +273,7 @@ export async function generateCommissionsForInvoice(
       .eq('id', invoice.quote_id).eq('org_id', orgId).maybeSingle();
     repUserId = q?.assigned_to || null;
     if (!repUserId && q?.lead_id) {
-      const { data: l } = await supabase.from('leads')
+      const { data: l } = await supabase.from('clients')
         .select('assigned_to').eq('id', q.lead_id).eq('org_id', orgId).maybeSingle();
       repUserId = l?.assigned_to || null;
     }

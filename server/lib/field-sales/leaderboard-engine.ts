@@ -98,8 +98,9 @@ export async function getLeaderboard(
       .lte('won_at', prevRange.end),
     // doors_knocked / conversion baseline: count leads created in the period per rep
     supabase
-      .from('leads')
+      .from('clients')
       .select('assigned_to, user_id, created_by')
+      .eq('status', 'lead')
       .in('org_id', orgIds)
       .is('deleted_at', null)
       .gte('created_at', range.start)
@@ -174,8 +175,9 @@ export async function getRepPerformance(
 
   const [leadsRes, quotesRes, dealsRes, jobsRes] = await Promise.all([
     supabase
-      .from('leads')
-      .select('id, status, created_at, assigned_to, user_id, created_by')
+      .from('clients')
+      .select('id, status:lead_status, created_at, assigned_to, user_id, created_by')
+      .eq('status', 'lead')
       .in('org_id', orgIds)
       .is('deleted_at', null)
       .gte('created_at', fromIso)

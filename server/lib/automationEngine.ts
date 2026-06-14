@@ -497,17 +497,19 @@ async function checkStopConditions(
     if (['approved', 'declined', 'expired', 'converted', 'void'].includes(quote.status)) return true;
   }
 
-  // Lead: stop if archived or deleted
+  // Lead: stop if archived or deleted (a lead is a client with status='lead')
   if (entityType === 'lead') {
     const { data: lead } = await supabase
-      .from('leads')
-      .select('status, deleted_at')
+      .from('clients')
+      .select('status, lead_status, deleted_at')
       .eq('id', entityId)
       .maybeSingle();
 
     if (!lead) return true;
     if (lead.deleted_at) return true;
-    if (['lost', 'closed', 'converted'].includes(lead.status)) return true;
+    // Stop once it's no longer an open lead (promoted/won/lost) or funnel-closed.
+    if (lead.status !== 'lead') return true;
+    if (['lost', 'closed', 'converted', 'closed_won', 'closed_lost'].includes(lead.lead_status)) return true;
   }
 
   return false;

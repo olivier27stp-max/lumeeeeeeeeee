@@ -147,10 +147,10 @@ describe('Cross-tenant data isolation — query scoping', () => {
     expect(query).not.toContain('org-bbb');
   });
 
-  it('lead query includes org_id filter', () => {
-    const query = buildQuery('leads', 'org-bbb', { status: 'new' });
+  it('lead query includes org_id filter (leads are clients with status=lead)', () => {
+    const query = buildQuery('clients', 'org-bbb', { status: 'lead' });
     expect(query).toContain("org_id = 'org-bbb'");
-    expect(query).toContain("status = 'new'");
+    expect(query).toContain("status = 'lead'");
   });
 
   it('invoice query does not leak to other orgs', () => {

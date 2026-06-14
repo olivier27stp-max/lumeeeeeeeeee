@@ -8,7 +8,6 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { getServiceClient } from './supabase';
 
 /**
  * Ensure a client record exists for a lead.
@@ -28,21 +27,41 @@ export async function ensureClientForLead(
     company?: string | null;
   }
 ): Promise<string> {
-  // Try the RPC first (uses SECURITY DEFINER, handles email dedup)
-  const { data, error } = await client.rpc('ensure_client_for_lead', {
-    p_org_id: params.orgId,
-    p_created_by: params.createdBy,
-    p_first_name: params.firstName,
-    p_last_name: params.lastName,
-    p_email: params.email || null,
-    p_phone: params.phone || null,
-    p_address: params.address || null,
-    p_company: params.company || null,
-  });
+  // A lead is a client with status='lead'. Reuse an existing client with the
+  // same email in the org, otherwise create one.
+  const email = (params.email || '').trim();
+  if (email) {
+    const { data: existing } = await client
+      .from('clients')
+      .select('id')
+      .eq('org_id', params.orgId)
+      .ilike('email', email)
+      .is('deleted_at', null)
+      .limit(1)
+      .maybeSingle();
+    if (existing?.id) return String(existing.id);
+  }
+
+  const { data, error } = await client
+    .from('clients')
+    .insert({
+      org_id: params.orgId,
+      created_by: params.createdBy,
+      first_name: (params.firstName || '').trim(),
+      last_name: (params.lastName || '').trim(),
+      email: email || null,
+      phone: params.phone?.trim() || null,
+      address: params.address?.trim() || null,
+      company: params.company?.trim() || null,
+      status: 'lead',
+      lead_status: 'new_prospect',
+    })
+    .select('id')
+    .single();
 
   if (error) throw error;
-  if (!data) throw new Error('ensure_client_for_lead returned null');
-  return String(data);
+  if (!data) throw new Error('Failed to create client for lead');
+  return String(data.id);
 }
 
 /**
@@ -91,47 +110,16 @@ export async function resolveClientIdForLead(
   client: SupabaseClient,
   leadId: string
 ): Promise<string> {
-  const { data: lead, error: leadErr } = await client
-    .from('leads')
-    .select('id, client_id, converted_to_client_id, org_id, created_by, first_name, last_name, email, phone, address, company')
+  // A lead is a client now — the lead id IS the client id.
+  const { data, error } = await client
+    .from('clients')
+    .select('id')
     .eq('id', leadId)
     .maybeSingle();
 
-  if (leadErr) throw leadErr;
-  if (!lead) throw new Error('Lead not found');
-
-  // Best case: client_id is set
-  if (lead.client_id) return String(lead.client_id);
-
-  // Fallback: converted_to_client_id
-  if (lead.converted_to_client_id) {
-    // Backfill client_id
-    await client
-      .from('leads')
-      .update({ client_id: lead.converted_to_client_id })
-      .eq('id', leadId);
-    return String(lead.converted_to_client_id);
-  }
-
-  // Last resort: create a client
-  const clientId = await ensureClientForLead(getServiceClient(), {
-    orgId: lead.org_id,
-    createdBy: lead.created_by,
-    firstName: lead.first_name || '',
-    lastName: lead.last_name || '',
-    email: lead.email,
-    phone: lead.phone,
-    address: lead.address,
-    company: lead.company,
-  });
-
-  // Link it
-  await client
-    .from('leads')
-    .update({ client_id: clientId, converted_to_client_id: clientId })
-    .eq('id', leadId);
-
-  return clientId;
+  if (error) throw error;
+  if (!data) throw new Error('Lead not found');
+  return String(data.id);
 }
 
 /**
@@ -143,7 +131,7 @@ export async function promoteClientFromLead(
 ): Promise<void> {
   const { error } = await client
     .from('clients')
-    .update({ status: 'active', updated_at: new Date().toISOString() })
+    .update({ status: 'active', lead_status: 'closed_won', updated_at: new Date().toISOString() })
     .eq('id', clientId)
     .eq('status', 'lead');
 

@@ -89,8 +89,8 @@ router.get('/goals/progress', async (req, res) => {
             .gte('created_at', from).lte('created_at', to);
           actual = count || 0;
         } else if (goal.metric === 'leads') {
-          const { count } = await admin.from('leads')
-            .select('*', { count: 'exact', head: true }).eq('org_id', auth.orgId).is('deleted_at', null)
+          const { count } = await admin.from('clients')
+            .select('*', { count: 'exact', head: true }).eq('org_id', auth.orgId).eq('status', 'lead').is('deleted_at', null)
             .gte('created_at', from).lte('created_at', to);
           actual = count || 0;
         }

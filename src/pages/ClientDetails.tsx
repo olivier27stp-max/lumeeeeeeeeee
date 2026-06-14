@@ -306,13 +306,9 @@ export default function ClientDetails() {
         setScheduleEvents([]);
       }
 
-      // Fetch associated leads
-      const { data: leadData } = await supabase
-        .from('leads_active')
-        .select('id,first_name,last_name,status,source,value,created_at')
-        .eq('client_id', clientId)
-        .order('created_at', { ascending: false });
-      setLeads((leadData || []) as any[]);
+      // Leads are clients with status='lead' now — a client has no separate
+      // associated lead records.
+      setLeads([]);
 
       // Fetch real quotes (from quotes table)
       const { data: quotesData } = await supabase

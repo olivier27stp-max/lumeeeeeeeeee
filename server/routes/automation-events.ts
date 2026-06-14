@@ -243,7 +243,7 @@ router.post('/automations/events/deal-stage-changed', validate(automationEventSc
 
     if (leadId && auth.orgId) {
       const { data: lead } = await admin
-        .from('leads').select('first_name, last_name, email, phone, client_id')
+        .from('clients').select('first_name, last_name, email, phone, client_id:id')
         .eq('id', leadId).eq('org_id', auth.orgId).maybeSingle();
       if (lead) {
         leadName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
@@ -394,8 +394,8 @@ router.post('/automations/events/lead-created', validate(automationEventSchema),
 
     const admin = getServiceClient();
     const { data: lead } = await admin
-      .from('leads')
-      .select('first_name, last_name, email, phone, status')
+      .from('clients')
+      .select('first_name, last_name, email, phone, status:lead_status')
       .eq('id', leadId)
       .eq('org_id', auth.orgId)
       .maybeSingle();
@@ -429,7 +429,7 @@ router.post('/automations/events/lead-status-changed', validate(automationEventS
 
     const admin = getServiceClient();
     const { data: lead } = await admin
-      .from('leads')
+      .from('clients')
       .select('first_name, last_name, email, phone')
       .eq('id', leadId)
       .eq('org_id', auth.orgId)

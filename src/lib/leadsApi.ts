@@ -89,7 +89,8 @@ function normalizeLead(raw: any): Lead {
     company: raw.company || '',
     title: raw.title || '',
     source: raw.source || '',
-    status: toUiStatus(raw.status),
+    // A lead is a client with status='lead'; the funnel status lives in lead_status.
+    status: toUiStatus(raw.lead_status ?? raw.status),
     assigned_to: raw.assigned_to,
     notes: raw.notes,
     value: Number(raw.value || 0),
@@ -98,8 +99,9 @@ function normalizeLead(raw: any): Lead {
     assigned_team: raw.assigned_team || null,
     line_items: Array.isArray(raw.line_items) ? raw.line_items : [],
     description: raw.description || null,
-    client_id: raw.client_id || null,
-    converted_to_client_id: raw.converted_to_client_id || null,
+    // The lead IS the client now; its id is the client id.
+    client_id: raw.client_id || raw.id || null,
+    converted_to_client_id: raw.converted_to_client_id || raw.id || null,
     deleted_at: raw.deleted_at || null,
     user_id: raw.created_by,
   };
@@ -136,14 +138,17 @@ function buildSearchFilter(search: string): string {
 export async function fetchLeadsScoped(query: LeadsQuery = {}): Promise<Lead[]> {
   const orgId = await getCurrentOrgIdOrThrow();
   const sortAscending = query.sort === 'oldest';
+  // Leads are clients with status='lead'. The funnel status lives in lead_status.
   let request = supabase
-    .from('leads_active')
+    .from('clients')
     .select('*')
     .eq('org_id', orgId)
+    .eq('status', 'lead')
+    .is('deleted_at', null)
     .order('created_at', { ascending: sortAscending });
 
   if (query.search?.trim()) request = request.or(buildSearchFilter(query.search));
-  if (query.status && query.status !== 'All') request = request.eq('status', toDbStatus(query.status));
+  if (query.status && query.status !== 'All') request = request.eq('lead_status', toDbStatus(query.status));
   if (query.source && query.source !== 'All') request = request.eq('source', query.source);
   if (query.assignedTo && query.assignedTo !== 'All') request = request.eq('assigned_to', query.assignedTo);
 
@@ -203,27 +208,10 @@ export async function findEmailConflict(email: string): Promise<EmailConflictRec
   // Defense-in-depth: always scope to current org (RLS also enforces)
   const orgId = await getCurrentOrgIdOrThrow();
 
-  const { data: leadData, error: leadError } = await supabase
-    .from('leads_active')
-    .select('id,first_name,last_name,email')
-    .eq('org_id', orgId)
-    .ilike('email', normalized)
-    .limit(1)
-    .maybeSingle();
-  if (leadError) throw leadError;
-  if (leadData?.id) {
-    return {
-      kind: 'lead',
-      id: String(leadData.id),
-      first_name: leadData.first_name,
-      last_name: leadData.last_name,
-      email: leadData.email,
-    };
-  }
-
+  // Leads and clients are the same table now — a single probe covers both.
   const { data: clientData, error: clientError } = await supabase
     .from('clients')
-    .select('id,first_name,last_name,email')
+    .select('id,first_name,last_name,email,status')
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .ilike('email', normalized)
@@ -232,7 +220,7 @@ export async function findEmailConflict(email: string): Promise<EmailConflictRec
   if (clientError) throw clientError;
   if (!clientData?.id) return null;
   return {
-    kind: 'client',
+    kind: clientData.status === 'lead' ? 'lead' : 'client',
     id: String(clientData.id),
     first_name: clientData.first_name,
     last_name: clientData.last_name,
@@ -251,7 +239,8 @@ export async function updateLeadScoped(id: string, input: UpdateLeadInput): Prom
   if (input.title !== undefined) payload.title = input.title?.trim() || null;
   if (input.company !== undefined) payload.company = input.company?.trim() || null;
   if (input.source !== undefined) payload.source = input.source?.trim() || null;
-  if (input.status !== undefined) payload.status = toDbStatus(input.status);
+  // The funnel status lives in clients.lead_status (status stays 'lead').
+  if (input.status !== undefined) payload.lead_status = toDbStatus(input.status);
   if (input.assigned_to !== undefined) payload.assigned_to = input.assigned_to || null;
   if (input.notes !== undefined) payload.notes = input.notes?.trim() || null;
   if (input.value !== undefined) payload.value = Number(input.value || 0);
@@ -260,13 +249,13 @@ export async function updateLeadScoped(id: string, input: UpdateLeadInput): Prom
   if (input.assigned_team !== undefined) payload.assigned_team = input.assigned_team || null;
   if (input.line_items !== undefined) payload.line_items = input.line_items || [];
   if (input.description !== undefined) payload.description = input.description || null;
-  if (input.converted_to_client_id !== undefined) payload.converted_to_client_id = input.converted_to_client_id;
   if (input.deleted_at !== undefined) payload.deleted_at = input.deleted_at;
 
-  const { data, error } = await supabase.from('leads').update(payload).eq('id', id).eq('org_id', orgId).select('*').single();
+  // The lead IS the client row now (id is the client id).
+  const { data, error } = await supabase.from('clients').update(payload).eq('id', id).eq('org_id', orgId).select('*').single();
   if (error) throw error;
 
-  // Sync lead status → pipeline deal stage (blocking with error handling)
+  // Sync funnel status → pipeline deal stage (blocking with error handling)
   if (input.status !== undefined) {
     const dbStatus = toDbStatus(input.status);
     try {
@@ -284,23 +273,6 @@ export async function updateLeadScoped(id: string, input: UpdateLeadInput): Prom
       }
     } catch (syncErr) {
       console.error('Lead→Deal sync error:', syncErr);
-    }
-  }
-
-  // Sync contact fields to the linked client record (blocking with error handling)
-  const clientId = data.client_id || data.converted_to_client_id;
-  if (clientId) {
-    const clientUpdate: Record<string, any> = {};
-    if (input.first_name !== undefined) clientUpdate.first_name = input.first_name.trim();
-    if (input.last_name !== undefined) clientUpdate.last_name = input.last_name.trim();
-    if (input.email !== undefined) clientUpdate.email = input.email?.trim() || null;
-    if (input.phone !== undefined) clientUpdate.phone = input.phone?.trim() || null;
-    if (input.address !== undefined) clientUpdate.address = input.address?.trim() || null;
-    if (input.company !== undefined) clientUpdate.company = input.company?.trim() || null;
-    if (Object.keys(clientUpdate).length > 0) {
-      clientUpdate.updated_at = new Date().toISOString();
-      const { error: syncErr } = await supabase.from('clients').update(clientUpdate).eq('id', clientId).eq('org_id', orgId);
-      if (syncErr) console.error('Lead→Client sync failed:', syncErr.message);
     }
   }
 
@@ -322,76 +294,32 @@ export async function deleteLeadScoped(id: string): Promise<void> {
 
 export async function convertLeadToClient(leadId: string): Promise<{ lead: Lead; clientId: string }> {
   const orgId = await getCurrentOrgIdOrThrow();
-  // Fetch the lead first
-  const { data: leadRow, error: leadFetchError } = await supabase
-    .from('leads')
-    .select('*')
-    .eq('id', leadId)
-    .eq('org_id', orgId)
-    .single();
-  if (leadFetchError) throw leadFetchError;
-  if (!leadRow) throw new Error('Lead not found.');
-
-  // With the new sync model, every lead already has a client_id
-  const clientId = leadRow.client_id || leadRow.converted_to_client_id;
-  if (!clientId) throw new Error('Lead has no linked client. Please contact support.');
-
-  // Promote client status from 'lead' to 'active'
-  await supabase
+  // A lead is a client with status='lead' — promote it to an active client.
+  const { data: updated, error } = await supabase
     .from('clients')
-    .update({ status: 'active', updated_at: new Date().toISOString() })
-    .eq('id', clientId)
-    .eq('org_id', orgId)
-    .eq('status', 'lead');
-
-  // Mark lead as converted/closed
-  const { data: updatedLead, error: updateError } = await supabase
-    .from('leads')
-    .update({
-      converted_to_client_id: clientId,
-      status: 'closed',
-      updated_at: new Date().toISOString(),
-    })
+    .update({ status: 'active', lead_status: 'closed_won', updated_at: new Date().toISOString() })
     .eq('id', leadId)
     .eq('org_id', orgId)
     .select('*')
     .single();
-  if (updateError) throw updateError;
+  if (error) throw error;
+  if (!updated) throw new Error('Lead not found.');
 
-  return { lead: normalizeLead(updatedLead), clientId: String(clientId) };
+  return { lead: normalizeLead(updated), clientId: String(leadId) };
 }
 
 /**
- * Resolve the client_id for a lead. Every lead should have a client_id now.
- * Returns the client_id or null if the lead doesn't exist.
+ * Resolve the client_id for a lead. A lead is a client now, so the lead id
+ * IS the client id. Returns it (or null if the row doesn't exist).
  */
 export async function resolveClientIdForLead(leadId: string): Promise<string | null> {
   const { data, error } = await supabase
-    .from('leads')
-    .select('client_id, converted_to_client_id')
+    .from('clients')
+    .select('id')
     .eq('id', leadId)
     .maybeSingle();
   if (error) throw error;
-  if (!data) return null;
-  const clientId = data.client_id || data.converted_to_client_id || null;
-  if (clientId) return clientId;
-
-  // Fallback: ask server to resolve (it can create a client for legacy leads)
-  try {
-    const headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
-    const response = await fetch('/api/leads/resolve-client', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ leadId }),
-    });
-    if (response.ok) {
-      const payload = await response.json();
-      if (payload?.clientId) return payload.clientId;
-    }
-  } catch {
-    // Server fallback failed — return null gracefully
-  }
-  return null;
+  return data?.id ? String(data.id) : null;
 }
 
 export async function createLeadQuick(input: {
@@ -476,9 +404,11 @@ export async function exportAllLeadsCsv(): Promise<string> {
   while (true) {
     const to = from + pageSize - 1;
     const { data, error } = await supabase
-      .from('leads_active')
-      .select('id,first_name,last_name,phone,email,company,address,source,status,value,assigned_to,notes,tags,created_at')
+      .from('clients')
+      .select('id,first_name,last_name,phone,email,company,address,source,lead_status,value,assigned_to,notes,tags,created_at')
       .eq('org_id', orgId)
+      .eq('status', 'lead')
+      .is('deleted_at', null)
       .order('created_at', { ascending: true })
       .range(from, to);
 
@@ -496,7 +426,7 @@ export async function exportAllLeadsCsv(): Promise<string> {
         company: (lead as any).company || '',
         address: (lead as any).address || '',
         source: lead.source || '',
-        status: toUiStatus(lead.status),
+        status: toUiStatus((lead as any).lead_status),
         value: (lead as any).value || 0,
         assigned_to: (lead as any).assigned_to || '',
         notes: (lead as any).notes || '',
