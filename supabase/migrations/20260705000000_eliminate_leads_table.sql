@@ -1253,8 +1253,9 @@ REVOKE ALL ON FUNCTION public.search_global_source(uuid, text) FROM public;
 -- 5. Drop the leads↔clients bridge objects (no longer needed)
 -- ───────────────────────────────────────────────────────────────
 DROP TRIGGER IF EXISTS trg_cascade_client_delete_to_leads ON public.clients;
-DROP FUNCTION IF EXISTS public.sync_lead_to_client();
-DROP FUNCTION IF EXISTS public.cascade_client_delete_to_leads();
+DROP TRIGGER IF EXISTS trg_sync_lead_to_client ON public.leads;
+DROP FUNCTION IF EXISTS public.sync_lead_to_client() CASCADE;
+DROP FUNCTION IF EXISTS public.cascade_client_delete_to_leads() CASCADE;
 DROP FUNCTION IF EXISTS public.ensure_client_for_lead(uuid, uuid, text, text, text, text, text, text);
 DROP FUNCTION IF EXISTS public.resolve_client_id_for_lead(uuid);
 DROP FUNCTION IF EXISTS public.create_lead_with_client(uuid, uuid, uuid, text, text, text, text, text, text, text, text, numeric, text);
