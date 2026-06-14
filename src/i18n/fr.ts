@@ -20,7 +20,7 @@ const fr: TranslationKeys = {
     signOut: 'Déconnexion',
     lightMode: 'Mode clair',
     darkMode: 'Mode sombre',
-    crm: 'CRM',
+    crm: 'Accueil',
     operations: 'Opérations',
     finance: 'Finance',
     timesheets: 'Feuilles de temps',

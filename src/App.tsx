@@ -716,7 +716,7 @@ function AuthenticatedApp({
       label: null,
       items: [
         { id: 'ai-helper', label: 'Lume Agent', icon: LumeAgentIcon as any, path: '/lume-agent', tileColor: 'blue', requiredPermission: 'external_agent.use', requiredPlanFlag: 'includes_ai' },
-        { id: 'day', label: 'CRM', icon: LayoutDashboard, path: '/day', tileColor: 'blue' },
+        { id: 'day', label: t.nav.crm, icon: LayoutDashboard, path: '/day', tileColor: 'blue' },
       ],
     },
     {

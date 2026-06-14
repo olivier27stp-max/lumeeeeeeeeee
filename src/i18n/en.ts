@@ -18,7 +18,7 @@ const en = {
     signOut: 'Sign Out',
     lightMode: 'Light Mode',
     darkMode: 'Dark Mode',
-    crm: 'CRM',
+    crm: 'Home',
     operations: 'Operations',
     finance: 'Finance',
     timesheets: 'Timesheets',

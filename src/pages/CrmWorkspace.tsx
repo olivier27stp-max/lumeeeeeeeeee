@@ -29,7 +29,7 @@ function getQuoteName(q: any): string {
 
 export default function CrmWorkspace() {
   const navigate = useNavigate();
-  const { language } = useTranslation();
+  const { language, t } = useTranslation();
   const fr = language === 'fr';
   const [search, setSearch] = useState('');
   const [leadPage, setLeadPage] = useState(1);
@@ -105,11 +105,11 @@ export default function CrmWorkspace() {
 
       {/* ══════════════════════════════════════════
           TOP BAR — matches reference exactly:
-          left: "CRM Dashboard"
+          left: page title (Home / Accueil)
           right: date range + Download button
           ══════════════════════════════════════════ */}
       <div className="flex items-center justify-between mb-5">
-        <h1 className="text-[18px] font-bold text-text-primary">CRM Dashboard</h1>
+        <h1 className="text-[18px] font-bold text-text-primary">{t.nav.crm}</h1>
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
