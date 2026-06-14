@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import express from 'express';
 import { getSupabaseAdminClient } from './supabaseAdmin';
 import { supabaseUrl, supabaseAnonKey, supabaseServiceRoleKey } from './config';
+import { ORG_UUID_RE, shouldUseRequestedOrg } from './active-org';
 
 let adminClientCache: SupabaseClient | null = null;
 
@@ -119,9 +120,9 @@ export async function requireAuthedClient(req: express.Request, res: express.Res
   // (anti-IDOR) ; sinon on retombe sur current_org_id() (première membership).
   let orgId: string | null = null;
   const headerOrg = req.header('x-org-id');
-  if (headerOrg && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(headerOrg)) {
+  if (headerOrg && ORG_UUID_RE.test(headerOrg)) {
     const { data: isMember } = await client.rpc('has_org_membership', { p_user: user.id, p_org: headerOrg });
-    if (isMember === true) orgId = headerOrg;
+    if (shouldUseRequestedOrg(headerOrg, isMember === true)) orgId = headerOrg;
   }
   if (!orgId) orgId = await resolveOrgId(client);
   if (!orgId) {

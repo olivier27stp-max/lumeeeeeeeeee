@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient, isOrgMember } from '../lib/supabase';
+import { ORG_UUID_RE, shouldUseRequestedOrg, leaderboardOrgIds } from '../lib/active-org';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { getLeaderboard, getRepPerformance, calculateRepStats } from '../lib/field-sales/leaderboard-engine';
 import { getRepBadges } from '../lib/field-sales/gamification-engine';
@@ -8,8 +9,6 @@ import { cached } from '../lib/cache';
 const router = Router();
 router.use(maxBodySize());
 router.use(guardCommonShape);
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Résout l'office "actif" pour cette requête. Le serveur ne connaît que la
@@ -22,9 +21,9 @@ async function resolveActiveOrgId(
   req: any
 ): Promise<string> {
   const requested = (req.query.orgId as string) || '';
-  if (UUID_RE.test(requested) && requested !== auth.orgId) {
+  if (ORG_UUID_RE.test(requested) && requested !== auth.orgId) {
     const member = await isOrgMember(auth.client, auth.user.id, requested);
-    if (member) return requested;
+    if (shouldUseRequestedOrg(requested, member)) return requested;
   }
   return auth.orgId;
 }
@@ -54,11 +53,11 @@ router.get('/leaderboard', async (req, res) => {
     let orgIds: string[];
     let cacheKey: string;
     if (scope === 'mine') {
-      orgIds = [activeOrgId];
+      orgIds = leaderboardOrgIds('mine', activeOrgId, []);
       cacheKey = `leaderboard:mine:${activeOrgId}:${period}:${teamId || 'all'}`;
     } else {
       const resolved = await resolveCompanyOrgIds(sc, activeOrgId);
-      orgIds = resolved.orgIds;
+      orgIds = leaderboardOrgIds('all', activeOrgId, resolved.orgIds);
       cacheKey = `leaderboard:all:${resolved.groupId}:${period}:${teamId || 'all'}`;
     }
 
