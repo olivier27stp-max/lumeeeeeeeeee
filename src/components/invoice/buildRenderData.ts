@@ -45,7 +45,13 @@ export function buildRenderData(
     client_email: client?.email || null,
     client_phone: client?.phone || null,
     client_company: (client as any)?.company || null,
-    client_address: null,
+    // Billing address: a distinct billing address when the client opted out of
+    // "same as service address", otherwise the service (property) address.
+    client_address: client
+      ? ((client as any).billing_same_as_service === false && (client as any).billing_address
+          ? (client as any).billing_address
+          : (client as any).address || null)
+      : null,
 
     company_name: company?.company_name || 'LUME',
     company_email: company?.company_email || null,

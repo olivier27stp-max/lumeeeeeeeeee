@@ -101,6 +101,9 @@ export interface InvoiceDetail {
     company: string | null;
     email: string | null;
     phone: string | null;
+    address: string | null;
+    billing_same_as_service: boolean;
+    billing_address: string | null;
   } | null;
   items: Array<{
     id: string;
@@ -350,7 +353,7 @@ export async function getInvoiceById(invoiceId: string): Promise<InvoiceDetail |
 
   const { data: clientRow, error: clientError } = await supabase
     .from('clients')
-    .select('id,first_name,last_name,company,email,phone')
+    .select('id,first_name,last_name,company,email,phone,address,billing_same_as_service,billing_address')
     .is('deleted_at', null)
     .eq('id', invoiceRow.client_id)
     .maybeSingle();
@@ -391,6 +394,9 @@ export async function getInvoiceById(invoiceId: string): Promise<InvoiceDetail |
           company: clientRow.company,
           email: clientRow.email,
           phone: clientRow.phone,
+          address: (clientRow as any).address ?? null,
+          billing_same_as_service: (clientRow as any).billing_same_as_service ?? true,
+          billing_address: (clientRow as any).billing_address ?? null,
         }
       : null,
     items: (itemsRows || []).map((item: any) => ({

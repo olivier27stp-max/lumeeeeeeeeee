@@ -8,6 +8,8 @@ export interface ClientRecord {
   email: string | null;
   phone: string | null;
   address: string | null;
+  billing_same_as_service: boolean;
+  billing_address: string | null;
   street_number: string | null;
   street_name: string | null;
   city: string | null;
@@ -122,6 +124,8 @@ export interface ClientPayload {
   email?: string;
   phone?: string;
   address?: string;
+  billing_same_as_service?: boolean;
+  billing_address?: string | null;
   street_number?: string;
   street_name?: string;
   city?: string;
@@ -229,6 +233,8 @@ export async function updateClient(id: string, payload: Partial<ClientPayload>):
   if (payload.email !== undefined) updatePayload.email = payload.email?.trim() || null;
   if (payload.phone !== undefined) updatePayload.phone = payload.phone?.trim() || null;
   if (payload.address !== undefined) updatePayload.address = payload.address?.trim() || null;
+  if (payload.billing_same_as_service !== undefined) updatePayload.billing_same_as_service = payload.billing_same_as_service;
+  if (payload.billing_address !== undefined) updatePayload.billing_address = payload.billing_address?.trim() || null;
   if (payload.street_number !== undefined) updatePayload.street_number = payload.street_number?.trim() || null;
   if (payload.street_name !== undefined) updatePayload.street_name = payload.street_name?.trim() || null;
   if (payload.city !== undefined) updatePayload.city = payload.city?.trim() || null;

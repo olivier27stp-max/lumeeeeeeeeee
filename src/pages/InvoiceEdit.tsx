@@ -394,6 +394,9 @@ export default function InvoiceEdit() {
           company: null,
           email: clientEmail || null,
           phone: clientPhone || null,
+          address: detailQuery.data?.client?.address ?? null,
+          billing_same_as_service: detailQuery.data?.client?.billing_same_as_service ?? true,
+          billing_address: detailQuery.data?.client?.billing_address ?? null,
         },
         items: lines
           .filter((l) => l.description.trim())

@@ -31,6 +31,7 @@ import {
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { clientDisplayName, getClientById, updateClient, listClientJobs, softDeleteClient } from '../lib/clientsApi';
 import type { ClientRecord } from '../lib/clientsApi';
+import { BillingAddressSection } from '../components/BillingAddressSection';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { getInvoiceRowUiStatus } from '../lib/invoicesApi';
@@ -706,6 +707,9 @@ export default function ClientDetails() {
               ) : (
                 <p className="text-[13px] text-text-tertiary">{(t.clientDetails as any).noPropertiesYet}</p>
               )}
+
+              {/* Billing address: same as service address (default) or distinct */}
+              <BillingAddressSection client={client} fr={language === 'fr'} onUpdated={setClient} />
             </div>
           </div>
 
