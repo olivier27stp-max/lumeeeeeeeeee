@@ -1256,11 +1256,11 @@ DROP TRIGGER IF EXISTS trg_cascade_client_delete_to_leads ON public.clients;
 DROP TRIGGER IF EXISTS trg_sync_lead_to_client ON public.leads;
 DROP FUNCTION IF EXISTS public.sync_lead_to_client() CASCADE;
 DROP FUNCTION IF EXISTS public.cascade_client_delete_to_leads() CASCADE;
-DROP FUNCTION IF EXISTS public.ensure_client_for_lead(uuid, uuid, text, text, text, text, text, text);
-DROP FUNCTION IF EXISTS public.resolve_client_id_for_lead(uuid);
-DROP FUNCTION IF EXISTS public.create_lead_with_client(uuid, uuid, uuid, text, text, text, text, text, text, text, text, numeric, text);
-DROP FUNCTION IF EXISTS public.auto_convert_lead_to_deal_and_job(uuid);
-DROP FUNCTION IF EXISTS public.soft_delete_lead(uuid, uuid);
+DROP FUNCTION IF EXISTS public.ensure_client_for_lead(uuid, uuid, text, text, text, text, text, text) CASCADE;
+DROP FUNCTION IF EXISTS public.resolve_client_id_for_lead(uuid) CASCADE;
+DROP FUNCTION IF EXISTS public.create_lead_with_client(uuid, uuid, uuid, text, text, text, text, text, text, text, text, numeric, text) CASCADE;
+DROP FUNCTION IF EXISTS public.auto_convert_lead_to_deal_and_job(uuid) CASCADE;
+DROP FUNCTION IF EXISTS public.soft_delete_lead(uuid, uuid) CASCADE;
 
 -- ───────────────────────────────────────────────────────────────
 -- 6. Drop the leads_active view, then the leads table
