@@ -13,7 +13,7 @@ import { createOffice } from '../lib/officesApi';
  * Le propriétaire peut créer un nouvel office depuis le pied du dropdown.
  */
 export function OfficeSwitcher() {
-  const { companies, current, currentRole, switchCompany, refresh } = useCompany();
+  const { companies, current, currentRole, switchCompany } = useCompany();
   const { language } = useTranslation();
   const fr = language === 'fr';
   const [open, setOpen] = React.useState(false);
@@ -22,20 +22,23 @@ export function OfficeSwitcher() {
   if (!current) return null;
 
   const officeName = current.companyName || (fr ? 'Bureau sans nom' : 'Unnamed office');
-  const isMultiOffice = companies.length > 1;
+  // Seuls owner et admin peuvent changer d'office. Les autres rôles
+  // (sales_rep, technician) sont épinglés à l'office qui leur est assigné →
+  // on n'affiche rien dans le header pour eux.
+  const canSwitch = currentRole === 'owner' || currentRole === 'admin';
   const canCreate = currentRole === 'owner';
 
-  // Icône statique pour les utilisateurs mono-office sans droit de création.
-  if (!isMultiOffice && !canCreate) {
-    return (
-      <div
-        className="p-2 rounded-lg text-text-tertiary"
-        title={officeName}
-      >
-        <Building2 size={17} strokeWidth={1.75} />
-      </div>
-    );
-  }
+  if (!canSwitch) return null;
+
+  // Bascule d'office = changement de tenant complet. On persiste l'office
+  // choisi puis on recharge entièrement la page : aucune donnée de l'ancien
+  // office ne peut subsister à l'écran (isolation 100% garantie).
+  const goToOffice = (orgId: string) => {
+    setOpen(false);
+    if (orgId === current.orgId) return;
+    switchCompany(orgId); // valide la membership + persiste lume-active-org
+    window.location.assign('/');
+  };
 
   return (
     <div className="relative">
@@ -57,10 +60,7 @@ export function OfficeSwitcher() {
             {companies.map((office) => (
               <button
                 key={office.orgId}
-                onClick={() => {
-                  switchCompany(office.orgId);
-                  setOpen(false);
-                }}
+                onClick={() => goToOffice(office.orgId)}
                 className={cn(
                   'w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-primary/5 transition-colors',
                   office.orgId === current.orgId && 'bg-primary/5'
@@ -105,10 +105,12 @@ export function OfficeSwitcher() {
         <CreateOfficeModal
           fr={fr}
           onClose={() => setShowCreate(false)}
-          onCreated={async (orgId) => {
+          onCreated={(orgId) => {
             setShowCreate(false);
-            await refresh();
-            switchCompany(orgId);
+            // Le créateur devient owner du nouvel office. On l'active puis on
+            // recharge pour atterrir dessus avec des données fraîches.
+            try { localStorage.setItem('lume-active-org', orgId); } catch {}
+            window.location.assign('/');
           }}
         />
       )}

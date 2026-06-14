@@ -8,7 +8,10 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new Error('Not authenticated');
-  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  // Office actif — le serveur scope dessus si l'utilisateur en est membre.
+  let activeOrg = '';
+  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch {}
+  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'x-org-id': activeOrg };
 }
 
 const BASE = '/api';
@@ -36,11 +39,21 @@ function qs(params: Record<string, string | number | undefined | null>): string 
 // API
 // ---------------------------------------------------------------------------
 
+export interface LeaderboardOptions {
+  teamId?: string;
+  /** 'mine' = office actif uniquement ; 'all' = tous les offices de la compagnie. */
+  scope?: 'mine' | 'all';
+  /** Office actuellement sélectionné (transmis au serveur pour scoper 'mine'). */
+  orgId?: string;
+}
+
 export function getLeaderboard(
   period: 'daily' | 'weekly' | 'monthly',
-  teamId?: string
+  opts: LeaderboardOptions = {}
 ): Promise<LeaderboardEntry[]> {
-  return apiFetch(`/leaderboard${qs({ period, teamId })}`);
+  return apiFetch(
+    `/leaderboard${qs({ period, teamId: opts.teamId, scope: opts.scope, orgId: opts.orgId })}`
+  );
 }
 
 export function getRepPerformance(

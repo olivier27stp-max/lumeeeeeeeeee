@@ -4,9 +4,14 @@ const API_BASE = '/api';
 
 async function authHeaders() {
   const { data: { session } } = await supabase.auth.getSession();
+  // Office actif sélectionné dans le header — le serveur scope dessus quand
+  // l'utilisateur en est membre (cf. requireAuthedClient).
+  let activeOrg = '';
+  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch {}
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${session?.access_token || ''}`,
+    'x-org-id': activeOrg,
   };
 }
 

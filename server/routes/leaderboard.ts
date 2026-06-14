@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient, isOrgMember } from '../lib/supabase';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { getLeaderboard, getRepPerformance, calculateRepStats } from '../lib/field-sales/leaderboard-engine';
 import { getRepBadges } from '../lib/field-sales/gamification-engine';
@@ -9,7 +9,27 @@ const router = Router();
 router.use(maxBodySize());
 router.use(guardCommonShape);
 
-// GET /api/leaderboard?period=daily|weekly|monthly&teamId=...
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Résout l'office "actif" pour cette requête. Le serveur ne connaît que la
+ * première membership via current_org_id(), donc le client transmet l'office
+ * réellement sélectionné (?orgId=...). On ne l'honore QUE si l'utilisateur en
+ * est bien membre (anti-IDOR), sinon on retombe sur auth.orgId.
+ */
+async function resolveActiveOrgId(
+  auth: NonNullable<Awaited<ReturnType<typeof requireAuthedClient>>>,
+  req: any
+): Promise<string> {
+  const requested = (req.query.orgId as string) || '';
+  if (UUID_RE.test(requested) && requested !== auth.orgId) {
+    const member = await isOrgMember(auth.client, auth.user.id, requested);
+    if (member) return requested;
+  }
+  return auth.orgId;
+}
+
+// GET /api/leaderboard?period=daily|weekly|monthly&teamId=...&scope=mine|all&orgId=...
 router.get('/leaderboard', async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
@@ -20,15 +40,28 @@ router.get('/leaderboard', async (req, res) => {
   }
 
   const teamId = req.query.teamId as string | undefined;
+  // 'mine' = uniquement l'office actif ; 'all' = tous les offices de la
+  // compagnie (company_group_id). Défaut prudent : 'all' (comportement legacy).
+  const scope = (req.query.scope as string) === 'mine' ? 'mine' : 'all';
 
   try {
     const sc = getServiceClient();
+    const activeOrgId = await resolveActiveOrgId(auth, req);
 
-    // Un "office" = un org. Le leaderboard mélange tous les offices de la
-    // même compagnie (company_group_id) pour créer l'esprit de compétition.
-    const { orgIds, groupId } = await resolveCompanyOrgIds(sc, auth.orgId);
+    // Un "office" = un org. En scope 'all' le leaderboard mélange tous les
+    // offices de la même compagnie pour créer l'esprit de compétition ; en
+    // scope 'mine' on se limite à l'office actif.
+    let orgIds: string[];
+    let cacheKey: string;
+    if (scope === 'mine') {
+      orgIds = [activeOrgId];
+      cacheKey = `leaderboard:mine:${activeOrgId}:${period}:${teamId || 'all'}`;
+    } else {
+      const resolved = await resolveCompanyOrgIds(sc, activeOrgId);
+      orgIds = resolved.orgIds;
+      cacheKey = `leaderboard:all:${resolved.groupId}:${period}:${teamId || 'all'}`;
+    }
 
-    const cacheKey = `leaderboard:group:${groupId}:${period}:${teamId || 'all'}`;
     const entries = await cached(cacheKey, 45, () =>
       getLeaderboard(sc, orgIds, period as 'daily' | 'weekly' | 'monthly', undefined, teamId)
     );

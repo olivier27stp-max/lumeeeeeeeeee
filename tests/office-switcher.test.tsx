@@ -30,12 +30,18 @@ function membership(orgId: string, name: string): CompanyMembership {
   };
 }
 
-function makeCtx(switchCompany: (id: string) => void): CompanyContextValue {
-  const companies = [membership(ORG_A, 'Bureau Montréal'), membership(ORG_B, 'Bureau Québec')];
+function makeCtx(
+  switchCompany: (id: string) => void,
+  role: 'owner' | 'admin' | 'sales_rep' | 'technician' = 'owner',
+): CompanyContextValue {
+  const companies = [
+    { ...membership(ORG_A, 'Bureau Montréal'), role },
+    membership(ORG_B, 'Bureau Québec'),
+  ];
   return {
     current: companies[0],
     currentOrgId: ORG_A,
-    currentRole: 'owner',
+    currentRole: role,
     currentScope: 'org' as any,
     currentPermissions: {} as any,
     companies,
@@ -50,11 +56,18 @@ function makeCtx(switchCompany: (id: string) => void): CompanyContextValue {
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
+let assignSpy: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
+  // Switching does a full reload — stub it so jsdom doesn't warn and we can assert.
+  assignSpy = vi.fn();
+  Object.defineProperty(window, 'location', {
+    value: { ...window.location, assign: assignSpy },
+    writable: true,
+  });
 });
 
 afterEach(() => {
@@ -117,9 +130,40 @@ describe('OfficeSwitcher (header, icon-only)', () => {
     openTrigger();
     expect(container.textContent).toContain('Bureau Québec');
 
-    // Click the other office → must call switchCompany with its orgId.
+    // Click the other office → must call switchCompany with its orgId
+    // and trigger a full reload onto that office.
     clickByText('Bureau Québec');
     expect(switchCompany).toHaveBeenCalledTimes(1);
     expect(switchCompany).toHaveBeenCalledWith(ORG_B);
+    expect(assignSpy).toHaveBeenCalledWith('/');
+  });
+
+  it('renders nothing for roles that cannot switch (sales_rep)', () => {
+    const switchCompany = vi.fn();
+    act(() => {
+      root.render(
+        <CompanyContext.Provider value={makeCtx(switchCompany, 'sales_rep')}>
+          <OfficeSwitcher />
+        </CompanyContext.Provider>,
+      );
+    });
+    // Only owner/admin may switch offices — others get no header control.
+    expect(container.querySelector('button')).toBeNull();
+    expect(container.textContent?.trim()).toBe('');
+  });
+
+  it('lets an admin switch offices', () => {
+    const switchCompany = vi.fn();
+    act(() => {
+      root.render(
+        <CompanyContext.Provider value={makeCtx(switchCompany, 'admin')}>
+          <OfficeSwitcher />
+        </CompanyContext.Provider>,
+      );
+    });
+    openTrigger();
+    clickByText('Bureau Québec');
+    expect(switchCompany).toHaveBeenCalledWith(ORG_B);
+    expect(assignSpy).toHaveBeenCalledWith('/');
   });
 });

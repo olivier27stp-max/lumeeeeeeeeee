@@ -113,7 +113,17 @@ export async function requireAuthedClient(req: express.Request, res: express.Res
     return null;
   }
 
-  const orgId = await resolveOrgId(client);
+  // Office actif : le front transmet l'office réellement sélectionné via le
+  // header `x-org-id` (un user peut être membre de plusieurs offices d'une même
+  // compagnie). On ne l'honore QUE si l'utilisateur en est bien membre
+  // (anti-IDOR) ; sinon on retombe sur current_org_id() (première membership).
+  let orgId: string | null = null;
+  const headerOrg = req.header('x-org-id');
+  if (headerOrg && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(headerOrg)) {
+    const { data: isMember } = await client.rpc('has_org_membership', { p_user: user.id, p_org: headerOrg });
+    if (isMember === true) orgId = headerOrg;
+  }
+  if (!orgId) orgId = await resolveOrgId(client);
   if (!orgId) {
     res.status(403).json({ error: 'No organization context found for user.' });
     return null;

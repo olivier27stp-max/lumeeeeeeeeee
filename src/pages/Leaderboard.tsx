@@ -5,6 +5,7 @@ import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { getRepAvatar } from '../lib/constants/avatars';
 import { getLeaderboard, getRepPerformance } from '../lib/leaderboardApi';
+import { useCompany } from '../contexts/CompanyContext';
 import type { LeaderboardEntry, RepPerformanceDetail } from '../types';
 import {
   TrendingUp,
@@ -212,7 +213,10 @@ export default function D2DLeaderboard() {
   const periodLabels: Record<Period, string> = fr
     ? { daily: 'Quotidien', weekly: 'Hebdomadaire', monthly: 'Mensuel' }
     : { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
+  const { currentOrgId } = useCompany();
   const [period, setPeriod] = useState<Period>('weekly');
+  // 'mine' = uniquement mon office ; 'all' = tous les offices de la compagnie.
+  const [scope, setScope] = useState<'mine' | 'all'>('mine');
   const [selectedRep, setSelectedRep] = useState<RepData | null>(null);
   const [loading, setLoading] = useState(true);
   const [podiumData, setPodiumData] = useState<RepData[]>([]);
@@ -228,7 +232,7 @@ export default function D2DLeaderboard() {
     let cancelled = false;
     setLoading(true);
 
-    getLeaderboard(period)
+    getLeaderboard(period, { scope, orgId: currentOrgId ?? undefined })
       .then((entries) => {
         if (cancelled) return;
         if (!entries || entries.length === 0) {
@@ -251,7 +255,7 @@ export default function D2DLeaderboard() {
       });
 
     return () => { cancelled = true; };
-  }, [period]);
+  }, [period, scope, currentOrgId]);
 
   // Fetch rep detail when drawer opens
   const openRepDrawer = useCallback((rep: RepData) => {
@@ -293,19 +297,39 @@ export default function D2DLeaderboard() {
           <h2 className="text-lg font-semibold text-text-primary">{fr ? 'Classement' : 'Rankings'}</h2>
           <p className="mt-1 text-sm text-text-tertiary">{fr ? 'Classement de l\'équipe' : 'Team ranking'}</p>
         </div>
-        <div className="flex items-center rounded-lg border border-border-subtle overflow-hidden">
-          {(['daily', 'weekly', 'monthly'] as Period[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={cn(
-                'px-3 py-1.5 text-xs font-medium transition-colors',
-                period === p ? 'bg-white text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary',
-              )}
-            >
-              {periodLabels[p]}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          {/* Scope: mon office vs tous les offices de la compagnie */}
+          <div className="flex items-center rounded-lg border border-border-subtle overflow-hidden">
+            {(['mine', 'all'] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setScope(s)}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-medium transition-colors',
+                  scope === s ? 'bg-white text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary',
+                )}
+              >
+                {s === 'mine'
+                  ? (fr ? 'Mon office' : 'My office')
+                  : (fr ? 'Tous les offices' : 'All offices')}
+              </button>
+            ))}
+          </div>
+          {/* Période */}
+          <div className="flex items-center rounded-lg border border-border-subtle overflow-hidden">
+            {(['daily', 'weekly', 'monthly'] as Period[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-medium transition-colors',
+                  period === p ? 'bg-white text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary',
+                )}
+              >
+                {periodLabels[p]}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
