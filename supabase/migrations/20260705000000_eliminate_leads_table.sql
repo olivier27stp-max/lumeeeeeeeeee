@@ -178,6 +178,16 @@ ALTER TABLE public.bookings
 --    at clients). Only the leads-table reads switch to clients.
 -- ───────────────────────────────────────────────────────────────
 
+-- 4.0 Ensure search_global_source's phone helper exists (some envs never
+--     received the global_search_v2/v3 migrations that introduced it).
+CREATE OR REPLACE FUNCTION public.normalize_phone_digits(p text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+AS $nd$
+  SELECT regexp_replace(coalesce(p, ''), '[^0-9]', '', 'g')
+$nd$;
+
 -- 4a. create_pipeline_deal — read the client instead of the lead
 CREATE OR REPLACE FUNCTION public.create_pipeline_deal(
   p_lead_id    uuid,
