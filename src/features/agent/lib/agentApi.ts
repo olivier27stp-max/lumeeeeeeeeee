@@ -34,6 +34,12 @@ async function authHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+  // Office actif : Mr Lume ne doit voir QUE cet office (aucun mélange entre
+  // offices). Le serveur scope dessus si l'utilisateur en est membre.
+  try {
+    const activeOrg = localStorage.getItem('lume-active-org');
+    if (activeOrg) headers['x-org-id'] = activeOrg;
+  } catch {}
   return headers;
 }
 

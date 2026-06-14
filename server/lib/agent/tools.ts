@@ -350,7 +350,7 @@ const listInvoices: AgentTool = {
       p_offset: 0,
       p_from: null,
       p_to: null,
-      p_org: null,
+      p_org: ctx.orgId,
     });
     if (error) return toolError('db', error);
     const rows = Array.isArray(data) ? data : (data as any)?.items || [];
@@ -409,7 +409,7 @@ const getOverduePayments: AgentTool = {
       p_offset: 0,
       p_from: null,
       p_to: null,
-      p_org: null,
+      p_org: ctx.orgId,
     });
     if (error) return toolError('db', error);
     const rows = (Array.isArray(data) ? data : (data as any)?.items || []) as any[];
@@ -473,7 +473,7 @@ const getRevenueSummary: AgentTool = {
     const toStr = to.toISOString().slice(0, 10);
 
     const { data: series, error } = await ctx.client.rpc('rpc_insights_revenue_series', {
-      p_org: null,
+      p_org: ctx.orgId,
       p_from: fromStr,
       p_to: toStr,
       p_granularity: 'month',
