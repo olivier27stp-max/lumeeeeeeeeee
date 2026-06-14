@@ -114,10 +114,12 @@ $$;
 -- Includes soft-deleted clients so their jobs/quotes/invoices can still be
 -- backfilled. created_by/org_id are passed explicitly (service-role context
 -- has no auth.uid(), and crm_enforce_scope requires them non-null then).
+-- NOTE: this DB's `clients` table only has the legacy `address` text column
+-- (the structured-address migration was never applied here), so we copy only
+-- `address`; the property's structured/geo fields stay null and can be filled
+-- later via the address autocomplete.
 insert into public.properties (
-  org_id, client_id, name, is_primary, created_by,
-  address, street_number, street_name, city, province, postal_code, country,
-  latitude, longitude, place_id
+  org_id, client_id, name, is_primary, created_by, address
 )
 select
   c.org_id,
@@ -125,8 +127,7 @@ select
   'Adresse principale',
   true,
   coalesce(c.created_by, gen_random_uuid()),
-  c.address, c.street_number, c.street_name, c.city, c.province, c.postal_code, c.country,
-  c.latitude, c.longitude, c.place_id
+  c.address
 from public.clients c
 -- guard against re-runs
 where not exists (
