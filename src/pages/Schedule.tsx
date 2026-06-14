@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
 import CalendarMapModal from '../components/CalendarMapModal';
+import AddVisitModal from '../components/AddVisitModal';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarControllerProvider, CalendarUiView, useCalendarController } from '../contexts/CalendarController';
 import { useJobModalController } from '../contexts/JobModalController';
@@ -556,6 +557,7 @@ function ScheduleContent() {
   const [assignModalJob, setAssignModalJob] = useState<UnscheduledJobRecord | ScheduleEventRecord | null>(null);
   const [activeFilter, setActiveFilter] = useState<QF>('all');
   const [teamPickerDrop, setTeamPickerDrop] = useState<{ jobId: string; startAt: string; endAt: string; revert: () => void; removeEvent: () => void } | null>(null);
+  const [addVisitSlot, setAddVisitSlot] = useState<{ start: Date; end: Date } | null>(null);
   const [teamSlots, setTeamSlots] = useState<Map<string, FreeSlot[]>>(new Map());
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [viewDrop, setViewDrop] = useState(false);
@@ -732,6 +734,11 @@ function ScheduleContent() {
   /* ── Handlers ── */
   const openCreate = (start: Date, end?: Date) => {
     openJobModal({ initialValues: { scheduled_at: start.toISOString(), end_at: (end || addHours(start, 2)).toISOString(), team_id: selectedTeamIds.length === 1 ? selectedTeamIds[0] : null, status: 'scheduled' }, sourceContext: { type: 'jobs' }, onCreated: refresh });
+  };
+  // Clicking an empty slot adds a visit to an EXISTING job (a job can have many
+  // visits). The modal still offers "create a new job instead".
+  const openAddVisit = (start: Date, end?: Date) => {
+    setAddVisitSlot({ start, end: end || addHours(start, 2) });
   };
   const openExisting = async (jobId: string) => {
     if (isOpeningJob) return; setIsOpeningJob(true);
@@ -985,11 +992,11 @@ function ScheduleContent() {
            view === 'month' ? (
             <MonthView date={selectedDate} events={filtered} tcMap={tcMap} onDayClick={(d) => { setDate(d); setView('day'); }} onEventClick={(id) => void openExisting(id)} />
           ) : view === 'week' ? (
-            <TimeGrid columns={weekColumns} events={filtered} tcMap={tcMap} onSlotClick={(s) => openCreate(s)} onEventClick={(id) => void openExisting(id)} {...timeGridDndProps} />
+            <TimeGrid columns={weekColumns} events={filtered} tcMap={tcMap} onSlotClick={(s) => openAddVisit(s)} onEventClick={(id) => void openExisting(id)} {...timeGridDndProps} />
           ) : view === 'day' ? (
-            <TimeGrid columns={dayColumns} events={filtered} tcMap={tcMap} onSlotClick={(s) => openCreate(s)} onEventClick={(id) => void openExisting(id)} {...timeGridDndProps} />
+            <TimeGrid columns={dayColumns} events={filtered} tcMap={tcMap} onSlotClick={(s) => openAddVisit(s)} onEventClick={(id) => void openExisting(id)} {...timeGridDndProps} />
           ) : view === 'agenda' ? (
-            <div className="h-full overflow-y-auto"><AgendaView events={filtered} overlaps={overlaps} tcMap={tcMap} teams={teams} onEventClick={(id) => void openExisting(id)} onSlotClick={(s, e) => openCreate(s, e)} /></div>
+            <div className="h-full overflow-y-auto"><AgendaView events={filtered} overlaps={overlaps} tcMap={tcMap} teams={teams} onEventClick={(id) => void openExisting(id)} onSlotClick={(s, e) => openAddVisit(s, e)} /></div>
           ) : null}
         </div>
 
@@ -1063,6 +1070,17 @@ function ScheduleContent() {
 
       {/* MAP MODAL — jobs of the selected period with completion pins */}
       {mapOpen && <CalendarMapModal start={range.start} end={range.end} periodLabel={label} onClose={() => setMapOpen(false)} onOpenJob={(id) => void openExisting(id)} />}
+
+      {/* ADD VISIT — clicking an empty slot adds a visit to an existing job */}
+      <AddVisitModal
+        open={!!addVisitSlot}
+        onClose={() => setAddVisitSlot(null)}
+        allowJobPick
+        defaultStart={addVisitSlot?.start}
+        defaultEnd={addVisitSlot?.end}
+        onAdded={refresh}
+        onCreateNewJob={() => { if (addVisitSlot) openCreate(addVisitSlot.start, addVisitSlot.end); }}
+      />
     </div>
   );
 }

@@ -258,21 +258,48 @@ export async function rescheduleEvent(payload: {
   if (error) throw error;
   invalidateScheduleCache();
 
-  // Sync job.scheduled_at / end_at to match the rescheduled event
+  // rpc_reschedule_event recomputes jobs.scheduled_at from the visit set
+  // server-side (next upcoming visit), so no client-side sync is needed —
+  // important now that a job can have several visits.
+  return {
+    event: mapScheduleRow((data as any)?.event),
+    overlaps: Number((data as any)?.overlaps || 0),
+  };
+}
+
+/**
+ * Add an ADDITIONAL visit to a job. Unlike scheduleUnscheduledJob (which upserts
+ * the job's first visit), this always inserts a new schedule_event so a single
+ * job can hold multiple visits. The server recomputes jobs.scheduled_at to the
+ * next upcoming visit.
+ */
+export async function addVisit(payload: {
+  jobId: string;
+  startAt: string;
+  endAt: string;
+  teamId?: string | null;
+  timezone?: string | null;
+  notes?: string | null;
+}): Promise<{ event: ScheduleEventRecord; overlaps: number }> {
+  const { data, error } = await supabase.rpc('rpc_add_visit', {
+    p_job_id: payload.jobId,
+    p_start_at: toIsoOrThrow(payload.startAt),
+    p_end_at: toIsoOrThrow(payload.endAt),
+    p_team_id: payload.teamId ?? null,
+    p_timezone: payload.timezone ?? DEFAULT_TIMEZONE,
+    p_notes: payload.notes ?? null,
+  });
+  if (error) throw error;
+  invalidateScheduleCache();
+
   const event = mapScheduleRow((data as any)?.event);
-  if (event.job_id) {
-    supabase
-      .from('jobs')
-      .update({
-        scheduled_at: toIsoOrThrow(payload.startAt),
-        end_at: toIsoOrThrow(payload.endAt),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', event.job_id)
-      .then(({ error: jobErr }) => {
-        if (jobErr) console.warn('Failed to sync job dates after reschedule:', jobErr.message);
-      });
-  }
+
+  // Fire automation hook (non-blocking)
+  emitAppointmentCreated({
+    eventId: event.id,
+    jobId: payload.jobId,
+    startTime: payload.startAt,
+  });
 
   return {
     event,

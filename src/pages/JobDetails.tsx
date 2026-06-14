@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRecentItems } from '../hooks/useRecentItems';
 import {
   ArrowLeft,
@@ -31,6 +31,7 @@ import { cn, formatDate } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { getJobById, getJobLineItems, updateJob, type JobLineItem } from '../lib/jobsApi';
+import AddVisitModal from '../components/AddVisitModal';
 import { createInvoiceFromJob, getInvoiceRowUiStatus } from '../lib/invoicesApi';
 import { formatCents, type TaxLine } from '../lib/jobCalc';
 import { Job } from '../types';
@@ -102,6 +103,7 @@ export default function JobDetails() {
   const [visits, setVisits] = useState<ScheduleEvent[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
+  const [showAddVisit, setShowAddVisit] = useState(false);
 
   // Action states
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
@@ -182,22 +184,36 @@ export default function JobDetails() {
   }, [id]);
 
   // ── Load visits (schedule_events) for this job ──
-  useEffect(() => {
+  const loadVisits = useCallback(async () => {
     if (!id) return;
-    (async () => {
-      try {
-        const { data } = await supabase
-          .from('schedule_events')
-          .select('id,start_at,end_at,start_time,end_time,status,team_id')
-          .eq('job_id', id)
-          .is('deleted_at', null)
-          .order('start_at', { ascending: true });
-        setVisits((data as ScheduleEvent[]) || []);
-      } catch (err: any) {
-        console.warn('Failed to load schedule events:', err?.message);
-      }
-    })();
+    try {
+      const { data } = await supabase
+        .from('schedule_events')
+        .select('id,start_at,end_at,start_time,end_time,status,team_id')
+        .eq('job_id', id)
+        .is('deleted_at', null)
+        .order('start_at', { ascending: true });
+      setVisits((data as ScheduleEvent[]) || []);
+    } catch (err: any) {
+      console.warn('Failed to load schedule events:', err?.message);
+    }
   }, [id]);
+
+  useEffect(() => {
+    void loadVisits();
+  }, [loadVisits]);
+
+  // Reload visits + job (jobs.scheduled_at is recomputed server-side) after a
+  // visit is added, so the header date reflects the next upcoming visit.
+  const handleVisitAdded = useCallback(async () => {
+    await loadVisits();
+    if (id) {
+      try {
+        const fresh = await getJobById(id);
+        if (fresh) setJob(fresh);
+      } catch { /* non-blocking */ }
+    }
+  }, [id, loadVisits]);
 
   // ── Load invoices for this job ──
   useEffect(() => {
@@ -768,8 +784,8 @@ export default function JobDetails() {
               </div>
               Visits
             </h2>
-            <button onClick={handleEdit} className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1 print:hidden">
-              New Visit
+            <button onClick={() => setShowAddVisit(true)} className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1 print:hidden">
+              {language === 'fr' ? 'Nouvelle visite' : 'New Visit'}
             </button>
           </div>
           <div className="p-5">
@@ -1092,6 +1108,15 @@ export default function JobDetails() {
           </ModalOverlay>
         )}
       </AnimatePresence>
+
+      {job && (
+        <AddVisitModal
+          open={showAddVisit}
+          onClose={() => setShowAddVisit(false)}
+          onAdded={() => void handleVisitAdded()}
+          job={{ id: job.id, label: [job.title, job.client_name].filter(Boolean).join(' — ') || (language === 'fr' ? 'Job' : 'Job') }}
+        />
+      )}
     </>
   );
 }
