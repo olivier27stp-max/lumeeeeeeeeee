@@ -11,6 +11,7 @@ import {
 import { getCompanySettings } from '../../lib/invoicesApi';
 import { createLeadScoped, fetchLeadsScoped } from '../../lib/leadsApi';
 import AddressAutocomplete, { type StructuredAddress } from '../AddressAutocomplete';
+import { listPropertiesByClient, type PropertyRecord } from '../../lib/propertiesApi';
 import ServicePicker from '../ServicePicker';
 import QuoteRenderer from '../quote/QuoteRenderer';
 import type { QuoteRenderData } from '../quote/types';
@@ -70,6 +71,8 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
   // ── Quote fields ──
   const [title, setTitle] = useState('');
   const [clientId, setClientId] = useState('');
+  const [properties, setProperties] = useState<PropertyRecord[]>([]);
+  const [propertyId, setPropertyId] = useState('');
   const [salespersonId, setSalespersonId] = useState('');
   const [validDays, setValidDays] = useState(30);
   const [notes, setNotes] = useState('');
@@ -374,6 +377,25 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
     });
   };
 
+  // Load the selected client's properties so the quote can target a specific
+  // one (the DB trigger defaults to the client's primary property otherwise).
+  useEffect(() => {
+    let active = true;
+    if (!clientId) { setProperties([]); setPropertyId(''); return; }
+    listPropertiesByClient(clientId)
+      .then((list) => {
+        if (!active) return;
+        setProperties(list);
+        setPropertyId((prev) => {
+          if (prev && list.some((p) => p.id === prev)) return prev;
+          const fallback = list.find((p) => p.is_primary) || (list.length === 1 ? list[0] : null);
+          return fallback?.id || '';
+        });
+      })
+      .catch(() => { if (active) setProperties([]); });
+    return () => { active = false; };
+  }, [clientId]);
+
   // ── Submit ──
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -433,6 +455,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
       const detail = await createQuote({
         lead_id: leadId,
         client_id: clientId || null,
+        property_id: propertyId || null,
         title: finalTitle,
         salesperson_id: salespersonId || null,
         context_type: leadId ? 'lead' : 'client',
@@ -611,6 +634,15 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                     </select>
                   )}
                 </div>
+                {clientId && properties.length > 0 && (
+                  <div><label className={labelCls}>{t.modals.property}</label>
+                    <select value={propertyId} onChange={e => setPropertyId(e.target.value)} className={inputCls}>
+                      <option value="">{t.modals.selectProperty}</option>
+                      {properties.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}{p.address ? ` — ${p.address}` : ''}</option>
+                      ))}
+                    </select></div>
+                )}
                 <div><label className={labelCls}>{tq.quoteNumber}</label>
                   <input className={inputCls} placeholder={tq.auto} disabled /></div>
                 <div><label className={labelCls}>{tq.salesperson}</label>

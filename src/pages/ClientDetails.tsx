@@ -32,6 +32,7 @@ import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { clientDisplayName, getClientById, updateClient, listClientJobs, softDeleteClient } from '../lib/clientsApi';
 import type { ClientRecord } from '../lib/clientsApi';
 import { BillingAddressSection } from '../components/BillingAddressSection';
+import PropertiesSection from '../components/PropertiesSection';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { getInvoiceRowUiStatus } from '../lib/invoicesApi';
@@ -651,64 +652,12 @@ export default function ClientDetails() {
 
         {/* ──── LEFT COLUMN ──── */}
         <div className="space-y-6 min-w-0">
-          {/* Properties Section */}
-          <div className="section-card">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
-              <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <MapPin size={15} className="text-text-secondary" />
-                {t.clientDetails.properties}
-              </h2>
-              <button
-                className="inline-flex items-center gap-1 h-7 px-2.5 bg-surface border border-outline rounded-md text-[12px] text-text-primary hover:bg-surface-secondary transition-colors"
-                onClick={() => {
-                  const addr = prompt(t.clientDetails.propertyAddress);
-                  if (addr && client) {
-                    updateClient(client.id, { address: addr }).then((updated) => {
-                      setClient(updated);
-                      toast.success(t.clientDetails.propertyAdded);
-                    }).catch((err: any) => toast.error(err?.message || 'Failed'));
-                  }
-                }}
-              >
-                <Plus size={12} /> {t.clientDetails.newProperty}
-              </button>
-            </div>
-            <div className="p-5">
-              {fullAddress ? (
-                <div className="flex items-start gap-3 rounded-lg border border-outline bg-surface-secondary p-3.5">
-                  <a
-                    href={buildGoogleMapsUrl(client)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-0.5 text-text-secondary hover:text-text-primary transition-colors"
-                    title="Open in Google Maps"
-                  >
-                    <MapPin size={15} />
-                  </a>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-semibold text-text-primary">
-                      {displayAddress(client.address || [client.street_number, client.street_name].filter(Boolean).join(' ') || 'Address')}
-                    </p>
-                    <p className="text-[12px] text-text-tertiary mt-0.5">
-                      {[client.city, client.province, client.postal_code].filter(Boolean).join(', ')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <a href={buildGoogleMapsDirectionsUrl(client)} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 h-6 px-2 bg-surface border border-outline rounded text-[11px] text-text-secondary hover:bg-surface-secondary transition-colors" title="Get directions">
-                      <Navigation size={11} /> {t.clientDetails.directions}
-                    </a>
-                    <a href={buildGoogleMapsUrl(client)} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 h-6 px-2 bg-surface border border-outline rounded text-[11px] text-text-secondary hover:bg-surface-secondary transition-colors" title="View on map">
-                      <ExternalLink size={11} /> {t.clientDetails.viewOnMap}
-                    </a>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-[13px] text-text-tertiary">{(t.clientDetails as any).noPropertiesYet}</p>
-              )}
+          {/* Properties Section — service locations (name + address) */}
+          <PropertiesSection clientId={client.id} />
 
-              {/* Billing address: same as service address (default) or distinct */}
+          {/* Billing address: same as service address (default) or distinct */}
+          <div className="section-card">
+            <div className="p-5">
               <BillingAddressSection client={client} fr={language === 'fr'} onUpdated={setClient} />
             </div>
           </div>

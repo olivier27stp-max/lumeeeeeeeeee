@@ -21,6 +21,7 @@ import {
   getJobLineItems,
 } from '../lib/invoicesApi';
 import { listPredefinedServices, type PredefinedService } from '../lib/servicesApi';
+import { listPropertiesByClient, type PropertyRecord } from '../lib/propertiesApi';
 import { cn } from '../lib/utils';
 
 interface CreateInvoiceModalProps {
@@ -71,6 +72,8 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
   const [mode, setMode] = useState<Mode>('job');
   const [selectedClient, setSelectedClient] = useState<{ id: string; name: string; email: string | null } | null>(null);
   const [selectedJob, setSelectedJob] = useState<any | null>(null);
+  const [properties, setProperties] = useState<PropertyRecord[]>([]);
+  const [propertyId, setPropertyId] = useState('');
   const [searchValue, setSearchValue] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showServicePicker, setShowServicePicker] = useState(false);
@@ -216,6 +219,26 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
     setShowServicePicker(false);
   }
 
+  // Load the selected client's properties so a client-mode invoice can target
+  // a specific one (job-mode invoices inherit the job's property automatically).
+  useEffect(() => {
+    let active = true;
+    const clientId = selectedClient?.id;
+    if (!clientId || mode !== 'client') { setProperties([]); setPropertyId(''); return; }
+    listPropertiesByClient(clientId)
+      .then((list) => {
+        if (!active) return;
+        setProperties(list);
+        setPropertyId((prev) => {
+          if (prev && list.some((p) => p.id === prev)) return prev;
+          const fallback = list.find((p) => p.is_primary) || (list.length === 1 ? list[0] : null);
+          return fallback?.id || '';
+        });
+      })
+      .catch(() => { if (active) setProperties([]); });
+    return () => { active = false; };
+  }, [selectedClient?.id, mode]);
+
   // ─── Calculations ─────────────────────────────────────────
 
   const createDraftMutation = useMutation({ mutationFn: createInvoiceDraft });
@@ -264,6 +287,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
     try {
       const created = await createDraftMutation.mutateAsync({
         clientId: selectedClient.id,
+        propertyId: propertyId || selectedJob?.property_id || null,
         subject: subject.trim() || null,
         dueDate: dueDate || null,
         jobId: selectedJob?.id || undefined,
@@ -461,6 +485,19 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                         className="glass-input w-full" />
                     </div>
                   </div>
+
+                  {/* Property (client mode) */}
+                  {mode === 'client' && properties.length > 0 && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-text-secondary">{fr ? 'Propriété' : 'Property'}</label>
+                      <select value={propertyId} onChange={(e) => setPropertyId(e.target.value)} className="glass-input w-full">
+                        <option value="">{fr ? 'Sélectionner une propriété' : 'Select a property'}</option>
+                        {properties.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}{p.address ? ` — ${p.address}` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {/* Line items */}
                   <div className="space-y-2">

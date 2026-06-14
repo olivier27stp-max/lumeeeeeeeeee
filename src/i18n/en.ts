@@ -1309,6 +1309,13 @@ const en = {
 
   // Modals (shared component strings)
   modals: {
+    // Properties
+    property: 'Property',
+    selectProperty: 'Select a property',
+    propertyRequired: 'Please select a property.',
+    noPropertiesForClient: 'This client has no property yet. Add one below.',
+    addPropertyInline: 'Add a property',
+    propertyNamePlaceholder: 'Property name (e.g. Main office)',
     // NewLeadModal
     newLead: 'New Quote',
     newJob: 'New Job',
@@ -2123,6 +2130,17 @@ const en = {
     // Errors / toasts
     failedLoadQuote: 'Failed to load quote',
     noPropertiesYet: 'No properties added yet.',
+    // Properties section
+    propertyName: 'Property name',
+    propertyNamePlaceholder: 'e.g. Main office, Cottage…',
+    addProperty: 'Add property',
+    editProperty: 'Edit property',
+    deleteProperty: 'Delete property',
+    propertyUpdated: 'Property updated',
+    propertyDeleted: 'Property deleted',
+    confirmDeleteProperty: 'Delete this property?',
+    propertyNameRequired: 'Property name is required.',
+    savePropertyFailed: 'Failed to save property',
   },
 
   // CommandPalette

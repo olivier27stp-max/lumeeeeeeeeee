@@ -11,15 +11,12 @@ import {
   createClient,
   createClientWithDuplicateHandling,
   findClientsByEmail,
-  findClientsByPlaceId,
   getClientById,
   softDeleteClient,
   listClientJobs,
   listClients,
   updateClient,
 } from '../lib/clientsApi';
-import AddressAutocomplete from '../components/AddressAutocomplete';
-import type { StructuredAddress } from '../components/AddressAutocomplete';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useTranslation } from '../i18n';
@@ -98,7 +95,6 @@ export default function Clients() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBatchArchiving, setIsBatchArchiving] = useState(false);
   const [showBatchMessage, setShowBatchMessage] = useState(false);
-  const [addressDuplicateWarning, setAddressDuplicateWarning] = useState<string | null>(null);
 
 
   // Escape key closes drawers/modals
@@ -209,7 +205,6 @@ export default function Clients() {
       place_id: selected.place_id || '',
       status: selected.status || 'active',
     });
-    setAddressDuplicateWarning(null);
     void loadClientJobs(selected.id);
   }, [selected?.id]);
 
@@ -358,36 +353,6 @@ export default function Clients() {
   }
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
-
-  const handleAddressSelect = async (addr: StructuredAddress) => {
-    setForm((prev) => ({
-      ...prev,
-      address: addr.formatted_address,
-      street_number: addr.street_number,
-      street_name: addr.street_name,
-      city: addr.city,
-      province: addr.province,
-      postal_code: addr.postal_code,
-      country: addr.country,
-      latitude: addr.latitude,
-      longitude: addr.longitude,
-      place_id: addr.place_id,
-    }));
-    setAddressDuplicateWarning(null);
-    if (addr.place_id) {
-      try {
-        const dupes = await findClientsByPlaceId(addr.place_id, selected?.id);
-        if (dupes.length > 0) {
-          const names = dupes.map((c) => `${c.first_name} ${c.last_name}`).join(', ');
-          setAddressDuplicateWarning(
-            t.address.duplicateWarning.replace('{names}', names),
-          );
-        }
-      } catch {
-        // silently ignore lookup errors
-      }
-    }
-  };
 
   const onCreate = async () => {
     if (!form.first_name.trim() || !form.last_name.trim()) {
@@ -626,7 +591,7 @@ export default function Clients() {
       <div className="flex items-center justify-between">
         <h1 className="text-[28px] font-bold text-[var(--color-text-primary)] leading-tight">Clients</h1>
         <button
-          onClick={() => { setForm(EMPTY_FORM); setSaveError(null); setAddressDuplicateWarning(null); setIsCreateOpen(true); }}
+          onClick={() => { setForm(EMPTY_FORM); setSaveError(null); setIsCreateOpen(true); }}
           className="inline-flex items-center gap-2 h-10 px-5 bg-primary text-white rounded-lg text-[14px] font-medium hover:bg-primary-hover active:scale-[0.98] transition-all"
         >
           {fr ? 'Nouveau client' : 'New Client'}
@@ -777,7 +742,7 @@ export default function Clients() {
                 </button>
               </div>
               <div className="px-6 py-5">
-                <ClientForm form={form} setForm={setForm} t={t} onAddressSelect={(addr) => void handleAddressSelect(addr)} addressDuplicateWarning={addressDuplicateWarning} />
+                <ClientForm form={form} setForm={setForm} t={t} />
                 {saveError && <p className="text-[13px] text-danger mt-3">{saveError}</p>}
               </div>
               <div className="flex justify-end gap-3 px-6 pb-6">
@@ -829,7 +794,7 @@ export default function Clients() {
               </div>
 
               <div className="p-6 space-y-6">
-                <ClientForm form={form} setForm={setForm} t={t} onAddressSelect={(addr) => void handleAddressSelect(addr)} addressDuplicateWarning={addressDuplicateWarning} isEdit />
+                <ClientForm form={form} setForm={setForm} t={t} isEdit />
                 {saveError && <p className="text-[13px] text-danger mt-2">{saveError}</p>}
                 <div className="flex items-center justify-between pt-3">
                   <button onClick={() => setClientToDelete(selected)} className="glass-button-danger">
@@ -977,18 +942,15 @@ function ClientForm({
   form,
   setForm,
   t,
-  onAddressSelect,
-  addressDuplicateWarning,
   isEdit = false,
 }: {
   form: ClientFormState;
   setForm: React.Dispatch<React.SetStateAction<ClientFormState>>;
   t: ReturnType<typeof useTranslation>['t'];
-  onAddressSelect: (addr: StructuredAddress) => void;
-  addressDuplicateWarning?: string | null;
   isEdit?: boolean;
 }) {
-  const [showAddress, setShowAddress] = useState(isEdit || !!form.address);
+  // Addresses are managed as the client's Properties (see ClientDetails),
+  // not on the client record itself.
   const patch = <K extends keyof ClientFormState>(key: K, value: ClientFormState[K]) => setForm((prev) => ({ ...prev, [key]: value }));
   return (
     <div className="space-y-4">
@@ -1027,47 +989,6 @@ function ClientForm({
           <input type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={(e) => patch('phone', e.target.value)} className="glass-input w-full mt-1.5" placeholder="(555) 123-4567" />
         </div>
       </div>
-
-      {/* Address — collapsed on create, expanded on edit or when user clicks */}
-      {!showAddress ? (
-        <button
-          type="button"
-          onClick={() => setShowAddress(true)}
-          className="text-[12px] text-primary hover:text-primary/80 font-medium transition-colors"
-        >
-          + {t.common.address}
-        </button>
-      ) : (
-        <>
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.address}</label>
-            <div className="mt-1.5">
-              <AddressAutocomplete
-                value={form.address}
-                onChange={(v) => patch('address', v)}
-                onSelect={onAddressSelect}
-                duplicateWarning={addressDuplicateWarning}
-              />
-            </div>
-          </div>
-          {form.city && (
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.address.city}</label>
-                <input value={form.city} readOnly className="glass-input w-full mt-1.5 bg-surface-secondary text-text-secondary cursor-default" />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.address.province}</label>
-                <input value={form.province} readOnly className="glass-input w-full mt-1.5 bg-surface-secondary text-text-secondary cursor-default" />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.address.postalCode}</label>
-                <input value={form.postal_code} readOnly className="glass-input w-full mt-1.5 bg-surface-secondary text-text-secondary cursor-default" />
-              </div>
-            </div>
-          )}
-        </>
-      )}
 
       {/* Status — only show on edit, defaults to "active" on create */}
       {isEdit && (

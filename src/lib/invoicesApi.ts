@@ -23,6 +23,7 @@ export type InvoiceSortKey =
 export interface InvoiceRow {
   id: string;
   client_id: string;
+  property_id?: string | null;
   job_id?: string | null;
   client_name: string;
   invoice_number: string;
@@ -276,6 +277,7 @@ export async function searchActiveClients(query: { q: string; page: number; page
 
 export async function createInvoiceDraft(payload: {
   clientId: string;
+  propertyId?: string | null;
   subject?: string | null;
   dueDate?: string | null;
   jobId?: string;
@@ -290,11 +292,16 @@ export async function createInvoiceDraft(payload: {
   const row = Array.isArray(data) ? data[0] : data;
   const invoiceId = String(row?.id);
 
-  // Link invoice to job if provided
-  if (payload.jobId && invoiceId) {
+  // Link invoice to job and/or the selected property. The DB trigger already
+  // defaults property_id (from the job, else the client's primary property);
+  // honor an explicit selection here.
+  if (invoiceId && (payload.jobId || payload.propertyId)) {
+    const link: Record<string, any> = {};
+    if (payload.jobId) link.job_id = payload.jobId;
+    if (payload.propertyId) link.property_id = payload.propertyId;
     await supabase
       .from('invoices')
-      .update({ job_id: payload.jobId })
+      .update(link)
       .eq('id', invoiceId);
   }
 

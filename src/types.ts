@@ -77,6 +77,7 @@ export interface Job {
   title: string;
   description?: string | null;
   client_id?: string | null;
+  property_id?: string | null;
   team_id?: string | null;
   client_name?: string | null;
   address?: string | null;

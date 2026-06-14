@@ -13,6 +13,7 @@ export interface Quote {
   lead_id: string | null;
   client_id: string | null;
   job_id: string | null;
+  property_id: string | null;
   status: QuoteStatus;
   context_type: 'lead' | 'client' | 'job';
   salesperson_id: string | null;
@@ -207,6 +208,7 @@ async function moveLeadDealToStage(leadId: string | null, targetDbSlug: string):
 export async function createQuote(payload: {
   lead_id?: string | null;
   client_id?: string | null;
+  property_id?: string | null;
   title: string;
   salesperson_id?: string | null;
   context_type?: 'lead' | 'client' | 'job';
@@ -250,6 +252,9 @@ export async function createQuote(payload: {
   // 2. Update tax/discount/deposit settings
   {
     const updatePayload: Record<string, any> = {};
+    // The DB trigger defaults property_id to the linked job's / client's primary
+    // property; honor the user's explicit selection here.
+    if (payload.property_id) updatePayload.property_id = payload.property_id;
     if (payload.tax_rate !== undefined) updatePayload.tax_rate = payload.tax_rate;
     if (payload.tax_rate_label) updatePayload.tax_rate_label = payload.tax_rate_label;
     if (payload.discount_type !== undefined) updatePayload.discount_type = payload.discount_type || null;

@@ -1308,6 +1308,13 @@ const fr: TranslationKeys = {
 
   // Modals
   modals: {
+    // Propriétés
+    property: 'Propriété',
+    selectProperty: 'Sélectionner une propriété',
+    propertyRequired: 'Veuillez sélectionner une propriété.',
+    noPropertiesForClient: 'Ce client n’a pas encore de propriété. Ajoutez-en une ci-dessous.',
+    addPropertyInline: 'Ajouter une propriété',
+    propertyNamePlaceholder: 'Nom de la propriété (ex. Bureau principal)',
     newLead: 'Nouveau devis',
     newJob: 'Nouveau job',
     createNewLeadOrJob: 'Créer un nouveau devis ou une demande de service',
@@ -2115,6 +2122,17 @@ const fr: TranslationKeys = {
     // Errors / toasts
     failedLoadQuote: 'Impossible de charger le devis',
     noPropertiesYet: 'Aucune propriété ajoutée pour le moment.',
+    // Section propriétés
+    propertyName: 'Nom de la propriété',
+    propertyNamePlaceholder: 'ex. Bureau principal, Chalet…',
+    addProperty: 'Ajouter une propriété',
+    editProperty: 'Modifier la propriété',
+    deleteProperty: 'Supprimer la propriété',
+    propertyUpdated: 'Propriété mise à jour',
+    propertyDeleted: 'Propriété supprimée',
+    confirmDeleteProperty: 'Supprimer cette propriété ?',
+    propertyNameRequired: 'Le nom de la propriété est requis.',
+    savePropertyFailed: 'Échec de l’enregistrement de la propriété',
   },
 
   // CommandPalette

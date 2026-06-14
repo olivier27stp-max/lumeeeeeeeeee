@@ -14,6 +14,7 @@ import ServicePicker from './ServicePicker';
 import type { PredefinedService } from '../lib/servicesApi';
 import { supabase } from '../lib/supabase';
 import AddressAutocomplete, { type StructuredAddress } from './AddressAutocomplete';
+import { listPropertiesByClient, createProperty, type PropertyRecord } from '../lib/propertiesApi';
 import { resolveTaxes, type TaxConfig } from '../lib/taxApi';
 import { useTranslation } from '../i18n';
 import SpecificNotes from './SpecificNotes';
@@ -41,6 +42,7 @@ export interface JobDraftInitialValues {
   lead_id?: string | null;
   title?: string;
   client_id?: string | null;
+  property_id?: string | null;
   team_id?: string | null;
   job_number?: string | null;
   salesperson_id?: string | null;
@@ -78,6 +80,7 @@ interface NewJobModalProps {
     title: string;
     lead_id?: string | null;
     client_id?: string | null;
+    property_id?: string | null;
     team_id?: string | null;
     job_number?: string | null;
     salesperson_id?: string | null;
@@ -219,6 +222,13 @@ export default function NewJobModal({
   const [clientId, setClientId] = useState('');
   const [clientSearch, setClientSearch] = useState('');
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
+  // Properties (a job must be assigned to one of the client's properties).
+  // An empty propertyId means "new property" — it is created on submit from
+  // the address fields below.
+  const [properties, setProperties] = useState<PropertyRecord[]>([]);
+  const [propertyId, setPropertyId] = useState('');
+  const [propertiesLoading, setPropertiesLoading] = useState(false);
+  const [newPropertyName, setNewPropertyName] = useState('');
   const [isCreatingNewClient, setIsCreatingNewClient] = useState(false);
   const [newClientFirst, setNewClientFirst] = useState('');
   const [newClientLast, setNewClientLast] = useState('');
@@ -288,6 +298,7 @@ export default function NewJobModal({
     setTitle(initialValues?.title || '');
     setLeadId(initialValues?.lead_id || null);
     setClientId(initialValues?.client_id || '');
+    setPropertyId(initialValues?.property_id || '');
     if (isEditMode) {
       setTeamSelection(initialValues?.team_id || UNASSIGNED_TEAM_VALUE);
     } else {
@@ -451,22 +462,44 @@ export default function NewJobModal({
     [clients, clientId]
   );
 
-  // Auto-fill address from client when client changes (only if address is currently empty)
+  // Load the selected client's properties. A job must be assigned to one of
+  // them; the address is then derived from the chosen property (see effect below).
   useEffect(() => {
-    if (!selectedClient) return;
-    // Don't overwrite if user already has address filled (edit mode)
-    if (addressLine1.trim()) return;
-
-    const clientAddr = [selectedClient.street_number, selectedClient.street_name].filter(Boolean).join(' ').trim();
-    if (clientAddr || selectedClient.address) {
-      setAddressLine1(clientAddr || selectedClient.address || '');
-      setAddressCity(selectedClient.city || '');
-      setAddressProvince(selectedClient.province || '');
-      setAddressPostalCode(selectedClient.postal_code || '');
-      setAddressCountry(selectedClient.country || 'Canada');
-      setAddressSearch(selectedClient.address || clientAddr || '');
+    let active = true;
+    if (!clientId) {
+      setProperties([]);
+      setPropertyId('');
+      return;
     }
-  }, [selectedClient?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    setPropertiesLoading(true);
+    listPropertiesByClient(clientId)
+      .then((list) => {
+        if (!active) return;
+        setProperties(list);
+        setPropertyId((prev) => {
+          if (prev && list.some((p) => p.id === prev)) return prev;
+          const fallback = list.find((p) => p.is_primary) || (list.length === 1 ? list[0] : null);
+          return fallback?.id || '';
+        });
+      })
+      .catch(() => { if (active) setProperties([]); })
+      .finally(() => { if (active) setPropertiesLoading(false); });
+    return () => { active = false; };
+  }, [clientId]);
+
+  // Derive the job-site address fields from the selected property so the
+  // composed `property_address`, geocoding and team suggestions keep working.
+  useEffect(() => {
+    const p = properties.find((x) => x.id === propertyId);
+    if (!p) return;
+    setAddressLine1(p.address || [p.street_number, p.street_name].filter(Boolean).join(' ') || '');
+    setAddressCity(p.city || '');
+    setAddressProvince(p.province || '');
+    setAddressPostalCode(p.postal_code || '');
+    setAddressCountry(p.country || 'Canada');
+    setAddressPlaceId(p.place_id || null);
+    setAddressSearch(p.address || '');
+  }, [propertyId, properties]);
 
   const totalCents = useMemo(() => {
     return lineItems.reduce((sum, item) => {
@@ -517,6 +550,9 @@ export default function NewJobModal({
     setTitle('');
     setLeadId(null);
     setClientId('');
+    setProperties([]);
+    setPropertyId('');
+    setNewPropertyName('');
     setClientSearch('');
     setClientDropdownOpen(false);
     setIsCreatingNewClient(false);
@@ -730,13 +766,39 @@ export default function NewJobModal({
       }
     }
 
-    if (!addressLine1.trim()) {
-      setInlineError(t.modals.addressRequired);
+    // A job must be assigned to a property. Either an existing property is
+    // selected, or we create one on the fly from the address fields below.
+    if (!propertyId && !addressLine1.trim()) {
+      setInlineError(t.modals.propertyRequired);
+      try { toast.error(t.modals.propertyRequired); } catch {}
       return;
     }
     // City/province are optional: jobs persist the address as a single
     // `property_address` string (composed below), so we don't force the
     // structured fields. This keeps legacy jobs (address only) editable.
+
+    // Resolve (or create) the property this job belongs to.
+    let resolvedPropertyId: string | null = propertyId || null;
+    if (!resolvedPropertyId && resolvedClientId) {
+      try {
+        const createdProp = await createProperty({
+          client_id: resolvedClientId,
+          name: newPropertyName.trim() || addressLine1.trim() || title.trim() || 'Adresse',
+          address: [addressLine1, addressCity, addressProvince, addressPostalCode].filter(Boolean).join(', ') || null,
+          street_number: null,
+          street_name: addressLine1.trim() || null,
+          city: addressCity || null,
+          province: addressProvince || null,
+          postal_code: addressPostalCode || null,
+          country: addressCountry || null,
+          place_id: addressPlaceId || null,
+        });
+        resolvedPropertyId = createdProp.id;
+      } catch (err: any) {
+        setInlineError(err?.message || (t.clientDetails as any).savePropertyFailed);
+        return;
+      }
+    }
 
     const teamIdPayload = teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection;
 
@@ -776,6 +838,7 @@ export default function NewJobModal({
         title: title.trim(),
         lead_id: leadId || null,
         client_id: resolvedClientId || null,
+        property_id: resolvedPropertyId,
         team_id: teamIdPayload,
         job_number: jobNumber.trim() || null,
         salesperson_id: salespersonId || null,
@@ -1013,6 +1076,48 @@ export default function NewJobModal({
                   </div>
                 </div>
               </section>
+
+              {/* Property — a job must be assigned to one of the client's properties */}
+              {(clientId || isCreatingNewClient) && (
+                <section className="space-y-2 pt-6 border-t border-border">
+                  <label className="text-xs font-medium text-text-tertiary">
+                    {t.modals.property} <span className="text-danger">*</span>
+                  </label>
+                  {!isCreatingNewClient && properties.length > 0 ? (
+                    <select
+                      value={propertyId}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setPropertyId(v);
+                        if (!v) {
+                          setNewPropertyName('');
+                          setAddressLine1(''); setAddressCity(''); setAddressProvince('');
+                          setAddressPostalCode(''); setAddressSearch(''); setAddressPlaceId(null);
+                        }
+                      }}
+                      className="glass-input w-full"
+                      disabled={propertiesLoading}
+                    >
+                      {properties.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}{p.address ? ` — ${p.address}` : ''}
+                        </option>
+                      ))}
+                      <option value="">＋ {t.modals.addPropertyInline}</option>
+                    </select>
+                  ) : (
+                    <p className="text-[11px] text-text-tertiary">{t.modals.noPropertiesForClient}</p>
+                  )}
+                  {!propertyId && (
+                    <input
+                      value={newPropertyName}
+                      onChange={(e) => setNewPropertyName(e.target.value)}
+                      className="glass-input w-full"
+                      placeholder={t.modals.propertyNamePlaceholder}
+                    />
+                  )}
+                </section>
+              )}
 
               {/* Job site address */}
               <section className="space-y-4 pt-6 border-t border-border">

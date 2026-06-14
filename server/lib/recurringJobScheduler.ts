@@ -32,7 +32,7 @@ async function processRecurringJobs(supabase: SupabaseClient) {
     // Find active rules that are due
     const { data: rules, error } = await supabase
       .from('job_recurrence_rules')
-      .select('*, jobs!inner(id, org_id, client_id, title, description, job_type, property_address, team_id, created_by)')
+      .select('*, jobs!inner(id, org_id, client_id, property_id, title, description, job_type, property_address, team_id, created_by)')
       .eq('is_active', true)
       .lte('next_run_at', now)
       .limit(50);
@@ -79,6 +79,7 @@ async function processRecurringJobs(supabase: SupabaseClient) {
           .insert({
             org_id: job.org_id,
             client_id: job.client_id,
+            property_id: job.property_id,
             title: job.title,
             description: job.description,
             job_type: job.job_type || 'recurring',

@@ -521,6 +521,7 @@ export async function createJob(payload: {
   title: string;
   job_number?: string | null;
   client_id?: string | null;
+  property_id?: string | null;
   team_id?: string | null;
   salesperson_id?: string | null;
   description?: string | null;
@@ -630,6 +631,10 @@ export async function createJob(payload: {
       updated_at: new Date().toISOString(),
     };
 
+    // Property assignment (required going forward). Only overwrite when the
+    // caller provides one, so edits that don't touch the property keep it.
+    if (payload.property_id) updatePayload.property_id = payload.property_id;
+
     // NOTE: the jobs table stores the address only as `property_address`.
     // Structured fields (address_line1/city/province/postal_code/place_id...)
     // are intentionally NOT written here — those columns do not exist on the
@@ -683,6 +688,17 @@ export async function createJob(payload: {
     if (rpcError) throw rpcError;
     const jobId = String((rpcData as any)?.job_id || '');
     if (!jobId) throw new Error('Job created but job_id is missing');
+
+    // The DB trigger defaults property_id to the client's primary property.
+    // Honor the user's explicit selection by overwriting it post-insert.
+    if (payload.property_id) {
+      const { error: propError } = await supabase
+        .from('jobs')
+        .update({ property_id: payload.property_id })
+        .eq('id', jobId);
+      if (propError) throw propError;
+    }
+
     const { data: created, error: fetchError, status: fetchStatus } = await supabase
       .from('jobs_active')
       .select('*')
