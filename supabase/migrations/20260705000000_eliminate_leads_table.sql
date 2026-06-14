@@ -76,37 +76,70 @@ FROM (
 WHERE src.client_id = c.id;
 
 -- ───────────────────────────────────────────────────────────────
--- 3. Repoint every `lead_id` FK + values from leads.id -> clients.id
---    (drop FK first so the value rewrite cannot violate it).
+-- 3. Repoint every `lead_id` FK + values from leads.id -> clients.id.
+--    Defensive: never null-out a lead_id from a null source, never
+--    leave a non-client lead_id (so the new FK -> clients is valid),
+--    and never touch pre-existing d2d rows that already have neither
+--    lead_id nor client_id (they would trip pipeline_deals_origin_check).
 -- ───────────────────────────────────────────────────────────────
 
--- 3a. pipeline_deals.lead_id (NOT NULL, CASCADE) + backfill client_id
+-- 3a. pipeline_deals.lead_id (CASCADE) — populate client_id from the lead's
+--     client FIRST (so the origin check is satisfied via client_id), then
+--     repoint lead_id to that client.
 ALTER TABLE public.pipeline_deals DROP CONSTRAINT IF EXISTS pipeline_deals_lead_id_fkey;
+UPDATE public.pipeline_deals pd
+SET client_id = l.client_id
+FROM public.leads l
+WHERE pd.lead_id = l.id AND pd.client_id IS NULL AND l.client_id IS NOT NULL;
 UPDATE public.pipeline_deals pd
 SET lead_id = l.client_id
 FROM public.leads l
-WHERE pd.lead_id = l.id;
-UPDATE public.pipeline_deals SET client_id = lead_id WHERE client_id IS NULL;
+WHERE pd.lead_id = l.id AND l.client_id IS NOT NULL;
+-- Any remaining non-client lead_id: repoint to client_id when present...
+UPDATE public.pipeline_deals pd
+SET lead_id = pd.client_id
+WHERE pd.lead_id IS NOT NULL AND pd.client_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM public.clients c WHERE c.id = pd.lead_id);
+-- ...else it's an unrecoverable orphan deal (test data) — drop it.
+DELETE FROM public.pipeline_deals pd
+WHERE pd.lead_id IS NOT NULL AND pd.client_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM public.clients c WHERE c.id = pd.lead_id);
 ALTER TABLE public.pipeline_deals
   ADD CONSTRAINT pipeline_deals_lead_id_fkey
   FOREIGN KEY (lead_id) REFERENCES public.clients(id) ON DELETE CASCADE;
 
--- 3b. job_intents.lead_id (NOT NULL, CASCADE)
+-- 3b. job_intents.lead_id (NOT NULL, CASCADE). Dedup pending intents per client
+--     (the per-lead unique index now collapses to per-client).
 ALTER TABLE public.job_intents DROP CONSTRAINT IF EXISTS job_intents_lead_id_fkey;
+DROP INDEX IF EXISTS public.uq_job_intents_pending_lead;
 UPDATE public.job_intents ji
 SET lead_id = l.client_id
 FROM public.leads l
-WHERE ji.lead_id = l.id;
+WHERE ji.lead_id = l.id AND l.client_id IS NOT NULL;
+DELETE FROM public.job_intents ji
+WHERE ji.lead_id IS NULL
+   OR NOT EXISTS (SELECT 1 FROM public.clients c WHERE c.id = ji.lead_id);
+DELETE FROM public.job_intents a USING public.job_intents b
+WHERE a.lead_id = b.lead_id AND a.status = 'pending' AND b.status = 'pending'
+  AND a.deleted_at IS NULL AND b.deleted_at IS NULL AND a.ctid < b.ctid;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_job_intents_pending_lead
+  ON public.job_intents (lead_id) WHERE status = 'pending' AND deleted_at IS NULL;
 ALTER TABLE public.job_intents
   ADD CONSTRAINT job_intents_lead_id_fkey
   FOREIGN KEY (lead_id) REFERENCES public.clients(id) ON DELETE CASCADE;
 
--- 3c. jobs.lead_id (nullable, SET NULL)
+-- 3c. jobs.lead_id (nullable, SET NULL). Drop the per-lead active-job unique
+--     index (a client may legitimately have several jobs).
 ALTER TABLE public.jobs DROP CONSTRAINT IF EXISTS jobs_lead_id_fkey;
+DROP INDEX IF EXISTS public.uq_jobs_active_lead;
 UPDATE public.jobs j
 SET lead_id = l.client_id
 FROM public.leads l
-WHERE j.lead_id = l.id;
+WHERE j.lead_id = l.id AND l.client_id IS NOT NULL;
+UPDATE public.jobs j
+SET lead_id = NULL
+WHERE j.lead_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM public.clients c WHERE c.id = j.lead_id);
 ALTER TABLE public.jobs
   ADD CONSTRAINT jobs_lead_id_fkey
   FOREIGN KEY (lead_id) REFERENCES public.clients(id) ON DELETE SET NULL;
@@ -116,7 +149,11 @@ ALTER TABLE public.quotes DROP CONSTRAINT IF EXISTS quotes_lead_id_fkey;
 UPDATE public.quotes q
 SET lead_id = l.client_id
 FROM public.leads l
-WHERE q.lead_id = l.id;
+WHERE q.lead_id = l.id AND l.client_id IS NOT NULL;
+UPDATE public.quotes q
+SET lead_id = NULL
+WHERE q.lead_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM public.clients c WHERE c.id = q.lead_id);
 ALTER TABLE public.quotes
   ADD CONSTRAINT quotes_lead_id_fkey
   FOREIGN KEY (lead_id) REFERENCES public.clients(id) ON DELETE SET NULL;
@@ -126,7 +163,11 @@ ALTER TABLE public.bookings DROP CONSTRAINT IF EXISTS bookings_lead_id_fkey;
 UPDATE public.bookings b
 SET lead_id = l.client_id
 FROM public.leads l
-WHERE b.lead_id = l.id;
+WHERE b.lead_id = l.id AND l.client_id IS NOT NULL;
+UPDATE public.bookings b
+SET lead_id = NULL
+WHERE b.lead_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM public.clients c WHERE c.id = b.lead_id);
 ALTER TABLE public.bookings
   ADD CONSTRAINT bookings_lead_id_fkey
   FOREIGN KEY (lead_id) REFERENCES public.clients(id) ON DELETE SET NULL;
