@@ -715,8 +715,8 @@ function AuthenticatedApp({
     {
       label: null,
       items: [
-        { id: 'ai-helper', label: 'Lume Agent', icon: LumeAgentIcon as any, path: '/lume-agent', tileColor: 'blue', requiredPermission: 'external_agent.use', requiredPlanFlag: 'includes_ai' },
         { id: 'day', label: t.nav.crm, icon: LayoutDashboard, path: '/day', tileColor: 'blue' },
+        { id: 'ai-helper', label: 'Lume Agent', icon: LumeAgentIcon as any, path: '/lume-agent', tileColor: 'blue', requiredPermission: 'external_agent.use', requiredPlanFlag: 'includes_ai' },
       ],
     },
     {
@@ -1147,7 +1147,7 @@ function AuthenticatedApp({
           <div className="flex-1 overflow-y-auto">
             <ErrorBoundary labels={t.errorBoundary}>
                   <Routes>
-                    <Route path="/" element={<Navigate to="/lume-agent" replace />} />
+                    <Route path="/" element={<Navigate to="/day" replace />} />
                     <Route path="/pricing" element={<Navigate to={{ pathname: '/settings', search: '?tab=billing' }} replace />} />
                     <Route path="/lume-agent" element={<Gated permission="external_agent.use"><PlanFeatureGate flag="includes_ai"><PageWrapper><MrLumePage /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/dashboard" element={<Navigate to="/lume-agent" replace />} />
