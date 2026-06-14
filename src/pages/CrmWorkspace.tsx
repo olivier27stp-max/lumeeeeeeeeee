@@ -18,6 +18,7 @@ import { listClients } from '../lib/clientsApi';
 import { getJobsKpis, type JobsKpis } from '../lib/jobsApi';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
+import { useCompany } from '../contexts/CompanyContext';
 
 function getQuoteName(q: any): string {
   const c = q.clients;
@@ -29,8 +30,17 @@ function getQuoteName(q: any): string {
 
 export default function CrmWorkspace() {
   const navigate = useNavigate();
-  const { language, t } = useTranslation();
+  const { language } = useTranslation();
   const fr = language === 'fr';
+  const { current } = useCompany();
+  // Greeting block (top-left of the Home page): bold date + "welcome back, <name>"
+  const firstName = current?.fullName?.trim().split(/\s+/)[0] || '';
+  const todayLabel = new Date().toLocaleDateString(fr ? 'fr-CA' : 'en-US', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+  const greeting = firstName
+    ? `${fr ? 'Bon retour' : 'Welcome back'}, ${firstName}`
+    : (fr ? 'Bon retour' : 'Welcome back');
   const [search, setSearch] = useState('');
   const [leadPage, setLeadPage] = useState(1);
 
@@ -105,11 +115,14 @@ export default function CrmWorkspace() {
 
       {/* ══════════════════════════════════════════
           TOP BAR — matches reference exactly:
-          left: page title (Home / Accueil)
+          left: bold date + "welcome back, <name>" greeting
           right: date range + Download button
           ══════════════════════════════════════════ */}
       <div className="flex items-center justify-between mb-5">
-        <h1 className="text-[18px] font-bold text-text-primary">{t.nav.crm}</h1>
+        <div>
+          <h1 className="text-[18px] font-bold text-text-primary first-letter:uppercase">{todayLabel}</h1>
+          <p className="text-[13px] text-text-muted mt-0.5">{greeting}</p>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
