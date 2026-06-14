@@ -21,18 +21,30 @@ DECLARE
   v_clients  uuid[];
   v_qid      uuid;
 BEGIN
-  -- --- Résolution de l'organisation + propriétaire ------------------------
-  SELECT m.org_id, m.user_id
-    INTO v_org, v_owner
-  FROM public.memberships m
-  JOIN auth.users u ON u.id = m.user_id
-  WHERE lower(u.email) = lower('beatsafterimage@gmail.com')
-    AND m.role IN ('owner','admin')
-  ORDER BY m.created_at NULLS LAST
-  LIMIT 1;
-
+  -- --- Résolution de l'organisation (auto, sans dépendre de l'email) -------
+  -- Org : celle qui a le plus de clients (sinon la première org existante).
+  SELECT org_id INTO v_org FROM (
+    SELECT c.org_id, count(*) AS n
+    FROM public.clients c
+    GROUP BY c.org_id
+    ORDER BY n DESC
+    LIMIT 1
+  ) t;
   IF v_org IS NULL THEN
-    RAISE EXCEPTION 'Aucune org trouvée pour le propriétaire — ajuste l''email ou hard-code v_org.';
+    SELECT id INTO v_org FROM public.organizations ORDER BY created_at NULLS LAST LIMIT 1;
+  END IF;
+  IF v_org IS NULL THEN
+    RAISE EXCEPTION 'Aucune organisation trouvée dans la base.';
+  END IF;
+
+  -- Propriétaire : owner/admin de cette org, sinon n'importe quel membre.
+  SELECT user_id INTO v_owner
+  FROM public.memberships
+  WHERE org_id = v_org
+  ORDER BY (role IN ('owner','admin')) DESC, created_at NULLS LAST
+  LIMIT 1;
+  IF v_owner IS NULL THEN
+    RAISE EXCEPTION 'Aucun membre trouvé pour l''org %.', v_org;
   END IF;
 
   -- Jusqu'à 3 clients existants de l'org (NULL si aucun)
