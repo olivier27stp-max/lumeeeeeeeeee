@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, Check, Plus, Loader2, X } from 'lucide-react';
+import { Building2, Check, Plus, Loader2, X, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useCompany } from '../contexts/CompanyContext';
@@ -44,10 +44,16 @@ export function OfficeSwitcher() {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-all"
+        className="flex items-center gap-2 pl-2 pr-1.5 py-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-tertiary transition-all max-w-[220px]"
         title={fr ? `${officeName} — changer de bureau` : `${officeName} — switch office`}
       >
-        <Building2 size={17} strokeWidth={1.75} />
+        <Building2 size={16} strokeWidth={1.75} className="flex-shrink-0 text-text-tertiary" />
+        <span className="min-w-0 truncate text-sm font-medium">{officeName}</span>
+        <ChevronDown
+          size={15}
+          strokeWidth={2}
+          className={cn('flex-shrink-0 text-text-tertiary transition-transform', open && 'rotate-180')}
+        />
       </button>
 
       {open && (

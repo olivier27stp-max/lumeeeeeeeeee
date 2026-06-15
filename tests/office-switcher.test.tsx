@@ -95,8 +95,8 @@ function openTrigger() {
   });
 }
 
-describe('OfficeSwitcher (header, icon-only)', () => {
-  it('renders an icon-only trigger that names the current office via title', () => {
+describe('OfficeSwitcher (header pill)', () => {
+  it('renders a pill trigger showing the current office name, icon and chevron', () => {
     const switchCompany = vi.fn();
     act(() => {
       root.render(
@@ -106,10 +106,11 @@ describe('OfficeSwitcher (header, icon-only)', () => {
       );
     });
     const trigger = container.querySelector('button')!;
-    // Icon-only: no office name in the visible text, only an SVG icon.
-    expect(trigger.textContent?.trim()).toBe('');
-    expect(trigger.querySelector('svg')).toBeTruthy();
-    // The office name is still discoverable via the tooltip.
+    // The pill now surfaces the office name as visible text…
+    expect(trigger.textContent).toContain('Bureau Montréal');
+    // …alongside the building icon + the switch-affordance chevron (2 SVGs).
+    expect(trigger.querySelectorAll('svg').length).toBe(2);
+    // The office name stays discoverable via the tooltip too.
     expect(trigger.getAttribute('title')).toContain('Bureau Montréal');
   });
 
