@@ -9,7 +9,7 @@ import {
   ArrowUpDown, ChevronLeft, ChevronRight, Download,
   Plus, Search, MoreHorizontal, Send, CheckCircle2, Copy,
   Trash2, Eye, FileText, DollarSign, Clock, AlertCircle,
-  Filter, X, Receipt, CreditCard,
+  Filter, X, Receipt,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -35,8 +35,7 @@ import { cn, formatDate } from '../lib/utils';
 import { exportToCsv } from '../lib/exportCsv';
 import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
-import { getCurrentOrgId, getCurrentOrgIdOrThrow } from '../lib/orgApi';
-import PaymentDetailDrawer from '../components/finances/PaymentDetailDrawer';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
 import { displayEmail } from '../lib/piiSanitizer';
@@ -133,13 +132,13 @@ function InvoiceStatusDropdown({ value, onChange, fr }: { value: InvoiceStatusFi
 function InvoiceBadge({ status, fr }: { status: string; fr: boolean }) {
   const s = (status || 'draft').toLowerCase();
   const map: Record<string, { label: string; badge: string }> = {
-    paid:        { label: fr ? 'Payée' : 'Paid',        badge: 'badge-success' },
-    sent_not_due:{ label: fr ? 'Envoyée' : 'Sent',      badge: 'badge-info' },
-    past_due:    { label: fr ? 'En retard' : 'Overdue',  badge: 'badge-danger' },
-    draft:       { label: fr ? 'Brouillon' : 'Draft',    badge: 'badge-neutral' },
-    partial:     { label: fr ? 'Partiel' : 'Partial',    badge: 'badge-warning' },
-    void:        { label: fr ? 'Annulée' : 'Void',       badge: 'badge-danger' },
-    sent:        { label: fr ? 'Envoyée' : 'Sent',       badge: 'badge-info' },
+    paid:        { label: fr ? 'Payée' : 'Paid',                          badge: 'badge-success' },
+    sent_not_due:{ label: fr ? 'En attente de paiement' : 'Awaiting Payment', badge: 'badge-info' },
+    past_due:    { label: fr ? 'En retard' : 'Past Due',                  badge: 'badge-danger' },
+    draft:       { label: fr ? 'Brouillon' : 'Draft',                     badge: 'badge-neutral' },
+    partial:     { label: fr ? 'En attente de paiement' : 'Awaiting Payment', badge: 'badge-info' },
+    void:        { label: fr ? 'Annulée' : 'Void',                        badge: 'badge-danger' },
+    sent:        { label: fr ? 'En attente de paiement' : 'Awaiting Payment', badge: 'badge-info' },
   };
   const v = map[s] || map.draft;
   return (
@@ -153,28 +152,14 @@ function InvoiceBadge({ status, fr }: { status: string; fr: boolean }) {
 
 type MainTab = 'invoices';
 
-// ─── Finances column label helpers ─────────────────────────────
-function paymentMethodLabel(method: string | null | undefined, fr: boolean): string {
-  switch (method) {
-    case 'card': return fr ? 'Carte' : 'Card';
-    case 'e-transfer': return fr ? 'Virement' : 'E-transfer';
-    case 'cash': return fr ? 'Comptant' : 'Cash';
-    case 'check': return fr ? 'Chèque' : 'Check';
-    default: return '—';
-  }
-}
-function providerLabel(provider: string | null | undefined, fr: boolean): string {
-  switch (provider) {
-    case 'stripe': return 'Stripe';
-    case 'paypal': return 'PayPal';
-    case 'manual': return fr ? 'Manuel' : 'Manual';
-    default: return '—';
-  }
-}
+// Default invoice subject shown when none is set.
+const DEFAULT_INVOICE_SUBJECT_FR = 'Pour service rendu';
+const DEFAULT_INVOICE_SUBJECT_EN = 'For services rendered';
 
 // Grid template + empty-state col span for the Facturation table.
-const INVOICE_GRID_COLUMNS = '40px 80px 1.2fr 1fr 90px 100px 100px 90px 1fr 100px 100px 44px 44px';
-const INVOICE_GRID_COL_COUNT = 13;
+// Columns: checkbox | Client | Invoice # | Due date | Subject | Status | Total | Balance | actions
+const INVOICE_GRID_COLUMNS = '40px 1.4fr 110px 120px 1.4fr 150px 120px 120px 44px';
+const INVOICE_GRID_COL_COUNT = 9;
 
 export default function Invoices({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, language } = useTranslation();
@@ -189,10 +174,6 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [invoiceToDelete, setInvoiceToDelete] = useState<InvoiceRow | null>(null);
   const [isDeletingInvoice, setIsDeletingInvoice] = useState(false);
-  const [orgId, setOrgId] = useState<string | null>(null);
-  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
-
-  useEffect(() => { void getCurrentOrgId().then(setOrgId); }, []);
 
   const status = parseStatus(searchParams.get('status'));
   const sort = parseSort(searchParams.get('sort'));
@@ -557,59 +538,45 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
         <>
           {/* ── TABLE (CSS Grid — identical pattern to Jobs & Clients) ── */}
           <div className="border border-outline rounded-md overflow-x-auto bg-white dark:bg-[#0e0e11]">
-            <div className="grid min-w-[1100px]" style={{ gridTemplateColumns: INVOICE_GRID_COLUMNS }}>
+            <div className="grid min-w-[860px]" style={{ gridTemplateColumns: INVOICE_GRID_COLUMNS }}>
               {/* HEADER */}
               <div className="py-3 pl-4 border-b border-outline flex items-center">
                 <input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
               </div>
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                <button onClick={() => applySort('invoice_number')} className="inline-flex items-center gap-1"># {IconSort}</button>
-              </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
                 <button onClick={() => applySort('client')} className="inline-flex items-center gap-1">Client {IconSort}</button>
               </div>
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                {fr ? 'Site' : 'Site'}
+                <button onClick={() => applySort('invoice_number')} className="inline-flex items-center gap-1">{fr ? 'N° facture' : 'Invoice #'} {IconSort}</button>
               </div>
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                {fr ? 'Devis' : 'Quote'}
+                <button onClick={() => applySort('due_date')} className="inline-flex items-center gap-1">{fr ? 'Échéance' : 'Due Date'} {IconSort}</button>
               </div>
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                <button onClick={() => applySort('due_date')} className="inline-flex items-center gap-1">{fr ? 'Date' : 'Date'} {IconSort}</button>
-              </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center justify-end text-[14px] font-medium text-text-primary">
-                <button onClick={() => applySort('total')} className="inline-flex items-center gap-1">Total {IconSort}</button>
-              </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                {fr ? 'Type' : 'Type'}
-              </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                {fr ? 'Payeur' : 'Payer'}
-              </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                {fr ? 'Méthode' : 'Method'}
+                {fr ? 'Sujet' : 'Subject'}
               </div>
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
                 <button onClick={() => applySort('status')} className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</button>
               </div>
-              <div className="py-3 border-b border-outline" />
+              <div className="py-3 px-4 border-b border-outline flex items-center justify-end text-[14px] font-medium text-text-primary">
+                <button onClick={() => applySort('total')} className="inline-flex items-center gap-1">Total {IconSort}</button>
+              </div>
+              <div className="py-3 px-4 border-b border-outline flex items-center justify-end text-[14px] font-medium text-text-primary">
+                <button onClick={() => applySort('balance')} className="inline-flex items-center gap-1">{fr ? 'Balance' : 'Balance'} {IconSort}</button>
+              </div>
               <div className="py-3 border-b border-outline" />
 
               {/* LOADING */}
               {invoicesQuery.isLoading && Array.from({ length: 10 }).map((_, i) => (
                 <React.Fragment key={`sk-${i}`}>
                   <div className="py-3 pl-4 border-b border-outline/30 flex items-center"><div className="w-4 h-4 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-10 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-24 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-24 bg-surface-tertiary rounded animate-pulse" /></div>
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-28 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-12 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-28 bg-surface-tertiary rounded animate-pulse" /></div>
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse ml-auto" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-12 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 border-b border-outline/30" />
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse ml-auto" /></div>
                   <div className="py-3 border-b border-outline/30" />
                 </React.Fragment>
               ))}
@@ -656,10 +623,6 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
                     <div className={`py-3 pl-4 flex items-center ${rowCls}`} onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={isSelected} onChange={() => toggleOne(row.id)} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
                     </div>
-                    {/* Invoice # */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
-                      <span className="text-[13px] text-text-muted tabular-nums font-medium">{row.invoice_number}</span>
-                    </div>
                     {/* Client */}
                     <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click}>
                       <div className="flex items-center gap-3 min-w-0">
@@ -672,56 +635,41 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
                         </div>
                       </div>
                     </div>
-                    {/* Site */}
-                    <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}>
-                      <span className="text-[13px] text-text-secondary truncate">{row.site || '—'}</span>
-                    </div>
-                    {/* Quote # */}
+                    {/* Invoice # */}
                     <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
-                      <span className="text-[13px] text-text-muted tabular-nums">{row.quote_number || '—'}</span>
+                      <span className="text-[13px] text-text-muted tabular-nums font-medium">{row.invoice_number}</span>
                     </div>
-                    {/* Date (issued) */}
+                    {/* Due date */}
                     <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
-                      <span className="text-[13px] text-text-muted tabular-nums font-medium">
-                        {row.issued_at ? formatDate(row.issued_at) : (row.due_date ? formatDate(row.due_date) : '—')}
+                      <span className={cn(
+                        'text-[13px] tabular-nums font-medium',
+                        isPastDue ? 'text-[#dc2626]' : 'text-text-muted'
+                      )}>
+                        {row.due_date ? formatDate(row.due_date) : '—'}
                       </span>
                     </div>
-                    {/* Total */}
-                    <div className={`py-3 px-4 flex items-center justify-end cursor-pointer ${rowCls}`} onClick={click}>
-                      <span className="text-[14px] font-semibold text-text-primary tabular-nums">{formatMoneyFromCents(row.total_cents)}</span>
-                    </div>
-                    {/* Type (provider) */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
-                      <span className="text-[13px] text-text-secondary">{providerLabel(row.provider, fr)}</span>
-                    </div>
-                    {/* Payer */}
+                    {/* Subject (default "Pour service rendu") */}
                     <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}>
-                      <span className="text-[13px] text-text-secondary truncate">{row.payer_name || '—'}</span>
-                    </div>
-                    {/* Method */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
-                      <span className="text-[13px] text-text-secondary">
-                        {row.payment_method ? paymentMethodLabel(row.payment_method, fr) : '—'}
+                      <span className="text-[13px] text-text-secondary truncate">
+                        {row.subject || (fr ? DEFAULT_INVOICE_SUBJECT_FR : DEFAULT_INVOICE_SUBJECT_EN)}
                       </span>
                     </div>
                     {/* Status */}
                     <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
                       <InvoiceBadge status={uiStatus} fr={fr} />
                     </div>
-                    {/* Payment link icon */}
-                    <div className={`py-3 flex items-center justify-center ${rowCls}`} onClick={e => e.stopPropagation()}>
-                      {row.payment_id ? (
-                        <button
-                          type="button"
-                          title={fr ? 'Voir le paiement' : 'View payment'}
-                          className="p-1 rounded text-text-tertiary hover:text-primary hover:bg-surface-tertiary transition-colors"
-                          onClick={() => setSelectedPaymentId(row.payment_id || null)}
-                        >
-                          <CreditCard size={15} />
-                        </button>
-                      ) : (
-                        <span className="text-text-muted/40">—</span>
-                      )}
+                    {/* Total */}
+                    <div className={`py-3 px-4 flex items-center justify-end cursor-pointer ${rowCls}`} onClick={click}>
+                      <span className="text-[14px] font-semibold text-text-primary tabular-nums">{formatMoneyFromCents(row.total_cents)}</span>
+                    </div>
+                    {/* Balance */}
+                    <div className={`py-3 px-4 flex items-center justify-end cursor-pointer ${rowCls}`} onClick={click}>
+                      <span className={cn(
+                        'text-[13px] font-medium tabular-nums',
+                        row.balance_cents === 0 ? 'text-text-muted' : isPastDue ? 'text-[#dc2626]' : 'text-text-primary'
+                      )}>
+                        {row.balance_cents === 0 ? formatMoneyFromCents(0) : formatMoneyFromCents(row.balance_cents)}
+                      </span>
                     </div>
                     {/* Actions */}
                     <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`}>
@@ -784,13 +732,6 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
           </div>
         </>
       )}
-
-      {/* ─── Payment detail drawer (opened by the per-row card icon) ─── */}
-      <PaymentDetailDrawer
-        orgId={orgId}
-        paymentId={selectedPaymentId}
-        onClose={() => setSelectedPaymentId(null)}
-      />
 
       {/* ─── Delete Confirmation Modal (Jobs pattern) ─── */}
       <AnimatePresence>

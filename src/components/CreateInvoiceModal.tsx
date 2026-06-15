@@ -67,6 +67,8 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
   const queryClient = useQueryClient();
   const { language } = useTranslation();
   const fr = language === 'fr';
+  // Default invoice subject when none is provided.
+  const defaultSubject = fr ? 'Pour service rendu' : 'For services rendered';
 
   const [step, setStep] = useState<Step>('choose-mode');
   const [mode, setMode] = useState<Mode>('job');
@@ -78,7 +80,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showServicePicker, setShowServicePicker] = useState(false);
 
-  const [subject, setSubject] = useState('');
+  const [subject, setSubject] = useState(defaultSubject);
   const [dueDate, setDueDate] = useState('');
   const [taxRate, setTaxRate] = useState('');  // percentage, e.g. "14.975"
   const [lines, setLines] = useState<InvoiceLineForm[]>([buildEmptyLine()]);
@@ -93,7 +95,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
     setSelectedJob(null);
     setSearchValue('');
     setDebouncedSearch('');
-    setSubject('');
+    setSubject(defaultSubject);
     setDueDate('');
     setTaxRate('');
     setLines([buildEmptyLine()]);
@@ -176,7 +178,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
   async function handleSelectJob(job: any) {
     setSelectedJob(job);
     setSelectedClient({ id: job.client_id, name: job.client_name || '', email: null });
-    setSubject(job.title || '');
+    setSubject(job.title || defaultSubject);
 
     try {
       const items = await getJobLineItems(job.id);
@@ -210,7 +212,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
     setSelectedClient(client);
     setSelectedJob(null);
     setLines([buildEmptyLine()]);
-    setSubject('');
+    setSubject(defaultSubject);
     setStep('draft');
   }
 
@@ -288,14 +290,14 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
       const created = await createDraftMutation.mutateAsync({
         clientId: selectedClient.id,
         propertyId: propertyId || selectedJob?.property_id || null,
-        subject: subject.trim() || null,
+        subject: subject.trim() || defaultSubject,
         dueDate: dueDate || null,
         jobId: selectedJob?.id || undefined,
       });
 
       await saveDraftMutation.mutateAsync({
         invoiceId: created.id,
-        subject: subject.trim() || null,
+        subject: subject.trim() || defaultSubject,
         dueDate: dueDate || null,
         taxCents,
         items: normalizedLines,

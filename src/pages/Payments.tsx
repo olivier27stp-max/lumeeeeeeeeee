@@ -31,6 +31,7 @@ import {
 import { getAccountStatus } from '../lib/connectApi';
 import { cn, formatDate } from '../lib/utils';
 import StatusBadge from '../components/ui/StatusBadge';
+import PaymentDetailDrawer from '../components/finances/PaymentDetailDrawer';
 
 const PAGE_SIZE = 25;
 const PAYOUT_PAGE_SIZE = 20;
@@ -215,6 +216,7 @@ export default function Payments({
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [selectedPayout, setSelectedPayout] = useState<PayoutListItem | null>(null);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
   const [searchInput, setSearchInput] = useState('');
 
@@ -462,7 +464,7 @@ export default function Payments({
 
           {/* ── TABLE (CSS Grid — identical pattern to Invoices) ── */}
           <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 120px 110px 130px' }}>
+            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 120px 110px 130px 44px' }}>
               {/* HEADER */}
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
                 {t.payments.client || (fr ? 'Client' : 'Client')}
@@ -479,6 +481,7 @@ export default function Payments({
               <div className="py-3 px-4 border-b border-outline flex items-center justify-end text-[14px] font-medium text-text-primary">
                 {t.payments.amount || (fr ? 'Montant' : 'Amount')}
               </div>
+              <div className="py-3 border-b border-outline" />
 
               {/* LOADING — Skeleton (Invoices pattern) */}
               {paymentsQuery.isLoading && Array.from({ length: 8 }).map((_, i) => (
@@ -488,12 +491,13 @@ export default function Payments({
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse ml-auto" /></div>
+                  <div className="py-3 border-b border-outline/30" />
                 </React.Fragment>
               ))}
 
               {/* EMPTY STATE (Invoices pattern) */}
               {!paymentsQuery.isLoading && rows.length === 0 && (
-                <div className="col-span-5 py-20">
+                <div className="col-span-6 py-20">
                   <div className="flex flex-col items-center justify-center text-center">
                     <div className="w-12 h-12 rounded-xl bg-surface-secondary flex items-center justify-center mb-4">
                       <DollarSign size={22} className="text-text-muted/60" />
@@ -537,6 +541,17 @@ export default function Payments({
                     {/* Amount */}
                     <div className={`py-3 px-4 flex items-center justify-end ${rowCls}`} onClick={click}>
                       <span className="text-[14px] font-semibold text-text-primary tabular-nums">{formatMoneyFromCents(r.amount_cents, r.currency)}</span>
+                    </div>
+                    {/* Payment detail icon */}
+                    <div className="py-3 flex items-center justify-center border-b border-outline/30" onClick={e => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        title={fr ? 'Voir le paiement' : 'View payment'}
+                        className="p-1 rounded text-text-tertiary hover:text-primary hover:bg-surface-tertiary transition-colors"
+                        onClick={() => setSelectedPaymentId(r.id)}
+                      >
+                        <CreditCard size={15} />
+                      </button>
                     </div>
                   </React.Fragment>
                 );
@@ -786,6 +801,13 @@ export default function Payments({
           </>
         )}
       </AnimatePresence>
+
+      {/* ─── Payment detail drawer (opened by the per-row card icon) ─── */}
+      <PaymentDetailDrawer
+        orgId={orgId}
+        paymentId={selectedPaymentId}
+        onClose={() => setSelectedPaymentId(null)}
+      />
     </>
   );
 }
