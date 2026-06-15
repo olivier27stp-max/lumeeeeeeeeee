@@ -1,0 +1,165 @@
+/**
+ * Revenue series for the Home (CRM Workspace) revenue overview card.
+ *
+ * Two measures, bucketed over a chosen period:
+ *  - collected : paid invoices, by `paid_at`
+ *  - scheduled : outstanding expected revenue (sent / partial invoices with a
+ *                positive balance), by `due_date`
+ *
+ * Period drives both the date window and the bucket granularity:
+ *  - today : 24 hourly buckets
+ *  - week  : 7 daily buckets (today and the 6 days before)
+ *  - month : one bucket per day of the current calendar month
+ */
+import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
+
+export type RevenuePeriod = 'today' | 'week' | 'month';
+
+export interface RevenuePoint {
+  /** Short label shown on the x-axis (e.g. "8h", "Mon", "12"). */
+  label: string;
+  /** Collected revenue in dollars. */
+  collected: number;
+  /** Scheduled (outstanding) revenue in dollars. */
+  scheduled: number;
+}
+
+export interface RevenueSeries {
+  points: RevenuePoint[];
+  collectedTotal: number;
+  scheduledTotal: number;
+}
+
+function ymd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+interface Window {
+  start: Date;
+  end: Date;
+  /** Returns the bucket index for a given date, or -1 if out of range. */
+  bucketOf: (d: Date) => number;
+  /** Pre-built, zeroed buckets with their labels. */
+  buckets: RevenuePoint[];
+}
+
+function buildWindow(period: RevenuePeriod, now: Date): Window {
+  if (period === 'today') {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const buckets: RevenuePoint[] = Array.from({ length: 24 }, (_, h) => ({
+      label: `${h}h`,
+      collected: 0,
+      scheduled: 0,
+    }));
+    return {
+      start,
+      end,
+      buckets,
+      bucketOf: (d) =>
+        ymd(d) === ymd(start) ? d.getHours() : -1,
+    };
+  }
+
+  if (period === 'week') {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const days: Date[] = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      return d;
+    });
+    const dayKeys = days.map(ymd);
+    const labels = days.map((d) =>
+      d.toLocaleDateString(undefined, { weekday: 'short' }),
+    );
+    const buckets: RevenuePoint[] = labels.map((label) => ({ label, collected: 0, scheduled: 0 }));
+    return {
+      start,
+      end,
+      buckets,
+      bucketOf: (d) => dayKeys.indexOf(ymd(d)),
+    };
+  }
+
+  // month
+  const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const daysInMonth = end.getDate();
+  const buckets: RevenuePoint[] = Array.from({ length: daysInMonth }, (_, i) => ({
+    label: String(i + 1),
+    collected: 0,
+    scheduled: 0,
+  }));
+  return {
+    start,
+    end,
+    buckets,
+    bucketOf: (d) =>
+      d.getFullYear() === start.getFullYear() && d.getMonth() === start.getMonth()
+        ? d.getDate() - 1
+        : -1,
+  };
+}
+
+export async function getRevenueSeries(period: RevenuePeriod): Promise<RevenueSeries> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const w = buildWindow(period, new Date());
+  const startIso = w.start.toISOString();
+  const endIso = w.end.toISOString();
+  const startYmd = ymd(w.start);
+  const endYmd = ymd(w.end);
+
+  const [collectedRes, scheduledRes] = await Promise.all([
+    // Collected — paid invoices by paid_at
+    supabase
+      .from('invoices')
+      .select('total_cents, paid_at')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .eq('status', 'paid')
+      .gte('paid_at', startIso)
+      .lte('paid_at', endIso),
+    // Scheduled — outstanding (sent / partial) invoices by due_date
+    supabase
+      .from('invoices')
+      .select('balance_cents, due_date')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .in('status', ['sent', 'partial'])
+      .gt('balance_cents', 0)
+      .gte('due_date', startYmd)
+      .lte('due_date', endYmd),
+  ]);
+
+  if (collectedRes.error) throw collectedRes.error;
+  if (scheduledRes.error) throw scheduledRes.error;
+
+  let collectedTotal = 0;
+  let scheduledTotal = 0;
+
+  for (const row of collectedRes.data || []) {
+    if (!row.paid_at) continue;
+    const idx = w.bucketOf(new Date(row.paid_at as string));
+    if (idx < 0) continue;
+    const amount = Number(row.total_cents || 0) / 100;
+    w.buckets[idx].collected += amount;
+    collectedTotal += amount;
+  }
+
+  for (const row of scheduledRes.data || []) {
+    if (!row.due_date) continue;
+    // due_date is a YYYY-MM-DD date — parse at local midnight
+    const idx = w.bucketOf(new Date(`${row.due_date as string}T00:00:00`));
+    if (idx < 0) continue;
+    const amount = Number(row.balance_cents || 0) / 100;
+    w.buckets[idx].scheduled += amount;
+    scheduledTotal += amount;
+  }
+
+  return { points: w.buckets, collectedTotal, scheduledTotal };
+}

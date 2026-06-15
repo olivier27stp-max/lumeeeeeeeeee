@@ -5,7 +5,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Search, Download, ChevronLeft, ChevronRight, ChevronDown,
-  MoreHorizontal, Filter, Plus, Calendar, Users, Briefcase,
+  MoreHorizontal, Filter, Plus, Calendar,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../i18n';
@@ -16,9 +16,8 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchQuoteKpis, listAllQuotes, type Quote } from '../lib/quotesApi';
 import { listClients } from '../lib/clientsApi';
 import { getJobsKpis, type JobsKpis } from '../lib/jobsApi';
-import { supabase } from '../lib/supabase';
-import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useCompany } from '../contexts/CompanyContext';
+import RevenueOverviewCard from '../components/RevenueOverviewCard';
 
 function getQuoteName(q: any): string {
   const c = q.clients;
@@ -59,7 +58,6 @@ export default function CrmWorkspace() {
   const clientCount = clientsRes?.total ?? 0;
   const jobCount = dash?.workflow?.jobs?.active ?? 0;
   const quoteCount = quoteKpis?.total_count ?? 0;
-  const totalRevenue = dash?.performance?.revenue?.today ?? 0;
   const leads = leadsRes?.data ?? [];
   const leadsTotal = leadsRes?.total ?? 0;
   const leadsPages = Math.ceil(leadsTotal / 10);
@@ -75,36 +73,11 @@ export default function CrmWorkspace() {
     { label: fr ? 'Devis' : 'Quotes', count: quoteCount, pct: Math.round((quoteCount / pipelineDenominator) * 100), color: '#d1d5db' },
   ];
 
-  // Revenue goal — pulled from company_settings.revenue_goal_cents
-  const { data: revenueGoal } = useQuery({
-    queryKey: ['crm-revenue-goal'],
-    queryFn: async () => {
-      const orgId = await getCurrentOrgIdOrThrow();
-      const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString();
-      const yearEnd = new Date(new Date().getFullYear(), 11, 31, 23, 59, 59).toISOString();
-
-      const [settingsRes, invoicesRes] = await Promise.all([
-        supabase.from('company_settings').select('revenue_goal_cents').eq('org_id', orgId).maybeSingle(),
-        supabase.from('invoices')
-          .select('total_cents')
-          .eq('org_id', orgId).is('deleted_at', null).eq('status', 'paid')
-          .gte('paid_at', yearStart).lte('paid_at', yearEnd),
-      ]);
-      const targetCents = Number(settingsRes.data?.revenue_goal_cents) || 0;
-      const currentCents = (invoicesRes.data || []).reduce((s: number, r: any) => s + Number(r.total_cents || 0), 0);
-      return { targetCents, currentCents };
-    },
-    staleTime: 60_000,
-  });
-  const goalTarget = revenueGoal?.targetCents ?? 0;
-  const goalCurrent = revenueGoal?.currentCents ?? 0;
-  const targetPct = goalTarget > 0 ? Math.min(Math.round((goalCurrent / goalTarget) * 100), 100) : 0;
-
   if (loading) {
     return (
       <div className="bg-surface min-h-screen -m-6 lg:-m-10 -mt-8 p-6 lg:p-8 space-y-5">
         <div className="h-7 w-44 bg-gray-200 rounded animate-pulse" />
-        <div className="grid grid-cols-4 gap-4">{[0,1,2,3].map(i => <div key={i} className="h-[120px] bg-surface-card border border-border rounded-xl animate-pulse" />)}</div>
+        <div className="h-[280px] bg-surface-card border border-border rounded-xl animate-pulse" />
         <div className="grid grid-cols-3 gap-4">{[0,1,2].map(i => <div key={i} className="h-[260px] bg-surface-card border border-border rounded-xl animate-pulse" />)}</div>
       </div>
     );
@@ -141,76 +114,10 @@ export default function CrmWorkspace() {
       </div>
 
       {/* ══════════════════════════════════════════
-          ROW 1 — 4 stat cards matching reference:
-          [progress/target] [Total Customers] [Total Deals] [Total Revenue]
+          ROW 1 — wide horizontal revenue overview card
+          (collected vs scheduled, period toggle, view financials)
           ══════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-
-        {/* Card 1: Progress/target (matches reference left card with circular visual) */}
-        <div className="bg-surface-card border border-border rounded-xl p-5 flex items-center gap-4">
-          {/* Circular progress ring — matches the reference x48 circle */}
-          <div className="relative w-14 h-14 shrink-0">
-            <svg viewBox="0 0 56 56" className="w-14 h-14 -rotate-90">
-              <circle cx="28" cy="28" r="24" fill="none" stroke="#f3f4f6" strokeWidth="4" />
-              <circle cx="28" cy="28" r="24" fill="none" stroke="var(--color-primary)" strokeWidth="4"
-                strokeDasharray={`${(targetPct / 100) * 150.8} 150.8`}
-                strokeLinecap="round" className="transition-all duration-500" />
-            </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-[13px] font-bold text-text-primary">{targetPct}%</span>
-          </div>
-          <div className="min-w-0">
-            <p className="text-[14px] font-semibold text-text-primary leading-tight">{fr ? 'Objectif de revenus' : 'Revenue Goal'}</p>
-            <p className="text-[12px] text-text-secondary mt-1 leading-snug">
-              {goalTarget > 0
-                ? `${formatCurrency(goalCurrent / 100)} / ${formatCurrency(goalTarget / 100)}`
-                : (fr ? 'Définissez votre objectif dans Paramètres → Entreprise.' : 'Set your goal in Settings → Company.')}
-            </p>
-          </div>
-        </div>
-
-        {/* Card 2: Total Customers — icon top-right like reference */}
-        <div className="bg-surface-card border border-border rounded-xl p-5 cursor-pointer hover:shadow-sm transition-shadow" onClick={() => navigate('/clients')}>
-          <div className="flex items-start justify-between">
-            <p className="text-[13px] text-text-secondary">{fr ? 'Total clients' : 'Total Customers'}</p>
-            <div className="w-9 h-9 rounded-lg bg-surface-tertiary flex items-center justify-center">
-              <Users size={16} className="text-text-secondary" />
-            </div>
-          </div>
-          <p className="text-[28px] font-bold text-text-primary tabular-nums tracking-tight mt-1 leading-none">{clientCount.toLocaleString()}</p>
-        </div>
-
-        {/* Card 3: Total Deals/Jobs */}
-        <div className="bg-surface-card border border-border rounded-xl p-5 cursor-pointer hover:shadow-sm transition-shadow" onClick={() => navigate('/jobs')}>
-          <div className="flex items-start justify-between">
-            <p className="text-[13px] text-text-secondary">{fr ? 'Total jobs' : 'Total Deals'}</p>
-            <div className="w-9 h-9 rounded-lg bg-surface-tertiary flex items-center justify-center">
-              <Briefcase size={16} className="text-text-secondary" />
-            </div>
-          </div>
-          <p className="text-[28px] font-bold text-text-primary tabular-nums tracking-tight mt-1 leading-none">{(jobCount + quoteCount).toLocaleString()}</p>
-          {dash?.performance?.conversionRate != null && dash.performance.conversionRate !== 0 && (
-            <p className={cn('text-[12px] font-medium mt-2', dash.performance.conversionRate > 0 ? 'text-red-500' : 'text-text-muted')}>
-              -{Math.abs(100 - dash.performance.conversionRate).toFixed(1)}% <span className="text-text-muted">from last month</span>
-            </p>
-          )}
-        </div>
-
-        {/* Card 4: Total Revenue */}
-        <div className="bg-surface-card border border-border rounded-xl p-5 cursor-pointer hover:shadow-sm transition-shadow" onClick={() => navigate('/insights')}>
-          <div className="flex items-start justify-between">
-            <p className="text-[13px] text-text-secondary">{fr ? 'Revenu total' : 'Total Revenue'}</p>
-            <div className="w-9 h-9 rounded-lg bg-surface-tertiary flex items-center justify-center">
-              <span className="text-[14px] font-bold text-text-secondary">$</span>
-            </div>
-          </div>
-          <p className="text-[28px] font-bold text-text-primary tabular-nums tracking-tight mt-1 leading-none">{formatCurrency(totalRevenue)}</p>
-          {dash?.performance?.conversionRate != null && dash.performance.conversionRate > 0 && (
-            <p className="text-[12px] font-medium mt-2 text-emerald-600">
-              +{dash.performance.conversionRate}% <span className="text-text-muted">from last month</span>
-            </p>
-          )}
-        </div>
-      </div>
+      <RevenueOverviewCard />
 
       {/* ══════════════════════════════════════════
           ROW 2 — 3 panels matching reference exactly:
