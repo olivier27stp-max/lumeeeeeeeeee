@@ -115,7 +115,7 @@ export default function CrmWorkspace() {
 
       {/* ══════════════════════════════════════════
           ROW 1 — wide horizontal revenue overview card
-          (collected vs scheduled, period toggle, view financials)
+          (collected vs scheduled, period toggle, view finances)
           ══════════════════════════════════════════ */}
       <RevenueOverviewCard />
 

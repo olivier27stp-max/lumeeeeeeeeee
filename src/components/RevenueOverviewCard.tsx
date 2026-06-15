@@ -168,7 +168,7 @@ export default function RevenueOverviewCard() {
           </div>
 
           <button
-            onClick={() => navigate('/financials')}
+            onClick={() => navigate('/finances')}
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium text-primary hover:bg-surface-tertiary transition-colors"
           >
             {fr ? 'Voir les finances' : 'View financials'}
