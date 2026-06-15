@@ -423,6 +423,27 @@ export async function fetchPayoutDetail(input: {
   });
 }
 
+export interface PaymentDetail {
+  id: string;
+  status: string;
+  method: string | null;
+  provider: string | null;
+  card_last4: string | null;
+  card_brand: string | null;
+  amount_cents: number;
+  currency: string;
+  payment_date: string | null;
+  receipt_url: string | null;
+}
+
+export async function fetchPaymentDetail(input: { orgId: string; id: string }) {
+  const params = new URLSearchParams();
+  params.set('orgId', input.orgId);
+  return fetchApiJson<PaymentDetail>(`/api/payments/${encodeURIComponent(input.id)}/detail?${params.toString()}`, {
+    method: 'GET',
+  });
+}
+
 export async function downloadPayoutCsv(input: {
   orgId: string;
   provider?: PayoutProvider | null;

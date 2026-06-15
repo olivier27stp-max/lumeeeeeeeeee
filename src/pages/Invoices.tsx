@@ -9,7 +9,7 @@ import {
   ArrowUpDown, ChevronLeft, ChevronRight, Download,
   Plus, Search, MoreHorizontal, Send, CheckCircle2, Copy,
   Trash2, Eye, FileText, DollarSign, Clock, AlertCircle,
-  Filter, X, Receipt,
+  Filter, X, Receipt, CreditCard,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -35,7 +35,8 @@ import { cn, formatDate } from '../lib/utils';
 import { exportToCsv } from '../lib/exportCsv';
 import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
-import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
+import { getCurrentOrgId, getCurrentOrgIdOrThrow } from '../lib/orgApi';
+import PaymentDetailDrawer from '../components/finances/PaymentDetailDrawer';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
 import { displayEmail } from '../lib/piiSanitizer';
@@ -152,7 +153,30 @@ function InvoiceBadge({ status, fr }: { status: string; fr: boolean }) {
 
 type MainTab = 'invoices';
 
-export default function Invoices() {
+// ─── Finances column label helpers ─────────────────────────────
+function paymentMethodLabel(method: string | null | undefined, fr: boolean): string {
+  switch (method) {
+    case 'card': return fr ? 'Carte' : 'Card';
+    case 'e-transfer': return fr ? 'Virement' : 'E-transfer';
+    case 'cash': return fr ? 'Comptant' : 'Cash';
+    case 'check': return fr ? 'Chèque' : 'Check';
+    default: return '—';
+  }
+}
+function providerLabel(provider: string | null | undefined, fr: boolean): string {
+  switch (provider) {
+    case 'stripe': return 'Stripe';
+    case 'paypal': return 'PayPal';
+    case 'manual': return fr ? 'Manuel' : 'Manual';
+    default: return '—';
+  }
+}
+
+// Grid template + empty-state col span for the Facturation table.
+const INVOICE_GRID_COLUMNS = '40px 80px 1.2fr 1fr 90px 100px 100px 90px 1fr 100px 100px 44px 44px';
+const INVOICE_GRID_COL_COUNT = 13;
+
+export default function Invoices({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
   const navigate = useNavigate();
@@ -165,6 +189,10 @@ export default function Invoices() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [invoiceToDelete, setInvoiceToDelete] = useState<InvoiceRow | null>(null);
   const [isDeletingInvoice, setIsDeletingInvoice] = useState(false);
+  const [orgId, setOrgId] = useState<string | null>(null);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
+
+  useEffect(() => { void getCurrentOrgId().then(setOrgId); }, []);
 
   const status = parseStatus(searchParams.get('status'));
   const sort = parseSort(searchParams.get('sort'));
@@ -453,11 +481,13 @@ export default function Invoices() {
 
   return (
     <>
-      {/* ── PAGE HEADER (Jobs/Clients pattern) ── */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-[28px] font-bold text-text-primary leading-tight">
-          {fr ? 'Factures' : 'Invoices'}
-        </h1>
+      {/* ── PAGE HEADER (Jobs/Clients pattern) — hidden when embedded in Finances ── */}
+      <div className={cn('flex items-center', embedded ? 'justify-end' : 'justify-between')}>
+        {!embedded && (
+          <h1 className="text-[28px] font-bold text-text-primary leading-tight">
+            {fr ? 'Factures' : 'Invoices'}
+          </h1>
+        )}
         <button
           onClick={() => setIsCreateModalOpen(true)}
           className="inline-flex items-center gap-2 h-10 px-5 bg-primary text-white rounded-md text-[14px] font-medium hover:bg-primary-hover active:scale-[0.98] transition-all"
@@ -526,8 +556,8 @@ export default function Invoices() {
       {(
         <>
           {/* ── TABLE (CSS Grid — identical pattern to Jobs & Clients) ── */}
-          <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-            <div className="grid" style={{ gridTemplateColumns: '40px 80px 1fr 1fr 100px 110px 100px 110px 48px' }}>
+          <div className="border border-outline rounded-md overflow-x-auto bg-white dark:bg-[#0e0e11]">
+            <div className="grid min-w-[1100px]" style={{ gridTemplateColumns: INVOICE_GRID_COLUMNS }}>
               {/* HEADER */}
               <div className="py-3 pl-4 border-b border-outline flex items-center">
                 <input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
@@ -539,20 +569,30 @@ export default function Invoices() {
                 <button onClick={() => applySort('client')} className="inline-flex items-center gap-1">Client {IconSort}</button>
               </div>
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                {fr ? 'Sujet' : 'Subject'}
+                {fr ? 'Site' : 'Site'}
               </div>
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                <button onClick={() => applySort('status')} className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</button>
+                {fr ? 'Devis' : 'Quote'}
+              </div>
+              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
+                <button onClick={() => applySort('due_date')} className="inline-flex items-center gap-1">{fr ? 'Date' : 'Date'} {IconSort}</button>
               </div>
               <div className="py-3 px-4 border-b border-outline flex items-center justify-end text-[14px] font-medium text-text-primary">
                 <button onClick={() => applySort('total')} className="inline-flex items-center gap-1">Total {IconSort}</button>
               </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center justify-end text-[14px] font-medium text-text-primary">
-                <button onClick={() => applySort('balance')} className="inline-flex items-center gap-1">{fr ? 'Solde' : 'Balance'} {IconSort}</button>
+              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
+                {fr ? 'Type' : 'Type'}
               </div>
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                <button onClick={() => applySort('due_date')} className="inline-flex items-center gap-1">{fr ? 'Échéance' : 'Due'} {IconSort}</button>
+                {fr ? 'Payeur' : 'Payer'}
               </div>
+              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
+                {fr ? 'Méthode' : 'Method'}
+              </div>
+              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
+                <button onClick={() => applySort('status')} className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</button>
+              </div>
+              <div className="py-3 border-b border-outline" />
               <div className="py-3 border-b border-outline" />
 
               {/* LOADING */}
@@ -561,18 +601,22 @@ export default function Invoices() {
                   <div className="py-3 pl-4 border-b border-outline/30 flex items-center"><div className="w-4 h-4 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-10 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-24 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-28 bg-surface-tertiary rounded animate-pulse" /></div>
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-24 bg-surface-tertiary rounded animate-pulse" /></div>
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-12 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse ml-auto" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse ml-auto" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-12 bg-surface-tertiary rounded animate-pulse" /></div>
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
+                  <div className="py-3 border-b border-outline/30" />
                   <div className="py-3 border-b border-outline/30" />
                 </React.Fragment>
               ))}
 
               {/* EMPTY STATE */}
               {!invoicesQuery.isLoading && rows.length === 0 && (
-                <div className="col-span-9 py-20">
+                <div style={{ gridColumn: `span ${INVOICE_GRID_COL_COUNT}` }} className="py-20">
                   <div className="flex flex-col items-center justify-center text-center">
                     <div className="w-12 h-12 rounded-xl bg-surface-secondary flex items-center justify-center mb-4">
                       <FileText size={22} className="text-text-muted/60" />
@@ -628,35 +672,56 @@ export default function Invoices() {
                         </div>
                       </div>
                     </div>
-                    {/* Subject */}
+                    {/* Site */}
                     <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}>
-                      <span className="text-[13px] text-text-secondary truncate">{row.subject || '—'}</span>
+                      <span className="text-[13px] text-text-secondary truncate">{row.site || '—'}</span>
                     </div>
-                    {/* Status */}
+                    {/* Quote # */}
                     <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
-                      <InvoiceBadge status={uiStatus} fr={fr} />
+                      <span className="text-[13px] text-text-muted tabular-nums">{row.quote_number || '—'}</span>
+                    </div>
+                    {/* Date (issued) */}
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
+                      <span className="text-[13px] text-text-muted tabular-nums font-medium">
+                        {row.issued_at ? formatDate(row.issued_at) : (row.due_date ? formatDate(row.due_date) : '—')}
+                      </span>
                     </div>
                     {/* Total */}
                     <div className={`py-3 px-4 flex items-center justify-end cursor-pointer ${rowCls}`} onClick={click}>
                       <span className="text-[14px] font-semibold text-text-primary tabular-nums">{formatMoneyFromCents(row.total_cents)}</span>
                     </div>
-                    {/* Balance */}
-                    <div className={`py-3 px-4 flex items-center justify-end cursor-pointer ${rowCls}`} onClick={click}>
-                      <span className={cn(
-                        'text-[13px] font-medium tabular-nums',
-                        row.balance_cents === 0 ? 'text-text-muted' : isPastDue ? 'text-[#dc2626]' : 'text-text-primary'
-                      )}>
-                        {row.balance_cents === 0 ? '—' : formatMoneyFromCents(row.balance_cents)}
+                    {/* Type (provider) */}
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
+                      <span className="text-[13px] text-text-secondary">{providerLabel(row.provider, fr)}</span>
+                    </div>
+                    {/* Payer */}
+                    <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}>
+                      <span className="text-[13px] text-text-secondary truncate">{row.payer_name || '—'}</span>
+                    </div>
+                    {/* Method */}
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
+                      <span className="text-[13px] text-text-secondary">
+                        {row.payment_method ? paymentMethodLabel(row.payment_method, fr) : '—'}
                       </span>
                     </div>
-                    {/* Due date */}
+                    {/* Status */}
                     <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
-                      <span className={cn(
-                        'text-[13px] tabular-nums font-medium',
-                        isPastDue ? 'text-[#dc2626]' : 'text-text-muted'
-                      )}>
-                        {row.due_date ? formatDate(row.due_date) : '—'}
-                      </span>
+                      <InvoiceBadge status={uiStatus} fr={fr} />
+                    </div>
+                    {/* Payment link icon */}
+                    <div className={`py-3 flex items-center justify-center ${rowCls}`} onClick={e => e.stopPropagation()}>
+                      {row.payment_id ? (
+                        <button
+                          type="button"
+                          title={fr ? 'Voir le paiement' : 'View payment'}
+                          className="p-1 rounded text-text-tertiary hover:text-primary hover:bg-surface-tertiary transition-colors"
+                          onClick={() => setSelectedPaymentId(row.payment_id || null)}
+                        >
+                          <CreditCard size={15} />
+                        </button>
+                      ) : (
+                        <span className="text-text-muted/40">—</span>
+                      )}
                     </div>
                     {/* Actions */}
                     <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`}>
@@ -719,6 +784,13 @@ export default function Invoices() {
           </div>
         </>
       )}
+
+      {/* ─── Payment detail drawer (opened by the per-row card icon) ─── */}
+      <PaymentDetailDrawer
+        orgId={orgId}
+        paymentId={selectedPaymentId}
+        onClose={() => setSelectedPaymentId(null)}
+      />
 
       {/* ─── Delete Confirmation Modal (Jobs pattern) ─── */}
       <AnimatePresence>

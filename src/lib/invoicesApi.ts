@@ -37,6 +37,15 @@ export interface InvoiceRow {
   paid_cents: number;
   created_at: string;
   updated_at: string;
+  // Finances — enriched payment-level columns (from rpc_list_invoices)
+  site?: string | null;
+  quote_number?: string | null;
+  payer_name?: string | null;
+  payment_method?: string | null;
+  provider?: string | null;
+  card_last4?: string | null;
+  card_brand?: string | null;
+  payment_id?: string | null;
   // View tracking
   view_token?: string | null;
   is_viewed?: boolean;
@@ -223,6 +232,16 @@ export async function listInvoices(query: InvoicesListQuery): Promise<InvoicesLi
       paid_cents: Number(row.paid_cents || 0),
       created_at: row.created_at,
       updated_at: row.updated_at,
+      property_id: (row as any).property_id || null,
+      job_id: (row as any).job_id || null,
+      site: row.site || null,
+      quote_number: row.quote_number || null,
+      payer_name: row.payer_name || null,
+      payment_method: row.payment_method || null,
+      provider: row.provider || null,
+      card_last4: row.card_last4 || null,
+      card_brand: row.card_brand || null,
+      payment_id: row.payment_id || null,
       is_viewed: !!(row as any).is_viewed,
       viewed_at: (row as any).viewed_at || null,
       view_count: Number((row as any).view_count || 0),

@@ -11,7 +11,6 @@ import {
   Calendar as CalendarIcon,
   Briefcase,
   MapPin,
-  FileText,
   TrendingUp,
   CreditCard,
   CalendarClock,
@@ -68,11 +67,10 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import { Toaster } from 'sonner';
 import { JobModalControllerProvider } from './contexts/JobModalController';
 import { useTranslation } from './i18n';
-import Invoices from './pages/Invoices';
 import InvoiceDetails from './pages/InvoiceDetails';
 import InvoiceEdit from './pages/InvoiceEdit';
 import Insights from './pages/Insights';
-import Payments from './pages/Payments';
+import Finances from './pages/Finances';
 import PaymentSettings from './pages/PaymentSettings';
 import Automations from './pages/Automations';
 import CompanySettings from './pages/CompanySettings';
@@ -188,6 +186,14 @@ function Gated({ permission, anyPermission, children }: { permission?: Permissio
 /** Standard page wrapper — constrains width for form/list pages */
 function PageWrapper({ children }: { children: React.ReactNode }) {
   return <div className="max-w-[1400px] mx-auto px-6 lg:px-10 py-8">{children}</div>;
+}
+
+/** Legacy /payments → /finances redirect, preserving old ?tab=payouts bookmarks */
+function PaymentsRedirect() {
+  const location = useLocation();
+  const incomingTab = new URLSearchParams(location.search).get('tab');
+  const to = incomingTab === 'payouts' ? '/finances?tab=versements' : '/finances?tab=paiements';
+  return <Navigate to={to} replace />;
 }
 
 /** Wrapper that resolves orgId from CompanyContext before rendering OnboardingWizard */
@@ -726,7 +732,7 @@ function AuthenticatedApp({
         { id: 'clients', label: t.nav.clients, icon: Users, path: '/clients', tileColor: 'blue', requiredPermission: 'clients.read' },
         { id: 'requests', label: t.nav.requests, icon: Inbox, path: '/requests', tileColor: 'blue', requiredPermission: 'clients.read' },
         { id: 'quotes', label: language === 'fr' ? 'Devis' : 'Quotes', icon: ClipboardList, path: '/quotes', tileColor: 'blue', requiredPermission: 'quotes.read' },
-        { id: 'invoices', label: t.nav.invoices, icon: FileText, path: '/invoices', tileColor: 'blue', requiredPermission: 'financial.view_invoices' },
+        { id: 'finances', label: t.nav.finances, icon: Wallet, path: '/finances', tileColor: 'blue', requiredPermission: 'financial.view_invoices' },
         { id: 'jobs', label: t.nav.jobs, icon: Briefcase, path: '/jobs', tileColor: 'blue', requiredPermission: 'jobs.read' },
         { id: 'schedule', label: t.nav.calendar, icon: CalendarIcon, path: '/calendar', tileColor: 'blue', requiredPermission: 'calendar.read' },
       ],
@@ -737,7 +743,6 @@ function AuthenticatedApp({
         { id: 'messages', label: t.nav.messages, icon: MessageSquare, path: '/messages', tileColor: 'blue', requiredPermission: 'messages.read', requiredPlanFlag: 'includes_sms' },
         { id: 'timesheets', label: t.nav.timesheets, icon: Timer, path: '/timesheets', tileColor: 'blue', requiredPermission: 'timesheets.read' },
         { id: 'courses', label: t.courses?.title || 'Courses', icon: GraduationCap, path: '/courses', tileColor: 'blue', requiredPlanFlag: 'includes_courses' },
-        { id: 'payments', label: t.nav.payments, icon: CreditCard, path: '/payments', tileColor: 'blue', requiredPermission: 'financial.view_payments' },
       ],
     },
     {
@@ -922,7 +927,7 @@ function AuthenticatedApp({
                               {unreadSms > 9 ? '9+' : unreadSms}
                             </span>
                           )}
-                          {!['messages', 'quotes', 'invoices'].includes(item.id) && (notifCountsByNav[item.id] || 0) > 0 && !sidebarExpanded && (
+                          {!['messages', 'quotes', 'finances'].includes(item.id) && (notifCountsByNav[item.id] || 0) > 0 && !sidebarExpanded && (
                             <span className="absolute -top-1.5 -right-1.5 bg-danger text-white text-[7px] font-bold rounded-full min-w-[12px] h-[12px] flex items-center justify-center px-0.5">
                               {notifCountsByNav[item.id] > 9 ? '9+' : notifCountsByNav[item.id]}
                             </span>
@@ -941,13 +946,13 @@ function AuthenticatedApp({
                                 {pendingQuotes}
                               </span>
                             )}
-                            {item.id === 'invoices' && overdueInvoices > 0 && (
+                            {item.id === 'finances' && overdueInvoices > 0 && (
                               <span className="ml-auto bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-[9px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-1 shrink-0">
                                 {overdueInvoices}
                               </span>
                             )}
                             {/* Unread-notification count for pages without a domain-specific badge */}
-                            {!['messages', 'quotes', 'invoices'].includes(item.id) && (notifCountsByNav[item.id] || 0) > 0 && (
+                            {!['messages', 'quotes', 'finances'].includes(item.id) && (notifCountsByNav[item.id] || 0) > 0 && (
                               <span className="ml-auto bg-danger text-white text-[9px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-1 shrink-0">
                                 {notifCountsByNav[item.id] > 9 ? '9+' : notifCountsByNav[item.id]}
                               </span>
@@ -1170,12 +1175,13 @@ function AuthenticatedApp({
                     <Route path="/quotes/templates" element={<Gated permission="settings.read"><PageWrapper><QuotePresets /></PageWrapper></Gated>} />
                     <Route path="/quotes/:id" element={<Gated permission="quotes.read"><PageWrapper><QuoteDetails /></PageWrapper></Gated>} />
                     <Route path="/quotes/:id/measure" element={<Gated permission="quotes.read"><React.Suspense fallback={null}><QuoteMeasure /></React.Suspense></Gated>} />
-                    <Route path="/invoices" element={<Gated permission="invoices.read"><PageWrapper><Invoices /></PageWrapper></Gated>} />
+                    <Route path="/finances" element={<Gated permission="invoices.read"><PageWrapper><Finances /></PageWrapper></Gated>} />
+                    <Route path="/invoices" element={<Navigate to="/finances" replace />} />
                     <Route path="/invoices/new" element={<Gated permission="invoices.create"><PageWrapper><InvoiceEdit /></PageWrapper></Gated>} />
                     <Route path="/invoices/:id" element={<Gated permission="invoices.read"><PageWrapper><InvoiceDetails /></PageWrapper></Gated>} />
                     <Route path="/invoices/:id/edit" element={<Gated permission="invoices.update"><PageWrapper><InvoiceEdit /></PageWrapper></Gated>} />
                     <Route path="/insights" element={<Gated permission="reports.read"><PageWrapper><Insights /></PageWrapper></Gated>} />
-                    <Route path="/payments" element={<Gated permission="payments.read"><PageWrapper><Payments /></PageWrapper></Gated>} />
+                    <Route path="/payments" element={<PaymentsRedirect />} />
                     <Route path="/payments/settings" element={<Navigate to="/settings?tab=payments" replace />} />
                     <Route path="/timesheets" element={<Gated permission="timesheets.read"><PageWrapper><Timesheets /></PageWrapper></Gated>} />
                     <Route path="/settings" element={<Gated permission="settings.read"><PageWrapper><SettingsPage /></PageWrapper></Gated>} />

@@ -36,6 +36,8 @@ export interface PaymentInsertInput {
   provider_event_id?: string | null;
   status: PaymentStatus;
   method?: string | null;
+  card_last4?: string | null;
+  card_brand?: string | null;
   amount_cents: number;
   currency: string;
   payment_date?: string;

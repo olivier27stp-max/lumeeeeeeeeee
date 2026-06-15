@@ -864,17 +864,22 @@ export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput)
 
   if (existing) {
     if (existing.status !== input.status) {
+      const updatePayload: Record<string, unknown> = {
+        status: input.status,
+        method: input.method || null,
+        provider_order_id: input.provider_order_id || null,
+        payment_date: input.payment_date || new Date().toISOString(),
+        amount_cents: input.amount_cents,
+        currency: input.currency || 'CAD',
+        updated_at: new Date().toISOString(),
+      };
+      // Only set card details when this event actually carries them, so a
+      // later status-only event never wipes a value already stored.
+      if (input.card_last4) updatePayload.card_last4 = input.card_last4;
+      if (input.card_brand) updatePayload.card_brand = input.card_brand;
       const { error: updateError } = await admin
         .from('payments')
-        .update({
-          status: input.status,
-          method: input.method || null,
-          provider_order_id: input.provider_order_id || null,
-          payment_date: input.payment_date || new Date().toISOString(),
-          amount_cents: input.amount_cents,
-          currency: input.currency || 'CAD',
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq('id', existing.id);
       if (updateError) throw updateError;
       if (input.status === 'succeeded' && input.invoice_id) {
@@ -899,6 +904,8 @@ export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput)
     provider_event_id: input.provider_event_id || null,
     status: input.status,
     method: input.method || null,
+    card_last4: input.card_last4 || null,
+    card_brand: input.card_brand || null,
     amount_cents: Math.max(0, Math.round(input.amount_cents || 0)),
     currency: (input.currency || 'CAD').toUpperCase(),
     payment_date: input.payment_date || new Date().toISOString(),

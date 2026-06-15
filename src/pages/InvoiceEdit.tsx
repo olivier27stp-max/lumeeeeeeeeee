@@ -423,7 +423,7 @@ export default function InvoiceEdit() {
   if (isNew && !clientId) {
     return (
       <div className="mx-auto max-w-2xl space-y-4 py-6">
-        <button type="button" onClick={() => navigate('/invoices')} className="glass-button inline-flex items-center gap-2">
+        <button type="button" onClick={() => navigate('/finances')} className="glass-button inline-flex items-center gap-2">
           <ArrowLeft size={14} />
           {t.companySettings.back}
         </button>

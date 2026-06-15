@@ -146,6 +146,28 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           const charge = intent.latest_charge;
           const transferData = (intent as any).transfer_data;
 
+          // Pull card brand + last4 from the charge so we can store them on the
+          // payment. latest_charge is a bare id on webhook events, so retrieve it.
+          // Failure here must never fail the webhook — fall back to null.
+          let cardLast4: string | null = null;
+          let cardBrand: string | null = null;
+          if (intent.payment_method_types?.[0] === 'card') {
+            try {
+              const chargeId = typeof charge === 'string' ? charge : charge?.id;
+              if (chargeId) {
+                const ch = await stripeWebhookClient.charges.retrieve(
+                  chargeId,
+                  connectAccountId ? { stripeAccount: connectAccountId } : undefined,
+                );
+                const cardDetails = ch.payment_method_details?.card;
+                cardLast4 = cardDetails?.last4 || null;
+                cardBrand = cardDetails?.brand || null;
+              }
+            } catch (cardErr: any) {
+              console.error('[webhook/stripe] card detail fetch failed:', cardErr?.message);
+            }
+          }
+
           await insertOrUpdatePaymentIdempotent({
             org_id: metadata.orgId,
             invoice_id: metadata.invoiceId,
@@ -156,6 +178,8 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             provider_event_id: event.id,
             status: 'succeeded',
             method: intent.payment_method_types?.[0] === 'card' ? 'card' : null,
+            card_last4: cardLast4,
+            card_brand: cardBrand,
             amount_cents: Math.max(0, Math.round(intent.amount_received || intent.amount || 0)),
             currency: String(intent.currency || 'CAD').toUpperCase(),
             payment_date: new Date((intent.created || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
@@ -789,6 +813,63 @@ router.get('/payments/payouts/detail', async (req, res) => {
     return res.json(detail);
   } catch (error: any) {
     return sendSafeError(res, error, 'Unable to load payout detail.', '[payments/payouts/detail]');
+  }
+});
+
+// Single-payment detail — used by the Facturation tab payment-detail drawer.
+// Card brand/last4 come from the stored row; receipt_url is fetched live from Stripe.
+router.get('/payments/:id/detail', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const requestedOrgId = parseOrgId(req.query.orgId) || auth.orgId;
+    const member = await isOrgMember(auth.client, auth.user.id, requestedOrgId);
+    if (!member) return res.status(403).json({ error: 'Forbidden for this organization.' });
+
+    const paymentId = String(req.params.id || '').trim();
+    if (!paymentId) return res.status(400).json({ error: 'Missing payment id.' });
+
+    const admin = getServiceClient();
+    const { data: payment, error } = await admin
+      .from('payments')
+      .select('id, status, method, provider, card_last4, card_brand, amount_cents, currency, payment_date, paid_at, stripe_charge_id')
+      .eq('id', paymentId)
+      .eq('org_id', requestedOrgId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (error) throw error;
+    if (!payment) return res.status(404).json({ error: 'Payment not found.' });
+
+    // Best-effort live receipt url from Stripe (not persisted).
+    let receiptUrl: string | null = null;
+    try {
+      if (payment.provider === 'stripe' && payment.stripe_charge_id) {
+        const secrets = await getPaymentProviderSecrets(requestedOrgId);
+        if (secrets.stripe_secret_key) {
+          const stripeClient = new Stripe(secrets.stripe_secret_key);
+          const ch = await stripeClient.charges.retrieve(payment.stripe_charge_id);
+          receiptUrl = ch.receipt_url || null;
+        }
+      }
+    } catch (recErr: any) {
+      console.error('[payments/:id/detail] receipt fetch failed:', recErr?.message);
+    }
+
+    return res.json({
+      id: payment.id,
+      status: payment.status,
+      method: payment.method,
+      provider: payment.provider,
+      card_last4: payment.card_last4,
+      card_brand: payment.card_brand,
+      amount_cents: payment.amount_cents,
+      currency: payment.currency,
+      payment_date: payment.paid_at || payment.payment_date,
+      receipt_url: receiptUrl,
+    });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Unable to load payment detail.', '[payments/:id/detail]');
   }
 });
 

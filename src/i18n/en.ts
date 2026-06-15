@@ -13,6 +13,7 @@ const en = {
     tasks: 'Tasks',
     invoices: 'Invoices',
     payments: 'Payments',
+    finances: 'Finances',
     insights: 'Insights',
     settings: 'Settings',
     signOut: 'Sign Out',
@@ -432,6 +433,16 @@ const en = {
     viewed: 'Viewed',
     viewInvoice: 'View invoice',
 
+  },
+
+  // Finances
+  finances: {
+    title: 'Finances',
+    tabs: {
+      invoicing: 'Invoicing',
+      payments: 'Payments',
+      payouts: 'Payouts',
+    },
   },
 
   // Payments

@@ -162,7 +162,7 @@ export default function Dashboard() {
 
       {/* ═══ SECONDARY ROW — compact stat cards ═══ */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {canSeeFinancials && <MiniStat label={t.dashboard.outstanding} value={formatCurrency(overdueAmt)} warn={hasOverdue} onClick={() => navigate('/invoices')} />}
+        {canSeeFinancials && <MiniStat label={t.dashboard.outstanding} value={formatCurrency(overdueAmt)} warn={hasOverdue} onClick={() => navigate('/finances')} />}
         <MiniStat label={t.dashboard.newLeads} value={String(data.performance?.newLeadsToday ?? 0)} onClick={() => navigate('/quotes')} />
         <MiniStat label={t.dashboard.upcomingAppointments} value={String(data.appointments?.total ?? 0)} onClick={() => navigate('/calendar')} />
         {pendingQuotes > 0 && <MiniStat label={t.dashboard.pendingQuotes} value={String(pendingQuotes)} onClick={() => navigate('/quotes')} />}

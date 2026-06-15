@@ -15,6 +15,7 @@ const fr: TranslationKeys = {
     tasks: 'Tâches',
     invoices: 'Factures',
     payments: 'Paiements',
+    finances: 'Finances',
     insights: 'Statistiques',
     settings: 'Paramètres',
     signOut: 'Déconnexion',
@@ -433,6 +434,16 @@ const fr: TranslationKeys = {
     viewed: 'Vu',
     viewInvoice: 'Voir la facture',
 
+  },
+
+  // Finances
+  finances: {
+    title: 'Finances',
+    tabs: {
+      invoicing: 'Facturation',
+      payments: 'Paiements',
+      payouts: 'Versements',
+    },
   },
 
   // Payments

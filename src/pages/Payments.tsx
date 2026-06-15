@@ -206,7 +206,10 @@ function PaymentBadge({ status, fr }: { status: string; fr: boolean }) {
 
 // ─── Main Component ────────────────────────────────────────────
 
-export default function Payments() {
+export default function Payments({
+  embedded = false,
+  forceTab,
+}: { embedded?: boolean; forceTab?: 'overview' | 'payouts' } = {}) {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
   const navigate = useNavigate();
@@ -215,7 +218,9 @@ export default function Payments() {
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
   const [searchInput, setSearchInput] = useState('');
 
-  const tab = parseTab(params.get('tab'));
+  // When embedded in the Finances page, the active sub-tab is driven by the
+  // parent (forceTab) instead of the local ?tab= param.
+  const tab = forceTab || parseTab(params.get('tab'));
   const status = parseStatus(params.get('status'));
   const method = parseMethod(params.get('method'));
   const date = parseDate(params.get('date'));
@@ -341,18 +346,29 @@ export default function Payments() {
 
   return (
     <>
-      {/* ── PAGE HEADER (Invoices pattern) ── */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-[28px] font-bold text-text-primary leading-tight">
-          {t.commandPalette.payments}
-        </h1>
-        <button
-          onClick={() => navigate('/settings/payments')}
-          className="inline-flex items-center gap-2 h-10 px-5 bg-surface-card border border-outline text-text-primary rounded-md text-[14px] font-medium hover:bg-surface-secondary transition-all"
-        >
-          {fr ? 'Paramètres' : 'Settings'}
-        </button>
-      </div>
+      {/* ── PAGE HEADER (Invoices pattern) — hidden when embedded in Finances ── */}
+      {embedded ? (
+        <div className="flex items-center justify-end">
+          <button
+            onClick={() => navigate('/settings/payments')}
+            className="inline-flex items-center gap-2 h-10 px-5 bg-surface-card border border-outline text-text-primary rounded-md text-[14px] font-medium hover:bg-surface-secondary transition-all"
+          >
+            {fr ? 'Paramètres' : 'Settings'}
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between">
+          <h1 className="text-[28px] font-bold text-text-primary leading-tight">
+            {t.commandPalette.payments}
+          </h1>
+          <button
+            onClick={() => navigate('/settings/payments')}
+            className="inline-flex items-center gap-2 h-10 px-5 bg-surface-card border border-outline text-text-primary rounded-md text-[14px] font-medium hover:bg-surface-secondary transition-all"
+          >
+            {fr ? 'Paramètres' : 'Settings'}
+          </button>
+        </div>
+      )}
 
       {/* Not connected banner */}
       {!isConnected && !connectQuery.isLoading && (
@@ -371,7 +387,8 @@ export default function Payments() {
         </div>
       )}
 
-      {/* ── KPI STAT CHIPS (Invoices pattern — top metrics) ── */}
+      {/* ── KPI STAT CHIPS (Invoices pattern — top metrics) — overview only ── */}
+      {tab === 'overview' && (
       <div className="flex items-center gap-1.5 mt-4 flex-wrap">
         {/* Available funds — always visible, not a filter */}
         <div className="inline-flex items-center gap-2 h-8 px-3.5 rounded-full text-xs font-medium text-text-tertiary whitespace-nowrap">
@@ -413,16 +430,19 @@ export default function Payments() {
           );
         })}
       </div>
+      )}
 
-      {/* ── TABS (Invoices pattern) ── */}
-      <div className="tab-nav mt-4">
-        <button className={tab === 'overview' ? 'tab-item-active' : 'tab-item'} onClick={() => updateParams((n) => n.delete('tab'))}>
-          {t.payments.overview}
-        </button>
-        <button className={tab === 'payouts' ? 'tab-item-active' : 'tab-item'} onClick={() => updateParams((n) => n.set('tab', 'payouts'))}>
-          {t.payments.payouts}
-        </button>
-      </div>
+      {/* ── TABS (Invoices pattern) — hidden when embedded (Finances owns tabs) ── */}
+      {!embedded && (
+        <div className="tab-nav mt-4">
+          <button className={tab === 'overview' ? 'tab-item-active' : 'tab-item'} onClick={() => updateParams((n) => n.delete('tab'))}>
+            {t.payments.overview}
+          </button>
+          <button className={tab === 'payouts' ? 'tab-item-active' : 'tab-item'} onClick={() => updateParams((n) => n.set('tab', 'payouts'))}>
+            {t.payments.payouts}
+          </button>
+        </div>
+      )}
 
       {tab === 'overview' ? (
         <>

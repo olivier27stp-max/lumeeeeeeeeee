@@ -345,7 +345,7 @@ export default function Insights() {
                 <BalanceCard
                   value={overview?.revenue_cents || 0}
                   changePct={cmp('revenue').pct ?? null}
-                  onViewPayments={() => navigate('/payments')}
+                  onViewPayments={() => navigate('/finances?tab=paiements')}
                   onExport={exportCsv}
                 />
                 <PendingInvoicesCard
@@ -387,7 +387,7 @@ export default function Insights() {
               <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4">
                 <TransactionsTableCard
                   transactions={transactions}
-                  onViewAll={() => navigate('/invoices')}
+                  onViewAll={() => navigate('/finances')}
                 />
                 <div className="space-y-4">
                   <RevenueGoalCard

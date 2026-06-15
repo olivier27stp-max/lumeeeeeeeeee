@@ -79,7 +79,7 @@ export default function InvoiceDetails() {
     return (
       <div className="section-card border-danger-light p-6">
         <p className="text-lg font-bold text-danger">{t.invoiceDetails.invoiceNotFound}</p>
-        <button type="button" onClick={() => navigate('/invoices')} className="glass-button mt-3">
+        <button type="button" onClick={() => navigate('/finances')} className="glass-button mt-3">
           {t.invoiceDetails.backToInvoices}
         </button>
       </div>
@@ -163,7 +163,7 @@ export default function InvoiceDetails() {
 
   return (
     <div className="space-y-6">
-      <button type="button" onClick={() => navigate('/invoices')} className="glass-button inline-flex items-center gap-2">
+      <button type="button" onClick={() => navigate('/finances')} className="glass-button inline-flex items-center gap-2">
         <ArrowLeft size={14} />
         {t.invoiceDetails.backToInvoices}
       </button>
