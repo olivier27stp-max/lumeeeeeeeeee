@@ -4,7 +4,7 @@ import { AlertTriangle, BriefcaseBusiness, Calendar, ChevronDown, Clock3, MapPin
 import { useQuery } from '@tanstack/react-query';
 import { cn, formatCurrency } from '../lib/utils';
 import { listClients, createClient } from '../lib/clientsApi';
-import { getSuggestedJobNumber, listSalespeople } from '../lib/jobsApi';
+import { listSalespeople } from '../lib/jobsApi';
 import { resolveClientIdForLead } from '../lib/leadsApi';
 import { listTeams } from '../lib/teamsApi';
 import TeamSuggestions from './TeamSuggestions';
@@ -215,7 +215,7 @@ export default function NewJobModal({
   onDelete,
   isDeleting = false,
 }: NewJobModalProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const isEditMode = Boolean(initialValues?.id);
   const specificNotesRef = useRef<SpecificNotesInlineHandle>(null);
   const [title, setTitle] = useState('');
@@ -431,11 +431,9 @@ export default function NewJobModal({
         setClients([]);
       });
 
-    if (!initialValues?.job_number) {
-      getSuggestedJobNumber()
-        .then(setJobNumber)
-        .catch(() => setJobNumber(''));
-    }
+    // Le numéro de job est désormais attribué par la DB (trigger par org,
+    // atomique) à la création. Plus de suggestion côté client : on évite ainsi
+    // la race condition qui pouvait générer des numéros en double.
 
     listSalespeople()
       .then(setSalespeople)
@@ -1051,9 +1049,10 @@ export default function NewJobModal({
                   <label className="text-xs font-medium text-text-tertiary">{t.jobs.jobNumber}</label>
                   <input
                     value={jobNumber}
-                    onChange={(event) => setJobNumber(event.target.value)}
-                    className="glass-input w-full"
-                    placeholder="322"
+                    readOnly
+                    disabled
+                    className="glass-input w-full opacity-60 cursor-not-allowed"
+                    placeholder={language === 'fr' ? 'Attribué automatiquement' : 'Auto-assigned'}
                   />
                 </div>
 
