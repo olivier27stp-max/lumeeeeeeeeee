@@ -71,7 +71,7 @@ BEGIN
   ) VALUES (
     v_org, 'DEMO-Q-001', 'Contrat de déneigement saisonnier 2026-2027',
     v_clients[1], 'sent', CASE WHEN v_clients[1] IS NULL THEN 'lead' ELSE 'client' END,
-    v_owner, v_owner, (now() + interval '21 days')::date,
+    v_owner, NULL,(now() + interval '21 days')::date,
     117500, 'TPS+TVQ (14.975%)', 14.975, 17596, 135096, 'CAD',
     'Déneigement de l''entrée double + trottoir. Service prioritaire avant 7h00.'
   ) RETURNING id INTO v_qid;
@@ -95,7 +95,7 @@ BEGIN
   ) VALUES (
     v_org, 'DEMO-Q-002', 'Forfait entretien paysager — saison estivale',
     v_clients[2], 'draft', CASE WHEN v_clients[2] IS NULL THEN 'lead' ELSE 'client' END,
-    v_owner, v_owner, (now() + interval '30 days')::date,
+    v_owner, NULL,(now() + interval '30 days')::date,
     110000, 'percentage', 10, 11000,
     'TPS+TVQ (14.975%)', 14.975, 14825, 113825, 'CAD',
     'Rabais fidélité 10 % appliqué. Visites hebdomadaires de mai à août.'
@@ -120,7 +120,7 @@ BEGIN
   ) VALUES (
     v_org, 'DEMO-Q-003', 'Lavage de vitres, gouttières et pression',
     v_clients[3], 'approved', CASE WHEN v_clients[3] IS NULL THEN 'lead' ELSE 'client' END,
-    v_owner, v_owner, (now() + interval '14 days')::date, now(),
+    v_owner, NULL,(now() + interval '14 days')::date, now(),
     49000, 'TPS+TVQ (14.975%)', 14.975, 7338, 56338, 'CAD',
     'Approuvé par le client. À planifier dans les 2 prochaines semaines.'
   ) RETURNING id INTO v_qid;

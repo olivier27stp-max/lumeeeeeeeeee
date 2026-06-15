@@ -466,7 +466,7 @@ export default function GlobalSearch() {
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           placeholder={t.globalSearch.placeholder}
-          className="glass-input w-full rounded-xl pl-10 pr-4 focus:pr-20 py-2 text-[13px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+          className="glass-input w-full rounded-xl pl-10 pr-4 focus:pr-20 py-1.5 text-[13px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           aria-label="Global search"
           role="combobox"
           aria-expanded={showDropdown}
