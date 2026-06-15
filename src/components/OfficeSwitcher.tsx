@@ -59,7 +59,7 @@ export function OfficeSwitcher() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 w-64 bg-surface-raised border border-outline rounded-xl shadow-lg z-50 py-1 max-h-72 overflow-y-auto">
+          <div className="absolute left-0 top-full mt-1 w-64 bg-surface-elevated border border-outline rounded-xl shadow-lg z-50 py-1 max-h-72 overflow-y-auto">
             <div className="px-3 py-2 text-xs font-medium text-text-tertiary uppercase tracking-wider">
               {fr ? 'Changer de bureau' : 'Switch office'}
             </div>
@@ -158,7 +158,7 @@ function CreateOfficeModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
       <div
-        className="w-full max-w-sm bg-surface-raised border border-outline rounded-2xl shadow-xl p-5"
+        className="w-full max-w-sm bg-surface-elevated border border-outline rounded-2xl shadow-xl p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
