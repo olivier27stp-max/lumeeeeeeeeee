@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
+  Home,
   Users,
   Inbox,
   Settings,
@@ -715,7 +716,7 @@ function AuthenticatedApp({
     {
       label: null,
       items: [
-        { id: 'day', label: t.nav.crm, icon: LayoutDashboard, path: '/day', tileColor: 'blue' },
+        { id: 'day', label: t.nav.crm, icon: Home, path: '/day', tileColor: 'blue' },
         { id: 'ai-helper', label: 'Lume Agent', icon: LumeAgentIcon as any, path: '/lume-agent', tileColor: 'blue', requiredPermission: 'external_agent.use', requiredPlanFlag: 'includes_ai' },
       ],
     },
