@@ -79,6 +79,28 @@ export default function RevenueOverviewCard() {
         </div>
       </div>
 
+      {/* Collected / Scheduled totals — big & bold, at the top of the chart */}
+      <div className="flex items-start gap-10 mb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLLECTED_COLOR }} />
+            <span className="text-[16px] font-bold text-text-primary">{fr ? 'Collecté' : 'Collected'}</span>
+          </div>
+          <p className="text-[28px] font-bold text-text-primary tabular-nums tracking-tight mt-1 leading-none">
+            {formatCurrency(collectedTotal)}
+          </p>
+        </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: SCHEDULED_COLOR }} />
+            <span className="text-[16px] font-bold text-text-primary">{fr ? 'Planifié' : 'Schedule'}</span>
+          </div>
+          <p className="text-[28px] font-bold text-text-primary tabular-nums tracking-tight mt-1 leading-none">
+            {formatCurrency(scheduledTotal)}
+          </p>
+        </div>
+      </div>
+
       {/* Chart */}
       <div className="h-[180px] w-full">
         {isLoading ? (
@@ -148,33 +170,15 @@ export default function RevenueOverviewCard() {
         )}
       </div>
 
-      {/* Footer: Collected (bottom-left) · Schedule (right) · View financials (bottom-right) */}
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLLECTED_COLOR }} />
-          <span className="text-[13px] text-text-secondary">{fr ? 'Collecté' : 'Collected'}</span>
-          <span className="text-[13px] font-semibold text-text-primary tabular-nums">
-            {formatCurrency(collectedTotal)}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: SCHEDULED_COLOR }} />
-            <span className="text-[13px] text-text-secondary">{fr ? 'Planifié' : 'Schedule'}</span>
-            <span className="text-[13px] font-semibold text-text-primary tabular-nums">
-              {formatCurrency(scheduledTotal)}
-            </span>
-          </div>
-
-          <button
-            onClick={() => navigate('/finances')}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium text-primary hover:bg-surface-tertiary transition-colors"
-          >
-            {fr ? 'Voir les finances' : 'View financials'}
-            <ArrowRight size={14} />
-          </button>
-        </div>
+      {/* Footer: View finances button (bottom-right) */}
+      <div className="flex items-center justify-end mt-3 pt-3 border-t border-border">
+        <button
+          onClick={() => navigate('/finances')}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium text-primary hover:bg-surface-tertiary transition-colors"
+        >
+          {fr ? 'Voir les finances' : 'View financials'}
+          <ArrowRight size={14} />
+        </button>
       </div>
     </div>
   );
