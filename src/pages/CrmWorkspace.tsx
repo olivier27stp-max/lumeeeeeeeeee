@@ -1,9 +1,10 @@
 /**
  * CRM Workspace — Home page.
- * All dashboard boxes (revenue card, panels, leads table) removed.
+ * Shows the date/greeting and the wide horizontal revenue overview card.
  */
 import { useTranslation } from '../i18n';
 import { useCompany } from '../contexts/CompanyContext';
+import RevenueOverviewCard from '../components/RevenueOverviewCard';
 
 export default function CrmWorkspace() {
   const { language } = useTranslation();
@@ -25,6 +26,9 @@ export default function CrmWorkspace() {
         <h1 className="text-[24px] font-bold text-text-primary first-letter:uppercase">{todayLabel}</h1>
         <p className="text-[16px] font-bold text-text-primary mt-0.5">{greeting}</p>
       </div>
+
+      {/* Wide horizontal revenue overview (collected vs scheduled, period toggle, view finances) */}
+      <RevenueOverviewCard />
     </div>
   );
 }
