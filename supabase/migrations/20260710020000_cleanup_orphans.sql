@@ -23,8 +23,17 @@ CREATE TABLE IF NOT EXISTS archive.orphans_memberships_20260710 AS
   SELECT * FROM public.memberships m
   WHERE m.org_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.orgs o WHERE o.id=m.org_id);
 
+-- IMPORTANT : memberships a un trigger d'audit (trg_membership_change_audit) qui
+-- réinsère l'org_id supprimé dans security_events. Sur un org_id orphelin, cet
+-- INSERT échoue (surtout une fois la FK security_events.org_id en place).
+-- On désactive donc les triggers USER le temps de ce nettoyage système.
+-- (Découvert via un test BEGIN/ROLLBACK contre les données réelles avant déploiement.)
+ALTER TABLE public.memberships DISABLE TRIGGER USER;
+
 DELETE FROM public.memberships m
   WHERE m.org_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.orgs o WHERE o.id=m.org_id);
+
+ALTER TABLE public.memberships ENABLE TRIGGER USER;
 
 -- 2) Archiver puis supprimer org_invoice_sequences orphelins
 CREATE TABLE IF NOT EXISTS archive.orphans_org_invoice_sequences_20260710 AS
