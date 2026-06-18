@@ -707,23 +707,44 @@ router.post('/billing/change-plan', validate(changePlanSchema), async (req, res)
     // Downgrade: lower plan tier OR cheaper price (e.g. yearly→monthly = downgrade)
     const isDowngrade = targetSortOrder < currentSortOrder || amountCents < currentPrice;
 
-    // Create Product + Price for the target plan
-    let newPriceId: string;
-    try {
-      const product = await stripe.products.create({
-        name: `Lume ${targetPlan.name}`,
-        metadata: { plan_slug: targetPlan.slug, plan_id: targetPlan.id },
-      });
-      const price = await stripe.prices.create({
-        product: product.id,
-        currency: currency.toLowerCase(),
-        unit_amount: amountCents,
-        recurring: { interval: interval === 'yearly' ? 'year' : 'month' },
-      });
-      newPriceId = price.id;
-    } catch (err: any) {
-      console.error('[billing/change-plan] Stripe price create failed', err.message);
-      return res.status(502).json({ error: `Stripe price creation failed: ${err.message}` });
+    // Resolve the persistent Stripe Price ID for the target plan + interval + currency.
+    // These IDs are pre-created via scripts/sync-stripe-products.ts and stored on plans.
+    const priceIdField =
+      interval === 'yearly'
+        ? currency === 'USD' ? 'stripe_yearly_price_id_usd' : 'stripe_yearly_price_id_cad'
+        : currency === 'USD' ? 'stripe_monthly_price_id_usd' : 'stripe_monthly_price_id_cad';
+    let newPriceId: string | null = targetPlan[priceIdField] || null;
+
+    // Lazy fallback: if the persistent ID isn't set yet (e.g. plan added later),
+    // create one and save it back to the plan row so we never pay this cost again.
+    if (!newPriceId) {
+      try {
+        let productId: string | null = targetPlan.stripe_product_id;
+        if (!productId) {
+          const product = await stripe.products.create({
+            name: `Lume ${targetPlan.name}`,
+            description: `Lume CRM ${targetPlan.name} subscription`,
+            metadata: { plan_id: targetPlan.id, plan_slug: targetPlan.slug },
+          });
+          productId = product.id;
+        }
+        const price = await stripe.prices.create({
+          product: productId,
+          currency: currency.toLowerCase(),
+          unit_amount: amountCents,
+          recurring: { interval: interval === 'yearly' ? 'year' : 'month' },
+          metadata: { plan_id: targetPlan.id },
+        });
+        newPriceId = price.id;
+        // Persist for future calls
+        await admin.from('plans').update({
+          stripe_product_id: productId,
+          [priceIdField]: newPriceId,
+        }).eq('id', targetPlan.id);
+      } catch (err: any) {
+        console.error('[billing/change-plan] Stripe price create failed', err.message);
+        return res.status(502).json({ error: `Stripe price creation failed: ${err.message}` });
+      }
     }
 
     if (isDowngrade) {
@@ -1071,7 +1092,7 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
 
     const { data: plan } = await admin
       .from('plans')
-      .select('name, slug, extra_seat_price_usd, extra_seat_price_cad')
+      .select('id, name, slug, extra_seat_price_usd, extra_seat_price_cad')
       .eq('id', subRow.plan_id)
       .maybeSingle();
     if (!plan) return res.status(404).json({ error: 'Plan not found.' });
@@ -1122,22 +1143,54 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
       return res.json({ message: 'Extra seats removed.', extra_seats: 0 });
     }
 
-    // First-time add: create Stripe Product + Price for the seat, then attach to sub
+    // First-time add: find or create a single shared "Extra seat" Stripe Product per plan,
+    // then find or create the matching Price (one per currency × interval).
+    // This keeps the Stripe Dashboard clean — no duplicates across orgs.
     try {
-      const product = await stripe.products.create({
-        name: `Lume ${plan.name} — Extra user seat`,
-        metadata: { plan_slug: plan.slug, type: 'extra_seat' },
+      const extraSeatInterval: 'month' | 'year' = subRow.interval === 'yearly' ? 'year' : 'month';
+
+      // 1. Find or create the seat product (one per plan)
+      let seatProductId: string | null = null;
+      const productSearch = await stripe.products.search({
+        query: `metadata['plan_id']:'${plan.id}' AND metadata['type']:'extra_seat'`,
+        limit: 1,
       });
-      const price = await stripe.prices.create({
-        product: product.id,
-        currency: currency.toLowerCase(),
-        unit_amount: unitAmount,
-        recurring: { interval: subRow.interval === 'yearly' ? 'year' : 'month' },
+      if (productSearch.data.length > 0) {
+        seatProductId = productSearch.data[0].id;
+      } else {
+        const product = await stripe.products.create({
+          name: `Lume ${plan.name} — Extra user seat`,
+          description: `Additional user seat for the Lume ${plan.name} plan`,
+          metadata: { plan_id: plan.id, plan_slug: plan.slug, type: 'extra_seat' },
+        });
+        seatProductId = product.id;
+      }
+
+      // 2. Find or create the matching price (currency + interval + unit_amount)
+      const priceList = await stripe.prices.list({
+        product: seatProductId,
+        active: true,
+        limit: 100,
       });
+      const matchingPrice = priceList.data.find(
+        (p) =>
+          p.currency === currency.toLowerCase() &&
+          p.unit_amount === unitAmount &&
+          p.recurring?.interval === extraSeatInterval,
+      );
+      const seatPriceId = matchingPrice
+        ? matchingPrice.id
+        : (await stripe.prices.create({
+            product: seatProductId,
+            currency: currency.toLowerCase(),
+            unit_amount: unitAmount,
+            recurring: { interval: extraSeatInterval },
+            metadata: { plan_id: plan.id, type: 'extra_seat' },
+          })).id;
 
       const newItem = await stripe.subscriptionItems.create({
         subscription: subRow.stripe_subscription_id,
-        price: price.id,
+        price: seatPriceId,
         quantity: extra_seats,
         proration_behavior: 'always_invoice',
       });
@@ -1465,8 +1518,40 @@ router.post('/billing/create-checkout-session', async (req, res) => {
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-    // Create Stripe Checkout Session
-    // SECURITY: Never store passwords in Stripe metadata
+    // Resolve persistent Stripe Price ID for this plan + interval + currency.
+    const priceIdField =
+      interval === 'yearly'
+        ? currency === 'USD' ? 'stripe_yearly_price_id_usd' : 'stripe_yearly_price_id_cad'
+        : currency === 'USD' ? 'stripe_monthly_price_id_usd' : 'stripe_monthly_price_id_cad';
+    let priceId: string | null = plan[priceIdField] || null;
+
+    // Lazy fallback if the persistent Price ID isn't set yet.
+    if (!priceId) {
+      let productId: string | null = plan.stripe_product_id;
+      if (!productId) {
+        const product = await stripe.products.create({
+          name: `Lume ${plan.name}`,
+          description: `Lume CRM ${plan.name} subscription`,
+          metadata: { plan_id: plan.id, plan_slug: plan.slug },
+        });
+        productId = product.id;
+      }
+      const price = await stripe.prices.create({
+        product: productId,
+        currency: (currency || 'CAD').toLowerCase(),
+        unit_amount: amountCents,
+        recurring: { interval: interval === 'yearly' ? 'year' : 'month' },
+        metadata: { plan_id: plan.id },
+      });
+      priceId = price.id;
+      await admin.from('plans').update({
+        stripe_product_id: productId,
+        [priceIdField]: priceId,
+      }).eq('id', plan.id);
+    }
+
+    // Create Stripe Checkout Session — uses the persistent Price ID, no duplicates.
+    // Promo discounts (if any) flow through Stripe Coupons, not inline price_data.
     const session = await stripe.checkout.sessions.create({
       customer: customer.id,
       mode: 'subscription',
@@ -1476,17 +1561,10 @@ router.post('/billing/create-checkout-session', async (req, res) => {
       payment_method_collection: 'always',
       phone_number_collection: { enabled: true },
       line_items: [{
-        price_data: {
-          currency: (currency || 'CAD').toLowerCase(),
-          product_data: {
-            name: `Lume ${plan.name} — ${interval === 'yearly' ? 'Annual' : 'Monthly'}`,
-            description: (plan.features || []).slice(0, 3).join(', '),
-          },
-          unit_amount: amountCents,
-          recurring: { interval: interval === 'yearly' ? 'year' : 'month' },
-        },
+        price: priceId,
         quantity: 1,
       }],
+      discounts: discounts.length > 0 ? discounts : undefined,
       metadata: {
         email,
         full_name: full_name || '',
