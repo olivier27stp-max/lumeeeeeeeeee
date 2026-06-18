@@ -835,7 +835,7 @@ function ScheduleContent() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* TOOLBAR */}
-      <header className="relative z-20 flex items-center gap-2 border-b border-border bg-surface px-4 py-2.5 lg:px-6">
+      <header className="relative z-50 flex items-center gap-2 border-b border-border bg-surface px-4 py-2.5 lg:px-6">
         <button onClick={goPrev} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors"><ChevronLeft size={18} /></button>
         <button onClick={goNext} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors"><ChevronRight size={18} /></button>
         <div className="relative">
