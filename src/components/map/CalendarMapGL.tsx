@@ -98,6 +98,9 @@ interface CalendarMapGLProps {
   onOpenJob?: (jobId: string) => void;
   /** Localised label for the "open job" link in the popup. */
   openJobLabel: string;
+  /** When true, drop the card chrome (rounded corners + border) so the map can
+   *  fill a parent edge-to-edge — used for the Home page background map. */
+  bare?: boolean;
 }
 
 export default function CalendarMapGL({
@@ -105,6 +108,7 @@ export default function CalendarMapGL({
   heightClassName = 'h-[60vh]',
   onOpenJob,
   openJobLabel,
+  bare = false,
 }: CalendarMapGLProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -203,7 +207,7 @@ export default function CalendarMapGL({
 
   if (!MAPBOX_TOKEN) {
     return (
-      <div className={`flex items-center justify-center rounded-2xl border border-outline bg-surface-tertiary text-sm text-text-secondary ${heightClassName}`}>
+      <div className={`flex items-center justify-center ${bare ? '' : 'rounded-2xl border border-outline'} bg-surface-tertiary text-sm text-text-secondary ${heightClassName}`}>
         Mapbox token manquant (VITE_MAPBOX_TOKEN).
       </div>
     );
@@ -212,7 +216,7 @@ export default function CalendarMapGL({
   return (
     <div
       ref={containerRef}
-      className={`overflow-hidden rounded-2xl border border-outline bg-surface-tertiary ${heightClassName}`}
+      className={`overflow-hidden ${bare ? '' : 'rounded-2xl border border-outline'} bg-surface-tertiary ${heightClassName}`}
     />
   );
 }

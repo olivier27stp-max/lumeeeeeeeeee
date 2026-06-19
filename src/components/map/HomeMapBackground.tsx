@@ -1,34 +1,39 @@
 /**
- * HomeMapBackground — full-bleed, non-interactive job map used as the
- * background layer of the Home page (CrmWorkspace). Same visual style as the
- * Sales Map (CRMMap + job pins), but bare (no card chrome) and inert so it
- * never traps scroll/clicks: the page content scrolls on top of it and the map
- * is revealed in the empty space below the cards.
+ * HomeMapBackground — full-bleed, INTERACTIVE job map used as the background
+ * layer of the Home page (CrmWorkspace). This is the exact same map as the
+ * Calendar map (CalendarMapGL: Mapbox satellite + gold teardrop pins), rendered
+ * edge-to-edge and showing TODAY's jobs only.
  *
  * Self-contained + easy to remove: delete this file and the background block
  * in CrmWorkspace.tsx to fully revert.
  */
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { fetchMapJobs, type MapJobResult } from '../../lib/mapApi';
-import CRMMap from './CRMMap';
+import { useTranslation } from '../../i18n';
+import CalendarMapGL from './CalendarMapGL';
 
 const EMPTY_RESULT: MapJobResult = { pins: [], totalEvents: 0, missingLocationCount: 0 };
 
 export default function HomeMapBackground() {
+  const navigate = useNavigate();
+  const { t } = useTranslation();
+
+  // Today's jobs only — same data source as the Calendar map.
   const { data = EMPTY_RESULT } = useQuery({
-    queryKey: ['mapJobs', 'this_week'],
-    queryFn: () => fetchMapJobs('this_week'),
+    queryKey: ['mapJobs', 'today'],
+    queryFn: () => fetchMapJobs('today'),
     staleTime: 60_000,
   });
 
   return (
-    <CRMMap
+    <CalendarMapGL
       pins={data.pins}
       heightClassName="h-full"
       bare
-      interactive={false}
-      showJobCount={false}
+      openJobLabel={t.schedule.mapOpenJob}
+      onOpenJob={(id) => navigate(`/jobs/${id}`)}
     />
   );
 }
