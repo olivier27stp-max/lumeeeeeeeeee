@@ -5,6 +5,7 @@
 import { useTranslation } from '../i18n';
 import { useCompany } from '../contexts/CompanyContext';
 import RevenueOverviewCard from '../components/RevenueOverviewCard';
+import HomeTasksCard from '../components/HomeTasksCard';
 
 export default function CrmWorkspace() {
   const { language } = useTranslation();
@@ -27,8 +28,15 @@ export default function CrmWorkspace() {
         <p className="text-[16px] font-bold text-text-primary mt-0.5">{greeting}</p>
       </div>
 
-      {/* Wide horizontal revenue overview (collected vs scheduled, period toggle, view finances) */}
-      <RevenueOverviewCard />
+      {/* Tasks box (1/3, left) + revenue overview chart (2/3, right) */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
+        <div className="xl:col-span-1">
+          <HomeTasksCard />
+        </div>
+        <div className="xl:col-span-2">
+          <RevenueOverviewCard />
+        </div>
+      </div>
     </div>
   );
 }
