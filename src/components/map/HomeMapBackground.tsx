@@ -26,6 +26,9 @@ export default function HomeMapBackground() {
     queryKey: ['mapJobs', 'today'],
     queryFn: () => fetchMapJobs('today'),
     staleTime: 60_000,
+    // Refresh the Home every time you come back to it (navigation or tab focus).
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   return (

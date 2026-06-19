@@ -42,6 +42,9 @@ export default function RevenueOverviewCard() {
     queryKey: ['crm-revenue-series', period],
     queryFn: () => getRevenueSeries(period),
     staleTime: 60_000,
+    // Refresh the Home every time you come back to it (navigation or tab focus).
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   const points = data?.points ?? [];
