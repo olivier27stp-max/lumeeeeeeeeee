@@ -1006,9 +1006,6 @@ export default function NewJobModal({
                 </div>
                 <div>
                   <h2 className="text-[16px] font-bold tracking-tight">{isEditMode ? t.modals.editJobHeading : t.modals.newJobHeading}</h2>
-                  <p className="text-[13px] text-text-tertiary">
-                    {isEditMode ? t.modals.editJobSubtitle : t.modals.newJobSubtitle}
-                  </p>
                 </div>
               </div>
               <button onClick={() => handleClose()} className="p-2 rounded-xl border border-outline hover:bg-surface-secondary transition-colors">
