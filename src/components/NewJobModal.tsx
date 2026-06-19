@@ -261,10 +261,11 @@ export default function NewJobModal({
   const [newClientLast, setNewClientLast] = useState('');
   const [newClientEmail, setNewClientEmail] = useState('');
   const [newClientPhone, setNewClientPhone] = useState('');
+  const [newClientCompany, setNewClientCompany] = useState('');
   const [leadId, setLeadId] = useState<string | null>(null);
   const [teamSelection, setTeamSelection] = useState('');
   const [teamSuggestions, setTeamSuggestions] = useState<TeamSuggestion[]>([]);
-  const [clients, setClients] = useState<Array<{ id: string; label: string; address: string | null; street_number: string | null; street_name: string | null; city: string | null; province: string | null; postal_code: string | null; country: string | null; latitude: number | null; longitude: number | null }>>([]);
+  const [clients, setClients] = useState<Array<{ id: string; label: string; address: string | null; phone: string | null; street_number: string | null; street_name: string | null; city: string | null; province: string | null; postal_code: string | null; country: string | null; latitude: number | null; longitude: number | null }>>([]);
   const [jobNumber, setJobNumber] = useState('');
   const [salespersonId, setSalespersonId] = useState('');
   const [salespeople, setSalespeople] = useState<Array<{ id: string; label: string }>>([]);
@@ -459,6 +460,7 @@ export default function NewJobModal({
             client.company ||
             `Client ${client.id.slice(0, 6)}`,
           address: client.address,
+          phone: client.phone ?? null,
           street_number: client.street_number ?? null,
           street_name: client.street_name ?? null,
           city: client.city ?? null,
@@ -615,6 +617,7 @@ export default function NewJobModal({
     setNewClientLast('');
     setNewClientEmail('');
     setNewClientPhone('');
+    setNewClientCompany('');
     setTeamSelection('');
     setTeamSuggestions([]);
     setJobNumber('');
@@ -773,12 +776,20 @@ export default function NewJobModal({
     if (isCreatingNewClient) {
       if (!newClientFirst.trim()) { setInlineError(t.modals.newClientFirstNameRequired); return; }
       if (!newClientLast.trim()) { setInlineError(t.modals.newClientLastNameRequired); return; }
+      if (!addressLine1.trim()) {
+        const msg = language === 'fr' ? 'L’adresse du client est requise.' : 'Client address is required.';
+        setInlineError(msg);
+        try { toast.error(msg); } catch {}
+        return;
+      }
       try {
         const created = await createClient({
           first_name: newClientFirst.trim(),
           last_name: newClientLast.trim(),
           email: newClientEmail.trim() || undefined,
           phone: newClientPhone.trim() || undefined,
+          company: newClientCompany.trim() || undefined,
+          address: [addressLine1, addressCity, addressProvince, addressPostalCode].filter(Boolean).join(', ') || undefined,
         });
         resolvedClientId = created.id;
       } catch (err: any) {
@@ -1084,7 +1095,7 @@ export default function NewJobModal({
                       <label className="text-xs font-medium text-text-tertiary">{t.modals.createNewClient}</label>
                       <button
                         type="button"
-                        onClick={() => { setIsCreatingNewClient(false); setNewClientFirst(''); setNewClientLast(''); setNewClientEmail(''); setNewClientPhone(''); }}
+                        onClick={() => { setIsCreatingNewClient(false); setNewClientFirst(''); setNewClientLast(''); setNewClientEmail(''); setNewClientPhone(''); setNewClientCompany(''); setAddressLine1(''); setAddressLine2(''); setAddressCity(''); setAddressProvince(''); setAddressPostalCode(''); setAddressPlaceId(null); setAddressSearch(''); }}
                         className="text-xs text-text-secondary hover:text-text-primary transition-colors"
                       >
                         {t.modals.cancelNewClient}
@@ -1100,13 +1111,35 @@ export default function NewJobModal({
                         <input value={newClientLast} onChange={(e) => setNewClientLast(e.target.value)} className="glass-input w-full" />
                       </div>
                       <div className="space-y-1">
+                        <label className="text-xs font-medium text-text-tertiary">{t.modals.newClientPhone}</label>
+                        <input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} className="glass-input w-full" />
+                      </div>
+                      <div className="space-y-1">
                         <label className="text-xs font-medium text-text-tertiary">{t.modals.newClientEmail}</label>
                         <input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} className="glass-input w-full" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-medium text-text-tertiary">{t.modals.newClientPhone}</label>
-                        <input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} className="glass-input w-full" />
+                        <label className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Entreprise' : 'Company'}</label>
+                        <input value={newClientCompany} onChange={(e) => setNewClientCompany(e.target.value)} className="glass-input w-full" />
                       </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Adresse' : 'Address'} <span className="text-danger">*</span></label>
+                      <AddressAutocomplete
+                        value={addressSearch}
+                        onChange={setAddressSearch}
+                        onSelect={(addr: StructuredAddress) => {
+                          const line1 = [addr.street_number, addr.street_name].filter(Boolean).join(' ').trim();
+                          setAddressLine1(line1 || addr.formatted_address);
+                          setAddressCity(addr.city);
+                          setAddressProvince(addr.province);
+                          setAddressPostalCode(addr.postal_code);
+                          setAddressCountry(addr.country || 'Canada');
+                          setAddressPlaceId(addr.place_id || null);
+                          setAddressSearch(addr.formatted_address);
+                        }}
+                        placeholder={language === 'fr' ? 'Commencez à taper une adresse…' : 'Start typing an address...'}
+                      />
                     </div>
                   </div>
                 ) : (
@@ -1138,11 +1171,17 @@ export default function NewJobModal({
                               type="button"
                               onClick={() => { setClientId(client.id); setClientSearch(client.label); setClientDropdownOpen(false); }}
                               className={cn(
-                                'w-full text-left px-3 py-2 text-sm hover:bg-surface-secondary transition-colors',
-                                client.id === clientId && 'bg-surface-tertiary font-medium'
+                                'w-full text-left px-3 py-2 hover:bg-surface-secondary transition-colors',
+                                client.id === clientId && 'bg-surface-tertiary'
                               )}
                             >
-                              {client.label}
+                              <div className="text-sm font-bold text-text-primary">{client.label}</div>
+                              {client.address && (
+                                <div className="text-xs text-text-tertiary">{client.address}</div>
+                              )}
+                              {client.phone && (
+                                <div className="text-xs text-text-tertiary">{client.phone}</div>
+                              )}
                             </button>
                           ))
                         }
@@ -1262,97 +1301,6 @@ export default function NewJobModal({
                   )}
                 </Box>
               )}
-
-              {/* Job site address */}
-              <Box title={t.modals.jobSiteAddress}>
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-text-tertiary">{t.modals.searchAddress}</label>
-                    <AddressAutocomplete
-                      value={addressSearch}
-                      onChange={setAddressSearch}
-                      onSelect={(addr: StructuredAddress) => {
-                        const line1 = [addr.street_number, addr.street_name].filter(Boolean).join(' ').trim();
-                        setAddressLine1(line1 || addr.formatted_address);
-                        setAddressCity(addr.city);
-                        setAddressProvince(addr.province);
-                        setAddressPostalCode(addr.postal_code);
-                        setAddressCountry(addr.country || 'Canada');
-                        setAddressPlaceId(addr.place_id || null);
-                        setAddressSearch(addr.formatted_address);
-                      }}
-                      placeholder="Start typing an address..."
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-text-tertiary">
-                        {t.modals.addressLine1} <span className="text-danger">*</span>
-                      </label>
-                      <input
-                        value={addressLine1}
-                        onChange={(e) => setAddressLine1(e.target.value)}
-                        className="glass-input w-full"
-                        placeholder={t.modals.addressLine1Placeholder}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-text-tertiary">{t.modals.addressLine2}</label>
-                      <input
-                        value={addressLine2}
-                        onChange={(e) => setAddressLine2(e.target.value)}
-                        className="glass-input w-full"
-                        placeholder={t.modals.addressLine2Placeholder}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-text-tertiary">
-                        {t.modals.cityLabel}
-                      </label>
-                      <input
-                        value={addressCity}
-                        onChange={(e) => setAddressCity(e.target.value)}
-                        className="glass-input w-full"
-                        placeholder={t.modals.cityPlaceholder}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-text-tertiary">
-                        {t.modals.provinceLabel}
-                      </label>
-                      <input
-                        value={addressProvince}
-                        onChange={(e) => setAddressProvince(e.target.value)}
-                        className="glass-input w-full"
-                        placeholder={t.modals.provincePlaceholder}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-text-tertiary">{t.modals.postalCodeLabel}</label>
-                      <input
-                        value={addressPostalCode}
-                        onChange={(e) => setAddressPostalCode(e.target.value)}
-                        className="glass-input w-full"
-                        placeholder={t.modals.postalCodePlaceholder}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-text-tertiary">{t.modals.countryLabel}</label>
-                      <input
-                        value={addressCountry}
-                        onChange={(e) => setAddressCountry(e.target.value)}
-                        className="glass-input w-full"
-                        placeholder={t.modals.countryPlaceholder}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </Box>
 
               <Box title={t.modals.jobType}>
                   <div className="inline-flex rounded-xl bg-surface-secondary border border-border p-1">
