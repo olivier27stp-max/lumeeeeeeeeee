@@ -271,8 +271,14 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
       .single();
 
     if (createError) {
-      console.error('[invitations/send] create error:', createError.message);
-      return res.status(500).json({ error: 'Failed to create invitation.' });
+      console.error('[invitations/send] create error:', createError.message, createError.code, createError.details);
+      // TEMP diagnostic — surface the real DB error to the caller. Remove after debugging.
+      return res.status(500).json({
+        error: 'Failed to create invitation.',
+        detail: createError.message,
+        code: createError.code,
+        hint: createError.hint,
+      });
     }
 
     // Get org + branding + inviter info in parallel
