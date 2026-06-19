@@ -836,6 +836,33 @@ export default function NewJobModal({
       if (typeof window !== 'undefined' && !window.confirm(msg)) return;
     }
 
+    // Si un numéro de job est saisi manuellement, vérifier qu'il n'est pas déjà
+    // pris dans l'org (la RLS limite la requête aux jobs de l'org courante).
+    const trimmedJobNumber = jobNumber.trim();
+    if (trimmedJobNumber) {
+      try {
+        let dupQuery = supabase
+          .from('jobs')
+          .select('id')
+          .eq('job_number', trimmedJobNumber)
+          .is('deleted_at', null)
+          .limit(1);
+        if (initialValues?.id) dupQuery = dupQuery.neq('id', initialValues.id);
+        const { data: dup } = await dupQuery.maybeSingle();
+        if (dup?.id) {
+          const msg = language === 'fr'
+            ? `Le numéro de job « ${trimmedJobNumber} » est déjà utilisé.`
+            : `Job number "${trimmedJobNumber}" is already in use.`;
+          setInlineError(msg);
+          try { toast.error(msg); } catch {}
+          return;
+        }
+      } catch (err) {
+        // Échec de la vérification : on laisse la contrainte DB trancher au save.
+        console.error('[jobs] job number uniqueness check failed', err);
+      }
+    }
+
     const filteredItems = lineItems
       .filter((item) => item.name.trim())
       .map((item) => ({
@@ -1066,10 +1093,9 @@ export default function NewJobModal({
                   <label className="text-xs font-medium text-text-tertiary">{t.jobs.jobNumber}</label>
                   <input
                     value={jobNumber}
-                    readOnly
-                    disabled
-                    className="glass-input w-full opacity-60 cursor-not-allowed"
-                    placeholder={language === 'fr' ? 'Attribué automatiquement' : 'Auto-assigned'}
+                    onChange={(event) => setJobNumber(event.target.value)}
+                    className="glass-input w-full"
+                    placeholder={language === 'fr' ? 'Numéro de job' : 'Job number'}
                   />
                 </div>
 
