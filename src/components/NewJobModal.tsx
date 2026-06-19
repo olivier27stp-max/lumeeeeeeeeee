@@ -305,7 +305,22 @@ export default function NewJobModal({
       setTeamSelection(initialValues?.team_id || '');
     }
     setJobNumber(initialValues?.job_number || '');
-    setSalespersonId(initialValues?.salesperson_id || '');
+    if (initialValues?.salesperson_id) {
+      setSalespersonId(initialValues.salesperson_id);
+    } else if (isEditMode) {
+      // Édition : garder le vendeur tel quel (possiblement vide).
+      setSalespersonId('');
+    } else {
+      // Nouveau job : assigner par défaut le vendeur à l'utilisateur courant.
+      // Reste modifiable via le menu déroulant ci-dessous.
+      setSalespersonId('');
+      supabase.auth
+        .getUser()
+        .then(({ data }) => {
+          if (data.user?.id) setSalespersonId(data.user.id);
+        })
+        .catch(() => {});
+    }
     setJobType(initialValues?.job_type || 'one_off');
     if (isEditMode) {
       const editStartDate = formatLocalDateInput(initialValues?.scheduled_at || null);
