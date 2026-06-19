@@ -83,7 +83,12 @@ export async function sendInvitation(
       ...(options?.org_id ? { org_id: options.org_id } : {}),
     }),
   });
-  if (!res.ok) throw new Error((await res.json()).error || 'Failed to send invitation.');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    // TEMP diagnostic — append the server detail/code so it shows in the UI. Remove after debugging.
+    const parts = [body.error || 'Failed to send invitation.', body.detail, body.code].filter(Boolean);
+    throw new Error(parts.join(' | '));
+  }
   return res.json();
 }
 
