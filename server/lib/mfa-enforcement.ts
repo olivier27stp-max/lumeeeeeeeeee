@@ -39,6 +39,23 @@ const MFA_REQUIRED_PREFIXES = [
 ];
 
 /**
+ * TEMPORARY MFA exemption — single account, auto-expiring.
+ * Requested by the owner on 2026-06-19. Expires 2026-06-21 23:59:59 UTC (2 days).
+ * After the expiry timestamp this map is inert and normal MFA enforcement resumes
+ * automatically — no need to remember to remove it. Email match is case-insensitive.
+ */
+const TEMP_MFA_EXEMPTIONS: Record<string, string> = {
+  'willhebert30@gmail.com': '2026-06-21T23:59:59Z',
+};
+
+function isTemporarilyExempt(email?: string | null): boolean {
+  if (!email) return false;
+  const until = TEMP_MFA_EXEMPTIONS[email.trim().toLowerCase()];
+  if (!until) return false;
+  return new Date() < new Date(until);
+}
+
+/**
  * Middleware that enforces MFA for admin/owner roles on sensitive endpoints.
  * Mount this AFTER body parsing and auth middleware.
  */
@@ -66,6 +83,15 @@ export function mfaEnforcementMiddleware() {
 
       const isAdmin = await isOrgAdminOrOwner(auth.client, auth.user.id, auth.orgId);
       if (!isAdmin) return next(); // Non-admins don't need MFA for these routes
+
+      // Temporary, time-boxed exemption for a single owner account (auto-expires).
+      if (isTemporarilyExempt(auth.user.email)) {
+        console.warn(
+          `[mfa-enforcement] TEMP EXEMPTION active for ${auth.user.email} on ${req.method} ${req.path} ` +
+            `(expires ${TEMP_MFA_EXEMPTIONS[auth.user.email!.trim().toLowerCase()]})`,
+        );
+        return next();
+      }
 
       // Check MFA status via Supabase Auth
       const { data: factorsData } = await auth.client.auth.mfa.listFactors();
