@@ -1336,7 +1336,7 @@ const en = {
     salesperson: 'Salesperson',
     assign: 'Assign',
     jobType: 'Job Type',
-    oneOff: 'One time',
+    oneOff: 'One-off',
     recurring: 'Service plan',
     schedule: 'Schedule',
     showCalendar: 'Show Calendar',
