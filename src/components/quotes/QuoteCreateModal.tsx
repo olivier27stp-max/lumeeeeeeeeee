@@ -538,7 +538,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
 
           {/* ── Body (form + optional client-view preview) ── */}
           <div className="flex-1 flex min-h-0 overflow-hidden">
-          <form id="quote-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+          <form id="quote-form" onSubmit={handleSubmit} className="item-form flex-1 overflow-y-auto px-6 py-6 space-y-5">
 
             {/* ── Contact section (inline lead creation) ── */}
             {createLeadInline && !lead && (

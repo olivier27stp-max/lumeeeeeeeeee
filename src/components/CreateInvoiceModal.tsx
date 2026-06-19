@@ -465,7 +465,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
             {/* ── Step 3: Draft ── */}
             {step === 'draft' && (
               <>
-                <section className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                <section className="item-form flex-1 overflow-y-auto px-5 py-4 space-y-4">
                   {selectedJob && (
                     <div className="flex items-center gap-2 text-xs text-text-muted bg-surface-secondary/50 rounded-lg px-3 py-2">
                       <Briefcase size={13} className="text-primary shrink-0" />
