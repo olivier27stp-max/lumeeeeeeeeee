@@ -973,7 +973,6 @@ export default function NewJobModal({
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <label className="text-xs font-medium text-text-tertiary">{t.modals.clientName}</label>
                     <div className="relative">
                     <input
                       type="text"
@@ -981,7 +980,7 @@ export default function NewJobModal({
                       onChange={(e) => { setClientSearch(e.target.value); setClientDropdownOpen(true); if (!e.target.value) setClientId(''); }}
                       onFocus={() => setClientDropdownOpen(true)}
                       className="glass-input w-full"
-                      placeholder={t.modals.searchClientPlaceholder}
+                      placeholder={t.modals.selectClient}
                       autoComplete="off"
                     />
                     {clientDropdownOpen && (
