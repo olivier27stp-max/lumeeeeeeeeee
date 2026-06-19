@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Plus, Navigation, TrendingUp, DollarSign, Briefcase, Target, Users, Calendar as CalIcon, ArrowUpRight, Trophy, Radio } from 'lucide-react';
+import { ArrowRight, Plus, Navigation, TrendingUp, DollarSign, Briefcase, Target, Users, Calendar as CalIcon, ArrowUpRight, Trophy, Radio, ListChecks } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../i18n';
 import { CRMMapCard } from '../components/map';
@@ -193,7 +193,7 @@ export default function Dashboard() {
       )}
 
       {/* ═══ MAIN CONTENT — Jobs + Revenue side by side ═══ */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-4">
         {/* Today's jobs */}
         <div className={cn(darkPanel, 'overflow-hidden')}>
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-border-light">
@@ -261,15 +261,22 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Right column — Revenue chart + Top balances */}
+        {/* Right column — Tasks + Revenue chart + Top balances */}
         <div className="space-y-4">
-          {/* Revenue */}
-          <div className={cn(darkPanel, 'overflow-hidden')}>
-            <div className="px-5 py-3.5 border-b border-border-light">
-              <h3 className="text-[13px] font-semibold text-text-primary">{fr ? 'Revenus' : 'Revenue'}</h3>
+          {/* Tasks (1/3, left) + Revenue chart (2/3, right) */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-1">
+              <TasksWidget fr={fr} navigate={navigate} />
             </div>
-            <div className="p-5">
-              <RevenueChart data={data} fr={fr} />
+            <div className="col-span-2">
+              <div className={cn(darkPanel, 'overflow-hidden h-full')}>
+                <div className="px-5 py-3.5 border-b border-border-light">
+                  <h3 className="text-[13px] font-semibold text-text-primary">{fr ? 'Revenus' : 'Revenue'}</h3>
+                </div>
+                <div className="p-5">
+                  <RevenueChart data={data} fr={fr} />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -448,6 +455,98 @@ function MiniStat({ label, value, warn, onClick }: { label: string; value: strin
         {value}
       </p>
     </button>
+  );
+}
+
+/* ═══ Today's tasks widget — Late / Next ═══ */
+function formatDueDate(due: string, fr: boolean): string {
+  const d = new Date(due.length <= 10 ? due + 'T12:00:00' : due);
+  return d.toLocaleDateString(fr ? 'fr-CA' : 'en-US', { month: 'short', day: 'numeric' });
+}
+
+function TasksWidget({ fr, navigate }: { fr: boolean; navigate: any }) {
+  const [view, setView] = useState<'late' | 'next'>('late');
+
+  const { data: tasks = [] } = useQuery({
+    queryKey: ['dashboard-tasks-open'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('tasks_active')
+        .select('id, title, due_date, priority, status')
+        .eq('status', 'open')
+        .not('due_date', 'is', null)
+        .order('due_date', { ascending: true })
+        .limit(100);
+      return (data || []) as { id: string; title: string; due_date: string; priority: string }[];
+    },
+    staleTime: 30_000,
+  });
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const late = tasks.filter(t => (t.due_date || '').slice(0, 10) < todayStr);
+  const next = tasks.filter(t => (t.due_date || '').slice(0, 10) >= todayStr);
+  const list = view === 'late' ? late : next;
+
+  return (
+    <div className={cn(darkPanel, 'overflow-hidden flex flex-col h-full')}>
+      <div className="px-3 py-3 border-b border-border-light">
+        <h3 className="text-[12px] font-semibold text-text-primary flex items-center gap-1.5 mb-2.5">
+          <ListChecks size={13} className="text-primary" />
+          {fr ? 'Tâches' : 'Tasks'}
+        </h3>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setView('late')}
+            className={cn(
+              'flex-1 h-7 rounded-lg text-[10px] font-semibold transition-colors',
+              view === 'late' ? 'bg-red-500/15 text-red-400' : 'text-text-muted hover:bg-surface-tertiary'
+            )}
+          >
+            {fr ? 'Retard' : 'Late'}{late.length > 0 ? ` ${late.length}` : ''}
+          </button>
+          <button
+            onClick={() => setView('next')}
+            className={cn(
+              'flex-1 h-7 rounded-lg text-[10px] font-semibold transition-colors',
+              view === 'next' ? 'bg-primary/15 text-primary' : 'text-text-muted hover:bg-surface-tertiary'
+            )}
+          >
+            {fr ? 'À venir' : 'Next'}{next.length > 0 ? ` ${next.length}` : ''}
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto max-h-[260px]">
+        {list.length === 0 ? (
+          <div className="px-3 py-8 text-center text-[11px] text-text-muted">
+            {view === 'late'
+              ? (fr ? 'Aucune tâche en retard' : 'No late tasks')
+              : (fr ? 'Aucune tâche à venir' : 'No upcoming tasks')}
+          </div>
+        ) : (
+          list.map((task, idx) => (
+            <button
+              key={task.id}
+              onClick={() => navigate('/tasks')}
+              className={cn(
+                'w-full flex items-start gap-2 px-3 py-2.5 text-left hover:bg-surface-tertiary/40 transition-colors',
+                idx > 0 && 'border-t border-border-light'
+              )}
+            >
+              <span className={cn(
+                'w-1.5 h-1.5 rounded-full shrink-0 mt-1.5',
+                task.priority === 'high' ? 'bg-red-500' : task.priority === 'medium' ? 'bg-amber-400' : 'bg-gray-500'
+              )} />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-medium text-text-primary truncate leading-tight">{task.title}</p>
+                <p className={cn('text-[10px] tabular-nums mt-0.5', view === 'late' ? 'text-red-400' : 'text-text-muted')}>
+                  {formatDueDate(task.due_date, fr)}
+                </p>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
 
