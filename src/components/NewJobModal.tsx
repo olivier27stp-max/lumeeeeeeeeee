@@ -11,6 +11,7 @@ import TeamSuggestions from './TeamSuggestions';
 import type { TeamSuggestion } from '../lib/teamSuggestionsApi';
 import { Job } from '../types';
 import ServicePicker from './ServicePicker';
+import FormPageHost from './ui/FormPageHost';
 import type { PredefinedService } from '../lib/servicesApi';
 import { supabase } from '../lib/supabase';
 import AddressAutocomplete, { type StructuredAddress } from './AddressAutocomplete';
@@ -901,12 +902,12 @@ export default function NewJobModal({
     <>
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 backdrop-blur-md p-4">
+        <FormPageHost>
           <motion.div
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.98 }}
-            className="w-full max-w-6xl max-h-[92vh] glass rounded-2xl border border-border shadow-2xl flex flex-col overflow-hidden text-text-primary"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[120] bg-surface flex flex-col overflow-hidden text-text-primary"
           >
             <div className="px-6 py-5 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1622,7 +1623,7 @@ export default function NewJobModal({
               </div>
             </div>
           </motion.div>
-        </div>
+        </FormPageHost>
       )}
     </AnimatePresence>
 

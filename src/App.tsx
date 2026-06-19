@@ -1149,8 +1149,10 @@ function AuthenticatedApp({
             </div>
           </header>
 
-          {/* Page content */}
-          <div className="flex-1 overflow-y-auto">
+          {/* Page content — relative host so full-page item forms (jobs, quotes…)
+              can portal in and fill this area while the sidebar + top bar stay. */}
+          <div id="page-content-area" className="relative flex-1 min-h-0">
+            <div className="absolute inset-0 overflow-y-auto">
             <ErrorBoundary labels={t.errorBoundary}>
                   <Routes>
                     <Route path="/" element={<Navigate to="/day" replace />} />
@@ -1236,6 +1238,7 @@ function AuthenticatedApp({
                     <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
                   </Routes>
             </ErrorBoundary>
+            </div>
           </div>
         </main>
       </div>

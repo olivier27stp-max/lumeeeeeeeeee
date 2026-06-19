@@ -20,6 +20,7 @@ import type { Lead, QuotePreset } from '../../types';
 import { resolveTaxes, calculateTaxes, type TaxConfig } from '../../lib/taxApi';
 import { useTranslation } from '../../i18n';
 import SpecificNotesInline, { type SpecificNotesInlineHandle } from '../SpecificNotesInline';
+import FormPageHost from '../ui/FormPageHost';
 
 interface QuoteCreateModalProps {
   isOpen: boolean;
@@ -500,15 +501,12 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
 
   return (
     <>
-      <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 backdrop-blur-md p-4">
+      <FormPageHost>
         <motion.div
-          initial={{ opacity: 0, y: 16, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 16, scale: 0.98 }}
-          className={cn(
-            'w-full max-h-[94vh] bg-surface rounded-2xl border border-outline shadow-2xl flex flex-col overflow-hidden transition-[max-width] duration-200',
-            showPreview ? 'max-w-7xl' : 'max-w-5xl',
-          )}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 z-[130] bg-surface flex flex-col overflow-hidden"
         >
           {/* ── Header ── */}
           <div className="px-6 py-5 border-b border-outline flex items-center justify-between bg-surface-secondary">
@@ -902,7 +900,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
             </button>
           </div>
         </motion.div>
-      </div>
+      </FormPageHost>
 
       <AnimatePresence>
         {servicePickerOpen && (

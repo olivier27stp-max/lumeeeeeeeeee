@@ -1340,3 +1340,33 @@ tr[data-status="cancelled"] {
   --color-primary-light: #1e2d4d;
   --color-primary-lighter: #171f30;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   Input "typebar" styling — global, app-wide.
+   • Text-entry fields share the page background colour (var(--color-surface)).
+   • In dark mode, text + outline turn white for stronger contrast.
+   Unlayered so it overrides Tailwind utility classes on inputs.
+   Excludes toggles / non-text controls.
+   ════════════════════════════════════════════════════════════════ */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="reset"]),
+textarea,
+select {
+  background-color: var(--color-surface);
+}
+
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="reset"]),
+.dark textarea,
+.dark select,
+body.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="reset"]),
+body.dark textarea,
+body.dark select {
+  color: #ffffff;
+  border-color: #ffffff;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder,
+body.dark input::placeholder,
+body.dark textarea::placeholder {
+  color: rgba(255, 255, 255, 0.55);
+}
