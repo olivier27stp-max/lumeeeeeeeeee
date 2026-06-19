@@ -6,6 +6,7 @@ import { useTranslation } from '../i18n';
 import { useCompany } from '../contexts/CompanyContext';
 import RevenueOverviewCard from '../components/RevenueOverviewCard';
 import HomeTasksCard from '../components/HomeTasksCard';
+import HomeServiceMixCard from '../components/HomeServiceMixCard';
 import { HomeMapBackground } from '../components/map';
 
 export default function CrmWorkspace() {
@@ -46,6 +47,7 @@ export default function CrmWorkspace() {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
           <div className="xl:col-span-1">
             <HomeTasksCard />
+            <HomeServiceMixCard />
           </div>
           <div className="xl:col-span-2">
             <RevenueOverviewCard />
