@@ -154,6 +154,7 @@ import { usePlatformOwner } from './hooks/usePlatformOwner';
 // Route groups (extracted to src/routes/* to keep this file from growing further)
 import { PublicRoutes } from './routes/PublicRoutes';
 import { TokenRoute, detectTokenKind } from './routes/TokenRoutes';
+import { useQueryClient } from '@tanstack/react-query';
 // Cross-cutting hooks previously inlined in App()
 import { useInactivityLogout } from './hooks/useInactivityLogout';
 import { useCommandPaletteShortcut } from './hooks/useCommandPaletteShortcut';
@@ -249,6 +250,7 @@ export default function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   // NOTE: useRealtimeNotifications uses useCompany() internally, so it must be
   // called inside <CompanyProvider>. It's hoisted into AuthenticatedApp instead.
   const [unreadSms, setUnreadSms] = useState(0);
@@ -351,6 +353,11 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const prev = user;
       setUser(session?.user ?? null);
+      // Reconnect (sign back in): drop all cached query data so the whole app
+      // reloads fresh instead of showing the previous session's cache.
+      if (event === 'SIGNED_IN') {
+        void queryClient.invalidateQueries();
+      }
       // Session expired or user signed out in another tab
       if (event === 'SIGNED_OUT' && prev) {
         import('sonner').then(({ toast }) => {
@@ -635,6 +642,17 @@ function AuthenticatedApp({
   navigate,
   location,
 }: any) {
+  const queryClient = useQueryClient();
+  // Bumping this remounts GlobalSearch (it holds local state, not react-query),
+  // so a logo click resets the search bar to a clean state.
+  const [searchResetKey, setSearchResetKey] = useState(0);
+  // Click the Lume logo → refresh everything: drop all cached data (refetches
+  // active queries), reset the search bar, and go Home.
+  const handleLogoClick = () => {
+    void queryClient.invalidateQueries();
+    setSearchResetKey((k) => k + 1);
+    navigate('/');
+  };
   const { current, currentRole, companies, loading: companyLoading, isMultiCompany, hasNoCompany, currentOrgId } = useCompany();
   // Call realtime notifications hook INSIDE CompanyProvider (it uses useCompany() internally)
   const { unreadCount: unreadNotifs, resetCount: resetNotifCount, countsByNav: notifCountsByNav } = useRealtimeNotifications(!!user);
@@ -825,7 +843,7 @@ function AuthenticatedApp({
                   exit={{ opacity: 0 }}
                   className="pl-1"
                 >
-                  <img src="/lume-logo-v2.png" alt="Lume CRM" onClick={() => navigate('/')} className="h-7 w-auto object-contain dark:invert cursor-pointer" />
+                  <img src="/lume-logo-v2.png" alt="Lume CRM" onClick={handleLogoClick} className="h-7 w-auto object-contain dark:invert cursor-pointer" />
                 </motion.div>
               ) : (
                 <motion.div
@@ -835,7 +853,7 @@ function AuthenticatedApp({
                   exit={{ opacity: 0 }}
                   className="mx-auto"
                 >
-                  <img src="/lume-logo-v2.png" alt="Lume CRM" onClick={() => navigate('/')} className="h-6 w-auto object-contain dark:invert cursor-pointer" />
+                  <img src="/lume-logo-v2.png" alt="Lume CRM" onClick={handleLogoClick} className="h-6 w-auto object-contain dark:invert cursor-pointer" />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1109,7 +1127,7 @@ function AuthenticatedApp({
             )}
             <OfficeSwitcher />
             <div className="ml-auto">
-              <GlobalSearch />
+              <GlobalSearch key={searchResetKey} />
             </div>
             <div className="flex items-center gap-0.5">
               <button
