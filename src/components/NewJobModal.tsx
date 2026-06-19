@@ -972,8 +972,9 @@ export default function NewJobModal({
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-2 relative">
+                  <div className="space-y-2">
                     <label className="text-xs font-medium text-text-tertiary">{t.modals.clientName}</label>
+                    <div className="relative">
                     <input
                       type="text"
                       value={clientSearch || (clientId ? clients.find(c => c.id === clientId)?.label || '' : '')}
@@ -1013,6 +1014,7 @@ export default function NewJobModal({
                         )}
                       </div>
                     )}
+                    </div>
                     {clientDropdownOpen && (
                       <div className="fixed inset-0 z-40" onClick={() => setClientDropdownOpen(false)} />
                     )}
