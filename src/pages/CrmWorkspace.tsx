@@ -22,23 +22,27 @@ export default function CrmWorkspace() {
     : (fr ? 'Bon retour' : 'Welcome back');
 
   return (
-    <div className="relative min-h-screen -m-6 lg:-m-10 -mt-8 overflow-hidden">
+    <div className="relative -m-6 lg:-m-10 -mt-8">
       {/* ─── HOME MAP BACKGROUND (exact Calendar map — today's jobs) ──────────
+          Sticky + full viewport: the map stays pinned to the screen while the
+          content scrolls over it, so scrolling down past the cards leaves only
+          the complete map on screen.
           Easy to remove: delete this whole block + HomeMapBackground.tsx and
-          restore `bg-surface ... p-6 lg:p-8` on the wrapper above. */}
-      <div className="absolute inset-0 z-0">
+          restore `bg-surface min-h-screen ... p-6 lg:p-8` on the wrapper. */}
+      <div className="sticky top-0 z-0 h-[100dvh] -mb-[100dvh] overflow-hidden">
         <HomeMapBackground />
-        {/* Scrim: keeps the greeting + cards readable up top, fades out so the
-            map shows through clearly below. pointer-events-none so it never
-            blocks interaction with the map underneath. */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-[55vh] bg-gradient-to-b from-surface via-surface/85 to-transparent" />
       </div>
       {/* ─── END HOME MAP BACKGROUND ──────────────────────────────────────── */}
 
-      {/* Foreground content — sits on top of the map. The wrapper is
+      {/* Foreground content — scrolls on top of the map. The wrapper is
           pointer-events-none so empty areas let clicks/scroll reach the
           interactive map; only the cards re-enable pointer events. */}
       <div className="relative z-10 p-6 lg:p-8 pointer-events-none">
+        {/* Scrim: fades the top so the greeting + cards stay readable over the
+            satellite imagery, and scrolls away with the content so the full map
+            is clean once the cards are gone. */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[70vh] bg-gradient-to-b from-surface via-surface/80 to-transparent" />
+
         {/* TOP BAR — bold date + "welcome back, <name>" greeting */}
         <div className="mb-5">
           <h1 className="text-[24px] font-bold text-text-primary first-letter:uppercase">{todayLabel}</h1>
@@ -55,8 +59,9 @@ export default function CrmWorkspace() {
           </div>
         </div>
 
-        {/* Spacer — leaves a clear, interactive stretch of map below the cards. */}
-        <div className="h-[55vh]" />
+        {/* Scroll room — lets you scroll the cards fully off-screen so only the
+            complete map remains visible. */}
+        <div className="h-[120vh]" />
       </div>
     </div>
   );
