@@ -955,13 +955,12 @@ export default function NewJobModal({
 
             <form id="new-job-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
               <section className="space-y-2">
-                <label className="text-xs font-medium text-text-tertiary">{t.modals.jobTitle}</label>
                 <input
                   autoFocus
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   className="glass-input w-full text-lg text-center"
-                  placeholder="e.g. Residential Cleaning - Smith Residence"
+                  placeholder={t.modals.jobTitle}
                   required
                 />
               </section>
