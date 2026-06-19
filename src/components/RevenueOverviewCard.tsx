@@ -25,7 +25,7 @@ import { formatCurrency } from '../lib/utils';
 import { getRevenueSeries, type RevenuePeriod } from '../lib/revenueSeriesApi';
 
 const COLLECTED_COLOR = 'var(--color-primary)';
-const SCHEDULED_COLOR = '#9ca3af';
+const SCHEDULED_COLOR = '#3b82f6';
 
 function useIsDark() {
   return document.documentElement.classList.contains('dark');
