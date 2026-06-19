@@ -1437,7 +1437,7 @@ const en = {
     // EditJobModal
     editJobTitle: 'Edit Job',
     updateJobDetails: 'Update job details and schedule',
-    jobTitle: 'Job Title',
+    jobTitle: 'Title',
     deleteJobConfirmShort: 'Are you sure you want to delete this job?',
     saveChanges: 'Save Changes',
     notesPlaceholder: 'Add any additional notes here...',

@@ -1430,7 +1430,7 @@ const fr: TranslationKeys = {
 
     editJobTitle: 'Modifier le job',
     updateJobDetails: 'Mettre à jour les détails et l\'horaire du job',
-    jobTitle: 'Titre du job',
+    jobTitle: 'Titre',
     deleteJobConfirmShort: 'Es-tu sûr de vouloir supprimer ce job?',
     saveChanges: 'Enregistrer les modifications',
     notesPlaceholder: 'Ajouter des notes supplémentaires ici...',
