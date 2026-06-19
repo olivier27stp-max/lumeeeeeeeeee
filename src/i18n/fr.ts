@@ -1335,7 +1335,7 @@ const fr: TranslationKeys = {
     assign: 'Assigner',
     jobType: 'Type de job',
     oneOff: 'Service ponctuel',
-    recurring: 'Forfait',
+    recurring: 'Forfait de service',
     schedule: 'Horaire',
     showCalendar: 'Afficher le calendrier',
     startDate: 'Date de début',

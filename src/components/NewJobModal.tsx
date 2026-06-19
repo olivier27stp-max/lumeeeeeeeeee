@@ -4,7 +4,7 @@ import { AlertTriangle, BriefcaseBusiness, Calendar, ChevronDown, Clock3, MapPin
 import { useQuery } from '@tanstack/react-query';
 import { cn, formatCurrency } from '../lib/utils';
 import { listClients, createClient } from '../lib/clientsApi';
-import { listSalespeople } from '../lib/jobsApi';
+import { listSalespeople, applyJobExtras } from '../lib/jobsApi';
 import { resolveClientIdForLead } from '../lib/leadsApi';
 import { listTeams } from '../lib/teamsApi';
 import TeamSuggestions from './TeamSuggestions';
@@ -201,6 +201,32 @@ function normalizeMoneyInput(value: string) {
 
 const UNASSIGNED_TEAM_VALUE = '__UNASSIGNED__';
 
+/** A titled card "box". Each form section lives in one of these. */
+function Box({
+  title,
+  subtitle,
+  right,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-border bg-surface-card p-5 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-[15px] font-bold tracking-tight text-text-primary">{title}</h3>
+          {subtitle && <p className="text-[12px] text-text-tertiary mt-0.5">{subtitle}</p>}
+        </div>
+        {right}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export default function NewJobModal({
   isOpen,
   onClose,
@@ -243,6 +269,13 @@ export default function NewJobModal({
   const [salespersonId, setSalespersonId] = useState('');
   const [salespeople, setSalespeople] = useState<Array<{ id: string; label: string }>>([]);
   const [jobType, setJobType] = useState<'one_off' | 'recurring'>('one_off');
+  // Assignment: choose between assigning an individual user or a team (tabs)
+  const [assignMode, setAssignMode] = useState<'user' | 'team'>('team');
+  const [assignedUserId, setAssignedUserId] = useState('');
+  // Job tags + "ask for a review" setup
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [askForReview, setAskForReview] = useState(false);
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('10:00');
@@ -323,6 +356,14 @@ export default function NewJobModal({
         .catch(() => {});
     }
     setJobType(initialValues?.job_type || 'one_off');
+    // Assignment / tags / review (best-effort fields — may be absent on the draft)
+    const iv = initialValues as any;
+    const initialAssignedUser = iv?.assigned_user_id || '';
+    setAssignedUserId(initialAssignedUser);
+    setAssignMode(initialAssignedUser && !(initialValues?.team_id) ? 'user' : 'team');
+    setTags(Array.isArray(iv?.tags) ? iv.tags : []);
+    setTagInput('');
+    setAskForReview(Boolean(iv?.ask_for_review));
     if (isEditMode) {
       const editStartDate = formatLocalDateInput(initialValues?.scheduled_at || null);
       const editStartTime = formatLocalTimeInput(initialValues?.scheduled_at || null);
@@ -711,6 +752,14 @@ export default function NewJobModal({
     return null;
   }, [selectedTeamSuggestion, startTime, endTime, t]);
 
+  const addTag = (raw: string) => {
+    const value = raw.trim();
+    if (!value) return;
+    setTags((prev) => (prev.some((tag) => tag.toLowerCase() === value.toLowerCase()) ? prev : [...prev, value]));
+    setTagInput('');
+  };
+  const removeTag = (value: string) => setTags((prev) => prev.filter((tag) => tag !== value));
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setInlineError(null);
@@ -814,7 +863,11 @@ export default function NewJobModal({
       }
     }
 
-    const teamIdPayload = teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection;
+    // Assignment is exclusive: a job is assigned to a team OR an individual user.
+    const teamIdPayload = assignMode === 'user'
+      ? null
+      : (teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection);
+    const assignedUserPayload = assignMode === 'user' ? (assignedUserId || null) : null;
 
     const scheduledAt = startDate && startTime ? buildDateTime(startDate, startTime) : null;
     const endAt = startDate && endTime ? buildDateTime(startDate, endTime) : null;
@@ -910,6 +963,16 @@ export default function NewJobModal({
         total: grandTotalCents / 100,
         tax_lines: taxLines,
       });
+      // Persist tags / ask-for-review / individual assignee (best-effort —
+      // no-ops gracefully if the migration hasn't been applied yet).
+      if (createdJob?.id) {
+        await applyJobExtras(createdJob.id, {
+          tags,
+          askForReview,
+          assignedUserId: assignedUserPayload,
+        });
+      }
+
       // Save specific notes (photos, files, etc.) if any were added
       if (createdJob?.id && specificNotesRef.current?.hasContent()) {
         await specificNotesRef.current.saveNote('job', createdJob.id);
@@ -954,18 +1017,70 @@ export default function NewJobModal({
             </div>
 
             <form id="new-job-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
-              <section className="space-y-2">
+              <Box title={language === 'fr' ? 'Détails' : 'Details'}>
                 <input
                   autoFocus
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  className="glass-input w-full text-lg text-center"
+                  className="glass-input w-full text-lg"
                   placeholder={t.modals.jobTitle}
                   required
                 />
-              </section>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-text-tertiary">{t.jobs.jobNumber}</label>
+                    <input
+                      value={jobNumber}
+                      onChange={(event) => setJobNumber(event.target.value)}
+                      className="glass-input w-full"
+                      placeholder={language === 'fr' ? 'Numéro de job' : 'Job number'}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-text-tertiary">{t.modals.salesperson}</label>
+                    <select
+                      value={salespersonId}
+                      onChange={(event) => setSalespersonId(event.target.value)}
+                      className="glass-input w-full"
+                    >
+                      <option value="">{t.modals.assign}</option>
+                      {salespeople.map((person) => (
+                        <option key={person.id} value={person.id}>
+                          {person.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Étiquettes' : 'Tags'}</label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {tags.map((tag) => (
+                      <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary text-[12px] font-medium px-2.5 py-1">
+                        {tag}
+                        <button type="button" onClick={() => removeTag(tag)} className="hover:text-danger"><X size={12} /></button>
+                      </span>
+                    ))}
+                    <input
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); } }}
+                      onBlur={() => addTag(tagInput)}
+                      className="glass-input flex-1 min-w-[160px]"
+                      placeholder={language === 'fr' ? 'Ajouter une étiquette…' : 'Add a tag…'}
+                    />
+                  </div>
+                </div>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" checked={askForReview} onChange={(e) => setAskForReview(e.target.checked)} className="h-4 w-4 mt-0.5 rounded" />
+                  <span>
+                    <span className="block text-[13px] font-medium text-text-primary">{language === 'fr' ? 'Demander un avis' : 'Ask for a review'}</span>
+                    <span className="text-[12px] text-text-tertiary">{language === 'fr' ? "Envoyer une demande d'avis au client une fois le job terminé." : 'Send the client a review request once the job is complete.'}</span>
+                  </span>
+                </label>
+              </Box>
 
-              <section className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+              <Box title="Client">
                 {isCreatingNewClient ? (
                   <div className="lg:col-span-4 space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
                     <div className="flex items-center justify-between">
@@ -1045,14 +1160,20 @@ export default function NewJobModal({
                     )}
                   </div>
                 )}
+              </Box>
 
+              <Box title={language === 'fr' ? 'Assignation' : 'Assignment'}>
+                <div className="inline-flex rounded-xl bg-surface-secondary border border-border p-1">
+                  <button type="button" onClick={() => setAssignMode('team')} className={cn('px-4 py-2 rounded-lg text-sm font-medium transition-colors', assignMode === 'team' ? 'bg-surface shadow-sm text-text-primary' : 'text-text-tertiary')}>{language === 'fr' ? 'Assigner une équipe' : 'Assign team'}</button>
+                  <button type="button" onClick={() => setAssignMode('user')} className={cn('px-4 py-2 rounded-lg text-sm font-medium transition-colors', assignMode === 'user' ? 'bg-surface shadow-sm text-text-primary' : 'text-text-tertiary')}>{language === 'fr' ? 'Assigner un utilisateur' : 'Assign user'}</button>
+                </div>
+                {assignMode === 'team' ? (
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-text-tertiary">{t.modals.assignTeam}</label>
                   <select
                     value={teamSelection}
                     onChange={(event) => setTeamSelection(event.target.value)}
                     className="glass-input w-full"
-                    required
                   >
                     <option value="">{t.modals.selectTeam}</option>
                     <option value={UNASSIGNED_TEAM_VALUE}>{t.modals.unassignedOption}</option>
@@ -1087,25 +1208,15 @@ export default function NewJobModal({
                     </div>
                   )}
                 </div>
-
+                ) : (
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-text-tertiary">{t.jobs.jobNumber}</label>
-                  <input
-                    value={jobNumber}
-                    onChange={(event) => setJobNumber(event.target.value)}
-                    className="glass-input w-full"
-                    placeholder={language === 'fr' ? 'Numéro de job' : 'Job number'}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-text-tertiary">{t.modals.salesperson}</label>
+                  <label className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Utilisateur' : 'User'}</label>
                   <select
-                    value={salespersonId}
-                    onChange={(event) => setSalespersonId(event.target.value)}
+                    value={assignedUserId}
+                    onChange={(event) => setAssignedUserId(event.target.value)}
                     className="glass-input w-full"
                   >
-                    <option value="">{t.modals.assign}</option>
+                    <option value="">{language === 'fr' ? 'Choisir un utilisateur' : 'Select a user'}</option>
                     {salespeople.map((person) => (
                       <option key={person.id} value={person.id}>
                         {person.label}
@@ -1113,14 +1224,12 @@ export default function NewJobModal({
                     ))}
                   </select>
                 </div>
-              </section>
+                )}
+              </Box>
 
               {/* Property — a job must be assigned to one of the client's properties */}
               {(clientId || isCreatingNewClient) && (
-                <section className="space-y-2 pt-6 border-t border-border">
-                  <label className="text-xs font-medium text-text-tertiary">
-                    {t.modals.property} <span className="text-danger">*</span>
-                  </label>
+                <Box title={t.modals.property} subtitle={language === 'fr' ? 'Requis' : 'Required'}>
                   {!isCreatingNewClient && properties.length > 0 ? (
                     <select
                       value={propertyId}
@@ -1154,16 +1263,11 @@ export default function NewJobModal({
                       placeholder={t.modals.propertyNamePlaceholder}
                     />
                   )}
-                </section>
+                </Box>
               )}
 
               {/* Job site address */}
-              <section className="space-y-4 pt-6 border-t border-border">
-                <div className="flex items-center gap-2">
-                  <MapPin size={18} className="text-text-secondary" />
-                  <h3 className="text-[16px] font-bold tracking-tight">{t.modals.jobSiteAddress}</h3>
-                </div>
-
+              <Box title={t.modals.jobSiteAddress}>
                 <div className="space-y-3">
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-text-tertiary">{t.modals.searchAddress}</label>
@@ -1251,11 +1355,9 @@ export default function NewJobModal({
                     </div>
                   </div>
                 </div>
-              </section>
+              </Box>
 
-              <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-6 border-t border-border">
-                <div className="space-y-4">
-                  <h3 className="text-[16px] font-bold tracking-tight">{t.modals.jobType}</h3>
+              <Box title={t.modals.jobType}>
                   <div className="inline-flex rounded-xl bg-surface-secondary border border-border p-1">
                     <button
                       type="button"
@@ -1278,21 +1380,22 @@ export default function NewJobModal({
                       {t.modals.recurring}
                     </button>
                   </div>
-                </div>
+              </Box>
 
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-[16px] font-bold tracking-tight">{t.modals.schedule}</h3>
-                    <a
-                      href="/calendar"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[10px] font-bold text-text-muted uppercase tracking-widest hover:text-text-primary inline-flex items-center gap-1"
-                    >
-                      <Calendar size={12} />
-                      {t.modals.viewCalendar}
-                    </a>
-                  </div>
+              <Box
+                title={t.modals.schedule}
+                right={(
+                  <a
+                    href="/calendar"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] font-bold text-text-muted uppercase tracking-widest hover:text-text-primary inline-flex items-center gap-1"
+                  >
+                    <Calendar size={12} />
+                    {t.modals.viewCalendar}
+                  </a>
+                )}
+              >
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-text-tertiary">{t.modals.startDate}</label>
@@ -1331,11 +1434,9 @@ export default function NewJobModal({
                       </div>
                     </div>
                   </div>
-                </div>
-              </section>
+              </Box>
 
-              <section className="pt-6 border-t border-border space-y-4">
-                <h3 className="text-[16px] font-bold tracking-tight">{t.modals.billing}</h3>
+              <Box title={t.modals.billing}>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -1354,11 +1455,11 @@ export default function NewJobModal({
                   />
                   <span className="text-sm">{t.modals.splitInvoices}</span>
                 </label>
-              </section>
+              </Box>
 
-              <section className="pt-6 border-t border-border space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-[16px] font-bold tracking-tight">{t.modals.lineItems}</h3>
+              <Box
+                title={language === 'fr' ? 'Produits / Services' : 'Products / Services'}
+                right={(
                   <button
                     type="button"
                     onClick={() => setServicePickerOpen(true)}
@@ -1367,8 +1468,8 @@ export default function NewJobModal({
                     <Package size={14} />
                     {t.modals.addFromCatalog}
                   </button>
-                </div>
-
+                )}
+              >
                 {/* Line items list */}
                 {lineItems.length === 1 && !lineItems[0].name.trim() ? (
                   <div className="rounded-xl border border-dashed border-outline-subtle bg-surface-secondary/30 p-6 text-center">
@@ -1477,10 +1578,9 @@ export default function NewJobModal({
                     {t.modals.addLineItem}
                   </button>
                 </div>
-              </section>
+              </Box>
 
-              <section className="pt-6 border-t border-border space-y-4">
-                <h3 className="text-[16px] font-bold tracking-tight">{t.modals.taxes}</h3>
+              <Box title={t.modals.taxes}>
                 {taxConfigured === null ? (
                   <p className="text-[12px] text-text-tertiary">Loading taxes...</p>
                 ) : taxConfigured === false ? (
@@ -1528,11 +1628,10 @@ export default function NewJobModal({
                     <span>{t.modals.totalLabel}</span><span>{formatCurrency(grandTotalCents / 100)}</span>
                   </p>
                 </div>
-              </section>
+              </Box>
 
               {/* ── Deposit & Payment Settings ── */}
-              <section className="rounded-xl border border-outline bg-surface p-5 space-y-3">
-                <h3 className="text-sm font-semibold text-text-primary">{t.modals.depositSettings}</h3>
+              <Box title={t.modals.depositSettings}>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" checked={jobDepositRequired} onChange={e => setJobDepositRequired(e.target.checked)} className="h-4 w-4 rounded" />
                   <span className="text-[13px] text-text-primary">{t.modals.requireDeposit}</span>
@@ -1565,14 +1664,19 @@ export default function NewJobModal({
                   <input type="checkbox" checked={jobRequirePaymentMethod} onChange={e => setJobRequirePaymentMethod(e.target.checked)} className="h-4 w-4 rounded" />
                   <span className="text-[13px] text-text-primary">Require payment method on file</span>
                 </label>
-              </section>
+              </Box>
 
-              {/* ── Specific Notes ── */}
-              {isEditMode && initialValues?.id ? (
-                <SpecificNotes entityType="job" entityId={initialValues.id} mode="full" />
-              ) : (
-                <SpecificNotesInline ref={specificNotesRef} tempEntityType="job" />
-              )}
+              {/* ── Notes ── */}
+              <Box
+                title="Notes"
+                subtitle={language === 'fr' ? 'Laissez des notes internes pour vous ou un membre de l’équipe.' : 'Leave internal notes for yourself or a team member.'}
+              >
+                {isEditMode && initialValues?.id ? (
+                  <SpecificNotes entityType="job" entityId={initialValues.id} mode="full" />
+                ) : (
+                  <SpecificNotesInline ref={specificNotesRef} tempEntityType="job" />
+                )}
+              </Box>
 
               {(inlineError || errorMessage) && (
                 <div className="rounded-xl border border-danger bg-danger-light text-danger px-4 py-3 text-sm">

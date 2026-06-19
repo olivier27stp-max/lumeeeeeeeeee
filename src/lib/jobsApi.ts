@@ -1027,6 +1027,28 @@ export async function getSuggestedJobNumber(): Promise<string> {
   return String(maxNumber + 1);
 }
 
+/**
+ * Best-effort persistence for job "extras" (tags, ask-for-review flag,
+ * individual user assignment). These live in columns added by migration
+ * 20260710000000. If that migration hasn't been applied yet the update
+ * silently no-ops so job creation/editing never breaks.
+ */
+export async function applyJobExtras(
+  jobId: string,
+  extras: { tags?: string[]; askForReview?: boolean; assignedUserId?: string | null }
+): Promise<void> {
+  const patch: Record<string, unknown> = {};
+  if (extras.tags !== undefined) patch.tags = extras.tags;
+  if (extras.askForReview !== undefined) patch.ask_for_review = extras.askForReview;
+  if (extras.assignedUserId !== undefined) patch.assigned_user_id = extras.assignedUserId || null;
+  if (Object.keys(patch).length === 0) return;
+  const { error } = await supabase.from('jobs').update(patch).eq('id', jobId);
+  if (error) {
+    // Column missing (migration pending) or RLS — don't fail the whole save.
+    console.warn('[jobs] applyJobExtras skipped:', error.message);
+  }
+}
+
 export async function listSalespeople(): Promise<SalespersonOption[]> {
   const orgId = await getCurrentOrgIdOrThrow();
   const { data: memberships, error: membershipsError } = await supabase.from('memberships').select('user_id').eq('org_id', orgId).limit(200);
