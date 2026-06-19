@@ -38,11 +38,6 @@ export default function CrmWorkspace() {
           pointer-events-none so empty areas let clicks/scroll reach the
           interactive map; only the cards re-enable pointer events. */}
       <div className="relative z-10 p-6 lg:p-8 pointer-events-none">
-        {/* Scrim: fades the top so the greeting + cards stay readable over the
-            satellite imagery, and scrolls away with the content so the full map
-            is clean once the cards are gone. */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[70vh] bg-gradient-to-b from-surface via-surface/80 to-transparent" />
-
         {/* TOP BAR — bold date + "welcome back, <name>" greeting */}
         <div className="mb-5">
           <h1 className="text-[24px] font-bold text-text-primary first-letter:uppercase">{todayLabel}</h1>
