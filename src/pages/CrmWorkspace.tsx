@@ -34,22 +34,20 @@ export default function CrmWorkspace() {
       </div>
       {/* ─── END HOME MAP BACKGROUND ──────────────────────────────────────── */}
 
-      {/* Foreground content — scrolls on top of the map. The wrapper is
-          pointer-events-none so empty areas let clicks/scroll reach the
-          interactive map; only the cards re-enable pointer events. */}
-      <div className="relative z-10 p-6 lg:p-8 pointer-events-none">
-        {/* TOP BAR — bold date + "welcome back, <name>" greeting */}
+      {/* Foreground content — scrolls on top of the (non-interactive) map. */}
+      <div className="relative z-10 p-6 lg:p-8">
+        {/* TOP BAR — bold date + "welcome back, <name>" greeting (white over the map) */}
         <div className="mb-5">
-          <h1 className="text-[24px] font-bold text-text-primary first-letter:uppercase">{todayLabel}</h1>
-          <p className="text-[16px] font-bold text-text-primary mt-0.5">{greeting}</p>
+          <h1 className="text-[24px] font-bold text-white first-letter:uppercase drop-shadow">{todayLabel}</h1>
+          <p className="text-[16px] font-bold text-white/90 mt-0.5 drop-shadow">{greeting}</p>
         </div>
 
         {/* Tasks box (1/3, left) + revenue overview chart (2/3, right) */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
-          <div className="xl:col-span-1 pointer-events-auto">
+          <div className="xl:col-span-1">
             <HomeTasksCard />
           </div>
-          <div className="xl:col-span-2 pointer-events-auto">
+          <div className="xl:col-span-2">
             <RevenueOverviewCard />
           </div>
         </div>

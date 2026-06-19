@@ -1,8 +1,9 @@
 /**
- * HomeMapBackground — full-bleed, INTERACTIVE job map used as the background
- * layer of the Home page (CrmWorkspace). This is the exact same map as the
- * Calendar map (CalendarMapGL: Mapbox satellite + gold teardrop pins), rendered
- * edge-to-edge and showing TODAY's jobs only.
+ * HomeMapBackground — full-bleed, NON-interactive job map used as the
+ * background layer of the Home page (CrmWorkspace). This is the exact same map
+ * as the Calendar map (CalendarMapGL: Mapbox satellite + gold teardrop pins),
+ * rendered edge-to-edge and showing TODAY's jobs only. Inert so it never traps
+ * scroll/clicks — the page content scrolls freely on top of it.
  *
  * Self-contained + easy to remove: delete this file and the background block
  * in CrmWorkspace.tsx to fully revert.
@@ -32,6 +33,7 @@ export default function HomeMapBackground() {
       pins={data.pins}
       heightClassName="h-full"
       bare
+      interactive={false}
       openJobLabel={t.schedule.mapOpenJob}
       onOpenJob={(id) => navigate(`/jobs/${id}`)}
     />

@@ -101,6 +101,9 @@ interface CalendarMapGLProps {
   /** When true, drop the card chrome (rounded corners + border) so the map can
    *  fill a parent edge-to-edge — used for the Home page background map. */
   bare?: boolean;
+  /** When false, the map is fully inert: no pan/zoom/click, no nav control, and
+   *  the container ignores pointer events — used for the Home background map. */
+  interactive?: boolean;
 }
 
 export default function CalendarMapGL({
@@ -109,6 +112,7 @@ export default function CalendarMapGL({
   onOpenJob,
   openJobLabel,
   bare = false,
+  interactive = true,
 }: CalendarMapGLProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -131,10 +135,14 @@ export default function CalendarMapGL({
       attributionControl: false,
       dragRotate: false,
       pitchWithRotate: false,
+      // When false, Mapbox disables all interaction handlers (pan/zoom/click).
+      interactive,
     });
     mapRef.current = map;
 
-    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+    if (interactive) {
+      map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+    }
 
     map.on('style.load', () => {
       // 1. Remove highway numbers / road labels and airports.
@@ -216,7 +224,7 @@ export default function CalendarMapGL({
   return (
     <div
       ref={containerRef}
-      className={`overflow-hidden ${bare ? '' : 'rounded-2xl border border-outline'} bg-surface-tertiary ${heightClassName}`}
+      className={`overflow-hidden ${bare ? '' : 'rounded-2xl border border-outline'} ${interactive ? '' : 'pointer-events-none'} bg-surface-tertiary ${heightClassName}`}
     />
   );
 }
