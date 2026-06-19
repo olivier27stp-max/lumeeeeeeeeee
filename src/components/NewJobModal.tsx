@@ -1073,21 +1073,18 @@ export default function NewJobModal({
 
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-text-tertiary">{t.modals.salesperson}</label>
-                  <div className="relative">
-                    <select
-                      value={salespersonId}
-                      onChange={(event) => setSalespersonId(event.target.value)}
-                      className="glass-input w-full pr-10"
-                    >
-                      <option value="">{t.modals.assign}</option>
-                      {salespeople.map((person) => (
-                        <option key={person.id} value={person.id}>
-                          {person.label}
-                        </option>
-                      ))}
-                    </select>
-                    <Plus size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
-                  </div>
+                  <select
+                    value={salespersonId}
+                    onChange={(event) => setSalespersonId(event.target.value)}
+                    className="glass-input w-full"
+                  >
+                    <option value="">{t.modals.assign}</option>
+                    {salespeople.map((person) => (
+                      <option key={person.id} value={person.id}>
+                        {person.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </section>
 
