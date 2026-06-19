@@ -933,7 +933,7 @@ export default function NewJobModal({
                   autoFocus
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  className="glass-input w-full text-lg"
+                  className="glass-input w-full text-lg text-center"
                   placeholder="e.g. Residential Cleaning - Smith Residence"
                   required
                 />
