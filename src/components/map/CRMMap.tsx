@@ -89,6 +89,12 @@ interface CRMMapProps {
   tileStyle?: 'voyager' | 'satellite';
   /** Force a single pin color (e.g. gold) instead of per-team colors. */
   pinColor?: string;
+  /** When false, all map interaction (drag/zoom/click) is disabled and the
+   *  wrapper ignores pointer events — used for the Home page background map. */
+  interactive?: boolean;
+  /** When true, drop the card chrome (rounded corners, border, bg) so the map
+   *  can fill a parent edge-to-edge as a page background. */
+  bare?: boolean;
 }
 
 export default function CRMMap({
@@ -101,6 +107,8 @@ export default function CRMMap({
   showCompletionCheck = false,
   tileStyle = 'voyager',
   pinColor,
+  interactive = true,
+  bare = false,
 }: CRMMapProps) {
   const [selectedPin, setSelectedPin] = useState<MapJobPin | null>(null);
   const [labelsVisible, setLabelsVisible] = useState(true);
@@ -124,7 +132,15 @@ export default function CRMMap({
   }, [pins, showCompletionCheck, pinColor]);
 
   return (
-    <div className={cn('relative overflow-hidden rounded-2xl border border-outline bg-surface-tertiary', heightClassName, className)}>
+    <div
+      className={cn(
+        'relative overflow-hidden',
+        bare ? 'bg-surface-tertiary' : 'rounded-2xl border border-outline bg-surface-tertiary',
+        !interactive && 'pointer-events-none',
+        heightClassName,
+        className,
+      )}
+    >
       <MapContainer
         ref={mapRef}
         center={DEFAULT_CENTER}
@@ -137,7 +153,12 @@ export default function CRMMap({
         zoomSnap={0}
         zoomDelta={0.5}
         wheelPxPerZoomLevel={120}
-        scrollWheelZoom
+        scrollWheelZoom={interactive}
+        dragging={interactive}
+        doubleClickZoom={interactive}
+        touchZoom={interactive}
+        boxZoom={interactive}
+        keyboard={interactive}
         zoomAnimation
         fadeAnimation
         markerZoomAnimation
@@ -154,7 +175,7 @@ export default function CRMMap({
         <FitBounds pins={pins} />
 
         {/* Zoom control top-right */}
-        <ZoomControl />
+        {interactive && <ZoomControl />}
 
         {pins.map((pin, i) => {
           const iconSet = icons[i];
