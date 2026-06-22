@@ -71,7 +71,7 @@ export async function sendInvitation(
   email: string,
   role: MemberRole,
   options?: { scope?: InviteScope; team_id?: string | null; org_id?: string },
-): Promise<{ invitation: Invitation; invite_link: string }> {
+): Promise<{ invitation: Invitation; invite_link: string; email_sent: boolean; email_skipped_reason?: string | null }> {
   const res = await fetch(`${API_BASE}/invitations/send`, {
     method: 'POST',
     headers: await authHeaders(),
@@ -85,9 +85,7 @@ export async function sendInvitation(
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    // TEMP diagnostic — append the server detail/code so it shows in the UI. Remove after debugging.
-    const parts = [body.error || 'Failed to send invitation.', body.detail, body.code].filter(Boolean);
-    throw new Error(parts.join(' | '));
+    throw new Error(body.error || 'Failed to send invitation.');
   }
   return res.json();
 }

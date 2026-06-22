@@ -157,7 +157,15 @@ export default function ManageTeam() {
     options?: { scope?: InviteScope; team_id?: string | null; org_id?: string },
   ) => {
     const result = await sendInvitation(email, role, options);
-    toast.success(t.manageTeam.invitationSent);
+    if (result.email_sent) {
+      toast.success(t.manageTeam.invitationSent);
+    } else {
+      toast.warning(
+        isFr
+          ? "Invitation créée, mais l'email n'a pas pu être envoyé (service email non configuré). Partage le lien copié ci-dessous au membre."
+          : 'Invitation created, but the email could not be sent (email service not configured). Share the copied link below with the member.',
+      );
+    }
     setShowInviteModal(false);
 
     if (result.invite_link) {

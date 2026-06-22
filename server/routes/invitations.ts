@@ -272,13 +272,7 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
 
     if (createError) {
       console.error('[invitations/send] create error:', createError.message, createError.code, createError.details);
-      // TEMP diagnostic — surface the real DB error to the caller. Remove after debugging.
-      return res.status(500).json({
-        error: 'Failed to create invitation.',
-        detail: createError.message,
-        code: createError.code,
-        hint: createError.hint,
-      });
+      return res.status(500).json({ error: 'Failed to create invitation.' });
     }
 
     // Get org + branding + inviter info in parallel
@@ -292,28 +286,39 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
     const baseUrl = getBaseUrl();
     const inviteLink = `${baseUrl}/invite/${token}`;
 
-    // Send invitation email via SMTP, branded with the org's company_settings
+    // Send invitation email via SMTP, branded with the org's company_settings.
+    // We track whether it actually went out so the client can tell the user the
+    // truth instead of always claiming "invitation sent".
+    let emailSent = false;
+    let emailSkippedReason: string | null = null;
     try {
       const { sendEmail, isMailerConfigured } = await import('../lib/mailer');
       if (isMailerConfigured()) {
         const { renderInvitationEmail } = await import('../lib/email-templates/invitation');
-        const { subject, html, text } = renderInvitationEmail({
+        const { subject, html } = renderInvitationEmail({
           orgName,
           role,
           inviteLink,
           inviterName: inviter?.full_name || null,
           branding,
         });
-        await sendEmail({ to: email, subject, html });
+        const result = await sendEmail({ to: email, subject, html });
+        emailSent = result.sent;
+        if (!result.sent) emailSkippedReason = result.error || 'send_failed';
+      } else {
+        emailSkippedReason = 'mailer_not_configured';
       }
     } catch (emailErr: any) {
       console.error('[invitations/send] email error:', emailErr.message);
+      emailSkippedReason = emailErr.message || 'send_failed';
       // Don't fail the invitation if email fails
     }
 
     return res.json({
       invitation,
       invite_link: inviteLink,
+      email_sent: emailSent,
+      email_skipped_reason: emailSkippedReason,
     });
   } catch (err: any) {
     console.error('[invitations/send]', err.message);
