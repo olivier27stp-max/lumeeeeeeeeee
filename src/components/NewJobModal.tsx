@@ -1030,7 +1030,7 @@ export default function NewJobModal({
                   autoFocus
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  className="glass-input w-full text-lg"
+                  className="glass-input job-title-input w-full text-lg"
                   placeholder={t.modals.jobTitle}
                   required
                 />

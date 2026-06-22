@@ -518,6 +518,15 @@ body.dark .item-form .glass-input {
   background-color: var(--color-surface-secondary);
 }
 
+/* New Job: title text is pure black in light mode (unchanged in dark). */
+.job-title-input {
+  color: #000000;
+}
+.dark .job-title-input,
+body.dark .job-title-input {
+  color: var(--color-text-primary);
+}
+
 /* ─── Buttons ─── */
 @utility glass-button {
   background-color: var(--color-surface-tertiary);
