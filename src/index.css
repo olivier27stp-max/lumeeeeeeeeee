@@ -508,10 +508,14 @@ body.dark .dot-grid {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
 }
 
-/* Item forms (job / quote / invoice): input bars blend with the white
-   card background instead of the grey surface-secondary fill. */
+/* Item forms (job / quote / invoice): pure white input bars in light mode.
+   Dark mode keeps the standard dark input fill. */
 .item-form .glass-input {
-  background-color: var(--color-surface-card);
+  background-color: #ffffff;
+}
+.dark .item-form .glass-input,
+body.dark .item-form .glass-input {
+  background-color: var(--color-surface-secondary);
 }
 
 /* ─── Buttons ─── */
