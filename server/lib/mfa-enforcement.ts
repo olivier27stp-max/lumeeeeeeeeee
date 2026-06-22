@@ -40,12 +40,13 @@ const MFA_REQUIRED_PREFIXES = [
 
 /**
  * TEMPORARY MFA exemption — single account, auto-expiring.
- * Requested by the owner on 2026-06-19. Expires 2026-06-21 23:59:59 UTC (2 days).
- * After the expiry timestamp this map is inert and normal MFA enforcement resumes
- * automatically — no need to remember to remove it. Email match is case-insensitive.
+ * Requested by the owner on 2026-06-19, extended 2026-06-21. Expires
+ * 2026-06-26 23:59:59 UTC. After the expiry timestamp this map is inert and
+ * normal MFA enforcement resumes automatically — no need to remember to remove
+ * it. Email match is case-insensitive.
  */
 const TEMP_MFA_EXEMPTIONS: Record<string, string> = {
-  'willhebert30@gmail.com': '2026-06-21T23:59:59Z',
+  'willhebert30@gmail.com': '2026-06-26T23:59:59Z',
 };
 
 function isTemporarilyExempt(email?: string | null): boolean {
