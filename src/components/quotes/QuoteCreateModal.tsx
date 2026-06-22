@@ -21,6 +21,8 @@ import { resolveTaxes, calculateTaxes, type TaxConfig } from '../../lib/taxApi';
 import { useTranslation } from '../../i18n';
 import SpecificNotesInline, { type SpecificNotesInlineHandle } from '../SpecificNotesInline';
 import FormPageHost from '../ui/FormPageHost';
+import LeaveFormConfirm from '../ui/LeaveFormConfirm';
+import { useNavigationGuard } from '../../contexts/NavigationGuard';
 
 interface QuoteCreateModalProps {
   isOpen: boolean;
@@ -93,6 +95,9 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
   const [discountValue, setDiscountValue] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Has the user entered anything? Drives the leave-without-saving guard.
+  const [dirty, setDirty] = useState(false);
+  const guard = useNavigationGuard(isOpen && dirty);
   const [servicePickerOpen, setServicePickerOpen] = useState(false);
   // Per-line catalog picker: id of the line whose product/service is being chosen
   const [lineEditId, setLineEditId] = useState<string | null>(null);
@@ -121,7 +126,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
   // ── Init ──
   useEffect(() => {
     if (!isOpen) return;
-    setError(null); setSaving(false); setShowPreview(false);
+    setError(null); setSaving(false); setShowPreview(false); setDirty(false);
     setContactMode('new'); setSelectedLeadId('');
     setLeadFirstName(''); setLeadLastName(''); setLeadEmail('');
     setLeadPhone(''); setLeadAddress(''); setLeadAddressSearch(''); setLeadCompany('');
@@ -481,6 +486,8 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
         await specificNotesRef.current.saveNote('quote', detail.quote.id);
       }
 
+      // Quote saved — let the post-save navigation (e.g. to the quote page) through.
+      guard.release();
       onCreated(detail);
       onClose();
     } catch (err: any) {
@@ -507,7 +514,10 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="absolute inset-0 z-[130] bg-surface flex flex-col overflow-hidden"
+          onInput={() => setDirty(true)}
+          onChange={() => setDirty(true)}
         >
+          <LeaveFormConfirm open={guard.active} onConfirm={guard.confirmLeave} onCancel={guard.cancelLeave} />
           {/* ── Header ── */}
           <div className="px-6 py-5 border-b border-outline flex items-center justify-between bg-surface-secondary">
             <div className="flex items-center gap-3">

@@ -5,6 +5,8 @@ import { useTranslation } from '../i18n';
 import { addVisit } from '../lib/scheduleApi';
 import { listTeams, type TeamRecord } from '../lib/teamsApi';
 import { getJobs } from '../lib/jobsApi';
+import { useNavigationGuard } from '../contexts/NavigationGuard';
+import LeaveFormConfirm from './ui/LeaveFormConfirm';
 
 interface LockedJob {
   id: string;
@@ -69,6 +71,9 @@ export default function AddVisitModal({
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const searchSeq = useRef(0);
+  // Has the user entered anything? Drives the leave-without-saving guard.
+  const [dirty, setDirty] = useState(false);
+  const guard = useNavigationGuard(open && dirty);
 
   // Reset form each time the modal is (re)opened.
   useEffect(() => {
@@ -82,6 +87,7 @@ export default function AddVisitModal({
     setSelectedJob(job);
     setJobQuery('');
     setJobResults([]);
+    setDirty(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -160,7 +166,12 @@ export default function AddVisitModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        onInput={() => setDirty(true)}
+        onChange={() => setDirty(true)}
+      >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-[15px] font-bold text-text-primary flex items-center gap-2">
             <Calendar size={15} className="text-text-secondary" />
@@ -199,7 +210,7 @@ export default function AddVisitModal({
                 {!searching && jobResults.map((r) => (
                   <button
                     key={r.id}
-                    onClick={() => { setSelectedJob(r); setJobResults([]); setJobQuery(''); }}
+                    onClick={() => { setSelectedJob(r); setJobResults([]); setJobQuery(''); setDirty(true); }}
                     className="block w-full truncate px-3 py-2 text-left text-[13px] text-text-primary hover:bg-surface-secondary"
                   >
                     {r.label}
@@ -258,6 +269,8 @@ export default function AddVisitModal({
           </div>
         </div>
       </div>
+
+      <LeaveFormConfirm open={guard.active} onConfirm={guard.confirmLeave} onCancel={guard.cancelLeave} />
     </div>
   );
 }
