@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertTriangle, BriefcaseBusiness, Calendar, ChevronDown, Clock3, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -243,8 +244,16 @@ export default function NewJobModal({
   isDeleting = false,
 }: NewJobModalProps) {
   const { t, language } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const isEditMode = Boolean(initialValues?.id);
   const specificNotesRef = useRef<SpecificNotesInlineHandle>(null);
+  // Navigation guard: route where the form was opened + leave-confirmation state.
+  const openedPathRef = useRef<string | null>(null);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  // Dirty tracking — baseline signature captured right after the form resets.
+  const baselineSignatureRef = useRef<string>('');
+  const captureBaselineRef = useRef(false);
   const [title, setTitle] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSearch, setClientSearch] = useState('');
@@ -330,6 +339,7 @@ export default function NewJobModal({
     setInlineError(null);
     setCalendarHint(null);
     setConfirmDelete(false);
+    setShowLeaveConfirm(false);
     setTitle(initialValues?.title || '');
     setLeadId(initialValues?.lead_id || null);
     setClientId(initialValues?.client_id || '');
@@ -512,7 +522,82 @@ export default function NewJobModal({
           })
       )
     ).catch(() => {});
+    // Snapshot the freshly-reset values on the next render so we can detect
+    // whether the user has since entered anything (see the effect below).
+    captureBaselineRef.current = true;
   }, [isOpen, initialValues, isEditMode, source?.type]);
+
+  // Signature of every user-editable field. System-autofilled fields
+  // (salesperson, resolved taxes, auto job number) are intentionally excluded so
+  // that simply opening a blank form is never treated as "dirty".
+  const formSignature = useMemo(
+    () =>
+      JSON.stringify({
+        title,
+        description,
+        status,
+        clientId,
+        propertyId,
+        newPropertyName,
+        isCreatingNewClient,
+        newClientFirst,
+        newClientLast,
+        newClientEmail,
+        newClientPhone,
+        newClientCompany,
+        leadId,
+        teamSelection,
+        assignMode,
+        assignedUserId,
+        jobType,
+        tags,
+        tagInput,
+        askForReview,
+        startDate,
+        startTime,
+        endTime,
+        requiresInvoicing,
+        billingSplit,
+        prefilledAddress,
+        addressLine1,
+        addressLine2,
+        addressCity,
+        addressProvince,
+        addressPostalCode,
+        addressCountry,
+        addressSearch,
+        totalInput,
+        jobDepositRequired,
+        jobDepositType,
+        jobDepositValue,
+        jobRequirePaymentMethod,
+        lineItems: lineItems.map((item) => ({
+          name: item.name,
+          qtyInput: item.qtyInput,
+          unitPriceInput: item.unitPriceInput,
+          included: item.included,
+        })),
+      }),
+    [
+      title, description, status, clientId, propertyId, newPropertyName, isCreatingNewClient,
+      newClientFirst, newClientLast, newClientEmail, newClientPhone, newClientCompany, leadId,
+      teamSelection, assignMode, assignedUserId, jobType, tags, tagInput, askForReview,
+      startDate, startTime, endTime, requiresInvoicing, billingSplit, prefilledAddress,
+      addressLine1, addressLine2, addressCity, addressProvince, addressPostalCode, addressCountry,
+      addressSearch, totalInput, jobDepositRequired, jobDepositType, jobDepositValue,
+      jobRequirePaymentMethod, lineItems,
+    ]
+  );
+
+  // Capture the baseline once per open, on the render right after the reset effect runs.
+  useEffect(() => {
+    if (captureBaselineRef.current) {
+      baselineSignatureRef.current = formSignature;
+      captureBaselineRef.current = false;
+    }
+  }, [formSignature]);
+
+  const isDirty = isOpen && formSignature !== baselineSignatureRef.current;
 
   const selectedClient = useMemo(
     () => clients.find((client) => client.id === clientId) || null,
@@ -660,10 +745,32 @@ export default function NewJobModal({
   };
 
   const handleClose = (reason: 'cancel' | 'created' = 'cancel') => {
+    setShowLeaveConfirm(false);
     resetForm();
     onClose();
     if (reason === 'cancel') onCancel?.();
   };
+
+  // Remember the route the form was opened on (capture only on open, not on
+  // every navigation — hence the intentionally narrow dependency list).
+  useEffect(() => {
+    if (isOpen) openedPathRef.current = location.pathname;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  // Auto-close on navigation. If the form is untouched, dismiss it silently.
+  // If the user entered something, keep the new page behind a leave-confirmation.
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!openedPathRef.current) return;
+    if (location.pathname === openedPathRef.current) return;
+    if (isDirty) {
+      setShowLeaveConfirm(true);
+    } else {
+      handleClose();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, isOpen]);
 
   const updateLineItem = (id: string, patch: Partial<LineItemForm>) => {
     setLineItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -1697,6 +1804,42 @@ export default function NewJobModal({
                 </button>
               </div>
             </div>
+
+            {/* Leave-without-saving confirmation (shown when navigating away with unsaved data) */}
+            {showLeaveConfirm && (
+              <div className="absolute inset-0 z-[140] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-2xl">
+                  <div className="flex items-start gap-3">
+                    <div className="h-10 w-10 shrink-0 rounded-xl bg-danger/10 text-danger flex items-center justify-center">
+                      <AlertTriangle size={18} />
+                    </div>
+                    <div>
+                      <h3 className="text-[15px] font-bold tracking-tight text-text-primary">{t.modals.leaveFormTitle}</h3>
+                      <p className="text-[13px] text-text-tertiary mt-1">{t.modals.leaveFormBody}</p>
+                    </div>
+                  </div>
+                  <div className="mt-5 flex items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowLeaveConfirm(false);
+                        if (openedPathRef.current) navigate(openedPathRef.current);
+                      }}
+                      className="glass-button"
+                    >
+                      {t.modals.keepEditingBtn}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleClose()}
+                      className="glass-button-danger px-4 py-2 font-semibold"
+                    >
+                      {t.modals.leaveAnywayBtn}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </motion.div>
         </FormPageHost>
       )}

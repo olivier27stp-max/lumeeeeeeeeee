@@ -1522,6 +1522,12 @@ const fr: TranslationKeys = {
     saveChangesBtn: 'Sauvegarder',
     saveJobBtn: 'Créer le job',
 
+    // Avertissement quitter le formulaire (navigation)
+    leaveFormTitle: 'Quitter sans enregistrer ?',
+    leaveFormBody: 'Des informations ont été saisies dans ce formulaire. Si vous quittez maintenant, elles seront perdues.',
+    leaveAnywayBtn: 'Quitter quand même',
+    keepEditingBtn: 'Continuer l\'édition',
+
     // Validation
     titleRequired: 'Le titre du job est requis.',
     clientRequired: 'Veuillez sélectionner un client.',

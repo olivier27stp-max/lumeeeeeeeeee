@@ -1530,6 +1530,12 @@ const en = {
     saveChangesBtn: 'Save Changes',
     saveJobBtn: 'Save Job',
 
+    // Leave-form warning (navigation)
+    leaveFormTitle: 'Leave without saving?',
+    leaveFormBody: 'You\'ve entered information in this form. If you leave now, it will be lost.',
+    leaveAnywayBtn: 'Leave anyway',
+    keepEditingBtn: 'Keep editing',
+
     // Validation
     titleRequired: 'Job title is required.',
     clientRequired: 'Please select a client.',
