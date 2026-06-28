@@ -102,8 +102,10 @@ export default function HomeServiceMixCard() {
                     borderRadius: 12,
                     border: '1px solid var(--color-border)',
                     backgroundColor: 'var(--color-surface-card)',
+                    color: 'var(--color-text-primary)',
                     fontSize: 13,
                   }}
+                  itemStyle={{ color: 'var(--color-text-primary)' }}
                 />
               </PieChart>
             </ResponsiveContainer>
