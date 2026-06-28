@@ -1133,14 +1133,20 @@ export default function NewJobModal({
 
             <form id="new-job-form" onSubmit={handleSubmit} className="item-form flex-1 overflow-y-auto px-6 py-6 space-y-5">
               <Box title={language === 'fr' ? 'Détails' : 'Details'}>
-                <input
-                  autoFocus
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  className="glass-input job-title-input w-full text-lg"
-                  placeholder={t.modals.jobTitle}
-                  required
-                />
+                <div className="relative">
+                  <input
+                    autoFocus
+                    id="job-title-input"
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    className="glass-input job-title-input w-full text-lg text-center"
+                    placeholder=" "
+                    required
+                  />
+                  <label htmlFor="job-title-input" className="job-title-float">
+                    {t.modals.jobTitle}
+                  </label>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-text-tertiary">{t.jobs.jobNumber}</label>

@@ -521,10 +521,42 @@ body.dark .item-form .glass-input {
 /* New Job: title text is pure black in light mode (unchanged in dark). */
 .job-title-input {
   color: #000000;
+  transition: padding-top 0.15s ease, padding-bottom 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .dark .job-title-input,
 body.dark .job-title-input {
   color: var(--color-text-primary);
+}
+/* Once text is entered, push it down so the floated label has clear room
+   at the top. Padding sum is kept equal to the default so the bar height
+   does not change. */
+.job-title-input:not(:placeholder-shown) {
+  padding-top: 1.05rem;
+  padding-bottom: 0.075rem;
+}
+
+/* New Job title: floating label.
+   Empty (even when focused) → big & centered like a placeholder.
+   As soon as text is entered → shrinks and rises to the top of the bar. */
+.job-title-float {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  text-align: center;
+  padding: 0 0.875rem;
+  font-size: 1.125rem;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+  pointer-events: none;
+  transition: top 0.15s ease, font-size 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.job-title-input:not(:placeholder-shown) ~ .job-title-float {
+  top: 0.3rem;
+  transform: translateY(0);
+  font-size: 0.6875rem;
+  color: var(--color-text-tertiary);
 }
 
 /* ─── Buttons ─── */
