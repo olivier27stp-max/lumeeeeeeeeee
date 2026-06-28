@@ -1,10 +1,11 @@
 import React from 'react';
-import { Building2, ChevronRight, Shield } from 'lucide-react';
+import { Building2, ChevronRight, Shield, LogOut } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import type { CompanyMembership } from '../contexts/CompanyContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { useTranslation } from '../i18n';
+import { supabase } from '../lib/supabase';
 
 // ── Full-page selector (shown after login when user has multiple companies) ──
 
@@ -184,6 +185,22 @@ export function CompanySwitcher() {
 export function NoCompanyState() {
   const { language } = useTranslation();
   const fr = language === 'fr';
+  const [email, setEmail] = React.useState<string | null>(null);
+  const [signingOut, setSigningOut] = React.useState(false);
+
+  React.useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null)).catch(() => {});
+  }, []);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      // Full reload clears the orphan session and re-shows the login screen.
+      window.location.href = '/';
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface px-4">
@@ -196,9 +213,23 @@ export function NoCompanyState() {
         </h1>
         <p className="text-sm text-text-secondary mt-2">
           {fr
-            ? 'Votre compte n\'est associé à aucune compagnie. Contactez votre administrateur ou attendez une invitation.'
-            : 'Your account is not associated with any company. Contact your administrator or wait for an invitation.'}
+            ? 'Ce compte n\'est associé à aucune compagnie. Vous êtes peut-être connecté avec le mauvais compte — déconnectez-vous et reconnectez-vous avec le bon, ou attendez une invitation.'
+            : 'This account is not associated with any company. You may be signed in with the wrong account — sign out and sign back in with the right one, or wait for an invitation.'}
         </p>
+        {email && (
+          <p className="text-xs text-text-tertiary mt-3">
+            {fr ? 'Connecté en tant que' : 'Signed in as'}{' '}
+            <span className="font-semibold text-text-secondary">{email}</span>
+          </p>
+        )}
+        <button
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-outline bg-surface-raised hover:bg-primary/5 hover:border-primary/40 transition-colors text-sm font-medium text-text-primary disabled:opacity-60"
+        >
+          <LogOut className="w-4 h-4" />
+          {fr ? 'Se déconnecter / changer de compte' : 'Sign out / switch account'}
+        </button>
       </div>
     </div>
   );
