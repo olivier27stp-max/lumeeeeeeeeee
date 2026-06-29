@@ -14,6 +14,7 @@ import {
   setTaskStatus,
 } from '@/lib/api/tasks';
 import { listMembers } from '@/lib/api/org';
+import { sendPushToUsers } from '@/lib/api/pushNotifications';
 import { useAuth } from '@/lib/auth';
 import { usePermissions } from '@/lib/usePermissions';
 
@@ -79,9 +80,11 @@ export default function Tasks() {
   });
 
   const create = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!title.trim()) throw new Error('Titre requis.');
-      return createTask({
+      const assignedTo = assignee;
+      const taskTitle = title.trim();
+      const res = await createTask({
         orgId: String(orgId),
         createdBy: userId,
         title,
@@ -90,6 +93,15 @@ export default function Tasks() {
         dueDate: dueIso(due),
         assigneeUserId: assignee,
       });
+      // Notify the assignee (push) when assigning to someone other than yourself.
+      if (assignedTo && assignedTo !== userId) {
+        sendPushToUsers(String(orgId), [assignedTo], {
+          title: 'Nouvelle tâche assignée',
+          body: taskTitle,
+          data: { type: 'task' },
+        });
+      }
+      return res;
     },
     onSuccess: () => {
       setCreating(false);

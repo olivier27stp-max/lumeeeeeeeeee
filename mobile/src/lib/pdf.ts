@@ -4,7 +4,9 @@
 
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+// Legacy API: stable cacheDirectory/moveAsync/deleteAsync (the SDK 54+ root
+// export dropped them for a new File/Paths API we don't need here).
+import * as FileSystem from 'expo-file-system/legacy';
 
 /**
  * Render `html` to a PDF and return its file URI. Optionally opens the share

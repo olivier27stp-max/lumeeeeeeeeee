@@ -13,6 +13,8 @@ import { createQuote, markQuoteSent, quoteShareLink, LineItemInput } from '@/lib
 import { getClient } from '@/lib/api/clients';
 import { getCompany } from '@/lib/api/org';
 import { findOrCreateConversation } from '@/lib/api/messaging';
+import { sendEmail } from '@/lib/email';
+import { htmlToPdf, shareHtmlAsPdf } from '@/lib/pdf';
 import { sendSmsViaServer } from '@/lib/api/server';
 import { depositNote, deviceLanguage, packTemplate, quoteNiceMessage, unpackTemplate } from '@/lib/contact';
 import { formatCurrencyCents } from '@/lib/format';
@@ -183,6 +185,48 @@ export default function NewQuote() {
     }
   };
 
+  // Email the quote (with the PDF attached) via the native composer — the server
+  // can't email mobile quotes, so this is the mobile path. Falls back to mailto.
+  const emailQuote = async () => {
+    if (!sentQuote) return;
+    setSendingQuote(true);
+    try {
+      const full = client?.id ? await getClient(client.id) : null;
+      let attachments: string[] | undefined;
+      try {
+        attachments = previewHtml ? [await htmlToPdf(previewHtml, `Soumission-${sentQuote.id}`)] : undefined;
+      } catch {
+        attachments = undefined;
+      }
+      const res = await sendEmail({
+        to: full?.email ?? null,
+        subject: `Soumission — ${company?.company_name ?? current?.companyName ?? 'Lume'}`,
+        body: quoteBody(),
+        attachments,
+      });
+      if (res === 'unavailable') {
+        Alert.alert('Courriel', 'Aucune app de courriel configurée sur cet appareil.');
+        return;
+      }
+      await markQuoteSent(sentQuote.id);
+      qc.invalidateQueries({ queryKey: ['quotes'] });
+      setShowSend(false);
+      router.replace('/(app)/(tabs)');
+    } catch (e) {
+      Alert.alert('Courriel', (e as Error).message);
+    } finally {
+      setSendingQuote(false);
+    }
+  };
+
+  const pdfQuote = async () => {
+    try {
+      if (previewHtml) await shareHtmlAsPdf(previewHtml, `Soumission-${sentQuote?.id ?? 'devis'}`);
+    } catch (e) {
+      Alert.alert('PDF', (e as Error).message);
+    }
+  };
+
   if (!(can('quotes.create') || canSeePricing)) return <Redirect href="/(app)/(tabs)" />;
 
   return (
@@ -324,6 +368,15 @@ export default function NewQuote() {
               <View className="flex-1">
                 <Button title="Envoyer" onPress={sendQuote} loading={sendingQuote} />
               </View>
+            </View>
+            <View className="flex-row items-center justify-center gap-4 pt-2">
+              <Pressable onPress={emailQuote} disabled={sendingQuote}>
+                <Text className="text-sm text-brand">Courriel…</Text>
+              </Pressable>
+              <Text className="text-ink-subtle">·</Text>
+              <Pressable onPress={pdfQuote}>
+                <Text className="text-sm text-brand">PDF…</Text>
+              </Pressable>
             </View>
           </View>
         </KeyboardAvoidingView>
