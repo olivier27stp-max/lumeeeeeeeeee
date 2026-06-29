@@ -112,10 +112,26 @@ export async function refreshAccountStatus(orgId: string) {
 
 // ── Destination Charge helpers ──
 
-const APPLICATION_FEE_PERCENT = 2.9; // Platform fee: 2.9% of the charge amount
+// ── Platform pricing (Lume's revenue) ──
+// What we charge the merchant on every payment, taken as the Stripe application
+// fee: a percentage PLUS a fixed amount. The fixed part (default 30¢) covers
+// Stripe's own fixed fee so WE never pay it out of pocket.
+//
+// How the margin works, fully automatic — no manual payouts, ever:
+//   • We charge the merchant this fee (e.g. 2.9% + 30¢) → lands in our platform balance.
+//   • Stripe deducts OUR OWN negotiated wholesale rate from that same balance.
+//   • The leftover (our fee − Stripe's wholesale) is our margin. Stripe pays it
+//     out to our bank on its automatic schedule, same as any balance.
+// So once you negotiate a lower rate with Stripe (2.2%, 1.8%…), the spread to us
+// GROWS with ZERO code change — Stripe just deducts less. Tune the merchant-facing
+// rate any time via PLATFORM_FEE_PERCENT / PLATFORM_FEE_FIXED_CENTS (no redeploy).
+const PLATFORM_FEE_PERCENT = Number(process.env.PLATFORM_FEE_PERCENT ?? '2.9');
+const PLATFORM_FEE_FIXED_CENTS = Number(process.env.PLATFORM_FEE_FIXED_CENTS ?? '30');
 
 export function calculateApplicationFee(amountCents: number): number {
-  return Math.round(amountCents * APPLICATION_FEE_PERCENT / 100);
+  const fee = Math.round((amountCents * PLATFORM_FEE_PERCENT) / 100) + PLATFORM_FEE_FIXED_CENTS;
+  // Never exceed the charge itself (guards tiny amounts); Stripe rejects fee ≥ amount.
+  return Math.min(fee, Math.max(0, amountCents - 1));
 }
 
 export async function createDestinationPaymentIntent(params: {
