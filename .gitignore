@@ -27,6 +27,12 @@ scripts/*-with-keys.*
 scripts/local-*.env
 scripts/.env*
 
+# ── Playwright (E2E web smoke tests) ──
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # ── IDE ──
 .idea/
 .vscode/settings.json

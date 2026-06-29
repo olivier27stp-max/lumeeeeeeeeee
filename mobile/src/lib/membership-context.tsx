@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Session } from '@supabase/supabase-js';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 
 import { useAuth } from './auth';
+import { supabase } from './supabase';
 import {
   ACTIVE_ORG_KEY,
   CompanyMembership,
@@ -10,6 +12,15 @@ import {
   pickActiveMembership,
   readCachedMemberships,
 } from './membership';
+
+/** Best display name for the signed-in user (Google metadata → email prefix). */
+function sessionDisplayName(session: Session | null): string | null {
+  const m = (session?.user?.user_metadata ?? {}) as Record<string, any>;
+  const name = m.full_name || m.name || m.preferred_username;
+  if (name) return String(name);
+  const email = session?.user?.email;
+  return email ? email.split('@')[0] : null;
+}
 
 type MembershipState = {
   /** Active company membership (null while loading or if user has none). */
@@ -54,15 +65,33 @@ export function MembershipProvider({ children }: { children: ReactNode }) {
 
     try {
       const list = await fetchMemberships(userId);
+      // Fill in the user's display name from the Google session when the DB
+      // didn't store one, so they always see their own name.
+      const name = sessionDisplayName(session);
+      if (name) for (const m of list) if (!m.fullName) m.fullName = name;
+
       setCompanies(list);
-      setCurrent(await pickActiveMembership(list));
+      const active = await pickActiveMembership(list);
+      setCurrent(active);
       await cacheMemberships(list);
+
+      // Best effort: persist the name to the membership so it also shows up in
+      // the team list for admins (no-op if RLS forbids it).
+      if (name && active) {
+        supabase
+          .from('memberships')
+          .update({ full_name: name })
+          .eq('user_id', userId)
+          .eq('org_id', active.orgId)
+          .is('full_name', null)
+          .then(() => {}, () => {});
+      }
     } catch {
       // Network error: keep cached values if we have them.
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, session]);
 
   useEffect(() => {
     load();

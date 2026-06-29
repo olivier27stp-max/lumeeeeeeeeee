@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -14,6 +14,7 @@ import {
   STATUS_COLOR,
   STATUS_LABEL,
 } from '@/lib/api/fieldSales';
+import { createLead } from '@/lib/api/leads';
 import { useAuth } from '@/lib/auth';
 import { usePermissions } from '@/lib/usePermissions';
 import { MK } from '@/lib/offline/mutationKeys';
@@ -32,7 +33,7 @@ const QUICK_ACTIONS: { type: HouseEventType; label: string; status?: HouseStatus
 export default function HouseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session } = useAuth();
-  const { orgId } = usePermissions();
+  const { orgId, can } = usePermissions();
 
   const [note, setNote] = useState('');
   const [name, setName] = useState('');
@@ -68,7 +69,7 @@ export default function HouseDetail() {
     onError: (e: Error) => Alert.alert('Could not log', e.message),
   });
 
-  const logAction = (action: { type: HouseEventType; status?: HouseStatus }) =>
+  const logAction = (action: { type: HouseEventType; status?: HouseStatus }) => {
     logMut.mutate({
       orgId: orgId ?? '',
       houseId: String(id),
@@ -79,10 +80,26 @@ export default function HouseDetail() {
       customer: name || phone ? { name: name || undefined, phone: phone || undefined } : null,
     });
 
+    // A door-side "Lead" with contact info also becomes a real CRM lead so it
+    // shows up in the pipeline (best-effort; the house event is the source of truth).
+    if (action.type === 'lead' && orgId && (name.trim() || phone.trim())) {
+      const [firstName, ...rest] = name.trim().split(/\s+/);
+      createLead({
+        orgId,
+        firstName: firstName || 'Lead',
+        lastName: rest.join(' '),
+        phone: phone.trim() || null,
+        notes: note.trim() || null,
+        assignedTo: session?.user.id ?? null,
+        source: 'd2d',
+      }).catch((e) => console.warn('[d2d-house] createLead failed:', e?.message ?? e));
+    }
+  };
+
   const status = house?.current_status ?? 'unknown';
 
   return (
-    <ScrollView className="flex-1 bg-surface-alt">
+    <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt">
       <View className="p-5 gap-4">
         <View className="gap-2">
           <View className="flex-row items-center gap-2">
@@ -142,6 +159,18 @@ export default function HouseDetail() {
             ))}
           </View>
         </View>
+
+        {can('jobs.create') ? (
+          <Button
+            title="Planifier un RDV / une visite"
+            variant="secondary"
+            onPress={() =>
+              router.push(
+                `/(app)/jobs/new?address=${encodeURIComponent(house?.address ?? '')}&title=${encodeURIComponent('RDV — ' + (name || house?.address || ''))}` as any,
+              )
+            }
+          />
+        ) : null}
 
         <Card className="gap-2">
           <Text className="text-xs uppercase text-ink-muted">History</Text>

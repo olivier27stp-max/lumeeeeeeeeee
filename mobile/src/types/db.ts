@@ -24,11 +24,13 @@ export interface Job {
   description: string | null;
   client_id: string | null;
   client_name: string | null;
+  team_id: string | null;
   property_address: string | null;
   scheduled_at: string | null;
   start_at: string | null;
   end_at: string | null;
   status: JobDbStatus | string;
+  job_type: string | null;
   total_cents: number;
   currency: string;
   notes: string | null;

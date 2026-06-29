@@ -73,7 +73,7 @@ export function JobPhotoGrid({ jobId, orgId, userId, attachments, editable = tru
         <Text className="text-xs text-ink-muted uppercase">
           Photos {photos.length > 0 ? `(${photos.length})` : ''}
         </Text>
-        {uploading ? <ActivityIndicator color="#208AEF" /> : null}
+        {uploading ? <ActivityIndicator color="#171717" /> : null}
       </View>
 
       <View className="flex-row flex-wrap gap-2">

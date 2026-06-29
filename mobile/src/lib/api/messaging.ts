@@ -24,7 +24,7 @@ export function normalizePhone(raw: string): string {
   return `+${digits}`;
 }
 
-async function findOrCreateConversation(params: {
+export async function findOrCreateConversation(params: {
   orgId: string;
   phone: string;
   clientId?: string | null;
@@ -89,6 +89,53 @@ export async function logOutboundMessage(params: {
     .from('conversations')
     .update({ last_message_text: params.text, last_message_at: new Date().toISOString() })
     .eq('id', conversationId);
+}
+
+/** Mark a conversation read — clears its unread badge (call when it's opened). */
+export async function markConversationRead(conversationId: string): Promise<void> {
+  await supabase.from('conversations').update({ unread_count: 0 }).eq('id', conversationId);
+}
+
+export interface ConversationRow {
+  id: string;
+  client_id: string | null;
+  client_name: string | null;
+  phone_number: string;
+  last_message_text: string | null;
+  last_message_at: string | null;
+  unread_count: number | null;
+  status: string | null;
+}
+
+/** All client conversations for the org, newest first; optional text search. */
+export async function listConversations(orgId: string, search?: string): Promise<ConversationRow[]> {
+  let q = supabase
+    .from('conversations')
+    .select('id, client_id, client_name, phone_number, last_message_text, last_message_at, unread_count, status')
+    .eq('org_id', orgId)
+    .order('last_message_at', { ascending: false, nullsFirst: false })
+    .limit(200);
+
+  const term = search?.trim();
+  if (term) {
+    q = q.or(
+      `client_name.ilike.%${term}%,phone_number.ilike.%${term}%,last_message_text.ilike.%${term}%`,
+    );
+  }
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ConversationRow[];
+}
+
+/** Full thread (oldest → newest) for a conversation. */
+export async function listMessages(conversationId: string): Promise<MessageRow[]> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, conversation_id, direction, message_text, status, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as MessageRow[];
 }
 
 /** Recent messages for a phone number's conversation (thread preview). */

@@ -8,17 +8,30 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { useAuth } from '@/lib/auth';
 
 export default function SignIn() {
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const onSubmit = async () => {
     setError(null);
     setLoading(true);
     const { error: e } = await signIn(email.trim(), password);
     setLoading(false);
+    if (e) {
+      setError(e);
+      return;
+    }
+    router.replace('/(app)/(tabs)');
+  };
+
+  const onGoogle = async () => {
+    setError(null);
+    setGoogleLoading(true);
+    const { error: e } = await signInWithGoogle();
+    setGoogleLoading(false);
     if (e) {
       setError(e);
       return;
@@ -56,6 +69,19 @@ export default function SignIn() {
           />
           {error ? <Text className="text-sm text-status-late">{error}</Text> : null}
           <Button title="Sign in" onPress={onSubmit} loading={loading} />
+
+          <View className="flex-row items-center gap-3 py-1">
+            <View className="h-px flex-1 bg-surface-border" />
+            <Text className="text-xs text-ink-muted">or</Text>
+            <View className="h-px flex-1 bg-surface-border" />
+          </View>
+          <Button
+            title="Continue with Google"
+            variant="secondary"
+            onPress={onGoogle}
+            loading={googleLoading}
+          />
+
           <Link href="/(auth)/forgot-password" asChild>
             <Text className="text-center text-sm text-brand">Forgot password?</Text>
           </Link>

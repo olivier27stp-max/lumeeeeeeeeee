@@ -11,6 +11,7 @@ import {
   quoteShareLink,
 } from '@/lib/api/billing';
 import { logOutboundMessage } from '@/lib/api/messaging';
+import { createNotification } from '@/lib/api/notifications';
 import { textNumber } from '@/lib/contact';
 import { formatCurrencyCents } from '@/lib/format';
 
@@ -59,8 +60,45 @@ export function JobBillingCard({
         await Share.share({ message: body, url });
       }
       markInvoiceSent(invoiceId).catch(() => {});
+      createNotification({
+        orgId,
+        title: `Facture envoyée${clientName ? ` à ${clientName}` : ''}`,
+        body: invoiceNumber ? `Facture ${invoiceNumber} · ${formatCurrencyCents(amountCents, currency)}` : undefined,
+        category: 'invoice_sent',
+        type: 'success',
+        entityType: 'job',
+        entityId: jobId,
+      });
     } catch (e) {
       Alert.alert('Send invoice', (e as Error).message);
+    }
+  };
+
+  // One-tap payment reminder for an unpaid invoice (native SMS + log + notif).
+  const remindInvoice = async (invoiceId: string, invoiceNumber: string | null, amountCents: number) => {
+    try {
+      const url = await getOrCreatePaymentLink({ orgId, invoiceId, amountCents, currency });
+      const label = invoiceNumber ? `la facture ${invoiceNumber}` : 'votre facture';
+      const body = `Petit rappel : ${label} de ${formatCurrencyCents(amountCents, currency)} est en attente de paiement. Vous pouvez la régler ici : ${url}`;
+      if (clientPhone) {
+        await textNumber(clientPhone, body);
+        if (userId) {
+          logOutboundMessage({ orgId, phone: clientPhone, text: body, userId, clientId, clientName }).catch(() => {});
+        }
+      } else {
+        await Share.share({ message: body, url });
+      }
+      createNotification({
+        orgId,
+        title: `Relance de paiement envoyée${clientName ? ` à ${clientName}` : ''}`,
+        body: invoiceNumber ? `Facture ${invoiceNumber} · ${formatCurrencyCents(amountCents, currency)}` : undefined,
+        category: 'payment_reminder',
+        type: 'info',
+        entityType: 'job',
+        entityId: jobId,
+      });
+    } catch (e) {
+      Alert.alert('Relance', (e as Error).message);
     }
   };
 
@@ -87,6 +125,15 @@ export function JobBillingCard({
         await Share.share({ message: body, url });
       }
       markQuoteSent(quoteId).catch(() => {});
+      createNotification({
+        orgId,
+        title: `Soumission envoyée${clientName ? ` à ${clientName}` : ''}`,
+        body: quoteNumber ? `Quote ${quoteNumber} · ${formatCurrencyCents(amountCents, currency)}` : undefined,
+        category: 'quote_sent',
+        type: 'success',
+        entityType: 'job',
+        entityId: jobId,
+      });
     } catch (e) {
       Alert.alert('Send quote', (e as Error).message);
     }
@@ -159,14 +206,22 @@ export function JobBillingCard({
               </Text>
             </View>
             {due > 0 ? (
-              <Pressable
-                onPress={() => sendInvoice(inv.id, inv.invoice_number, due)}
-                className="self-start rounded-full bg-brand px-4 py-1.5"
-              >
-                <Text className="text-xs font-medium text-white">
-                  {clientPhone ? 'Send invoice to client' : 'Send invoice'}
-                </Text>
-              </Pressable>
+              <View className="flex-row flex-wrap gap-2">
+                <Pressable
+                  onPress={() => sendInvoice(inv.id, inv.invoice_number, due)}
+                  className="rounded-full bg-brand px-4 py-1.5"
+                >
+                  <Text className="text-xs font-medium text-white">
+                    {clientPhone ? 'Envoyer la facture' : 'Send invoice'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => remindInvoice(inv.id, inv.invoice_number, due)}
+                  className="rounded-full border border-brand px-4 py-1.5"
+                >
+                  <Text className="text-xs font-medium text-brand">Relancer le paiement</Text>
+                </Pressable>
+              </View>
             ) : null}
           </View>
         );

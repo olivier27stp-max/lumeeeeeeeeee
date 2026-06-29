@@ -33,7 +33,7 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled 
       className={`h-12 rounded-2xl items-center justify-center px-5 ${containerByVariant[variant]} ${isDisabled ? 'opacity-50' : ''}`}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' || variant === 'danger' ? '#fff' : '#208AEF'} />
+        <ActivityIndicator color={variant === 'primary' || variant === 'danger' ? '#fff' : '#171717'} />
       ) : (
         <Text className={`text-base font-semibold ${textByVariant[variant]}`}>{title}</Text>
       )}

@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { ClientRecord } from '@/types/db';
+import { createNotification } from './notifications';
 
 export async function listClients(search?: string, limit = 50): Promise<ClientRecord[]> {
   let q = supabase
@@ -10,15 +11,28 @@ export async function listClients(search?: string, limit = 50): Promise<ClientRe
     .limit(limit);
 
   if (search && search.trim().length > 0) {
-    const term = search.trim();
+    // In a PostgREST .or() filter the wildcard is `*`, not `%` — using `%` here
+    // matches the literal characters and returns nothing (this broke search).
+    const term = search.trim().replace(/[,()*]/g, ' ');
     q = q.or(
-      `first_name.ilike.%${term}%,last_name.ilike.%${term}%,company.ilike.%${term}%,email.ilike.%${term}%`,
+      `first_name.ilike.*${term}*,last_name.ilike.*${term}*,company.ilike.*${term}*,email.ilike.*${term}*`,
     );
   }
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   return (data ?? []) as ClientRecord[];
+}
+
+/** Phone numbers for a set of clients, keyed by client id (for job action rows). */
+export async function listClientPhones(ids: string[]): Promise<Record<string, string | null>> {
+  const unique = Array.from(new Set(ids.filter(Boolean)));
+  if (unique.length === 0) return {};
+  const { data, error } = await supabase.from('clients').select('id, phone').in('id', unique);
+  if (error) throw new Error(error.message);
+  const map: Record<string, string | null> = {};
+  for (const r of data ?? []) map[r.id as string] = (r.phone as string | null) ?? null;
+  return map;
 }
 
 export interface ClientInput {
@@ -47,7 +61,17 @@ export async function createClient(orgId: string, input: ClientInput): Promise<C
     .select('*')
     .single();
   if (error) throw new Error(error.message);
-  return data as ClientRecord;
+  const created = data as ClientRecord;
+  const name = `${created.first_name ?? ''} ${created.last_name ?? ''}`.trim() || 'Client';
+  createNotification({
+    orgId,
+    title: `Nouveau client : ${name}`,
+    category: 'new_client',
+    type: 'success',
+    entityType: 'client',
+    entityId: created.id,
+  });
+  return created;
 }
 
 export async function updateClient(id: string, input: ClientInput): Promise<ClientRecord> {

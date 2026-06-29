@@ -3,7 +3,45 @@
 // authenticated org member can read/write directly). We replicate the minimal
 // write logic: log an event, move the house status, and keep the pin in sync.
 
+import * as Location from 'expo-location';
+
 import { supabase } from '../supabase';
+
+/** Turn GPS coordinates into a real street address (so jobs/quotes get the
+ * address, not "45.123, -73.456"). Returns null on failure. */
+async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  try {
+    const res = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+    const a = res?.[0];
+    if (!a) return null;
+    const line1 = [a.streetNumber, a.street].filter(Boolean).join(' ');
+    const parts = [line1, a.city, a.region].filter(Boolean);
+    return parts.join(', ') || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether reps can see each other's commission totals (org setting, default on).
+ * Defaults to true if the column/row isn't there yet (migration not run). */
+export async function getPeerPayoutsVisible(orgId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('field_settings')
+    .select('show_peer_payouts')
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (error) return true;
+  return (data?.show_peer_payouts ?? true) === true;
+}
+
+/** Toggle peer payout visibility for the org (managers only — gate the UI). */
+export async function setPeerPayoutsVisible(orgId: string, value: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('field_settings')
+    .update({ show_peer_payouts: value })
+    .eq('org_id', orgId);
+  if (error) throw new Error(error.message);
+}
 
 export type HouseStatus =
   | 'unknown'
@@ -210,8 +248,10 @@ export async function createHouseAt(params: {
   status?: HouseStatus;
 }): Promise<FieldHouse> {
   const { orgId, userId, lat, lng, address, status = 'unknown' } = params;
-  // address is NOT NULL in the DB — fall back to the coordinates.
-  const safeAddress = address?.trim() || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  // address is NOT NULL in the DB. Prefer the passed address, else reverse-geocode
+  // the tapped point to a real street address, else fall back to coordinates.
+  const geocoded = address?.trim() ? null : await reverseGeocode(lat, lng);
+  const safeAddress = address?.trim() || geocoded || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
   const { data, error } = await supabase
     .from('field_house_profiles')
     .insert({
@@ -240,4 +280,47 @@ export async function createHouseAt(params: {
   );
 
   return data as FieldHouse;
+}
+
+// ── Territories / zones (team-delimited areas) ───────────────────────────────
+
+export interface Territory {
+  id: string;
+  name: string;
+  color: string | null;
+  polygon_geojson: any;
+  assigned_team_id: string | null;
+}
+
+/** All active zones for the org. */
+export async function listTerritories(orgId: string): Promise<Territory[]> {
+  const { data, error } = await supabase
+    .from('field_territories')
+    .select('id, name, color, polygon_geojson, assigned_team_id')
+    .eq('org_id', orgId)
+    .is('deleted_at', null);
+  if (error) return [];
+  return (data ?? []) as Territory[];
+}
+
+/** Create a zone (admin/owner). `coordinates` is a [lng,lat][] ring. */
+export async function createTerritory(params: {
+  orgId: string;
+  name: string;
+  color: string;
+  coordinates: [number, number][];
+  assignedTeamId: string | null;
+}): Promise<void> {
+  const ring = [...params.coordinates];
+  if (ring.length && (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1])) {
+    ring.push(ring[0]); // close the polygon
+  }
+  const { error } = await supabase.from('field_territories').insert({
+    org_id: params.orgId,
+    name: params.name,
+    color: params.color,
+    polygon_geojson: { type: 'Polygon', coordinates: [ring] },
+    assigned_team_id: params.assignedTeamId,
+  });
+  if (error) throw new Error(error.message);
 }

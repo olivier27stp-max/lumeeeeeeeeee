@@ -2,6 +2,8 @@ import { useRef } from 'react';
 import { Modal, Text, View } from 'react-native';
 import Signature, { SignatureViewRef } from 'react-native-signature-canvas';
 
+import { Button } from '@/components/ui/Button';
+
 type Props = {
   visible: boolean;
   onClose: () => void;
@@ -22,24 +24,43 @@ export function SignaturePad({ visible, onClose, onSave }: Props) {
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View className="flex-1 bg-white">
         <View className="px-5 pt-14 pb-2">
-          <Text className="text-xl font-bold text-ink">Client signature</Text>
+          <Text className="text-xl font-bold text-ink">Signature du client</Text>
           <Text className="text-sm text-ink-muted">
-            Ask the client to sign below to confirm the work.
+            Demandez au client de signer ci-dessous pour confirmer le travail.
           </Text>
         </View>
-        <Signature
-          ref={ref}
-          onOK={handleOK}
-          onEmpty={onClose}
-          onError={onClose}
-          descriptionText=""
-          clearText="Clear"
-          confirmText="Save"
-          imageType="image/png"
-          webStyle={`.m-signature-pad--footer { margin: 8px; }
-            .m-signature-pad { box-shadow: none; border: 1px solid #E2E8F0; }
-            body,html { height: 100%; }`}
-        />
+
+        {/* The canvas. Its own footer buttons are hidden (unreliable on device);
+            we drive it with the native buttons below via the ref. */}
+        <View className="flex-1">
+          <Signature
+            ref={ref}
+            onOK={handleOK}
+            onEmpty={() => {
+              /* nothing drawn yet — keep the pad open so the client can sign */
+            }}
+            onError={onClose}
+            descriptionText=""
+            imageType="image/png"
+            webStyle={`.m-signature-pad--footer { display: none; margin: 0; }
+              .m-signature-pad { box-shadow: none; border: 1px solid #E2E8F0; }
+              .m-signature-pad--body { border: none; }
+              body,html { height: 100%; margin: 0; }`}
+          />
+        </View>
+
+        {/* Native action buttons — always visible, reliable. */}
+        <View className="gap-2 px-5 pb-10 pt-2">
+          <Button title="Confirmer la signature" onPress={() => ref.current?.readSignature()} />
+          <View className="flex-row gap-2">
+            <View className="flex-1">
+              <Button title="Effacer" variant="secondary" onPress={() => ref.current?.clearSignature()} />
+            </View>
+            <View className="flex-1">
+              <Button title="Annuler" variant="secondary" onPress={onClose} />
+            </View>
+          </View>
+        </View>
       </View>
     </Modal>
   );

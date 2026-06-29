@@ -22,6 +22,7 @@ export interface SubmitDemoRequestPayload {
   source?: string | null;
   availability?: string | null;
   message?: string | null;
+  referral_code?: string | null;
 }
 
 /** Public — no auth required. Just sends an email to the platform owner. */

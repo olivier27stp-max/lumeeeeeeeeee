@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { Job } from '@/types/db';
+import { createNotification } from './notifications';
 import { endOfToday, startOfToday } from '../format';
 import {
   PermissionsMap,
@@ -74,6 +75,83 @@ export async function listUpcomingJobs(access?: JobAccess, limit = 50): Promise<
   return (data ?? []).map((j) => maskJob(j as Job, access));
 }
 
+/**
+ * Most recently created jobs regardless of schedule date — used as a Home
+ * fallback so the box still shows real work when nothing is scheduled today or
+ * upcoming. Respects team scope and financial masking like the other lists.
+ */
+export async function listRecentJobs(access?: JobAccess, limit = 10): Promise<Job[]> {
+  let query = supabase
+    .from('jobs')
+    .select('*')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  query = applyScope(query, access);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((j) => maskJob(j as Job, access));
+}
+
+/**
+ * Test helper (runs as the signed-in user): take the most recent real jobs and
+ * spread them across today & tomorrow at staggered hours, so the Home carousels
+ * have real data to demo. Returns how many landed on each day.
+ */
+export async function spreadJobsAcrossTodayTomorrow(
+  orgId: string,
+): Promise<{ today: number; tomorrow: number }> {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('id')
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(8);
+  if (error) throw new Error(error.message);
+  const ids = (data ?? []).map((r) => r.id as string);
+  if (ids.length === 0) throw new Error('Aucun job existant à replanifier.');
+
+  let today = 0;
+  let tomorrow = 0;
+  for (let i = 0; i < ids.length; i++) {
+    const offsetDays = i % 2; // alternate today / tomorrow
+    const hour = 8 + Math.floor(i / 2) * 2; // 8h, 10h, 12h, …
+    const start = new Date();
+    start.setDate(start.getDate() + offsetDays);
+    start.setHours(hour, 0, 0, 0);
+    const end = new Date(start);
+    end.setHours(hour + 2, 0, 0, 0);
+    const { error: upErr } = await supabase
+      .from('jobs')
+      .update({ scheduled_at: start.toISOString(), end_at: end.toISOString() })
+      .eq('id', ids[i]);
+    if (upErr) throw new Error(upErr.message);
+    if (offsetDays === 0) today++;
+    else tomorrow++;
+  }
+  return { today, tomorrow };
+}
+
+/** Search jobs by title, client name or job number (for the global search). */
+export async function searchJobs(term: string, access?: JobAccess, limit = 20): Promise<Job[]> {
+  const t = term.trim().replace(/[,()*]/g, ' ');
+  if (!t) return [];
+  let query = supabase
+    .from('jobs')
+    .select('*')
+    .is('deleted_at', null)
+    .or(`title.ilike.*${t}*,client_name.ilike.*${t}*,job_number.ilike.*${t}*`)
+    .order('scheduled_at', { ascending: false, nullsFirst: false })
+    .limit(limit);
+  query = applyScope(query, access);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((j) => maskJob(j as Job, access));
+}
+
 export async function listJobsInRange(
   startISO: string,
   endISO: string,
@@ -94,6 +172,17 @@ export async function listJobsInRange(
   return (data ?? []).map((j) => maskJob(j as Job, access));
 }
 
+export async function listJobsForClient(clientId: string, access?: JobAccess): Promise<Job[]> {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('*')
+    .eq('client_id', clientId)
+    .is('deleted_at', null)
+    .order('scheduled_at', { ascending: false, nullsFirst: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((j) => maskJob(j as Job, access));
+}
+
 export async function getJob(id: string, access?: JobAccess): Promise<Job | null> {
   const { data, error } = await supabase
     .from('jobs')
@@ -107,6 +196,40 @@ export async function getJob(id: string, access?: JobAccess): Promise<Job | null
   return maskJob(data as Job, access);
 }
 
+export interface JobLineItem {
+  name: string;
+  qty: number;
+  unit_price_cents: number;
+}
+
+export interface JobLineItemRow {
+  id: string;
+  name: string;
+  qty: number;
+  unit_price_cents: number;
+  total_cents: number;
+}
+
+/** The services/line items attached to a job (what the tech will actually do). */
+export async function listJobLineItems(jobId: string): Promise<JobLineItemRow[]> {
+  const { data, error } = await supabase
+    .from('job_line_items')
+    .select('id, name, qty, unit_price_cents, total_cents')
+    .eq('job_id', jobId)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as JobLineItemRow[];
+}
+
+/** UI frequency keys (jobs/new) mapped to the DB-allowed recurrence config. */
+export type RecurrenceFrequencyKey =
+  | 'daily'
+  | 'weekly'
+  | 'biweekly'
+  | 'monthly'
+  | 'annual'
+  | 'custom';
+
 export interface JobInput {
   title: string;
   description?: string | null;
@@ -114,23 +237,173 @@ export interface JobInput {
   client_name?: string | null;
   property_address?: string | null;
   scheduled_at?: string | null;
+  end_at?: string | null;
   team_id?: string | null;
+  job_type?: string;
+  requires_invoicing?: boolean;
+  items?: JobLineItem[];
+  taxRatePct?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  /** When set (job_type 'recurring'), a job_recurrence_rules row is created so
+   * the server cron generates future occurrences. */
+  recurrence?: { frequency: RecurrenceFrequencyKey; startISO: string; endDate?: string | null } | null;
+}
+
+/** Build the job_recurrence_rules payload from a UI frequency key + start date.
+ * The DB CHECK only allows daily|weekly|biweekly|monthly|custom, so 'annual'
+ * is expressed as a 365-day custom interval. */
+function buildRecurrenceRow(
+  jobId: string,
+  orgId: string,
+  cfg: { frequency: RecurrenceFrequencyKey; startISO: string; endDate?: string | null },
+): Record<string, unknown> {
+  const start = new Date(cfg.startISO);
+  const startDate = start.toISOString().slice(0, 10);
+  const weekday = start.getDay(); // 0=Sun … 6=Sat
+  const dom = start.getDate();
+
+  let frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom' = 'weekly';
+  let interval_days: number | null = null;
+  let day_of_week: number[] | null = null;
+  let day_of_month: number | null = null;
+
+  switch (cfg.frequency) {
+    case 'daily':
+      frequency = 'daily';
+      interval_days = 1;
+      break;
+    case 'weekly':
+      frequency = 'weekly';
+      interval_days = 7;
+      day_of_week = [weekday];
+      break;
+    case 'biweekly':
+      frequency = 'biweekly';
+      interval_days = 14;
+      day_of_week = [weekday];
+      break;
+    case 'monthly':
+      frequency = 'monthly';
+      day_of_month = dom;
+      break;
+    case 'annual':
+      frequency = 'custom';
+      interval_days = 365;
+      break;
+    case 'custom':
+    default:
+      frequency = 'custom';
+      interval_days = 7;
+      break;
+  }
+
+  // First future occurrence: start + interval (the initial job already exists).
+  const next = new Date(start);
+  if (frequency === 'monthly') next.setMonth(next.getMonth() + 1);
+  else next.setDate(next.getDate() + (interval_days ?? 7));
+
+  return {
+    job_id: jobId,
+    org_id: orgId,
+    frequency,
+    interval_days,
+    day_of_week,
+    day_of_month,
+    start_date: startDate,
+    end_date: cfg.endDate ?? null,
+    next_run_at: next.toISOString(),
+    is_active: true,
+  };
 }
 
 export async function createJob(orgId: string, input: JobInput): Promise<Job> {
+  const { items = [], taxRatePct = 0, ...rest } = input;
+  const subtotal = items.reduce((s, i) => s + Math.round(i.qty * i.unit_price_cents), 0);
+  const taxTotal = Math.round((subtotal * taxRatePct) / 100);
+  const total = subtotal + taxTotal;
+
   const { data, error } = await supabase
     .from('jobs')
     .insert({
       org_id: orgId,
       status: 'scheduled',
-      ...input,
-      // property_address is NOT NULL in the DB.
-      property_address: input.property_address ?? '',
+      title: rest.title,
+      description: rest.description ?? null,
+      client_id: rest.client_id ?? null,
+      client_name: rest.client_name ?? null,
+      team_id: rest.team_id ?? null,
+      job_type: rest.job_type ?? 'one_off',
+      requires_invoicing: rest.requires_invoicing ?? false,
+      property_address: rest.property_address ?? '',
+      scheduled_at: rest.scheduled_at ?? null,
+      end_at: rest.end_at ?? null,
+      latitude: rest.latitude ?? null,
+      longitude: rest.longitude ?? null,
+      currency: 'CAD',
+      total_cents: total,
     })
     .select('*')
     .single();
   if (error) throw new Error(error.message);
-  return data as Job;
+  const job = data as Job;
+
+  createNotification({
+    orgId,
+    title: `Nouveau job : ${job.title}`,
+    body: job.client_name ?? undefined,
+    category: 'new_job',
+    type: 'info',
+    entityType: 'job',
+    entityId: job.id,
+  });
+
+  if (items.length) {
+    // RLS requires created_by = auth.uid(), otherwise the insert is silently rejected.
+    const { data: auth } = await supabase.auth.getUser();
+    const createdBy = auth?.user?.id ?? null;
+    const rows = items.map((it) => ({
+      org_id: orgId,
+      job_id: job.id,
+      created_by: createdBy,
+      name: it.name || 'Item',
+      qty: it.qty,
+      unit_price_cents: it.unit_price_cents,
+      total_cents: Math.round(it.qty * it.unit_price_cents),
+    }));
+    const { error: liErr } = await supabase.from('job_line_items').insert(rows);
+    if (liErr) throw new Error(`Services non enregistrés : ${liErr.message}`);
+  }
+
+  // Recurring job → create the recurrence rule so the server cron generates
+  // future occurrences. Best effort: the job itself is already saved.
+  if (rest.job_type === 'recurring' && input.recurrence) {
+    const row = buildRecurrenceRow(job.id, orgId, {
+      ...input.recurrence,
+      startISO: input.recurrence.startISO || rest.scheduled_at || new Date().toISOString(),
+    });
+    const { error: recErr } = await supabase.from('job_recurrence_rules').insert(row);
+    if (recErr) console.warn('[createJob] recurrence rule not saved:', recErr.message);
+  }
+
+  // Auto-add to the schedule (schedule_events) so it shows in the calendar,
+  // like the web. Best effort — never fail job creation over this.
+  if (rest.scheduled_at) {
+    await supabase
+      .from('schedule_events')
+      .insert({
+        org_id: orgId,
+        job_id: job.id,
+        team_id: rest.team_id ?? null,
+        start_at: rest.scheduled_at,
+        end_at: rest.end_at ?? rest.scheduled_at,
+        start_time: rest.scheduled_at,
+        end_time: rest.end_at ?? rest.scheduled_at,
+        status: 'scheduled',
+      })
+      .then(undefined, () => {});
+  }
+  return job;
 }
 
 export async function updateJob(id: string, input: Partial<JobInput>): Promise<Job> {
@@ -142,6 +415,12 @@ export async function updateJob(id: string, input: Partial<JobInput>): Promise<J
     .single();
   if (error) throw new Error(error.message);
   return data as Job;
+}
+
+/** Permanently delete a job (RLS still enforces the org/team boundary). */
+export async function deleteJob(id: string): Promise<void> {
+  const { error } = await supabase.from('jobs').delete().eq('id', id);
+  if (error) throw new Error(error.message);
 }
 
 export async function markJobInProgress(id: string): Promise<Job> {

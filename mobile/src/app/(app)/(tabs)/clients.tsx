@@ -55,7 +55,7 @@ export default function ClientsTab() {
           <ClientCard client={item} onPress={() => router.push(`/(app)/clients/${item.id}`)} />
         )}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#208AEF" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#171717" />
         }
         ListEmptyComponent={
           !isLoading ? (

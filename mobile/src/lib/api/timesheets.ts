@@ -49,6 +49,39 @@ export async function getActiveTimesheet(employeeId: string): Promise<TimeEntryR
   return (data as TimeEntryRow | null) ?? null;
 }
 
+/** Entries for an employee between two YYYY-MM-DD dates (inclusive). */
+export async function listEntriesInRange(
+  employeeId: string,
+  startDate: string,
+  endDate: string,
+): Promise<TimeEntryRow[]> {
+  const { data, error } = await supabase
+    .from('time_entries')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .order('punch_in_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as TimeEntryRow[];
+}
+
+/**
+ * All currently open sessions (active or on break) across the org — powers the
+ * admin/owner "who's on the clock" roster on the Punchin page. Mirrors the
+ * team-roster avatars shown on the web Timesheets hub.
+ */
+export async function listActiveOrgEntries(orgId: string): Promise<TimeEntryRow[]> {
+  const { data, error } = await supabase
+    .from('time_entries')
+    .select('*')
+    .eq('org_id', orgId)
+    .in('status', ['active', 'paused'])
+    .order('punch_in_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as TimeEntryRow[];
+}
+
 export async function listTodaysEntries(employeeId: string): Promise<TimeEntryRow[]> {
   const { data, error } = await supabase
     .from('time_entries')

@@ -415,8 +415,8 @@ export const ROLE_PRESETS: Record<TeamRole, PermissionsMap> = {
     'leads.create', 'leads.read', 'leads.update',
     // Quotes (with pricing)
     'quotes.create', 'quotes.read', 'quotes.update', 'quotes.send',
-    // Jobs (read only, no financial fields)
-    'jobs.read',
+    // Jobs (reps can create/read; financial fields still masked unless they have pricing)
+    'jobs.read', 'jobs.create',
     // Messages
     'messages.read', 'messages.send',
     // Calendar

@@ -1,117 +1,410 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Redirect, router } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { createJob, JobInput } from '@/lib/api/jobs';
-import { listClients } from '@/lib/api/clients';
-import { clientFullName } from '@/lib/format';
+import { AddressAutocomplete } from '@/components/AddressAutocomplete';
+import { ClientPicker, PickedClient } from '@/components/ClientPicker';
+import { LineItemsEditor } from '@/components/LineItemsEditor';
+import { MiniWeekCalendar, sameDay } from '@/components/MiniWeekCalendar';
+import { createJob, listJobsInRange } from '@/lib/api/jobs';
+import { getClient } from '@/lib/api/clients';
+import { listTeams } from '@/lib/api/org';
+import { findOrCreateConversation } from '@/lib/api/messaging';
+import { sendSmsViaServer } from '@/lib/api/server';
+import { LineItemInput } from '@/lib/api/billing';
+import { bookingNiceMessage, deviceLanguage, packTemplate, unpackTemplate } from '@/lib/contact';
+import { formatCurrencyCents, formatDateTime, formatTime } from '@/lib/format';
+import { useAuth } from '@/lib/auth';
+import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
+
+const FREQUENCIES = [
+  { key: 'daily', label: 'Daily' },
+  { key: 'weekly', label: 'Weekly' },
+  { key: 'biweekly', label: 'Bi-weekly' },
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'annual', label: 'Annual' },
+  { key: 'custom', label: 'Custom' },
+];
+const DEFAULT_TAX = '14.975';
+
+function SectionLabel({ children }: { children: string }) {
+  return <Text className="px-1 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{children}</Text>;
+}
 
 export default function NewJob() {
   const qc = useQueryClient();
-  const { orgId, teamId, canCreateJobs } = usePermissions();
+  const { orgId, teamId, scope, permissions, role, canCreateJobs, canSeePricing } = usePermissions();
+  const { session } = useAuth();
+  const { current } = useMembership();
+  const isManager = role === 'owner' || role === 'admin';
 
-  const [title, setTitle] = useState('');
-  const [address, setAddress] = useState('');
-  const [description, setDescription] = useState('');
-  const [clientSearch, setClientSearch] = useState('');
-  const [client, setClient] = useState<{ id: string; name: string } | null>(null);
-  const [scheduleToday, setScheduleToday] = useState(true);
+  // Booking-confirmation popup (after Save): send the client the appointment
+  // details (time / amount / address) + an editable, persisted nice message.
+  const lang = deviceLanguage();
+  const bookingKey = `lume_booking_tmpl_${session?.user.id ?? ''}`;
+  const [createdJobId, setCreatedJobId] = useState<string | null>(null);
+  const [showBooking, setShowBooking] = useState(false);
+  const [bookingNice, setBookingNice] = useState('');
+  const [sendingBooking, setSendingBooking] = useState(false);
 
-  const { data: clientResults } = useQuery({
-    queryKey: ['clients', 'search', clientSearch],
-    queryFn: () => listClients(clientSearch),
-    enabled: !client && clientSearch.trim().length >= 2,
+  // Owner/admin can assign the job to any team; others default to their own.
+  const [assignedTeam, setAssignedTeam] = useState<string | null>(teamId ?? null);
+  const { data: teams } = useQuery({
+    queryKey: ['teams', orgId],
+    queryFn: () => listTeams(orgId ?? ''),
+    enabled: !!orgId && isManager,
   });
+
+  // Prefill from a D2D pin "close" (address) or other deep-links.
+  const prefill = useLocalSearchParams<{ address?: string; title?: string }>();
+  const [title, setTitle] = useState(typeof prefill.title === 'string' ? prefill.title : '');
+  const [client, setClient] = useState<PickedClient | null>(null);
+  const [address, setAddress] = useState(typeof prefill.address === 'string' ? prefill.address : '');
+  const [description, setDescription] = useState('');
+  const [jobType, setJobType] = useState<'one_off' | 'recurring'>('one_off');
+  const [frequency, setFrequency] = useState('weekly');
+  const [startDate, setStartDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setMinutes(0, 0, 0);
+    return d;
+  });
+  const [endDate, setEndDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(d.getHours() + 1, 0, 0, 0);
+    return d;
+  });
+  const [items, setItems] = useState<LineItemInput[]>([]);
+  const [taxRate, setTaxRate] = useState(DEFAULT_TAX);
+
+  const totals = useMemo(() => {
+    const subtotal = items.reduce((s, i) => s + Math.round(i.qty * i.unit_price_cents), 0);
+    const tax = Math.round((subtotal * (parseFloat(taxRate) || 0)) / 100);
+    return { subtotal, tax, total: subtotal + tax };
+  }, [items, taxRate]);
+
+  // Existing jobs around now → availability dots + the selected day's bookings.
+  const calRange = useMemo(() => {
+    const s = new Date(); s.setDate(s.getDate() - 7); s.setHours(0, 0, 0, 0);
+    const e = new Date(); e.setDate(e.getDate() + 28); e.setHours(23, 59, 59, 0);
+    return { s: s.toISOString(), e: e.toISOString() };
+  }, []);
+  const { data: calJobs } = useQuery({
+    queryKey: ['jobs', 'cal', orgId, role, teamId],
+    queryFn: () => listJobsInRange(calRange.s, calRange.e, { teamId, scope, permissions, role }),
+    enabled: !!orgId,
+  });
+  const countForDay = (d: Date) =>
+    (calJobs ?? []).filter((j) => j.scheduled_at && sameDay(new Date(j.scheduled_at), d)).length;
+  const dayJobs = useMemo(
+    () =>
+      (calJobs ?? [])
+        .filter((j) => j.scheduled_at && sameDay(new Date(j.scheduled_at), startDate))
+        .sort((a, b) => (a.scheduled_at ?? '').localeCompare(b.scheduled_at ?? '')),
+    [calJobs, startDate],
+  );
+  // Pick a day from the calendar → keep the chosen start/end times.
+  const pickDay = (d: Date) => {
+    setStartDate((prev) => { const n = new Date(d); n.setHours(prev.getHours(), prev.getMinutes(), 0, 0); return n; });
+    setEndDate((prev) => { const n = new Date(d); n.setHours(prev.getHours(), prev.getMinutes(), 0, 0); return n; });
+  };
+  const setTimeOn = (base: Date, t: Date) => {
+    const n = new Date(base);
+    n.setHours(t.getHours(), t.getMinutes(), 0, 0);
+    return n;
+  };
 
   const saveMut = useMutation({
     mutationFn: () => {
-      const input: JobInput = {
+      return createJob(orgId ?? '', {
         title: title.trim(),
-        description: description.trim() || null,
-        property_address: address.trim() || null,
         client_id: client?.id ?? null,
         client_name: client?.name ?? null,
-        team_id: teamId ?? null,
-        scheduled_at: scheduleToday ? new Date().toISOString() : null,
-      };
-      return createJob(orgId ?? '', input);
+        property_address: address.trim(),
+        description: description.trim() || null,
+        team_id: isManager ? assignedTeam : teamId ?? null,
+        job_type: jobType,
+        requires_invoicing: true,
+        scheduled_at: startDate.toISOString(),
+        end_at: endDate.toISOString(),
+        items: canSeePricing ? items : [],
+        taxRatePct: parseFloat(taxRate) || 0,
+        recurrence:
+          jobType === 'recurring'
+            ? { frequency: frequency as any, startISO: startDate.toISOString() }
+            : null,
+      });
     },
-    onSuccess: (job) => {
+    onSuccess: async (job) => {
       qc.invalidateQueries({ queryKey: ['jobs'] });
-      router.replace(`/(app)/jobs/${job.id}`);
+      // Open the booking-confirmation popup instead of navigating right away.
+      setCreatedJobId(job.id);
+      const saved = await AsyncStorage.getItem(bookingKey).catch(() => null);
+      setBookingNice(
+        unpackTemplate(saved, current?.companyName, lang) ??
+          bookingNiceMessage(current?.companyName, client?.name ?? null, lang),
+      );
+      setShowBooking(true);
     },
     onError: (e: Error) => Alert.alert('Could not create job', e.message),
   });
 
+  // The auto-filled appointment details appended under the nice message.
+  const bookingDetails = () => {
+    const lines: string[] = [`📅 ${formatDateTime(startDate.toISOString())}`];
+    if (address.trim()) lines.push(`📍 ${address.trim()}`);
+    if (canSeePricing && totals.total > 0) lines.push(`💵 ${formatCurrencyCents(totals.total, 'CAD')}`);
+    return lines.join('\n');
+  };
+
+  // Go to the new job's detail page (after sending or skipping the confirmation).
+  const goToJob = () => {
+    setShowBooking(false);
+    if (createdJobId) router.replace(`/(app)/jobs/${createdJobId}`);
+  };
+
+  // Send the booking confirmation to the client via Twilio (in-app thread).
+  const sendBooking = async () => {
+    if (!orgId || !client?.id) {
+      Alert.alert('Confirmation', "Aucun client n'est rattaché à ce job.");
+      return;
+    }
+    setSendingBooking(true);
+    try {
+      const full = await getClient(client.id);
+      const phone = full?.phone ?? null;
+      if (!phone) {
+        Alert.alert('Confirmation', "Ce client n'a pas de numéro de téléphone.");
+        setSendingBooking(false);
+        return;
+      }
+      const body = `${bookingNice.trim()}\n\n${bookingDetails()}`;
+      await sendSmsViaServer({ phone, text: body, clientId: client.id, clientName: client.name });
+      // Persist the edited nice message for next time.
+      AsyncStorage.setItem(bookingKey, packTemplate(bookingNice.trim(), current?.companyName)).catch(() => {});
+      const cid = await findOrCreateConversation({ orgId, phone, clientId: client.id, clientName: client.name });
+      setShowBooking(false);
+      router.replace(
+        `/(app)/conversation/${cid}?phone=${encodeURIComponent(phone)}&name=${encodeURIComponent(client.name)}&clientId=${encodeURIComponent(client.id)}` as any,
+      );
+    } catch (e) {
+      Alert.alert('Confirmation', (e as Error).message);
+    } finally {
+      setSendingBooking(false);
+    }
+  };
+
   if (!canCreateJobs) return <Redirect href="/(app)/(tabs)" />;
 
   return (
-    <ScrollView className="flex-1 bg-surface-alt">
-      <View className="p-5 gap-3">
-        <Input label="Title" value={title} onChangeText={setTitle} placeholder="e.g. AC maintenance" />
+    <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt" contentContainerStyle={{ padding: 20, gap: 14 }}>
+      <Input label="Job title" value={title} onChangeText={setTitle} placeholder="e.g. AC maintenance — Smith" />
 
-        {/* Client picker */}
-        {client ? (
-          <Card className="flex-row items-center justify-between">
-            <Text className="text-base text-ink">{client.name}</Text>
-            <Pressable onPress={() => setClient(null)}>
-              <Text className="text-sm text-brand">Change</Text>
+      <View className="gap-2">
+        <SectionLabel>Client</SectionLabel>
+        <ClientPicker value={client} onChange={setClient} />
+      </View>
+
+      {/* Team assignment (owner/admin) */}
+      {isManager && (teams?.length ?? 0) > 0 ? (
+        <View className="gap-2">
+          <SectionLabel>Équipe assignée</SectionLabel>
+          <View className="flex-row flex-wrap gap-2">
+            {(teams ?? []).map((t) => {
+              const sel = assignedTeam === t.id;
+              return (
+                <Pressable
+                  key={t.id}
+                  onPress={() => setAssignedTeam(t.id)}
+                  className={`flex-row items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${sel ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
+                >
+                  {t.color_hex ? (
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: t.color_hex }} />
+                  ) : null}
+                  <Text className={`text-xs font-semibold ${sel ? 'text-white' : 'text-ink'}`}>{t.name}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+
+      <AddressAutocomplete label="Job site address" value={address} onChangeText={setAddress} onSelect={(a) => setAddress(a.address)} />
+
+      {/* Job type */}
+      <View className="gap-2">
+        <SectionLabel>Job type</SectionLabel>
+        <View className="flex-row rounded-2xl bg-surface-sunken p-1">
+          {(['one_off', 'recurring'] as const).map((t) => (
+            <Pressable key={t} onPress={() => setJobType(t)} className={`flex-1 items-center rounded-xl py-2 ${jobType === t ? 'bg-white' : ''}`}>
+              <Text className={`text-sm font-semibold ${jobType === t ? 'text-ink' : 'text-ink-muted'}`}>
+                {t === 'one_off' ? 'One-off' : 'Recurring'}
+              </Text>
             </Pressable>
-          </Card>
-        ) : (
-          <View className="gap-2">
-            <Input
-              label="Client (optional)"
-              value={clientSearch}
-              onChangeText={setClientSearch}
-              placeholder="Search a client…"
-            />
-            {(clientResults ?? []).slice(0, 5).map((c) => (
+          ))}
+        </View>
+        {jobType === 'recurring' ? (
+          <View className="flex-row flex-wrap gap-2 pt-1">
+            {FREQUENCIES.map((f) => (
               <Pressable
-                key={c.id}
-                onPress={() => {
-                  setClient({ id: c.id, name: clientFullName(c) });
-                  setClientSearch('');
-                }}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-3"
+                key={f.key}
+                onPress={() => setFrequency(f.key)}
+                className={`rounded-full border px-3.5 py-1.5 ${frequency === f.key ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
               >
-                <Text className="text-sm text-ink">{clientFullName(c)}</Text>
+                <Text className={`text-xs font-semibold ${frequency === f.key ? 'text-white' : 'text-ink'}`}>{f.label}</Text>
               </Pressable>
             ))}
           </View>
-        )}
-
-        <Input label="Address" value={address} onChangeText={setAddress} placeholder="Job site address" />
-        <Input
-          label="Description"
-          value={description}
-          onChangeText={setDescription}
-          placeholder="Scope of work…"
-          multiline
-          numberOfLines={3}
-          style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }}
-        />
-
-        <Pressable
-          onPress={() => setScheduleToday((s) => !s)}
-          className="flex-row items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3"
-        >
-          <Text className="text-sm text-ink">Schedule for today</Text>
-          <Text className="text-lg">{scheduleToday ? '☑️' : '⬜️'}</Text>
-        </Pressable>
-
-        <Button
-          title="Create job"
-          onPress={() => saveMut.mutate()}
-          loading={saveMut.isPending}
-          disabled={!title.trim() || !orgId}
-        />
+        ) : null}
       </View>
+
+      {/* Date & time */}
+      <View className="gap-2">
+        <SectionLabel>Date &amp; time</SectionLabel>
+
+        <MiniWeekCalendar selected={startDate} onSelect={pickDay} counts={countForDay} />
+
+        {/* Selected day's bookings → see free slots */}
+        <View className="rounded-2xl bg-white p-3">
+          <Text className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
+            {startDate.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} ·{' '}
+            {dayJobs.length === 0 ? 'free day' : `${dayJobs.length} booked`}
+          </Text>
+          {dayJobs.length === 0 ? (
+            <Text className="text-xs text-ink-subtle">No jobs yet — wide open.</Text>
+          ) : (
+            dayJobs.map((j) => (
+              <View key={j.id} className="flex-row justify-between border-t border-surface-border py-1.5">
+                <Text className="text-sm text-ink" numberOfLines={1}>{j.client_name ?? j.title}</Text>
+                <Text className="text-xs text-ink-muted">{formatTime(j.scheduled_at)}</Text>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* Start / End time — compact pickers (tap, choose, auto-close) */}
+        <View className="flex-row gap-3">
+          <View className="flex-1 flex-row items-center justify-between rounded-xl border border-surface-border bg-surface-sunken px-4 py-2.5">
+            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">Start</Text>
+            <DateTimePicker
+              value={startDate}
+              mode="time"
+              display="compact"
+              themeVariant="light"
+              accentColor="#171717"
+              onChange={(_, d) => { if (d) setStartDate((prev) => setTimeOn(prev, d)); }}
+            />
+          </View>
+          <View className="flex-1 flex-row items-center justify-between rounded-xl border border-surface-border bg-surface-sunken px-4 py-2.5">
+            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">End</Text>
+            <DateTimePicker
+              value={endDate}
+              mode="time"
+              display="compact"
+              themeVariant="light"
+              accentColor="#171717"
+              onChange={(_, d) => { if (d) setEndDate((prev) => setTimeOn(prev, d)); }}
+            />
+          </View>
+        </View>
+      </View>
+
+      <Input
+        label="Description"
+        value={description}
+        onChangeText={setDescription}
+        placeholder="Scope of work…"
+        multiline
+        numberOfLines={3}
+        style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }}
+      />
+
+      {/* Pricing (admin) */}
+      {canSeePricing ? (
+        <>
+          <LineItemsEditor onChange={setItems} />
+          <Input label="Tax rate (%)" value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
+          <View className="gap-1 rounded-2xl bg-white p-4">
+            <Row label="Subtotal" value={formatCurrencyCents(totals.subtotal, 'CAD')} />
+            <Row label="Tax" value={formatCurrencyCents(totals.tax, 'CAD')} />
+            <Row label="Total" value={formatCurrencyCents(totals.total, 'CAD')} bold />
+          </View>
+        </>
+      ) : null}
+
+      <Button title="Create job" onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!title.trim() || !orgId} />
+
+      {/* Booking confirmation — pops up after Save: send the client the details. */}
+      <Modal visible={showBooking} transparent animationType="fade" onRequestClose={goToJob}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          className="flex-1 justify-end bg-black/40"
+        >
+          <Pressable className="absolute inset-0" onPress={() => Keyboard.dismiss()} />
+          <View className="rounded-t-3xl bg-white p-5 gap-4" style={{ paddingBottom: 28 }}>
+            <View className="gap-0.5">
+              <Text className="text-lg font-bold text-ink">Send booking information 📅</Text>
+              <Text className="text-xs text-ink-muted">Confirme le rendez-vous au client par message.</Text>
+            </View>
+
+            <View className="gap-1.5">
+              <Text className="text-xs uppercase text-ink-muted">Message</Text>
+              <TextInput
+                value={bookingNice}
+                onChangeText={setBookingNice}
+                multiline
+                scrollEnabled
+                textAlignVertical="top"
+                placeholderTextColor="#A3A3A3"
+                style={{
+                  height: 120,
+                  borderWidth: 1,
+                  borderColor: '#E5E5E5',
+                  borderRadius: 12,
+                  backgroundColor: '#F5F5F5',
+                  paddingHorizontal: 14,
+                  paddingTop: 12,
+                  paddingBottom: 12,
+                  fontSize: 16,
+                  lineHeight: 22,
+                  color: '#171717',
+                }}
+              />
+            </View>
+
+            {/* Auto-filled appointment details preview */}
+            <View className="gap-1 rounded-2xl bg-surface-sunken p-3">
+              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
+                Détails ajoutés automatiquement
+              </Text>
+              <Text className="text-sm leading-5 text-ink">{bookingDetails()}</Text>
+            </View>
+
+            <View className="flex-row gap-2 pt-1">
+              <View className="flex-1">
+                <Button title="Passer" variant="secondary" onPress={goToJob} disabled={sendingBooking} />
+              </View>
+              <View className="flex-1">
+                <Button title="Envoyer" onPress={sendBooking} loading={sendingBooking} />
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScrollView>
+  );
+}
+
+function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+  return (
+    <View className="flex-row justify-between">
+      <Text className={bold ? 'text-base font-bold text-ink' : 'text-sm text-ink-muted'}>{label}</Text>
+      <Text className={bold ? 'text-base font-bold text-ink' : 'text-sm text-ink'}>{value}</Text>
+    </View>
   );
 }

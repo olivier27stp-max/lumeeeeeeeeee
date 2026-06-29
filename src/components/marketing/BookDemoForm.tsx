@@ -48,6 +48,20 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
   const [form, setForm] = useState<FormState>(EMPTY);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success'>('idle');
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+  const [referral, setReferral] = useState('');
+
+  // Capture the affiliate code from ?ref= (persisted, so it survives navigation
+  // from the landing link to the contact page).
+  useEffect(() => {
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get('ref');
+      if (fromUrl) sessionStorage.setItem('lume_ref', fromUrl);
+      const ref = (fromUrl || sessionStorage.getItem('lume_ref') || '').trim();
+      if (ref) setReferral(ref);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -94,6 +108,7 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
         source: source || form.heard_from || null,
         availability: form.availability || null,
         message: form.message.trim() || null,
+        referral_code: referral || null,
       });
       setStatus('success');
     } catch (err: any) {
@@ -257,6 +272,17 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
                       className={inputCls(!!errors.message) + ' resize-none'}
                     />
                   </Field>
+
+                  {referral ? (
+                    <Field label="Parrainage (referral)" className="sm:col-span-2">
+                      <input
+                        type="text"
+                        value={referral}
+                        readOnly
+                        className={inputCls(false) + ' bg-[#f5f5f5] font-semibold'}
+                      />
+                    </Field>
+                  ) : null}
 
                   <div className="sm:col-span-2 mt-2">
                     <button
