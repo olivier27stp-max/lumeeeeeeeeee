@@ -9,7 +9,13 @@ import { getQuote, listQuoteItems, markQuoteSent, quoteShareLink } from '@/lib/a
 import { getClient } from '@/lib/api/clients';
 import { getCompany } from '@/lib/api/org';
 import { logOutboundMessage } from '@/lib/api/messaging';
-import { sendSmsViaServer, isSmsUnavailable, convertQuoteToJob } from '@/lib/api/server';
+import {
+  sendSmsViaServer,
+  isSmsUnavailable,
+  convertQuoteToJob,
+  sendQuoteEmailViaServer,
+  isServerSendUnavailable,
+} from '@/lib/api/server';
 import { textNumber } from '@/lib/contact';
 import { sendEmail } from '@/lib/email';
 import { htmlToPdf, shareHtmlAsPdf } from '@/lib/pdf';
@@ -139,7 +145,16 @@ export default function SendQuote() {
 
   const sendByEmail = useMutation({
     mutationFn: async () => {
-      // Attach the quote as a PDF so the client gets a clean document, not just a link.
+      // Send through the org's mailer (server) so the client gets a branded email
+      // from the business — same as the desktop. Fall back to the device's native
+      // composer only when the server genuinely can't (no SMTP / unreachable).
+      try {
+        await sendQuoteEmailViaServer(String(id));
+        return;
+      } catch (e) {
+        if (!isServerSendUnavailable(e)) throw e; // real error (no client email…) → surface
+      }
+      // Native composer fallback (attaches the quote PDF).
       let attachments: string[] | undefined;
       try {
         attachments = previewHtml ? [await htmlToPdf(previewHtml, fileName)] : undefined;

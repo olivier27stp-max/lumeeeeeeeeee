@@ -180,6 +180,25 @@ export async function sendInvoiceEmailViaServer(input: {
   });
 }
 
+/**
+ * Email a (mobile) quote to its client from the org's mailer — POST
+ * /api/emails/send-mobile-quote (reads the standalone `quotes` table). Throws
+ * ServerError; callers can fall back to the native composer when it's an infra
+ * issue (see isServerSendUnavailable).
+ */
+export async function sendQuoteEmailViaServer(quoteId: string): Promise<void> {
+  await serverPost('/emails/send-mobile-quote', { quoteId });
+}
+
+/** Whether to fall back to the device's native composer instead of surfacing the
+ * error: true for infra problems (no server URL, network, SMTP not configured =
+ * 503, or any 5xx); false for real client errors (400/403/404 — e.g. the client
+ * has no email) which the user must see. */
+export function isServerSendUnavailable(e: unknown): boolean {
+  if (!(e instanceof ServerError)) return true;
+  return e.status === 0 || e.status === 503 || e.status >= 500;
+}
+
 // ─── In-app card payment (collect on device via Stripe PaymentSheet) ────────
 // Reuses the SAME server route the web pay page uses: given an invoice's public
 // payment-request token, the server creates a destination-charge PaymentIntent on
