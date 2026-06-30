@@ -163,7 +163,8 @@ export default function AppLayout() {
       <Stack.Screen name="search" options={{ headerShown: true, headerTitle: 'Search', headerBackTitle: 'More' }} />
       <Stack.Screen name="global-search" options={{ headerShown: true, headerTitle: 'Recherche', headerBackTitle: 'More' }} />
       <Stack.Screen name="dashboard" options={{ headerShown: true, headerTitle: 'Tableau de bord', headerBackTitle: 'More' }} />
-      <Stack.Screen name="tech-history" options={{ headerShown: true, headerTitle: 'Historique terrain', headerBackTitle: 'Time' }} />
+      <Stack.Screen name="tech-history" options={{ headerShown: true, headerTitle: 'Équipe', headerBackTitle: 'Time' }} />
+      <Stack.Screen name="tech-history/[id]" options={{ headerShown: true, headerTitle: 'Profil', headerBackTitle: 'Équipe' }} />
       <Stack.Screen name="refer" options={{ headerShown: true, headerTitle: 'Refer a friend', headerBackTitle: 'More' }} />
       <Stack.Screen name="manage-team" options={{ headerShown: true, headerTitle: 'Manage team', headerBackTitle: 'More' }} />
       <Stack.Screen name="member/[id]" options={{ headerShown: true, headerTitle: 'Member', headerBackTitle: 'Team' }} />
