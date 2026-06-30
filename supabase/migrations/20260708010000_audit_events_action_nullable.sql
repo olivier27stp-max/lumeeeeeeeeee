@@ -8,3 +8,5 @@
 -- Drop the NOT NULL so audit inserts succeed. Idempotent.
 
 ALTER TABLE public.audit_events ALTER COLUMN action DROP NOT NULL;
+-- Same problem on entity_type (legacy NOT NULL, functions don't fill it).
+ALTER TABLE public.audit_events ALTER COLUMN entity_type DROP NOT NULL;
