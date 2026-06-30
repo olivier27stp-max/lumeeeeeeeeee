@@ -420,6 +420,39 @@ export default function JobDetail() {
           ) : null}
         </Card>
 
+        {/* Détails du job — type, schedule window. */}
+        <Card className="gap-3">
+          <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Détails du job</Text>
+          <View className="flex-row items-center justify-between">
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Type</Text>
+            <Text className="text-sm text-ink">{job.job_type || 'One-off'}</Text>
+          </View>
+          <View className="flex-row items-center justify-between">
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Début</Text>
+            <Text className="text-sm text-ink">{formatDateTime(when)}</Text>
+          </View>
+          <View className="flex-row items-center justify-between">
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Fin</Text>
+            <Text className="text-sm text-ink">{job.end_at ? formatDateTime(job.end_at) : '—'}</Text>
+          </View>
+        </Card>
+
+        {/* Client's address, when it differs from the job location above. */}
+        {client && clientAddress && clientAddress !== address ? (
+          <Card>
+            <Pressable
+              onPress={() =>
+                Linking.openURL(`https://maps.apple.com/?q=${encodeURIComponent(clientAddress)}`)
+              }
+            >
+              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
+                Adresse du client
+              </Text>
+              <Text className="text-base text-brand underline">{clientAddress}</Text>
+            </Pressable>
+          </Card>
+        ) : null}
+
         {/* Quick team assignment (owner/admin) */}
         {isManager && (teams?.length ?? 0) > 0 ? (
           <Card className="gap-2">
@@ -491,20 +524,8 @@ export default function JobDetail() {
           </Card>
         ) : null}
 
-        {/* Client's address, when it differs from the job location above. */}
-        {client && clientAddress && clientAddress !== address ? (
-          <Card>
-            <Pressable
-              onPress={() =>
-                Linking.openURL(`https://maps.apple.com/?q=${encodeURIComponent(clientAddress)}`)
-              }
-            >
-              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
-                Adresse du client
-              </Text>
-              <Text className="text-base text-brand underline">{clientAddress}</Text>
-            </Pressable>
-          </Card>
+        {orgId ? (
+          <JobVisitsCard jobId={job.id} orgId={orgId} teamId={job.team_id} canEdit={can('jobs.update')} />
         ) : null}
 
         {canSeePricing && orgId ? (
@@ -519,6 +540,14 @@ export default function JobDetail() {
           />
         ) : null}
 
+        {orgId ? <SpecificNotesCard jobId={job.id} orgId={orgId} /> : null}
+
+        {orgId ? <JobChecklistsCard jobId={job.id} orgId={orgId} jobType={job.job_type} /> : null}
+
+        {orgId ? <JobMaterialsCard jobId={job.id} orgId={orgId} canSeePricing={canSeePricing} /> : null}
+
+        {orgId ? <CustomFieldsCard orgId={orgId} entity="jobs" recordId={job.id} /> : null}
+
         {orgId ? (
           <Card>
             <JobPhotoGrid
@@ -531,14 +560,6 @@ export default function JobDetail() {
             />
           </Card>
         ) : null}
-
-        {orgId ? (
-          <JobVisitsCard jobId={job.id} orgId={orgId} teamId={job.team_id} canEdit={can('jobs.update')} />
-        ) : null}
-
-        {orgId ? <JobMaterialsCard jobId={job.id} orgId={orgId} canSeePricing={canSeePricing} /> : null}
-
-        {orgId ? <CustomFieldsCard orgId={orgId} entity="jobs" recordId={job.id} /> : null}
 
         {!isDone ? (
           <View className="gap-3 pt-2">
