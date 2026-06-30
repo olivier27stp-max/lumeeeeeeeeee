@@ -256,9 +256,22 @@ export default function JobDetail() {
   const completeMut = useMutation<unknown, Error, { id: string; notes?: string }>({
     mutationKey: MK.jobComplete,
     onSuccess: () => {
-      Alert.alert('Job completed', 'Nice work!', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      // Job done (+ signature, if captured) → offer to invoice the client right
+      // away. Tapping "Créer la facture" opens the invoice screen prefilled with
+      // this job (client + line items). Only for users who can invoice / see prices.
+      if (can('invoices.create') || canSeePricing) {
+        Alert.alert('Job terminé ✓', 'Envoyer une facture au client ?', [
+          { text: 'Plus tard', style: 'cancel', onPress: () => router.back() },
+          {
+            text: 'Créer la facture',
+            onPress: () => router.push(`/(app)/invoices/new?jobId=${String(id)}` as any),
+          },
+        ]);
+      } else {
+        Alert.alert('Job completed', 'Nice work!', [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+      }
     },
     onError: (e: Error) => Alert.alert('Could not complete job', e.message),
   });

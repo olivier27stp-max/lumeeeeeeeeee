@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Redirect, router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { ClientPicker, PickedClient } from '@/components/ClientPicker';
 import { LineItemsEditor } from '@/components/LineItemsEditor';
 import { createInvoice, LineItemInput } from '@/lib/api/billing';
-import { listJobLineItems, listJobsInRange } from '@/lib/api/jobs';
+import { getJob, listJobLineItems, listJobsInRange } from '@/lib/api/jobs';
 import { Job } from '@/types/db';
 import { formatCurrencyCents, formatTime } from '@/lib/format';
 import { usePermissions } from '@/lib/usePermissions';
@@ -27,7 +27,11 @@ export default function NewInvoice() {
   const { orgId, teamId, scope, permissions, role, can, canSeePricing } = usePermissions();
   const access = { teamId, scope, permissions, role };
 
-  const [mode, setMode] = useState<'client' | 'job'>('client');
+  // Optional deep-link: /invoices/new?jobId=… (e.g. from the "Send invoice?"
+  // prompt after a job is completed) preselects that job and prefills its items.
+  const { jobId } = useLocalSearchParams<{ jobId?: string }>();
+
+  const [mode, setMode] = useState<'client' | 'job'>(jobId ? 'job' : 'client');
   const [client, setClient] = useState<PickedClient | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [jobSearch, setJobSearch] = useState('');
@@ -68,6 +72,18 @@ export default function NewInvoice() {
     setClient(j.client_id ? { id: j.client_id, name: j.client_name ?? 'Client' } : null);
     setSubject(j.title ?? '');
   };
+
+  // Arrived with ?jobId=… → fetch that job once and preselect it (prefills the
+  // client + subject; line items seed from the job below).
+  const { data: prefillJob } = useQuery({
+    queryKey: ['job', 'invoice-prefill', jobId],
+    queryFn: () => getJob(String(jobId), access),
+    enabled: !!jobId && !!orgId && !job,
+  });
+  useEffect(() => {
+    if (prefillJob && !job) pickJob(prefillJob);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillJob]);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((s, i) => s + Math.round(i.qty * i.unit_price_cents), 0);
