@@ -89,7 +89,7 @@ export default function HomeServiceMixCard() {
                   cy="50%"
                   innerRadius={52}
                   outerRadius={74}
-                  paddingAngle={2}
+                  paddingAngle={0}
                   stroke="none"
                 >
                   {slices.map((s) => (
