@@ -60,6 +60,7 @@ export default function SendInvoice() {
     () =>
       invoice
         ? buildInvoicePreviewHtml({
+            company: company ?? null,
             companyName: company?.company_name ?? current?.companyName ?? null,
             companyLogoUrl: company?.logo_url ?? null,
             invoice,

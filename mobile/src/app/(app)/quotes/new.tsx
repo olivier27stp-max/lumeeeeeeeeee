@@ -125,6 +125,7 @@ export default function NewQuote() {
   const previewHtml = useMemo(
     () =>
       buildQuotePreviewHtml({
+        company: company ?? null,
         companyName: company?.company_name ?? current?.companyName ?? null,
         companyLogoUrl: company?.logo_url ?? null,
         title: title.trim() || null,

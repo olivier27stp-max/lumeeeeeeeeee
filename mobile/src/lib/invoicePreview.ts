@@ -2,8 +2,14 @@
 // rendered in a WebView on the Send screens. They use our own data (no network,
 // no Stripe), so the preview ALWAYS shows — even when the business hasn't
 // connected payments yet and the client-facing web page refuses to render.
+//
+// The look mirrors the desktop "Business Pro" invoice template
+// (src/components/invoice/templates/BusinessProTemplate.tsx): dark branded
+// header, status badge, zebra item table, paid/balance totals. Every field is
+// wired to real data (company contact + client contact + invoice status/balance).
 
 import type { InvoiceRow, InvoiceItemRow } from './api/billing';
+import type { CompanySettings } from './api/org';
 import { formatCurrencyCents } from './format';
 import type { ClientRecord } from '@/types/db';
 
@@ -29,10 +35,12 @@ function clientName(c: ClientRecord | null): string {
   return name || c.company || 'Client';
 }
 
-function clientAddress(c: ClientRecord | null): string {
+/** Light-grey contact lines for the bill-to block (company, address, email, phone). */
+function clientLines(c: ClientRecord | null): string {
   if (!c) return '';
+  const hasName = [c.first_name, c.last_name].filter(Boolean).length > 0;
   const lines = [
-    c.company && [c.first_name, c.last_name].filter(Boolean).length ? c.company : null,
+    hasName && c.company ? c.company : null,
     c.address,
     [c.city, c.province, c.postal_code].filter(Boolean).join(', '),
     c.email,
@@ -41,12 +49,32 @@ function clientAddress(c: ClientRecord | null): string {
   return lines.map((l) => `<div>${esc(l)}</div>`).join('');
 }
 
-/** Company brand block: logo (if set in desktop company settings) with the name
- * underneath — falls back to just the name when no logo is configured. */
-function brandBlock(companyName: string | null | undefined, companyLogoUrl: string | null | undefined): string {
-  const logo = typeof companyLogoUrl === 'string' && /^https?:\/\//i.test(companyLogoUrl) ? companyLogoUrl : null;
-  const name = `<div class="company">${esc(companyName || 'Your company')}</div>`;
-  return logo ? `<img class="logo" src="${esc(logo)}" alt="" />${name}` : name;
+/** White/60 contact lines for the dark header (company address, email, phone). */
+function companyLines(co: CompanySettings | null | undefined): string {
+  if (!co) return '';
+  const lines = [
+    [co.street1, co.street2].filter(Boolean).join(', '),
+    [co.city, co.province, co.postal_code].filter(Boolean).join(', '),
+    co.email,
+    co.phone,
+  ].filter(Boolean);
+  return lines.map((l) => `<div>${esc(l)}</div>`).join('');
+}
+
+const STATUS: Record<string, { label: string; bg: string; fg: string }> = {
+  draft: { label: 'Draft', bg: '#f1f5f9', fg: '#475569' },
+  sent: { label: 'Open', bg: '#dbeafe', fg: '#1d4ed8' },
+  sent_not_due: { label: 'Open', bg: '#dbeafe', fg: '#1d4ed8' },
+  partial: { label: 'Partial', bg: '#fef3c7', fg: '#a16207' },
+  paid: { label: 'Paid', bg: '#dcfce7', fg: '#15803d' },
+  void: { label: 'Void', bg: '#fecaca', fg: '#b91c1c' },
+  overdue: { label: 'Overdue', bg: '#fecaca', fg: '#b91c1c' },
+};
+
+function statusBadge(status: string | null | undefined): string {
+  const st = STATUS[String(status ?? 'sent')] || STATUS.sent;
+  return `<span class="badge" style="background:${st.bg};color:${st.fg}">
+    <span class="dot" style="background:${st.fg}"></span>${esc(st.label)}</span>`;
 }
 
 const DOC_CSS = `
@@ -54,53 +82,59 @@ const DOC_CSS = `
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
-    color: #171717;
-    background: #f5f5f5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    color: #262626; background: #f1f5f9; font-size: 13px; line-height: 1.6;
     -webkit-text-size-adjust: 100%;
   }
-  .sheet {
-    background: #ffffff;
-    margin: 16px;
-    padding: 24px 22px 28px;
-    border-radius: 16px;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.06);
-  }
-  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
-  .brand { max-width: 60%; }
-  .logo { max-width: 160px; max-height: 64px; width: auto; height: auto; object-fit: contain; display: block; margin-bottom: 6px; }
-  .company { font-size: 18px; font-weight: 800; letter-spacing: -0.2px; }
-  .tag { text-transform: uppercase; letter-spacing: 1.5px; font-size: 11px; font-weight: 700; color: #8a8a8a; }
-  .doc-no { font-size: 14px; font-weight: 700; margin-top: 2px; }
-  .meta { text-align: right; font-size: 12px; color: #555; line-height: 1.5; }
-  .meta b { color: #171717; }
-  .billto { margin-top: 22px; font-size: 13px; line-height: 1.5; }
-  .billto .label { text-transform: uppercase; letter-spacing: 1.2px; font-size: 10px; font-weight: 700; color: #8a8a8a; margin-bottom: 4px; }
-  .billto .name { font-weight: 700; font-size: 14px; }
-  .subject { margin-top: 18px; font-size: 14px; font-weight: 600; }
-  table.items { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13px; }
-  table.items th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #8a8a8a; padding: 8px 6px; border-bottom: 1px solid #eaeaea; }
+  .doc { background: #fff; margin: 14px; border-radius: 14px; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,0.08); }
+  .head { background: #171717; color: #fff; padding: 24px 22px 20px; display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+  .head .logo { height: 38px; max-width: 170px; object-fit: contain; filter: brightness(0) invert(1); display: block; }
+  .head .cname { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
+  .head .caddr { margin-top: 8px; font-size: 11px; color: rgba(255,255,255,0.6); line-height: 1.5; }
+  .head .right { text-align: right; white-space: nowrap; }
+  .head .right .lbl { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,0.5); }
+  .head .right .no { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; margin-top: 2px; }
+  .body { padding: 20px 22px; }
+  .meta { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid #e2e8f0; }
+  .lbl { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #94a3b8; }
+  .billname { font-size: 16px; font-weight: 800; color: #171717; margin-top: 6px; }
+  .billextra { font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.55; }
+  .meta .right { text-align: right; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 4px 10px; font-size: 10px; font-weight: 700; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .dates { font-size: 11px; color: #94a3b8; margin-top: 9px; line-height: 1.7; }
+  .dates b { color: #475569; font-weight: 600; }
+  .subject { padding: 14px 0; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 700; color: #171717; }
+  table.items { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  table.items thead th { background: #171717; color: #fff; font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; padding: 9px 10px; text-align: left; }
   table.items th.num, table.items td.num { text-align: right; white-space: nowrap; }
-  table.items td { padding: 11px 6px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
-  table.items td.desc { width: 52%; }
-  table.items td.empty { text-align: center; color: #9a9a9a; padding: 22px 6px; }
-  .totals { width: 100%; margin-top: 16px; }
-  .totals table { margin-left: auto; border-collapse: collapse; font-size: 13px; min-width: 220px; }
-  .totals td { padding: 6px 4px; }
-  .totals td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-  .totals tr.total td { font-size: 16px; font-weight: 800; border-top: 2px solid #171717; padding-top: 10px; }
-  .totals tr.balance td { font-weight: 700; color: #b00020; }
-  .footer { margin-top: 24px; font-size: 11px; color: #9a9a9a; text-align: center; }
+  table.items th.qty, table.items td.qty { text-align: center; }
+  table.items tbody td { padding: 11px 10px; font-size: 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  table.items tbody tr:nth-child(even) { background: #f8fafc; }
+  table.items td.amt { font-weight: 700; }
+  table.items td.empty { text-align: center; color: #cbd5e1; padding: 32px 10px; }
+  .tot { display: flex; justify-content: flex-end; padding: 14px 0 2px; border-bottom: 1px solid #e2e8f0; }
+  .tot table { min-width: 230px; border-collapse: collapse; font-size: 12px; }
+  .tot td { padding: 6px 2px; }
+  .tot td.k { color: #94a3b8; }
+  .tot td.v { text-align: right; font-variant-numeric: tabular-nums; }
+  .tot tr.total td { font-size: 16px; font-weight: 800; color: #171717; padding-top: 10px; }
+  .tot tr.disc td { color: #dc2626; }
+  .tot tr.paid td { color: #15803d; font-weight: 600; }
+  .tot tr.bal td { font-weight: 800; color: #171717; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+  .foot { padding: 16px 22px 22px; text-align: center; font-size: 10px; color: #cbd5e1; }
 `;
 
-/** Shared document shell: brand + meta header, bill-to, line-item table, totals. */
-function docShell(args: {
-  brand: string;
-  docType: string;
+/** The Business Pro shell — dark header, bill-to + status, items, totals. */
+function businessProDoc(args: {
+  brandHtml: string; // logo or company name (rendered white on dark)
+  companyContact: string;
+  docLabel: string; // "INVOICE" / "QUOTE"
   number: string;
-  metaRows: string;
   billToName: string;
   billToExtra?: string;
+  statusHtml?: string;
+  datesHtml: string;
   subject?: string | null;
   itemRows: string;
   totalsRows: string;
@@ -114,49 +148,73 @@ function docShell(args: {
 <style>${DOC_CSS}</style>
 </head>
 <body>
-  <div class="sheet">
-    <div class="top">
-      <div class="brand">
-        ${args.brand}
-        <div class="tag" style="margin-top:8px;">${esc(args.docType)}</div>
-        <div class="doc-no">${args.number ? `#${esc(args.number)}` : ''}</div>
+  <div class="doc">
+    <div class="head">
+      <div>
+        ${args.brandHtml}
+        ${args.companyContact ? `<div class="caddr">${args.companyContact}</div>` : ''}
       </div>
-      <div class="meta">${args.metaRows}</div>
+      <div class="right">
+        <div class="lbl">${esc(args.docLabel)}</div>
+        <div class="no">${args.number ? `#${esc(args.number)}` : ''}</div>
+      </div>
     </div>
 
-    <div class="billto">
-      <div class="label">Bill to</div>
-      <div class="name">${esc(args.billToName)}</div>
-      ${args.billToExtra ?? ''}
+    <div class="body">
+      <div class="meta">
+        <div>
+          <div class="lbl">Bill to</div>
+          <div class="billname">${esc(args.billToName)}</div>
+          ${args.billToExtra ? `<div class="billextra">${args.billToExtra}</div>` : ''}
+        </div>
+        <div class="right">
+          ${args.statusHtml ?? ''}
+          <div class="dates">${args.datesHtml}</div>
+        </div>
+      </div>
+
+      ${args.subject ? `<div class="subject">${esc(args.subject)}</div>` : ''}
+
+      <table class="items">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th class="qty">Qty</th>
+            <th class="num">Rate</th>
+            <th class="num">Amount</th>
+          </tr>
+        </thead>
+        <tbody>${args.itemRows}</tbody>
+      </table>
+
+      <div class="tot"><table>${args.totalsRows}</table></div>
+
+      <div class="foot">${esc(args.footer)}</div>
     </div>
-
-    ${args.subject ? `<div class="subject">${esc(args.subject)}</div>` : ''}
-
-    <table class="items">
-      <thead>
-        <tr><th>Description</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Amount</th></tr>
-      </thead>
-      <tbody>${args.itemRows}</tbody>
-    </table>
-
-    <div class="totals">
-      <table>${args.totalsRows}</table>
-    </div>
-
-    <div class="footer">${esc(args.footer)}</div>
   </div>
 </body>
 </html>`;
 }
 
+/** White logo (inverted) or company name for the dark header. */
+function brandHtml(name: string | null | undefined, logoUrl: string | null | undefined): string {
+  const logo = typeof logoUrl === 'string' && /^https?:\/\//i.test(logoUrl) ? logoUrl : null;
+  return logo
+    ? `<img class="logo" src="${esc(logo)}" alt="${esc(name ?? '')}" />`
+    : `<div class="cname">${esc(name || 'Your company')}</div>`;
+}
+
 export function buildInvoicePreviewHtml(args: {
-  companyName: string | null;
+  company?: CompanySettings | null;
+  companyName?: string | null;
   companyLogoUrl?: string | null;
   invoice: InvoiceRow;
   items: InvoiceItemRow[];
   client: ClientRecord | null;
 }): string {
-  const { companyName, companyLogoUrl, invoice, items, client } = args;
+  const { company, invoice, items, client } = args;
+  const name = company?.company_name ?? args.companyName ?? null;
+  const logo = company?.logo_url ?? args.companyLogoUrl ?? null;
   const currency = invoice.currency ?? 'CAD';
   const money = (cents: number | null | undefined) => esc(formatCurrencyCents(cents ?? 0, currency));
 
@@ -164,45 +222,48 @@ export function buildInvoicePreviewHtml(args: {
   const tax = invoice.tax_cents ?? 0;
   const total = invoice.total_cents ?? subtotal + tax;
   const balance = invoice.balance_cents;
+  const paid = balance != null ? Math.max(total - balance, 0) : 0;
 
   const itemRows = items.length
     ? items
         .map(
           (it) => `
         <tr>
-          <td class="desc">${esc(it.description || 'Item')}</td>
-          <td class="num">${esc(it.qty ?? 1)}</td>
+          <td>${esc(it.description || 'Item')}</td>
+          <td class="qty">${esc(it.qty ?? 1)}</td>
           <td class="num">${money(it.unit_price_cents)}</td>
-          <td class="num">${money(it.line_total_cents)}</td>
+          <td class="num amt">${money(it.line_total_cents)}</td>
         </tr>`,
         )
         .join('')
-    : `<tr><td class="desc empty" colspan="4">No line items.</td></tr>`;
+    : `<tr><td class="empty" colspan="4">No line items.</td></tr>`;
 
   const totalsRows = `
-    <tr><td>Subtotal</td><td>${money(subtotal)}</td></tr>
-    <tr><td>Tax</td><td>${money(tax)}</td></tr>
-    <tr class="total"><td>Total</td><td>${money(total)}</td></tr>
-    ${balance != null && balance !== total ? `<tr class="balance"><td>Balance due</td><td>${money(balance)}</td></tr>` : ''}`;
+    <tr><td class="k">Subtotal</td><td class="v">${money(subtotal)}</td></tr>
+    <tr><td class="k">Tax</td><td class="v">${money(tax)}</td></tr>
+    <tr class="total"><td>Total</td><td class="v">${money(total)}</td></tr>
+    ${paid > 0 ? `<tr class="paid"><td>Paid</td><td class="v">${money(paid)}</td></tr>` : ''}
+    ${balance != null && balance !== total ? `<tr class="bal"><td>Balance due</td><td class="v">${money(balance)}</td></tr>` : ''}`;
 
-  return docShell({
-    brand: brandBlock(companyName, companyLogoUrl),
-    docType: 'Invoice',
+  return businessProDoc({
+    brandHtml: brandHtml(name, logo),
+    companyContact: companyLines(company),
+    docLabel: 'Invoice',
     number: invoice.invoice_number ?? '',
-    metaRows: `
-      <div>Issued: <b>${prettyDate(invoice.created_at)}</b></div>
-      <div>Due: <b>${prettyDate(invoice.due_date)}</b></div>`,
     billToName: clientName(client),
-    billToExtra: clientAddress(client),
+    billToExtra: clientLines(client),
+    statusHtml: statusBadge(invoice.status),
+    datesHtml: `Issued: <b>${prettyDate(invoice.created_at)}</b><br/>Due: <b>${prettyDate(invoice.due_date)}</b>`,
     subject: invoice.subject,
     itemRows,
     totalsRows,
-    footer: 'Thank you for your business.',
+    footer: `${name ?? ''}${company?.email ? ` · ${company.email}` : ''}${company?.phone ? ` · ${company.phone}` : ''}`.trim() || 'Thank you for your business.',
   });
 }
 
 export function buildQuotePreviewHtml(args: {
-  companyName: string | null;
+  company?: CompanySettings | null;
+  companyName?: string | null;
   companyLogoUrl?: string | null;
   title?: string | null;
   quoteNumber?: string | null;
@@ -216,6 +277,8 @@ export function buildQuotePreviewHtml(args: {
   depositCents?: number;
   currency?: string | null;
 }): string {
+  const name = args.company?.company_name ?? args.companyName ?? null;
+  const logo = args.company?.logo_url ?? args.companyLogoUrl ?? null;
   const currency = args.currency ?? 'CAD';
   const money = (cents: number | null | undefined) => esc(formatCurrencyCents(cents ?? 0, currency));
 
@@ -224,33 +287,34 @@ export function buildQuotePreviewHtml(args: {
         .map(
           (it) => `
         <tr>
-          <td class="desc">${esc(it.name || 'Item')}</td>
-          <td class="num">${esc(it.qty ?? 1)}</td>
+          <td>${esc(it.name || 'Item')}</td>
+          <td class="qty">${esc(it.qty ?? 1)}</td>
           <td class="num">${money(it.unit_price_cents)}</td>
-          <td class="num">${money(Math.round((it.qty ?? 0) * (it.unit_price_cents ?? 0)))}</td>
+          <td class="num amt">${money(Math.round((it.qty ?? 0) * (it.unit_price_cents ?? 0)))}</td>
         </tr>`,
         )
         .join('')
-    : `<tr><td class="desc empty" colspan="4">No line items.</td></tr>`;
+    : `<tr><td class="empty" colspan="4">No line items.</td></tr>`;
 
   const discount = args.discountCents ?? 0;
   const deposit = args.depositCents ?? 0;
   const totalsRows = `
-    <tr><td>Subtotal</td><td>${money(args.subtotalCents)}</td></tr>
-    ${discount > 0 ? `<tr><td>Discount</td><td>- ${money(discount)}</td></tr>` : ''}
-    <tr><td>Tax</td><td>${money(args.taxCents)}</td></tr>
-    <tr class="total"><td>Total</td><td>${money(args.totalCents)}</td></tr>
-    ${deposit > 0 ? `<tr class="balance"><td>Deposit due</td><td>${money(deposit)}</td></tr>` : ''}`;
+    <tr><td class="k">Subtotal</td><td class="v">${money(args.subtotalCents)}</td></tr>
+    ${discount > 0 ? `<tr class="disc"><td>Discount</td><td class="v">- ${money(discount)}</td></tr>` : ''}
+    <tr><td class="k">Tax</td><td class="v">${money(args.taxCents)}</td></tr>
+    <tr class="total"><td>Total</td><td class="v">${money(args.totalCents)}</td></tr>
+    ${deposit > 0 ? `<tr class="bal"><td>Deposit due</td><td class="v">${money(deposit)}</td></tr>` : ''}`;
 
-  return docShell({
-    brand: brandBlock(args.companyName, args.companyLogoUrl),
-    docType: 'Quote',
+  return businessProDoc({
+    brandHtml: brandHtml(name, logo),
+    companyContact: companyLines(args.company),
+    docLabel: 'Quote',
     number: args.quoteNumber ?? '',
-    metaRows: args.validUntil ? `<div>Valid until: <b>${prettyDate(args.validUntil)}</b></div>` : '',
     billToName: args.clientName || 'Client',
+    datesHtml: args.validUntil ? `Valid until: <b>${prettyDate(args.validUntil)}</b>` : '—',
     subject: args.title,
     itemRows,
     totalsRows,
-    footer: 'We look forward to working with you.',
+    footer: `${name ?? ''}${args.company?.email ? ` · ${args.company.email}` : ''}`.trim() || 'We look forward to working with you.',
   });
 }
