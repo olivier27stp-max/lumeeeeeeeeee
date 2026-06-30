@@ -86,43 +86,43 @@ const DOC_CSS = `
     color: #262626; background: #f1f5f9; font-size: 13px; line-height: 1.6;
     -webkit-text-size-adjust: 100%;
   }
-  .doc { background: #fff; margin: 14px; border-radius: 14px; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,0.08); }
-  .head { background: #171717; color: #fff; padding: 24px 22px 20px; display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
-  .head .logo { height: 38px; max-width: 170px; object-fit: contain; filter: brightness(0) invert(1); display: block; }
-  .head .cname { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
-  .head .caddr { margin-top: 8px; font-size: 11px; color: rgba(255,255,255,0.6); line-height: 1.5; }
-  .head .right { text-align: right; white-space: nowrap; }
-  .head .right .lbl { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,0.5); }
-  .head .right .no { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; margin-top: 2px; }
-  .body { padding: 20px 22px; }
-  .meta { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid #e2e8f0; }
-  .lbl { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #94a3b8; }
-  .billname { font-size: 16px; font-weight: 800; color: #171717; margin-top: 6px; }
-  .billextra { font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.55; }
+  .doc { background: #fff; margin: 10px; border-radius: 12px; overflow: hidden; box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+  .head { background: #171717; color: #fff; padding: 18px 16px 14px; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .head .logo { height: 32px; max-width: 130px; object-fit: contain; filter: brightness(0) invert(1); display: block; }
+  .head .cname { font-size: 17px; font-weight: 800; letter-spacing: -0.3px; }
+  .head .caddr { margin-top: 6px; font-size: 10px; color: rgba(255,255,255,0.6); line-height: 1.45; }
+  .head .right { text-align: right; flex-shrink: 0; }
+  .head .right .lbl { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,0.5); }
+  .head .right .no { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; margin-top: 2px; }
+  .body { padding: 16px; }
+  .meta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid #e2e8f0; }
+  .lbl { font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #94a3b8; }
+  .billname { font-size: 15px; font-weight: 800; color: #171717; margin-top: 5px; }
+  .billextra { font-size: 10px; color: #64748b; margin-top: 3px; line-height: 1.5; }
   .meta .right { text-align: right; }
-  .badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 4px 10px; font-size: 10px; font-weight: 700; }
-  .badge .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-  .dates { font-size: 11px; color: #94a3b8; margin-top: 9px; line-height: 1.7; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 3px 8px; font-size: 9px; font-weight: 700; }
+  .badge .dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+  .dates { font-size: 10px; color: #94a3b8; margin-top: 7px; line-height: 1.6; }
   .dates b { color: #475569; font-weight: 600; }
-  .subject { padding: 14px 0; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 700; color: #171717; }
-  table.items { width: 100%; border-collapse: collapse; margin-top: 6px; }
-  table.items thead th { background: #171717; color: #fff; font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; padding: 9px 10px; text-align: left; }
-  table.items th.num, table.items td.num { text-align: right; white-space: nowrap; }
-  table.items th.qty, table.items td.qty { text-align: center; }
-  table.items tbody td { padding: 11px 10px; font-size: 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  .subject { padding: 12px 0; border-bottom: 1px solid #e2e8f0; font-size: 13px; font-weight: 700; color: #171717; }
+  table.items { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 4px; }
+  table.items thead th { background: #171717; color: #fff; font-size: 9px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; padding: 7px; text-align: left; }
+  table.items th.num, table.items td.num { text-align: right; white-space: nowrap; width: 70px; }
+  table.items th.qty, table.items td.qty { text-align: center; width: 30px; }
+  table.items tbody td { padding: 8px 7px; font-size: 11px; border-bottom: 1px solid #f1f5f9; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
   table.items tbody tr:nth-child(even) { background: #f8fafc; }
   table.items td.amt { font-weight: 700; }
-  table.items td.empty { text-align: center; color: #cbd5e1; padding: 32px 10px; }
-  .tot { display: flex; justify-content: flex-end; padding: 14px 0 2px; border-bottom: 1px solid #e2e8f0; }
-  .tot table { min-width: 230px; border-collapse: collapse; font-size: 12px; }
-  .tot td { padding: 6px 2px; }
+  table.items td.empty { text-align: center; color: #cbd5e1; padding: 26px 8px; }
+  .tot { display: flex; justify-content: flex-end; padding: 12px 0 2px; border-bottom: 1px solid #e2e8f0; }
+  .tot table { width: 64%; min-width: 0; border-collapse: collapse; font-size: 11px; }
+  .tot td { padding: 5px 2px; }
   .tot td.k { color: #94a3b8; }
-  .tot td.v { text-align: right; font-variant-numeric: tabular-nums; }
-  .tot tr.total td { font-size: 16px; font-weight: 800; color: #171717; padding-top: 10px; }
+  .tot td.v { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tot tr.total td { font-size: 14px; font-weight: 800; color: #171717; padding-top: 8px; }
   .tot tr.disc td { color: #dc2626; }
   .tot tr.paid td { color: #15803d; font-weight: 600; }
-  .tot tr.bal td { font-weight: 800; color: #171717; border-top: 1px solid #e2e8f0; padding-top: 8px; }
-  .foot { padding: 16px 22px 22px; text-align: center; font-size: 10px; color: #cbd5e1; }
+  .tot tr.bal td { font-weight: 800; color: #171717; border-top: 1px solid #e2e8f0; padding-top: 7px; }
+  .foot { padding: 14px 16px 18px; text-align: center; font-size: 9px; color: #cbd5e1; line-height: 1.5; }
 `;
 
 /** The Business Pro shell — dark header, bill-to + status, items, totals. */
