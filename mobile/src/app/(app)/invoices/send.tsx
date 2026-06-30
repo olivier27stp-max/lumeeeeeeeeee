@@ -280,13 +280,6 @@ export default function SendInvoice() {
                 />
               </View>
             </View>
-            <View className="flex-row items-center justify-center gap-4 pt-0.5">
-              <Pressable onPress={exportPdf}><Text className="text-sm text-brand">PDF…</Text></Pressable>
-              <Text className="text-ink-subtle">·</Text>
-              <Pressable onPress={shareIt}><Text className="text-sm text-brand">Partager…</Text></Pressable>
-              <Text className="text-ink-subtle">·</Text>
-              <Pressable onPress={markSent}><Text className="text-sm text-ink-muted">Marquer envoyée</Text></Pressable>
-            </View>
           </>
         ) : (
           <Button title="Terminé" onPress={() => router.replace('/(app)/(tabs)')} />
