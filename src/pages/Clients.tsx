@@ -666,10 +666,32 @@ export default function Clients() {
                 <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click}>
                   <div className="flex items-center gap-3 min-w-0">
                     <UnifiedAvatar id={item.id} name={clientDisplayName(item)} />
-                    <span className="text-[14px] text-[var(--color-text-primary)] truncate">{clientDisplayName(item) || '—'}</span>
+                    <div className="min-w-0">
+                      <p className="text-[14px] font-semibold text-[var(--color-text-primary)] truncate leading-tight">{clientDisplayName(item) || '—'}</p>
+                      {(() => {
+                        const secondary = item.display_as_company && item.company
+                          ? `${item.first_name || ''} ${item.last_name || ''}`.trim()
+                          : (item.company || '');
+                        return secondary
+                          ? <p className="text-[12px] font-normal text-[var(--color-text-tertiary)] truncate leading-tight mt-0.5">{secondary}</p>
+                          : null;
+                      })()}
+                    </div>
                   </div>
                 </div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-primary)] truncate">{item.address || '—'}</span></div>
+                <div className={`py-3 px-4 flex flex-col justify-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}>
+                  {(() => {
+                    const line1 = [item.street_number, item.street_name].filter(Boolean).join(' ').trim() || item.address || '';
+                    const line2 = [item.city, item.province, item.postal_code].filter(Boolean).join(', ').trim();
+                    if (!line1 && !line2) return <span className="text-[14px] text-[var(--color-text-primary)]">—</span>;
+                    return (
+                      <>
+                        <span className="text-[14px] text-[var(--color-text-primary)] truncate leading-tight">{line1 || '—'}</span>
+                        {line2 && <span className="text-[12px] text-[var(--color-text-tertiary)] truncate leading-tight mt-0.5">{line2}</span>}
+                      </>
+                    );
+                  })()}
+                </div>
                 <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}>
                   {item.tags && item.tags.length > 0 ? (
                     <div className="flex items-center gap-1 overflow-hidden">
