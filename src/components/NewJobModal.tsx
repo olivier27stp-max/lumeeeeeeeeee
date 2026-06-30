@@ -13,6 +13,7 @@ import type { TeamSuggestion } from '../lib/teamSuggestionsApi';
 import { Job } from '../types';
 import ServicePicker from './ServicePicker';
 import FormPageHost from './ui/FormPageHost';
+import LeaveFormConfirm from './ui/LeaveFormConfirm';
 import type { PredefinedService } from '../lib/servicesApi';
 import { supabase } from '../lib/supabase';
 import AddressAutocomplete, { type StructuredAddress } from './AddressAutocomplete';
@@ -251,9 +252,10 @@ export default function NewJobModal({
   // Navigation guard: route where the form was opened + leave-confirmation state.
   const openedPathRef = useRef<string | null>(null);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-  // Dirty tracking — baseline signature captured right after the form resets.
-  const baselineSignatureRef = useRef<string>('');
-  const captureBaselineRef = useRef(false);
+  // Dirty tracking — flipped only by genuine user input (see the form's
+  // onInput/onChange). Programmatic/async field population never marks the form
+  // dirty, so simply opening (or prefilling) a form is never treated as edited.
+  const [dirty, setDirty] = useState(false);
   const [title, setTitle] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSearch, setClientSearch] = useState('');
@@ -522,82 +524,11 @@ export default function NewJobModal({
           })
       )
     ).catch(() => {});
-    // Snapshot the freshly-reset values on the next render so we can detect
-    // whether the user has since entered anything (see the effect below).
-    captureBaselineRef.current = true;
+    // Fresh form: nothing entered yet.
+    setDirty(false);
   }, [isOpen, initialValues, isEditMode, source?.type]);
 
-  // Signature of every user-editable field. System-autofilled fields
-  // (salesperson, resolved taxes, auto job number) are intentionally excluded so
-  // that simply opening a blank form is never treated as "dirty".
-  const formSignature = useMemo(
-    () =>
-      JSON.stringify({
-        title,
-        description,
-        status,
-        clientId,
-        propertyId,
-        newPropertyName,
-        isCreatingNewClient,
-        newClientFirst,
-        newClientLast,
-        newClientEmail,
-        newClientPhone,
-        newClientCompany,
-        leadId,
-        teamSelection,
-        assignMode,
-        assignedUserId,
-        jobType,
-        tags,
-        tagInput,
-        askForReview,
-        startDate,
-        startTime,
-        endTime,
-        requiresInvoicing,
-        billingSplit,
-        prefilledAddress,
-        addressLine1,
-        addressLine2,
-        addressCity,
-        addressProvince,
-        addressPostalCode,
-        addressCountry,
-        addressSearch,
-        totalInput,
-        jobDepositRequired,
-        jobDepositType,
-        jobDepositValue,
-        jobRequirePaymentMethod,
-        lineItems: lineItems.map((item) => ({
-          name: item.name,
-          qtyInput: item.qtyInput,
-          unitPriceInput: item.unitPriceInput,
-          included: item.included,
-        })),
-      }),
-    [
-      title, description, status, clientId, propertyId, newPropertyName, isCreatingNewClient,
-      newClientFirst, newClientLast, newClientEmail, newClientPhone, newClientCompany, leadId,
-      teamSelection, assignMode, assignedUserId, jobType, tags, tagInput, askForReview,
-      startDate, startTime, endTime, requiresInvoicing, billingSplit, prefilledAddress,
-      addressLine1, addressLine2, addressCity, addressProvince, addressPostalCode, addressCountry,
-      addressSearch, totalInput, jobDepositRequired, jobDepositType, jobDepositValue,
-      jobRequirePaymentMethod, lineItems,
-    ]
-  );
-
-  // Capture the baseline once per open, on the render right after the reset effect runs.
-  useEffect(() => {
-    if (captureBaselineRef.current) {
-      baselineSignatureRef.current = formSignature;
-      captureBaselineRef.current = false;
-    }
-  }, [formSignature]);
-
-  const isDirty = isOpen && formSignature !== baselineSignatureRef.current;
+  const isDirty = isOpen && dirty;
 
   const selectedClient = useMemo(
     () => clients.find((client) => client.id === clientId) || null,
@@ -689,6 +620,7 @@ export default function NewJobModal({
   const grandTotalCents = effectiveSubtotalCents + taxTotalCents;
 
   const resetForm = () => {
+    setDirty(false);
     setTitle('');
     setLeadId(null);
     setClientId('');
@@ -1116,6 +1048,8 @@ export default function NewJobModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="absolute inset-0 z-[120] bg-surface flex flex-col overflow-hidden text-text-primary"
+            onInput={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
+            onChange={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
           >
             <div className="px-6 py-5 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1812,40 +1746,14 @@ export default function NewJobModal({
             </div>
 
             {/* Leave-without-saving confirmation (shown when navigating away with unsaved data) */}
-            {showLeaveConfirm && (
-              <div className="absolute inset-0 z-[140] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-                <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-2xl">
-                  <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 shrink-0 rounded-xl bg-danger/10 text-danger flex items-center justify-center">
-                      <AlertTriangle size={18} />
-                    </div>
-                    <div>
-                      <h3 className="text-[15px] font-bold tracking-tight text-text-primary">{t.modals.leaveFormTitle}</h3>
-                      <p className="text-[13px] text-text-tertiary mt-1">{t.modals.leaveFormBody}</p>
-                    </div>
-                  </div>
-                  <div className="mt-5 flex items-center justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowLeaveConfirm(false);
-                        if (openedPathRef.current) navigate(openedPathRef.current);
-                      }}
-                      className="glass-button"
-                    >
-                      {t.modals.keepEditingBtn}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleClose()}
-                      className="glass-button-danger px-4 py-2 font-semibold"
-                    >
-                      {t.modals.leaveAnywayBtn}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+            <LeaveFormConfirm
+              open={showLeaveConfirm}
+              onConfirm={() => handleClose()}
+              onCancel={() => {
+                setShowLeaveConfirm(false);
+                if (openedPathRef.current) navigate(openedPathRef.current);
+              }}
+            />
           </motion.div>
         </FormPageHost>
       )}
