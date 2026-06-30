@@ -212,6 +212,16 @@ export function isPaymentsNotReady(e: unknown): boolean {
   return e instanceof ServerError && e.status === 503;
 }
 
+/**
+ * Convert a quote into a job (Jobber-style). Drives the existing server route
+ * POST /api/quotes/convert-to-job (reads the `quotes` table, copies line items,
+ * creates the job). Returns the new job id to open.
+ */
+export async function convertQuoteToJob(quoteId: string): Promise<{ jobId: string }> {
+  const res = await serverPost<{ ok: boolean; jobId: string }>('/quotes/convert-to-job', { quoteId });
+  return { jobId: res.jobId };
+}
+
 // ─── Stripe Connect (self-serve payment onboarding, per company) ────────────
 // Each org connects its OWN Stripe account so it can collect card payments on
 // the client pay page. The server (server/routes/connect.ts) owns the Stripe

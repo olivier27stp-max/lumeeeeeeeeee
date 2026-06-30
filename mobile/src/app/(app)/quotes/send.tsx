@@ -9,7 +9,7 @@ import { getQuote, listQuoteItems, markQuoteSent, quoteShareLink } from '@/lib/a
 import { getClient } from '@/lib/api/clients';
 import { getCompany } from '@/lib/api/org';
 import { logOutboundMessage } from '@/lib/api/messaging';
-import { sendSmsViaServer, isSmsUnavailable } from '@/lib/api/server';
+import { sendSmsViaServer, isSmsUnavailable, convertQuoteToJob } from '@/lib/api/server';
 import { textNumber } from '@/lib/contact';
 import { sendEmail } from '@/lib/email';
 import { htmlToPdf, shareHtmlAsPdf } from '@/lib/pdf';
@@ -18,6 +18,15 @@ import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
 import { buildQuotePreviewHtml } from '@/lib/invoicePreview';
+
+const QSTATUS: Record<string, { label: string; bg: string; fg: string }> = {
+  draft: { label: 'Brouillon', bg: '#f1f5f9', fg: '#475569' },
+  sent: { label: 'Envoyée', bg: '#dbeafe', fg: '#1d4ed8' },
+  approved: { label: 'Approuvée', bg: '#dcfce7', fg: '#15803d' },
+  declined: { label: 'Refusée', bg: '#fee2e2', fg: '#b91c1c' },
+  action_required: { label: 'Action requise', bg: '#fef3c7', fg: '#a16207' },
+  converted: { label: 'Convertie', bg: '#e0e7ff', fg: '#4338ca' },
+};
 
 export default function SendQuote() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -151,6 +160,18 @@ export default function SendQuote() {
     onError: (e: Error) => Alert.alert('Courriel', e.message),
   });
 
+  // Convert this quote into a job (Jobber-style). Especially the CTA once the
+  // client has approved the quote.
+  const convert = useMutation({
+    mutationFn: () => convertQuoteToJob(String(id)),
+    onSuccess: ({ jobId }) => {
+      qc.invalidateQueries({ queryKey: ['jobs'] });
+      qc.invalidateQueries({ queryKey: ['quotes', id] });
+      router.replace(`/(app)/jobs/${jobId}` as any);
+    },
+    onError: (e: Error) => Alert.alert('Convertir en job', e.message),
+  });
+
   const shareIt = async () => {
     try {
       await Share.share({ message: buildBody(), ...(link ? { url: link } : {}) });
@@ -178,9 +199,27 @@ export default function SendQuote() {
   return (
     <View className="flex-1 bg-surface-alt">
       <View className="gap-3 p-4">
-        <Text className="text-lg font-bold text-ink">
-          Soumission {quote?.quote_number ?? ''} · {formatCurrencyCents(amount, currency)}
-        </Text>
+        <View className="flex-row items-center justify-between">
+          <Text className="flex-1 pr-2 text-lg font-bold text-ink">
+            Soumission {quote?.quote_number ?? ''} · {formatCurrencyCents(amount, currency)}
+          </Text>
+          {quote?.status ? (
+            <View style={{ backgroundColor: (QSTATUS[quote.status] ?? QSTATUS.sent).bg }} className="rounded-full px-2.5 py-1">
+              <Text style={{ color: (QSTATUS[quote.status] ?? QSTATUS.sent).fg }} className="text-[10px] font-bold">
+                {(QSTATUS[quote.status] ?? QSTATUS.sent).label}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        {quote?.status !== 'converted' ? (
+          <Button
+            title="Convertir en job"
+            variant={quote?.status === 'approved' ? 'primary' : 'secondary'}
+            onPress={() => convert.mutate()}
+            loading={convert.isPending}
+          />
+        ) : null}
 
         {!sent ? (
           <View className="gap-2">
