@@ -30,7 +30,7 @@ function Row({
 }) {
   const Inner = (
     <View className="gap-1">
-      <Text className="text-xs text-ink-muted uppercase">{label}</Text>
+      <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{label}</Text>
       <Text className={`text-base ${onPress ? 'text-brand underline' : 'text-ink'}`}>
         {value}
       </Text>
@@ -122,7 +122,7 @@ export default function ClientDetail() {
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-surface-alt">
-        <Text className="text-ink-muted">Loading…</Text>
+        <Text className="text-ink-muted">Chargement…</Text>
       </View>
     );
   }
@@ -130,7 +130,7 @@ export default function ClientDetail() {
     return (
       <View className="flex-1 items-center justify-center bg-surface-alt p-6">
         <Text className="text-ink-muted text-center">
-          {error ? (error as Error).message : 'Client not found.'}
+          {error ? (error as Error).message : 'Client introuvable.'}
         </Text>
       </View>
     );
@@ -156,21 +156,21 @@ export default function ClientDetail() {
         <Card className="gap-4">
           {client.phone ? (
             <Row
-              label="Phone"
+              label="Téléphone"
               value={client.phone}
               onPress={() => Linking.openURL(`tel:${client.phone}`)}
             />
           ) : null}
           {client.email ? (
             <Row
-              label="Email"
+              label="Courriel"
               value={client.email}
               onPress={() => Linking.openURL(`mailto:${client.email}`)}
             />
           ) : null}
           {address ? (
             <Row
-              label="Address"
+              label="Adresse"
               value={address}
               onPress={() =>
                 Linking.openURL(`https://maps.apple.com/?q=${encodeURIComponent(address)}`)
@@ -182,15 +182,15 @@ export default function ClientDetail() {
         {/* Status · lead source · client since */}
         <Card className="gap-3">
           <View className="flex-row items-center justify-between">
-            <Text className="text-xs text-ink-muted uppercase">Statut</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Statut</Text>
             <StatusPill status={client.status} />
           </View>
           <View className="flex-row items-center justify-between border-t border-surface-border pt-3">
-            <Text className="text-xs text-ink-muted uppercase">Source</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Source</Text>
             <Text className="text-sm text-ink">{leadSource || 'Non spécifiée'}</Text>
           </View>
           <View className="flex-row items-center justify-between border-t border-surface-border pt-3">
-            <Text className="text-xs text-ink-muted uppercase">Client depuis</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Client depuis</Text>
             <Text className="text-sm text-ink">{formatDateTime(client.created_at)}</Text>
           </View>
         </Card>
@@ -198,7 +198,7 @@ export default function ClientDetail() {
         {/* Billing rollup + tappable invoices (admin) — open one to view/manage it. */}
         {canSeePricing && (invoices?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-xs text-ink-muted uppercase mb-1">Facturation</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle mb-1">Facturation</Text>
             <View className="flex-row justify-between">
               <View className="items-center flex-1">
                 <Text className="text-[10px] uppercase text-ink-subtle">Facturé</Text>
@@ -237,7 +237,7 @@ export default function ClientDetail() {
         {/* Quotes — tappable to open/send (admin). */}
         {canSeePricing && (quotes?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-xs text-ink-muted uppercase mb-1">Soumissions</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle mb-1">Soumissions</Text>
             {(quotes ?? []).map((q) => (
               <Pressable
                 key={q.id}
@@ -269,7 +269,7 @@ export default function ClientDetail() {
         {/* Notes — editable on the spot (saves on blur) */}
         {can('clients.update') ? (
           <Card>
-            <Text className="text-xs text-ink-muted uppercase mb-1">Notes</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle mb-1">Notes</Text>
             <Input
               value={notes}
               onChangeText={setNotes}
@@ -281,7 +281,7 @@ export default function ClientDetail() {
           </Card>
         ) : client.notes ? (
           <Card>
-            <Text className="text-xs text-ink-muted uppercase mb-1">Notes</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle mb-1">Notes</Text>
             <Text className="text-base text-ink leading-6">{client.notes}</Text>
           </Card>
         ) : null}
@@ -290,7 +290,7 @@ export default function ClientDetail() {
         {client.phone ? (
           <Card className="gap-2">
             <View className="flex-row items-center justify-between">
-              <Text className="text-xs text-ink-muted uppercase">Communications</Text>
+              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Communications</Text>
               <Pressable onPress={openThread}>
                 <Text className="text-xs font-semibold text-brand">Ouvrir le fil</Text>
               </Pressable>
@@ -318,7 +318,7 @@ export default function ClientDetail() {
         {/* Jobs */}
         {(jobs?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-xs text-ink-muted uppercase">Jobs ({jobs!.length})</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Jobs ({jobs!.length})</Text>
             {jobs!.map((j) => (
               <Pressable
                 key={j.id}
@@ -337,10 +337,10 @@ export default function ClientDetail() {
         {/* Quotes (admin) */}
         {canSeePricing && (quotes?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-xs text-ink-muted uppercase">Quotes ({quotes!.length})</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Soumissions ({quotes!.length})</Text>
             {quotes!.map((q) => (
               <View key={q.id} className="flex-row items-center justify-between border-t border-surface-border py-2.5">
-                <Text className="text-sm text-ink">Quote {q.quote_number ?? ''} · {q.status ?? '—'}</Text>
+                <Text className="text-sm text-ink">Soumission {q.quote_number ?? ''} · {q.status ?? '—'}</Text>
                 <Text className="text-sm font-medium text-ink">
                   {formatCurrencyCents(q.total_cents ?? 0, 'CAD')}
                 </Text>
@@ -352,11 +352,11 @@ export default function ClientDetail() {
         {/* Invoices (admin) */}
         {canSeePricing && (invoices?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-xs text-ink-muted uppercase">Invoices ({invoices!.length})</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Factures ({invoices!.length})</Text>
             {invoices!.map((inv) => (
               <View key={inv.id} className="flex-row items-center justify-between border-t border-surface-border py-2.5">
                 <Text className="text-sm text-ink">
-                  Invoice {inv.invoice_number ?? ''} · {inv.status ?? '—'}
+                  Facture {inv.invoice_number ?? ''} · {inv.status ?? '—'}
                 </Text>
                 <Text className="text-sm font-medium text-ink">
                   {formatCurrencyCents(inv.total_cents ?? 0, 'CAD')}
@@ -369,7 +369,7 @@ export default function ClientDetail() {
         {/* Activity timeline */}
         {(activity?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-xs text-ink-muted uppercase">Activité</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Activité</Text>
             {activity!.map((a) => (
               <View key={a.id} className="flex-row items-start justify-between border-t border-surface-border pt-2">
                 <Text className="flex-1 text-sm text-ink" numberOfLines={2}>
@@ -385,7 +385,7 @@ export default function ClientDetail() {
 
         {can('clients.update') ? (
           <Button
-            title="Edit client"
+            title="Modifier le client"
             variant="secondary"
             onPress={() => router.push(`/(app)/clients/edit?id=${client.id}`)}
           />

@@ -41,8 +41,8 @@ export function JobBillingCard({
   const sendInvoice = async (invoiceId: string, invoiceNumber: string | null, amountCents: number) => {
     try {
       const url = await getOrCreatePaymentLink({ orgId, invoiceId, amountCents, currency });
-      const label = invoiceNumber ? `invoice ${invoiceNumber}` : 'your invoice';
-      const body = `Here's ${label} for ${formatCurrencyCents(amountCents, currency)}. View and pay it here: ${url}`;
+      const label = invoiceNumber ? `la facture ${invoiceNumber}` : 'votre facture';
+      const body = `Voici ${label} de ${formatCurrencyCents(amountCents, currency)}. Consultez-la et payez ici : ${url}`;
 
       if (clientPhone) {
         await textNumber(clientPhone, body);
@@ -70,7 +70,7 @@ export function JobBillingCard({
         entityId: jobId,
       });
     } catch (e) {
-      Alert.alert('Send invoice', (e as Error).message);
+      Alert.alert('Envoyer la facture', (e as Error).message);
     }
   };
 
@@ -143,10 +143,10 @@ export function JobBillingCard({
 
   return (
     <Card className="gap-3">
-      <Text className="text-xs uppercase text-ink-muted">Billing</Text>
+      <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Facturation</Text>
 
       {!hasAny ? (
-        <Text className="text-sm text-ink-subtle">No quotes or invoices yet.</Text>
+        <Text className="text-sm text-ink-subtle">Aucune soumission ni facture.</Text>
       ) : null}
 
       {(quotes ?? []).map((q) => {
@@ -155,7 +155,7 @@ export function JobBillingCard({
           <View key={q.id} className="gap-2">
             <View className="flex-row items-center justify-between">
               <View>
-                <Text className="text-sm font-medium text-ink">Quote {q.quote_number ?? ''}</Text>
+                <Text className="text-sm font-medium text-ink">Soumission {q.quote_number ?? ''}</Text>
                 <Text className="text-xs text-ink-muted">{q.status ?? '—'}</Text>
               </View>
               <Text className="text-sm text-ink">
@@ -184,11 +184,11 @@ export function JobBillingCard({
             >
               <View>
                 <Text className="text-sm font-medium text-ink">
-                  Invoice {inv.invoice_number ?? ''}
+                  Facture {inv.invoice_number ?? ''}
                 </Text>
                 <Text className="text-xs text-ink-muted">
                   {inv.status ?? '—'}
-                  {due > 0 ? ` · ${formatCurrencyCents(due, currency)} due` : ''}
+                  {due > 0 ? ` · ${formatCurrencyCents(due, currency)} dû` : ''}
                 </Text>
               </View>
               <Text className="text-sm text-ink">
@@ -205,7 +205,7 @@ export function JobBillingCard({
                     className="rounded-full bg-brand px-4 py-1.5"
                   >
                     <Text className="text-xs font-medium text-white">
-                      {clientPhone ? 'Envoyer la facture' : 'Send invoice'}
+                      {clientPhone ? 'Envoyer la facture' : 'Partager la facture'}
                     </Text>
                   </Pressable>
                 ) : null}

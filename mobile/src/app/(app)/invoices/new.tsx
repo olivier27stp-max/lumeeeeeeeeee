@@ -106,7 +106,7 @@ export default function NewInvoice() {
       // After creating → the send-confirmation page.
       router.replace(`/(app)/invoices/send?id=${data.id}`);
     },
-    onError: (e: Error) => Alert.alert('Could not create invoice', e.message),
+    onError: (e: Error) => Alert.alert('Impossible de créer la facture', e.message),
   });
 
   if (!(can('invoices.create') || canSeePricing)) return <Redirect href="/(app)/(tabs)" />;
@@ -122,7 +122,7 @@ export default function NewInvoice() {
             className={`flex-1 items-center rounded-xl py-2 ${mode === m ? 'bg-white' : ''}`}
           >
             <Text className={`text-sm font-semibold ${mode === m ? 'text-ink' : 'text-ink-muted'}`}>
-              {m === 'client' ? 'From a client' : 'From a job'}
+              {m === 'client' ? 'D\'un client' : 'D\'un job'}
             </Text>
           </Pressable>
         ))}
@@ -131,7 +131,7 @@ export default function NewInvoice() {
       {/* From job: pick a job (prefills client + items) */}
       {mode === 'job' && !job ? (
         <View className="gap-2">
-          <Input label="Search jobs" value={jobSearch} onChangeText={setJobSearch} placeholder="Job title or client…" />
+          <Input label="Rechercher un job" value={jobSearch} onChangeText={setJobSearch} placeholder="Titre du job ou client…" />
           {filteredJobs.slice(0, 12).map((j) => (
             <Pressable key={j.id} onPress={() => pickJob(j)} className="rounded-xl border border-surface-border bg-white px-4 py-3">
               <View className="flex-row items-center justify-between gap-2">
@@ -145,7 +145,7 @@ export default function NewInvoice() {
               </Text>
             </Pressable>
           ))}
-          {filteredJobs.length === 0 ? <Text className="text-xs text-ink-subtle">No jobs found.</Text> : null}
+          {filteredJobs.length === 0 ? <Text className="text-xs text-ink-subtle">Aucun job trouvé.</Text> : null}
         </View>
       ) : null}
 
@@ -158,19 +158,19 @@ export default function NewInvoice() {
       ) : job ? (
         <View className="flex-row items-center justify-between rounded-2xl bg-white p-4">
           <View>
-            <Text className="text-[11px] uppercase text-ink-subtle">From job</Text>
+            <Text className="text-[11px] uppercase text-ink-subtle">D&apos;un job</Text>
             <Text className="text-base font-semibold text-ink">{job.title}</Text>
-            <Text className="text-xs text-ink-muted">{client?.name ?? 'No client on job'}</Text>
+            <Text className="text-xs text-ink-muted">{client?.name ?? 'Aucun client sur le job'}</Text>
           </View>
           <Pressable onPress={() => { setJob(null); setClient(null); }}>
-            <Text className="text-sm text-brand">Change</Text>
+            <Text className="text-sm text-brand">Changer</Text>
           </Pressable>
         </View>
       ) : null}
 
-      <Input label="Subject" value={subject} onChangeText={setSubject} placeholder="e.g. June service" />
+      <Input label="Objet" value={subject} onChangeText={setSubject} placeholder="ex. Service de juin" />
       <Input
-        label="Due date (YYYY-MM-DD) — defaults to 30 days from today"
+        label="Échéance (AAAA-MM-JJ) — 30 jours par défaut"
         value={dueDate}
         onChangeText={setDueDate}
         placeholder="2026-07-14"
@@ -179,16 +179,16 @@ export default function NewInvoice() {
 
       <LineItemsEditor onChange={setItems} seed={seed} seedKey={job?.id} />
 
-      <Input label="Tax rate (%)" value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
+      <Input label="Taux de taxe (%)" value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
 
       <View className="gap-1 rounded-2xl bg-white p-4">
-        <Row label="Subtotal" value={formatCurrencyCents(totals.subtotal, 'CAD')} />
-        <Row label="Tax" value={formatCurrencyCents(totals.tax, 'CAD')} />
+        <Row label="Sous-total" value={formatCurrencyCents(totals.subtotal, 'CAD')} />
+        <Row label="Taxe" value={formatCurrencyCents(totals.tax, 'CAD')} />
         <Row label="Total" value={formatCurrencyCents(totals.total, 'CAD')} bold />
       </View>
 
       <Button
-        title="Create invoice"
+        title="Créer la facture"
         onPress={() => saveMut.mutate()}
         loading={saveMut.isPending}
         disabled={!client || items.length === 0 || !orgId}

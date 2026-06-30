@@ -106,7 +106,7 @@ export default function NewQuote() {
       );
       setShowSend(true);
     },
-    onError: (e: Error) => Alert.alert('Could not create quote', e.message),
+    onError: (e: Error) => Alert.alert('Impossible de créer la soumission', e.message),
   });
 
   // Deposit amount (cents) from the form, for the message note.
@@ -238,15 +238,15 @@ export default function NewQuote() {
       </View>
 
       <View className="flex-row gap-3">
-        <View className="flex-1"><Input label="Title" value={title} onChangeText={setTitle} placeholder="AC replacement" /></View>
-        <View className="w-28"><Input label="Valid (days)" value={validDays} onChangeText={setValidDays} keyboardType="number-pad" /></View>
+        <View className="flex-1"><Input label="Titre" value={title} onChangeText={setTitle} placeholder="Remplacement climatisation" /></View>
+        <View className="w-28"><Input label="Validité (jours)" value={validDays} onChangeText={setValidDays} keyboardType="number-pad" /></View>
       </View>
 
       <LineItemsEditor onChange={setItems} />
 
       {/* Discount */}
       <Pressable onPress={() => setDiscountOn((d) => !d)} className="flex-row items-center justify-between rounded-2xl bg-white px-4 py-3">
-        <Text className="text-sm text-ink">Add discount</Text>
+        <Text className="text-sm text-ink">Ajouter un rabais</Text>
         <Text className="text-lg">{discountOn ? '☑️' : '⬜️'}</Text>
       </Pressable>
       {discountOn ? (
@@ -258,15 +258,15 @@ export default function NewQuote() {
               </Pressable>
             ))}
           </View>
-          <View className="flex-1"><Input label="Discount" value={discountValue} onChangeText={setDiscountValue} keyboardType="decimal-pad" /></View>
+          <View className="flex-1"><Input label="Rabais" value={discountValue} onChangeText={setDiscountValue} keyboardType="decimal-pad" /></View>
         </View>
       ) : null}
 
-      <Input label="Tax rate (%)" value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
+      <Input label="Taux de taxe (%)" value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
 
       {/* Deposit */}
       <Pressable onPress={() => setDepositOn((d) => !d)} className="flex-row items-center justify-between rounded-2xl bg-white px-4 py-3">
-        <Text className="text-sm text-ink">Require deposit</Text>
+        <Text className="text-sm text-ink">Exiger un dépôt</Text>
         <Text className="text-lg">{depositOn ? '☑️' : '⬜️'}</Text>
       </Pressable>
       {depositOn ? (
@@ -278,17 +278,17 @@ export default function NewQuote() {
               </Pressable>
             ))}
           </View>
-          <View className="flex-1"><Input label="Deposit" value={depositValue} onChangeText={setDepositValue} keyboardType="decimal-pad" /></View>
+          <View className="flex-1"><Input label="Dépôt" value={depositValue} onChangeText={setDepositValue} keyboardType="decimal-pad" /></View>
         </View>
       ) : null}
 
-      <Input label="Notes (visible to client)" value={notes} onChangeText={setNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }} />
+      <Input label="Notes (visibles au client)" value={notes} onChangeText={setNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }} />
 
       {/* Totals */}
       <View className="gap-1 rounded-2xl bg-white p-4">
-        <Row label="Subtotal" value={formatCurrencyCents(totals.subtotal, 'CAD')} />
-        {totals.discount > 0 ? <Row label="Discount" value={`- ${formatCurrencyCents(totals.discount, 'CAD')}`} /> : null}
-        <Row label="Tax" value={formatCurrencyCents(totals.tax, 'CAD')} />
+        <Row label="Sous-total" value={formatCurrencyCents(totals.subtotal, 'CAD')} />
+        {totals.discount > 0 ? <Row label="Rabais" value={`- ${formatCurrencyCents(totals.discount, 'CAD')}`} /> : null}
+        <Row label="Taxe" value={formatCurrencyCents(totals.tax, 'CAD')} />
         <Row label="Total" value={formatCurrencyCents(totals.total, 'CAD')} bold />
       </View>
 
@@ -298,7 +298,7 @@ export default function NewQuote() {
         onPress={() => setShowPreview(true)}
         disabled={items.length === 0}
       />
-      <Button title="Create quote" onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!client || items.length === 0 || !orgId} />
+      <Button title="Créer la soumission" onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!client || items.length === 0 || !orgId} />
 
       {/* Full-screen in-app preview of the quote (logo + name + items + totals). */}
       <Modal visible={showPreview} animationType="slide" onRequestClose={() => setShowPreview(false)}>

@@ -197,7 +197,7 @@ export default function JobDetail() {
         `/(app)/conversation/${cid}?phone=${encodeURIComponent(phone)}&name=${encodeURIComponent(job?.client_name ?? '')}&clientId=${encodeURIComponent(job?.client_id ?? '')}` as any,
       );
     } catch (e) {
-      Alert.alert('On my way', (e as Error).message);
+      Alert.alert('En route', (e as Error).message);
     }
   };
 
@@ -250,7 +250,7 @@ export default function JobDetail() {
   // and queue when offline, then resume automatically when back online.
   const startMut = useMutation<unknown, Error, { id: string }>({
     mutationKey: MK.jobStart,
-    onError: (e: Error) => Alert.alert('Could not start job', e.message),
+    onError: (e: Error) => Alert.alert('Impossible de démarrer le job', e.message),
   });
 
   const completeMut = useMutation<unknown, Error, { id: string; notes?: string }>({
@@ -261,7 +261,7 @@ export default function JobDetail() {
       // RPC, then opens it directly — no "do you want to invoice?" prompt. Only for
       // users who can invoice / see prices; technicians just see "done".
       if (!(can('invoices.create') || canSeePricing)) {
-        Alert.alert('Job completed', 'Nice work!', [
+        Alert.alert('Job terminé', 'Beau travail !', [
           { text: 'OK', onPress: () => router.back() },
         ]);
         return;
@@ -278,7 +278,7 @@ export default function JobDetail() {
         ]);
       }
     },
-    onError: (e: Error) => Alert.alert('Could not complete job', e.message),
+    onError: (e: Error) => Alert.alert('Impossible de terminer le job', e.message),
   });
 
   // Delete the job (confirm first), then leave the screen.
@@ -327,7 +327,7 @@ export default function JobDetail() {
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-surface-alt">
-        <Text className="text-ink-muted">Loading…</Text>
+        <Text className="text-ink-muted">Chargement…</Text>
       </View>
     );
   }
@@ -336,7 +336,7 @@ export default function JobDetail() {
     return (
       <View className="flex-1 items-center justify-center bg-surface-alt p-6">
         <Text className="text-ink-muted text-center">
-          {error ? (error as Error).message : 'Job not found.'}
+          {error ? (error as Error).message : 'Job introuvable.'}
         </Text>
       </View>
     );
@@ -361,7 +361,7 @@ export default function JobDetail() {
             <Text className="text-xs text-ink-muted">#{job.job_number}</Text>
             {can('jobs.update') ? (
               <Pressable onPress={() => router.push(`/(app)/jobs/edit?id=${job.id}`)}>
-                <Text className="text-sm font-medium text-brand">Edit</Text>
+                <Text className="text-sm font-medium text-brand">Modifier</Text>
               </Pressable>
             ) : null}
           </View>
@@ -385,7 +385,7 @@ export default function JobDetail() {
               </View>
               {can('clients.update') ? (
                 <Pressable hitSlop={8} onPress={() => router.push(`/(app)/clients/edit?id=${client.id}`)}>
-                  <Text className="text-sm font-medium text-brand">Edit</Text>
+                  <Text className="text-sm font-medium text-brand">Modifier</Text>
                 </Pressable>
               ) : null}
             </Pressable>
@@ -404,7 +404,7 @@ export default function JobDetail() {
             </View>
           ) : null}
           {phone && !isDone ? (
-            <Button title="I'm on my way 🚗" variant="secondary" onPress={openOnMyWay} />
+            <Button title="En route 🚗" variant="secondary" onPress={openOnMyWay} />
           ) : null}
           {client?.email ? (
             <Pressable onPress={() => Linking.openURL(`mailto:${client.email}`)}>
@@ -440,7 +440,7 @@ export default function JobDetail() {
           <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Détails du job</Text>
           <View className="flex-row items-center justify-between">
             <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Type</Text>
-            <Text className="text-sm text-ink">{job.job_type || 'One-off'}</Text>
+            <Text className="text-sm text-ink">{job.job_type || 'Ponctuel'}</Text>
           </View>
           <View className="flex-row items-center justify-between">
             <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Début</Text>
@@ -471,7 +471,7 @@ export default function JobDetail() {
         {/* Quick team assignment (owner/admin) */}
         {isManager && (teams?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-xs text-ink-muted uppercase">Équipe assignée</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Équipe assignée</Text>
             <View className="flex-row flex-wrap gap-2">
               {(teams ?? []).map((t) => {
                 const sel = job.team_id === t.id;
@@ -496,7 +496,7 @@ export default function JobDetail() {
         {/* Per-job timer */}
         {can('jobs.update') ? (
           <Card className="gap-2">
-            <Text className="text-xs text-ink-muted uppercase">Temps sur ce job</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Temps sur ce job</Text>
             <View className="flex-row items-center justify-between">
               <Text className="text-2xl font-bold text-ink" style={{ fontVariant: ['tabular-nums'] }}>
                 {fmtDur(jobElapsedSec)}
@@ -514,7 +514,7 @@ export default function JobDetail() {
         {/* Services — what the tech will actually do, with prices (behind pricing access). */}
         {lineItems && lineItems.length > 0 ? (
           <Card className="gap-2">
-            <Text className="text-xs text-ink-muted uppercase">Services</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Services</Text>
             {lineItems.map((li) => (
               <View key={li.id} className="flex-row items-center justify-between border-t border-surface-border pt-2.5">
                 <Text className="flex-1 pr-3 text-base text-ink">
@@ -578,13 +578,13 @@ export default function JobDetail() {
           <View className="gap-3 pt-2">
             {!isActive ? (
               <Button
-                title="Start job"
+                title="Démarrer le job"
                 onPress={() => startMut.mutate({ id: String(id) })}
                 loading={startMut.isPending}
               />
             ) : null}
             <Button
-              title="Mark complete"
+              title="Marquer terminé"
               variant={isActive ? 'primary' : 'secondary'}
               onPress={handleComplete}
               loading={completeMut.isPending || savingSig}
@@ -600,10 +600,10 @@ export default function JobDetail() {
         ) : (
           <Card className="bg-emerald-50 border-emerald-200 gap-2">
             <Text className="text-emerald-700 font-semibold">
-              Completed {formatDateTime(job.completed_at)}
+              Terminé {formatDateTime(job.completed_at)}
             </Text>
             {hasSignature ? (
-              <Text className="text-emerald-700 text-sm">Signed by client ✓</Text>
+              <Text className="text-emerald-700 text-sm">Signé par le client ✓</Text>
             ) : null}
             {can('jobs.update') ? (
               <Button title="Ré-ouvrir le job" variant="secondary" onPress={confirmReopen} loading={reopenMut.isPending} />

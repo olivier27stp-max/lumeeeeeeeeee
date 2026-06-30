@@ -24,12 +24,12 @@ import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
 
 const FREQUENCIES = [
-  { key: 'daily', label: 'Daily' },
-  { key: 'weekly', label: 'Weekly' },
-  { key: 'biweekly', label: 'Bi-weekly' },
-  { key: 'monthly', label: 'Monthly' },
-  { key: 'annual', label: 'Annual' },
-  { key: 'custom', label: 'Custom' },
+  { key: 'daily', label: 'Quotidien' },
+  { key: 'weekly', label: 'Hebdomadaire' },
+  { key: 'biweekly', label: 'Aux 2 semaines' },
+  { key: 'monthly', label: 'Mensuel' },
+  { key: 'annual', label: 'Annuel' },
+  { key: 'custom', label: 'Personnalisé' },
 ];
 const DEFAULT_TAX = '14.975';
 
@@ -172,7 +172,7 @@ export default function NewJob() {
       );
       setShowBooking(true);
     },
-    onError: (e: Error) => Alert.alert('Could not create job', e.message),
+    onError: (e: Error) => Alert.alert('Impossible de créer le job', e.message),
   });
 
   // The auto-filled appointment details appended under the nice message.
@@ -224,7 +224,7 @@ export default function NewJob() {
 
   return (
     <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt" contentContainerStyle={{ padding: 20, gap: 14 }}>
-      <Input label="Job title" value={title} onChangeText={setTitle} placeholder="e.g. AC maintenance — Smith" />
+      <Input label="Titre du job" value={title} onChangeText={setTitle} placeholder="ex. Entretien climatisation — Smith" />
 
       <View className="gap-2">
         <SectionLabel>Client</SectionLabel>
@@ -255,16 +255,16 @@ export default function NewJob() {
         </View>
       ) : null}
 
-      <AddressAutocomplete label="Job site address" value={address} onChangeText={setAddress} onSelect={(a) => setAddress(a.address)} />
+      <AddressAutocomplete label="Adresse du chantier" value={address} onChangeText={setAddress} onSelect={(a) => setAddress(a.address)} />
 
       {/* Job type */}
       <View className="gap-2">
-        <SectionLabel>Job type</SectionLabel>
+        <SectionLabel>Type de job</SectionLabel>
         <View className="flex-row rounded-2xl bg-surface-sunken p-1">
           {(['one_off', 'recurring'] as const).map((t) => (
             <Pressable key={t} onPress={() => setJobType(t)} className={`flex-1 items-center rounded-xl py-2 ${jobType === t ? 'bg-white' : ''}`}>
               <Text className={`text-sm font-semibold ${jobType === t ? 'text-ink' : 'text-ink-muted'}`}>
-                {t === 'one_off' ? 'One-off' : 'Recurring'}
+                {t === 'one_off' ? 'Ponctuel' : 'Récurrent'}
               </Text>
             </Pressable>
           ))}
@@ -286,7 +286,7 @@ export default function NewJob() {
 
       {/* Date & time */}
       <View className="gap-2">
-        <SectionLabel>Date &amp; time</SectionLabel>
+        <SectionLabel>Date et heure</SectionLabel>
 
         <MiniWeekCalendar selected={startDate} onSelect={pickDay} counts={countForDay} />
 
@@ -294,10 +294,10 @@ export default function NewJob() {
         <View className="rounded-2xl bg-white p-3">
           <Text className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
             {startDate.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} ·{' '}
-            {dayJobs.length === 0 ? 'free day' : `${dayJobs.length} booked`}
+            {dayJobs.length === 0 ? 'journée libre' : `${dayJobs.length} réservé(s)`}
           </Text>
           {dayJobs.length === 0 ? (
-            <Text className="text-xs text-ink-subtle">No jobs yet — wide open.</Text>
+            <Text className="text-xs text-ink-subtle">Aucun job — agenda libre.</Text>
           ) : (
             dayJobs.map((j) => (
               <View key={j.id} className="flex-row justify-between border-t border-surface-border py-1.5">
@@ -311,7 +311,7 @@ export default function NewJob() {
         {/* Start / End time — compact pickers (tap, choose, auto-close) */}
         <View className="flex-row gap-3">
           <View className="flex-1 flex-row items-center justify-between rounded-xl border border-surface-border bg-surface-sunken px-4 py-2.5">
-            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">Start</Text>
+            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">Début</Text>
             <DateTimePicker
               value={startDate}
               mode="time"
@@ -322,7 +322,7 @@ export default function NewJob() {
             />
           </View>
           <View className="flex-1 flex-row items-center justify-between rounded-xl border border-surface-border bg-surface-sunken px-4 py-2.5">
-            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">End</Text>
+            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">Fin</Text>
             <DateTimePicker
               value={endDate}
               mode="time"
@@ -339,7 +339,7 @@ export default function NewJob() {
         label="Description"
         value={description}
         onChangeText={setDescription}
-        placeholder="Scope of work…"
+        placeholder="Description des travaux…"
         multiline
         numberOfLines={3}
         style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }}
@@ -349,16 +349,16 @@ export default function NewJob() {
       {canSeePricing ? (
         <>
           <LineItemsEditor onChange={setItems} />
-          <Input label="Tax rate (%)" value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
+          <Input label="Taux de taxe (%)" value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
           <View className="gap-1 rounded-2xl bg-white p-4">
-            <Row label="Subtotal" value={formatCurrencyCents(totals.subtotal, 'CAD')} />
-            <Row label="Tax" value={formatCurrencyCents(totals.tax, 'CAD')} />
+            <Row label="Sous-total" value={formatCurrencyCents(totals.subtotal, 'CAD')} />
+            <Row label="Taxe" value={formatCurrencyCents(totals.tax, 'CAD')} />
             <Row label="Total" value={formatCurrencyCents(totals.total, 'CAD')} bold />
           </View>
         </>
       ) : null}
 
-      <Button title="Create job" onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!title.trim() || !orgId} />
+      <Button title="Créer le job" onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!title.trim() || !orgId} />
 
       {/* Booking confirmation — pops up after Save: send the client the details. */}
       <Modal visible={showBooking} transparent animationType="fade" onRequestClose={goToJob}>

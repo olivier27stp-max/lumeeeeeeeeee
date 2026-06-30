@@ -142,7 +142,7 @@ export default function SendInvoice() {
         }
       }
     },
-    onError: (e: Error) => Alert.alert('Send by message', e.message),
+    onError: (e: Error) => Alert.alert('Envoyer par message', e.message),
   });
 
   const sendEmail = useMutation({
@@ -151,7 +151,7 @@ export default function SendInvoice() {
       await sendInvoiceEmailViaServer({ invoiceId: String(id) });
     },
     onSuccess: markSent,
-    onError: (e: Error) => Alert.alert('Send by email', e.message),
+    onError: (e: Error) => Alert.alert('Envoyer par courriel', e.message),
   });
 
   // Collect the payment right now, in person, with the native Stripe sheet
@@ -206,7 +206,7 @@ export default function SendInvoice() {
   if (isLoading || !invoice) {
     return (
       <View className="flex-1 items-center justify-center bg-surface-alt">
-        <Text className="text-ink-muted">Loading…</Text>
+        <Text className="text-ink-muted">Chargement…</Text>
       </View>
     );
   }
@@ -218,11 +218,11 @@ export default function SendInvoice() {
         <View className="flex-row items-center justify-between rounded-2xl bg-white p-4">
           <View className="flex-1 pr-3">
             <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
-              Invoice {invoice.invoice_number ? `#${invoice.invoice_number}` : ''}
+              Facture {invoice.invoice_number ? `#${invoice.invoice_number}` : ''}
             </Text>
             <Text className="text-2xl font-bold text-ink">{formatCurrencyCents(amount, 'CAD')}</Text>
             <Text className="text-sm text-ink-muted" numberOfLines={1}>
-              {client ? `${clientFullName(client)} · ` : ''}{client?.phone ?? client?.email ?? 'No contact on file'}
+              {client ? `${clientFullName(client)} · ` : ''}{client?.phone ?? client?.email ?? 'Aucun contact'}
             </Text>
           </View>
           {sent ? (
@@ -230,7 +230,7 @@ export default function SendInvoice() {
               <View className="h-10 w-10 items-center justify-center rounded-full bg-status-completed">
                 <SymbolView name="checkmark" tintColor="#FFFFFF" size={20} resizeMode="scaleAspectFit" />
               </View>
-              <Text className="mt-1 text-xs font-semibold text-status-completed">Sent ✓</Text>
+              <Text className="mt-1 text-xs font-semibold text-status-completed">Envoyée ✓</Text>
             </View>
           ) : null}
         </View>
@@ -247,14 +247,14 @@ export default function SendInvoice() {
               Paiement par carte dans l'app · ou envoyez la facture ci-dessous
             </Text>
             <Button
-              title={client?.phone ? 'Send by message' : 'No phone — use Share'}
+              title={client?.phone ? 'Envoyer par message' : 'Pas de numéro — Partager'}
               variant="secondary"
               onPress={() => sendText.mutate()}
               loading={sendText.isPending}
               disabled={!client?.phone}
             />
             <Button
-              title={client?.email ? 'Send by email' : 'No email on file'}
+              title={client?.email ? 'Envoyer par courriel' : 'Pas de courriel'}
               variant="secondary"
               onPress={() => sendEmail.mutate()}
               loading={sendEmail.isPending}
@@ -263,13 +263,13 @@ export default function SendInvoice() {
             <View className="flex-row items-center justify-center gap-4 pt-0.5">
               <Pressable onPress={exportPdf}><Text className="text-sm text-brand">PDF…</Text></Pressable>
               <Text className="text-ink-subtle">·</Text>
-              <Pressable onPress={shareIt}><Text className="text-sm text-brand">Share…</Text></Pressable>
+              <Pressable onPress={shareIt}><Text className="text-sm text-brand">Partager…</Text></Pressable>
               <Text className="text-ink-subtle">·</Text>
-              <Pressable onPress={markSent}><Text className="text-sm text-ink-muted">Mark as sent</Text></Pressable>
+              <Pressable onPress={markSent}><Text className="text-sm text-ink-muted">Marquer envoyée</Text></Pressable>
             </View>
           </View>
         ) : (
-          <Button title="Done" onPress={() => router.replace('/(app)/(tabs)')} />
+          <Button title="Terminé" onPress={() => router.replace('/(app)/(tabs)')} />
         )}
       </View>
 
@@ -277,7 +277,7 @@ export default function SendInvoice() {
           independent of Stripe / the web pay page. */}
       <View className="flex-1 border-t border-surface-border bg-white">
         <Text className="px-4 pb-1 pt-3 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
-          Invoice preview
+          Aperçu de la facture
         </Text>
         {previewHtml ? (
           <WebView
@@ -288,7 +288,7 @@ export default function SendInvoice() {
           />
         ) : (
           <View className="flex-1 items-center justify-center p-6">
-            <Text className="text-center text-sm text-ink-subtle">Preparing preview…</Text>
+            <Text className="text-center text-sm text-ink-subtle">Préparation de l&apos;aperçu…</Text>
           </View>
         )}
       </View>

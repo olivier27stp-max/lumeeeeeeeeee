@@ -26,7 +26,7 @@ export default function NewClient() {
       qc.invalidateQueries({ queryKey: ['clients'] });
       router.replace(`/(app)/clients/${client.id}`);
     },
-    onError: (e: Error) => Alert.alert('Could not create client', e.message),
+    onError: (e: Error) => Alert.alert('Impossible de créer le client', e.message),
   });
 
   if (!canCreateClients) return <Redirect href="/(app)/(tabs)/clients" />;
@@ -39,29 +39,29 @@ export default function NewClient() {
         {/* Name row */}
         <View className="flex-row gap-3">
           <View className="flex-1">
-            <Input label="First name" value={form.first_name ?? ''} onChangeText={set('first_name')} placeholder="John" />
+            <Input label="Prénom" value={form.first_name ?? ''} onChangeText={set('first_name')} placeholder="Jean" />
           </View>
           <View className="flex-1">
-            <Input label="Last name" value={form.last_name ?? ''} onChangeText={set('last_name')} placeholder="Doe" />
+            <Input label="Nom" value={form.last_name ?? ''} onChangeText={set('last_name')} placeholder="Tremblay" />
           </View>
         </View>
 
-        <Input label="Company" value={form.company ?? ''} onChangeText={set('company')} placeholder="Acme Inc." />
+        <Input label="Entreprise" value={form.company ?? ''} onChangeText={set('company')} placeholder="Acme Inc." />
 
         {/* Contact row */}
         <View className="flex-row gap-3">
           <View className="flex-1">
-            <Input label="Email" value={form.email ?? ''} onChangeText={set('email')} keyboardType="email-address" autoCapitalize="none" placeholder="john@example.com" />
+            <Input label="Courriel" value={form.email ?? ''} onChangeText={set('email')} keyboardType="email-address" autoCapitalize="none" placeholder="jean@exemple.com" />
           </View>
           <View className="flex-1">
-            <Input label="Phone" value={form.phone ?? ''} onChangeText={set('phone')} keyboardType="phone-pad" placeholder="(555) 123-4567" />
+            <Input label="Téléphone" value={form.phone ?? ''} onChangeText={set('phone')} keyboardType="phone-pad" placeholder="(555) 123-4567" />
           </View>
         </View>
 
         {/* Address — collapsed by default, like the web */}
         {!showAddress ? (
           <Pressable onPress={() => setShowAddress(true)} className="self-start">
-            <Text className="text-sm font-semibold text-brand">+ Address</Text>
+            <Text className="text-sm font-semibold text-brand">+ Adresse</Text>
           </Pressable>
         ) : (
           <View className="gap-3">
@@ -80,15 +80,15 @@ export default function NewClient() {
             />
             {form.city ? (
               <View className="flex-row gap-3">
-                <View className="flex-1"><Input label="City" value={form.city ?? ''} onChangeText={set('city')} /></View>
+                <View className="flex-1"><Input label="Ville" value={form.city ?? ''} onChangeText={set('city')} /></View>
                 <View className="flex-1"><Input label="Province" value={form.province ?? ''} onChangeText={set('province')} /></View>
               </View>
             ) : null}
-            {form.city ? <Input label="Postal code" value={form.postal_code ?? ''} onChangeText={set('postal_code')} /> : null}
+            {form.city ? <Input label="Code postal" value={form.postal_code ?? ''} onChangeText={set('postal_code')} /> : null}
           </View>
         )}
 
-        <Button title="Create client" onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!valid || !orgId} />
+        <Button title="Créer le client" onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!valid || !orgId} />
       </View>
     </ScreenContainer>
   );
