@@ -57,6 +57,28 @@ function isTemporarilyExempt(email?: string | null): boolean {
 }
 
 /**
+ * Federated-identity exemption.
+ *
+ * Users who sign in through an OAuth provider (Google, Microsoft, Apple, …)
+ * already authenticate against that provider, which enforces its own MFA.
+ * Stacking a separate TOTP factor on top is redundant and a poor mobile UX
+ * (it bounces users to their password app with no clear follow-up). So we
+ * treat a federated sign-in as a strong second factor and skip app-level MFA.
+ * Email/password admins still get TOTP enforcement.
+ */
+const FEDERATED_PROVIDERS = new Set(['google', 'azure', 'apple', 'github', 'gitlab', 'bitbucket']);
+
+function isFederatedUser(user: any): boolean {
+  const provider = user?.app_metadata?.provider;
+  if (typeof provider === 'string' && FEDERATED_PROVIDERS.has(provider)) return true;
+  const providers: unknown = user?.app_metadata?.providers;
+  if (Array.isArray(providers)) {
+    return providers.some((p) => typeof p === 'string' && FEDERATED_PROVIDERS.has(p));
+  }
+  return false;
+}
+
+/**
  * Middleware that enforces MFA for admin/owner roles on sensitive endpoints.
  * Mount this AFTER body parsing and auth middleware.
  */
@@ -84,6 +106,12 @@ export function mfaEnforcementMiddleware() {
 
       const isAdmin = await isOrgAdminOrOwner(auth.client, auth.user.id, auth.orgId);
       if (!isAdmin) return next(); // Non-admins don't need MFA for these routes
+
+      // Federated sign-in (Google, etc.) already provides strong auth via the
+      // provider — skip the redundant TOTP requirement for OAuth users.
+      if (isFederatedUser(auth.user)) {
+        return next();
+      }
 
       // Temporary, time-boxed exemption for a single owner account (auto-expires).
       if (isTemporarilyExempt(auth.user.email)) {

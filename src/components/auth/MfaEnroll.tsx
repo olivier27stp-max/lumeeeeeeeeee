@@ -42,7 +42,7 @@ export default function MfaEnroll({ onComplete, onCancel }: MfaEnrollProps) {
       // Supabase doesn't reject the new enrollment ("factor already exists").
       try {
         const { data: list } = await supabase.auth.mfa.listFactors();
-        const stale = (list?.totp || []).filter((f) => f.status === 'unverified');
+        const stale = (list?.totp || []).filter((f) => (f.status as string) !== 'verified');
         for (const f of stale) await supabase.auth.mfa.unenroll({ factorId: f.id });
       } catch {}
 
