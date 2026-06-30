@@ -667,7 +667,7 @@ export default function Clients() {
                   <div className="flex items-center gap-3 min-w-0">
                     <UnifiedAvatar id={item.id} name={clientDisplayName(item)} />
                     <div className="min-w-0">
-                      <p className="text-[14px] font-semibold text-[var(--color-text-primary)] truncate leading-tight">{clientDisplayName(item) || '—'}</p>
+                      <p className="text-[14px] font-bold text-[var(--color-text-primary)] truncate leading-tight">{clientDisplayName(item) || '—'}</p>
                       {(() => {
                         const secondary = item.display_as_company && item.company
                           ? `${item.first_name || ''} ${item.last_name || ''}`.trim()
