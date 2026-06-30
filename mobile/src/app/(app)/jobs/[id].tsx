@@ -328,10 +328,12 @@ export default function JobDetail() {
   }
 
   const when = job.scheduled_at ?? job.start_at ?? null;
-  const address = job.property_address;
   const clientAddress = client
     ? [client.address, client.city, client.province, client.postal_code].filter(Boolean).join(', ')
     : '';
+  // The job's service address, falling back to the client's address when the job
+  // has no distinct one — so it's never blank or mismatched with the client.
+  const address = job.property_address || clientAddress || null;
   const isDone = job.status === 'completed';
   const isActive = job.status === 'in_progress';
   const hasSignature = (job.attachments ?? []).some((a) => a.kind === 'signature');

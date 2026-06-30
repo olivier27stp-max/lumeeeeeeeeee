@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
@@ -81,6 +81,27 @@ export default function NewJob() {
   });
   const [items, setItems] = useState<LineItemInput[]>([]);
   const [taxRate, setTaxRate] = useState(DEFAULT_TAX);
+
+  // When a client is chosen, prefill the job's service address from their address
+  // (only when the user hasn't typed one yet) so the job and client stay connected.
+  const { data: pickedClientFull } = useQuery({
+    queryKey: ['clients', client?.id],
+    queryFn: () => getClient(String(client?.id)),
+    enabled: !!client?.id,
+  });
+  useEffect(() => {
+    if (!pickedClientFull || address.trim()) return;
+    const addr = [
+      pickedClientFull.address,
+      pickedClientFull.city,
+      pickedClientFull.province,
+      pickedClientFull.postal_code,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    if (addr) setAddress(addr);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickedClientFull]);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((s, i) => s + Math.round(i.qty * i.unit_price_cents), 0);
