@@ -16,7 +16,7 @@ import { JobMaterialsCard } from '@/components/JobMaterialsCard';
 import { JobVisitsCard } from '@/components/JobVisitsCard';
 import { JobBillingCard } from '@/components/JobBillingCard';
 import { SignaturePad } from '@/components/SignaturePad';
-import { deleteJob, getJob, listJobLineItems, updateJob } from '@/lib/api/jobs';
+import { deleteJob, getJob, listJobLineItems, reopenJob, updateJob } from '@/lib/api/jobs';
 import { finishJobAndPrepareInvoice } from '@/lib/api/billing';
 import { getJobTime, startJobTimer, stopJobTimer } from '@/lib/api/jobTime';
 import { getActiveTimesheet, punchIn } from '@/lib/api/timesheets';
@@ -295,6 +295,22 @@ export default function JobDetail() {
     Alert.alert('Supprimer le job', 'Cette action est irréversible. Continuer ?', [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Supprimer', style: 'destructive', onPress: () => deleteMut.mutate() },
+    ]);
+  };
+
+  // Re-open a completed job (undo the completion) so it can be edited/re-finished.
+  const reopenMut = useMutation({
+    mutationFn: () => reopenJob(String(id)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['jobs', id] });
+      qc.invalidateQueries({ queryKey: ['jobs'] });
+    },
+    onError: (e: Error) => Alert.alert('Ré-ouvrir le job', e.message),
+  });
+  const confirmReopen = () => {
+    Alert.alert('Ré-ouvrir le job', 'Le job repassera à « planifié » et tu pourras le modifier puis le re-compléter. Continuer ?', [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Ré-ouvrir', onPress: () => reopenMut.mutate() },
     ]);
   };
 
@@ -585,12 +601,15 @@ export default function JobDetail() {
             ) : null}
           </View>
         ) : (
-          <Card className="bg-emerald-50 border-emerald-200 gap-1">
+          <Card className="bg-emerald-50 border-emerald-200 gap-2">
             <Text className="text-emerald-700 font-semibold">
               Completed {formatDateTime(job.completed_at)}
             </Text>
             {hasSignature ? (
               <Text className="text-emerald-700 text-sm">Signed by client ✓</Text>
+            ) : null}
+            {can('jobs.update') ? (
+              <Button title="Ré-ouvrir le job" variant="secondary" onPress={confirmReopen} loading={reopenMut.isPending} />
             ) : null}
           </Card>
         )}

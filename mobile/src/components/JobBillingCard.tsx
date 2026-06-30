@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { Alert, Pressable, Share, Text, View } from 'react-native';
 
@@ -8,6 +8,7 @@ import {
   listInvoicesForJob,
   listQuotesForJob,
   markInvoiceSent,
+  voidInvoice,
 } from '@/lib/api/billing';
 import { logOutboundMessage } from '@/lib/api/messaging';
 import { createNotification } from '@/lib/api/notifications';
@@ -101,6 +102,32 @@ export function JobBillingCard({
     }
   };
 
+  const qc = useQueryClient();
+
+  // Void (cancel) an invoice — e.g. it was created wrong or the job is being redone.
+  const confirmVoid = (invoiceId: string, invoiceNumber: string | null) => {
+    Alert.alert(
+      'Annuler la facture',
+      `La facture ${invoiceNumber ? `${invoiceNumber} ` : ''}sera marquée « annulée » (void) et n'attendra plus de paiement. Continuer ?`,
+      [
+        { text: 'Retour', style: 'cancel' },
+        {
+          text: 'Annuler la facture',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await voidInvoice(invoiceId);
+              qc.invalidateQueries({ queryKey: ['billing', 'invoices', jobId] });
+              qc.invalidateQueries({ queryKey: ['invoices'] });
+            } catch (e) {
+              Alert.alert('Annuler la facture', (e as Error).message);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const { data: invoices } = useQuery({
     queryKey: ['billing', 'invoices', jobId],
     queryFn: () => listInvoicesForJob(jobId),
@@ -165,24 +192,36 @@ export function JobBillingCard({
                 {formatCurrencyCents(inv.total_cents ?? 0, currency)}
               </Text>
             </View>
-            {due > 0 ? (
+            {inv.status === 'void' ? (
+              <Text className="text-xs font-medium text-ink-subtle">Facture annulée (void)</Text>
+            ) : (
               <View className="flex-row flex-wrap gap-2">
+                {due > 0 || (inv.total_cents ?? 0) > 0 ? (
+                  <Pressable
+                    onPress={() => sendInvoice(inv.id, inv.invoice_number, due > 0 ? due : inv.total_cents ?? 0)}
+                    className="rounded-full bg-brand px-4 py-1.5"
+                  >
+                    <Text className="text-xs font-medium text-white">
+                      {clientPhone ? 'Envoyer la facture' : 'Send invoice'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {due > 0 ? (
+                  <Pressable
+                    onPress={() => remindInvoice(inv.id, inv.invoice_number, due)}
+                    className="rounded-full border border-brand px-4 py-1.5"
+                  >
+                    <Text className="text-xs font-medium text-brand">Relancer le paiement</Text>
+                  </Pressable>
+                ) : null}
                 <Pressable
-                  onPress={() => sendInvoice(inv.id, inv.invoice_number, due)}
-                  className="rounded-full bg-brand px-4 py-1.5"
+                  onPress={() => confirmVoid(inv.id, inv.invoice_number)}
+                  className="rounded-full border border-red-300 px-4 py-1.5"
                 >
-                  <Text className="text-xs font-medium text-white">
-                    {clientPhone ? 'Envoyer la facture' : 'Send invoice'}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => remindInvoice(inv.id, inv.invoice_number, due)}
-                  className="rounded-full border border-brand px-4 py-1.5"
-                >
-                  <Text className="text-xs font-medium text-brand">Relancer le paiement</Text>
+                  <Text className="text-xs font-medium text-red-600">Annuler la facture</Text>
                 </Pressable>
               </View>
-            ) : null}
+            )}
           </View>
         );
       })}

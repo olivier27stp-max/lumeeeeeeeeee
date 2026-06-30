@@ -416,6 +416,16 @@ export async function markInvoiceSent(invoiceId: string): Promise<void> {
   await supabase.from('invoices').update(patch).eq('id', invoiceId);
 }
 
+/** Void (cancel) an invoice: status → 'void', no balance due. Org members can
+ * update invoices under RLS, same as markInvoiceSent. */
+export async function voidInvoice(invoiceId: string): Promise<void> {
+  const { error } = await supabase
+    .from('invoices')
+    .update({ status: 'void', balance_cents: 0 })
+    .eq('id', invoiceId);
+  if (error) throw new Error(error.message);
+}
+
 export async function listQuotesForClient(clientId: string): Promise<QuoteRow[]> {
   const { data, error } = await supabase
     .from('quotes')

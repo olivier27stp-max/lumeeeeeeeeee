@@ -417,6 +417,16 @@ export async function updateJob(id: string, input: Partial<JobInput>): Promise<J
   return data as Job;
 }
 
+/** Re-open a completed job (undo the completion): back to scheduled, clear
+ * completed_at. RLS still enforces the org/team boundary. */
+export async function reopenJob(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('jobs')
+    .update({ status: 'scheduled', completed_at: null })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 /** Permanently delete a job (RLS still enforces the org/team boundary). */
 export async function deleteJob(id: string): Promise<void> {
   const { error } = await supabase.from('jobs').delete().eq('id', id);
