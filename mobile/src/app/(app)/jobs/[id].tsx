@@ -352,36 +352,69 @@ export default function JobDetail() {
           <StatusPill status={job.status} />
         </View>
 
+        {/* Hero card: the client first — tap to open, one-tap call/text — plus the
+            contract total and the appointment, all in the first thing you see. */}
         <Card className="gap-3">
-          <View>
-            <Text className="text-xs text-ink-muted uppercase mb-1">Scheduled</Text>
-            <Text className="text-base text-ink">{formatDateTime(when)}</Text>
-          </View>
-          {!client && job.client_name ? (
+          {client ? (
+            <Pressable
+              onPress={() => router.push(`/(app)/clients/${client.id}`)}
+              className="flex-row items-center gap-3"
+            >
+              <UnifiedAvatar id={client.id} name={clientFullName(client)} size={48} />
+              <View className="flex-1">
+                <Text className="text-lg font-bold text-ink">{clientFullName(client)}</Text>
+                {client.company ? <Text className="text-sm text-ink-muted">{client.company}</Text> : null}
+                {client.phone ? <Text className="text-sm text-ink-muted">{client.phone}</Text> : null}
+              </View>
+              {can('clients.update') ? (
+                <Pressable hitSlop={8} onPress={() => router.push(`/(app)/clients/edit?id=${client.id}`)}>
+                  <Text className="text-sm font-medium text-brand">Edit</Text>
+                </Pressable>
+              ) : null}
+            </Pressable>
+          ) : job.client_name ? (
             <View>
-              <Text className="text-xs text-ink-muted uppercase mb-1">Client</Text>
-              <Text className="text-base text-ink">{job.client_name}</Text>
+              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Client</Text>
+              <Text className="text-lg font-bold text-ink">{job.client_name}</Text>
             </View>
           ) : null}
-          {address ? (
-            <Pressable
-              onPress={() =>
-                Linking.openURL(
-                  `https://maps.apple.com/?q=${encodeURIComponent(address)}`,
-                )
-              }
-            >
-              <Text className="text-xs text-ink-muted uppercase mb-1">Job location</Text>
-              <Text className="text-base text-brand underline">{address}</Text>
+
+          {/* Quick call / text shortcuts */}
+          {phone ? (
+            <View className="flex-row gap-2">
+              <View className="flex-1"><Button title="Appeler" onPress={() => callNumber(phone)} /></View>
+              <View className="flex-1"><Button title="Texter" variant="secondary" onPress={openThread} /></View>
+            </View>
+          ) : null}
+          {phone && !isDone ? (
+            <Button title="I'm on my way 🚗" variant="secondary" onPress={openOnMyWay} />
+          ) : null}
+          {client?.email ? (
+            <Pressable onPress={() => Linking.openURL(`mailto:${client.email}`)}>
+              <Text className="text-sm text-brand underline">{client.email}</Text>
             </Pressable>
           ) : null}
-          {canSeePricing ? (
-            <View>
-              <Text className="text-xs text-ink-muted uppercase mb-1">Total</Text>
-              <Text className="text-base font-semibold text-ink">
-                {formatCurrencyCents(job.total_cents, job.currency)}
-              </Text>
+
+          {/* Appointment + contract total */}
+          <View className="flex-row items-end justify-between border-t border-surface-border pt-3">
+            <View className="flex-1 pr-3">
+              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Rendez-vous</Text>
+              <Text className="text-sm text-ink">{formatDateTime(when)}</Text>
             </View>
+            {canSeePricing ? (
+              <View className="items-end">
+                <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Total contrat</Text>
+                <Text className="text-xl font-bold text-ink">{formatCurrencyCents(job.total_cents, job.currency)}</Text>
+              </View>
+            ) : null}
+          </View>
+
+          {/* Job location (separate from the client's address) */}
+          {address ? (
+            <Pressable onPress={() => Linking.openURL(`https://maps.apple.com/?q=${encodeURIComponent(address)}`)}>
+              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Adresse du job</Text>
+              <Text className="text-sm text-brand underline">{address}</Text>
+            </Pressable>
           ) : null}
         </Card>
 
@@ -456,68 +489,19 @@ export default function JobDetail() {
           </Card>
         ) : null}
 
-        {client ? (
-          <Card className="gap-3">
-            <View className="flex-row items-center justify-between">
-              <Text className="text-xs text-ink-muted uppercase">Client</Text>
-              {can('clients.update') ? (
-                <Pressable onPress={() => router.push(`/(app)/clients/edit?id=${client.id}`)}>
-                  <Text className="text-sm font-medium text-brand">Edit client</Text>
-                </Pressable>
-              ) : null}
-            </View>
-
+        {/* Client's address, when it differs from the job location above. */}
+        {client && clientAddress && clientAddress !== address ? (
+          <Card>
             <Pressable
-              onPress={() => router.push(`/(app)/clients/${client.id}`)}
-              className="flex-row items-center gap-3"
+              onPress={() =>
+                Linking.openURL(`https://maps.apple.com/?q=${encodeURIComponent(clientAddress)}`)
+              }
             >
-              <UnifiedAvatar id={client.id} name={clientFullName(client)} size={44} />
-              <View className="flex-1">
-                <Text className="text-base font-semibold text-ink">{clientFullName(client)}</Text>
-                {client.company ? (
-                  <Text className="text-sm text-ink-muted">{client.company}</Text>
-                ) : null}
-              </View>
+              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
+                Adresse du client
+              </Text>
+              <Text className="text-base text-brand underline">{clientAddress}</Text>
             </Pressable>
-
-            {client.phone ? (
-              <Pressable onPress={() => promptCall(clientFullName(client), client.phone!)}>
-                <Text className="text-xs text-ink-muted uppercase mb-0.5">Phone</Text>
-                <Text className="text-base text-brand underline">{client.phone}</Text>
-              </Pressable>
-            ) : null}
-            {client.email ? (
-              <Pressable onPress={() => Linking.openURL(`mailto:${client.email}`)}>
-                <Text className="text-xs text-ink-muted uppercase mb-0.5">Email</Text>
-                <Text className="text-base text-brand underline">{client.email}</Text>
-              </Pressable>
-            ) : null}
-            {clientAddress ? (
-              <Pressable
-                onPress={() =>
-                  Linking.openURL(`https://maps.apple.com/?q=${encodeURIComponent(clientAddress)}`)
-                }
-              >
-                <Text className="text-xs text-ink-muted uppercase mb-0.5">Address</Text>
-                <Text className="text-base text-brand underline">{clientAddress}</Text>
-              </Pressable>
-            ) : null}
-
-            {phone ? (
-              <>
-                <View className="flex-row gap-2">
-                  <View className="flex-1">
-                    <Button title="Call" variant="secondary" onPress={() => callNumber(phone)} />
-                  </View>
-                  <View className="flex-1">
-                    <Button title="Text" variant="secondary" onPress={openThread} />
-                  </View>
-                </View>
-                {!isDone ? (
-                  <Button title="I'm on my way 🚗" onPress={openOnMyWay} />
-                ) : null}
-              </>
-            ) : null}
           </Card>
         ) : null}
 
