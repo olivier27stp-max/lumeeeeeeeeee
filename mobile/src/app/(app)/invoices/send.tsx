@@ -11,6 +11,7 @@ import { getClient } from '@/lib/api/clients';
 import { getCompany } from '@/lib/api/org';
 import { findOrCreateConversation, logOutboundMessage } from '@/lib/api/messaging';
 import { sendInvoiceEmailViaServer, sendSmsViaServer, isSmsUnavailable } from '@/lib/api/server';
+import { collectInvoicePayment } from '@/lib/payments';
 import { textNumber } from '@/lib/contact';
 import { clientFullName, formatCurrencyCents } from '@/lib/format';
 import { useAuth } from '@/lib/auth';
@@ -152,6 +153,38 @@ export default function SendInvoice() {
     onError: (e: Error) => Alert.alert('Send by email', e.message),
   });
 
+  // Collect the payment right now, in person, with the native Stripe sheet
+  // (tap card / Apple Pay). The money goes to the company's connected account;
+  // our platform fee is taken automatically. Needs Stripe Connect onboarding done.
+  const collect = useMutation({
+    mutationFn: () =>
+      collectInvoicePayment({
+        orgId: orgId ?? '',
+        invoiceId: String(id),
+        amountCents: amount,
+        currency: invoice?.currency ?? 'CAD',
+        companyName: company?.company_name ?? current?.companyName ?? null,
+      }),
+    onSuccess: (res) => {
+      if (res.status === 'paid') {
+        qc.invalidateQueries({ queryKey: ['invoices'] });
+        qc.invalidateQueries({ queryKey: ['invoices', id] });
+        qc.invalidateQueries({ queryKey: ['pay-link', id] });
+        Alert.alert('Paiement reçu', 'Le paiement a été encaissé. ✅');
+        setSent(true);
+      } else if (res.status === 'not_ready') {
+        Alert.alert(
+          'Paiements pas encore actifs',
+          "Termine d'abord la configuration Stripe (Plus → Paiements) pour pouvoir encaisser des cartes.",
+        );
+      } else if (res.status === 'error') {
+        Alert.alert('Paiement', res.message);
+      }
+      // 'canceled' → silent
+    },
+    onError: (e: Error) => Alert.alert('Paiement', e.message),
+  });
+
   const shareIt = async () => {
     try {
       await Share.share(payUrl ? { message: buildBody(), url: payUrl } : { message: buildBody() });
@@ -204,7 +237,17 @@ export default function SendInvoice() {
         {!sent ? (
           <View className="gap-2">
             <Button
+              title={`Encaisser ${formatCurrencyCents(amount, invoice.currency ?? 'CAD')}`}
+              onPress={() => collect.mutate()}
+              loading={collect.isPending}
+              disabled={amount <= 0}
+            />
+            <Text className="text-center text-[11px] text-ink-subtle">
+              Paiement par carte dans l'app · ou envoyez la facture ci-dessous
+            </Text>
+            <Button
               title={client?.phone ? 'Send by message' : 'No phone — use Share'}
+              variant="secondary"
               onPress={() => sendText.mutate()}
               loading={sendText.isPending}
               disabled={!client?.phone}

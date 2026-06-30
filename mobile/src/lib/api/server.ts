@@ -180,6 +180,38 @@ export async function sendInvoiceEmailViaServer(input: {
   });
 }
 
+// ─── In-app card payment (collect on device via Stripe PaymentSheet) ────────
+// Reuses the SAME server route the web pay page uses: given an invoice's public
+// payment-request token, the server creates a destination-charge PaymentIntent on
+// the org's connected account and returns its client_secret + the platform
+// publishable key. The mobile app then presents the native Stripe PaymentSheet.
+// No new server code or credentials — the rep's JWT is enough (route is public,
+// keyed by the unguessable 48-hex token; balance is verified server-side).
+
+export interface InvoicePaymentIntent {
+  client_secret: string;
+  payment_intent_id: string;
+  amount_cents: number;
+  currency: string;
+  publishable_key: string;
+}
+
+/**
+ * Create (or reuse) the PaymentIntent for an invoice's payment-request token.
+ * Throws ServerError with status 503 when the business hasn't finished Stripe
+ * Connect onboarding (`charges_enabled` is false) — callers should surface a
+ * "finish payment setup" message in that case (see isPaymentsNotReady).
+ */
+export async function createInvoicePaymentIntent(publicToken: string): Promise<InvoicePaymentIntent> {
+  return serverPost<InvoicePaymentIntent>(`/pay/${publicToken}/create-payment-intent`, {});
+}
+
+/** True when the failure is "this business isn't ready to accept payments yet"
+ * (Stripe Connect onboarding/KYC not complete) rather than a transient error. */
+export function isPaymentsNotReady(e: unknown): boolean {
+  return e instanceof ServerError && e.status === 503;
+}
+
 // ─── Stripe Connect (self-serve payment onboarding, per company) ────────────
 // Each org connects its OWN Stripe account so it can collect card payments on
 // the client pay page. The server (server/routes/connect.ts) owns the Stripe

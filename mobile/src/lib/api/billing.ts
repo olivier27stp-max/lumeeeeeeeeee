@@ -142,18 +142,12 @@ export async function listQuotesForJob(jobId: string): Promise<QuoteRow[]> {
  * Works against Supabase directly (payment_requests RLS allows org members to
  * read/insert); the secure web page handles Stripe. Requires EXPO_PUBLIC_WEB_URL.
  */
-export async function getOrCreatePaymentLink(params: {
+export async function getOrCreatePaymentToken(params: {
   orgId: string;
   invoiceId: string;
   amountCents: number;
   currency: string;
 }): Promise<string> {
-  const webUrl = process.env.EXPO_PUBLIC_WEB_URL;
-  if (!webUrl) {
-    throw new Error(
-      'Set EXPO_PUBLIC_WEB_URL (your deployed Lume web app URL) to generate payment links.',
-    );
-  }
   if (!params.amountCents || params.amountCents <= 0) {
     throw new Error('This invoice has nothing left to pay.');
   }
@@ -184,6 +178,22 @@ export async function getOrCreatePaymentLink(params: {
     token = data.public_token as string;
   }
 
+  return token;
+}
+
+export async function getOrCreatePaymentLink(params: {
+  orgId: string;
+  invoiceId: string;
+  amountCents: number;
+  currency: string;
+}): Promise<string> {
+  const webUrl = process.env.EXPO_PUBLIC_WEB_URL;
+  if (!webUrl) {
+    throw new Error(
+      'Set EXPO_PUBLIC_WEB_URL (your deployed Lume web app URL) to generate payment links.',
+    );
+  }
+  const token = await getOrCreatePaymentToken(params);
   return `${webUrl.replace(/\/$/, '')}/pay/${token}`;
 }
 
