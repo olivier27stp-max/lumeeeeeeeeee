@@ -169,8 +169,8 @@ export default function AddVisitModal({
       <div
         className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
-        onInput={() => setDirty(true)}
-        onChange={() => setDirty(true)}
+        onInput={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
+        onChange={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-[15px] font-bold text-text-primary flex items-center gap-2">

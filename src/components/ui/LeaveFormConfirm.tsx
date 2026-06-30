@@ -3,7 +3,6 @@
  * navigates away from a form that contains unsaved data. Rendered as an overlay
  * filling its positioned parent. The "leave anyway" CTA is intentionally red.
  */
-import { AlertTriangle } from 'lucide-react';
 import { useTranslation } from '../../i18n';
 
 interface LeaveFormConfirmProps {
@@ -24,15 +23,8 @@ export default function LeaveFormConfirm({ open, onConfirm, onCancel }: LeaveFor
         className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start gap-3">
-          <div className="h-10 w-10 shrink-0 rounded-xl bg-danger/10 text-danger flex items-center justify-center">
-            <AlertTriangle size={18} />
-          </div>
-          <div>
-            <h3 className="text-[15px] font-bold tracking-tight text-text-primary">{t.modals.leaveFormTitle}</h3>
-            <p className="text-[13px] text-text-tertiary mt-1">{t.modals.leaveFormBody}</p>
-          </div>
-        </div>
+        <h3 className="text-xl font-bold tracking-tight text-text-primary">{t.modals.leaveFormTitle}</h3>
+        <p className="text-[13px] text-text-tertiary mt-2">{t.modals.leaveFormBody}</p>
         <div className="mt-5 flex items-center justify-end gap-3">
           <button type="button" onClick={onCancel} className="glass-button">
             {t.modals.keepEditingBtn}

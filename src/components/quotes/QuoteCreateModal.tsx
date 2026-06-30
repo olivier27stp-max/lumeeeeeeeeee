@@ -514,8 +514,8 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="absolute inset-0 z-[130] bg-surface flex flex-col overflow-hidden"
-          onInput={() => setDirty(true)}
-          onChange={() => setDirty(true)}
+          onInput={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
+          onChange={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
         >
           <LeaveFormConfirm open={guard.active} onConfirm={guard.confirmLeave} onCancel={guard.cancelLeave} />
           {/* ── Header ── */}
