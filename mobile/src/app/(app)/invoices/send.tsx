@@ -213,53 +213,73 @@ export default function SendInvoice() {
 
   return (
     <View className="flex-1 bg-surface-alt">
-      {/* Top: compact summary + send actions (Message first, then Email) */}
-      <View className="gap-3 p-4">
-        <View className="flex-row items-center justify-between rounded-2xl bg-white p-4">
-          <View className="flex-1 pr-3">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
-              Facture {invoice.invoice_number ? `#${invoice.invoice_number}` : ''}
-            </Text>
-            <Text className="text-2xl font-bold text-ink">{formatCurrencyCents(amount, 'CAD')}</Text>
-            <Text className="text-sm text-ink-muted" numberOfLines={1}>
-              {client ? `${clientFullName(client)} · ` : ''}{client?.phone ?? client?.email ?? 'Aucun contact'}
-            </Text>
-          </View>
-          {sent ? (
-            <View className="items-center">
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-status-completed">
-                <SymbolView name="checkmark" tintColor="#FFFFFF" size={20} resizeMode="scaleAspectFit" />
-              </View>
-              <Text className="mt-1 text-xs font-semibold text-status-completed">Envoyée ✓</Text>
-            </View>
-          ) : null}
+      {/* Header — like the web invoice modal: title + invoice no. + status. */}
+      <View className="flex-row items-center justify-between border-b border-surface-border bg-white px-4 py-3">
+        <View className="flex-1 pr-3">
+          <Text className="text-base font-bold text-ink">Aperçu de la facture</Text>
+          <Text className="text-xs text-ink-muted" numberOfLines={1}>
+            Facture {invoice.invoice_number ? `#${invoice.invoice_number}` : ''} · {formatCurrencyCents(amount, 'CAD')}
+            {client ? ` · ${clientFullName(client)}` : ''}
+          </Text>
         </View>
+        {sent ? (
+          <View className="flex-row items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1">
+            <SymbolView name="checkmark.circle.fill" tintColor="#16A34A" size={13} resizeMode="scaleAspectFit" />
+            <Text className="text-xs font-semibold text-emerald-700">Envoyée</Text>
+          </View>
+        ) : null}
+      </View>
 
+      {/* The invoice itself — the document (Business Pro), on a gray backdrop so it
+          reads like a sheet of paper, exactly like the web preview. */}
+      <View className="flex-1" style={{ backgroundColor: '#f1f5f9' }}>
+        {previewHtml ? (
+          <WebView
+            originWhitelist={['*']}
+            source={{ html: previewHtml }}
+            startInLoadingState
+            style={{ flex: 1, backgroundColor: '#f1f5f9' }}
+          />
+        ) : (
+          <View className="flex-1 items-center justify-center p-6">
+            <Text className="text-center text-sm text-ink-subtle">Préparation de l&apos;aperçu…</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Options d'envoi — clean panel at the bottom (the web modal's sidebar). */}
+      <View className="gap-2 border-t border-surface-border bg-white px-4 pb-7 pt-3">
         {!sent ? (
-          <View className="gap-2">
+          <>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
+              Options d&apos;envoi
+            </Text>
             <Button
               title={`Encaisser ${formatCurrencyCents(amount, invoice.currency ?? 'CAD')}`}
               onPress={() => collect.mutate()}
               loading={collect.isPending}
               disabled={amount <= 0}
             />
-            <Text className="text-center text-[11px] text-ink-subtle">
-              Paiement par carte dans l'app · ou envoyez la facture ci-dessous
-            </Text>
-            <Button
-              title={client?.phone ? 'Envoyer par message' : 'Pas de numéro — Partager'}
-              variant="secondary"
-              onPress={() => sendText.mutate()}
-              loading={sendText.isPending}
-              disabled={!client?.phone}
-            />
-            <Button
-              title={client?.email ? 'Envoyer par courriel' : 'Pas de courriel'}
-              variant="secondary"
-              onPress={() => sendEmail.mutate()}
-              loading={sendEmail.isPending}
-              disabled={!client?.email}
-            />
+            <View className="flex-row gap-2">
+              <View className="flex-1">
+                <Button
+                  title={client?.phone ? 'Message' : 'Partager'}
+                  variant="secondary"
+                  onPress={() => sendText.mutate()}
+                  loading={sendText.isPending}
+                  disabled={!client?.phone}
+                />
+              </View>
+              <View className="flex-1">
+                <Button
+                  title="Courriel"
+                  variant="secondary"
+                  onPress={() => sendEmail.mutate()}
+                  loading={sendEmail.isPending}
+                  disabled={!client?.email}
+                />
+              </View>
+            </View>
             <View className="flex-row items-center justify-center gap-4 pt-0.5">
               <Pressable onPress={exportPdf}><Text className="text-sm text-brand">PDF…</Text></Pressable>
               <Text className="text-ink-subtle">·</Text>
@@ -267,29 +287,9 @@ export default function SendInvoice() {
               <Text className="text-ink-subtle">·</Text>
               <Pressable onPress={markSent}><Text className="text-sm text-ink-muted">Marquer envoyée</Text></Pressable>
             </View>
-          </View>
+          </>
         ) : (
           <Button title="Terminé" onPress={() => router.replace('/(app)/(tabs)')} />
-        )}
-      </View>
-
-      {/* Preview: the invoice itself, rendered in-app so it always shows —
-          independent of Stripe / the web pay page. */}
-      <View className="flex-1 border-t border-surface-border bg-white">
-        <Text className="px-4 pb-1 pt-3 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
-          Aperçu de la facture
-        </Text>
-        {previewHtml ? (
-          <WebView
-            originWhitelist={['*']}
-            source={{ html: previewHtml }}
-            startInLoadingState
-            style={{ flex: 1, backgroundColor: '#FFFFFF' }}
-          />
-        ) : (
-          <View className="flex-1 items-center justify-center p-6">
-            <Text className="text-center text-sm text-ink-subtle">Préparation de l&apos;aperçu…</Text>
-          </View>
         )}
       </View>
     </View>
