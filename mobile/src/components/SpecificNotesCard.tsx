@@ -12,18 +12,16 @@ import {
   listSpecificNotes,
   updateSpecificNoteFiles,
 } from '@/lib/api/specificNotes';
-import { capturePhoto, pickPhoto, uploadJobPhoto } from '@/lib/api/jobPhotos';
 import { useAuth } from '@/lib/auth';
 
-/** Running internal notes log for a job (text + photos). */
+/** Running internal notes log for a job (text only — job photos live in the
+ * separate Photos section, so notes don't duplicate that). */
 export function SpecificNotesCard({ jobId, orgId }: { jobId: string; orgId: string }) {
   const qc = useQueryClient();
   const { session } = useAuth();
   const userId = session?.user.id ?? '';
 
   const [text, setText] = useState('');
-  const [pending, setPending] = useState<NoteFile[]>([]);
-  const [uploading, setUploading] = useState(false);
 
   const { data: notes, isLoading } = useQuery({
     queryKey: ['specific-notes', 'job', jobId],
@@ -33,19 +31,18 @@ export function SpecificNotesCard({ jobId, orgId }: { jobId: string; orgId: stri
 
   const add = useMutation({
     mutationFn: () => {
-      if (!text.trim() && pending.length === 0) throw new Error('Note vide.');
+      if (!text.trim()) throw new Error('Note vide.');
       return createSpecificNote({
         orgId,
         entityType: 'job',
         entityId: jobId,
         text,
-        files: pending,
+        files: [],
         createdBy: userId,
       });
     },
     onSuccess: () => {
       setText('');
-      setPending([]);
       qc.invalidateQueries({ queryKey: ['specific-notes', 'job', jobId] });
     },
     onError: (e: Error) => Alert.alert('Note', e.message),
@@ -61,7 +58,7 @@ export function SpecificNotesCard({ jobId, orgId }: { jobId: string; orgId: stri
       { text: 'Supprimer', style: 'destructive', onPress: () => del.mutate(id) },
     ]);
 
-  // Remove one photo from an already-saved note.
+  // Remove one photo from an already-saved note (clean up legacy note photos).
   const removePhoto = useMutation({
     mutationFn: ({ noteId, files }: { noteId: string; files: NoteFile[] }) =>
       updateSpecificNoteFiles(noteId, files),
@@ -69,56 +66,13 @@ export function SpecificNotesCard({ jobId, orgId }: { jobId: string; orgId: stri
     onError: (e: Error) => Alert.alert('Photo', e.message),
   });
 
-  const attach = async (fromCamera: boolean) => {
-    const img = fromCamera ? await capturePhoto() : await pickPhoto();
-    if (!img) return;
-    setUploading(true);
-    try {
-      const att = await uploadJobPhoto({ jobId, orgId, uri: img.uri, userId });
-      setPending((p) => [...p, { name: att.name ?? 'photo', url: att.url, path: att.path, file_type: 'image' as const }]);
-    } catch (e) {
-      Alert.alert('Photo', (e as Error).message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  // One "Photo" entry → choose camera or gallery (replaces the two old buttons).
-  const choosePhoto = () =>
-    Alert.alert('Ajouter une photo', undefined, [
-      { text: 'Appareil photo', onPress: () => attach(true) },
-      { text: 'Galerie', onPress: () => attach(false) },
-      { text: 'Annuler', style: 'cancel' },
-    ]);
-
   return (
     <View className="gap-3 rounded-2xl bg-white p-4">
       <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Notes internes</Text>
 
-      {/* Composer */}
+      {/* Composer (text only) */}
       <Input value={text} onChangeText={setText} placeholder="Ajouter une note…" multiline />
-      {pending.length ? (
-        <View className="flex-row flex-wrap gap-2">
-          {pending.map((f, i) => (
-            <View key={i} className="relative">
-              <Image source={{ uri: f.url }} className="h-14 w-14 rounded-lg" />
-              <Pressable
-                onPress={() => setPending((p) => p.filter((_, idx) => idx !== i))}
-                hitSlop={8}
-                className="absolute -right-1.5 -top-1.5 h-5 w-5 items-center justify-center rounded-full bg-ink"
-              >
-                <SymbolView name="xmark" tintColor="#FFFFFF" size={10} />
-              </Pressable>
-            </View>
-          ))}
-        </View>
-      ) : null}
-      <View className="flex-row items-center gap-3">
-        <Pressable onPress={choosePhoto} className="flex-row items-center gap-1">
-          <SymbolView name="camera" tintColor="#525252" size={16} />
-          <Text className="text-sm text-ink-muted">Photo</Text>
-        </Pressable>
-        {uploading ? <ActivityIndicator size="small" color="#171717" /> : null}
+      <View className="flex-row items-center">
         <View className="flex-1" />
         <Button title="Ajouter" onPress={() => add.mutate()} loading={add.isPending} />
       </View>

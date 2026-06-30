@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/Input';
 import { StatusPill } from '@/components/ui/StatusPill';
 import UnifiedAvatar from '@/components/ui/UnifiedAvatar';
 import { JobPhotoGrid } from '@/components/JobPhotoGrid';
-import { JobChecklistsCard } from '@/components/JobChecklistsCard';
 import { SpecificNotesCard } from '@/components/SpecificNotesCard';
 import { CustomFieldsCard } from '@/components/CustomFieldsCard';
 import { JobMaterialsCard } from '@/components/JobMaterialsCard';
@@ -557,8 +556,6 @@ export default function JobDetail() {
         ) : null}
 
         {orgId ? <SpecificNotesCard jobId={job.id} orgId={orgId} /> : null}
-
-        {orgId ? <JobChecklistsCard jobId={job.id} orgId={orgId} jobType={job.job_type} /> : null}
 
         {orgId ? <JobMaterialsCard jobId={job.id} orgId={orgId} canSeePricing={canSeePricing} /> : null}
 
