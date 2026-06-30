@@ -17,6 +17,7 @@ import { JobVisitsCard } from '@/components/JobVisitsCard';
 import { JobBillingCard } from '@/components/JobBillingCard';
 import { SignaturePad } from '@/components/SignaturePad';
 import { deleteJob, getJob, listJobLineItems, updateJob } from '@/lib/api/jobs';
+import { finishJobAndPrepareInvoice } from '@/lib/api/billing';
 import { getJobTime, startJobTimer, stopJobTimer } from '@/lib/api/jobTime';
 import { getActiveTimesheet, punchIn } from '@/lib/api/timesheets';
 import { listTeams } from '@/lib/api/org';
@@ -255,20 +256,25 @@ export default function JobDetail() {
 
   const completeMut = useMutation<unknown, Error, { id: string; notes?: string }>({
     mutationKey: MK.jobComplete,
-    onSuccess: () => {
-      // Job done (+ signature, if captured) → offer to invoice the client right
-      // away. Tapping "Créer la facture" opens the invoice screen prefilled with
-      // this job (client + line items). Only for users who can invoice / see prices.
-      if (can('invoices.create') || canSeePricing) {
-        Alert.alert('Job terminé ✓', 'Envoyer une facture au client ?', [
-          { text: 'Plus tard', style: 'cancel', onPress: () => router.back() },
-          {
-            text: 'Créer la facture',
-            onPress: () => router.push(`/(app)/invoices/new?jobId=${String(id)}` as any),
-          },
-        ]);
-      } else {
+    onSuccess: async () => {
+      // Same flow as desktop (JobModalController.handleFinishJob): completing the
+      // job auto-prepares the invoice draft via the finish_job_and_prepare_invoice
+      // RPC, then opens it directly — no "do you want to invoice?" prompt. Only for
+      // users who can invoice / see prices; technicians just see "done".
+      if (!(can('invoices.create') || canSeePricing)) {
         Alert.alert('Job completed', 'Nice work!', [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+        return;
+      }
+      try {
+        const { invoiceId } = await finishJobAndPrepareInvoice({ orgId, jobId: String(id) });
+        qc.invalidateQueries({ queryKey: ['invoices'] });
+        qc.invalidateQueries({ queryKey: ['billing', 'invoices', String(id)] });
+        router.replace(`/(app)/invoices/send?id=${invoiceId}` as any);
+      } catch (e) {
+        // Job is completed regardless; surface why the invoice couldn't be prepared.
+        Alert.alert('Job terminé', `Facture non préparée : ${(e as Error).message}`, [
           { text: 'OK', onPress: () => router.back() },
         ]);
       }

@@ -181,6 +181,28 @@ export async function getOrCreatePaymentToken(params: {
   return token;
 }
 
+/**
+ * Finish a job and prepare its invoice — the SAME flow the desktop uses on
+ * "complete job". Calls the `finish_job_and_prepare_invoice` Postgres RPC, which
+ * creates the invoice draft from the job (totals, taxes, line items) or returns
+ * the existing one. Returns the invoice id to open. Mirrors
+ * src/lib/invoicesApi.ts → finishJobAndPrepareInvoice.
+ */
+export async function finishJobAndPrepareInvoice(params: {
+  orgId?: string | null;
+  jobId: string;
+}): Promise<{ invoiceId: string; alreadyExists: boolean }> {
+  const { data, error } = await supabase.rpc('finish_job_and_prepare_invoice', {
+    p_org_id: params.orgId ?? null,
+    p_job_id: params.jobId,
+  });
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  const invoiceId = String(row?.invoice_id ?? '').trim();
+  if (!invoiceId) throw new Error('Invoice preparation succeeded but invoice_id is missing.');
+  return { invoiceId, alreadyExists: Boolean(row?.already_exists) };
+}
+
 export async function getOrCreatePaymentLink(params: {
   orgId: string;
   invoiceId: string;
