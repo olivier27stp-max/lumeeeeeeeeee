@@ -71,7 +71,13 @@
       "@react-native-community/datetimepicker",
       "expo-sharing",
       "expo-mail-composer",
-      "@stripe/stripe-react-native"
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.wilheb.lumecrm",
+          "enableGooglePay": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
