@@ -53,10 +53,14 @@ export default function HomeServiceMixCard() {
   const total = plans + oneoff;
   const plansPct = total > 0 ? Math.round((plans / total) * 100) : 0;
 
-  const slices = [
+  const allSlices = [
     { key: 'plans', name: fr ? 'Forfaits service' : 'Service plans', value: plans, color: PLANS_COLOR },
     { key: 'oneoff', name: fr ? 'Jobs ponctuelles' : 'One-off jobs', value: oneoff, color: ONEOFF_COLOR },
   ];
+  // Only render non-zero slices so a 100%-uniform ring stays a full solid circle.
+  const slices = allSlices.filter((s) => s.value > 0);
+  // Small gap between the two colors only when both are present.
+  const gapAngle = slices.length > 1 ? 2 : 0;
 
   return (
     <div className="bg-surface-card border border-border rounded-xl p-5 mb-5 flex flex-col">
@@ -89,7 +93,7 @@ export default function HomeServiceMixCard() {
                   cy="50%"
                   innerRadius={52}
                   outerRadius={74}
-                  paddingAngle={0}
+                  paddingAngle={gapAngle}
                   stroke="none"
                 >
                   {slices.map((s) => (
@@ -117,7 +121,7 @@ export default function HomeServiceMixCard() {
 
           {/* Legend with amounts */}
           <div className="mt-3 space-y-2">
-            {slices.map((s) => (
+            {allSlices.map((s) => (
               <div key={s.key} className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                 <span className="text-[12px] text-text-secondary flex-1 truncate">{s.name}</span>
