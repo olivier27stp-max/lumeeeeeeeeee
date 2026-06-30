@@ -6,8 +6,10 @@ import {
   attachmentDisplayUrl,
   capturePhoto,
   pickPhoto,
+  removeAttachment,
   uploadJobPhoto,
 } from '@/lib/api/jobPhotos';
+import { SymbolView } from 'expo-symbols';
 import { JobAttachment } from '@/types/db';
 
 type Props = {
@@ -37,6 +39,24 @@ export function JobPhotoGrid({ jobId, orgId, userId, attachments, editable = tru
     } finally {
       setUploading(false);
     }
+  };
+
+  const deletePhoto = (att: JobAttachment) => {
+    Alert.alert('Supprimer la photo', 'Cette photo sera retirée du job. Continuer ?', [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await removeAttachment(jobId, att.path ?? att.url);
+            onChange?.();
+          } catch (e) {
+            Alert.alert('Photo', (e as Error).message);
+          }
+        },
+      },
+    ]);
   };
 
   const addPhoto = () => {
@@ -78,7 +98,12 @@ export function JobPhotoGrid({ jobId, orgId, userId, attachments, editable = tru
 
       <View className="flex-row flex-wrap gap-2">
         {photos.map((att) => (
-          <PhotoThumb key={att.path} att={att} onPress={(url) => setViewer(url)} />
+          <PhotoThumb
+            key={att.path}
+            att={att}
+            onPress={(url) => setViewer(url)}
+            onDelete={editable ? () => deletePhoto(att) : undefined}
+          />
         ))}
 
         {editable ? (
@@ -106,7 +131,15 @@ export function JobPhotoGrid({ jobId, orgId, userId, attachments, editable = tru
   );
 }
 
-function PhotoThumb({ att, onPress }: { att: JobAttachment; onPress: (fullUrl: string) => void }) {
+function PhotoThumb({
+  att,
+  onPress,
+  onDelete,
+}: {
+  att: JobAttachment;
+  onPress: (fullUrl: string) => void;
+  onDelete?: () => void;
+}) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -120,20 +153,31 @@ function PhotoThumb({ att, onPress }: { att: JobAttachment; onPress: (fullUrl: s
   }, [att]);
 
   return (
-    <Pressable
-      onPress={async () => {
-        const full = await attachmentDisplayUrl(att, false);
-        if (full) onPress(full);
-      }}
-      className="h-24 w-24 overflow-hidden rounded-xl bg-slate-200"
-    >
-      {thumbUrl ? (
-        <Image source={{ uri: thumbUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-      ) : (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#94A3B8" />
-        </View>
-      )}
-    </Pressable>
+    <View className="relative">
+      <Pressable
+        onPress={async () => {
+          const full = await attachmentDisplayUrl(att, false);
+          if (full) onPress(full);
+        }}
+        className="h-24 w-24 overflow-hidden rounded-xl bg-slate-200"
+      >
+        {thumbUrl ? (
+          <Image source={{ uri: thumbUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+        ) : (
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator color="#94A3B8" />
+          </View>
+        )}
+      </Pressable>
+      {onDelete ? (
+        <Pressable
+          onPress={onDelete}
+          hitSlop={8}
+          className="absolute -right-1.5 -top-1.5 h-6 w-6 items-center justify-center rounded-full bg-ink"
+        >
+          <SymbolView name="xmark" tintColor="#FFFFFF" size={11} />
+        </Pressable>
+      ) : null}
+    </View>
   );
 }

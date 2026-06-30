@@ -135,6 +135,26 @@ export async function appendAttachment(
   if (writeErr) throw new Error(writeErr.message);
 }
 
+/** Read-modify-write removal of an attachment from jobs.attachments, matched by
+ * its path (or url). Used to delete a single job photo. */
+export async function removeAttachment(jobId: string, key: string | null | undefined): Promise<void> {
+  const { data: row, error: readErr } = await supabase
+    .from('jobs')
+    .select('attachments')
+    .eq('id', jobId)
+    .single();
+  if (readErr) throw new Error(readErr.message);
+
+  const current: JobAttachment[] = Array.isArray(row?.attachments) ? row.attachments : [];
+  const next = current.filter((a) => a.path !== key && a.url !== key);
+
+  const { error: writeErr } = await supabase
+    .from('jobs')
+    .update({ attachments: next })
+    .eq('id', jobId);
+  if (writeErr) throw new Error(writeErr.message);
+}
+
 /** Resolve a signed display URL for an attachment (private bucket safe). */
 export async function attachmentDisplayUrl(
   att: JobAttachment,

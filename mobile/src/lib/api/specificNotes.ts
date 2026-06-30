@@ -66,3 +66,9 @@ export async function deleteSpecificNote(id: string): Promise<void> {
   const { error } = await supabase.from('specific_notes').delete().eq('id', id);
   if (error) throw new Error(error.message);
 }
+
+/** Replace a note's attached files — used to remove a single photo from a note. */
+export async function updateSpecificNoteFiles(id: string, files: NoteFile[]): Promise<void> {
+  const { error } = await supabase.from('specific_notes').update({ files }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
