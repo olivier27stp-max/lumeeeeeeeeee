@@ -47,7 +47,6 @@ import CommunicationsTimeline from '../components/communications/CommunicationsT
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
 import SpecificNotes from '../components/SpecificNotes';
-import JobChecklistsSection from '../components/JobChecklistsSection';
 import { displayEmail, displayPhone } from '../lib/piiSanitizer';
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -954,9 +953,6 @@ export default function JobDetails() {
 
         {/* ═══ SPECIFIC NOTES ═══ */}
         <SpecificNotes entityType="job" entityId={id!} mode="full" />
-
-        {/* ═══ CHECKLISTS ═══ */}
-        <JobChecklistsSection jobId={id!} />
 
         {/* ═══ RECURRENCE ═══ */}
         <div className="rounded-xl border border-outline bg-surface overflow-hidden">
