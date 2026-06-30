@@ -178,7 +178,10 @@ export function JobBillingCard({
         const due = inv.balance_cents != null && inv.balance_cents > 0 ? inv.balance_cents : 0;
         return (
           <View key={inv.id} className="gap-2">
-            <View className="flex-row items-center justify-between">
+            <Pressable
+              onPress={() => router.push(`/(app)/invoices/send?id=${inv.id}` as any)}
+              className="flex-row items-center justify-between"
+            >
               <View>
                 <Text className="text-sm font-medium text-ink">
                   Invoice {inv.invoice_number ?? ''}
@@ -191,7 +194,7 @@ export function JobBillingCard({
               <Text className="text-sm text-ink">
                 {formatCurrencyCents(inv.total_cents ?? 0, currency)}
               </Text>
-            </View>
+            </Pressable>
             {inv.status === 'void' ? (
               <Text className="text-xs font-medium text-ink-subtle">Facture annulée (void)</Text>
             ) : (

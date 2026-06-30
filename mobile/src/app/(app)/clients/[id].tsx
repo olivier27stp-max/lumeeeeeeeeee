@@ -195,10 +195,10 @@ export default function ClientDetail() {
           </View>
         </Card>
 
-        {/* Billing rollup (admin) */}
+        {/* Billing rollup + tappable invoices (admin) — open one to view/manage it. */}
         {canSeePricing && (invoices?.length ?? 0) > 0 ? (
-          <Card>
-            <Text className="text-xs text-ink-muted uppercase mb-2">Facturation</Text>
+          <Card className="gap-2">
+            <Text className="text-xs text-ink-muted uppercase mb-1">Facturation</Text>
             <View className="flex-row justify-between">
               <View className="items-center flex-1">
                 <Text className="text-[10px] uppercase text-ink-subtle">Facturé</Text>
@@ -215,6 +215,42 @@ export default function ClientDetail() {
                 </Text>
               </View>
             </View>
+            {(invoices ?? []).map((inv) => (
+              <Pressable
+                key={inv.id}
+                onPress={() => router.push(`/(app)/invoices/send?id=${inv.id}` as any)}
+                className="flex-row items-center justify-between border-t border-surface-border pt-2.5"
+              >
+                <View className="flex-1 pr-3">
+                  <Text className="text-sm font-medium text-ink">Facture {inv.invoice_number ?? ''}</Text>
+                  <Text className="text-xs text-ink-muted">
+                    {inv.status ?? '—'}
+                    {inv.balance_cents != null && inv.balance_cents > 0 ? ` · ${formatCurrencyCents(inv.balance_cents, 'CAD')} dû` : ''}
+                  </Text>
+                </View>
+                <Text className="text-sm text-ink">{formatCurrencyCents(inv.total_cents ?? 0, 'CAD')}</Text>
+              </Pressable>
+            ))}
+          </Card>
+        ) : null}
+
+        {/* Quotes — tappable to open/send (admin). */}
+        {canSeePricing && (quotes?.length ?? 0) > 0 ? (
+          <Card className="gap-2">
+            <Text className="text-xs text-ink-muted uppercase mb-1">Soumissions</Text>
+            {(quotes ?? []).map((q) => (
+              <Pressable
+                key={q.id}
+                onPress={() => router.push(`/(app)/quotes/send?id=${q.id}` as any)}
+                className="flex-row items-center justify-between border-t border-surface-border pt-2.5"
+              >
+                <View className="flex-1 pr-3">
+                  <Text className="text-sm font-medium text-ink">Soumission {q.quote_number ?? ''}</Text>
+                  <Text className="text-xs text-ink-muted">{q.status ?? '—'}</Text>
+                </View>
+                <Text className="text-sm text-ink">{formatCurrencyCents(q.total_cents ?? 0, 'CAD')}</Text>
+              </Pressable>
+            ))}
           </Card>
         ) : null}
 
