@@ -410,6 +410,78 @@ ${viewUrl ? `
   }
 });
 
+// ── POST /api/emails/send-mobile-quote ──
+// Mobile quotes live in the standalone `quotes` table (not `invoices` like the
+// web). This emails such a quote to its client from the org's mailer, with a
+// link to the public /quote/:token view to approve.
+
+router.post('/emails/send-mobile-quote', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const { client, orgId } = auth;
+    const quoteId = String(req.body?.quoteId || '').trim();
+    if (!quoteId) return res.status(400).json({ error: 'quoteId is required.' });
+
+    const member = await isOrgMember(client, auth.user.id, orgId);
+    if (!member) return res.status(403).json({ error: 'Forbidden.' });
+
+    const { data: quote, error: qErr } = await client
+      .from('quotes')
+      .select('id, quote_number, total_cents, currency, valid_until, status, client_id, view_token')
+      .eq('id', quoteId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
+
+    const { data: clientData } = await client
+      .from('clients')
+      .select('id, first_name, last_name, email')
+      .eq('id', quote.client_id)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (!clientData?.email) return res.status(400).json({ error: 'Client has no email address.' });
+
+    const clientName = `${clientData.first_name || ''} ${clientData.last_name || ''}`.trim() || 'Client';
+    const company = await getCompanySettings(orgId);
+    const amountStr = formatCurrency(quote.total_cents || 0, quote.currency || 'CAD');
+    const baseUrl = resolvePublicBaseUrl(req);
+    const viewUrl = quote.view_token ? `${baseUrl}/quote/${quote.view_token}` : null;
+
+    const bodyHtml = `
+<h2 style="margin:0 0 8px;font-size:20px;color:#1a1a2e;">Soumission ${quote.quote_number || ''}</h2>
+<p style="margin:0 0 24px;color:#6b7280;">Bonjour ${clientName},</p>
+<p style="margin:0 0 16px;color:#374151;">Voici votre soumission. Vous pouvez la consulter et l'approuver ci-dessous.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">
+<tr style="background-color:#f9fafb;"><td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;">Soumission</td><td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;">${quote.quote_number || quoteId.slice(0, 8)}</td></tr>
+<tr><td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;border-top:1px solid #e5e7eb;">Montant</td><td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;border-top:1px solid #e5e7eb;font-weight:700;">${amountStr}</td></tr>
+<tr><td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;border-top:1px solid #e5e7eb;">Valide jusqu'au</td><td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;border-top:1px solid #e5e7eb;">${formatDate(quote.valid_until)}</td></tr>
+</table>
+${viewUrl ? `<div style="text-align:center;margin-bottom:16px;"><a href="${viewUrl}" style="display:inline-block;padding:12px 32px;background-color:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">Voir et approuver</a></div>` : ''}
+<p style="margin:0;font-size:13px;color:#9ca3af;">Pour toute question, répondez à ce courriel.</p>`;
+
+    ensureMailer();
+    const emailResult = await sendEmail({
+      from: emailFrom,
+      to: clientData.email,
+      subject: `Soumission ${quote.quote_number || ''} — ${amountStr}`,
+      html: buildEmailLayout(company, bodyHtml),
+    });
+    if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
+
+    await client
+      .from('quotes')
+      .update({ status: 'sent' })
+      .eq('id', quoteId)
+      .in('status', ['draft', 'action_required']);
+
+    return res.json({ ok: true, emailId: emailResult?.messageId || null });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to send quote email.', '[emails/send-mobile-quote]');
+  }
+});
+
 // ── POST /api/emails/send-custom ──
 
 router.post('/emails/send-custom', validate(sendCustomEmailSchema), async (req, res) => {
