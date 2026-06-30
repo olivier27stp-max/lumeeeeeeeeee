@@ -44,6 +44,8 @@ import {
   type InviteScope,
 } from '../lib/invitationsApi';
 import { supabase } from '../lib/supabase';
+import MfaEnroll from '../components/auth/MfaEnroll';
+import MfaChallenge from '../components/auth/MfaChallenge';
 import { getCurrentOrgId } from '../lib/orgApi';
 import { useCompany } from '../contexts/CompanyContext';
 import { fetchSeatUsage, fetchCurrentBilling, setExtraSeats } from '../lib/billingApi';
@@ -150,6 +152,14 @@ export default function ManageTeam() {
     newExtras: number;
   } | null>(null);
   const [seatChargeBusy, setSeatChargeBusy] = useState(false);
+  // 2FA prompt shown when a sensitive action (invite) needs MFA. We keep the
+  // pending invite so we can resend it automatically once MFA is set up/verified.
+  const [mfaPrompt, setMfaPrompt] = useState<{ mode: 'enroll' | 'challenge'; factorId?: string } | null>(null);
+  const [mfaRetryInvite, setMfaRetryInvite] = useState<{
+    email: string;
+    role: MemberRole;
+    options?: { scope?: InviteScope; team_id?: string | null; org_id?: string };
+  } | null>(null);
 
   const doSendInvite = async (
     email: string,
@@ -215,8 +225,35 @@ export default function ManageTeam() {
 
       await doSendInvite(email, role, options);
     } catch (err: any) {
+      // Sensitive action gated by 2FA — guide the user through it instead of
+      // dumping a raw error, then auto-retry the invite once MFA is set.
+      if (err?.code === 'mfa_required') {
+        setMfaRetryInvite({ email, role, options });
+        setMfaPrompt({ mode: 'enroll' });
+        return;
+      }
+      if (err?.code === 'mfa_challenge_required') {
+        setMfaRetryInvite({ email, role, options });
+        setMfaPrompt({ mode: 'challenge', factorId: err.factorId });
+        return;
+      }
       toast.error(err.message);
     }
+  };
+
+  // Called when the user finishes enabling/verifying 2FA from the invite flow.
+  const handleMfaDone = async () => {
+    const pending = mfaRetryInvite;
+    setMfaPrompt(null);
+    setMfaRetryInvite(null);
+    if (pending) {
+      await handleInvite(pending.email, pending.role, pending.options);
+    }
+  };
+
+  const closeMfaPrompt = () => {
+    setMfaPrompt(null);
+    setMfaRetryInvite(null);
   };
 
   // User confirmed they're OK paying for the extra seat — sync seat count, then send invite
@@ -483,6 +520,37 @@ export default function ManageTeam() {
           onCancel={() => setShowInviteModal(false)}
         />
       </Modal>
+
+      {/* 2FA prompt — shown when inviting requires MFA. Guides the user through
+          enabling/verifying 2FA, then auto-resends the invitation. */}
+      {mfaPrompt && (
+        <div
+          className="fixed inset-0 z-[140] flex items-center justify-center bg-black/40 backdrop-blur-md p-4"
+          role="presentation"
+          onClick={closeMfaPrompt}
+        >
+          <div
+            className="w-full max-w-md glass rounded-2xl border border-border shadow-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 rounded-xl bg-primary/5 border border-primary/20 px-4 py-3">
+              <p className="text-[15px] font-semibold text-text-primary">
+                {isFr ? 'Sécurité requise pour inviter' : 'Security required to invite'}
+              </p>
+              <p className="text-[13px] text-text-secondary mt-1">
+                {isFr
+                  ? "Inviter un membre est une action sensible. Active la double authentification (2FA) pour continuer — ton invitation sera envoyée automatiquement juste après."
+                  : 'Inviting a member is a sensitive action. Enable two-factor authentication (2FA) to continue — your invitation is sent automatically right after.'}
+              </p>
+            </div>
+            {mfaPrompt.mode === 'enroll' ? (
+              <MfaEnroll onComplete={handleMfaDone} onCancel={closeMfaPrompt} />
+            ) : (
+              <MfaChallenge factorId={mfaPrompt.factorId!} onSuccess={handleMfaDone} onCancel={closeMfaPrompt} />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Seat charge confirmation modal — shown when invite exceeds plan seats */}
       {pendingInvite && seatChargeData && (

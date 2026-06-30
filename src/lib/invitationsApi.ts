@@ -85,7 +85,15 @@ export async function sendInvitation(
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Failed to send invitation.');
+    const err = new Error(body.error || 'Failed to send invitation.') as Error & {
+      code?: string;
+      factorId?: string;
+    };
+    // Preserve the server's machine-readable code so the UI can react
+    // (e.g. show the 2FA setup flow instead of a raw error toast).
+    if (body.code) err.code = body.code;
+    if (body.factor_id) err.factorId = body.factor_id;
+    throw err;
   }
   return res.json();
 }
