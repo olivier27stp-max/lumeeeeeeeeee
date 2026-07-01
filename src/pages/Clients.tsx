@@ -686,8 +686,8 @@ export default function Clients() {
                     if (!line1 && !line2) return <span className="text-[14px] text-[var(--color-text-primary)]">—</span>;
                     return (
                       <>
-                        <span className="text-[14px] text-[var(--color-text-primary)] truncate leading-tight">{line1 || '—'}</span>
-                        {line2 && <span className="text-[12px] text-[var(--color-text-tertiary)] truncate leading-tight mt-0.5">{line2}</span>}
+                        <span className="text-[14px] text-[var(--color-text-primary)] whitespace-normal break-words leading-tight">{line1 || '—'}</span>
+                        {line2 && <span className="text-[12px] text-[var(--color-text-tertiary)] whitespace-normal break-words leading-tight mt-0.5">{line2}</span>}
                       </>
                     );
                   })()}
