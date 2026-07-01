@@ -1,35 +1,29 @@
 /**
- * LUME CRM — MFA Enforcement Middleware
- * =======================================
- * Requires MFA for admin/owner accounts on sensitive operations.
+ * LUME CRM — Step-up 2FA Enforcement Middleware (SMS + trusted devices)
+ * =====================================================================
+ * Risk-based, payment-scoped step-up authentication.
  *
- * How it works:
- * - Checks if user's role is admin or owner
- * - Verifies that their Supabase session has an authenticated MFA factor
- * - If admin/owner without MFA: returns 403 with mfa_required flag
- * - Frontend detects this and shows MFA enrollment/challenge prompt
+ * For owners/admins performing a PAYMENT-sensitive action from an
+ * unrecognized device, we require a one-time SMS code. A device that has
+ * passed the SMS challenge is trusted for 30 days (via an `x-device-token`
+ * the client stores) and is not re-challenged. This mirrors how modern
+ * field-service CRMs handle it: no friction for everyday actions, SMS only
+ * for money-related surface on new devices.
  *
- * Risk-based scope (mirrors how modern field-service CRMs handle it):
- * 2FA is reserved for PAYMENT-sensitive operations only — not for everyday
- * admin actions like inviting or managing team members. This keeps friction
- * low while still protecting the money-related surface.
- *
- * Operations that require MFA for admins/owners:
- * - Payment provider key management
- * - Payout/Connect account setup
- * - Billing cancellation
+ * Non-payment actions (invites, roles, general settings) are NOT gated.
+ * The 2FA is tied to the account + a verified phone, independent of whether
+ * the user signed in with Google or email/password.
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { requireAuthedClient, isOrgAdminOrOwner } from './supabase';
+import { requireAuthedClient, isOrgAdminOrOwner, getServiceClient } from './supabase';
+import { isSmsConfigured, getVerifiedPhone, isDeviceTrusted } from './mfa-sms';
 
 /**
- * Routes that require MFA for admin/owner roles.
- * Matched by prefix — any path starting with these requires MFA.
- *
- * Scoped to payment-sensitive endpoints only. Member management
- * (invitations, roles) and general security settings deliberately do NOT
- * require MFA — inviting a teammate should never be blocked by 2FA.
+ * Routes that require step-up MFA for admin/owner roles.
+ * Matched by prefix — scoped to payment-sensitive endpoints only. Member
+ * management (invitations, roles) and general security settings deliberately
+ * do NOT require MFA.
  */
 const MFA_REQUIRED_PREFIXES = [
   '/api/payments/keys',
@@ -37,122 +31,54 @@ const MFA_REQUIRED_PREFIXES = [
   '/api/billing/cancel',
 ];
 
-/**
- * TEMPORARY MFA exemption — single account, auto-expiring.
- * Requested by the owner on 2026-06-19, extended 2026-06-21. Expires
- * 2026-06-26 23:59:59 UTC. After the expiry timestamp this map is inert and
- * normal MFA enforcement resumes automatically — no need to remember to remove
- * it. Email match is case-insensitive.
- */
-const TEMP_MFA_EXEMPTIONS: Record<string, string> = {
-  'willhebert30@gmail.com': '2026-06-26T23:59:59Z',
-};
-
-function isTemporarilyExempt(email?: string | null): boolean {
-  if (!email) return false;
-  const until = TEMP_MFA_EXEMPTIONS[email.trim().toLowerCase()];
-  if (!until) return false;
-  return new Date() < new Date(until);
-}
-
-/**
- * Federated-identity exemption.
- *
- * Users who sign in through an OAuth provider (Google, Microsoft, Apple, …)
- * already authenticate against that provider, which enforces its own MFA.
- * Stacking a separate TOTP factor on top is redundant and a poor mobile UX
- * (it bounces users to their password app with no clear follow-up). So we
- * treat a federated sign-in as a strong second factor and skip app-level MFA.
- * Email/password admins still get TOTP enforcement.
- */
-const FEDERATED_PROVIDERS = new Set(['google', 'azure', 'apple', 'github', 'gitlab', 'bitbucket']);
-
-function isFederatedUser(user: any): boolean {
-  const provider = user?.app_metadata?.provider;
-  if (typeof provider === 'string' && FEDERATED_PROVIDERS.has(provider)) return true;
-  const providers: unknown = user?.app_metadata?.providers;
-  if (Array.isArray(providers)) {
-    return providers.some((p) => typeof p === 'string' && FEDERATED_PROVIDERS.has(p));
-  }
-  return false;
-}
-
-/**
- * Middleware that enforces MFA for admin/owner roles on sensitive endpoints.
- * Mount this AFTER body parsing and auth middleware.
- */
 export function mfaEnforcementMiddleware() {
   return async (req: Request, res: Response, next: NextFunction) => {
-    // Only check POST/PUT/DELETE (state-changing operations)
+    // Only state-changing calls.
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
 
-    // Check if this route requires MFA.
-    // Match exact path or "<prefix>/<sub>" so that e.g. '/api/billing/cancel-scheduled-change'
+    // Match exact path or "<prefix>/<sub>" so '/api/billing/cancel-scheduled-change'
     // does NOT match the '/api/billing/cancel' prefix.
-    const requiresMfa = MFA_REQUIRED_PREFIXES.some(prefix => {
-      return req.path === prefix || req.path.startsWith(prefix + '/');
-    });
+    const requiresMfa = MFA_REQUIRED_PREFIXES.some(
+      (prefix) => req.path === prefix || req.path.startsWith(prefix + '/'),
+    );
     if (!requiresMfa) return next();
 
-    // Get auth context
     const authHeader = req.header('authorization');
-    if (!authHeader) return next(); // Let downstream auth handle it
+    if (!authHeader) return next(); // Let downstream auth handle it.
 
     try {
-      // Check if user is admin/owner — only they need MFA enforcement
       const auth = await requireAuthedClient(req, res);
-      if (!auth) return; // 401 already sent
+      if (!auth) return; // 401 already sent.
 
+      // Only owners/admins (who touch payments) need step-up.
       const isAdmin = await isOrgAdminOrOwner(auth.client, auth.user.id, auth.orgId);
-      if (!isAdmin) return next(); // Non-admins don't need MFA for these routes
+      if (!isAdmin) return next();
 
-      // Federated sign-in (Google, etc.) already provides strong auth via the
-      // provider — skip the redundant TOTP requirement for OAuth users.
-      if (isFederatedUser(auth.user)) {
-        return next();
-      }
+      // If SMS isn't configured on the server, don't lock owners out.
+      if (!isSmsConfigured()) return next();
 
-      // Temporary, time-boxed exemption for a single owner account (auto-expires).
-      if (isTemporarilyExempt(auth.user.email)) {
-        console.warn(
-          `[mfa-enforcement] TEMP EXEMPTION active for ${auth.user.email} on ${req.method} ${req.path} ` +
-            `(expires ${TEMP_MFA_EXEMPTIONS[auth.user.email!.trim().toLowerCase()]})`,
-        );
-        return next();
-      }
+      const admin = getServiceClient();
+      const deviceToken = req.header('x-device-token');
 
-      // Check MFA status via Supabase Auth
-      const { data: factorsData } = await auth.client.auth.mfa.listFactors();
-      const verifiedFactors = factorsData?.totp?.filter(f => f.status === 'verified') || [];
+      // Recognized device → no challenge.
+      if (await isDeviceTrusted(admin, auth.user.id, deviceToken)) return next();
 
-      if (verifiedFactors.length === 0) {
-        // Admin without MFA enrolled — require them to set it up
+      // Unrecognized device → require SMS step-up.
+      const phone = await getVerifiedPhone(admin, auth.user.id);
+      if (!phone) {
         return res.status(403).json({
-          error: 'MFA required for admin operations. Please enable two-factor authentication in your security settings.',
-          code: 'mfa_required',
-          mfa_enrolled: false,
+          error: 'Set up SMS verification to perform this payment action.',
+          code: 'sms_enroll_required',
         });
       }
-
-      // Check if current session has MFA verified
-      // Supabase AAL2 = MFA verified session
-      const { data: aalData } = await auth.client.auth.mfa.getAuthenticatorAssuranceLevel();
-
-      if (aalData?.currentLevel !== 'aal2') {
-        // MFA enrolled but not verified in this session
-        return res.status(403).json({
-          error: 'Please verify your MFA code to perform this action.',
-          code: 'mfa_challenge_required',
-          mfa_enrolled: true,
-          factor_id: verifiedFactors[0]?.id,
-        });
-      }
-
-      // MFA verified — proceed
-      next();
+      return res.status(403).json({
+        error: 'Enter the SMS code to continue.',
+        code: 'sms_challenge_required',
+        phone_hint: phone.replace(/\D/g, '').slice(-4),
+      });
     } catch (err: any) {
-      // Don't block on MFA check failures — fail open but log
-      console.error('[mfa-enforcement] Check failed:', err?.message);
+      // Never hard-block on an enforcement error — fail open but log.
+      console.error('[mfa-enforcement] check failed:', err?.message);
       next();
     }
   };
