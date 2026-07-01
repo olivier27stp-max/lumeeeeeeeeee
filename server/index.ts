@@ -62,6 +62,7 @@ import billingRouter from './routes/billing';
 import referralsRouter from './routes/referrals';
 import supportRouter from './routes/support';
 import securityRouter from './routes/security';
+import mfaSmsRouter from './routes/mfa-sms';
 import coursesRouter from './routes/courses';
 import fieldSalesRouter from './routes/field-sales';
 import leaderboardRouter from './routes/leaderboard';
@@ -300,6 +301,11 @@ app.use('/api/dsr', redisRateLimit({ preset: 'strict', keyFn: (req) => `dsr:${us
 app.use('/api/incidents/failed-login', redisRateLimit({ preset: 'auth' }));
 app.use('/api/incidents', redisRateLimit({ preset: 'standard', keyFn: (req) => `inc:${userKey(req)}` }));
 // ── MFA enforcement for admin/owner on sensitive endpoints ──
+// SMS 2FA enrollment/challenge routes must stay reachable (they authenticate
+// the user themselves) — mount before the MFA/RBAC gates so a step-up flow
+// can never be blocked by the very gate it's meant to satisfy.
+app.use('/api', mfaSmsRouter);
+
 app.use(mfaEnforcementMiddleware());
 
 // ── RBAC permission enforcement (before route handlers) ──
