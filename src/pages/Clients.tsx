@@ -67,6 +67,23 @@ const EMPTY_FORM: ClientFormState = {
   status: 'lead',
 };
 
+/** Last-activity label: <24h → time with am/pm; <1 week → 3-letter weekday (e.g. Thu); else → day + month. */
+function formatLastActivity(iso: string, fr: boolean): string {
+  const d = new Date(iso);
+  const diffMs = Date.now() - d.getTime();
+  const H24 = 86_400_000;
+  const WEEK = 7 * H24;
+  const locale = fr ? 'fr-CA' : 'en-US';
+  if (diffMs < H24) {
+    return d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit', hour12: true });
+  }
+  if (diffMs < WEEK) {
+    const wd = d.toLocaleDateString(locale, { weekday: 'short' }).replace('.', '');
+    return wd.charAt(0).toUpperCase() + wd.slice(1);
+  }
+  return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
+}
+
 export default function Clients() {
   const navigate = useNavigate();
   const { id: clientIdFromRoute } = useParams();
@@ -703,7 +720,7 @@ export default function Clients() {
                   ) : <span className="text-[14px] text-[var(--color-text-tertiary)]">—</span>}
                 </div>
                 <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}><Badge status={item.status} /></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-secondary)] truncate">{item.last_activity ? new Date(item.last_activity).toLocaleDateString(fr ? 'fr-CA' : 'en-US', { day: 'numeric', month: 'short' }) : '—'}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-secondary)] truncate">{item.last_activity ? formatLastActivity(item.last_activity, fr) : '—'}</span></div>
                 <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`}>
                   <button className="p-1 rounded text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-tertiary)] transition-colors" onClick={e => { e.stopPropagation(); setActionMenuId(actionMenuId === item.id ? null : item.id); }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
