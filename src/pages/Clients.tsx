@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertTriangle, X } from 'lucide-react';
+import StatusBadge from '../components/ui/status-badge';
 import BatchMessageModal from '../components/BatchMessageModal';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -554,16 +555,9 @@ export default function Clients() {
   const allSelected = items.length > 0 && selectedIds.size === items.length;
 
 
-  // ── Status badge ──
+  // ── Status badge ── (premium SaaS status system)
   function Badge({ status }: { status: string }) {
-    const s = status || 'inactive';
-    const map: Record<string, { label: string; badge: string }> = {
-      active:   { label: fr ? 'Actif' : 'Active',     badge: 'badge-success' },
-      lead:     { label: fr ? 'Lead' : 'Lead',         badge: 'badge-info' },
-      inactive: { label: fr ? 'Inactif' : 'Inactive',  badge: 'badge-neutral' },
-    };
-    const v = map[s] || map.inactive;
-    return <span className={v.badge}>{v.label}</span>;
+    return <StatusBadge status={status || 'inactive'} />;
   }
 
   // ── Status dropdown state ──
