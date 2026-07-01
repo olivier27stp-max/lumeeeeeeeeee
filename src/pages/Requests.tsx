@@ -77,10 +77,7 @@ export default function Requests() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-text-primary">{fr ? 'Demandes' : 'Requests'}</h2>
-          <p className="mt-1 text-sm text-text-tertiary">
-            {fr ? 'Soumissions reçues via votre formulaire de demande' : 'Submissions received through your request form'}
-          </p>
+          <h1 className="text-[28px] font-bold text-text-primary leading-tight">{fr ? 'Demandes' : 'Requests'}</h1>
         </div>
         <button
           onClick={load}
