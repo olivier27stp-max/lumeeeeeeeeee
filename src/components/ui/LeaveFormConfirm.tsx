@@ -23,13 +23,17 @@ export default function LeaveFormConfirm({ open, onConfirm, onCancel }: LeaveFor
         className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-xl font-bold tracking-tight text-text-primary">{t.modals.leaveFormTitle}</h3>
-        <p className="text-[13px] text-text-tertiary mt-2">{t.modals.leaveFormBody}</p>
+        <h3 className="text-3xl font-extrabold tracking-tight text-text-primary">{t.modals.leaveFormTitle}</h3>
+        <p className="text-base font-medium text-text-primary mt-3">{t.modals.leaveFormBody}</p>
         <div className="mt-5 flex items-center justify-end gap-3">
           <button type="button" onClick={onCancel} className="glass-button">
             {t.modals.keepEditingBtn}
           </button>
-          <button type="button" onClick={onConfirm} className="glass-button-danger px-4 py-2 font-semibold">
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="rounded-xl bg-red-600 px-4 py-2 font-semibold text-white shadow-sm transition-colors hover:bg-red-700"
+          >
             {t.modals.leaveAnywayBtn}
           </button>
         </div>
