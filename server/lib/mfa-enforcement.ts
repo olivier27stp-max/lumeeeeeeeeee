@@ -9,12 +9,15 @@
  * - If admin/owner without MFA: returns 403 with mfa_required flag
  * - Frontend detects this and shows MFA enrollment/challenge prompt
  *
- * Sensitive operations that require MFA for admins:
- * - Member management (invite, remove, role change)
- * - Payment key management
- * - Security settings (IP blocks, API keys)
- * - Data export
- * - Billing changes
+ * Risk-based scope (mirrors how modern field-service CRMs handle it):
+ * 2FA is reserved for PAYMENT-sensitive operations only — not for everyday
+ * admin actions like inviting or managing team members. This keeps friction
+ * low while still protecting the money-related surface.
+ *
+ * Operations that require MFA for admins/owners:
+ * - Payment provider key management
+ * - Payout/Connect account setup
+ * - Billing cancellation
  */
 
 import { Request, Response, NextFunction } from 'express';
@@ -23,19 +26,15 @@ import { requireAuthedClient, isOrgAdminOrOwner } from './supabase';
 /**
  * Routes that require MFA for admin/owner roles.
  * Matched by prefix — any path starting with these requires MFA.
+ *
+ * Scoped to payment-sensitive endpoints only. Member management
+ * (invitations, roles) and general security settings deliberately do NOT
+ * require MFA — inviting a teammate should never be blocked by 2FA.
  */
 const MFA_REQUIRED_PREFIXES = [
-  '/api/invitations/send',
-  '/api/invitations/remove-member',
-  '/api/invitations/update-role',
   '/api/payments/keys',
-  '/api/security/block-ip',
-  '/api/security/api-keys',
-  '/api/security/sessions/invalidate-all',
-  '/api/security/export-log',
-  // '/api/billing/subscribe' — removed: new users need to subscribe during onboarding without MFA
-  '/api/billing/cancel',
   '/api/connect/create-account',
+  '/api/billing/cancel',
 ];
 
 /**
