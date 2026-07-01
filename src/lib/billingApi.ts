@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { deviceTokenHeader } from './deviceToken';
 
 const API_BASE = '/api';
 
@@ -12,6 +13,7 @@ async function authHeaders() {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${session?.access_token || ''}`,
     'x-org-id': activeOrg,
+    ...deviceTokenHeader(),
   };
 }
 

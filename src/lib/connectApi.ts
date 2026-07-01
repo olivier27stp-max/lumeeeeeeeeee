@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { deviceTokenHeader } from './deviceToken';
 import type { ConnectedAccount, PaymentRequest } from '../types';
 
 // ── Auth helpers (same pattern as paymentsApi) ──
@@ -16,11 +17,13 @@ async function fetchApiJson<T>(url: string, init?: RequestInit): Promise<T> {
   const headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
   const response = await fetch(url, {
     ...init,
-    headers: { ...headers, ...(init?.headers || {}) },
+    headers: { ...headers, ...deviceTokenHeader(), ...(init?.headers || {}) },
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error((payload as any)?.error || `Request failed (${response.status}).`);
+    const err = new Error((payload as any)?.error || `Request failed (${response.status}).`) as Error & { code?: string };
+    if ((payload as any)?.code) err.code = (payload as any).code;
+    throw err;
   }
   return payload as T;
 }

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { deviceTokenHeader } from './deviceToken';
 import { PaymentMethod, PaymentStatus } from '../types';
 
 export type PaymentsTab = 'overview' | 'payouts';
@@ -155,13 +156,16 @@ async function fetchApiJson<T>(url: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       ...headers,
+      ...deviceTokenHeader(),
       ...(init?.headers || {}),
     },
   });
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload?.error || `Request failed (${response.status}).`);
+    const err = new Error(payload?.error || `Request failed (${response.status}).`) as Error & { code?: string };
+    if (payload?.code) err.code = payload.code;
+    throw err;
   }
 
   return payload as T;

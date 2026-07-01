@@ -30,7 +30,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types';
 import { cn } from '../lib/utils';
-import MfaEnroll from '../components/auth/MfaEnroll';
+import SmsStepUp from '../components/auth/SmsStepUp';
+import { getSmsStatus, type SmsStatus } from '../lib/mfaSmsApi';
 import { useTranslation, Language } from '../i18n';
 import LocationServices from '../components/LocationServices';
 import ArchivesPanel from '../components/ArchivesPanel';
@@ -195,87 +196,72 @@ function WorkspaceTab() {
 }
 
 // ─── Main Component ──────────────────────────────────────────────
-// ── MFA Section Component ──
+// ── SMS 2FA Section Component ──
+// Risk-based, payments-scoped: owners verify a mobile number; sensitive payment
+// actions on a new device then require an SMS code (device trusted 30 days).
 function MfaSection() {
-  const { t } = useTranslation();
-  const [mfaEnabled, setMfaEnabled] = React.useState<boolean | null>(null);
-  const [showEnroll, setShowEnroll] = React.useState(false);
-  const [disabling, setDisabling] = React.useState(false);
+  const { t, language } = useTranslation();
+  const fr = language === 'fr';
+  const [status, setStatus] = React.useState<SmsStatus | null>(null);
+  const [showStepUp, setShowStepUp] = React.useState(false);
 
-  React.useEffect(() => {
-    checkMfaStatus();
+  const load = React.useCallback(async () => {
+    try { setStatus(await getSmsStatus()); } catch { setStatus(null); }
   }, []);
+  React.useEffect(() => { load(); }, [load]);
 
-  const checkMfaStatus = async () => {
-    try {
-      const { data } = await supabase.auth.mfa.listFactors();
-      const verified = data?.totp?.filter(f => f.status === 'verified') || [];
-      setMfaEnabled(verified.length > 0);
-    } catch {
-      setMfaEnabled(false);
-    }
-  };
-
-  const handleDisableMfa = async () => {
-    if (!confirm('Are you sure you want to disable two-factor authentication? This will make your account less secure.')) return;
-    setDisabling(true);
-    try {
-      const { data } = await supabase.auth.mfa.listFactors();
-      const factors = data?.totp?.filter(f => f.status === 'verified') || [];
-      for (const factor of factors) {
-        await supabase.auth.mfa.unenroll({ factorId: factor.id });
-      }
-      setMfaEnabled(false);
-    } catch (err: any) {
-      alert(err.message || 'Failed to disable 2FA');
-    } finally {
-      setDisabling(false);
-    }
-  };
-
-  if (showEnroll) {
+  if (showStepUp) {
     return (
       <div className="glass-card rounded-2xl p-6">
-        <MfaEnroll
-          onComplete={() => { setShowEnroll(false); setMfaEnabled(true); }}
-          onCancel={() => setShowEnroll(false)}
+        <SmsStepUp
+          mode="enroll"
+          onDone={() => { setShowStepUp(false); load(); }}
+          onCancel={() => setShowStepUp(false)}
         />
       </div>
     );
   }
 
+  const enrolled = !!status?.enrolled;
+  const smsOff = !!status && !status.sms_configured;
+
   return (
     <div className="glass-card rounded-2xl p-6 space-y-5">
       <p className="text-xs font-medium text-text-tertiary">{t.settings.security}</p>
-      <div className="flex items-center justify-between p-4 bg-surface-secondary rounded-xl hover:bg-surface-secondary/80 transition-colors">
+      <div className="flex items-center justify-between p-4 bg-surface-secondary rounded-xl">
         <div className="flex items-center gap-3.5">
-          <Shield size={18} className={mfaEnabled ? 'text-green-600' : 'text-text-tertiary'} />
+          <Shield size={18} className={enrolled ? 'text-green-600' : 'text-text-tertiary'} />
           <div>
-            <p className="text-[13px] font-semibold text-text-primary">{t.settings.twoFactor}</p>
-            <p className="text-xs text-text-tertiary">{t.settings.twoFactorDesc}</p>
+            <p className="text-[13px] font-semibold text-text-primary">
+              {fr ? 'Vérification par SMS' : 'SMS verification'}
+            </p>
+            <p className="text-xs text-text-tertiary">
+              {fr
+                ? 'Requise pour les actions de paiement sur un nouvel appareil.'
+                : 'Required for payment actions on a new device.'}
+              {enrolled && status?.phone_hint ? `  ·  •••• ${status.phone_hint}` : ''}
+            </p>
           </div>
         </div>
-        {mfaEnabled === null ? (
+        {status === null ? (
           <Loader2 size={14} className="animate-spin text-text-tertiary" />
-        ) : mfaEnabled ? (
+        ) : smsOff ? (
+          <span className="text-[10px] text-text-tertiary">{fr ? 'SMS non configuré' : 'SMS not configured'}</span>
+        ) : enrolled ? (
           <div className="flex items-center gap-2.5">
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 rounded-full px-3 py-1">
-              <Check size={9} /> Active
+              <Check size={9} /> {fr ? 'Actif' : 'Active'}
             </span>
-            <button
-              onClick={handleDisableMfa}
-              disabled={disabling}
-              className="glass-button-ghost text-[10px] text-red-500 hover:text-red-700 font-medium"
-            >
-              {disabling ? 'Disabling...' : 'Disable'}
+            <button onClick={() => setShowStepUp(true)} className="glass-button-ghost text-[10px] font-medium">
+              {fr ? 'Changer le numéro' : 'Change number'}
             </button>
           </div>
         ) : (
           <button
-            onClick={() => setShowEnroll(true)}
+            onClick={() => setShowStepUp(true)}
             className="glass-button-secondary text-[11px] !py-2 !px-4"
           >
-            {(t.settings as any).enable2FA}
+            {fr ? 'Configurer' : 'Set up'}
           </button>
         )}
       </div>
