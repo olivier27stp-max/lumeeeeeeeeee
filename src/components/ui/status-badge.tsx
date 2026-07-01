@@ -59,6 +59,7 @@ export default function StatusBadge({ status, className }: StatusBadgeProps) {
         alignItems: 'center',
         justifyContent: 'center',
         height: 30,
+        minWidth: 128,
         padding: '0 14px',
         borderRadius: 999,
         background: config.bg,
