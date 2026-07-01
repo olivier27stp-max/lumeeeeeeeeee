@@ -58,9 +58,9 @@ export default function StatusBadge({ status, className }: StatusBadgeProps) {
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        height: 30,
-        minWidth: 128,
-        padding: '0 14px',
+        height: 24,
+        minWidth: 104,
+        padding: '0 10px',
         borderRadius: 999,
         background: config.bg,
         border: '1px solid rgba(255,255,255,0.08)',
@@ -71,21 +71,21 @@ export default function StatusBadge({ status, className }: StatusBadgeProps) {
         userSelect: 'none',
       }}
     >
-      <Icon size={14} color={config.iconColor} strokeWidth={2.25} aria-hidden />
+      <Icon size={12} color={config.iconColor} strokeWidth={2.25} aria-hidden />
       <span
         aria-hidden
         style={{
           width: 1,
-          height: 14,
+          height: 11,
           background: 'rgba(255,255,255,0.12)',
-          margin: '0 10px',
+          margin: '0 7px',
         }}
       />
       <span
         style={{
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: 600,
-          letterSpacing: '0.08em',
+          letterSpacing: '0.06em',
           textTransform: 'uppercase',
           color: '#FFFFFF',
           lineHeight: 1,
