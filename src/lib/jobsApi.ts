@@ -320,7 +320,11 @@ function applyTableFilters(request: any, query: JobsQuery) {
       if (dbStatus !== null) builder = builder.eq('status', dbStatus);
     }
   }
-  if (jobType && jobType !== 'All') builder = builder.eq('job_type', jobType);
+  if (jobType && jobType !== 'All') {
+    // Legacy jobs predate job_type: a null type means one-off.
+    if (jobType === 'one_off') builder = builder.or('job_type.eq.one_off,job_type.is.null');
+    else builder = builder.eq('job_type', jobType);
+  }
   if (clientId && clientId !== 'All') builder = builder.eq('client_id', clientId);
   if (q && q.trim()) builder = builder.or(buildSearchFilter(q));
   return builder;

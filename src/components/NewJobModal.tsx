@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, BriefcaseBusiness, Calendar, ChevronDown, Clock3, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, BriefcaseBusiness, Calendar, ChevronDown, ChevronLeft, ChevronRight, Clock3, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn, formatCurrency } from '../lib/utils';
 import { listClients, createClient } from '../lib/clientsApi';
 import { listSalespeople, applyJobExtras } from '../lib/jobsApi';
+import { addVisit } from '../lib/scheduleApi';
+import { createServiceContract } from '../lib/serviceContractsApi';
 import { resolveClientIdForLead } from '../lib/leadsApi';
 import { listTeams } from '../lib/teamsApi';
 import TeamSuggestions from './TeamSuggestions';
@@ -291,6 +293,12 @@ export default function NewJobModal({
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('10:00');
+  // Service plan (job_type = recurring, creation only): the year being planned,
+  // the planned months mapped to their exact visit date (month 1-12 -> YYYY-MM-DD),
+  // and whether a contract should be created alongside the job.
+  const [serviceYear, setServiceYear] = useState(new Date().getFullYear());
+  const [serviceMonthDates, setServiceMonthDates] = useState<Record<number, string>>({});
+  const [createContract, setCreateContract] = useState(false);
   const [requiresInvoicing, setRequiresInvoicing] = useState(true);
   const [billingSplit, setBillingSplit] = useState(false);
   const [description, setDescription] = useState<string | null>(null);
@@ -336,6 +344,60 @@ export default function NewJobModal({
   });
   const teams = teamsQuery.data || [];
 
+  // ── Service plan (months + per-month visit date) ──
+  // Only drives creation; existing service-plan jobs manage their visits from
+  // the job page.
+  const isServicePlan = jobType === 'recurring' && !isEditMode;
+  const monthNames = useMemo(() => {
+    const locale = language === 'fr' ? 'fr-CA' : 'en-CA';
+    return Array.from({ length: 12 }, (_, i) =>
+      new Date(2000, i, 1).toLocaleDateString(locale, { month: 'long' }));
+  }, [language]);
+  const selectedServiceMonths = useMemo(
+    () => Object.keys(serviceMonthDates).map(Number).sort((a, b) => a - b),
+    [serviceMonthDates]
+  );
+  const serviceVisitDates = useMemo(
+    () => Object.values(serviceMonthDates).filter(Boolean).sort(),
+    [serviceMonthDates]
+  );
+  const lastDayOfMonth = (year: number, month: number) => new Date(year, month, 0).getDate();
+  const toggleServiceMonth = (month: number) => {
+    setDirty(true);
+    setServiceMonthDates((prev) => {
+      const next = { ...prev };
+      if (next[month]) delete next[month];
+      else next[month] = `${serviceYear}-${String(month).padStart(2, '0')}-01`;
+      return next;
+    });
+  };
+  const setServiceMonthDate = (month: number, date: string) => {
+    if (!date) return;
+    setServiceMonthDates((prev) => ({ ...prev, [month]: date }));
+  };
+  const changeServiceYear = (delta: number) => {
+    setServiceYear((prevYear) => {
+      const year = prevYear + delta;
+      // Re-anchor already-picked dates in the new year (clamping the day).
+      setServiceMonthDates((prev) => {
+        const next: Record<number, string> = {};
+        for (const [key, date] of Object.entries(prev)) {
+          const month = Number(key);
+          const day = Math.min(Number(date.slice(8, 10)) || 1, lastDayOfMonth(year, month));
+          next[month] = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        }
+        return next;
+      });
+      return year;
+    });
+  };
+  // Keep startDate aligned with the first planned visit so team suggestions
+  // and conflict checks target the right day.
+  useEffect(() => {
+    if (!isServicePlan) return;
+    if (serviceVisitDates[0]) setStartDate(serviceVisitDates[0]);
+  }, [isServicePlan, serviceVisitDates]);
+
   useEffect(() => {
     if (!isOpen) return;
     setInlineError(null);
@@ -377,6 +439,9 @@ export default function NewJobModal({
     setTags(Array.isArray(iv?.tags) ? iv.tags : []);
     setTagInput('');
     setAskForReview(Boolean(iv?.ask_for_review));
+    setServiceYear(new Date().getFullYear());
+    setServiceMonthDates({});
+    setCreateContract(false);
     if (isEditMode) {
       const editStartDate = formatLocalDateInput(initialValues?.scheduled_at || null);
       const editStartTime = formatLocalTimeInput(initialValues?.scheduled_at || null);
@@ -919,8 +984,21 @@ export default function NewJobModal({
       : (teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection);
     const assignedUserPayload = assignMode === 'user' ? (assignedUserId || null) : null;
 
-    const scheduledAt = startDate && startTime ? buildDateTime(startDate, startTime) : null;
-    const endAt = startDate && endTime ? buildDateTime(startDate, endTime) : null;
+    // Service plan: the schedule comes from the planned months (first visit =
+    // the job's own schedule); at least one month with its date is required.
+    if (isServicePlan && serviceVisitDates.length === 0) {
+      setInlineError(t.modals.servicePlanNoMonths);
+      try { toast.error(t.modals.servicePlanNoMonths); } catch {}
+      return;
+    }
+    const visitStartTime = startTime || '09:00';
+    const visitEndTime = endTime || '10:00';
+    const scheduledAt = isServicePlan
+      ? buildDateTime(serviceVisitDates[0], visitStartTime)
+      : (startDate && startTime ? buildDateTime(startDate, startTime) : null);
+    const endAt = isServicePlan
+      ? buildDateTime(serviceVisitDates[0], visitEndTime)
+      : (startDate && endTime ? buildDateTime(startDate, endTime) : null);
     // Allow draft jobs without dates — only validate if partially filled
     if (endAt && !scheduledAt) {
       setInlineError(t.modals.startTimeRequired);
@@ -1021,6 +1099,37 @@ export default function NewJobModal({
           askForReview,
           assignedUserId: assignedUserPayload,
         });
+      }
+
+      // Service plan: create one visit per additional planned month (the first
+      // month is the job's own schedule, created above), then the optional
+      // contract snapshotting the 12-month plan.
+      if (createdJob?.id && isServicePlan) {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Montreal';
+        for (const date of serviceVisitDates.slice(1)) {
+          const visitStart = buildDateTime(date, visitStartTime);
+          const visitEnd = buildDateTime(date, visitEndTime);
+          if (!visitStart || !visitEnd) continue;
+          try {
+            await addVisit({ jobId: createdJob.id, startAt: visitStart, endAt: visitEnd, teamId: teamIdPayload, timezone });
+          } catch (err) {
+            console.error('[jobs] failed to add service plan visit', date, err);
+          }
+        }
+        if (createContract) {
+          try {
+            await createServiceContract({
+              job_id: createdJob.id,
+              client_id: resolvedClientId || null,
+              title: title.trim(),
+              year: serviceYear,
+              visits: selectedServiceMonths.map((month) => ({ month, date: serviceMonthDates[month] })),
+            });
+          } catch (err) {
+            console.error('[jobs] failed to create service contract', err);
+            try { toast.error(language === 'fr' ? 'Le contrat n’a pas pu être créé.' : 'The contract could not be created.'); } catch {}
+          }
+        }
       }
 
       // Save specific notes (photos, files, etc.) if any were added
@@ -1374,6 +1483,130 @@ export default function NewJobModal({
                   </div>
               </Box>
 
+              {isServicePlan ? (
+              <Box
+                title={t.modals.servicePlanSchedule}
+                subtitle={t.modals.servicePlanScheduleHint}
+                right={(
+                  <div className="inline-flex items-center gap-1 rounded-xl bg-surface-secondary border border-border p-1">
+                    <button
+                      type="button"
+                      onClick={() => changeServiceYear(-1)}
+                      className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface transition-colors"
+                      aria-label="Previous year"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span className="text-sm font-semibold tabular-nums px-1">{serviceYear}</span>
+                    <button
+                      type="button"
+                      onClick={() => changeServiceYear(1)}
+                      className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface transition-colors"
+                      aria-label="Next year"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                )}
+              >
+                  {/* Which months of the year the service happens */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-text-tertiary">{t.modals.servicePlanMonths}</label>
+                    <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                      {monthNames.map((name, idx) => {
+                        const month = idx + 1;
+                        const selected = Boolean(serviceMonthDates[month]);
+                        return (
+                          <button
+                            key={month}
+                            type="button"
+                            onClick={() => toggleServiceMonth(month)}
+                            className={cn(
+                              'px-3 py-2 rounded-lg border text-sm font-medium capitalize transition-colors',
+                              selected
+                                ? 'border-primary bg-primary/10 text-primary'
+                                : 'border-outline-subtle bg-surface-secondary/30 text-text-tertiary hover:text-text-secondary'
+                            )}
+                          >
+                            {name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Exact visit date inside each planned month */}
+                  {selectedServiceMonths.length > 0 && (
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-text-tertiary">{t.modals.servicePlanDates}</label>
+                      <div className="space-y-2">
+                        {selectedServiceMonths.map((month) => {
+                          const mm = String(month).padStart(2, '0');
+                          const lastDay = String(lastDayOfMonth(serviceYear, month)).padStart(2, '0');
+                          return (
+                            <div key={month} className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
+                              <span className="text-sm font-medium capitalize text-text-primary">{monthNames[month - 1]} {serviceYear}</span>
+                              <div className="relative">
+                                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                                <input
+                                  type="date"
+                                  value={serviceMonthDates[month] || ''}
+                                  min={`${serviceYear}-${mm}-01`}
+                                  max={`${serviceYear}-${mm}-${lastDay}`}
+                                  onChange={(event) => setServiceMonthDate(month, event.target.value)}
+                                  className="glass-input w-full pl-10"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Visit time window — applied to every visit */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime} — {t.modals.servicePlanVisitTimeHint}</label>
+                      <div className="relative">
+                        <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                        <input
+                          type="time"
+                          value={startTime}
+                          onChange={(event) => setStartTime(event.target.value)}
+                          className="glass-input w-full pl-10"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
+                      <div className="relative">
+                        <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                        <input
+                          type="time"
+                          value={endTime}
+                          onChange={(event) => setEndTime(event.target.value)}
+                          className="glass-input w-full pl-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Optional contract */}
+                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
+                    <input
+                      type="checkbox"
+                      checked={createContract}
+                      onChange={(event) => setCreateContract(event.target.checked)}
+                      className="h-4 w-4 mt-0.5"
+                    />
+                    <span>
+                      <span className="block text-sm text-text-primary">{t.modals.servicePlanCreateContract}</span>
+                      <span className="block text-xs text-text-tertiary mt-0.5">{t.modals.servicePlanCreateContractHint}</span>
+                    </span>
+                  </label>
+              </Box>
+              ) : (
               <Box
                 title={t.modals.schedule}
                 right={(
@@ -1427,6 +1660,7 @@ export default function NewJobModal({
                     </div>
                   </div>
               </Box>
+              )}
 
               <Box title={t.modals.billing}>
                 <label className="flex items-center gap-3 cursor-pointer">

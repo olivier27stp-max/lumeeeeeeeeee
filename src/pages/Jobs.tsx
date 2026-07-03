@@ -624,6 +624,27 @@ export default function Jobs() {
 
       {/* ── TOOLBAR ── */}
       <div className="flex items-center gap-2 mt-5 mb-4">
+        {/* Job type selector: all / one-off / service plan */}
+        <div className="inline-flex h-9 items-center rounded-md border border-outline bg-surface-card p-0.5">
+          {([
+            { value: 'All', label: fr ? 'Tous' : 'All' },
+            { value: 'one_off', label: fr ? 'Ponctuel' : 'One-off' },
+            { value: 'recurring', label: fr ? 'Forfait de service' : 'Service plan' },
+          ] as const).map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => { setJobTypeFilter(opt.value); setPage(1); }}
+              className={cn(
+                'h-full px-3 rounded-[5px] text-[13px] font-medium transition-colors',
+                jobTypeFilter === opt.value
+                  ? 'bg-primary text-white'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-secondary'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
           placeholder={fr ? 'Rechercher jobs...' : 'Search jobs...'}
           className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all" />

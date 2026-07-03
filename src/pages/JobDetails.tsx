@@ -41,6 +41,7 @@ import { useTranslation } from '../i18n';
 import ActivityTimeline from '../components/ActivityTimeline';
 import { useDropZone } from '../hooks/useDropZone';
 import { getRecurrenceRule, createRecurrenceRule, deactivateRecurrenceRule, type RecurrenceRule, type RecurrenceFrequency } from '../lib/recurringJobsApi';
+import { getServiceContractByJob, type ServiceContract } from '../lib/serviceContractsApi';
 import SendSmsModal from '../components/communications/SendSmsModal';
 import SendEmailModal from '../components/communications/SendEmailModal';
 import CommunicationsTimeline from '../components/communications/CommunicationsTimeline';
@@ -116,6 +117,9 @@ export default function JobDetails() {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailMode, setEmailMode] = useState<'confirmation' | 'followup' | 'generic'>('confirmation');
   const [commRefreshKey, setCommRefreshKey] = useState(0);
+
+  // Service plan contract (12-month calendar snapshot, optional)
+  const [contract, setContract] = useState<ServiceContract | null>(null);
 
   // Recurrence
   const [recurrence, setRecurrence] = useState<RecurrenceRule | null>(null);
@@ -264,6 +268,12 @@ export default function JobDetails() {
   useEffect(() => {
     if (!id) return;
     getRecurrenceRule(id).then(setRecurrence).catch(() => {});
+  }, [id]);
+
+  // Load service plan contract (null when none / migration pending)
+  useEffect(() => {
+    if (!id) return;
+    getServiceContractByJob(id).then(setContract).catch(() => {});
   }, [id]);
 
   const reload = () => {
@@ -839,6 +849,50 @@ export default function JobDetails() {
             )}
           </div>
         </div>
+
+        {/* ═══ SERVICE PLAN CONTRACT — 12-month calendar, planned months show their visit date ═══ */}
+        {contract && (
+          <div className="rounded-xl border border-outline bg-surface overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
+              <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
+                <div className="icon-tile icon-tile-sm icon-tile-blue">
+                  <FileText size={13} strokeWidth={2} />
+                </div>
+                {language === 'fr' ? 'Contrat de service' : 'Service contract'} · {contract.year}
+              </h2>
+              <span className="text-[12px] text-text-tertiary">
+                {contract.visits.length} {language === 'fr' ? 'visites planifiées' : 'planned visits'}
+              </span>
+            </div>
+            <div className="p-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
+                  const visit = contract.visits.find((v) => v.month === month);
+                  const monthName = new Date(2000, month - 1, 1)
+                    .toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', { month: 'long' });
+                  return (
+                    <div
+                      key={month}
+                      className={cn(
+                        'rounded-lg border p-3',
+                        visit
+                          ? 'border-primary/50 bg-primary/5'
+                          : 'border-outline-subtle bg-surface-secondary/40 opacity-60'
+                      )}
+                    >
+                      <p className={cn('text-[12px] font-semibold capitalize', visit ? 'text-primary' : 'text-text-tertiary')}>
+                        {monthName}
+                      </p>
+                      <p className={cn('text-[13px] mt-1 tabular-nums', visit ? 'text-text-primary font-semibold' : 'text-text-tertiary')}>
+                        {visit ? formatDate(`${visit.date}T12:00:00`) : '—'}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ═══ INVOICES — hidden for financially restricted roles ═══ */}
         {canSeeInvoices && <div className="rounded-xl border border-outline bg-surface overflow-hidden">
