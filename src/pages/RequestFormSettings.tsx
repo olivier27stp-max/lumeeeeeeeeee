@@ -551,76 +551,66 @@ export default function RequestFormSettings() {
             exit={{ opacity: 0, y: -6 }}
             className="space-y-6 max-w-2xl"
           >
+            {/* A0. Form Logo */}
+            <div className="section-card p-5 space-y-4">
+              <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
+                {isFr ? 'Logo du formulaire' : 'Form Logo'}
+              </h3>
+              <div className="flex items-start gap-4">
+                <div className="w-24 h-24 rounded-xl border border-outline overflow-hidden bg-surface-secondary flex items-center justify-center shrink-0">
+                  {(logoUrl || companyLogo) ? (
+                    <img
+                      src={logoUrl || companyLogo || ''}
+                      alt="Form logo"
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <ImagePlus size={20} className="text-text-tertiary opacity-40" />
+                  )}
+                </div>
+                <div className="flex-1 space-y-2 min-w-0">
+                  <p className="text-[12px] text-text-secondary">
+                    {logoUrl
+                      ? (isFr ? 'Logo personnalisé — affiché en haut du formulaire public.' : 'Custom logo — shown at the top of the public form.')
+                      : companyLogo
+                        ? (isFr ? 'Logo de l\'entreprise (par défaut) — affiché en haut du formulaire public.' : 'Company logo (default) — shown at the top of the public form.')
+                        : (isFr ? 'Aucun logo. Téléversez-en un, ou définissez le logo de l\'entreprise dans Paramètres → Entreprise.' : 'No logo yet. Upload one, or set the company logo in Settings → Company.')}
+                  </p>
+                  <FileUpload
+                    bucket={STORAGE_BUCKETS.COMPANY_LOGOS}
+                    path={`${orgId || 'default'}/request-form`}
+                    accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                    maxSizeMb={5}
+                    onUpload={(url) => setLogoUrl(url)}
+                  >
+                    <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-text-secondary">
+                      <ImagePlus size={13} />
+                      {(logoUrl || companyLogo)
+                        ? (isFr ? 'Changer le logo' : 'Change logo')
+                        : (isFr ? 'Téléverser un logo' : 'Upload a logo')}
+                    </span>
+                  </FileUpload>
+                  {logoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setLogoUrl('')}
+                      className="glass-button inline-flex items-center gap-1.5 text-[11px]"
+                    >
+                      <Trash2 size={11} />
+                      {companyLogo
+                        ? (isFr ? 'Revenir au logo de l\'entreprise' : 'Back to company logo')
+                        : t.companySettings.remove}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* A. Form Header Settings */}
             <div className="section-card p-5 space-y-4">
               <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
                 {t.requestForm.formHeader}
               </h3>
-              <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                  Logo
-                </label>
-                {logoUrl || companyLogo ? (
-                  <div className="flex items-center gap-4 mt-2">
-                    <div className="w-20 h-20 rounded-xl border border-outline overflow-hidden bg-surface-secondary flex items-center justify-center shrink-0">
-                      <img
-                        src={logoUrl || companyLogo || ''}
-                        alt="Form logo"
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <div className="space-y-2 min-w-0">
-                      <p className="text-[12px] text-text-secondary">
-                        {logoUrl
-                          ? (isFr ? 'Logo personnalisé' : 'Custom logo')
-                          : (isFr ? 'Logo de l\'entreprise (par défaut)' : 'Company logo (default)')}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        {logoUrl ? (
-                          <button
-                            type="button"
-                            onClick={() => setLogoUrl('')}
-                            className="glass-button inline-flex items-center gap-1.5 text-[11px]"
-                          >
-                            <Trash2 size={11} />
-                            {companyLogo
-                              ? (isFr ? 'Utiliser le logo de l\'entreprise' : 'Use company logo')
-                              : t.companySettings.remove}
-                          </button>
-                        ) : (
-                          <FileUpload
-                            bucket={STORAGE_BUCKETS.COMPANY_LOGOS}
-                            path={`${orgId || 'default'}/request-form`}
-                            accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                            maxSizeMb={5}
-                            onUpload={(url) => setLogoUrl(url)}
-                          >
-                            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-secondary">
-                              <ImagePlus size={12} />
-                              {isFr ? 'Téléverser un logo personnalisé' : 'Upload a custom logo'}
-                            </span>
-                          </FileUpload>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-2 space-y-2">
-                    <FileUpload
-                      bucket={STORAGE_BUCKETS.COMPANY_LOGOS}
-                      path={`${orgId || 'default'}/request-form`}
-                      accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                      maxSizeMb={5}
-                      onUpload={(url) => setLogoUrl(url)}
-                    />
-                    <p className="text-[11px] text-text-tertiary">
-                      {isFr
-                        ? 'Astuce : le logo défini dans Paramètres → Entreprise est utilisé par défaut.'
-                        : 'Tip: the logo set in Settings → Company is used by default.'}
-                    </p>
-                  </div>
-                )}
-              </div>
               <div>
                 <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                   {t.requestForm.formTitle}

@@ -193,16 +193,8 @@ function PaymentMethodDropdown({ value, onChange, fr }: { value: PaymentMethodFi
 
 // ─── Payment Badge (same pattern as InvoiceBadge) ──────────────
 
-function PaymentBadge({ status, fr }: { status: string; fr: boolean }) {
-  const s = (status || 'pending').toLowerCase();
-  const map: Record<string, { label: string; badge: string }> = {
-    succeeded: { label: fr ? 'Réussi' : 'Succeeded', badge: 'badge-success' },
-    pending: { label: fr ? 'En attente' : 'Pending', badge: 'badge-warning' },
-    failed: { label: fr ? 'Échoué' : 'Failed', badge: 'badge-danger' },
-    refunded: { label: fr ? 'Remboursé' : 'Refunded', badge: 'badge-neutral' },
-  };
-  const v = map[s] || map.pending;
-  return <span className={v.badge}>{v.label}</span>;
+function PaymentBadge({ status }: { status: string; fr: boolean }) {
+  return <StatusBadge status={status || 'pending'} />;
 }
 
 // ─── Main Component ────────────────────────────────────────────

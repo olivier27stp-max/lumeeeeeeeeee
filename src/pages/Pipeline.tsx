@@ -125,7 +125,9 @@ const DealCard: React.FC<{ deal: PipelineDeal; onClick: () => void; onDelete: ()
       {/* Price + status */}
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-[14px] font-bold text-text-primary tabular-nums">{formatCurrency(deal.value)}</span>
-        <span className="badge-neutral text-[10px]">{deal.job?.status || t.pipeline.noStatus}</span>
+        {deal.job?.status
+          ? <StatusBadge status={deal.job.status} />
+          : <span className="badge-neutral text-[10px]">{t.pipeline.noStatus}</span>}
       </div>
 
       {/* Next step indicator */}

@@ -603,16 +603,7 @@ export default function Jobs() {
 
 
   function JobBadge({ status }: { status: string }) {
-    const s = (status || 'draft').toLowerCase();
-    const map: Record<string, { label: string; badge: string }> = {
-      completed: { label: fr ? 'Complété' : 'Completed', badge: 'badge-success' },
-      scheduled: { label: fr ? 'Planifié' : 'Scheduled', badge: 'badge-info' },
-      in_progress: { label: fr ? 'En cours' : 'In Progress', badge: 'badge-warning' },
-      cancelled: { label: fr ? 'Annulé' : 'Cancelled', badge: 'badge-danger' },
-      draft: { label: fr ? 'Brouillon' : 'Draft', badge: 'badge-neutral' },
-    };
-    const v = map[s] || map.draft;
-    return <span className={v.badge}>{v.label}</span>;
+    return <StatusBadge status={status || 'draft'} />;
   }
 
   const IconSort = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>;
