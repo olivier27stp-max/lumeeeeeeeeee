@@ -57,25 +57,19 @@ router.post('/request-forms', validate(upsertRequestFormSchema), async (req, res
       .is('deleted_at', null)
       .maybeSingle();
 
-    let form;
-    if (existing?.id) {
-      const { data, error } = await admin
-        .from('request_forms')
-        .update(payload)
-        .eq('id', existing.id)
-        .select('*')
-        .single();
-      if (error) throw error;
-      form = data;
-    } else {
-      const { data, error } = await admin
-        .from('request_forms')
-        .insert(payload)
-        .select('*')
-        .single();
-      if (error) throw error;
-      form = data;
+    const save = (p: Record<string, unknown>) =>
+      existing?.id
+        ? admin.from('request_forms').update(p).eq('id', existing.id).select('*').single()
+        : admin.from('request_forms').insert(p).select('*').single();
+
+    let { data: form, error: saveError } = await save(payload);
+    // logo_url ships with migration 20260711000000_request_form_logo — keep
+    // saving working on a DB that hasn't applied it yet.
+    if (saveError && saveError.code === '42703' && `${saveError.message}`.includes('logo_url')) {
+      const { logo_url: _omitted, ...rest } = payload;
+      ({ data: form, error: saveError } = await save(rest));
     }
+    if (saveError) throw saveError;
 
     return res.json({ form });
   } catch (err: any) {
@@ -153,9 +147,12 @@ router.get('/public/form/:apiKey', async (req, res) => {
     }
 
     const admin = getServiceClient();
+    // select('*') (not an explicit column list) so this keeps working on a DB
+    // where migration 20260711000000_request_form_logo isn't applied yet; the
+    // public payload is rebuilt field-by-field below, so nothing extra leaks.
     const { data: form, error } = await admin
       .from('request_forms')
-      .select('id, org_id, title, description, success_message, enabled, logo_url, custom_fields')
+      .select('*')
       .eq('api_key', apiKey)
       .is('deleted_at', null)
       .maybeSingle();
@@ -175,9 +172,17 @@ router.get('/public/form/:apiKey', async (req, res) => {
       logoUrl = company?.logo_url || null;
     }
 
-    // Strip org_id from public response
-    const { org_id, ...publicForm } = form;
-    return res.json({ form: { ...publicForm, logo_url: logoUrl } });
+    return res.json({
+      form: {
+        id: form.id,
+        title: form.title,
+        description: form.description,
+        success_message: form.success_message,
+        enabled: form.enabled,
+        custom_fields: form.custom_fields,
+        logo_url: logoUrl,
+      },
+    });
   } catch (err: any) {
     console.error('[public/form] get failed:', err.message);
     return res.status(500).json({ error: 'Unable to load form.' });
