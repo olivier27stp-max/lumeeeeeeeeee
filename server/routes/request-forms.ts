@@ -250,15 +250,20 @@ router.post(
 
 // ── POST /public/form/:apiKey/submit — public submission ──────────
 router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema), async (req, res) => {
+  // Step tracker — surfaced in the error log (and temporarily in the 500
+  // response) so a failing submission tells us exactly where it broke.
+  let step = 'start';
   try {
     const apiKey = String(req.params.apiKey || '').trim();
     if (!apiKey || apiKey.length < 32) {
       return res.status(400).json({ error: 'Invalid API key.' });
     }
 
+    step = 'service-client';
     const admin = getServiceClient();
 
     // Look up form
+    step = 'form-lookup';
     const { data: form, error: formError } = await admin
       .from('request_forms')
       .select('id, org_id, enabled, created_by, custom_fields')
@@ -279,6 +284,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     // so the work must be attributed to a real member of the org — NOT the
     // org id. Passing org_id here triggered a 23503 FK violation → 500.
     // Prefer the form's creator if they are still a member, else the org owner.
+    step = 'actor-resolution';
     const { data: members } = await admin
       .from('memberships')
       .select('user_id, role')
@@ -335,6 +341,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
 
     // ── REUSE existing lead creation logic ──
     // 1. Ensure linked client
+    step = 'ensure-client';
     const clientId = await ensureClientForLead(admin, {
       orgId,
       createdBy: actorId,
@@ -347,6 +354,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     });
 
     // 2. A lead IS a client with status='lead' — stamp lead fields onto the client.
+    step = 'lead-stamp';
     const { error: leadErr } = await admin
       .from('clients')
       .update({
@@ -363,6 +371,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     const leadIdStr = String(clientId);
 
     // 3. Create pipeline deal (new_prospect stage)
+    step = 'pipeline-deal';
     const { data: existingDeal } = await admin
       .from('pipeline_deals')
       .select('id')
@@ -411,6 +420,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     }
 
     // 4. Save submission record
+    step = 'submission-record';
     const { data: submission, error: subError } = await admin
       .from('form_submissions')
       .insert({
@@ -444,6 +454,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     }
 
     // 5. Emit event for automations
+    step = 'event-emit';
     eventBus.emit('lead.created', {
       orgId,
       entityType: 'lead',
@@ -456,8 +467,11 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
 
     return res.json({ ok: true, submission_id: submission?.id || null });
   } catch (err: any) {
-    console.error('[public/form] submit failed:', err.message);
-    return res.status(500).json({ error: 'Unable to process submission.' });
+    console.error('[public/form] submit failed:', { step, code: err?.code, message: err?.message, details: err?.details, hint: err?.hint });
+    // TEMP DIAGNOSTIC — expose the failing step + db error code (no raw SQL /
+    // stack) so live failures can be identified without server logs. Remove
+    // once the submission bug is resolved.
+    return res.status(500).json({ error: `Unable to process submission. [${step}${err?.code ? ` ${err.code}` : ''}]` });
   }
 });
 

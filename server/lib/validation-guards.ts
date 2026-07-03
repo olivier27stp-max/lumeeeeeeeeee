@@ -10,8 +10,15 @@ import { z } from 'zod';
 import type { Request, Response, NextFunction } from 'express';
 
 // ── Size guard — reject bodies > 1 MiB by default ──
+// NOTE: routers apply this with router.use(), and routers are mounted on the
+// shared /api path — so every /api request flows through it, not just the
+// router's own routes. Raw image uploads (public form photos) legitimately
+// exceed 1 MiB and carry their own express.raw() limit at the route level,
+// so they are exempted here.
 export function maxBodySize(maxBytes = 1_048_576) {
   return (req: Request, res: Response, next: NextFunction) => {
+    const contentType = String(req.headers['content-type'] || '');
+    if (contentType.startsWith('image/')) return next();
     const contentLen = Number(req.headers['content-length'] || 0);
     if (contentLen > maxBytes) {
       return res.status(413).json({ error: 'Payload too large' });
