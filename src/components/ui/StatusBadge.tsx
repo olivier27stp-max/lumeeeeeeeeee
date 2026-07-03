@@ -217,9 +217,14 @@ export default function StatusBadge({ status, variant, className }: StatusBadgeP
   const label = translated || status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
   // Archived jobs get a dedicated near-black treatment.
+  // Requires-invoicing gets a true yellow bubble (bright amber gradient,
+  // dark text for contrast — the generic warning variant reads too dark).
+  const isYellow = key === 'requires_invoicing';
   const style = key === 'archived'
     ? { bg: 'linear-gradient(135deg, #1C1C1E 0%, #08080A 100%)', icon: '#8A8A8E', defaultIcon: Archive }
-    : variantStyle[resolvedVariant];
+    : isYellow
+      ? { bg: 'linear-gradient(135deg, #F5C848 0%, #DF9F1F 100%)', icon: '#4A3608', defaultIcon: AlertCircle }
+      : variantStyle[resolvedVariant];
   const Icon = statusIcons[key] || style.defaultIcon;
 
   return (
@@ -236,7 +241,7 @@ export default function StatusBadge({ status, variant, className }: StatusBadgeP
         padding: '0 8px',
         borderRadius: 999,
         background: style.bg,
-        border: '1px solid rgba(255,255,255,0.08)',
+        border: isYellow ? '1px solid rgba(0,0,0,0.10)' : '1px solid rgba(255,255,255,0.08)',
         boxShadow: hovered ? HOVER_SHADOW : BASE_SHADOW,
         transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
         transition: 'all 0.18s ease',
@@ -247,7 +252,7 @@ export default function StatusBadge({ status, variant, className }: StatusBadgeP
       <Icon size={12} color={style.icon} strokeWidth={2.25} aria-hidden />
       <span
         aria-hidden
-        style={{ width: 1, height: 11, background: 'rgba(255,255,255,0.12)', margin: '0 6px' }}
+        style={{ width: 1, height: 11, background: isYellow ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.12)', margin: '0 6px' }}
       />
       <span
         style={{
@@ -255,7 +260,7 @@ export default function StatusBadge({ status, variant, className }: StatusBadgeP
           fontWeight: 600,
           letterSpacing: '0.06em',
           textTransform: 'uppercase',
-          color: '#FFFFFF',
+          color: isYellow ? '#3A2A06' : '#FFFFFF',
           lineHeight: 1,
         }}
       >

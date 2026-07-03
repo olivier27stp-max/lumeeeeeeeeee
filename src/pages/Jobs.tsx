@@ -169,6 +169,7 @@ function statusColor(status: string): string {
   if (s === 'upcoming') return 'bg-success';        // green
   if (s === 'late') return 'bg-danger';             // red
   if (s === 'action_required') return 'bg-warning'; // yellow
+  if (s === 'requires_invoicing') return 'bg-warning'; // yellow
   if (s === 'archived') return 'bg-text-tertiary';  // muted / archived
   return 'bg-text-tertiary';
 }
@@ -345,6 +346,7 @@ function JobStatusDropdown({ value, onChange, fr }: { value: string; onChange: (
     { value: 'upcoming', label: fr ? 'À venir' : 'Upcoming' },
     { value: 'late', label: fr ? 'En retard' : 'Late' },
     { value: 'action_required', label: fr ? 'Action requise' : 'Action Required' },
+    { value: 'requires_invoicing', label: fr ? 'À facturer' : 'Requires Invoicing' },
     { value: 'archived', label: fr ? 'Archivé' : 'Archived' },
   ];
 

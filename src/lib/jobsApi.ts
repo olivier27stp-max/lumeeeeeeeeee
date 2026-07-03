@@ -108,6 +108,12 @@ function deriveJobDisplayStatus(raw: {
   const scheduledAt = raw.scheduled_at ? new Date(raw.scheduled_at) : null;
   const now = new Date();
 
+  // Completed jobs that still need invoicing stay visible as a yellow
+  // "Requires Invoicing" bubble instead of dropping straight to Archived.
+  if (dbStatus === 'completed' && raw.requires_invoicing) {
+    return 'Requires Invoicing';
+  }
+
   // Closed jobs → Archived
   if (dbStatus === 'completed' || dbStatus === 'cancelled' || dbStatus === 'canceled' || dbStatus === 'archived') {
     return 'Archived';
