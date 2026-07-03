@@ -48,7 +48,7 @@ export async function getFollowUpRecommendations(
     .from('quotes')
     .select('id, title, client_id, status, sent_at, total_cents, clients!inner(first_name, last_name, address)')
     .eq('org_id', orgId)
-    .in('status', ['sent', 'viewed'])
+    .in('status', ['awaiting_response', 'changes_requested'])
     .is('deleted_at', null)
     .order('sent_at', { ascending: true })
     .limit(20);

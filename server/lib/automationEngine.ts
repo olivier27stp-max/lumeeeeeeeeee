@@ -484,7 +484,8 @@ async function checkStopConditions(
     if (evt.status === 'cancelled') return true;
   }
 
-  // Quote follow-ups: stop if approved, declined, expired, converted, or deleted
+  // Quote follow-ups: stop once the client responded (approved, declined,
+  // changes requested) or the quote left circulation (expired, converted, archived)
   if (entityType === 'quote') {
     const { data: quote } = await supabase
       .from('quotes')
@@ -494,7 +495,7 @@ async function checkStopConditions(
 
     if (!quote) return true; // Quote deleted
     if (quote.deleted_at) return true;
-    if (['approved', 'declined', 'expired', 'converted', 'void'].includes(quote.status)) return true;
+    if (['approved', 'declined', 'changes_requested', 'expired', 'converted', 'archived', 'void'].includes(quote.status)) return true;
   }
 
   // Lead: stop if archived or deleted (a lead is a client with status='lead')

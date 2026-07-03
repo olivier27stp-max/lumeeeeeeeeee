@@ -431,7 +431,7 @@ async function expireOverdueQuotes(supabase: SupabaseClient) {
   const { data: quotes, error } = await supabase
     .from('quotes')
     .select('id, org_id, quote_number, valid_until, status')
-    .in('status', ['sent', 'awaiting_response', 'action_required'])
+    .in('status', ['draft', 'awaiting_response', 'changes_requested'])
     .not('valid_until', 'is', null)
     .lt('valid_until', today)
     .is('deleted_at', null);

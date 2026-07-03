@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle, XCircle, PenLine, Download, Phone, Mail, Globe, MapPin, Calendar, Hash, User, FileText, CreditCard, Loader2, AlertCircle } from 'lucide-react';
+import { CheckCircle, XCircle, PenLine, Pencil, Download, Phone, Mail, Globe, MapPin, Calendar, Hash, User, FileText, CreditCard, Loader2, AlertCircle } from 'lucide-react';
 import { formatQuoteMoney } from '../lib/quotesApi';
 import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -68,7 +68,7 @@ interface QuoteData {
   } | null;
 }
 
-type ViewState = 'loading' | 'error' | 'view' | 'accepted' | 'declined' | 'deposit_payment';
+type ViewState = 'loading' | 'error' | 'view' | 'accepted' | 'declined' | 'changes_requested' | 'deposit_payment';
 
 // ── Helpers ──
 function fmtDate(iso: string | null | undefined): string {
@@ -152,6 +152,9 @@ export default function QuoteView() {
   const [error, setError] = useState('');
   const [accepting, setAccepting] = useState(false);
   const [declining, setDeclining] = useState(false);
+  const [showChangeRequest, setShowChangeRequest] = useState(false);
+  const [changeMessage, setChangeMessage] = useState('');
+  const [requestingChanges, setRequestingChanges] = useState(false);
   const [showSignature, setShowSignature] = useState(false);
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [signerName, setSignerName] = useState('');
@@ -371,6 +374,27 @@ export default function QuoteView() {
     }
   }
 
+  async function handleRequestChanges() {
+    if (!data || !changeMessage.trim()) return;
+    setRequestingChanges(true);
+    try {
+      const API_BASE = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${API_BASE}/api/quotes/public/request-changes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view_token: token, message: changeMessage.trim() }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((result as any)?.error || 'Failed to request changes');
+      setShowChangeRequest(false);
+      setViewState('changes_requested');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to request changes. Please try again.');
+    } finally {
+      setRequestingChanges(false);
+    }
+  }
+
   // ── Loading ──
   if (viewState === 'loading') {
     return (
@@ -397,7 +421,7 @@ export default function QuoteView() {
   const cur = quote.currency;
   const contact = client || lead;
   const isExpired = quote.valid_until && new Date(quote.valid_until) < new Date();
-  const canRespond = ['sent', 'awaiting_response', 'action_required'].includes(quote.status) && !isExpired;
+  const canRespond = ['draft', 'awaiting_response', 'changes_requested'].includes(quote.status) && !isExpired;
   const requiredItems = items.filter(i => !i.is_optional);
   const optionalItems = items.filter(i => i.is_optional);
   const depositAmount = calcDepositAmount(quote);
@@ -434,6 +458,24 @@ export default function QuoteView() {
             <div>
               <p className="font-semibold text-[#111] text-[14px]">Quote Declined</p>
               <p className="text-[13px] text-[#666]">This quote has been declined.</p>
+            </div>
+          </div>
+        )}
+        {viewState === 'changes_requested' && (
+          <div className="bg-[#f8f8f8] border border-[#e0e0e0] rounded-lg p-4 mb-5 flex items-center gap-3 no-print">
+            <Pencil className="text-[#333] shrink-0" size={18} />
+            <div>
+              <p className="font-semibold text-[#111] text-[14px]">Change Request Sent</p>
+              <p className="text-[13px] text-[#666]">We received your request and will send you an updated quote shortly.</p>
+            </div>
+          </div>
+        )}
+        {viewState === 'view' && quote.status === 'changes_requested' && (
+          <div className="bg-[#f8f8f8] border border-[#e0e0e0] rounded-lg p-4 mb-5 flex items-center gap-3 no-print">
+            <Pencil className="text-[#333] shrink-0" size={18} />
+            <div>
+              <p className="font-semibold text-[#111] text-[14px]">Changes Requested</p>
+              <p className="text-[13px] text-[#666]">A change request was submitted for this quote. You can still accept it as-is below.</p>
             </div>
           </div>
         )}
@@ -532,6 +574,7 @@ export default function QuoteView() {
                 }`}>
                   {quote.status === 'approved' ? 'Approved' :
                    quote.status === 'declined' ? 'Declined' :
+                   quote.status === 'changes_requested' ? 'Changes Requested' :
                    isExpired ? 'Expired' : 'Pending Review'}
                 </span>
               </div>
@@ -687,17 +730,29 @@ export default function QuoteView() {
             <>
               <div className="border-t border-[#eee]" />
               <div className="px-8 py-6 no-print">
-                {!showSignature ? (
-                  <div className="flex gap-3">
+                {!showSignature && !showChangeRequest ? (
+                  <div className="space-y-3">
+                    {error && (
+                      <p className="text-[12px] text-[#c00]">{error}</p>
+                    )}
+                    <div className="flex flex-col sm:flex-row gap-3">
                     <button
                       onClick={() => {
                         setShowSignature(true);
+                        setError('');
                         setTimeout(() => initCanvas(), 100);
                       }}
                       className="flex-1 bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors flex items-center justify-center gap-2"
                     >
                       <CheckCircle size={16} />
                       Accept Quote
+                    </button>
+                    <button
+                      onClick={() => { setShowChangeRequest(true); setError(''); }}
+                      className="flex-1 bg-surface border border-[#ddd] text-[#555] py-3 rounded-lg font-medium text-[14px] hover:bg-[#f8f8f8] transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Pencil size={16} />
+                      Request Changes
                     </button>
                     <button
                       onClick={handleDecline}
@@ -707,6 +762,46 @@ export default function QuoteView() {
                       <XCircle size={16} />
                       {declining ? 'Declining...' : 'Decline'}
                     </button>
+                    </div>
+                  </div>
+                ) : showChangeRequest ? (
+                  <div className="space-y-4">
+                    <h3 className="text-[14px] font-semibold text-[#111] flex items-center gap-2">
+                      <Pencil size={16} />
+                      Request Changes
+                    </h3>
+                    <div>
+                      <label className="block text-[12px] font-medium text-[#666] mb-1">What would you like to change?</label>
+                      <textarea
+                        value={changeMessage}
+                        onChange={(e) => setChangeMessage(e.target.value)}
+                        rows={4}
+                        maxLength={2000}
+                        placeholder="Describe the changes you'd like on this quote..."
+                        className="w-full px-3 py-2.5 border border-[#ddd] rounded-lg text-[13px] text-[#111] focus:outline-none focus:ring-1 focus:ring-[#111] focus:border-[#111] placeholder:text-[#ccc] resize-none"
+                      />
+                    </div>
+
+                    {error && (
+                      <p className="text-[12px] text-[#c00]">{error}</p>
+                    )}
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleRequestChanges}
+                        disabled={requestingChanges || !changeMessage.trim()}
+                        className="flex-1 bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        <Pencil size={16} />
+                        {requestingChanges ? 'Sending...' : 'Send Request'}
+                      </button>
+                      <button
+                        onClick={() => { setShowChangeRequest(false); setChangeMessage(''); setError(''); }}
+                        className="px-5 bg-surface border border-[#ddd] text-[#555] py-3 rounded-lg font-medium text-[14px] hover:bg-[#f8f8f8] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4">

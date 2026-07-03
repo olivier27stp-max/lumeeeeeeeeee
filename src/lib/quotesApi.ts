@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
-import { emitQuoteDeclined, emitQuoteSent, emitQuoteApproved } from './automationEventsApi';
+import { emitQuoteDeclined, emitQuoteApproved } from './automationEventsApi';
 import { syncEntityPin } from './fieldSalesApi';
 
 // ── Types ──
@@ -26,6 +26,8 @@ export interface Quote {
   declined_at: string | null;
   expired_at: string | null;
   converted_at: string | null;
+  changes_requested_at: string | null;
+  archived_at: string | null;
   valid_until: string | null;
   subtotal_cents: number;
   discount_type: 'percentage' | 'fixed' | null;
@@ -52,34 +54,34 @@ export interface Quote {
 
 export type QuoteStatus =
   | 'draft'
-  | 'action_required'
-  | 'sent'
   | 'awaiting_response'
+  | 'changes_requested'
   | 'approved'
   | 'declined'
   | 'expired'
-  | 'converted';
+  | 'converted'
+  | 'archived';
 
 export const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
   draft: 'Draft',
-  action_required: 'Action Required',
-  sent: 'Sent',
   awaiting_response: 'Awaiting Response',
+  changes_requested: 'Changes Requested',
   approved: 'Approved',
   declined: 'Declined',
   expired: 'Expired',
   converted: 'Converted',
+  archived: 'Archived',
 };
 
 export const QUOTE_STATUS_LABELS_FR: Record<QuoteStatus, string> = {
   draft: 'Brouillon',
-  action_required: 'Action requise',
-  sent: 'Envoyé',
   awaiting_response: 'En attente de réponse',
+  changes_requested: 'Changements demandés',
   approved: 'Approuvé',
   declined: 'Refusé',
   expired: 'Expiré',
   converted: 'Converti',
+  archived: 'Archivé',
 };
 
 export function getQuoteStatusLabel(status: QuoteStatus, lang: string): string {
@@ -89,13 +91,13 @@ export function getQuoteStatusLabel(status: QuoteStatus, lang: string): string {
 
 export const QUOTE_STATUS_COLORS: Record<QuoteStatus, string> = {
   draft: 'bg-surface-tertiary text-text-secondary border-outline',
-  action_required: 'bg-warning-light text-warning border-warning/30',
-  sent: 'bg-info-light text-info border-info/30',
   awaiting_response: 'bg-info-light text-info border-info/30',
+  changes_requested: 'bg-warning-light text-warning border-warning/30',
   approved: 'bg-success-light text-success border-success/30',
   declined: 'bg-danger-light text-danger border-danger/30',
   expired: 'bg-surface-tertiary text-text-tertiary border-outline',
   converted: 'bg-success-light text-success border-success/30',
+  archived: 'bg-surface-tertiary text-text-tertiary border-outline',
 };
 
 export interface QuoteLineItem {
@@ -402,6 +404,8 @@ export async function updateQuoteStatus(
   if (newStatus === 'declined') updatePayload.declined_at = new Date().toISOString();
   if (newStatus === 'expired') updatePayload.expired_at = new Date().toISOString();
   if (newStatus === 'converted') updatePayload.converted_at = new Date().toISOString();
+  if (newStatus === 'changes_requested') updatePayload.changes_requested_at = new Date().toISOString();
+  if (newStatus === 'archived') updatePayload.archived_at = new Date().toISOString();
 
   const { data, error } = await supabase
     .from('quotes').update(updatePayload).eq('id', quoteId).eq('org_id', orgId).select('*').single();
@@ -420,7 +424,7 @@ export async function updateQuoteStatus(
   // Automation: move pipeline deal based on quote status
   const quoteData = data as Quote;
   const stageMap: Partial<Record<QuoteStatus, string>> = {
-    sent: 'quote_sent',
+    awaiting_response: 'quote_sent',
     approved: 'closed_won',
     declined: 'closed_lost',
   };
@@ -436,11 +440,43 @@ export async function updateQuoteStatus(
     // Sales map: turn the linked pin 🔴 Refusé (non-blocking).
     syncEntityPin('quote', quoteId, 'not_interested');
   }
-  if (newStatus === 'sent') {
-    emitQuoteSent({ quoteId, leadId: quoteData.lead_id || undefined, channel: 'email' });
-  }
 
   return quoteData;
+}
+
+/**
+ * Unarchive a quote by restoring the status it had before being archived
+ * (from quote_status_history), without re-firing approval/decline side
+ * effects. Falls back to 'draft' if no history is found.
+ */
+export async function unarchiveQuote(quoteId: string): Promise<Quote> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data: hist } = await supabase
+    .from('quote_status_history')
+    .select('old_status')
+    .eq('quote_id', quoteId)
+    .eq('new_status', 'archived')
+    .order('changed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const restoreTo = (hist?.old_status as QuoteStatus) || 'draft';
+
+  const { data, error } = await supabase
+    .from('quotes')
+    .update({ status: restoreTo, updated_at: new Date().toISOString() })
+    .eq('id', quoteId).eq('org_id', orgId).select('*').single();
+  if (error) throw error;
+
+  const { data: { user } } = await supabase.auth.getUser();
+  await supabase.from('quote_status_history').insert({
+    quote_id: quoteId,
+    old_status: 'archived',
+    new_status: restoreTo,
+    changed_by: user?.id || null,
+    reason: 'Unarchived',
+  });
+
+  return data as Quote;
 }
 
 export async function updateQuote(
@@ -627,7 +663,7 @@ export async function listAllQuotes(opts?: {
 
   let query = supabase
     .from('quotes')
-    .select('*, clients(first_name, last_name, company, deleted_at), leads(first_name, last_name, company, deleted_at)', { count: 'exact' })
+    .select('*, clients(first_name, last_name, company, deleted_at), leads(first_name, last_name, company, deleted_at), properties(name, address)', { count: 'exact' })
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -646,7 +682,7 @@ export async function listAllQuotes(opts?: {
   return { data: (data || []) as Quote[], total: count || 0 };
 }
 
-export const PENDING_QUOTE_STATUSES: QuoteStatus[] = ['sent', 'awaiting_response', 'action_required'];
+export const PENDING_QUOTE_STATUSES: QuoteStatus[] = ['awaiting_response', 'changes_requested'];
 
 export async function fetchQuoteKpis(): Promise<{
   total_count: number;

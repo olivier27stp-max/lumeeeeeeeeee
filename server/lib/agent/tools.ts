@@ -299,7 +299,7 @@ const listQuotes: AgentTool = {
     parameters: {
       type: 'object',
       properties: {
-        status: { type: 'string', description: "Optional status filter, e.g. 'draft', 'sent', 'accepted', 'rejected'." },
+        status: { type: 'string', description: "Optional status filter. One of: 'draft', 'awaiting_response', 'changes_requested', 'approved', 'declined', 'expired', 'converted', 'archived'." },
         query: { type: 'string', description: 'Optional search (quote number or title).' },
         limit: { type: 'integer', description: 'Max results (default 15, max 30).' },
       },

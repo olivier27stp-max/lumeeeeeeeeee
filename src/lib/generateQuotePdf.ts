@@ -16,14 +16,16 @@ function fmtDate(iso: string | null | undefined): string {
 
 function statusLabel(status: string): string {
   const en: Record<string, string> = {
-    draft: 'Draft', action_required: 'Action Required', sent: 'Sent',
-    awaiting_response: 'Awaiting Response', approved: 'Approved',
+    draft: 'Draft', awaiting_response: 'Awaiting Response',
+    changes_requested: 'Changes Requested', approved: 'Approved',
     declined: 'Declined', expired: 'Expired', converted: 'Converted',
+    archived: 'Archived',
   };
   const fr: Record<string, string> = {
-    draft: 'Brouillon', action_required: 'Action requise', sent: 'Envoyé',
-    awaiting_response: 'En attente de réponse', approved: 'Approuvé',
+    draft: 'Brouillon', awaiting_response: 'En attente de réponse',
+    changes_requested: 'Changements demandés', approved: 'Approuvé',
     declined: 'Refusé', expired: 'Expiré', converted: 'Converti',
+    archived: 'Archivé',
   };
   const map = isFr() ? fr : en;
   return map[status] || status;

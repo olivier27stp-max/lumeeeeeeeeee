@@ -19,6 +19,8 @@ const STATUS_MAP: Record<string, { label: string; bg: string; fg: string }> = {
   draft:             { label: 'Draft',     bg: '#f1f5f9', fg: '#475569' },
   sent:              { label: 'Sent',      bg: '#dbeafe', fg: '#1d4ed8' },
   awaiting_response: { label: 'Pending',   bg: '#fef3c7', fg: '#a16207' },
+  changes_requested: { label: 'Changes Requested', bg: '#fef2f2', fg: '#b91c1c' },
+  archived:          { label: 'Archived',  bg: '#f1f5f9', fg: '#64748b' },
   approved:          { label: 'Approved',  bg: '#dcfce7', fg: '#15803d' },
   declined:          { label: 'Declined',  bg: '#fecaca', fg: '#b91c1c' },
   expired:           { label: 'Expired',   bg: '#f1f5f9', fg: '#64748b' },

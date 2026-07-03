@@ -61,6 +61,10 @@ const publicDeclineSchema = z.object({
   view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
   reason: z.string().trim().max(2000).optional().nullable(),
 });
+const publicRequestChangesSchema = z.object({
+  view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
+  message: z.string().trim().min(1, 'Message is required.').max(2000),
+});
 const trackViewSchema = z.object({
   viewer_fingerprint: z.string().trim().max(200).optional().nullable(),
 }).passthrough();
@@ -337,11 +341,14 @@ router.post('/quotes/send-email', async (req, res) => {
       html: emailHtml,
     });
 
-    // Update quote
+    // Update quote — a sent quote is awaiting the client's response.
+    // Only pre-response statuses advance; re-sending an approved/converted/
+    // declined/expired/archived quote must not knock it back into circulation.
+    const advanceStatus = ['draft', 'awaiting_response', 'changes_requested'].includes(quote.status);
     await admin.from('quotes').update({
       sent_via_email_at: new Date().toISOString(),
       last_sent_channel: 'email',
-      status: 'sent',
+      ...(advanceStatus ? { status: 'awaiting_response' } : {}),
       updated_at: new Date().toISOString(),
     }).eq('id', quoteId).eq('org_id', auth.orgId);
 
@@ -355,13 +362,15 @@ router.post('/quotes/send-email', async (req, res) => {
     });
 
     // Log status change
-    await admin.from('quote_status_history').insert({
-      quote_id: quoteId,
-      old_status: quote.status,
-      new_status: 'sent',
-      changed_by: auth.user.id,
-      reason: 'Sent via email',
-    });
+    if (advanceStatus && quote.status !== 'awaiting_response') {
+      await admin.from('quote_status_history').insert({
+        quote_id: quoteId,
+        old_status: quote.status,
+        new_status: 'awaiting_response',
+        changed_by: auth.user.id,
+        reason: 'Sent via email',
+      });
+    }
 
     // Automation: move pipeline deal to Quote Sent
     if (quote.lead_id) {
@@ -465,10 +474,12 @@ router.post('/quotes/send-sms', async (req, res) => {
       to: formattedPhone,
     });
 
+    // Only pre-response statuses advance — same rule as the email route.
+    const advanceStatus = ['draft', 'awaiting_response', 'changes_requested'].includes(quote.status);
     await admin.from('quotes').update({
       sent_via_sms_at: new Date().toISOString(),
       last_sent_channel: 'sms',
-      status: 'sent',
+      ...(advanceStatus ? { status: 'awaiting_response' } : {}),
       updated_at: new Date().toISOString(),
     }).eq('id', quoteId);
 
@@ -481,13 +492,15 @@ router.post('/quotes/send-sms', async (req, res) => {
       provider_message_id: twilioMsg.sid,
     });
 
-    await admin.from('quote_status_history').insert({
-      quote_id: quoteId,
-      old_status: quote.status,
-      new_status: 'sent',
-      changed_by: auth.user.id,
-      reason: 'Sent via SMS',
-    });
+    if (advanceStatus && quote.status !== 'awaiting_response') {
+      await admin.from('quote_status_history').insert({
+        quote_id: quoteId,
+        old_status: quote.status,
+        new_status: 'awaiting_response',
+        changed_by: auth.user.id,
+        reason: 'Sent via SMS',
+      });
+    }
 
     // Automation: move pipeline deal to Quote Sent
     if (quote.lead_id) {
@@ -538,6 +551,9 @@ router.post('/quotes/convert-to-job', async (req, res) => {
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
 
     if (quote.status === 'converted') return res.status(400).json({ error: 'Quote already converted.' });
+    if (quote.status !== 'approved') {
+      return res.status(400).json({ error: 'Only approved quotes can be converted to a job.' });
+    }
 
     // Create job via RPC
     const { data: rpcResult, error: rpcError } = await auth.client.rpc('rpc_create_job_with_optional_schedule', {
@@ -783,8 +799,8 @@ router.post('/quotes/public/accept', async (req, res) => {
 
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
 
-    // Check if already responded or expired
-    if (['approved', 'declined', 'converted', 'expired'].includes(quote.status)) {
+    // Check if already responded, archived or expired
+    if (['approved', 'declined', 'converted', 'expired', 'archived'].includes(quote.status)) {
       return res.status(400).json({ error: `Quote is already ${quote.status}.` });
     }
     if (quote.valid_until && new Date(quote.valid_until) < new Date()) {
@@ -1205,7 +1221,7 @@ router.post('/quotes/public/decline', async (req, res) => {
 
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
 
-    if (['approved', 'declined', 'converted'].includes(quote.status)) {
+    if (['approved', 'declined', 'converted', 'archived'].includes(quote.status)) {
       return res.status(400).json({ error: `Quote is already ${quote.status}.` });
     }
 
@@ -1294,6 +1310,86 @@ router.post('/quotes/public/decline', async (req, res) => {
   }
 });
 
+// ── Public: client requests changes on a quote (no auth — uses view_token) ──
+router.post('/quotes/public/request-changes', async (req, res) => {
+  try {
+    const parsed = publicRequestChangesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues.map(i => i.message).join('; ') });
+    }
+    const { view_token, message } = parsed.data;
+
+    const admin = getServiceClient();
+    const { data: quote, error: qErr } = await admin
+      .from('quotes')
+      .select('id, org_id, quote_number, status, client_id, lead_id')
+      .eq('view_token', view_token)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
+
+    if (['approved', 'declined', 'converted', 'expired', 'archived'].includes(quote.status)) {
+      return res.status(400).json({ error: `Quote is already ${quote.status}.` });
+    }
+
+    const now = new Date().toISOString();
+
+    const { error: updErr } = await admin.from('quotes').update({
+      status: 'changes_requested',
+      changes_requested_at: now,
+      updated_at: now,
+    }).eq('id', quote.id);
+    if (updErr) {
+      console.error('[quotes/public/request-changes] status update failed:', updErr.message);
+      return res.status(500).json({ error: 'Failed to request changes.' });
+    }
+
+    await admin.from('quote_status_history').insert({
+      quote_id: quote.id,
+      old_status: quote.status,
+      new_status: 'changes_requested',
+      changed_by: null,
+      reason: `Changes requested by client: ${message}`,
+    });
+
+    // Resolve client name
+    let clientName = 'Client';
+    if (quote.client_id) {
+      const { data: client } = await admin
+        .from('clients').select('first_name, last_name')
+        .eq('id', quote.client_id).maybeSingle();
+      if (client) clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client';
+    } else if (quote.lead_id) {
+      const { data: lead } = await admin
+        .from('clients').select('first_name, last_name')
+        .eq('id', quote.lead_id).maybeSingle();
+      if (lead) clientName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Client';
+    }
+
+    await admin.from('notifications').insert({
+      org_id: quote.org_id,
+      type: 'quote_changes_requested',
+      title: `${clientName} requested changes on quote #${quote.quote_number}`,
+      body: message,
+      icon: 'pencil',
+      link: `/quotes/${quote.id}`,
+      reference_id: quote.id,
+    });
+
+    eventBus.emit('quote.changes_requested', {
+      orgId: quote.org_id,
+      entityType: 'quote',
+      entityId: quote.id,
+      metadata: { quote_number: quote.quote_number, message },
+    });
+
+    return res.json({ ok: true, status: 'changes_requested' });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to request changes.', '[quotes/public/request-changes]');
+  }
+});
+
 // ══════════════════════════════════════════════════════════════
 // Convert approved quote to invoice (Feature 13)
 // ══════════════════════════════════════════════════════════════
@@ -1311,7 +1407,7 @@ router.post('/quotes/convert-to-invoice', async (req, res) => {
       .from('quotes').select('*').eq('id', quoteId).eq('org_id', auth.orgId).single();
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
 
-    if (!['approved', 'sent', 'awaiting_response', 'action_required'].includes(quote.status)) {
+    if (!['approved', 'awaiting_response', 'changes_requested', 'draft'].includes(quote.status)) {
       return res.status(400).json({ error: `Cannot convert quote with status "${quote.status}".` });
     }
 

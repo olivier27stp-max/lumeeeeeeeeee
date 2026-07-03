@@ -45,6 +45,8 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
   new: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/15 dark:text-neutral-400',
   action_required: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
+  changes_requested: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
+  archived: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400',
 };
 
 function parsePage(raw: string | null, fallback = 1) {

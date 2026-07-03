@@ -3169,6 +3169,7 @@ const en = {
     closed_won: 'Closed Won',
     closed_lost: 'Closed Lost',
     awaiting_response: 'Awaiting Response',
+    changes_requested: 'Changes Requested',
     approved: 'Approved',
     declined: 'Declined',
     expired: 'Expired',

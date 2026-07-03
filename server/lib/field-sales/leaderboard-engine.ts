@@ -221,7 +221,7 @@ export async function getRepPerformance(
     conversations: myLeads.filter((l: any) => l.status && l.status !== 'new').length,
     demos_set: myDeals.length,
     demos_held: myDeals.filter((d: any) => d.stage !== 'new_prospect').length,
-    quotes_sent: myQuotes.filter((q: any) => q.sent_via_email_at || q.sent_via_sms_at || ['sent', 'awaiting_response', 'approved', 'declined', 'converted'].includes(q.status)).length,
+    quotes_sent: myQuotes.filter((q: any) => q.sent_via_email_at || q.sent_via_sms_at || ['awaiting_response', 'changes_requested', 'approved', 'declined', 'converted'].includes(q.status)).length,
     closes: myWonDeals.length,
     revenue: myWonDeals.reduce((s: number, d: any) => s + dealValue(d), 0),
     conversion_rate: 0,

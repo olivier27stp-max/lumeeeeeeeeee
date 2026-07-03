@@ -23,6 +23,8 @@ function StatusPill({ status }: { status: string }) {
     draft:              { bg: '#f1f5f9', text: '#475569' },
     sent:               { bg: '#eff6ff', text: '#1d4ed8' },
     awaiting_response:  { bg: '#fefce8', text: '#a16207' },
+    changes_requested: { bg: '#fef2f2', text: '#b91c1c' },
+    archived:           { bg: '#f1f5f9', text: '#64748b' },
     approved:           { bg: '#f0fdf4', text: '#15803d' },
     declined:           { bg: '#fef2f2', text: '#b91c1c' },
     expired:            { bg: '#f1f5f9', text: '#64748b' },

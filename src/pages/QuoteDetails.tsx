@@ -8,7 +8,7 @@ import {
   ArrowLeft, MoreHorizontal, Mail, MessageSquare, Briefcase, Copy,
   Eye, Printer, FileSignature, Trash2, Clock, CheckCircle2,
   MapPin, Phone as PhoneIcon, Mail as MailIcon, Pencil, FileText,
-  Plus, Check, X, Save, Ruler, Package,
+  Plus, Check, X, Save, Ruler, Package, Archive,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePermissions } from '../hooks/usePermissions';
@@ -16,7 +16,7 @@ import { hasPermission } from '../lib/permissions';
 import {
   getQuoteById, updateQuote, saveQuoteLineItems, type QuoteDetail,
   type QuoteStatus, type QuoteLineItemInput,
-  formatQuoteMoney, updateQuoteStatus, sendQuoteEmail, sendQuoteSms,
+  formatQuoteMoney, updateQuoteStatus, unarchiveQuote, sendQuoteEmail, sendQuoteSms,
   convertQuoteToJob, convertQuoteToInvoice, duplicateQuote, deleteQuote,
 } from '../lib/quotesApi';
 import { supabase } from '../lib/supabase';
@@ -246,9 +246,9 @@ export default function QuoteDetails() {
                 <div className="fixed inset-0 z-30" onClick={() => setMoreOpen(false)} />
                 <div className="absolute right-0 top-full mt-1 w-52 bg-surface border border-outline rounded-xl shadow-xl z-40 py-1 text-[13px]">
                   <button onClick={() => act(async () => { const { jobId } = await convertQuoteToJob(quote.id); toast.success('Converted'); navigate(`/jobs/${jobId}`); })}
-                    disabled={quote.status === 'converted' || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
+                    disabled={quote.status !== 'approved' || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
                     <Briefcase size={14} /> Convert to Job</button>
-                  {['approved', 'sent', 'awaiting_response', 'action_required'].includes(quote.status) && (
+                  {['approved', 'awaiting_response', 'changes_requested', 'draft'].includes(quote.status) && (
                     <button onClick={() => act(async () => { const { invoiceId } = await convertQuoteToInvoice(quote.id); toast.success('Invoice created'); navigate(`/invoices/${invoiceId}`); })}
                       disabled={quote.status === 'converted' || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
                       <FileText size={14} /> Convert to Invoice</button>
@@ -277,6 +277,15 @@ export default function QuoteDetails() {
                   <button onClick={() => act(async () => { await updateQuoteStatus(quote.id, 'approved'); toast.success('Approved'); loadQuote(); })}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
                     <CheckCircle2 size={14} /> Approved</button>
+                  {quote.status === 'archived' ? (
+                    <button onClick={() => act(async () => { await unarchiveQuote(quote.id); toast.success(language === 'fr' ? 'Devis désarchivé' : 'Quote unarchived'); loadQuote(); })}
+                      className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
+                      <Archive size={14} /> {language === 'fr' ? 'Désarchiver' : 'Unarchive'}</button>
+                  ) : (
+                    <button onClick={() => act(async () => { await updateQuoteStatus(quote.id, 'archived'); toast.success(language === 'fr' ? 'Devis archivé' : 'Quote archived'); loadQuote(); })}
+                      className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
+                      <Archive size={14} /> {language === 'fr' ? 'Archiver' : 'Archive'}</button>
+                  )}
                   <div className="border-t border-outline my-1" />
                   <button onClick={() => { window.open(`/quote/${quote.view_token}`, '_blank'); setMoreOpen(false); }}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">

@@ -11,6 +11,8 @@ import {
   listAllQuotes,
   formatQuoteMoney,
   deleteQuote,
+  updateQuoteStatus,
+  unarchiveQuote,
   QUOTE_STATUS_LABELS,
   type QuoteStatus,
 } from '../lib/quotesApi';
@@ -25,25 +27,26 @@ import { CirclePlus, ArrowUpDown, Ruler } from 'lucide-react';
 const PAGE_SIZE = 20;
 type StatusTab = 'all' | QuoteStatus;
 type QuoteSort = 'recent' | 'oldest' | 'total_desc' | 'total_asc';
-const STATUS_TABS: StatusTab[] = ['all', 'draft', 'sent', 'awaiting_response', 'action_required', 'approved', 'declined', 'expired', 'converted'];
+const STATUS_TABS: StatusTab[] = ['all', 'draft', 'awaiting_response', 'changes_requested', 'approved', 'converted', 'archived', 'declined', 'expired'];
 
 const STATUS_BADGE: Record<string, string> = {
   draft: 'badge-neutral',
-  action_required: 'badge-warning',
-  sent: 'badge-sky',
   awaiting_response: 'badge-info',
+  changes_requested: 'badge-warning',
   approved: 'badge-success',
   declined: 'badge-danger',
   expired: 'badge-neutral',
   converted: 'badge-teal',
+  archived: 'badge-neutral',
 };
 
 
 function sLabel(s: StatusTab, fr: boolean): string {
   if (s === 'all') return fr ? 'Tous' : 'All';
   const map: Record<string, string> = {
-    draft: 'Brouillon', sent: 'Envoyé', awaiting_response: 'En attente', approved: 'Approuvé',
-    declined: 'Décliné', expired: 'Expiré', converted: 'Converti',
+    draft: 'Brouillon', awaiting_response: 'En attente', changes_requested: 'Changements demandés',
+    approved: 'Approuvé', converted: 'Converti', archived: 'Archivé',
+    declined: 'Décliné', expired: 'Expiré',
   };
   return fr ? (map[s] || s) : (QUOTE_STATUS_LABELS[s as QuoteStatus] || s);
 }
@@ -182,15 +185,30 @@ export default function Quotes() {
     return '—';
   }
 
+  function propertyLabel(q: any): string {
+    const p = q.properties as any;
+    return p?.name || p?.address || '—';
+  }
+
   async function onDel(id: string) {
     if (!confirm(t.quotes.deleteThisQuote)) return;
     try { await deleteQuote(id); qc.invalidateQueries({ queryKey: ['quotes-list'] }); qc.invalidateQueries({ queryKey: ['quote-kpis'] }); toast.success(t.quotes.quoteDeleted); }
     catch { toast.error('Failed'); }
   }
 
+  async function onArchive(q: { id: string; status: string }) {
+    try {
+      if (q.status === 'archived') await unarchiveQuote(q.id);
+      else await updateQuoteStatus(q.id, 'archived');
+      qc.invalidateQueries({ queryKey: ['quotes-list'] });
+      qc.invalidateQueries({ queryKey: ['quote-kpis'] });
+      toast.success(q.status === 'archived' ? (fr ? 'Devis désarchivé' : 'Quote unarchived') : (fr ? 'Devis archivé' : 'Quote archived'));
+    } catch (e: any) { toast.error(e?.message || 'Failed'); }
+  }
+
   const badgeColor = (s: string): 'green' | 'orange' | 'red' | 'gray' | 'blue' => {
     if (s === 'approved' || s === 'converted') return 'green';
-    if (s === 'sent' || s === 'awaiting_response' || s === 'action_required') return 'orange';
+    if (s === 'awaiting_response' || s === 'changes_requested') return 'orange';
     if (s === 'declined' || s === 'expired') return 'red';
     return 'gray';
   };
@@ -273,14 +291,15 @@ export default function Quotes() {
 
       {/* ── TABLE ── */}
       <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: '40px 1fr 1fr 1fr 100px 1fr 48px' }} onMouseLeave={() => setHoveredId(null)}>
+        <div className="grid" style={{ gridTemplateColumns: '40px 1.2fr 0.7fr 1.2fr 1fr 150px 0.9fr 48px' }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Client {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? '# Devis' : 'Quote #'} {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Montant' : 'Amount'} {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Propriété' : 'Property'} {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Créé le' : 'Created'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Date {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Total {IconSort}</span></div>
           <div className="py-3 border-b border-outline" />
 
           {/* LOADING */}
@@ -289,16 +308,17 @@ export default function Quotes() {
               <div className="py-3 pl-4 border-b border-outline/30 flex items-center"><div className="w-4 h-4 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-24 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-24 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 border-b border-outline/30" />
             </React.Fragment>
           ))}
 
           {/* EMPTY */}
           {!isLoading && sorted.length === 0 && (
-            <div className="col-span-7 py-20 text-center text-[14px] text-text-tertiary">{fr ? 'Aucun devis trouvé' : 'No quotes found'}</div>
+            <div className="col-span-8 py-20 text-center text-[14px] text-text-tertiary">{fr ? 'Aucun devis trouvé' : 'No quotes found'}</div>
           )}
 
           {/* ROWS */}
@@ -319,9 +339,10 @@ export default function Quotes() {
                   </div>
                 </div>
                 <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{q.quote_number}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] font-semibold text-text-primary tabular-nums truncate">{formatQuoteMoney(q.total_cents, q.currency)}</span></div>
-                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><Badge status={q.status} /></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary truncate">{propertyLabel(q)}</span></div>
                 <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{formatDate(q.created_at)}</span></div>
+                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><Badge status={q.status} /></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] font-semibold text-text-primary tabular-nums truncate">{formatQuoteMoney(q.total_cents, q.currency)}</span></div>
                 <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                   <button
                     className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
@@ -336,6 +357,12 @@ export default function Quotes() {
                         className="w-full text-left px-3 py-1.5 text-[13px] text-text-secondary hover:bg-surface-secondary transition-colors"
                       >
                         {fr ? 'Modifier' : 'Edit'}
+                      </button>
+                      <button
+                        onClick={() => { setMenuOpen(null); onArchive(q); }}
+                        className="w-full text-left px-3 py-1.5 text-[13px] text-text-secondary hover:bg-surface-secondary transition-colors"
+                      >
+                        {q.status === 'archived' ? (fr ? 'Désarchiver' : 'Unarchive') : (fr ? 'Archiver' : 'Archive')}
                       </button>
                       <button
                         onClick={() => { setMenuOpen(null); onDel(q.id); }}

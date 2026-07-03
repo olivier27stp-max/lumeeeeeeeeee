@@ -68,7 +68,9 @@ const statusColors: Record<string, string> = {
   declined: 'bg-red-100 text-red-700',
   expired: 'bg-gray-100 text-gray-500',
   awaiting_response: 'bg-amber-100 text-amber-700',
+  changes_requested: 'bg-red-100 text-red-700',
   converted: 'bg-green-100 text-green-700',
+  archived: 'bg-gray-100 text-gray-500',
 };
 
 const statusLabels: Record<string, string> = {
@@ -78,7 +80,8 @@ const statusLabels: Record<string, string> = {
   unscheduled: 'Unscheduled', action_required: 'Action Required',
   requires_invoicing: 'Requires Invoicing', cancelled: 'Cancelled',
   approved: 'Approved', declined: 'Declined', expired: 'Expired',
-  awaiting_response: 'Awaiting Response', converted: 'Converted',
+  awaiting_response: 'Awaiting Response', changes_requested: 'Changes Requested',
+  converted: 'Converted', archived: 'Archived',
 };
 
 function deriveInvoiceStatus(inv: { status: string; balance_cents: number; due_date: string | null }): string {
@@ -277,7 +280,7 @@ export default function ClientPortal() {
                       {q.status.replace('_', ' ')}
                     </span>
                     <span className="text-sm font-bold text-gray-900 tabular-nums">{formatMoney(q.total_cents)}</span>
-                    {q.view_token && ['sent', 'awaiting_response', 'action_required'].includes(q.status) && (
+                    {q.view_token && ['awaiting_response', 'changes_requested'].includes(q.status) && (
                       <a
                         href={`/quote/${q.view_token}`}
                         className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1"

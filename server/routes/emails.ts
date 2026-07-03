@@ -472,9 +472,9 @@ ${viewUrl ? `<div style="text-align:center;margin-bottom:16px;"><a href="${viewU
 
     await client
       .from('quotes')
-      .update({ status: 'sent' })
+      .update({ status: 'awaiting_response' })
       .eq('id', quoteId)
-      .in('status', ['draft', 'action_required']);
+      .in('status', ['draft', 'changes_requested']);
 
     return res.json({ ok: true, emailId: emailResult?.messageId || null });
   } catch (error: any) {

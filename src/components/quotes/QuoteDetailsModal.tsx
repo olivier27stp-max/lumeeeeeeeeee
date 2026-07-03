@@ -3,14 +3,14 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   X, MoreHorizontal, Mail, MessageSquare, Briefcase, Copy,
   Eye, Pen, Printer, FileSignature, Trash2, Clock, CheckCircle2,
-  MapPin, Phone as PhoneIcon, Mail as MailIcon, User, Calendar, ChevronDown,
+  MapPin, Phone as PhoneIcon, Mail as MailIcon, User, Calendar, ChevronDown, Archive,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { StatusBadge } from '../ui';
 import {
   type QuoteDetail, type QuoteStatus,
   QUOTE_STATUS_LABELS,
-  formatQuoteMoney, updateQuoteStatus, sendQuoteEmail, sendQuoteSms,
+  formatQuoteMoney, updateQuoteStatus, unarchiveQuote, sendQuoteEmail, sendQuoteSms,
   convertQuoteToJob, duplicateQuote, deleteQuote,
 } from '../../lib/quotesApi';
 import { toast } from 'sonner';
@@ -69,6 +69,12 @@ export default function QuoteDetailsModal({
     onRefresh();
   });
 
+  const handleUnarchive = () => handleAction(async () => {
+    await unarchiveQuote(quote.id);
+    toast.success('Quote unarchived.');
+    onRefresh();
+  });
+
   const handleConvert = () => handleAction(async () => {
     const { jobId } = await convertQuoteToJob(quote.id);
     toast.success('Quote converted to job.');
@@ -124,7 +130,7 @@ export default function QuoteDetailsModal({
               </button>
               {moreOpen && (
                 <div className="absolute right-0 top-full mt-1 w-56 bg-surface border border-outline rounded-xl shadow-xl z-50 py-1 text-sm">
-                  <button onClick={handleConvert} disabled={quote.status === 'converted' || busy}
+                  <button onClick={handleConvert} disabled={quote.status !== 'approved' || busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2 disabled:opacity-40">
                     <Briefcase size={14} /> Convert to Job
                   </button>
@@ -152,6 +158,17 @@ export default function QuoteDetailsModal({
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
                     <CheckCircle2 size={14} /> Approved
                   </button>
+                  {quote.status === 'archived' ? (
+                    <button onClick={handleUnarchive} disabled={busy}
+                      className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
+                      <Archive size={14} /> Unarchive
+                    </button>
+                  ) : (
+                    <button onClick={handleMarkStatus('archived')} disabled={busy}
+                      className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
+                      <Archive size={14} /> Archive
+                    </button>
+                  )}
                   <div className="border-t border-outline my-1" />
                   <button onClick={handlePreview}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">

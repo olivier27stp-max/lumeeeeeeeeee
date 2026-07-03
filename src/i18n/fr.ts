@@ -3161,6 +3161,7 @@ const fr: TranslationKeys = {
     closed_won: 'Gagné',
     closed_lost: 'Perdu',
     awaiting_response: 'En attente de réponse',
+    changes_requested: 'Changements demandés',
     approved: 'Approuvé',
     declined: 'Refusé',
     expired: 'Expiré',
