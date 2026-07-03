@@ -590,6 +590,7 @@ export default function Jobs() {
   const toggleOne = (id: string) => { const n = new Set(selectedJobIds); n.has(id) ? n.delete(id) : n.add(id); setSelectedJobIds(n); };
 
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!menuOpen) return;
@@ -645,7 +646,7 @@ export default function Jobs() {
       {/* ── TABLE (grid layout — identical structure to Clients & Devis) ── */}
       {/* dark interior pinned to #0e0e11 (= CRM page card color); white in light mode */}
       <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: '40px 1fr 1fr 1fr 1fr 100px 48px' }}>
+        <div className="grid" style={{ gridTemplateColumns: '40px 1fr 1fr 1fr 1fr 100px 48px' }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Titre' : 'Title'} {IconSort}</span></div>
@@ -675,24 +676,26 @@ export default function Jobs() {
 
           {/* ROWS */}
           {!loading && jobs.map(job => {
-            const rowCls = `border-b border-outline/30 transition-colors ${selectedJobIds.has(job.id) ? 'bg-[#f0f4ff]' : ''}`;
+            const isHovered = hoveredId === job.id;
+            const rowCls = `border-b border-outline/30 transition-colors duration-150 ${selectedJobIds.has(job.id) || isHovered ? 'bg-[#f0f4ff]' : ''}`;
             const click = () => handleJobClick(job);
+            const hover = () => setHoveredId(job.id);
             return (
               <React.Fragment key={job.id}>
-                <div className={`py-3 pl-4 flex items-center ${rowCls}`} onClick={e => e.stopPropagation()}>
+                <div className={`py-3 pl-4 flex items-center ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                   <input type="checkbox" checked={selectedJobIds.has(job.id)} onChange={() => toggleOne(job.id)} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
                 </div>
-                <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click}>
+                <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                   <div className="flex items-center gap-3 min-w-0">
                     <UnifiedAvatar id={job.client_id || job.id} name={job.client_name || job.title} />
                     <span className="text-[14px] text-text-primary truncate">{job.title}</span>
                   </div>
                 </div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-text-primary truncate">{job.client_name || '—'}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-text-primary tabular-nums truncate">{job.scheduled_at ? formatDate(job.scheduled_at) : (fr ? 'Non planifié' : 'Unscheduled')}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] font-semibold text-text-primary tabular-nums">{formatMoney(job)}</span></div>
-                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}><JobBadge status={job.status} /></div>
-                <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onClick={e => e.stopPropagation()}>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary truncate">{job.client_name || '—'}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{job.scheduled_at ? formatDate(job.scheduled_at) : (fr ? 'Non planifié' : 'Unscheduled')}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] font-semibold text-text-primary tabular-nums">{formatMoney(job)}</span></div>
+                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><JobBadge status={job.status} /></div>
+                <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                   <button
                     className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
                     onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === job.id ? null : job.id); }}

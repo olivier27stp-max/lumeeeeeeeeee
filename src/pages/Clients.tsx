@@ -573,8 +573,8 @@ export default function Clients() {
     return [...new Set(cities)].sort((a, b) => a.localeCompare(b));
   }, [items]);
 
-  // ── Row actions menu state ──
-  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  // ── Row hover state ── (highlight the whole row wherever the mouse is)
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -637,44 +637,39 @@ export default function Clients() {
 
       {/* ── TABLE ── */}
       <div className="border border-[var(--color-outline)] rounded-md bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: '40px 1.4fr 1.6fr 1.3fr 110px 130px 48px' }}>
+        <div className="grid" style={{ gridTemplateColumns: '1.4fr 1.6fr 1.3fr 110px 130px' }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
-          <div className="py-3 pl-4 border-b border-[var(--color-outline)] flex items-center"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="rounded-[3px] border-[var(--color-outline)] w-4 h-4 accent-[var(--color-text-primary)] cursor-pointer" /></div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Nom' : 'Name'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Adresse' : 'Address'}</div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Étiquettes' : 'Tags'}</div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Statut' : 'Status'}</div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Dernière activité' : 'Last activity'}</div>
-          <div className="py-3 border-b border-[var(--color-outline)]" />
 
           {/* LOADING */}
           {loading && Array.from({ length: 10 }).map((_, i) => (
             <React.Fragment key={`sk-${i}`}>
-              <div className="py-3 pl-4 border-b border-[var(--color-surface-tertiary)] flex items-center"><div className="w-4 h-4 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-24 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-28 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-14 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
-              <div className="py-3 border-b border-[var(--color-surface-tertiary)]" />
             </React.Fragment>
           ))}
 
           {/* EMPTY */}
           {!loading && displayItems.length === 0 && (
-            <div className="col-span-7 py-20 text-center text-[14px] text-[var(--color-text-tertiary)]">{t.clients.noClientsFound}</div>
+            <div className="col-span-5 py-20 text-center text-[14px] text-[var(--color-text-tertiary)]">{t.clients.noClientsFound}</div>
           )}
 
           {/* ROWS */}
           {!loading && displayItems.map(item => {
-            const rowCls = `border-b border-[var(--color-surface-tertiary)] transition-colors ${selectedIds.has(item.id) ? 'bg-[var(--color-primary-light)]' : ''}`;
+            const isHovered = hoveredId === item.id;
+            const rowCls = `border-b border-[var(--color-surface-tertiary)] transition-colors duration-150 cursor-pointer ${isHovered ? 'bg-[var(--color-primary-light)]' : ''}`;
             const click = () => navigate(`/clients/${item.id}`);
+            const hover = () => setHoveredId(item.id);
             return (
               <React.Fragment key={item.id}>
-                <div className={`py-3 pl-4 flex items-center ${rowCls}`} onClick={e => e.stopPropagation()}>
-                  <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} className="rounded-[3px] border-[var(--color-outline)] w-4 h-4 accent-[var(--color-text-primary)] cursor-pointer" />
-                </div>
-                <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click}>
+                <div className={`py-3 px-4 flex items-center min-w-0 ${rowCls}`} onClick={click} onMouseEnter={hover}>
                   <div className="flex items-center gap-3 min-w-0">
                     <UnifiedAvatar id={item.id} name={clientDisplayName(item)} />
                     <div className="min-w-0">
@@ -690,7 +685,7 @@ export default function Clients() {
                     </div>
                   </div>
                 </div>
-                <div className={`py-3 px-4 flex flex-col justify-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}>
+                <div className={`py-3 px-4 flex flex-col justify-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover}>
                   {(() => {
                     const line1 = [item.street_number, item.street_name].filter(Boolean).join(' ').trim() || item.address || '';
                     const line2 = [item.city, item.province, item.postal_code].filter(Boolean).join(', ').trim();
@@ -703,7 +698,7 @@ export default function Clients() {
                     );
                   })()}
                 </div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}>
+                <div className={`py-3 px-4 flex items-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover}>
                   {item.tags && item.tags.length > 0 ? (
                     <div className="flex items-center gap-1 overflow-hidden">
                       {item.tags.slice(0, 2).map((tag: string) => (
@@ -713,27 +708,8 @@ export default function Clients() {
                     </div>
                   ) : <span className="text-[14px] text-[var(--color-text-tertiary)]">—</span>}
                 </div>
-                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}><Badge status={item.status} /></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}><span className="text-[14px] text-[var(--color-text-secondary)] truncate">{item.last_activity ? formatLastActivity(item.last_activity, fr) : '—'}</span></div>
-                <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`}>
-                  <button className="p-1 rounded text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-tertiary)] transition-colors" onClick={e => { e.stopPropagation(); setActionMenuId(actionMenuId === item.id ? null : item.id); }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-                  </button>
-                  {actionMenuId === item.id && (
-                    <div className="absolute right-0 top-full mt-1 w-40 bg-surface-card border border-[var(--color-outline)] rounded-md shadow-lg z-50 py-1" onClick={e => e.stopPropagation()}>
-                      <button className="w-full text-left px-3 py-2 text-[13px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors flex items-center gap-2"
-                        onClick={() => { setActionMenuId(null); navigate(`/clients/${item.id}`); }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-                        {fr ? 'Modifier' : 'Edit client'}
-                      </button>
-                      <button className="w-full text-left px-3 py-2 text-[13px] text-[var(--color-danger)] hover:bg-[var(--color-danger-light)] transition-colors flex items-center gap-2"
-                        onClick={() => { setActionMenuId(null); setClientToDelete(item); }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                        {fr ? 'Supprimer' : 'Delete client'}
-                      </button>
-                    </div>
-                  )}
-                </div>
+                <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click} onMouseEnter={hover}><Badge status={item.status} /></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-[var(--color-text-secondary)] truncate">{item.last_activity ? formatLastActivity(item.last_activity, fr) : '—'}</span></div>
               </React.Fragment>
             );
           })}
@@ -743,7 +719,7 @@ export default function Clients() {
       {/* ── FOOTER: selection count + pagination ── */}
       <div className="flex items-center justify-between mt-3">
         <span className="text-[14px] text-[var(--color-text-secondary)]">
-          {t.common.rowsSelected.replace('{selected}', String(selectedIds.size)).replace('{total}', String(total))}
+          {total} {fr ? (total === 1 ? 'client' : 'clients') : (total === 1 ? 'client' : 'clients')}
         </span>
         <div className="flex items-center gap-2">
           <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}

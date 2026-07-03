@@ -1,15 +1,86 @@
-import React from 'react';
+import React, { useState } from 'react';
+import {
+  User,
+  CheckCircle,
+  PauseCircle,
+  XCircle,
+  Clock,
+  AlertCircle,
+  MinusCircle,
+  Circle,
+  Send,
+  Loader2,
+  type LucideIcon,
+} from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 
 type Variant = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
-const variantMap: Record<Variant, string> = {
-  success: 'badge-success',
-  warning: 'badge-warning',
-  danger: 'badge-danger',
-  info: 'badge-info',
-  neutral: 'badge-neutral',
+// Premium dark-gradient treatment per variant — enterprise SaaS status system.
+const variantStyle: Record<Variant, { bg: string; icon: string; defaultIcon: LucideIcon }> = {
+  success: { bg: 'linear-gradient(135deg, #0F5132 0%, #0A3822 100%)', icon: '#43D17B', defaultIcon: CheckCircle },
+  info:    { bg: 'linear-gradient(135deg, #1A1D24 0%, #0F1117 100%)', icon: '#4F8CFF', defaultIcon: Circle },
+  warning: { bg: 'linear-gradient(135deg, #3A2E12 0%, #241B08 100%)', icon: '#E0A93B', defaultIcon: Clock },
+  danger:  { bg: 'linear-gradient(135deg, #3A1618 0%, #241012 100%)', icon: '#E5565B', defaultIcon: XCircle },
+  neutral: { bg: 'linear-gradient(135deg, #3A3A3A 0%, #232323 100%)', icon: '#B5B5B5', defaultIcon: MinusCircle },
+};
+
+// Per-status icon overrides (keyed by normalized snake_case status).
+const statusIcons: Record<string, LucideIcon> = {
+  // Client
+  lead: User,
+  active: CheckCircle,
+  inactive: PauseCircle,
+  // Job
+  draft: Circle,
+  scheduled: Clock,
+  in_progress: Loader2,
+  completed: CheckCircle,
+  cancelled: XCircle,
+  late: AlertCircle,
+  unscheduled: MinusCircle,
+  requires_invoicing: AlertCircle,
+  action_required: AlertCircle,
+  upcoming: Clock,
+  // Invoice
+  sent: Send,
+  partial: Clock,
+  paid: CheckCircle,
+  void: XCircle,
+  past_due: AlertCircle,
+  overdue: AlertCircle,
+  // Quote
+  awaiting_response: Clock,
+  approved: CheckCircle,
+  declined: XCircle,
+  expired: MinusCircle,
+  converted: CheckCircle,
+  // Lead / pipeline
+  new: User,
+  new_prospect: User,
+  no_response: Clock,
+  quote_sent: Send,
+  closed_won: CheckCircle,
+  closed_lost: XCircle,
+  qualified: User,
+  contacted: User,
+  won: CheckCircle,
+  follow_up_1: Clock,
+  follow_up_2: Clock,
+  follow_up_3: Clock,
+  closed: CheckCircle,
+  lost: XCircle,
+  // Schedule
+  confirmed: CheckCircle,
+  tentative: Clock,
+  // Payment
+  succeeded: CheckCircle,
+  pending: Clock,
+  failed: XCircle,
+  refunded: MinusCircle,
+  // Misc
+  archived: MinusCircle,
 };
 
 // Common status → variant mapping for CRM entities
@@ -31,6 +102,7 @@ const statusVariants: Record<string, Variant> = {
   unscheduled: 'neutral',
   requires_invoicing: 'warning',
   action_required: 'danger',
+  upcoming: 'info',
   // Job (display labels — for StatusBadge receiving formatted strings)
   'Draft': 'neutral',
   'Scheduled': 'info',
@@ -41,6 +113,7 @@ const statusVariants: Record<string, Variant> = {
   'Unscheduled': 'neutral',
   'Requires Invoicing': 'warning',
   'Action Required': 'danger',
+  'Upcoming': 'info',
   'Ending within 30 days': 'warning',
 
   // ── Invoice ──
@@ -107,31 +180,77 @@ const statusVariants: Record<string, Variant> = {
   pending: 'warning',
   failed: 'danger',
   refunded: 'neutral',
+
+  // ── Misc ──
+  archived: 'neutral',
 };
+
+const BASE_SHADOW = '0 4px 12px rgba(0,0,0,0.20)';
+const HOVER_SHADOW = '0 8px 20px rgba(0,0,0,0.28)';
 
 interface StatusBadgeProps {
   status: string;
   variant?: Variant;
+  /** @deprecated the premium badge always renders an icon; kept for API compatibility */
   dot?: boolean;
   className?: string;
 }
 
-export default function StatusBadge({ status, variant, dot = true, className }: StatusBadgeProps) {
+export default function StatusBadge({ status, variant, className }: StatusBadgeProps) {
   const { t } = useTranslation();
+  const [hovered, setHovered] = useState(false);
+
   const resolvedVariant = variant || statusVariants[status] || statusVariants[status.toLowerCase()] || 'neutral';
-  // Try to translate via t.status.<key>. Match snake_case key, or convert "Foo Bar" → foo_bar
+  // Normalize to a snake_case key: "Foo Bar" → foo_bar, "past-due" → past_due
   const key = status.includes(' ')
     ? status.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_')
-    : status.toLowerCase();
+    : status.toLowerCase().replace(/-/g, '_');
+
   const translated = (t as any).status?.[key];
   const label = translated || status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
+  const style = variantStyle[resolvedVariant];
+  const Icon = statusIcons[key] || style.defaultIcon;
+
   return (
-    <span className={cn(variantMap[resolvedVariant], className)}>
-      {dot && (
-        <span className="w-[5px] h-[5px] rounded-full bg-current shrink-0 opacity-90" />
-      )}
-      {label}
+    <span
+      className={className}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: 24,
+        minWidth: 92,
+        padding: '0 8px',
+        borderRadius: 999,
+        background: style.bg,
+        border: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: hovered ? HOVER_SHADOW : BASE_SHADOW,
+        transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
+        transition: 'all 0.18s ease',
+        whiteSpace: 'nowrap',
+        userSelect: 'none',
+      }}
+    >
+      <Icon size={12} color={style.icon} strokeWidth={2.25} aria-hidden />
+      <span
+        aria-hidden
+        style={{ width: 1, height: 11, background: 'rgba(255,255,255,0.12)', margin: '0 6px' }}
+      />
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: '#FFFFFF',
+          lineHeight: 1,
+        }}
+      >
+        {label}
+      </span>
     </span>
   );
 }

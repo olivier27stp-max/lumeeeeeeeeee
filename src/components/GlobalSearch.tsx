@@ -12,6 +12,7 @@ import {
   fetchSearchSuggestions,
 } from '../lib/globalSearchApi';
 import { cn } from '../lib/utils';
+import StatusBadge from './ui/StatusBadge';
 import {
   getCommandSuggestions,
   normalizeSearchQuery,
@@ -69,28 +70,6 @@ const ENTITY_COLORS: Record<SearchEntityType, string> = {
   request: 'text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-500/10',
   team: 'text-neutral-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-500/10',
   event: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10',
-};
-
-const STATUS_BADGE_COLORS: Record<string, string> = {
-  paid: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-  draft: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400',
-  sent: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/15 dark:text-neutral-400',
-  overdue: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400',
-  approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-  declined: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400',
-  completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-  cancelled: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400',
-  scheduled: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/15 dark:text-neutral-400',
-  'in progress': 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
-  active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-  new: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/15 dark:text-neutral-400',
-  action_required: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
-  void: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-500/15 dark:text-neutral-500',
-  partial: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
-  awaiting_response: 'bg-surface-secondary text-text-secondary',
-  converted: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-  expired: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-500/15 dark:text-neutral-500',
-  unscheduled: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400',
 };
 
 // ── Quick Actions ──
@@ -155,16 +134,6 @@ function formatShortDate(dateStr: string | null | undefined) {
     if (isNaN(d.getTime())) return null;
     return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
   } catch { return null; }
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const display = status.replace(/_/g, ' ');
-  const colorClass = STATUS_BADGE_COLORS[status.toLowerCase()] || STATUS_BADGE_COLORS[display.toLowerCase()] || 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400';
-  return (
-    <span className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide leading-none', colorClass)}>
-      {display}
-    </span>
-  );
 }
 
 // ── Entity groups order ──

@@ -169,6 +169,7 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
   const [searchParams, setSearchParams] = useSearchParams();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [mainTab, setMainTab] = useState<MainTab>('invoices');
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -538,7 +539,7 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
         <>
           {/* ── TABLE (CSS Grid — identical pattern to Jobs & Clients) ── */}
           <div className="border border-outline rounded-md overflow-x-auto bg-white dark:bg-[#0e0e11]">
-            <div className="grid min-w-[860px]" style={{ gridTemplateColumns: INVOICE_GRID_COLUMNS }}>
+            <div className="grid min-w-[860px]" style={{ gridTemplateColumns: INVOICE_GRID_COLUMNS }} onMouseLeave={() => setHoveredId(null)}>
               {/* HEADER */}
               <div className="py-3 pl-4 border-b border-outline flex items-center">
                 <input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
@@ -613,18 +614,20 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
                 const client = clientMap[row.client_id];
                 const isMenuOpen = actionMenuId === row.id;
                 const isSelected = selectedIds.has(row.id);
-                const rowCls = `border-b border-outline/30 transition-colors ${isSelected ? 'bg-[#f0f4ff]' : ''}`;
+                const isHovered = hoveredId === row.id;
+                const rowCls = `border-b border-outline/30 transition-colors duration-150 ${isSelected || isHovered ? 'bg-[#f0f4ff]' : ''}`;
                 const click = () => navigate(`/invoices/${row.id}`);
+                const hover = () => setHoveredId(row.id);
                 const isPastDue = uiStatus === 'past_due';
 
                 return (
                   <React.Fragment key={row.id}>
                     {/* Checkbox */}
-                    <div className={`py-3 pl-4 flex items-center ${rowCls}`} onClick={e => e.stopPropagation()}>
+                    <div className={`py-3 pl-4 flex items-center ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                       <input type="checkbox" checked={isSelected} onChange={() => toggleOne(row.id)} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
                     </div>
                     {/* Client */}
-                    <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click}>
+                    <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                       <div className="flex items-center gap-3 min-w-0">
                         <UnifiedAvatar id={row.client_id || row.id} name={row.client_name || '?'} />
                         <div className="min-w-0">
@@ -636,11 +639,11 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
                       </div>
                     </div>
                     {/* Invoice # */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                       <span className="text-[13px] text-text-muted tabular-nums font-medium">{row.invoice_number}</span>
                     </div>
                     {/* Due date */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                       <span className={cn(
                         'text-[13px] tabular-nums font-medium',
                         isPastDue ? 'text-[#dc2626]' : 'text-text-muted'
@@ -649,21 +652,21 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
                       </span>
                     </div>
                     {/* Subject (default "Pour service rendu") */}
-                    <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click}>
+                    <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                       <span className="text-[13px] text-text-secondary truncate">
                         {row.subject || (fr ? DEFAULT_INVOICE_SUBJECT_FR : DEFAULT_INVOICE_SUBJECT_EN)}
                       </span>
                     </div>
                     {/* Status */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click}>
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                       <InvoiceBadge status={uiStatus} fr={fr} />
                     </div>
                     {/* Total */}
-                    <div className={`py-3 px-4 flex items-center justify-end cursor-pointer ${rowCls}`} onClick={click}>
+                    <div className={`py-3 px-4 flex items-center justify-end cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                       <span className="text-[14px] font-semibold text-text-primary tabular-nums">{formatMoneyFromCents(row.total_cents)}</span>
                     </div>
                     {/* Balance */}
-                    <div className={`py-3 px-4 flex items-center justify-end cursor-pointer ${rowCls}`} onClick={click}>
+                    <div className={`py-3 px-4 flex items-center justify-end cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                       <span className={cn(
                         'text-[13px] font-medium tabular-nums',
                         row.balance_cents === 0 ? 'text-text-muted' : isPastDue ? 'text-[#dc2626]' : 'text-text-primary'
@@ -672,7 +675,7 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
                       </span>
                     </div>
                     {/* Actions */}
-                    <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`}>
+                    <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onMouseEnter={hover}>
                       <button
                         className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
                         onClick={e => { e.stopPropagation(); setActionMenuId(isMenuOpen ? null : row.id); }}
