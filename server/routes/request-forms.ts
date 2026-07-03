@@ -4,6 +4,7 @@ import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { validate, upsertRequestFormSchema, publicFormSubmissionSchema } from '../lib/validation';
 import { ensureClientForLead } from '../lib/leadClientSync';
+import { upsertLeadPinForClient } from '../lib/fieldPinSync';
 import { eventBus } from '../lib/eventBus';
 
 const router = Router();
@@ -384,19 +385,30 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     let dealId: string | null = existingDeal?.id ? String(existingDeal.id) : null;
 
     if (!dealId) {
-      const { data: dealInsert, error: dealError } = await admin
+      const dealRow = {
+        org_id: orgId,
+        created_by: actorId,
+        lead_id: leadIdStr,
+        stage: 'new_prospect',
+        title: body.company || fullName,
+        value: 0,
+        notes: fullNotes,
+      };
+      let { data: dealInsert, error: dealError } = await admin
         .from('pipeline_deals')
-        .insert({
-          org_id: orgId,
-          created_by: actorId,
-          lead_id: leadIdStr,
-          stage: 'new',
-          title: body.company || fullName,
-          value: 0,
-          notes: fullNotes,
-        })
+        .insert(dealRow)
         .select('id')
         .single();
+
+      // 23514 = CHECK violation: DB still on legacy stage slugs (migration
+      // 20260703200000 not applied yet) — retry with the legacy value.
+      if (dealError?.code === '23514') {
+        ({ data: dealInsert, error: dealError } = await admin
+          .from('pipeline_deals')
+          .insert({ ...dealRow, stage: 'new' })
+          .select('id')
+          .single());
+      }
 
       if (dealError) {
         // Roll back lead-client on deal failure
@@ -406,18 +418,19 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
       dealId = dealInsert?.id ? String(dealInsert.id) : null;
     }
 
-    // 3b. Promote the prospect to a full client automatically.
-    // ensure_client_for_lead creates the client with status 'lead'; a request-form
-    // submission is an inbound prospect we want to surface as an active client.
-    const { error: promoteErr } = await admin
-      .from('clients')
-      .update({ status: 'active', updated_at: new Date().toISOString() })
-      .eq('id', clientId)
-      .eq('org_id', orgId);
-    if (promoteErr) {
-      console.error('[public/form] client promotion failed:', promoteErr.message);
-      // Non-fatal — lead/deal/client already exist
-    }
+    // 3b. Drop a 'lead' pin on the field-sales map (geocoded from the form
+    // address). Non-fatal — the helper never throws. The pin then follows the
+    // client status via the trg_clients_sync_field_pin DB trigger.
+    step = 'map-pin';
+    const pinResult = await upsertLeadPinForClient(admin, {
+      orgId,
+      actorId,
+      clientId: leadIdStr,
+      address: address || '',
+      customerName: fullName,
+      customerPhone: body.phone || null,
+      customerEmail: body.email || null,
+    });
 
     // 4. Save submission record
     step = 'submission-record';
@@ -463,7 +476,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
       metadata: { name: fullName, email: body.email, phone: body.phone, source: 'request_form' },
     });
 
-    console.info('[public/form] submission processed', { orgId, leadId: leadIdStr, dealId, formId: form.id });
+    console.info('[public/form] submission processed', { orgId, leadId: leadIdStr, dealId, houseId: pinResult?.houseId || null, formId: form.id });
 
     return res.json({ ok: true, submission_id: submission?.id || null });
   } catch (err: any) {
