@@ -9,9 +9,39 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 
+function normalizePhoneDigits(phone?: string | null): string {
+  return (phone || '').replace(/[^0-9]+/g, '');
+}
+
+/**
+ * Find an active client in the org whose phone matches after normalization.
+ * Mirrors the DB unique index uq_clients_org_phone_notnull on
+ * (org_id, regexp_replace(phone, '[^0-9]+', '', 'g')) — an insert that would
+ * collide with it must resolve to this client instead.
+ */
+async function findActiveClientByPhone(
+  client: SupabaseClient,
+  orgId: string,
+  phone?: string | null
+): Promise<string | null> {
+  const digits = normalizePhoneDigits(phone);
+  if (!digits) return null;
+  const { data } = await client
+    .from('clients')
+    .select('id, phone')
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
+    .not('phone', 'is', null)
+    .limit(5000);
+  const match = (data || []).find((c: any) => normalizePhoneDigits(c.phone) === digits);
+  return match ? String(match.id) : null;
+}
+
 /**
  * Ensure a client record exists for a lead.
  * - If a client with the same email already exists in the org, returns that client_id.
+ * - Else if a client with the same (normalized) phone exists, returns that client_id
+ *   — the DB enforces per-org phone uniqueness, so inserting would fail anyway.
  * - Otherwise, creates a new client with status='lead'.
  */
 export async function ensureClientForLead(
@@ -42,6 +72,9 @@ export async function ensureClientForLead(
     if (existing?.id) return String(existing.id);
   }
 
+  const byPhone = await findActiveClientByPhone(client, params.orgId, params.phone);
+  if (byPhone) return byPhone;
+
   const { data, error } = await client
     .from('clients')
     .insert({
@@ -59,7 +92,26 @@ export async function ensureClientForLead(
     .select('id')
     .single();
 
-  if (error) throw error;
+  if (error) {
+    // 23505 = unique violation — a concurrent request (double-submit) created
+    // the client between our lookups and the insert. Resolve to that row.
+    if ((error as any).code === '23505') {
+      if (email) {
+        const { data: byEmail } = await client
+          .from('clients')
+          .select('id')
+          .eq('org_id', params.orgId)
+          .ilike('email', email)
+          .is('deleted_at', null)
+          .limit(1)
+          .maybeSingle();
+        if (byEmail?.id) return String(byEmail.id);
+      }
+      const retryPhone = await findActiveClientByPhone(client, params.orgId, params.phone);
+      if (retryPhone) return retryPhone;
+    }
+    throw error;
+  }
   if (!data) throw new Error('Failed to create client for lead');
   return String(data.id);
 }
