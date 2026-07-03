@@ -1421,3 +1421,17 @@ body.dark input::placeholder,
 body.dark textarea::placeholder {
   color: rgba(255, 255, 255, 0.55);
 }
+
+/* ══════════════════════════════════════════════════════
+   CRM TABLE ROW HOVER — uniform full-row selection tint.
+   Applied to every cell of a hovered row (grid cells can't
+   be targeted by a CSS row :hover, so JS toggles this class).
+   Clearly visible in both light and dark themes.
+   ══════════════════════════════════════════════════════ */
+.crm-row-hover {
+  background-color: rgba(37, 99, 235, 0.10);
+}
+.dark .crm-row-hover,
+body.dark .crm-row-hover {
+  background-color: rgba(96, 165, 250, 0.16);
+}

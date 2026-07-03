@@ -46,7 +46,7 @@ import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
 import QuoteDetailsModal from '../components/quotes/QuoteDetailsModal';
 import SpecificNotes from '../components/SpecificNotes';
-import { getQuoteById, formatQuoteMoney, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, type QuoteDetail, type Quote } from '../lib/quotesApi';
+import { getQuoteById, formatQuoteMoney, type QuoteDetail, type Quote } from '../lib/quotesApi';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface JobRecord {
@@ -829,9 +829,7 @@ export default function ClientDetails() {
                             <p className="text-[13px] font-semibold text-text-primary group-hover:text-primary transition-colors">
                               {q.title || 'Quote'}
                             </p>
-                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${QUOTE_STATUS_COLORS[q.status] || 'bg-neutral-100 text-neutral-600'}`}>
-                              {QUOTE_STATUS_LABELS[q.status] || q.status}
-                            </span>
+                            <StatusBadge status={q.status} />
                           </div>
                           <span className="text-[12px] text-text-tertiary">{formatDate(q.created_at)}</span>
                         </div>
@@ -913,9 +911,7 @@ export default function ClientDetails() {
                             {event.end_at && ` — ${formatTime(event.end_at)}`}
                           </p>
                           {event.status && (
-                            <span className="inline-flex items-center rounded-full bg-primary/10 text-primary text-[10px] font-semibold px-2 py-0.5 mt-0.5">
-                              {event.status}
-                            </span>
+                            <div className="mt-1"><StatusBadge status={event.status} /></div>
                           )}
                         </div>
                       </div>
