@@ -33,7 +33,7 @@ function QuickActions({ phone, email, className, size = 'md', onSms, onEmail }: 
         <>
           <a
             href={`tel:${phone}`}
-            className={cn(btnClass, 'text-text-tertiary hover:text-primary hover:bg-primary/10 transition-colors')}
+            className={cn(btnClass, 'md:hidden text-text-tertiary hover:text-primary hover:bg-primary/10 transition-colors')}
             title={`Call ${phone}`}
           >
             <Phone size={iconSize} />

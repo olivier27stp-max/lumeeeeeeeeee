@@ -164,9 +164,14 @@ export default function ClientPortal() {
               )}
             </div>
             {data.company.company_phone && (
-              <a href={`tel:${data.company.company_phone}`} className="text-sm text-gray-500 hover:text-gray-700">
-                {data.company.company_phone}
-              </a>
+              <>
+                <a href={`tel:${data.company.company_phone}`} className="md:hidden text-sm text-gray-500 hover:text-gray-700">
+                  {data.company.company_phone}
+                </a>
+                <span className="hidden md:inline text-sm text-gray-500">
+                  {data.company.company_phone}
+                </span>
+              </>
             )}
           </div>
         </div>

@@ -562,7 +562,7 @@ export default function ClientDetails() {
             {/* Action buttons */}
             <div className="flex items-center gap-2 flex-wrap">
               {client.phone && (
-                <a href={`tel:${client.phone}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title={t.clientDetails.call}>
+                <a href={`tel:${client.phone}`} className="md:hidden inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title={t.clientDetails.call}>
                   <Phone size={14} /> {t.clientDetails.call}
                 </a>
               )}
@@ -682,7 +682,8 @@ export default function ClientDetails() {
                     {client.phone ? (
                       <span className="inline-flex items-center gap-1.5 text-[13px] text-text-secondary">
                         <Phone size={12} className="text-text-tertiary" />
-                        <a href={`tel:${client.phone}`} className="hover:text-primary transition-colors">{displayPhone(client.phone)}</a>
+                        <a href={`tel:${client.phone}`} className="md:hidden hover:text-primary transition-colors">{displayPhone(client.phone)}</a>
+                        <span className="hidden md:inline">{displayPhone(client.phone)}</span>
                         <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
                           <Copy size={11} />
                         </button>
@@ -966,7 +967,8 @@ export default function ClientDetails() {
                 </div>
                 {client.phone ? (
                   <div className="flex items-center gap-2 pl-5">
-                    <a href={`tel:${client.phone}`} className="text-[13px] font-medium text-text-primary hover:text-primary transition-colors">{displayPhone(client.phone)}</a>
+                    <a href={`tel:${client.phone}`} className="md:hidden text-[13px] font-medium text-text-primary hover:text-primary transition-colors">{displayPhone(client.phone)}</a>
+                    <span className="hidden md:inline text-[13px] font-medium text-text-primary">{displayPhone(client.phone)}</span>
                     <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
                       <Copy size={11} />
                     </button>

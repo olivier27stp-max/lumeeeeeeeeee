@@ -190,7 +190,7 @@ export function createLeadPinPopupHTML(
         ">${svgIcon(cfg.iconPaths, 10, true)} ${cfg.label}</span>
       </div>
       <div style="font-size:14px;font-weight:600;color:#fff;">${pin.name}</div>
-      ${pin.phone ? `<div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:4px;">📞 <a href="tel:${pin.phone}" style="color:#60a5fa;text-decoration:none;">${pin.phone}</a></div>` : ''}
+      ${pin.phone ? `<div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:4px;">📞 <a href="tel:${pin.phone}" class="md:hidden" style="color:#60a5fa;text-decoration:none;">${pin.phone}</a><span class="hidden md:inline">${pin.phone}</span></div>` : ''}
       ${pin.email ? `<div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px;">✉️ <a href="mailto:${pin.email}" style="color:#60a5fa;text-decoration:none;">${pin.email}</a></div>` : ''}
       <div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:5px;">📍 ${pin.address}</div>
       ${pin.note ? `<div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:6px;padding:6px 8px;background:rgba(255,255,255,.04);border-radius:6px;border:1px solid rgba(255,255,255,.06);line-height:1.4;">📝 ${pin.note}</div>` : ''}

@@ -419,7 +419,7 @@ export default function D2DRepProfile() {
               <MessageSquare size={16} strokeWidth={2.5} />
               Message
             </Link>
-            <ActionBtn icon={Phone} href={p.phone ? `tel:${p.phone}` : undefined} />
+            <ActionBtn icon={Phone} href={p.phone ? `tel:${p.phone}` : undefined} className="md:hidden" />
             <ActionBtn icon={Mail} href={p.email ? `mailto:${p.email}` : undefined} />
             <ActionBtn icon={Settings} />
           </div>
@@ -591,8 +591,8 @@ export default function D2DRepProfile() {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function ActionBtn({ icon: Icon, href }: { icon: React.ComponentType<{ size: number; className?: string }>; href?: string }) {
-  const cls = "flex h-10 w-10 items-center justify-center rounded-xl border border-outline transition-all duration-200 hover:scale-110 hover:bg-surface-secondary active:scale-95";
+function ActionBtn({ icon: Icon, href, className }: { icon: React.ComponentType<{ size: number; className?: string }>; href?: string; className?: string }) {
+  const cls = `${className ? `${className} ` : ''}flex h-10 w-10 items-center justify-center rounded-xl border border-outline transition-all duration-200 hover:scale-110 hover:bg-surface-secondary active:scale-95`;
   if (href) {
     return <a href={href} className={cls}><Icon size={18} className="text-text-tertiary" /></a>;
   }

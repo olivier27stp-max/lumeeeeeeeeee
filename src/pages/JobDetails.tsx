@@ -612,10 +612,16 @@ export default function JobDetails() {
                 <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">Contact details</p>
                 <div className="space-y-1.5">
                   {clientInfo?.phone && (
-                    <a href={`tel:${clientInfo.phone}`} className="flex items-center gap-2 text-[13px] text-text-primary hover:text-text-secondary transition-colors">
-                      <Phone size={13} className="text-text-tertiary" />
-                      {displayPhone(clientInfo.phone)}
-                    </a>
+                    <>
+                      <a href={`tel:${clientInfo.phone}`} className="md:hidden flex items-center gap-2 text-[13px] text-text-primary hover:text-text-secondary transition-colors">
+                        <Phone size={13} className="text-text-tertiary" />
+                        {displayPhone(clientInfo.phone)}
+                      </a>
+                      <span className="hidden md:flex items-center gap-2 text-[13px] text-text-primary">
+                        <Phone size={13} className="text-text-tertiary" />
+                        {displayPhone(clientInfo.phone)}
+                      </span>
+                    </>
                   )}
                   {clientInfo?.email && (
                     <a href={`mailto:${clientInfo.email}`} className="flex items-center gap-2 text-[13px] text-text-primary hover:underline">

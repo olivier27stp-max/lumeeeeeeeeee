@@ -336,10 +336,14 @@ export default function Privacy() {
                   <Mail size={16} className="text-gray-400" />
                   {DPO_EMAIL}
                 </a>
-                <a href={`tel:${INCIDENT_PHONE.replace(/[\s-]/g, '')}`} className="flex items-center gap-2 text-sm text-gray-700 hover:text-black transition-colors">
+                <a href={`tel:${INCIDENT_PHONE.replace(/[\s-]/g, '')}`} className="md:hidden flex items-center gap-2 text-sm text-gray-700 hover:text-black transition-colors">
                   <Phone size={16} className="text-gray-400" />
                   {fr ? 'Astreinte incidents 24/7 : ' : '24/7 incident hotline: '}{INCIDENT_PHONE}
                 </a>
+                <span className="hidden md:flex items-center gap-2 text-sm text-gray-700">
+                  <Phone size={16} className="text-gray-400" />
+                  {fr ? 'Astreinte incidents 24/7 : ' : '24/7 incident hotline: '}{INCIDENT_PHONE}
+                </span>
               </div>
             </div>
           </Section>

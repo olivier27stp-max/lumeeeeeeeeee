@@ -196,9 +196,14 @@ export default function Requests() {
                     </a>
                   )}
                   {s.phone && (
-                    <a href={`tel:${s.phone}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 hover:text-text-primary">
-                      <Phone className="h-3.5 w-3.5 text-text-muted" /> {s.phone}
-                    </a>
+                    <>
+                      <a href={`tel:${s.phone}`} onClick={(e) => e.stopPropagation()} className="md:hidden flex items-center gap-1.5 hover:text-text-primary">
+                        <Phone className="h-3.5 w-3.5 text-text-muted" /> {s.phone}
+                      </a>
+                      <span className="hidden md:flex items-center gap-1.5">
+                        <Phone className="h-3.5 w-3.5 text-text-muted" /> {s.phone}
+                      </span>
+                    </>
                   )}
                   {addr && (
                     <span className="flex items-center gap-1.5">
@@ -375,7 +380,10 @@ function ClientHeader({ submission: s }: { submission: FormSubmission }) {
       )}
 
       {s.phone && (
-        <a href={`tel:${s.phone}`} className="block text-sm text-text-secondary hover:text-primary">{s.phone}</a>
+        <>
+          <a href={`tel:${s.phone}`} className="md:hidden block text-sm text-text-secondary hover:text-primary">{s.phone}</a>
+          <span className="hidden md:block text-sm text-text-secondary">{s.phone}</span>
+        </>
       )}
       {s.email && (
         <a href={`mailto:${s.email}`} className="block break-words text-sm text-primary hover:underline">{s.email}</a>

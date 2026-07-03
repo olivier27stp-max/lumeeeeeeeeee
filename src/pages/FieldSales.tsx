@@ -940,7 +940,7 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
         <div className="flex gap-1.5 mt-3">
           {editPhone && (
             <>
-              <a href={`tel:${editPhone}`} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-semibold hover:bg-green-500/20 transition-colors">
+              <a href={`tel:${editPhone}`} className="md:hidden flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-semibold hover:bg-green-500/20 transition-colors">
                 <PhoneIcon size={12} /> {language === 'fr' ? 'Appeler' : 'Call'}
               </a>
               <a href={`sms:${editPhone}`} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-semibold hover:bg-blue-500/20 transition-colors">
@@ -1003,7 +1003,10 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
             )}
             <div className="flex gap-4">
               {editPhone ? (
-                <a href={`tel:${editPhone}`} className="text-[11px] text-primary flex items-center gap-1 hover:underline"><PhoneIcon size={10} />{editPhone}</a>
+                <>
+                  <a href={`tel:${editPhone}`} className="md:hidden text-[11px] text-primary flex items-center gap-1 hover:underline"><PhoneIcon size={10} />{editPhone}</a>
+                  <span className="hidden md:flex text-[11px] text-text-secondary items-center gap-1"><PhoneIcon size={10} />{editPhone}</span>
+                </>
               ) : (
                 <span className="text-[11px] text-text-tertiary flex items-center gap-1"><PhoneIcon size={10} />—</span>
               )}

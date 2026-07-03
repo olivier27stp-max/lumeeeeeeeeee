@@ -857,7 +857,7 @@ export default function Timesheets() {
                     <div><p className="text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{fr ? 'Dernière activité' : 'Last activity'}</p><p className="text-[14px] font-medium text-text-primary mt-1">{new Date(selectedRep.recorded_at).toLocaleTimeString()}</p></div>
                   </div>
                   <div className="p-4 border-t border-outline space-y-2">
-                    <a href={`tel:${selectedRep.user_name}`} className="w-full flex items-center justify-center gap-2 h-9 rounded-md bg-surface-card border border-outline text-text-primary text-[13px] font-medium hover:bg-surface-secondary transition-colors"><Phone size={13} /> {fr ? 'Contacter' : 'Contact'}</a>
+                    <a href={`tel:${selectedRep.user_name}`} className="md:hidden w-full flex items-center justify-center gap-2 h-9 rounded-md bg-surface-card border border-outline text-text-primary text-[13px] font-medium hover:bg-surface-secondary transition-colors"><Phone size={13} /> {fr ? 'Contacter' : 'Contact'}</a>
                     <button onClick={() => setHubTab('feuilles')} className="w-full flex items-center justify-center gap-2 h-9 rounded-md bg-surface-card border border-outline text-text-primary text-[13px] font-medium hover:bg-surface-secondary transition-colors"><Eye size={13} /> {fr ? 'Voir feuille de temps' : 'View timesheet'}</button>
                   </div>
                 </motion.div>
