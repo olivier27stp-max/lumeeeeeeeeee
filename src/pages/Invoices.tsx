@@ -615,7 +615,7 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
                 const isMenuOpen = actionMenuId === row.id;
                 const isSelected = selectedIds.has(row.id);
                 const isHovered = hoveredId === row.id;
-                const rowCls = `border-b border-outline/30 transition-colors duration-150 ${isSelected || isHovered ? 'bg-[#f0f4ff]' : ''}`;
+                const rowCls = `border-b border-outline/30 transition-colors duration-150 ${isSelected ? 'bg-[#f0f4ff]' : isHovered ? 'crm-row-hover' : ''}`;
                 const click = () => navigate(`/invoices/${row.id}`);
                 const hover = () => setHoveredId(row.id);
                 const isPastDue = uiStatus === 'past_due';

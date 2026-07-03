@@ -677,7 +677,7 @@ export default function Jobs() {
           {/* ROWS */}
           {!loading && jobs.map(job => {
             const isHovered = hoveredId === job.id;
-            const rowCls = `border-b border-outline/30 transition-colors duration-150 ${selectedJobIds.has(job.id) || isHovered ? 'bg-[#f0f4ff]' : ''}`;
+            const rowCls = `border-b border-outline/30 transition-colors duration-150 ${selectedJobIds.has(job.id) ? 'bg-[#f0f4ff]' : isHovered ? 'crm-row-hover' : ''}`;
             const click = () => handleJobClick(job);
             const hover = () => setHoveredId(job.id);
             return (

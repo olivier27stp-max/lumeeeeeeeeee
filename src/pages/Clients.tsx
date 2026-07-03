@@ -664,7 +664,7 @@ export default function Clients() {
           {/* ROWS */}
           {!loading && displayItems.map(item => {
             const isHovered = hoveredId === item.id;
-            const rowCls = `border-b border-[var(--color-surface-tertiary)] transition-colors duration-150 cursor-pointer ${isHovered ? 'bg-[var(--color-primary-light)]' : ''}`;
+            const rowCls = `border-b border-[var(--color-surface-tertiary)] transition-colors duration-150 cursor-pointer ${isHovered ? 'crm-row-hover' : ''}`;
             const click = () => navigate(`/clients/${item.id}`);
             const hover = () => setHoveredId(item.id);
             return (

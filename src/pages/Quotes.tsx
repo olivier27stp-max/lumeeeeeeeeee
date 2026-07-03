@@ -308,7 +308,7 @@ export default function Quotes() {
           {/* ROWS */}
           {!isLoading && sorted.map(q => {
             const isHovered = hoveredId === q.id;
-            const rowCls = `border-b border-outline/30 transition-colors duration-150 ${sel.has(q.id) || isHovered ? 'bg-primary-light' : ''}`;
+            const rowCls = `border-b border-outline/30 transition-colors duration-150 ${sel.has(q.id) ? 'bg-primary-light' : isHovered ? 'crm-row-hover' : ''}`;
             const click = () => nav(`/quotes/${q.id}`);
             const hover = () => setHoveredId(q.id);
             return (
