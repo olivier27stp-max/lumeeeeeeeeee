@@ -15,6 +15,8 @@ export interface PublicForm {
   description: string | null;
   success_message: string;
   enabled: boolean;
+  /** Form logo (custom, or the company logo as default). */
+  logo_url: string | null;
   custom_fields: FormField[];
 }
 

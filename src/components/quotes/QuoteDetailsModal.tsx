@@ -6,9 +6,10 @@ import {
   MapPin, Phone as PhoneIcon, Mail as MailIcon, User, Calendar, ChevronDown,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { StatusBadge } from '../ui';
 import {
   type QuoteDetail, type QuoteStatus,
-  QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS,
+  QUOTE_STATUS_LABELS,
   formatQuoteMoney, updateQuoteStatus, sendQuoteEmail, sendQuoteSms,
   convertQuoteToJob, duplicateQuote, deleteQuote,
 } from '../../lib/quotesApi';
@@ -109,12 +110,7 @@ export default function QuoteDetailsModal({
         {/* Header */}
         <div className="px-6 py-5 border-b border-outline flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className={cn(
-              'px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border',
-              QUOTE_STATUS_COLORS[quote.status as QuoteStatus] || QUOTE_STATUS_COLORS.draft
-            )}>
-              {QUOTE_STATUS_LABELS[quote.status as QuoteStatus] || quote.status}
-            </span>
+            <StatusBadge status={quote.status} />
             {quote.context_type === 'lead' && (
               <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-surface-tertiary text-text-primary border border-outline">Lead</span>
             )}

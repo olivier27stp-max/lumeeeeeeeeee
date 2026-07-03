@@ -25,6 +25,7 @@ export async function upsertRequestForm(payload: {
   description?: string | null;
   success_message: string;
   enabled?: boolean;
+  logo_url?: string | null;
   custom_fields?: RequestForm['custom_fields'];
   notify_email?: boolean;
   notify_in_app?: boolean;

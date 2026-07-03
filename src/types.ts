@@ -223,6 +223,8 @@ export interface RequestForm {
   description: string | null;
   success_message: string;
   enabled: boolean;
+  /** Custom form logo; NULL falls back to company_settings.logo_url. */
+  logo_url: string | null;
   custom_fields: FormField[];
   notify_email: boolean;
   notify_in_app: boolean;

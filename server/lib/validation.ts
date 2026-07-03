@@ -318,6 +318,7 @@ export const upsertRequestFormSchema = z.object({
   description: optionalString,
   success_message: z.string().trim().min(1, 'success_message is required.'),
   enabled: z.boolean().optional(),
+  logo_url: z.string().trim().url().nullable().optional(),
   custom_fields: z.array(formFieldSchema).optional().default([]),
   notify_email: z.boolean().optional(),
   notify_in_app: z.boolean().optional(),

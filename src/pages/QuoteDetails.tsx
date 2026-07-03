@@ -15,11 +15,12 @@ import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
 import {
   getQuoteById, updateQuote, saveQuoteLineItems, type QuoteDetail,
-  type QuoteStatus, type QuoteLineItemInput, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, getQuoteStatusLabel,
+  type QuoteStatus, type QuoteLineItemInput,
   formatQuoteMoney, updateQuoteStatus, sendQuoteEmail, sendQuoteSms,
   convertQuoteToJob, convertQuoteToInvoice, duplicateQuote, deleteQuote,
 } from '../lib/quotesApi';
 import { supabase } from '../lib/supabase';
+import { StatusBadge } from '../components/ui';
 import { downloadQuotePdf } from '../lib/generateQuotePdf';
 import { getCompanySettings } from '../lib/invoicesApi';
 import QuoteRenderer from '../components/quote/QuoteRenderer';
@@ -211,11 +212,7 @@ export default function QuoteDetails() {
           <div className="flex items-center gap-3 mb-3">
             <button onClick={() => navigate('/quotes')} className="text-text-tertiary hover:text-text-primary transition-colors"><ArrowLeft size={16} /></button>
             <FileText size={16} className="text-text-tertiary" />
-            <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-medium border inline-flex items-center gap-1',
-              QUOTE_STATUS_COLORS[quote.status as QuoteStatus] || QUOTE_STATUS_COLORS.draft)}>
-              <span className="w-1.5 h-1.5 rounded-full bg-current" />
-              {getQuoteStatusLabel(quote.status as QuoteStatus, language) || quote.status}
-            </span>
+            <StatusBadge status={quote.status} />
           </div>
           {editing === 'title' ? (
             <div className="flex items-center gap-2">

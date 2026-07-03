@@ -42,6 +42,7 @@ router.post('/request-forms', validate(upsertRequestFormSchema), async (req, res
       description: req.body.description || null,
       success_message: req.body.success_message,
       enabled: req.body.enabled ?? true,
+      logo_url: req.body.logo_url || null,
       custom_fields: req.body.custom_fields || [],
       notify_email: req.body.notify_email ?? true,
       notify_in_app: req.body.notify_in_app ?? true,
@@ -154,7 +155,7 @@ router.get('/public/form/:apiKey', async (req, res) => {
     const admin = getServiceClient();
     const { data: form, error } = await admin
       .from('request_forms')
-      .select('id, org_id, title, description, success_message, enabled, custom_fields')
+      .select('id, org_id, title, description, success_message, enabled, logo_url, custom_fields')
       .eq('api_key', apiKey)
       .is('deleted_at', null)
       .maybeSingle();
@@ -163,9 +164,20 @@ router.get('/public/form/:apiKey', async (req, res) => {
     if (!form) return res.status(404).json({ error: 'Form not found.' });
     if (!form.enabled) return res.status(403).json({ error: 'Form is currently disabled.' });
 
+    // No custom form logo → default to the company logo from company settings.
+    let logoUrl: string | null = form.logo_url || null;
+    if (!logoUrl) {
+      const { data: company } = await admin
+        .from('company_settings')
+        .select('logo_url')
+        .eq('org_id', form.org_id)
+        .maybeSingle();
+      logoUrl = company?.logo_url || null;
+    }
+
     // Strip org_id from public response
     const { org_id, ...publicForm } = form;
-    return res.json({ form: publicForm });
+    return res.json({ form: { ...publicForm, logo_url: logoUrl } });
   } catch (err: any) {
     console.error('[public/form] get failed:', err.message);
     return res.status(500).json({ error: 'Unable to load form.' });

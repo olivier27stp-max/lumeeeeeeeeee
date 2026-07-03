@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
+import { StatusBadge } from '../components/ui';
 import {
   listAllQuotes,
   formatQuoteMoney,
@@ -214,12 +215,7 @@ export default function Quotes() {
 
 
   function Badge({ status }: { status: string }) {
-    const s = status || 'draft';
-    const label = (QUOTE_STATUS_LABELS[s as QuoteStatus] || s).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    if (s === 'approved' || s === 'converted') return <span className="badge-success">{label}</span>;
-    if (s === 'sent' || s === 'awaiting_response' || s === 'action_required') return <span className="badge-warning">{label}</span>;
-    if (s === 'declined' || s === 'expired') return <span className="badge-danger">{label}</span>;
-    return <span className="badge-neutral">{label}</span>;
+    return <StatusBadge status={status || 'draft'} />;
   }
 
   const IconSort = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>;

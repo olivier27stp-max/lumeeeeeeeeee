@@ -184,6 +184,9 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
   return (
     <Shell>
       <div className="text-center space-y-1 mb-5">
+        {form.logo_url && (
+          <img src={form.logo_url} alt="" className="mx-auto mb-3 max-h-16 max-w-[200px] object-contain" />
+        )}
         <h1 className="text-[18px] font-bold text-text-primary">{form.title}</h1>
         {form.description && <p className="text-[13px] text-text-tertiary">{form.description}</p>}
       </div>

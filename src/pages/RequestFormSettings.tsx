@@ -23,6 +23,10 @@ import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import { fetchRequestForm, upsertRequestForm, regenerateApiKey } from '../lib/requestFormsApi';
+import { supabase } from '../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
+import { STORAGE_BUCKETS } from '../lib/storage';
+import FileUpload from '../components/FileUpload';
 import type { RequestForm, FormField, FormFieldType } from '../types';
 import BackToSettings from '../components/ui/BackToSettings';
 
@@ -176,11 +180,13 @@ function FieldEditor({
 function FormPreview({
   title,
   description,
+  logoUrl,
   customFields,
   isFr,
 }: {
   title: string;
   description: string;
+  logoUrl: string | null;
   customFields: FormField[];
   isFr: boolean;
 }) {
@@ -188,6 +194,9 @@ function FormPreview({
   return (
     <div className="section-card p-6 space-y-5 max-w-lg mx-auto">
       <div className="text-center space-y-1">
+        {logoUrl && (
+          <img src={logoUrl} alt="" className="mx-auto mb-3 max-h-16 max-w-[200px] object-contain" />
+        )}
         <h2 className="text-[17px] font-bold text-text-primary">{title || 'Service Request'}</h2>
         {description && <p className="text-[13px] text-text-tertiary">{description}</p>}
       </div>
@@ -327,6 +336,9 @@ export default function RequestFormSettings() {
   const [description, setDescription] = useState('');
   const [successMessage, setSuccessMessage] = useState('Thank you! We will get back to you shortly.');
   const [enabled, setEnabled] = useState(true);
+  const [logoUrl, setLogoUrl] = useState('');
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [orgId, setOrgId] = useState<string | null>(null);
   const [customFields, setCustomFields] = useState<FormField[]>([]);
   const [notifyEmail, setNotifyEmail] = useState(true);
   const [notifyInApp, setNotifyInApp] = useState(true);
@@ -344,6 +356,7 @@ export default function RequestFormSettings() {
           setDescription(data.description || '');
           setSuccessMessage(data.success_message);
           setEnabled(data.enabled);
+          setLogoUrl(data.logo_url || '');
           // 'multiselect' was merged into 'checkbox' (both render as a checkbox
           // group). Normalize any legacy fields so they edit/save as checkbox.
           setCustomFields(
@@ -360,6 +373,20 @@ export default function RequestFormSettings() {
       } finally {
         setLoading(false);
       }
+
+      // Company logo is the default when the form has no custom logo.
+      try {
+        const currentOrgId = await getCurrentOrgIdOrThrow();
+        setOrgId(currentOrgId);
+        const { data: company } = await supabase
+          .from('company_settings')
+          .select('logo_url')
+          .eq('org_id', currentOrgId)
+          .maybeSingle();
+        setCompanyLogo(company?.logo_url || null);
+      } catch {
+        // No company settings yet — no default logo
+      }
     }
     load();
   }, []);
@@ -374,6 +401,7 @@ export default function RequestFormSettings() {
         description: description || null,
         success_message: successMessage,
         enabled,
+        logo_url: logoUrl || null,
         // Drop blank option rows left behind in the editor before saving.
         custom_fields: customFields.map((f) => ({
           ...f,
@@ -391,7 +419,7 @@ export default function RequestFormSettings() {
     } finally {
       setSaving(false);
     }
-  }, [title, description, successMessage, enabled, customFields, notifyEmail, notifyInApp]);
+  }, [title, description, successMessage, enabled, logoUrl, customFields, notifyEmail, notifyInApp]);
 
   // Regenerate API key
   const handleRegenKey = async () => {
@@ -528,6 +556,71 @@ export default function RequestFormSettings() {
               <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
                 {t.requestForm.formHeader}
               </h3>
+              <div>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+                  Logo
+                </label>
+                {logoUrl || companyLogo ? (
+                  <div className="flex items-center gap-4 mt-2">
+                    <div className="w-20 h-20 rounded-xl border border-outline overflow-hidden bg-surface-secondary flex items-center justify-center shrink-0">
+                      <img
+                        src={logoUrl || companyLogo || ''}
+                        alt="Form logo"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="space-y-2 min-w-0">
+                      <p className="text-[12px] text-text-secondary">
+                        {logoUrl
+                          ? (isFr ? 'Logo personnalisé' : 'Custom logo')
+                          : (isFr ? 'Logo de l\'entreprise (par défaut)' : 'Company logo (default)')}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        {logoUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => setLogoUrl('')}
+                            className="glass-button inline-flex items-center gap-1.5 text-[11px]"
+                          >
+                            <Trash2 size={11} />
+                            {companyLogo
+                              ? (isFr ? 'Utiliser le logo de l\'entreprise' : 'Use company logo')
+                              : t.companySettings.remove}
+                          </button>
+                        ) : (
+                          <FileUpload
+                            bucket={STORAGE_BUCKETS.COMPANY_LOGOS}
+                            path={`${orgId || 'default'}/request-form`}
+                            accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                            maxSizeMb={5}
+                            onUpload={(url) => setLogoUrl(url)}
+                          >
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-secondary">
+                              <ImagePlus size={12} />
+                              {isFr ? 'Téléverser un logo personnalisé' : 'Upload a custom logo'}
+                            </span>
+                          </FileUpload>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    <FileUpload
+                      bucket={STORAGE_BUCKETS.COMPANY_LOGOS}
+                      path={`${orgId || 'default'}/request-form`}
+                      accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                      maxSizeMb={5}
+                      onUpload={(url) => setLogoUrl(url)}
+                    />
+                    <p className="text-[11px] text-text-tertiary">
+                      {isFr
+                        ? 'Astuce : le logo défini dans Paramètres → Entreprise est utilisé par défaut.'
+                        : 'Tip: the logo set in Settings → Company is used by default.'}
+                    </p>
+                  </div>
+                )}
+              </div>
               <div>
                 <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                   {t.requestForm.formTitle}
@@ -863,6 +956,7 @@ export default function RequestFormSettings() {
             <FormPreview
               title={title}
               description={description}
+              logoUrl={logoUrl || companyLogo}
               customFields={customFields}
               isFr={isFr}
             />
