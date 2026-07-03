@@ -6,10 +6,13 @@ import {
   XCircle,
   Clock,
   AlertCircle,
+  AlertTriangle,
   MinusCircle,
   Circle,
   Send,
   Loader2,
+  Archive,
+  CalendarClock,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -38,11 +41,11 @@ const statusIcons: Record<string, LucideIcon> = {
   in_progress: Loader2,
   completed: CheckCircle,
   cancelled: XCircle,
-  late: AlertCircle,
+  late: AlertTriangle,
   unscheduled: MinusCircle,
   requires_invoicing: AlertCircle,
   action_required: AlertCircle,
-  upcoming: Clock,
+  upcoming: CalendarClock,
   // Invoice
   sent: Send,
   partial: Clock,
@@ -52,6 +55,7 @@ const statusIcons: Record<string, LucideIcon> = {
   overdue: AlertCircle,
   // Quote
   awaiting_response: Clock,
+  changes_requested: AlertCircle,
   approved: CheckCircle,
   declined: XCircle,
   expired: MinusCircle,
@@ -80,7 +84,7 @@ const statusIcons: Record<string, LucideIcon> = {
   failed: XCircle,
   refunded: MinusCircle,
   // Misc
-  archived: MinusCircle,
+  archived: Archive,
 };
 
 // Common status → variant mapping for CRM entities
@@ -97,23 +101,24 @@ const statusVariants: Record<string, Variant> = {
   in_progress: 'warning',
   completed: 'success',
   cancelled: 'danger',
-  // Job (derived/display values)
-  late: 'danger',
-  unscheduled: 'neutral',
+  // Job (derived/display values) — 4-status system
+  late: 'danger',          // red
+  unscheduled: 'warning',
   requires_invoicing: 'warning',
-  action_required: 'danger',
-  upcoming: 'info',
+  action_required: 'warning', // yellow
+  upcoming: 'success',        // green
   // Job (display labels — for StatusBadge receiving formatted strings)
-  'Draft': 'neutral',
-  'Scheduled': 'info',
-  'In Progress': 'warning',
-  'Completed': 'success',
-  'Cancelled': 'danger',
+  'Draft': 'warning',
+  'Scheduled': 'success',
+  'In Progress': 'success',
+  'Completed': 'neutral',
+  'Cancelled': 'neutral',
   'Late': 'danger',
-  'Unscheduled': 'neutral',
+  'Unscheduled': 'warning',
   'Requires Invoicing': 'warning',
-  'Action Required': 'danger',
-  'Upcoming': 'info',
+  'Action Required': 'warning',
+  'Upcoming': 'success',
+  'Archived': 'neutral',
   'Ending within 30 days': 'warning',
 
   // ── Invoice ──
@@ -132,11 +137,13 @@ const statusVariants: Record<string, Variant> = {
 
   // ── Quote ──
   awaiting_response: 'warning',
+  changes_requested: 'danger',
   approved: 'success',
   declined: 'danger',
   expired: 'neutral',
   converted: 'success',
   'Awaiting Response': 'warning',
+  'Changes Requested': 'danger',
   'Approved': 'success',
   'Declined': 'danger',
   'Expired': 'neutral',
@@ -209,7 +216,10 @@ export default function StatusBadge({ status, variant, className }: StatusBadgeP
   const translated = (t as any).status?.[key];
   const label = translated || status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-  const style = variantStyle[resolvedVariant];
+  // Archived jobs get a dedicated near-black treatment.
+  const style = key === 'archived'
+    ? { bg: 'linear-gradient(135deg, #1C1C1E 0%, #08080A 100%)', icon: '#8A8A8E', defaultIcon: Archive }
+    : variantStyle[resolvedVariant];
   const Icon = statusIcons[key] || style.defaultIcon;
 
   return (

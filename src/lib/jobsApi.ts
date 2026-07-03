@@ -29,11 +29,10 @@ export interface JobsResult {
 }
 
 export interface JobsKpis {
-  ending_within_30: number;
+  upcoming: number;
   late: number;
-  requires_invoicing: number;
   action_required: number;
-  unscheduled: number;
+  archived: number;
   recent_visits: number;
   recent_visits_prev: number;
   visits_scheduled: number;
@@ -88,11 +87,17 @@ function isMissingJobLineItemsTableError(error: any): boolean {
 }
 
 /**
- * Derive the display status for a job, taking into account business rules:
- * - "Late": job is scheduled but the date has passed
- * - "Action Required": job is scheduled but date passed > 30 days ago
- * - "Requires Invoicing": job is completed + requires_invoicing flag
- * - "Unscheduled": job has no scheduled_at or is draft
+ * Derive the display status for a job. The product exposes exactly 4 states:
+ * - "Upcoming"        (green)  : job is active and has an upcoming visit.
+ * - "Late"            (red)    : the job's visit is in the past and not completed.
+ * - "Action Required" (yellow) : job is active but has no upcoming visit
+ *                                (add a visit or close the job).
+ * - "Archived"        (black)  : job is closed (completed/cancelled).
+ *
+ * `scheduled_at` is recomputed server-side (recompute_job_schedule): it holds the
+ * next upcoming visit if any, otherwise the most recent past visit, otherwise null.
+ * An active job (not completed/cancelled) with a past visit hasn't been closed out
+ * → Late; with no visit at all → Action Required.
  */
 function deriveJobDisplayStatus(raw: {
   status?: string | null;
@@ -103,45 +108,25 @@ function deriveJobDisplayStatus(raw: {
   const scheduledAt = raw.scheduled_at ? new Date(raw.scheduled_at) : null;
   const now = new Date();
 
-  // Draft or no schedule → Unscheduled
-  if (!dbStatus || dbStatus === 'draft') {
-    return scheduledAt ? 'Draft' : 'Unscheduled';
+  // Closed jobs → Archived
+  if (dbStatus === 'completed' || dbStatus === 'cancelled' || dbStatus === 'canceled' || dbStatus === 'archived') {
+    return 'Archived';
   }
 
-  // Scheduled but date is in the past
-  if (dbStatus === 'scheduled' && scheduledAt) {
-    const daysSince = (now.getTime() - scheduledAt.getTime()) / 86400000;
-    if (daysSince > 30) return 'Action Required';
-    if (daysSince > 0) return 'Late';
-    return 'Scheduled';
-  }
-  if (dbStatus === 'scheduled') return 'Scheduled';
-
-  // Completed + requires invoicing
-  if (dbStatus === 'completed' && raw.requires_invoicing) return 'Requires Invoicing';
-  if (dbStatus === 'completed') return 'Completed';
-
-  if (dbStatus === 'in_progress') return 'In Progress';
-  if (dbStatus === 'cancelled' || dbStatus === 'canceled') return 'Cancelled';
-
-  // Fallback
-  return dbStatus
-    .split('_')
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join(' ');
+  // Active jobs
+  if (scheduledAt && scheduledAt.getTime() >= now.getTime()) return 'Upcoming';
+  if (scheduledAt) return 'Late';
+  return 'Action Required';
 }
 
 /** Simple label formatter (no business logic — used when raw context is unavailable) */
 function formatStatusLabel(value: string | null | undefined): string {
-  if (!value) return 'Unscheduled';
+  if (!value) return 'Action Required';
   const normalized = value.toLowerCase();
-  if (normalized === 'draft') return 'Draft';
-  if (normalized === 'scheduled') return 'Scheduled';
-  if (normalized === 'in_progress') return 'In Progress';
-  if (normalized === 'completed') return 'Completed';
-  if (normalized === 'cancelled' || normalized === 'canceled') return 'Cancelled';
-  if (normalized === 'requires_invoicing') return 'Requires Invoicing';
-  if (normalized === 'action_required') return 'Action Required';
+  if (normalized === 'completed' || normalized === 'cancelled' || normalized === 'canceled' || normalized === 'archived') return 'Archived';
+  if (normalized === 'late') return 'Late';
+  if (normalized === 'upcoming' || normalized === 'scheduled' || normalized === 'in_progress') return 'Upcoming';
+  if (normalized === 'action_required' || normalized === 'draft' || normalized === 'unscheduled') return 'Action Required';
   return normalized
     .split('_')
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
@@ -296,24 +281,20 @@ function applyTableFilters(request: any, query: JobsQuery) {
   const { status, jobType, clientId, q } = query;
   if (status && status !== 'All') {
     const normalized = status.trim().toLowerCase().replace(/\s+/g, '_');
-    if (normalized === 'unscheduled') {
-      // Jobs without a scheduled date or in draft status
-      builder = builder.or('scheduled_at.is.null,status.eq.draft');
+    const nowIso = new Date().toISOString();
+    // 4-status system: Upcoming / Late / Action Required / Archived.
+    if (normalized === 'archived' || normalized === 'completed' || normalized === 'cancelled') {
+      // Closed jobs
+      builder = builder.in('status', ['completed', 'cancelled']);
+    } else if (normalized === 'upcoming') {
+      // Active job with an upcoming visit
+      builder = builder.in('status', ['scheduled', 'in_progress']).gte('scheduled_at', nowIso);
     } else if (normalized === 'late') {
-      // Scheduled jobs whose scheduled_at is in the past
-      builder = builder.eq('status', 'scheduled').lt('scheduled_at', new Date().toISOString());
-    } else if (normalized === 'requires_invoicing' || normalized === 'requires invoicing') {
-      // Completed jobs that need invoicing
-      builder = builder.eq('status', 'completed').eq('requires_invoicing', true);
-    } else if (normalized === 'action_required' || normalized === 'action required') {
-      // Scheduled jobs whose scheduled_at is more than 30 days in the past
-      const minus30 = new Date(Date.now() - 30 * 86400000).toISOString();
-      builder = builder.eq('status', 'scheduled').lt('scheduled_at', minus30);
-    } else if (normalized === 'ending_within_30' || normalized === 'ending within 30 days' || normalized === 'ending_within_30_days') {
-      // Jobs scheduled within the next 30 days
-      const now = new Date().toISOString();
-      const plus30 = new Date(Date.now() + 30 * 86400000).toISOString();
-      builder = builder.gte('scheduled_at', now).lte('scheduled_at', plus30);
+      // Active job whose visit is in the past (not closed out)
+      builder = builder.in('status', ['scheduled', 'in_progress']).lt('scheduled_at', nowIso);
+    } else if (normalized === 'action_required' || normalized === 'unscheduled') {
+      // Active job with no visit at all
+      builder = builder.is('scheduled_at', null).in('status', ['draft', 'scheduled', 'in_progress']);
     } else {
       // Direct DB status match — skip filter if the requested value cannot map to a DB state
       const dbStatus = normalizeStatusForFilter(status);
@@ -366,37 +347,36 @@ export async function getJobsKpis(params: { status?: string; jobType?: string; q
   const base = () => supabase.from('jobs_active').select('*', { count: 'exact', head: true }).eq('org_id', orgId);
 
   const [
-    endingWithin30Res, lateRes, requiresInvoicingRes, actionRequiredRes,
-    unscheduledRes, recentVisitsRes, prevRecentVisitsRes,
+    upcomingRes, lateRes, actionRequiredRes, archivedRes,
+    recentVisitsRes, prevRecentVisitsRes,
     visitsScheduledRes, prevVisitsScheduledRes,
   ] = await Promise.all([
-    base().gte('scheduled_at', nowIso).lte('scheduled_at', plus30Iso),
-    base().eq('status', 'scheduled').lt('scheduled_at', nowIso),
-    base().eq('status', 'completed').eq('requires_invoicing', true),
-    base().eq('status', 'scheduled').lt('scheduled_at', minus30Iso),
-    base().or('scheduled_at.is.null,status.eq.draft'),
+    // 4-status system
+    base().in('status', ['scheduled', 'in_progress']).gte('scheduled_at', nowIso),
+    base().in('status', ['scheduled', 'in_progress']).lt('scheduled_at', nowIso),
+    base().is('scheduled_at', null).in('status', ['draft', 'scheduled', 'in_progress']),
+    base().in('status', ['completed', 'cancelled']),
+    // Visit metrics (unchanged)
     base().gte('scheduled_at', minus30Iso).lte('scheduled_at', nowIso),
     base().gte('scheduled_at', minus60Iso).lt('scheduled_at', minus30Iso),
     base().gte('scheduled_at', nowIso).lte('scheduled_at', plus30Iso),
     base().gte('scheduled_at', minus30Iso).lt('scheduled_at', nowIso),
   ]);
 
-  const endingWithin30 = endingWithin30Res.count || 0;
+  const upcoming = upcomingRes.count || 0;
   const late = lateRes.count || 0;
-  const requiresInvoicing = requiresInvoicingRes.count || 0;
   const actionRequired = actionRequiredRes.count || 0;
-  const unscheduled = unscheduledRes.count || 0;
+  const archived = archivedRes.count || 0;
   const recentVisits = recentVisitsRes.count || 0;
   const prevRecentVisits = prevRecentVisitsRes.count || 0;
   const visitsScheduled = visitsScheduledRes.count || 0;
   const prevVisitsScheduled = prevVisitsScheduledRes.count || 0;
 
   return {
-    ending_within_30: endingWithin30,
+    upcoming,
     late,
-    requires_invoicing: requiresInvoicing,
     action_required: actionRequired,
-    unscheduled,
+    archived,
     recent_visits: recentVisits,
     recent_visits_prev: prevRecentVisits,
     visits_scheduled: visitsScheduled,

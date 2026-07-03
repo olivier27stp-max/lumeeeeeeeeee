@@ -166,12 +166,10 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onDelete, formatMoney }
 // ─── Status color helper ─────────────────────────────────────────
 function statusColor(status: string): string {
   const s = (status || '').toLowerCase().replace(/\s+/g, '_');
-  if (s === 'completed' || s === 'done') return 'bg-success';
-  if (s === 'scheduled' || s === 'confirmed') return 'bg-info';
-  if (s === 'in_progress' || s === 'active') return 'bg-primary';
-  if (s === 'cancelled') return 'bg-danger';
-  if (s === 'late' || s === 'overdue') return 'bg-danger';
-  if (s === 'requires_invoicing') return 'bg-warning';
+  if (s === 'upcoming') return 'bg-success';        // green
+  if (s === 'late') return 'bg-danger';             // red
+  if (s === 'action_required') return 'bg-warning'; // yellow
+  if (s === 'archived') return 'bg-text-tertiary';  // muted / archived
   return 'bg-text-tertiary';
 }
 
@@ -344,13 +342,10 @@ function JobStatusDropdown({ value, onChange, fr }: { value: string; onChange: (
 
   const options = [
     { value: 'All', label: fr ? 'Tous' : 'All' },
-    { value: 'scheduled', label: fr ? 'Planifié' : 'Scheduled' },
-    { value: 'in_progress', label: fr ? 'En cours' : 'In Progress' },
-    { value: 'action_required', label: fr ? 'Action requise' : 'Action Required' },
+    { value: 'upcoming', label: fr ? 'À venir' : 'Upcoming' },
     { value: 'late', label: fr ? 'En retard' : 'Late' },
-    { value: 'completed', label: fr ? 'Complété' : 'Done' },
-    { value: 'draft', label: fr ? 'Brouillon' : 'Draft' },
-    { value: 'cancelled', label: fr ? 'Annulé' : 'Cancelled' },
+    { value: 'action_required', label: fr ? 'Action requise' : 'Action Required' },
+    { value: 'archived', label: fr ? 'Archivé' : 'Archived' },
   ];
 
   const activeLabel = options.find(o => o.value === value)?.label;
@@ -402,7 +397,8 @@ export default function Jobs() {
   const [error, setError] = useState<string | null>(null);
   const [kpis, setKpis] = useState<JobsKpis | null>(null);
   const [statusFilter, setStatusFilter] = useState('All');
-  const [jobTypeFilter, setJobTypeFilter] = useState('All');
+  // Two separate tables, one per tab: one-off jobs vs service plans.
+  const [jobTypeFilter, setJobTypeFilter] = useState('one_off');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [sortBy, setSortBy] = useState<JobSort>('schedule');
@@ -577,12 +573,11 @@ export default function Jobs() {
   };
 
   const overviewBullets = useMemo(() => [
-    { label: 'Due soon', key: 'ending_within_30' as const, color: 'bg-danger', filter: t.jobs.endingWithin30 },
-    { label: 'Late', key: 'late' as const, color: 'bg-danger', filter: t.jobs.late },
-    { label: 'Needs invoice', key: 'requires_invoicing' as const, color: 'bg-warning', filter: t.jobs.requiresInvoicing },
-    { label: 'Action needed', key: 'action_required' as const, color: 'bg-warning', filter: t.jobs.actionRequired },
-    { label: 'Unscheduled', key: 'unscheduled' as const, color: 'bg-text-tertiary', filter: t.jobs.unscheduled },
-  ], [t]);
+    { label: 'Upcoming', key: 'upcoming' as const, color: 'bg-success', filter: 'upcoming' },
+    { label: 'Late', key: 'late' as const, color: 'bg-danger', filter: 'late' },
+    { label: 'Action Required', key: 'action_required' as const, color: 'bg-warning', filter: 'action_required' },
+    { label: 'Archived', key: 'archived' as const, color: 'bg-text-primary', filter: 'archived' },
+  ], []);
 
   const fr = language === 'fr';
   const allSel = jobs.length > 0 && selectedJobIds.size === jobs.length;
@@ -622,29 +617,31 @@ export default function Jobs() {
         </button>
       </div>
 
-      {/* ── TOOLBAR ── */}
-      <div className="flex items-center gap-2 mt-5 mb-4">
-        {/* Job type selector: all / one-off / service plan */}
-        <div className="inline-flex h-9 items-center rounded-md border border-outline bg-surface-card p-0.5">
+      {/* ── JOB TYPE TABS — one table per type ── */}
+      <div className="mt-4 border-b border-outline">
+        <div className="flex items-center gap-1">
           {([
-            { value: 'All', label: fr ? 'Tous' : 'All' },
-            { value: 'one_off', label: fr ? 'Ponctuel' : 'One-off' },
-            { value: 'recurring', label: fr ? 'Forfait de service' : 'Service plan' },
+            { value: 'one_off', label: fr ? 'Ponctuels' : 'One-off' },
+            { value: 'recurring', label: fr ? 'Forfaits de service' : 'Service plans' },
           ] as const).map(opt => (
             <button
               key={opt.value}
-              onClick={() => { setJobTypeFilter(opt.value); setPage(1); }}
+              onClick={() => { setJobTypeFilter(opt.value); setPage(1); setSelectedJobIds(new Set()); }}
               className={cn(
-                'h-full px-3 rounded-[5px] text-[13px] font-medium transition-colors',
+                'px-4 py-2.5 text-[14px] font-semibold border-b-2 transition-colors -mb-[1.5px]',
                 jobTypeFilter === opt.value
-                  ? 'bg-primary text-white'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-secondary'
+                  ? 'border-primary text-text-primary'
+                  : 'border-transparent text-text-tertiary hover:text-text-secondary'
               )}
             >
               {opt.label}
             </button>
           ))}
         </div>
+      </div>
+
+      {/* ── TOOLBAR ── */}
+      <div className="flex items-center gap-2 mt-4 mb-4">
         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
           placeholder={fr ? 'Rechercher jobs...' : 'Search jobs...'}
           className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all" />
