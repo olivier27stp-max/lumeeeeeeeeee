@@ -6,8 +6,10 @@ import { FlatList, Text, View } from 'react-native';
 import { ClientCard } from '@/components/ClientCard';
 import { Input } from '@/components/ui/Input';
 import { listClients } from '@/lib/api/clients';
+import { useTranslation } from '@/lib/i18n';
 
 export default function Search() {
+  const { t } = useTranslation();
   const [q, setQ] = useState('');
 
   // Empty query → listClients('') returns the most recent clients (updated_at desc).
@@ -24,12 +26,12 @@ export default function Search() {
         <Input
           value={q}
           onChangeText={setQ}
-          placeholder="Search a client by name, company, email…"
+          placeholder={t.mobileMisc.searchClientPlaceholder}
           autoFocus
           autoCapitalize="none"
         />
         <Text className="mt-2 text-xs text-ink-muted">
-          Find a client to see their jobs, quotes and invoices.
+          {t.mobileMisc.searchClientHint}
         </Text>
       </View>
 
@@ -40,7 +42,7 @@ export default function Search() {
         ListHeaderComponent={
           (data?.length ?? 0) > 0 ? (
             <Text className="pb-2 text-[11px] font-bold uppercase tracking-widest text-ink-subtle">
-              {q.trim() ? 'Résultats' : 'Clients récents'}
+              {q.trim() ? t.mobileMisc.resultsHeader : t.mobileMisc.recentClientsHeader}
             </Text>
           ) : null
         }
@@ -50,7 +52,7 @@ export default function Search() {
         ListEmptyComponent={
           q.trim().length >= 1 && !isFetching ? (
             <View className="items-center py-12">
-              <Text className="text-sm text-ink-muted">No clients found.</Text>
+              <Text className="text-sm text-ink-muted">{t.mobileMisc.noClientsFound}</Text>
             </View>
           ) : null
         }

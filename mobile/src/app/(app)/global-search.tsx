@@ -10,6 +10,7 @@ import { listClients } from '@/lib/api/clients';
 import { searchJobs } from '@/lib/api/jobs';
 import { listMembers } from '@/lib/api/org';
 import { clientFullName } from '@/lib/format';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 type Row =
@@ -19,6 +20,7 @@ type Row =
   | { type: 'member'; key: string; id: string; name: string; role: string };
 
 export default function GlobalSearch() {
+  const { t } = useTranslation();
   const { orgId, teamId, scope, permissions, role } = usePermissions();
   const access = { teamId, scope, permissions, role };
   const [q, setQ] = useState('');
@@ -54,7 +56,7 @@ export default function GlobalSearch() {
 
   const rows: Row[] = [];
   if ((clientsQ.data?.length ?? 0) > 0) {
-    rows.push({ type: 'header', key: 'h-c', label: 'Clients' });
+    rows.push({ type: 'header', key: 'h-c', label: t.mobileMisc.groupClients });
     for (const c of clientsQ.data!) {
       rows.push({
         type: 'client',
@@ -66,7 +68,7 @@ export default function GlobalSearch() {
     }
   }
   if ((jobsQ.data?.length ?? 0) > 0) {
-    rows.push({ type: 'header', key: 'h-j', label: 'Jobs' });
+    rows.push({ type: 'header', key: 'h-j', label: t.mobileMisc.groupJobs });
     for (const j of jobsQ.data!) {
       rows.push({
         type: 'job',
@@ -79,7 +81,7 @@ export default function GlobalSearch() {
     }
   }
   if (members.length > 0) {
-    rows.push({ type: 'header', key: 'h-m', label: 'Équipe' });
+    rows.push({ type: 'header', key: 'h-m', label: t.mobileMisc.groupTeam });
     for (const m of members) {
       rows.push({ type: 'member', key: `m-${m.user_id}`, id: m.user_id, name: m.full_name ?? '—', role: m.role });
     }
@@ -134,7 +136,7 @@ export default function GlobalSearch() {
         <Input
           value={q}
           onChangeText={setQ}
-          placeholder="Rechercher : client, job, technicien…"
+          placeholder={t.mobileMisc.globalSearchPlaceholder}
           autoFocus
           autoCapitalize="none"
         />
@@ -148,11 +150,11 @@ export default function GlobalSearch() {
         ListEmptyComponent={
           term.length >= 1 ? (
             <View className="items-center py-16">
-              <Text className="text-sm text-ink-muted">Aucun résultat pour « {term} ».</Text>
+              <Text className="text-sm text-ink-muted">{t.mobileMisc.noResultForQuery.replace('{query}', term)}</Text>
             </View>
           ) : (
             <View className="items-center py-16">
-              <Text className="text-sm text-ink-muted">Cherche un client, un job ou un technicien.</Text>
+              <Text className="text-sm text-ink-muted">{t.mobileMisc.searchPrompt}</Text>
             </View>
           )
         }

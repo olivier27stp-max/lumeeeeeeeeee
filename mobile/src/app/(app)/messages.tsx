@@ -6,22 +6,24 @@ import { FlatList, Pressable, Text, View } from 'react-native';
 import { Input } from '@/components/ui/Input';
 import UnifiedAvatar from '@/components/ui/UnifiedAvatar';
 import { ConversationRow, listConversations } from '@/lib/api/messaging';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
-function timeAgo(iso: string | null): string {
-  if (!iso) return '';
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'now';
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  return `${Math.floor(h / 24)}d`;
-}
-
 export default function Messages() {
+  const { t } = useTranslation();
   const { orgId } = usePermissions();
   const [q, setQ] = useState('');
+
+  const timeAgo = (iso: string | null): string => {
+    if (!iso) return '';
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return t.mobileMisc.timeNow;
+    if (m < 60) return t.mobileMisc.timeMinutes.replace('{n}', String(m));
+    const h = Math.floor(m / 60);
+    if (h < 24) return t.mobileMisc.timeHours.replace('{n}', String(h));
+    return t.mobileMisc.timeDays.replace('{n}', String(Math.floor(h / 24)));
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['conversations', orgId, q.trim()],
@@ -44,7 +46,7 @@ export default function Messages() {
         <Input
           value={q}
           onChangeText={setQ}
-          placeholder="Rechercher un client ou une conversation…"
+          placeholder={t.mobileMisc.searchClientOrConversation}
           autoCapitalize="none"
         />
       </View>
@@ -74,7 +76,7 @@ export default function Messages() {
                   className={`text-sm ${unread ? 'text-ink' : 'text-ink-muted'}`}
                   numberOfLines={1}
                 >
-                  {item.last_message_text || 'Aucun message'}
+                  {item.last_message_text || t.mobileMisc.noLastMessage}
                 </Text>
               </View>
               {unread ? <View className="h-2.5 w-2.5 rounded-full bg-brand" /> : null}
@@ -84,7 +86,7 @@ export default function Messages() {
         ListEmptyComponent={
           !isLoading ? (
             <View className="items-center py-16">
-              <Text className="text-sm text-ink-muted">Aucune conversation.</Text>
+              <Text className="text-sm text-ink-muted">{t.mobileMisc.noConversations}</Text>
             </View>
           ) : null
         }

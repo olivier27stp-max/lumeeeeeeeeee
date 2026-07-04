@@ -15,6 +15,7 @@ import {
   toEmbedUrl,
 } from '@/lib/api/courses';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 
 function stripHtml(s: string | null): string {
   if (!s) return '';
@@ -42,6 +43,7 @@ function lessonIcon(l: Lesson): string {
 }
 
 export default function CourseScreen() {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
   const { session } = useAuth();
@@ -138,7 +140,7 @@ export default function CourseScreen() {
           </View>
         ) : null}
         {active?.content_type === 'link' && active.embed_url ? (
-          <Button title="Open link" onPress={() => Linking.openURL(active.embed_url as string)} />
+          <Button title={t.mobileMisc.openLink} onPress={() => Linking.openURL(active.embed_url as string)} />
         ) : null}
 
         {/* Mark complete */}
@@ -148,7 +150,7 @@ export default function CourseScreen() {
             className={`flex-row items-center justify-between rounded-2xl border px-5 py-4 ${activeDone ? 'border-status-completed/30 bg-status-completed/10' : 'border-surface-border bg-white'}`}
           >
             <Text className={`text-sm font-semibold ${activeDone ? 'text-status-completed' : 'text-ink'}`}>
-              {activeDone ? 'Completed' : 'Mark as complete'}
+              {activeDone ? t.mobileMisc.completed : t.mobileMisc.markAsComplete}
             </Text>
             <View
               className={`h-6 w-6 items-center justify-center rounded-md border-2 ${activeDone ? 'border-status-completed bg-status-completed' : 'border-surface-border'}`}
@@ -161,20 +163,20 @@ export default function CourseScreen() {
         {/* Progress */}
         <View className="rounded-2xl bg-white p-5">
           <View className="mb-2 flex-row items-center justify-between">
-            <Text className="text-sm font-bold text-ink">Your progress</Text>
+            <Text className="text-sm font-bold text-ink">{t.mobileMisc.yourProgress}</Text>
             <Text className={`text-sm font-bold ${pct === 100 ? 'text-status-completed' : 'text-ink'}`}>{pct}%</Text>
           </View>
           <View className="h-2.5 overflow-hidden rounded-full bg-surface-sunken">
             <View style={{ width: `${pct}%` }} className={`h-full rounded-full ${pct === 100 ? 'bg-status-completed' : 'bg-ink'}`} />
           </View>
           <Text className="mt-2 text-xs text-ink-muted">
-            {doneCount}/{total} lessons completed
+            {t.mobileMisc.lessonsCompleted.replace('{done}', String(doneCount)).replace('{total}', String(total))}
           </Text>
         </View>
 
         {/* Modules / lessons */}
         <View className="gap-3">
-          <Text className="px-1 text-xs font-semibold uppercase tracking-wide text-ink-subtle">Course content</Text>
+          <Text className="px-1 text-xs font-semibold uppercase tracking-wide text-ink-subtle">{t.mobileMisc.courseContent}</Text>
           {course.modules.map((m: CourseModule) => {
             const open = openModules.has(m.id);
             const modDone = m.lessons.every((l) => doneSet.has(l.id)) && m.lessons.length > 0;

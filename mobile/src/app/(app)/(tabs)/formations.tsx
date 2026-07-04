@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listCourses } from '@/lib/api/courses';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 function fmtDuration(min: number): string {
@@ -17,6 +18,7 @@ function fmtDuration(min: number): string {
 }
 
 export default function Formations() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const { orgId, role } = usePermissions();
@@ -34,23 +36,23 @@ export default function Formations() {
   return (
     <View className="flex-1 bg-surface-alt" style={{ paddingTop: insets.top }}>
       <View className="px-5 pb-1 pt-3">
-        <Text className="text-2xl font-bold text-ink">Formations</Text>
+        <Text className="text-2xl font-bold text-ink">{t.mobileMisc.formationsTitle}</Text>
         <Text className="text-sm text-ink-muted">
-          {courses.length} course{courses.length === 1 ? '' : 's'} available
+          {t.mobileMisc.coursesAvailable.replace('{count}', String(courses.length))}
         </Text>
       </View>
 
       <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 14 }}>
         {error ? (
           <View className="rounded-3xl bg-white p-6">
-            <Text className="text-sm font-semibold text-status-late">Couldn't load courses</Text>
+            <Text className="text-sm font-semibold text-status-late">{t.mobileMisc.couldNotLoadCourses}</Text>
             <Text className="mt-1 text-xs text-ink-muted">{(error as Error).message}</Text>
           </View>
         ) : null}
         {!error && !isLoading && courses.length === 0 ? (
           <View className="items-center rounded-3xl bg-white p-8">
             <SymbolView name="graduationcap" tintColor="#A3A3A3" size={40} resizeMode="scaleAspectFit" />
-            <Text className="mt-2 text-sm text-ink-muted">No courses yet.</Text>
+            <Text className="mt-2 text-sm text-ink-muted">{t.mobileMisc.noCoursesYet}</Text>
           </View>
         ) : null}
         {courses.map((c) => (
@@ -91,8 +93,8 @@ export default function Formations() {
 
               {/* Meta */}
               <View className="mt-3 flex-row items-center gap-4">
-                <Meta icon="square.stack.3d.up" text={`${c.module_count} ch.`} />
-                <Meta icon="book" text={`${c.lesson_count} lessons`} />
+                <Meta icon="square.stack.3d.up" text={t.mobileMisc.courseChapters.replace('{count}', String(c.module_count))} />
+                <Meta icon="book" text={t.mobileMisc.courseLessons.replace('{count}', String(c.lesson_count))} />
                 {c.duration_min > 0 ? <Meta icon="clock" text={fmtDuration(c.duration_min)} /> : null}
               </View>
 
@@ -100,7 +102,7 @@ export default function Formations() {
               {c.progress_pct > 0 ? (
                 <View className="mt-3 border-t border-surface-border pt-3">
                   <View className="mb-1 flex-row justify-between">
-                    <Text className="text-xs text-ink-muted">Progress</Text>
+                    <Text className="text-xs text-ink-muted">{t.mobileMisc.courseProgress}</Text>
                     <Text className={`text-xs font-bold ${c.progress_pct === 100 ? 'text-status-completed' : 'text-ink'}`}>
                       {c.progress_pct}%
                     </Text>

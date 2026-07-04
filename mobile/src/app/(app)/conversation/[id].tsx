@@ -18,6 +18,7 @@ import { textNumber } from '@/lib/contact';
 import { listMessages, logOutboundMessage, markConversationRead, MessageRow } from '@/lib/api/messaging';
 import { sendSmsViaServer, isSmsUnavailable } from '@/lib/api/server';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 function fmtTime(iso: string): string {
@@ -25,6 +26,7 @@ function fmtTime(iso: string): string {
 }
 
 export default function Conversation() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const { session } = useAuth();
@@ -89,7 +91,7 @@ export default function Conversation() {
       qc.invalidateQueries({ queryKey: ['messages', id] });
       qc.invalidateQueries({ queryKey: ['conversations'] });
     } catch (e) {
-      Alert.alert('Message', (e as Error).message);
+      Alert.alert(t.mobileMisc.messageAlertTitle, (e as Error).message);
     } finally {
       setSending(false);
     }
@@ -128,7 +130,7 @@ export default function Conversation() {
         }}
         ListEmptyComponent={
           <View className="items-center py-16">
-            <Text className="text-sm text-ink-muted">Aucun message dans cette conversation.</Text>
+            <Text className="text-sm text-ink-muted">{t.mobileMisc.noMessagesInConversation}</Text>
           </View>
         }
       />
@@ -138,14 +140,14 @@ export default function Conversation() {
         style={{ paddingBottom: insets.bottom + 8 }}
       >
         <View className="flex-1">
-          <Input value={text} onChangeText={setText} placeholder="Écrire un message…" multiline />
+          <Input value={text} onChangeText={setText} placeholder={t.mobileMisc.writeMessagePlaceholder} multiline />
         </View>
         <Pressable
           onPress={send}
           disabled={sending || !text.trim() || !phone}
           className={`mb-1 rounded-full px-4 py-2.5 ${sending || !text.trim() || !phone ? 'bg-surface-border' : 'bg-brand'}`}
         >
-          <Text className="text-sm font-semibold text-white">Envoyer</Text>
+          <Text className="text-sm font-semibold text-white">{t.mobileMisc.send}</Text>
         </Pressable>
       </View>
     </KeyboardAvoidingView>

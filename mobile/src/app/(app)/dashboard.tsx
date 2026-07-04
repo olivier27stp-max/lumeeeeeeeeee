@@ -6,6 +6,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { ActionItem, getActionItems, getDashboard } from '@/lib/api/dashboard';
 import { formatCurrencyCents } from '@/lib/format';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 type Period = 'day' | 'week' | 'month';
@@ -45,6 +46,7 @@ function Stat({ label, value, icon, tint }: { label: string; value: string; icon
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const { orgId, role } = usePermissions();
   const isManager = role === 'owner' || role === 'admin';
   const [period, setPeriod] = useState<Period>('month');
@@ -64,15 +66,20 @@ export default function Dashboard() {
 
   if (!isManager) return <Redirect href="/(app)/(tabs)" />;
 
-  const periodLabel = period === 'day' ? "aujourd'hui" : period === 'week' ? 'cette semaine' : 'ce mois';
+  const periodLabel =
+    period === 'day'
+      ? t.mobileMisc.periodLabelToday
+      : period === 'week'
+        ? t.mobileMisc.periodLabelThisWeek
+        : t.mobileMisc.periodLabelThisMonth;
   const filtered = (actions ?? []).filter((a) => filter === 'all' || a.kind === filter);
   const countByKind = (k: ActionItem['kind']) => (actions ?? []).filter((a) => a.kind === k).length;
 
   const filters: { key: Filter; label: string }[] = [
-    { key: 'all', label: `Tout (${actions?.length ?? 0})` },
-    { key: 'invoice', label: `Factures (${countByKind('invoice')})` },
-    { key: 'quote', label: `Soumissions (${countByKind('quote')})` },
-    { key: 'job', label: `Jobs (${countByKind('job')})` },
+    { key: 'all', label: t.mobileMisc.filterAll.replace('{count}', String(actions?.length ?? 0)) },
+    { key: 'invoice', label: t.mobileMisc.filterInvoices.replace('{count}', String(countByKind('invoice'))) },
+    { key: 'quote', label: t.mobileMisc.filterQuotes.replace('{count}', String(countByKind('quote'))) },
+    { key: 'job', label: t.mobileMisc.filterJobs.replace('{count}', String(countByKind('job'))) },
   ];
 
   return (
@@ -86,7 +93,7 @@ export default function Dashboard() {
             className={`flex-1 items-center rounded-xl py-2 ${period === p ? 'bg-white' : ''}`}
           >
             <Text className={`text-sm font-semibold ${period === p ? 'text-ink' : 'text-ink-muted'}`}>
-              {p === 'day' ? 'Jour' : p === 'week' ? 'Semaine' : 'Mois'}
+              {p === 'day' ? t.mobileMisc.periodDay : p === 'week' ? t.mobileMisc.periodWeek : t.mobileMisc.periodMonth}
             </Text>
           </Pressable>
         ))}
@@ -94,30 +101,33 @@ export default function Dashboard() {
 
       {/* Revenue hero */}
       <View className="gap-1 rounded-3xl bg-ink p-5" style={SHADOW}>
-        <Text className="text-[11px] font-bold uppercase tracking-widest text-white/60">Encaissé {periodLabel}</Text>
+        <Text className="text-[11px] font-bold uppercase tracking-widest text-white/60">{t.mobileMisc.collected.replace('{period}', periodLabel)}</Text>
         <Text className="text-3xl font-bold text-white" style={{ fontVariant: ['tabular-nums'] }}>
           {formatCurrencyCents(stats?.paidCents ?? 0, 'CAD')}
         </Text>
         <Text className="text-sm text-white/70">
-          {formatCurrencyCents(stats?.invoicedCents ?? 0, 'CAD')} facturé · {stats?.paidInvoiceCount ?? 0}/{stats?.invoiceCount ?? 0} factures payées
+          {t.mobileMisc.invoicedPaidSummary
+            .replace('{invoiced}', formatCurrencyCents(stats?.invoicedCents ?? 0, 'CAD'))
+            .replace('{paid}', String(stats?.paidInvoiceCount ?? 0))
+            .replace('{total}', String(stats?.invoiceCount ?? 0))}
         </Text>
       </View>
 
       {/* Stat grid */}
       <View className="gap-3">
         <View className="flex-row gap-3">
-          <Stat label="Impayés" value={formatCurrencyCents(stats?.outstandingCents ?? 0, 'CAD')} icon="exclamationmark.circle" tint="#DC2626" />
-          <Stat label="Jobs complétés" value={String(stats?.jobsCompleted ?? 0)} icon="checkmark.circle" tint="#16A34A" />
+          <Stat label={t.mobileMisc.statUnpaid} value={formatCurrencyCents(stats?.outstandingCents ?? 0, 'CAD')} icon="exclamationmark.circle" tint="#DC2626" />
+          <Stat label={t.mobileMisc.statJobsCompleted} value={String(stats?.jobsCompleted ?? 0)} icon="checkmark.circle" tint="#16A34A" />
         </View>
         <View className="flex-row gap-3">
-          <Stat label="Soumissions en attente" value={String(stats?.quotesPending ?? 0)} icon="doc.text" tint="#CA8A04" />
-          <Stat label="Factures" value={String(stats?.invoiceCount ?? 0)} icon="dollarsign.circle" />
+          <Stat label={t.mobileMisc.statQuotesPending} value={String(stats?.quotesPending ?? 0)} icon="doc.text" tint="#CA8A04" />
+          <Stat label={t.mobileMisc.statInvoices} value={String(stats?.invoiceCount ?? 0)} icon="dollarsign.circle" />
         </View>
       </View>
 
       {/* Action Required */}
       <View className="flex-row items-baseline justify-between px-1 pt-1">
-        <Text className="text-lg font-bold text-ink">Action Required</Text>
+        <Text className="text-lg font-bold text-ink">{t.mobileMisc.actionRequired}</Text>
         <Text className="text-sm font-semibold text-ink-muted">{actions?.length ?? 0}</Text>
       </View>
 
@@ -141,7 +151,7 @@ export default function Dashboard() {
       {filtered.length === 0 ? (
         <View className="items-center rounded-3xl bg-white p-8" style={SHADOW}>
           <SymbolView name="checkmark.seal" tintColor="#16A34A" size={32} resizeMode="scaleAspectFit" />
-          <Text className="mt-2 text-sm text-ink-muted">Rien à traiter. 🎉</Text>
+          <Text className="mt-2 text-sm text-ink-muted">{t.mobileMisc.nothingToHandle}</Text>
         </View>
       ) : (
         <View className="gap-2">

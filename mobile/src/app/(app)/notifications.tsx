@@ -9,17 +9,8 @@ import {
   NotificationRow,
 } from '@/lib/api/notifications';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "à l'instant";
-  if (m < 60) return `il y a ${m} min`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `il y a ${h} h`;
-  return `il y a ${Math.floor(h / 24)} j`;
-}
 
 // Where to go when a notification is tapped, based on its entity.
 function routeFor(n: NotificationRow): string | null {
@@ -35,10 +26,21 @@ function routeFor(n: NotificationRow): string | null {
 }
 
 export default function Notifications() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const { session } = useAuth();
   const { orgId } = usePermissions();
   const userId = session?.user.id ?? '';
+
+  const timeAgo = (iso: string): string => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return t.mobileMisc.notificationsRelJustNow;
+    if (m < 60) return t.mobileMisc.notificationsRelMinutes.replace('{n}', String(m));
+    const h = Math.floor(m / 60);
+    if (h < 24) return t.mobileMisc.notificationsRelHours.replace('{n}', String(h));
+    return t.mobileMisc.notificationsRelDays.replace('{n}', String(Math.floor(h / 24)));
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['notifications', orgId, userId],
@@ -65,7 +67,7 @@ export default function Notifications() {
     <View className="flex-1 bg-surface-alt">
       {(data?.length ?? 0) > 0 ? (
         <Pressable onPress={markAll} className="items-end px-5 pb-1 pt-3">
-          <Text className="text-sm font-medium text-brand">Tout marquer comme lu</Text>
+          <Text className="text-sm font-medium text-brand">{t.mobileMisc.markAllRead}</Text>
         </Pressable>
       ) : null}
 
@@ -98,7 +100,7 @@ export default function Notifications() {
         ListEmptyComponent={
           !isLoading ? (
             <View className="items-center py-16">
-              <Text className="text-sm text-ink-muted">Aucune notification.</Text>
+              <Text className="text-sm text-ink-muted">{t.mobileMisc.noNotifications}</Text>
             </View>
           ) : null
         }

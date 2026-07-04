@@ -16,6 +16,7 @@ import {
 import { listMembers } from '@/lib/api/org';
 import { sendPushToUsers } from '@/lib/api/pushNotifications';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 const PRIORITY_COLOR: Record<TaskPriority, string> = {
@@ -24,12 +25,7 @@ const PRIORITY_COLOR: Record<TaskPriority, string> = {
   low: '#16A34A',
 };
 
-const DUE_OPTIONS = [
-  { key: 'none', label: 'Aucune' },
-  { key: 'today', label: "Aujourd'hui" },
-  { key: 'tomorrow', label: 'Demain' },
-  { key: 'week', label: 'Cette semaine' },
-];
+const DUE_KEYS = ['none', 'today', 'tomorrow', 'week'] as const;
 
 function dueIso(key: string): string | null {
   const d = new Date();
@@ -46,11 +42,24 @@ function dueIso(key: string): string | null {
 }
 
 export default function Tasks() {
+  const { t: tr } = useTranslation();
   const qc = useQueryClient();
   const { session } = useAuth();
   const { orgId, role } = usePermissions();
   const userId = session?.user.id ?? '';
   const isManager = role === 'owner' || role === 'admin';
+
+  const dueLabel: Record<(typeof DUE_KEYS)[number], string> = {
+    none: tr.mobileMisc.dueNone,
+    today: tr.mobileMisc.dueToday,
+    tomorrow: tr.mobileMisc.dueTomorrow,
+    week: tr.mobileMisc.dueThisWeek,
+  };
+  const priorityLabel: Record<TaskPriority, string> = {
+    low: tr.mobileMisc.priorityLow,
+    medium: tr.mobileMisc.priorityMedium,
+    high: tr.mobileMisc.priorityHigh,
+  };
 
   const [scope, setScope] = useState<'mine' | 'all'>('mine');
   const [showDone, setShowDone] = useState(false);
@@ -81,7 +90,7 @@ export default function Tasks() {
 
   const create = useMutation({
     mutationFn: async () => {
-      if (!title.trim()) throw new Error('Titre requis.');
+      if (!title.trim()) throw new Error(tr.mobileMisc.titleRequired);
       const assignedTo = assignee;
       const taskTitle = title.trim();
       const res = await createTask({
@@ -96,7 +105,7 @@ export default function Tasks() {
       // Notify the assignee (push) when assigning to someone other than yourself.
       if (assignedTo && assignedTo !== userId) {
         sendPushToUsers(String(orgId), [assignedTo], {
-          title: 'Nouvelle tâche assignée',
+          title: tr.mobileMisc.newTaskAssigned,
           body: taskTitle,
           data: { type: 'task' },
         });
@@ -112,7 +121,7 @@ export default function Tasks() {
       setAssignee(userId);
       qc.invalidateQueries({ queryKey: ['tasks'] });
     },
-    onError: (e: Error) => Alert.alert('Tâche', e.message),
+    onError: (e: Error) => Alert.alert(tr.mobileMisc.taskAlertTitle, e.message),
   });
 
   const toggle = useMutation({
@@ -143,25 +152,25 @@ export default function Tasks() {
                   className={`rounded-xl px-4 py-1.5 ${scope === s ? 'bg-white' : ''}`}
                 >
                   <Text className={`text-sm font-semibold ${scope === s ? 'text-ink' : 'text-ink-muted'}`}>
-                    {s === 'mine' ? 'Mes tâches' : 'Toutes'}
+                    {s === 'mine' ? tr.mobileMisc.myTasks : tr.mobileMisc.allTasks}
                   </Text>
                 </Pressable>
               ))}
             </View>
           ) : (
-            <Text className="text-base font-bold text-ink">Mes tâches</Text>
+            <Text className="text-base font-bold text-ink">{tr.mobileMisc.myTasks}</Text>
           )}
           <Pressable onPress={() => setShowDone((v) => !v)} className="flex-row items-center gap-1.5">
             <View className={`h-5 w-5 items-center justify-center rounded border ${showDone ? 'border-brand bg-brand' : 'border-surface-border'}`}>
               {showDone ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={12} /> : null}
             </View>
-            <Text className="text-sm text-ink-muted">Voir terminées</Text>
+            <Text className="text-sm text-ink-muted">{tr.mobileMisc.showCompleted}</Text>
           </Pressable>
         </View>
 
         {visible.length === 0 ? (
           <View className="items-center py-16">
-            <Text className="text-sm text-ink-muted">Aucune tâche.</Text>
+            <Text className="text-sm text-ink-muted">{tr.mobileMisc.noTasks}</Text>
           </View>
         ) : (
           visible.map((t) => (
@@ -181,9 +190,9 @@ export default function Tasks() {
                 <View className="mt-1 flex-row flex-wrap items-center gap-2">
                   <View className="flex-row items-center gap-1">
                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: PRIORITY_COLOR[t.priority] }} />
-                    <Text className="text-xs text-ink-subtle">{t.priority}</Text>
+                    <Text className="text-xs text-ink-subtle">{priorityLabel[t.priority]}</Text>
                   </View>
-                  {t.due_date ? <Text className="text-xs text-ink-subtle">· échéance {t.due_date}</Text> : null}
+                  {t.due_date ? <Text className="text-xs text-ink-subtle">{tr.mobileMisc.dueOn.replace('{date}', t.due_date)}</Text> : null}
                   {scope === 'all' && memberName(t.assignee_user_id) ? (
                     <Text className="text-xs text-ink-subtle">· {memberName(t.assignee_user_id)}</Text>
                   ) : null}
@@ -210,11 +219,11 @@ export default function Tasks() {
       <Modal visible={creating} transparent animationType="slide" onRequestClose={() => setCreating(false)}>
         <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setCreating(false)}>
           <Pressable className="gap-3 rounded-t-3xl bg-white p-5" onPress={(e) => e.stopPropagation()}>
-            <Text className="text-lg font-bold text-ink">Nouvelle tâche</Text>
-            <Input label="Titre" value={title} onChangeText={setTitle} placeholder="Ex. Rappeler le client" />
-            <Input label="Description" value={desc} onChangeText={setDesc} placeholder="Optionnel" multiline />
+            <Text className="text-lg font-bold text-ink">{tr.mobileMisc.newTask}</Text>
+            <Input label={tr.mobileMisc.taskTitleLabel} value={title} onChangeText={setTitle} placeholder={tr.mobileMisc.taskTitlePlaceholder} />
+            <Input label={tr.mobileMisc.descriptionLabel} value={desc} onChangeText={setDesc} placeholder={tr.mobileMisc.optional} multiline />
 
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Priorité</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{tr.mobileMisc.priorityLabel}</Text>
             <View className="flex-row gap-2">
               {(['low', 'medium', 'high'] as const).map((p) => (
                 <Pressable
@@ -222,33 +231,33 @@ export default function Tasks() {
                   onPress={() => setPriority(p)}
                   className={`flex-1 items-center rounded-xl border py-2 ${priority === p ? 'border-ink bg-ink' : 'border-surface-border'}`}
                 >
-                  <Text className={`text-sm font-semibold ${priority === p ? 'text-white' : 'text-ink'}`}>{p}</Text>
+                  <Text className={`text-sm font-semibold ${priority === p ? 'text-white' : 'text-ink'}`}>{priorityLabel[p]}</Text>
                 </Pressable>
               ))}
             </View>
 
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Échéance</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{tr.mobileMisc.dueLabel}</Text>
             <View className="flex-row flex-wrap gap-2">
-              {DUE_OPTIONS.map((o) => (
+              {DUE_KEYS.map((k) => (
                 <Pressable
-                  key={o.key}
-                  onPress={() => setDue(o.key)}
-                  className={`rounded-full border px-3.5 py-1.5 ${due === o.key ? 'border-ink bg-ink' : 'border-surface-border'}`}
+                  key={k}
+                  onPress={() => setDue(k)}
+                  className={`rounded-full border px-3.5 py-1.5 ${due === k ? 'border-ink bg-ink' : 'border-surface-border'}`}
                 >
-                  <Text className={`text-xs font-semibold ${due === o.key ? 'text-white' : 'text-ink'}`}>{o.label}</Text>
+                  <Text className={`text-xs font-semibold ${due === k ? 'text-white' : 'text-ink'}`}>{dueLabel[k]}</Text>
                 </Pressable>
               ))}
             </View>
 
             {isManager ? (
               <>
-                <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Assigner à</Text>
+                <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{tr.mobileMisc.assignToLabel}</Text>
                 <View className="flex-row flex-wrap gap-2">
                   <Pressable
                     onPress={() => setAssignee(userId)}
                     className={`rounded-full border px-3.5 py-1.5 ${assignee === userId ? 'border-ink bg-ink' : 'border-surface-border'}`}
                   >
-                    <Text className={`text-xs font-semibold ${assignee === userId ? 'text-white' : 'text-ink'}`}>Moi</Text>
+                    <Text className={`text-xs font-semibold ${assignee === userId ? 'text-white' : 'text-ink'}`}>{tr.mobileMisc.assignMe}</Text>
                   </Pressable>
                   {(members ?? [])
                     .filter((m) => m.user_id !== userId)
@@ -259,7 +268,7 @@ export default function Tasks() {
                         className={`rounded-full border px-3.5 py-1.5 ${assignee === m.user_id ? 'border-ink bg-ink' : 'border-surface-border'}`}
                       >
                         <Text className={`text-xs font-semibold ${assignee === m.user_id ? 'text-white' : 'text-ink'}`}>
-                          {m.full_name ?? 'Membre'}
+                          {m.full_name ?? tr.mobileMisc.memberFallback}
                         </Text>
                       </Pressable>
                     ))}
@@ -267,7 +276,7 @@ export default function Tasks() {
               </>
             ) : null}
 
-            <Button title="Créer la tâche" onPress={() => create.mutate()} loading={create.isPending} />
+            <Button title={tr.mobileMisc.createTask} onPress={() => create.mutate()} loading={create.isPending} />
           </Pressable>
         </Pressable>
       </Modal>
