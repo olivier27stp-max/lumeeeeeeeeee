@@ -40,6 +40,7 @@ import publicPayRouter from './routes/public-pay';
 import teamSuggestionsRouter from './routes/team-suggestions';
 import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
+import storageUploadRouter from './routes/storage-upload';
 import timesheetsRouter from './routes/timesheets';
 import requestFormsRouter from './routes/request-forms';
 import marketingRouter from './routes/marketing';
@@ -368,6 +369,7 @@ app.use('/api', surveysRouter);
 app.use('/api', teamSuggestionsRouter);
 app.use('/api', jobsRouter);
 app.use('/api', trackingRouter);
+app.use('/api', storageUploadRouter);
 app.use('/api', timesheetsRouter);
 const formSubmitLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — public form submissions
 app.use('/api/public/form', formSubmitLimiter);

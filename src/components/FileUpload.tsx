@@ -118,7 +118,13 @@ export default function FileUpload({
       e.preventDefault();
       setDragOver(false);
       const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
+      if (file) {
+        handleFile(file);
+        return;
+      }
+      // Dragging from the macOS/iOS Photos app yields an asset reference
+      // (uuid=...&library=1...), not an actual file the browser can read.
+      setError('Glissez le fichier depuis le Finder ou cliquez pour le sélectionner (le glisser depuis l’app Photos ne fonctionne pas). / Drag the file from Finder or click to browse (dragging from the Photos app doesn’t work).');
     },
     [handleFile]
   );

@@ -17,6 +17,29 @@ export interface UploadOptions {
   signal?: AbortSignal;
 }
 
+/** Authenticated server relay for image uploads blocked by storage RLS. */
+async function uploadViaServer(bucket: string, path: string, file: File): Promise<{ url: string; path: string }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error('Not authenticated');
+  let activeOrg = '';
+  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch {}
+
+  const res = await fetch(`/api/storage/upload?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': file.type || 'application/octet-stream',
+      'X-Requested-With': 'XMLHttpRequest',
+      ...(activeOrg ? { 'x-org-id': activeOrg } : {}),
+    },
+    body: file,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error || `Upload failed (${res.status}).`);
+  return { url: body.url as string, path: body.path as string };
+}
+
 /**
  * Upload a file to Supabase Storage.
  * Automatically switches to TUS resumable upload for files > 6 MB so that
@@ -34,10 +57,23 @@ export async function uploadFile(
   if (file.size <= RESUMABLE_THRESHOLD_BYTES) {
     // Fast path: single POST for small files.
     onProgress?.(0);
+    // upsert:false — all call sites use unique timestamped paths, and upsert
+    // requires a storage UPDATE policy the live DB doesn't have (it made every
+    // upload fail with "new row violates row-level security policy").
     const { data, error } = await supabase.storage
       .from(bucket)
-      .upload(path, file, { cacheControl: '3600', upsert: true });
-    if (error) throw error;
+      .upload(path, file, { cacheControl: '3600', upsert: false });
+    if (error) {
+      // The live DB's storage INSERT policies have drifted for some buckets.
+      // Image uploads fall back to the authenticated server relay, which
+      // enforces org-scoped paths and uploads via the service client.
+      if (/row-level security/i.test(error.message || '') && file.type.startsWith('image/')) {
+        const relayed = await uploadViaServer(bucket, path, file);
+        onProgress?.(1);
+        return relayed;
+      }
+      throw error;
+    }
     onProgress?.(1);
     return { url: getPublicUrl(bucket, data.path), path: data.path };
   }
@@ -56,7 +92,9 @@ export async function uploadFile(
       retryDelays: [0, 1500, 3000, 6000],
       headers: {
         authorization: `Bearer ${token}`,
-        'x-upsert': 'true',
+        // Same as the fast path: no upsert — unique paths, and the live DB has
+        // no storage UPDATE policy, so upsert trips RLS.
+        'x-upsert': 'false',
       },
       uploadDataDuringCreation: true,
       removeFingerprintOnSuccess: true,
