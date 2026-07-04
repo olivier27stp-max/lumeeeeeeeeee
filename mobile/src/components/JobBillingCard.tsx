@@ -14,6 +14,7 @@ import { logOutboundMessage } from '@/lib/api/messaging';
 import { createNotification } from '@/lib/api/notifications';
 import { textNumber } from '@/lib/contact';
 import { formatCurrencyCents } from '@/lib/format';
+import { useTranslation } from '@/lib/i18n';
 
 type Props = {
   jobId: string;
@@ -35,14 +36,21 @@ export function JobBillingCard({
   clientName,
   clientPhone,
 }: Props) {
+  const { t } = useTranslation();
+  const c = t.mobileComp;
+  const toClient = clientName ? c.notifToClient.replace('{name}', clientName) : '';
+
   // Send the invoice to the client: the /pay/:token page shows the full invoice
   // (number, line items, total, branding) + a Stripe pay button, so this both
   // delivers the invoice and lets them pay it.
   const sendInvoice = async (invoiceId: string, invoiceNumber: string | null, amountCents: number) => {
     try {
       const url = await getOrCreatePaymentLink({ orgId, invoiceId, amountCents, currency });
-      const label = invoiceNumber ? `la facture ${invoiceNumber}` : 'votre facture';
-      const body = `Voici ${label} de ${formatCurrencyCents(amountCents, currency)}. Consultez-la et payez ici : ${url}`;
+      const label = invoiceNumber ? c.invoiceThe.replace('{number}', invoiceNumber) : c.invoiceYours;
+      const body = c.invoiceSendBody
+        .replace('{label}', label)
+        .replace('{amount}', formatCurrencyCents(amountCents, currency))
+        .replace('{url}', url);
 
       if (clientPhone) {
         await textNumber(clientPhone, body);
@@ -62,15 +70,19 @@ export function JobBillingCard({
       markInvoiceSent(invoiceId).catch(() => {});
       createNotification({
         orgId,
-        title: `Facture envoyée${clientName ? ` à ${clientName}` : ''}`,
-        body: invoiceNumber ? `Facture ${invoiceNumber} · ${formatCurrencyCents(amountCents, currency)}` : undefined,
+        title: c.invoiceSentNotifTitle.replace('{to}', toClient),
+        body: invoiceNumber
+          ? c.notifInvoiceBody
+              .replace('{number}', invoiceNumber)
+              .replace('{amount}', formatCurrencyCents(amountCents, currency))
+          : undefined,
         category: 'invoice_sent',
         type: 'success',
         entityType: 'job',
         entityId: jobId,
       });
     } catch (e) {
-      Alert.alert('Envoyer la facture', (e as Error).message);
+      Alert.alert(c.invoiceSentTitle, (e as Error).message);
     }
   };
 
@@ -78,8 +90,11 @@ export function JobBillingCard({
   const remindInvoice = async (invoiceId: string, invoiceNumber: string | null, amountCents: number) => {
     try {
       const url = await getOrCreatePaymentLink({ orgId, invoiceId, amountCents, currency });
-      const label = invoiceNumber ? `la facture ${invoiceNumber}` : 'votre facture';
-      const body = `Petit rappel : ${label} de ${formatCurrencyCents(amountCents, currency)} est en attente de paiement. Vous pouvez la régler ici : ${url}`;
+      const label = invoiceNumber ? c.invoiceThe.replace('{number}', invoiceNumber) : c.invoiceYours;
+      const body = c.invoiceRemindBody
+        .replace('{label}', label)
+        .replace('{amount}', formatCurrencyCents(amountCents, currency))
+        .replace('{url}', url);
       if (clientPhone) {
         await textNumber(clientPhone, body);
         if (userId) {
@@ -90,15 +105,19 @@ export function JobBillingCard({
       }
       createNotification({
         orgId,
-        title: `Relance de paiement envoyée${clientName ? ` à ${clientName}` : ''}`,
-        body: invoiceNumber ? `Facture ${invoiceNumber} · ${formatCurrencyCents(amountCents, currency)}` : undefined,
+        title: c.paymentReminderNotifTitle.replace('{to}', toClient),
+        body: invoiceNumber
+          ? c.notifInvoiceBody
+              .replace('{number}', invoiceNumber)
+              .replace('{amount}', formatCurrencyCents(amountCents, currency))
+          : undefined,
         category: 'payment_reminder',
         type: 'info',
         entityType: 'job',
         entityId: jobId,
       });
     } catch (e) {
-      Alert.alert('Relance', (e as Error).message);
+      Alert.alert(c.reminder, (e as Error).message);
     }
   };
 
@@ -107,12 +126,12 @@ export function JobBillingCard({
   // Void (cancel) an invoice — e.g. it was created wrong or the job is being redone.
   const confirmVoid = (invoiceId: string, invoiceNumber: string | null) => {
     Alert.alert(
-      'Annuler la facture',
-      `La facture ${invoiceNumber ? `${invoiceNumber} ` : ''}sera marquée « annulée » (void) et n'attendra plus de paiement. Continuer ?`,
+      c.voidInvoice,
+      c.voidInvoiceConfirm.replace('{number}', invoiceNumber ? `${invoiceNumber} ` : ''),
       [
-        { text: 'Retour', style: 'cancel' },
+        { text: c.back, style: 'cancel' },
         {
-          text: 'Annuler la facture',
+          text: c.voidInvoice,
           style: 'destructive',
           onPress: async () => {
             try {
@@ -120,7 +139,7 @@ export function JobBillingCard({
               qc.invalidateQueries({ queryKey: ['billing', 'invoices', jobId] });
               qc.invalidateQueries({ queryKey: ['invoices'] });
             } catch (e) {
-              Alert.alert('Annuler la facture', (e as Error).message);
+              Alert.alert(c.voidInvoice, (e as Error).message);
             }
           },
         },
@@ -143,10 +162,10 @@ export function JobBillingCard({
 
   return (
     <Card className="gap-3">
-      <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Facturation</Text>
+      <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{c.billing}</Text>
 
       {!hasAny ? (
-        <Text className="text-sm text-ink-subtle">Aucune soumission ni facture.</Text>
+        <Text className="text-sm text-ink-subtle">{c.noQuoteOrInvoice}</Text>
       ) : null}
 
       {(quotes ?? []).map((q) => {
@@ -155,7 +174,7 @@ export function JobBillingCard({
           <View key={q.id} className="gap-2">
             <View className="flex-row items-center justify-between">
               <View>
-                <Text className="text-sm font-medium text-ink">Soumission {q.quote_number ?? ''}</Text>
+                <Text className="text-sm font-medium text-ink">{c.quoteLabel.replace('{number}', q.quote_number ?? '')}</Text>
                 <Text className="text-xs text-ink-muted">{q.status ?? '—'}</Text>
               </View>
               <Text className="text-sm text-ink">
@@ -167,7 +186,7 @@ export function JobBillingCard({
                 onPress={() => router.push(`/(app)/quotes/send?id=${q.id}` as any)}
                 className="self-start rounded-full border border-brand px-4 py-1.5"
               >
-                <Text className="text-xs font-medium text-brand">Envoyer la soumission</Text>
+                <Text className="text-xs font-medium text-brand">{c.sendQuote}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -184,11 +203,11 @@ export function JobBillingCard({
             >
               <View>
                 <Text className="text-sm font-medium text-ink">
-                  Facture {inv.invoice_number ?? ''}
+                  {c.invoiceLabel.replace('{number}', inv.invoice_number ?? '')}
                 </Text>
                 <Text className="text-xs text-ink-muted">
                   {inv.status ?? '—'}
-                  {due > 0 ? ` · ${formatCurrencyCents(due, currency)} dû` : ''}
+                  {due > 0 ? ` · ${formatCurrencyCents(due, currency)} ${c.due}` : ''}
                 </Text>
               </View>
               <Text className="text-sm text-ink">
@@ -196,7 +215,7 @@ export function JobBillingCard({
               </Text>
             </Pressable>
             {inv.status === 'void' ? (
-              <Text className="text-xs font-medium text-ink-subtle">Facture annulée (void)</Text>
+              <Text className="text-xs font-medium text-ink-subtle">{c.invoiceVoided}</Text>
             ) : (
               <View className="flex-row flex-wrap gap-2">
                 {due > 0 || (inv.total_cents ?? 0) > 0 ? (
@@ -205,7 +224,7 @@ export function JobBillingCard({
                     className="rounded-full bg-brand px-4 py-1.5"
                   >
                     <Text className="text-xs font-medium text-white">
-                      {clientPhone ? 'Envoyer la facture' : 'Partager la facture'}
+                      {clientPhone ? c.sendInvoice : c.shareInvoice}
                     </Text>
                   </Pressable>
                 ) : null}
@@ -214,14 +233,14 @@ export function JobBillingCard({
                     onPress={() => remindInvoice(inv.id, inv.invoice_number, due)}
                     className="rounded-full border border-brand px-4 py-1.5"
                   >
-                    <Text className="text-xs font-medium text-brand">Relancer le paiement</Text>
+                    <Text className="text-xs font-medium text-brand">{c.remindPayment}</Text>
                   </Pressable>
                 ) : null}
                 <Pressable
                   onPress={() => confirmVoid(inv.id, inv.invoice_number)}
                   className="rounded-full border border-red-300 px-4 py-1.5"
                 >
-                  <Text className="text-xs font-medium text-red-600">Annuler la facture</Text>
+                  <Text className="text-xs font-medium text-red-600">{c.voidInvoice}</Text>
                 </Pressable>
               </View>
             )}

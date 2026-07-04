@@ -12,6 +12,7 @@ import {
   listCustomColumns,
   saveCustomValue,
 } from '@/lib/api/customFields';
+import { useTranslation } from '@/lib/i18n';
 
 /** Renders an org's custom fields for one record (job/client) and saves edits. */
 export function CustomFieldsCard({
@@ -23,6 +24,8 @@ export function CustomFieldsCard({
   entity: CustomColumn['entity'];
   recordId: string;
 }) {
+  const { t } = useTranslation();
+  const c = t.mobileComp;
   const qc = useQueryClient();
   const { data: columns } = useQuery({
     queryKey: ['custom-columns', orgId, entity],
@@ -51,14 +54,14 @@ export function CustomFieldsCard({
       });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['custom-values', orgId, recordId] }),
-    onError: (e: Error) => Alert.alert('Champ', e.message),
+    onError: (e: Error) => Alert.alert(c.field, e.message),
   });
 
   if (!columns || columns.length === 0) return null;
 
   return (
     <View className="gap-3 rounded-2xl bg-white p-4">
-      <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Champs personnalisés</Text>
+      <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{c.customFields}</Text>
       {columns.map((col) => {
         const v = draft[col.id];
         return (
@@ -78,7 +81,7 @@ export function CustomFieldsCard({
                 <View className={`h-6 w-6 items-center justify-center rounded-md border ${v ? 'border-brand bg-brand' : 'border-surface-border'}`}>
                   {v ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={13} /> : null}
                 </View>
-                <Text className="text-ink-muted">{v ? 'Oui' : 'Non'}</Text>
+                <Text className="text-ink-muted">{v ? c.yes : c.no}</Text>
               </Pressable>
             ) : col.col_type === 'dropdown' || col.col_type === 'status' ? (
               <View className="flex-row flex-wrap gap-2">
@@ -95,8 +98,8 @@ export function CustomFieldsCard({
             ) : (
               <Input
                 value={v != null ? String(v) : ''}
-                onChangeText={(t) => setDraft((d) => ({ ...d, [col.id]: t }))}
-                placeholder={col.col_type === 'date' ? 'AAAA-MM-JJ' : '…'}
+                onChangeText={(txt) => setDraft((d) => ({ ...d, [col.id]: txt }))}
+                placeholder={col.col_type === 'date' ? c.datePlaceholder : '…'}
                 keyboardType={
                   ['number', 'currency', 'rating'].includes(col.col_type)
                     ? 'numeric'
@@ -112,7 +115,7 @@ export function CustomFieldsCard({
             )}
 
             {(col.col_type === 'checkbox' || col.col_type === 'dropdown' || col.col_type === 'status') ? (
-              <Button title="Enregistrer" variant="secondary" onPress={() => save.mutate(col)} />
+              <Button title={c.save} variant="secondary" onPress={() => save.mutate(col)} />
             ) : null}
           </View>
         );

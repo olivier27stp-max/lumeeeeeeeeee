@@ -15,9 +15,11 @@ import {
 } from '@/lib/api/checklists';
 import { capturePhoto, uploadJobPhoto, uploadJobSignature } from '@/lib/api/jobPhotos';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 export default function ChecklistFill() {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
   const { session } = useAuth();
@@ -52,7 +54,10 @@ export default function ChecklistFill() {
       const missing = (checklist?.items ?? []).filter(
         (it) => it.required && !hasValue(responses[it.id]),
       );
-      if (missing.length) throw new Error(`Champs requis manquants : ${missing.map((m) => m.label).join(', ')}`);
+      if (missing.length)
+        throw new Error(
+          t.mobileComp.requiredFieldsMissing.replace('{fields}', missing.map((m) => m.label).join(', ')),
+        );
       return completeChecklist(String(id), responses, userId);
     },
     onSuccess: () => {
@@ -60,7 +65,7 @@ export default function ChecklistFill() {
       qc.invalidateQueries({ queryKey: ['job-checklists', checklist?.job_id] });
       router.back();
     },
-    onError: (e: Error) => Alert.alert('Checklist', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileComp.checklist, e.message),
   });
 
   const addPhoto = async (item: ChecklistItem) => {
@@ -72,7 +77,7 @@ export default function ChecklistFill() {
       const att = await uploadJobPhoto({ jobId: checklist.job_id, orgId, uri: img.uri, userId });
       set(item.id, att.url);
     } catch (e) {
-      Alert.alert('Photo', (e as Error).message);
+      Alert.alert(t.mobileComp.photo, (e as Error).message);
     } finally {
       setBusyItem(null);
     }
@@ -87,7 +92,7 @@ export default function ChecklistFill() {
       const att = await uploadJobSignature({ jobId: checklist.job_id, orgId, base64Png, userId });
       set(item, att.url);
     } catch (e) {
-      Alert.alert('Signature', (e as Error).message);
+      Alert.alert(t.mobileJobs.signature, (e as Error).message);
     } finally {
       setBusyItem(null);
     }
@@ -104,9 +109,9 @@ export default function ChecklistFill() {
   return (
     <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt" contentContainerStyle={{ padding: 20, gap: 14 }}>
       <View>
-        <Text className="text-xl font-bold text-ink">{checklist.name ?? 'Checklist'}</Text>
+        <Text className="text-xl font-bold text-ink">{checklist.name ?? t.mobileComp.checklist}</Text>
         {done ? (
-          <Text className="mt-1 text-sm font-semibold text-status-completed">Complétée ✓</Text>
+          <Text className="mt-1 text-sm font-semibold text-status-completed">{t.mobileComp.completed}</Text>
         ) : null}
       </View>
 
@@ -130,14 +135,14 @@ export default function ChecklistFill() {
                 >
                   {val ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={14} /> : null}
                 </View>
-                <Text className="text-ink-muted">{val ? 'Oui' : 'Non'}</Text>
+                <Text className="text-ink-muted">{val ? t.mobileComp.yes : t.mobileComp.no}</Text>
               </Pressable>
             ) : null}
 
             {item.type === 'text' ? (
               <Input
                 value={String(val ?? '')}
-                onChangeText={(t) => set(item.id, t)}
+                onChangeText={(txt) => set(item.id, txt)}
                 editable={!done}
                 placeholder="…"
                 multiline
@@ -147,7 +152,7 @@ export default function ChecklistFill() {
             {item.type === 'number' ? (
               <Input
                 value={val != null ? String(val) : ''}
-                onChangeText={(t) => set(item.id, t.replace(/[^0-9.]/g, ''))}
+                onChangeText={(txt) => set(item.id, txt.replace(/[^0-9.]/g, ''))}
                 editable={!done}
                 keyboardType="numeric"
                 placeholder="0"
@@ -161,7 +166,7 @@ export default function ChecklistFill() {
                 ) : null}
                 {!done ? (
                   <Button
-                    title={val ? 'Reprendre la photo' : 'Prendre une photo'}
+                    title={val ? t.mobileComp.retakePhoto : t.mobileComp.takePhoto}
                     variant="secondary"
                     onPress={() => addPhoto(item)}
                     loading={busyItem === item.id}
@@ -177,7 +182,7 @@ export default function ChecklistFill() {
                 ) : null}
                 {!done ? (
                   <Button
-                    title={val ? 'Re-signer' : 'Signer'}
+                    title={val ? t.mobileComp.resign : t.mobileComp.sign}
                     variant="secondary"
                     onPress={() => setSigItemId(item.id)}
                     loading={busyItem === item.id}
@@ -191,9 +196,9 @@ export default function ChecklistFill() {
 
       {!done ? (
         <View className="gap-3 pt-2">
-          <Button title="Terminer la checklist" onPress={() => complete.mutate()} loading={complete.isPending} />
+          <Button title={t.mobileComp.finishChecklist} onPress={() => complete.mutate()} loading={complete.isPending} />
           <Button
-            title="Enregistrer le brouillon"
+            title={t.mobileComp.saveDraft}
             variant="secondary"
             onPress={() => saveDraft.mutate()}
             loading={saveDraft.isPending}

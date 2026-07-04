@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { createClient, listClients } from '@/lib/api/clients';
 import { clientFullName } from '@/lib/format';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 export type PickedClient = { id: string; name: string };
@@ -19,6 +20,8 @@ export function ClientPicker({
   value: PickedClient | null;
   onChange: (c: PickedClient | null) => void;
 }) {
+  const { t } = useTranslation();
+  const tc = t.mobileComp;
   const qc = useQueryClient();
   const { orgId, canCreateClients } = usePermissions();
   const [search, setSearch] = useState('');
@@ -42,7 +45,7 @@ export function ClientPicker({
       setCreating(false);
       setSearch('');
     },
-    onError: (e: Error) => Alert.alert('Could not create client', e.message),
+    onError: (e: Error) => Alert.alert(tc.couldNotCreateClient, e.message),
   });
 
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -52,7 +55,7 @@ export function ClientPicker({
       <Card className="flex-row items-center justify-between">
         <Text className="text-base text-ink">{value.name}</Text>
         <Pressable onPress={() => onChange(null)}>
-          <Text className="text-sm text-brand">Change</Text>
+          <Text className="text-sm text-brand">{tc.change}</Text>
         </Pressable>
       </Card>
     );

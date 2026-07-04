@@ -13,10 +13,13 @@ import {
   updateSpecificNoteFiles,
 } from '@/lib/api/specificNotes';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 
 /** Running internal notes log for a job (text only — job photos live in the
  * separate Photos section, so notes don't duplicate that). */
 export function SpecificNotesCard({ jobId, orgId }: { jobId: string; orgId: string }) {
+  const { t } = useTranslation();
+  const c = t.mobileComp;
   const qc = useQueryClient();
   const { session } = useAuth();
   const userId = session?.user.id ?? '';
@@ -31,7 +34,7 @@ export function SpecificNotesCard({ jobId, orgId }: { jobId: string; orgId: stri
 
   const add = useMutation({
     mutationFn: () => {
-      if (!text.trim()) throw new Error('Note vide.');
+      if (!text.trim()) throw new Error(c.noteEmpty);
       return createSpecificNote({
         orgId,
         entityType: 'job',
@@ -45,7 +48,7 @@ export function SpecificNotesCard({ jobId, orgId }: { jobId: string; orgId: stri
       setText('');
       qc.invalidateQueries({ queryKey: ['specific-notes', 'job', jobId] });
     },
-    onError: (e: Error) => Alert.alert('Note', e.message),
+    onError: (e: Error) => Alert.alert(c.note, e.message),
   });
 
   const del = useMutation({
@@ -53,9 +56,9 @@ export function SpecificNotesCard({ jobId, orgId }: { jobId: string; orgId: stri
     onSuccess: () => qc.invalidateQueries({ queryKey: ['specific-notes', 'job', jobId] }),
   });
   const confirmDelNote = (id: string) =>
-    Alert.alert('Supprimer la note', 'Cette note sera supprimée. Continuer ?', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Supprimer', style: 'destructive', onPress: () => del.mutate(id) },
+    Alert.alert(c.deleteNoteTitle, c.deleteNoteConfirm, [
+      { text: c.cancel, style: 'cancel' },
+      { text: c.delete, style: 'destructive', onPress: () => del.mutate(id) },
     ]);
 
   // Remove one photo from an already-saved note (clean up legacy note photos).
@@ -63,18 +66,18 @@ export function SpecificNotesCard({ jobId, orgId }: { jobId: string; orgId: stri
     mutationFn: ({ noteId, files }: { noteId: string; files: NoteFile[] }) =>
       updateSpecificNoteFiles(noteId, files),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['specific-notes', 'job', jobId] }),
-    onError: (e: Error) => Alert.alert('Photo', e.message),
+    onError: (e: Error) => Alert.alert(c.photo, e.message),
   });
 
   return (
     <View className="gap-3 rounded-2xl bg-white p-4">
-      <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Notes internes</Text>
+      <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{c.internalNotes}</Text>
 
       {/* Composer (text only) */}
-      <Input value={text} onChangeText={setText} placeholder="Ajouter une note…" multiline />
+      <Input value={text} onChangeText={setText} placeholder={c.addNotePlaceholder} multiline />
       <View className="flex-row items-center">
         <View className="flex-1" />
-        <Button title="Ajouter" onPress={() => add.mutate()} loading={add.isPending} />
+        <Button title={c.add} onPress={() => add.mutate()} loading={add.isPending} />
       </View>
 
       {/* Existing notes */}

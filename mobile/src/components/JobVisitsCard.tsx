@@ -6,6 +6,7 @@ import { Alert, Platform, Pressable, Text, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { addJobVisit, deleteJobVisit, listJobVisits } from '@/lib/api/visits';
+import { useTranslation } from '@/lib/i18n';
 
 /** Extra scheduled visits for a job (multi-day / return visits). */
 export function JobVisitsCard({
@@ -19,6 +20,8 @@ export function JobVisitsCard({
   teamId?: string | null;
   canEdit: boolean;
 }) {
+  const { t } = useTranslation();
+  const c = t.mobileComp;
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [when, setWhen] = useState(() => {
@@ -43,7 +46,7 @@ export function JobVisitsCard({
       setAdding(false);
       qc.invalidateQueries({ queryKey: ['job-visits', jobId] });
     },
-    onError: (e: Error) => Alert.alert('Visite', e.message),
+    onError: (e: Error) => Alert.alert(c.visit, e.message),
   });
 
   const del = useMutation({
@@ -60,11 +63,11 @@ export function JobVisitsCard({
   return (
     <View className="gap-3 rounded-2xl bg-white p-4">
       <View className="flex-row items-center justify-between">
-        <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Visites planifiées</Text>
+        <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{c.plannedVisits}</Text>
         {canEdit ? (
           <Pressable onPress={() => setAdding((v) => !v)} className="flex-row items-center gap-1">
             <SymbolView name={adding ? 'minus.circle.fill' : 'plus.circle.fill'} tintColor="#2563EB" size={18} />
-            <Text className="text-sm font-semibold text-brand">{adding ? 'Fermer' : 'Ajouter'}</Text>
+            <Text className="text-sm font-semibold text-brand">{adding ? c.close : c.add}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -77,12 +80,12 @@ export function JobVisitsCard({
             display={Platform.OS === 'ios' ? 'compact' : 'default'}
             onChange={(_, d) => d && setWhen(d)}
           />
-          <Button title="Ajouter la visite" onPress={() => add.mutate()} loading={add.isPending} />
+          <Button title={c.addVisit} onPress={() => add.mutate()} loading={add.isPending} />
         </View>
       ) : null}
 
       {(visits?.length ?? 0) === 0 ? (
-        <Text className="text-sm text-ink-muted">Aucune visite planifiée.</Text>
+        <Text className="text-sm text-ink-muted">{c.noPlannedVisits}</Text>
       ) : (
         visits!.map((v) => (
           <View key={v.id} className="flex-row items-center justify-between border-t border-surface-border pt-2">

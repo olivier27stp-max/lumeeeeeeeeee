@@ -6,6 +6,7 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { Input } from '@/components/ui/Input';
 import { LineItemInput } from '@/lib/api/billing';
 import { listServices } from '@/lib/api/services';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 type Row = { id: string; name: string; qty: string; price: string };
@@ -23,6 +24,8 @@ export function LineItemsEditor({
   seed?: LineItemInput[];
   seedKey?: string;
 }) {
+  const { t } = useTranslation();
+  const c = t.mobileComp;
   const { orgId } = usePermissions();
   const [rows, setRows] = useState<Row[]>([newRow()]);
   const [catalogOpen, setCatalogOpen] = useState(false);
@@ -76,7 +79,7 @@ export function LineItemsEditor({
 
   return (
     <View className="gap-2">
-      <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Articles</Text>
+      <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{c.items}</Text>
 
       {rows.map((r) => (
         <View key={r.id} className="gap-2 rounded-2xl border border-surface-border bg-white p-3">
@@ -84,7 +87,7 @@ export function LineItemsEditor({
             <TextInput
               value={r.name}
               onChangeText={(v) => update(r.id, 'name', v)}
-              placeholder="Article / service"
+              placeholder={c.itemService}
               placeholderTextColor="#A3A3A3"
               className="flex-1 text-base text-ink"
             />
@@ -94,11 +97,11 @@ export function LineItemsEditor({
           </View>
           <View className="flex-row gap-2">
             <View className="w-20">
-              <Text className="mb-0.5 text-[11px] text-ink-subtle">Qté</Text>
+              <Text className="mb-0.5 text-[11px] text-ink-subtle">{c.qty}</Text>
               <TextInput value={r.qty} onChangeText={(v) => update(r.id, 'qty', v)} keyboardType="decimal-pad" className="rounded-lg border border-surface-border px-2 py-1.5 text-sm text-ink" />
             </View>
             <View className="flex-1">
-              <Text className="mb-0.5 text-[11px] text-ink-subtle">Prix unitaire ($)</Text>
+              <Text className="mb-0.5 text-[11px] text-ink-subtle">{c.unitPrice}</Text>
               <TextInput value={r.price} onChangeText={(v) => update(r.id, 'price', v)} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#A3A3A3" className="rounded-lg border border-surface-border px-2 py-1.5 text-sm text-ink" />
             </View>
           </View>
@@ -111,20 +114,20 @@ export function LineItemsEditor({
           className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl border border-dashed border-surface-border py-3"
         >
           <SymbolView name="plus" tintColor="#171717" size={14} resizeMode="scaleAspectFit" />
-          <Text className="text-sm font-medium text-ink">Article personnalisé</Text>
+          <Text className="text-sm font-medium text-ink">{c.customItem}</Text>
         </Pressable>
         <Pressable
           onPress={() => setCatalogOpen((o) => !o)}
           className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl border border-dashed border-surface-border py-3"
         >
           <SymbolView name="square.grid.2x2" tintColor="#171717" size={14} resizeMode="scaleAspectFit" />
-          <Text className="text-sm font-medium text-ink">Du catalogue</Text>
+          <Text className="text-sm font-medium text-ink">{c.fromCatalog}</Text>
         </Pressable>
       </View>
 
       {catalogOpen ? (
         <View className="gap-2 rounded-2xl border border-surface-border bg-white p-3">
-          <Input label="Rechercher un service" value={catalogSearch} onChangeText={setCatalogSearch} placeholder="Nom du service…" />
+          <Input label={c.searchService} value={catalogSearch} onChangeText={setCatalogSearch} placeholder={c.serviceNamePlaceholder} />
           {(services ?? []).map((s) => (
             <Pressable
               key={s.id}
@@ -136,7 +139,7 @@ export function LineItemsEditor({
             </Pressable>
           ))}
           {(services?.length ?? 0) === 0 ? (
-            <Text className="py-2 text-xs text-ink-subtle">Aucun service trouvé. Utilise « Article personnalisé ».</Text>
+            <Text className="py-2 text-xs text-ink-subtle">{c.noServiceFound}</Text>
           ) : null}
         </View>
       ) : null}

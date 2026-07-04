@@ -10,6 +10,7 @@ import {
   uploadJobPhoto,
 } from '@/lib/api/jobPhotos';
 import { SymbolView } from 'expo-symbols';
+import { useTranslation } from '@/lib/i18n';
 import { JobAttachment } from '@/types/db';
 
 type Props = {
@@ -25,6 +26,8 @@ type Props = {
 const photoOnly = (a: JobAttachment) => a.kind !== 'signature';
 
 export function JobPhotoGrid({ jobId, orgId, userId, attachments, editable = true, onChange }: Props) {
+  const { t } = useTranslation();
+  const c = t.mobileComp;
   const photos = attachments.filter(photoOnly);
   const [uploading, setUploading] = useState(false);
   const [viewer, setViewer] = useState<string | null>(null);
@@ -35,24 +38,24 @@ export function JobPhotoGrid({ jobId, orgId, userId, attachments, editable = tru
       await uploadJobPhoto({ jobId, orgId, uri, userId });
       onChange?.();
     } catch (e) {
-      Alert.alert('Upload failed', (e as Error).message);
+      Alert.alert(c.uploadFailed, (e as Error).message);
     } finally {
       setUploading(false);
     }
   };
 
   const deletePhoto = (att: JobAttachment) => {
-    Alert.alert('Supprimer la photo', 'Cette photo sera retirée du job. Continuer ?', [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(c.deletePhotoTitle, c.deletePhotoConfirm, [
+      { text: c.cancel, style: 'cancel' },
       {
-        text: 'Supprimer',
+        text: c.delete,
         style: 'destructive',
         onPress: async () => {
           try {
             await removeAttachment(jobId, att.path ?? att.url);
             onChange?.();
           } catch (e) {
-            Alert.alert('Photo', (e as Error).message);
+            Alert.alert(c.photo, (e as Error).message);
           }
         },
       },
@@ -60,30 +63,30 @@ export function JobPhotoGrid({ jobId, orgId, userId, attachments, editable = tru
   };
 
   const addPhoto = () => {
-    Alert.alert('Add photo', undefined, [
+    Alert.alert(c.addPhoto, undefined, [
       {
-        text: 'Take photo',
+        text: c.takePhoto,
         onPress: async () => {
           try {
             const img = await capturePhoto();
             if (img) await runUpload(img.uri);
           } catch (e) {
-            Alert.alert('Camera', (e as Error).message);
+            Alert.alert(c.camera, (e as Error).message);
           }
         },
       },
       {
-        text: 'Choose from library',
+        text: c.chooseFromLibrary,
         onPress: async () => {
           try {
             const img = await pickPhoto();
             if (img) await runUpload(img.uri);
           } catch (e) {
-            Alert.alert('Library', (e as Error).message);
+            Alert.alert(c.library, (e as Error).message);
           }
         },
       },
-      { text: 'Cancel', style: 'cancel' },
+      { text: c.cancel, style: 'cancel' },
     ]);
   };
 
@@ -91,7 +94,7 @@ export function JobPhotoGrid({ jobId, orgId, userId, attachments, editable = tru
     <View className="gap-3">
       <View className="flex-row items-center justify-between">
         <Text className="text-xs text-ink-muted uppercase">
-          Photos {photos.length > 0 ? `(${photos.length})` : ''}
+          {c.photos} {photos.length > 0 ? `(${photos.length})` : ''}
         </Text>
         {uploading ? <ActivityIndicator color="#171717" /> : null}
       </View>

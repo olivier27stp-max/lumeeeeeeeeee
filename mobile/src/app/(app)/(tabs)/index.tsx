@@ -27,7 +27,7 @@ import { MK } from '@/lib/offline/mutationKeys';
 import { openDirections, promptCall } from '@/lib/contact';
 import { formatTime } from '@/lib/format';
 import { Job } from '@/types/db';
-import { statusStyle } from '@/lib/statusColors';
+import { statusLabel, statusStyle } from '@/lib/statusColors';
 import { useViewMode } from '@/lib/view-mode';
 import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
@@ -344,7 +344,7 @@ export default function Home() {
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: teamColor(j.team_id) as string }} />
           ) : null}
           <Text className="text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
-            {statusStyle(j.status).label}
+            {statusLabel(j.status, t.mobileComp)}
           </Text>
         </View>
         {j.property_address ? (

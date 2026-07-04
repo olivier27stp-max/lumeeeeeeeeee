@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { addJobMaterial, deleteJobMaterial, listJobMaterials } from '@/lib/api/materials';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 
 /** Tech-facing log of materials/supplies used on a job. */
 export function JobMaterialsCard({
@@ -18,6 +19,8 @@ export function JobMaterialsCard({
   orgId: string;
   canSeePricing: boolean;
 }) {
+  const { t } = useTranslation();
+  const c = t.mobileComp;
   const qc = useQueryClient();
   const { session } = useAuth();
   const userId = session?.user.id ?? '';
@@ -36,7 +39,7 @@ export function JobMaterialsCard({
 
   const add = useMutation({
     mutationFn: () => {
-      if (!name.trim()) throw new Error('Nom du matériel requis.');
+      if (!name.trim()) throw new Error(c.materialNameRequired);
       return addJobMaterial({
         orgId,
         jobId,
@@ -55,7 +58,7 @@ export function JobMaterialsCard({
       setAdding(false);
       qc.invalidateQueries({ queryKey: ['job-materials', jobId] });
     },
-    onError: (e: Error) => Alert.alert('Matériel', e.message),
+    onError: (e: Error) => Alert.alert(c.material, e.message),
   });
 
   const del = useMutation({
@@ -66,35 +69,35 @@ export function JobMaterialsCard({
   return (
     <View className="gap-3 rounded-2xl bg-white p-4">
       <View className="flex-row items-center justify-between">
-        <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Matériel utilisé</Text>
+        <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{c.materialsUsed}</Text>
         <Pressable onPress={() => setAdding((v) => !v)} className="flex-row items-center gap-1">
           <SymbolView name={adding ? 'minus.circle.fill' : 'plus.circle.fill'} tintColor="#2563EB" size={18} />
-          <Text className="text-sm font-semibold text-brand">{adding ? 'Fermer' : 'Ajouter'}</Text>
+          <Text className="text-sm font-semibold text-brand">{adding ? c.close : c.add}</Text>
         </Pressable>
       </View>
 
       {adding ? (
         <View className="gap-2">
-          <Input value={name} onChangeText={setName} placeholder="Ex. Tuyau PVC 1/2''" />
+          <Input value={name} onChangeText={setName} placeholder={c.materialNamePlaceholder} />
           <View className="flex-row gap-2">
             <View className="flex-1">
-              <Input value={qty} onChangeText={setQty} placeholder="Qté" keyboardType="numeric" />
+              <Input value={qty} onChangeText={setQty} placeholder={c.qty} keyboardType="numeric" />
             </View>
             <View className="flex-1">
-              <Input value={unit} onChangeText={setUnit} placeholder="Unité (pi, kg…)" />
+              <Input value={unit} onChangeText={setUnit} placeholder={c.unitPlaceholder} />
             </View>
             {canSeePricing ? (
               <View className="flex-1">
-                <Input value={cost} onChangeText={setCost} placeholder="$/u" keyboardType="numeric" />
+                <Input value={cost} onChangeText={setCost} placeholder={c.pricePerUnitPlaceholder} keyboardType="numeric" />
               </View>
             ) : null}
           </View>
-          <Button title="Enregistrer le matériel" onPress={() => add.mutate()} loading={add.isPending} />
+          <Button title={c.saveMaterial} onPress={() => add.mutate()} loading={add.isPending} />
         </View>
       ) : null}
 
       {(materials?.length ?? 0) === 0 ? (
-        <Text className="text-sm text-ink-muted">Aucun matériel enregistré.</Text>
+        <Text className="text-sm text-ink-muted">{c.noMaterials}</Text>
       ) : (
         materials!.map((m) => (
           <View key={m.id} className="flex-row items-center justify-between border-t border-surface-border pt-2">
