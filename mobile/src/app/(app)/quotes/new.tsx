@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ClientPicker, PickedClient } from '@/components/ClientPicker';
 import { LineItemsEditor } from '@/components/LineItemsEditor';
-import { createQuote, markQuoteSent, quoteShareLink, LineItemInput } from '@/lib/api/billing';
+import { createQuote, getOrgTaxRatePct, markQuoteSent, quoteShareLink, LineItemInput } from '@/lib/api/billing';
 import { getClient } from '@/lib/api/clients';
 import { getCompany } from '@/lib/api/org';
 import { findOrCreateConversation } from '@/lib/api/messaging';
@@ -51,6 +51,15 @@ export default function NewQuote() {
   const [validDays, setValidDays] = useState('30');
   const [items, setItems] = useState<LineItemInput[]>([]);
   const [taxRate, setTaxRate] = useState(DEFAULT_TAX);
+  // Org's tax rate from the desktop (Settings → Taxes) — same as the web.
+  const { data: orgTax } = useQuery({
+    queryKey: ['org-tax', orgId],
+    queryFn: () => getOrgTaxRatePct(String(orgId)),
+    enabled: !!orgId,
+  });
+  useEffect(() => {
+    if (orgTax != null) setTaxRate(String(orgTax));
+  }, [orgTax]);
   const [discountOn, setDiscountOn] = useState(false);
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');
   const [discountValue, setDiscountValue] = useState('');

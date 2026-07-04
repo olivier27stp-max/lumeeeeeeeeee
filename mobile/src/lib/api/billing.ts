@@ -445,3 +445,22 @@ export async function listInvoicesForClient(clientId: string): Promise<InvoiceRo
   if (error) throw new Error(error.message);
   return (data ?? []) as InvoiceRow[];
 }
+
+/**
+ * The org's default tax rate (%) — the sum of its ACTIVE percentage tax_configs,
+ * set on the desktop (Settings → Taxes). So a quote/invoice created on mobile
+ * uses the SAME taxes as the web instead of a hardcoded value. Returns null when
+ * the org has no tax configured (callers fall back to their own default).
+ */
+export async function getOrgTaxRatePct(orgId: string): Promise<number | null> {
+  const { data, error } = await supabase
+    .from('tax_configs')
+    .select('rate, type, is_active')
+    .eq('org_id', orgId)
+    .eq('is_active', true);
+  if (error || !data || data.length === 0) return null;
+  const total = data
+    .filter((t: any) => t.type === 'percentage')
+    .reduce((s: number, t: any) => s + (Number(t.rate) || 0), 0);
+  return total > 0 ? total : null;
+}

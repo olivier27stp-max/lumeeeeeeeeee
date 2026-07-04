@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ClientPicker, PickedClient } from '@/components/ClientPicker';
 import { LineItemsEditor } from '@/components/LineItemsEditor';
-import { createInvoice, LineItemInput } from '@/lib/api/billing';
+import { createInvoice, getOrgTaxRatePct, LineItemInput } from '@/lib/api/billing';
 import { getJob, listJobLineItems, listJobsInRange } from '@/lib/api/jobs';
 import { Job } from '@/types/db';
 import { formatCurrencyCents, formatTime } from '@/lib/format';
@@ -41,6 +41,17 @@ export default function NewInvoice() {
   const [dueDate, setDueDate] = useState(net30FromToday);
   const [items, setItems] = useState<LineItemInput[]>([]);
   const [taxRate, setTaxRate] = useState(DEFAULT_TAX);
+
+  // Use the org's tax rate configured on the desktop (Settings → Taxes) instead
+  // of a hardcoded value, so mobile invoices match the web.
+  const { data: orgTax } = useQuery({
+    queryKey: ['org-tax', orgId],
+    queryFn: () => getOrgTaxRatePct(String(orgId)),
+    enabled: !!orgId,
+  });
+  useEffect(() => {
+    if (orgTax != null) setTaxRate(String(orgTax));
+  }, [orgTax]);
 
   // From-job mode: list recent jobs to pick from.
   const range = useMemo(() => {

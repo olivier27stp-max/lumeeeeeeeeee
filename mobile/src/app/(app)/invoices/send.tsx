@@ -81,10 +81,10 @@ export default function SendInvoice() {
   });
 
   const buildBody = () => {
-    const who = client ? clientFullName(client) : 'there';
+    const who = client ? clientFullName(client) : 'bonjour';
     const amt = formatCurrencyCents(amount, 'CAD');
-    const link = payUrl ? `\n\nView and pay it here: ${payUrl}` : '';
-    return `Hi ${who}, here's your invoice ${invoice?.invoice_number ? `#${invoice.invoice_number}` : ''} for ${amt}.${link}`;
+    const link = payUrl ? `\n\nConsultez-la et payez ici : ${payUrl}` : '';
+    return `Bonjour ${who}, voici votre facture ${invoice?.invoice_number ? `#${invoice.invoice_number}` : ''} de ${amt}.${link}`;
   };
 
   const markSent = () => {
