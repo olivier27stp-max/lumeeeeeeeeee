@@ -27,7 +27,11 @@ COMMENT ON COLUMN public.pipeline_deals.won_at
 
 -- ---------------------------------------------------------------------------
 -- 2. Migrate legacy stage slugs to canonical values
+--    Drop the old CHECK first — prod has a legacy-slugs-only constraint that
+--    would reject the canonical values during the UPDATEs below.
 -- ---------------------------------------------------------------------------
+ALTER TABLE public.pipeline_deals DROP CONSTRAINT IF EXISTS pipeline_deals_stage_check;
+
 UPDATE public.pipeline_deals SET stage = 'new_prospect' WHERE stage IN ('new', 'lead', 'qualified');
 UPDATE public.pipeline_deals SET stage = 'no_response'  WHERE stage IN ('follow_up_1', 'contacted', 'follow_up', 'proposal');
 UPDATE public.pipeline_deals SET stage = 'quote_sent'   WHERE stage IN ('follow_up_2', 'follow_up_3', 'estimate_sent', 'negotiation');
@@ -41,7 +45,6 @@ WHERE stage NOT IN ('new_prospect', 'no_response', 'quote_sent', 'closed_won', '
 UPDATE public.pipeline_deals SET won_at  = COALESCE(won_at, updated_at) WHERE stage = 'closed_won'  AND won_at  IS NULL;
 UPDATE public.pipeline_deals SET lost_at = COALESCE(lost_at, updated_at) WHERE stage = 'closed_lost' AND lost_at IS NULL;
 
-ALTER TABLE public.pipeline_deals DROP CONSTRAINT IF EXISTS pipeline_deals_stage_check;
 ALTER TABLE public.pipeline_deals
   ADD CONSTRAINT pipeline_deals_stage_check
   CHECK (stage IN ('new_prospect', 'no_response', 'quote_sent', 'closed_won', 'closed_lost'));
