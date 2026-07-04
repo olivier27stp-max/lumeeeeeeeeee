@@ -404,17 +404,51 @@ export default function Insights() {
               REPORTS TAB — pre-built Jobber-parity reports
               ═══════════════════════════════════════════════════ */}
           {tab === 'reports' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              <AverageJobValueCard />
-              <ClientLifetimeValueCard />
-              <TeamProductivityCard />
-              <CancellationRateCard />
-              <QuoteConversionCard />
-              <InvoiceAgingCard />
-              <PaymentMethodMixCard />
-              <JobsPerWeekdayCard />
-              <RecurringRevenueCard />
-              <TopServicesByCountCard />
+            <div className="space-y-7">
+              {/* KPI row — real business metrics with period-over-period deltas */}
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+                <MetricCard label={fr ? 'Revenu' : 'Revenue'} value={overview?.revenue_cents || 0} format="money" changePct={cmp('revenue').pct ?? null} icon={DollarSign} />
+                <MetricCard label={fr ? 'Facturé' : 'Invoiced'} value={overview?.invoiced_value_cents || 0} format="money" icon={BarChart3} />
+                <MetricCard label={fr ? 'Nouveaux leads' : 'New leads'} value={overview?.new_leads_count || 0} icon={Users} />
+                <MetricCard label={fr ? 'Devis convertis' : 'Converted quotes'} value={overview?.converted_quotes_count || 0} icon={Target} />
+                <MetricCard label={fr ? 'Jobs fermés' : 'Closed jobs'} value={jobsSummary?.scheduledJobs || 0} icon={Zap} />
+              </div>
+
+              {/* Ventes & conversion */}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-3">{fr ? 'Ventes & conversion' : 'Sales & conversion'}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <QuoteConversionCard />
+                  <CancellationRateCard />
+                </div>
+              </div>
+
+              {/* Clients & services */}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-3">{fr ? 'Clients & services' : 'Clients & services'}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  <ClientLifetimeValueCard />
+                  <TopServicesByCountCard />
+                  <RecurringRevenueCard />
+                  <AverageJobValueCard />
+                </div>
+              </div>
+
+              {/* Opérations & paiements */}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-3">{fr ? 'Opérations & paiements' : 'Operations & payments'}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  <JobsPerWeekdayCard />
+                  <InvoiceAgingCard />
+                  <PaymentMethodMixCard />
+                </div>
+              </div>
+
+              {/* Équipe */}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-3">{fr ? 'Équipe' : 'Team'}</p>
+                <TeamProductivityCard />
+              </div>
             </div>
           )}
 
