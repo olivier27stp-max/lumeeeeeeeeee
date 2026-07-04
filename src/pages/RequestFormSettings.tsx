@@ -579,8 +579,9 @@ export default function RequestFormSettings() {
                   <FileUpload
                     bucket={STORAGE_BUCKETS.COMPANY_LOGOS}
                     path={`${orgId || 'default'}/request-form`}
-                    accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                    accept="image/*"
                     maxSizeMb={5}
+                    normalizeImageMaxDim={1024}
                     onUpload={(url) => setLogoUrl(url)}
                   >
                     <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-text-secondary">

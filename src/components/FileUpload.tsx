@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { Upload, X, Image as ImageIcon, File as FileIcon, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { uploadFile } from '../lib/storage';
+import { normalizeImageForUpload } from '../lib/imageNormalize';
 
 interface FileUploadProps {
   bucket: string;
@@ -10,6 +11,9 @@ interface FileUploadProps {
   maxSizeMb?: number;
   onUpload: (url: string) => void;
   children?: React.ReactNode;
+  /** Convert/downscale images to a web-safe format (HEIC photos, oversized
+      files) before validation and upload. Longest edge in px. */
+  normalizeImageMaxDim?: number;
 }
 
 export default function FileUpload({
@@ -19,6 +23,7 @@ export default function FileUpload({
   maxSizeMb = 10,
   onUpload,
   children,
+  normalizeImageMaxDim,
 }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -51,8 +56,18 @@ export default function FileUpload({
   };
 
   const handleFile = useCallback(
-    async (file: File) => {
+    async (rawFile: File) => {
       setError(null);
+
+      let file = rawFile;
+      if (normalizeImageMaxDim && rawFile.type.startsWith('image/')) {
+        try {
+          file = await normalizeImageForUpload(rawFile, { maxDim: normalizeImageMaxDim, maxSizeMb });
+        } catch (err: any) {
+          setError(err?.message || 'Image conversion failed');
+          return;
+        }
+      }
 
       const validationError = validateFile(file);
       if (validationError) {
@@ -95,7 +110,7 @@ export default function FileUpload({
         setUploading(false);
       }
     },
-    [bucket, path, accept, maxSizeMb, onUpload]
+    [bucket, path, accept, maxSizeMb, onUpload, normalizeImageMaxDim]
   );
 
   const handleDrop = useCallback(

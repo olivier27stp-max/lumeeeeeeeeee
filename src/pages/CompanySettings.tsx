@@ -269,8 +269,9 @@ export default function CompanySettings() {
             <FileUpload
               bucket={STORAGE_BUCKETS.COMPANY_LOGOS}
               path={form.org_id || 'default'}
-              accept="image/png,image/jpeg,image/svg+xml,image/webp"
+              accept="image/*"
               maxSizeMb={5}
+              normalizeImageMaxDim={1024}
               onUpload={(url) => {
                 update('logo_url', url);
               }}
