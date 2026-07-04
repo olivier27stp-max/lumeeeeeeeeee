@@ -194,8 +194,12 @@ function FormPreview({
   return (
     <div className="section-card p-6 space-y-5 max-w-lg mx-auto">
       <div className="text-center space-y-1">
-        {logoUrl && (
-          <img src={logoUrl} alt="" className="mx-auto mb-3 max-h-16 max-w-[200px] object-contain" />
+        {logoUrl ? (
+          <img src={logoUrl} alt="" className="mx-auto mb-3 max-h-40 max-w-[360px] object-contain" />
+        ) : (
+          /* No logo set — keep the logo area as reserved blank space so the
+             preview layout matches what the form will look like with one. */
+          <div aria-hidden className="h-40 mb-3" />
         )}
         <h2 className="text-[17px] font-bold text-text-primary">{title || 'Service Request'}</h2>
         {description && <p className="text-[13px] text-text-tertiary">{description}</p>}
