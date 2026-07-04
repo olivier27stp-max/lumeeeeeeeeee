@@ -217,13 +217,12 @@ export default function StatusBadge({ status, variant, className }: StatusBadgeP
   const label = translated || status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
   // Archived jobs get a dedicated near-black treatment.
-  // Requires-invoicing gets a true yellow bubble (bright amber gradient,
-  // dark text for contrast — the generic warning variant reads too dark).
-  const isYellow = key === 'requires_invoicing';
+  // Requires-invoicing keeps the dark premium look but shifts orange, so it
+  // reads distinct from the amber "Action Required" warning variant.
   const style = key === 'archived'
     ? { bg: 'linear-gradient(135deg, #1C1C1E 0%, #08080A 100%)', icon: '#8A8A8E', defaultIcon: Archive }
-    : isYellow
-      ? { bg: 'linear-gradient(135deg, #F5C848 0%, #DF9F1F 100%)', icon: '#4A3608', defaultIcon: AlertCircle }
+    : key === 'requires_invoicing'
+      ? { bg: 'linear-gradient(135deg, #47280D 0%, #2B1706 100%)', icon: '#F58A2E', defaultIcon: AlertCircle }
       : variantStyle[resolvedVariant];
   const Icon = statusIcons[key] || style.defaultIcon;
 
@@ -242,7 +241,7 @@ export default function StatusBadge({ status, variant, className }: StatusBadgeP
         padding: '0 10px',
         borderRadius: 999,
         background: style.bg,
-        border: isYellow ? '1px solid rgba(0,0,0,0.10)' : '1px solid rgba(255,255,255,0.08)',
+        border: '1px solid rgba(255,255,255,0.08)',
         boxShadow: hovered ? HOVER_SHADOW : BASE_SHADOW,
         transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
         transition: 'all 0.18s ease',
@@ -253,7 +252,7 @@ export default function StatusBadge({ status, variant, className }: StatusBadgeP
       <Icon size={12} color={style.icon} strokeWidth={2.25} aria-hidden />
       <span
         aria-hidden
-        style={{ width: 1, height: 11, background: isYellow ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.12)', margin: '0 6px' }}
+        style={{ width: 1, height: 11, background: 'rgba(255,255,255,0.12)', margin: '0 6px' }}
       />
       <span
         style={{
@@ -261,7 +260,7 @@ export default function StatusBadge({ status, variant, className }: StatusBadgeP
           fontWeight: 600,
           letterSpacing: '0.06em',
           textTransform: 'uppercase',
-          color: isYellow ? '#3A2A06' : '#FFFFFF',
+          color: '#FFFFFF',
           lineHeight: 1,
         }}
       >
