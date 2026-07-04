@@ -9,8 +9,9 @@ async function fetchData() {
   const orgId = await getCurrentOrgIdOrThrow();
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  // Count jobs actually completed this month (by completion date, not creation).
   const [{ data: jobs }, { data: teams }] = await Promise.all([
-    supabase.from('jobs').select('team_id,status').eq('org_id', orgId).is('deleted_at', null).gte('created_at', monthStart).in('status', ['completed', 'closed', 'done']),
+    supabase.from('jobs').select('team_id,completed_at').eq('org_id', orgId).is('deleted_at', null).gte('completed_at', monthStart),
     supabase.from('teams').select('id,name').eq('org_id', orgId).is('deleted_at', null),
   ]);
   const nameMap = new Map<string, string>((teams || []).map((t: any) => [t.id, t.name || 'Unnamed']));
@@ -30,20 +31,20 @@ export default function TeamProductivityCard() {
   const { data = [], isLoading } = useQuery({ queryKey: ['report-team-productivity'], queryFn: fetchData, staleTime: 60_000 });
 
   return (
-    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-5 flex flex-col h-full">
+    <div className="rounded-xl border border-border bg-surface-card p-5 flex flex-col h-full">
       <div className="mb-3">
-        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{ti.teamProductivity || 'Team Productivity'}</h3>
-        <p className="text-xs text-zinc-400 dark:text-zinc-500">{ti.jobsCompletedThisMonth || 'Jobs completed this month'}</p>
+        <h3 className="text-[15px] font-semibold text-text-primary">{ti.teamProductivity || 'Team Productivity'}</h3>
+        <p className="text-xs text-text-tertiary">{ti.jobsCompletedThisMonth || 'Jobs completed this month'}</p>
       </div>
       {isLoading ? (
-        <div className="flex-1 min-h-[200px] animate-pulse bg-zinc-100 dark:bg-zinc-800 rounded-lg" />
+        <div className="flex-1 min-h-[200px] animate-pulse bg-surface-tertiary/50 rounded-lg" />
       ) : data.length === 0 ? (
-        <div className="flex-1 min-h-[200px] flex items-center justify-center text-sm text-zinc-400">{ti.noData || 'No data'}</div>
+        <div className="flex-1 min-h-[200px] flex items-center justify-center text-sm text-text-tertiary">{ti.noData || 'No data'}</div>
       ) : (
         <div className="flex-1 min-h-[200px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} layout="vertical">
-              <CartesianGrid horizontal={false} stroke="#e4e4e7" />
+              <CartesianGrid horizontal={false} stroke="var(--color-border)" />
               <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
               <YAxis type="category" dataKey="name" width={110} axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
               <Tooltip />

@@ -44,8 +44,6 @@ import ClientLifetimeValueCard from '../components/insights/ClientLifetimeValueC
 import TeamProductivityCard from '../components/insights/TeamProductivityCard';
 import CancellationRateCard from '../components/insights/CancellationRateCard';
 import QuoteConversionCard from '../components/insights/QuoteConversionCard';
-import InvoiceAgingCard from '../components/insights/InvoiceAgingCard';
-import PaymentMethodMixCard from '../components/insights/PaymentMethodMixCard';
 import JobsPerWeekdayCard from '../components/insights/JobsPerWeekdayCard';
 import RecurringRevenueCard from '../components/insights/RecurringRevenueCard';
 import TopServicesByCountCard from '../components/insights/TopServicesByCountCard';
@@ -433,20 +431,13 @@ export default function Insights() {
                 </div>
               </div>
 
-              {/* Opérations & paiements */}
+              {/* Opérations & équipe */}
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-3">{fr ? 'Opérations & paiements' : 'Operations & payments'}</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-3">{fr ? 'Opérations & équipe' : 'Operations & team'}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <JobsPerWeekdayCard />
-                  <InvoiceAgingCard />
-                  <PaymentMethodMixCard />
+                  <TeamProductivityCard />
                 </div>
-              </div>
-
-              {/* Équipe */}
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-3">{fr ? 'Équipe' : 'Team'}</p>
-                <TeamProductivityCard />
               </div>
             </div>
           )}
