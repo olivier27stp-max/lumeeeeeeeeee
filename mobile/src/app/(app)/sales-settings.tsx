@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Switch, Text, View } from 'react-native';
 
 import { getPeerPayoutsVisible, setPeerPayoutsVisible } from '@/lib/api/fieldSales';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 /** Sales / D2D settings (managers). */
 export default function SalesSettings() {
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const { orgId, role } = usePermissions();
   const isManager = role === 'owner' || role === 'admin';
 
@@ -33,13 +35,13 @@ export default function SalesSettings() {
   return (
     <View className="flex-1 bg-surface-alt">
       <View className="gap-3 p-4">
-        <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Classement & commissions</Text>
+        <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileTeam.leaderboardCommissions}</Text>
         <View className="rounded-2xl bg-white p-4">
           <View className="flex-row items-center gap-3">
             <View className="flex-1">
-              <Text className="text-base font-semibold text-ink">Commissions des autres reps visibles</Text>
+              <Text className="text-base font-semibold text-ink">{t.mobileTeam.peerCommissionsVisible}</Text>
               <Text className="mt-0.5 text-sm text-ink-muted">
-                Les reps voient le « Prochain versement » de leurs collègues sur leur profil. Stimule la compétition.
+                {t.mobileTeam.peerCommissionsDesc}
               </Text>
             </View>
             {isLoading ? (
@@ -57,8 +59,7 @@ export default function SalesSettings() {
           </View>
         </View>
         <Text className="px-1 text-xs text-ink-subtle">
-          Désactivé : seuls le rep concerné et les administrateurs voient les commissions. Le nombre de ventes reste
-          toujours visible dans le classement.
+          {t.mobileTeam.peerCommissionsHint}
         </Text>
       </View>
     </View>

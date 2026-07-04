@@ -11,6 +11,7 @@ import * as WebBrowser from 'expo-web-browser';
 
 import { Button } from '@/components/ui/Button';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 import {
   activateConnectedAccount,
@@ -35,6 +36,7 @@ function Step({ n, title, body }: { n: number; title: string; body: string }) {
 
 export default function PaymentsSetup() {
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const { orgId, role } = usePermissions();
   const isManager = role === 'owner' || role === 'admin';
 
@@ -61,12 +63,12 @@ export default function PaymentsSetup() {
       await activateConnectedAccount(orgId ?? '');
       await openOnboarding(false);
     },
-    onError: (e: Error) => Alert.alert('Lume Payments', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileTeam.lumePayments, e.message),
   });
 
   const continueMut = useMutation({
     mutationFn: () => openOnboarding(true),
-    onError: (e: Error) => Alert.alert('Lume Payments', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileTeam.lumePayments, e.message),
   });
 
   const busy = activateMut.isPending || continueMut.isPending;
@@ -76,7 +78,7 @@ export default function PaymentsSetup() {
       <ScreenContainer>
         <View className="flex-1 items-center justify-center px-6">
           <Text className="text-center text-base text-ink-muted">
-            Les paiements ne sont pas disponibles : l’URL du serveur Lume n’est pas configurée.
+            {t.mobileTeam.paymentsUnavailableServer}
           </Text>
         </View>
       </ScreenContainer>
@@ -88,7 +90,7 @@ export default function PaymentsSetup() {
       <ScreenContainer>
         <View className="flex-1 items-center justify-center px-6">
           <Text className="text-center text-base text-ink-muted">
-            Seul le propriétaire ou un administrateur peut configurer les paiements.
+            {t.mobileTeam.onlyOwnerAdminPayments}
           </Text>
         </View>
       </ScreenContainer>
@@ -115,15 +117,19 @@ export default function PaymentsSetup() {
             className={fullyConnected ? 'bg-status-completed' : pending ? 'bg-status-inProgress' : 'bg-surface-border'}
           />
           <Text className="text-base font-bold text-ink">
-            {fullyConnected ? 'Paiements activés' : pending ? 'Configuration à terminer' : 'Paiements non activés'}
+            {fullyConnected
+              ? t.mobileTeam.paymentsActivated
+              : pending
+                ? t.mobileTeam.setupToFinish
+                : t.mobileTeam.paymentsNotActivated}
           </Text>
         </View>
         <Text className="mt-2 text-sm text-ink-muted">
           {fullyConnected
-            ? 'Tes clients peuvent payer leurs factures par carte. L’argent arrive directement dans ton compte.'
+            ? t.mobileTeam.activatedBody
             : pending
-              ? 'Ton compte de paiement est créé, mais Stripe a besoin de quelques infos de plus (identité, compte bancaire) pour l’activer.'
-              : 'Connecte ton compte pour encaisser les paiements par carte directement depuis tes factures.'}
+              ? t.mobileTeam.pendingBody
+              : t.mobileTeam.notActivatedBody}
         </Text>
 
         {statusQ.data?.warning ? (
@@ -132,37 +138,37 @@ export default function PaymentsSetup() {
 
         <View className="mt-5">
           {fullyConnected ? (
-            <Button title="Gérer mon compte" variant="secondary" loading={busy} onPress={() => continueMut.mutate()} />
+            <Button title={t.mobileTeam.manageMyAccount} variant="secondary" loading={busy} onPress={() => continueMut.mutate()} />
           ) : pending ? (
-            <Button title="Terminer la configuration" loading={busy} onPress={() => continueMut.mutate()} />
+            <Button title={t.mobileTeam.finishSetup} loading={busy} onPress={() => continueMut.mutate()} />
           ) : (
-            <Button title="Activer Lume Payments" loading={busy} onPress={() => activateMut.mutate()} />
+            <Button title={t.mobileTeam.activateLumePayments} loading={busy} onPress={() => activateMut.mutate()} />
           )}
         </View>
       </View>
 
       {/* How it works */}
       <View className="mt-5 gap-4 rounded-3xl bg-white p-5">
-        <Text className="text-sm font-semibold text-ink">Comment ça marche</Text>
-        <Step n={1} title="Tu connectes ton compte" body="Quelques minutes via Stripe — identité et compte bancaire." />
-        <Step n={2} title="Tu envoies une facture" body="Depuis l’app, le client reçoit un lien de paiement par SMS." />
-        <Step n={3} title="Le client paie par carte" body="Sur une page sécurisée, en quelques secondes." />
-        <Step n={4} title="Tu reçois l’argent" body="Les fonds arrivent directement dans ton compte bancaire." />
+        <Text className="text-sm font-semibold text-ink">{t.mobileTeam.howItWorks}</Text>
+        <Step n={1} title={t.mobileTeam.step1Title} body={t.mobileTeam.step1Body} />
+        <Step n={2} title={t.mobileTeam.step2Title} body={t.mobileTeam.step2Body} />
+        <Step n={3} title={t.mobileTeam.step3Title} body={t.mobileTeam.step3Body} />
+        <Step n={4} title={t.mobileTeam.step4Title} body={t.mobileTeam.step4Body} />
       </View>
 
       {fullyConnected && account ? (
         <View className="mt-5 gap-2 rounded-3xl bg-white p-5">
-          <Text className="text-sm font-semibold text-ink">Détails du compte</Text>
+          <Text className="text-sm font-semibold text-ink">{t.mobileTeam.accountDetails}</Text>
           <View className="flex-row justify-between">
-            <Text className="text-sm text-ink-muted">Encaissement</Text>
-            <Text className="text-sm text-ink">{account.charges_enabled ? 'Activé' : 'En attente'}</Text>
+            <Text className="text-sm text-ink-muted">{t.mobileTeam.charges}</Text>
+            <Text className="text-sm text-ink">{account.charges_enabled ? t.mobileTeam.enabled : t.mobileTeam.awaiting}</Text>
           </View>
           <View className="flex-row justify-between">
-            <Text className="text-sm text-ink-muted">Versements</Text>
-            <Text className="text-sm text-ink">{account.payouts_enabled ? 'Activés' : 'En attente'}</Text>
+            <Text className="text-sm text-ink-muted">{t.mobileTeam.payouts}</Text>
+            <Text className="text-sm text-ink">{account.payouts_enabled ? t.mobileTeam.payoutsEnabled : t.mobileTeam.awaiting}</Text>
           </View>
           <View className="flex-row justify-between">
-            <Text className="text-sm text-ink-muted">Devise</Text>
+            <Text className="text-sm text-ink-muted">{t.mobileTeam.currency}</Text>
             <Text className="text-sm text-ink">{(account.default_currency ?? 'cad').toUpperCase()}</Text>
           </View>
         </View>

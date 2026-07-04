@@ -5,11 +5,13 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { useTranslation } from '@/lib/i18n';
 import { listMembers } from '@/lib/api/org';
 import { ROLE_LABELS, TeamRole } from '@/lib/permissions';
 import { usePermissions } from '@/lib/usePermissions';
 
 export default function ManageTeam() {
+  const { t, language } = useTranslation();
   const { orgId, can, role } = usePermissions();
   const isManager = can('team.update') || role === 'owner' || role === 'admin';
 
@@ -25,9 +27,10 @@ export default function ManageTeam() {
     <ScreenContainer scroll>
       <View className="gap-4 py-6">
         <View>
-          <Text className="text-2xl font-bold text-ink">Manage team</Text>
+          <Text className="text-2xl font-bold text-ink">{t.mobileTeam.manageTeam}</Text>
           <Text className="mt-1 text-sm text-ink-muted">
-            {members?.length ?? 0} member{(members?.length ?? 0) === 1 ? '' : 's'}
+            {members?.length ?? 0}{' '}
+            {(members?.length ?? 0) === 1 ? t.mobileTeam.memberSingular : t.mobileTeam.memberPlural}
           </Text>
         </View>
 
@@ -36,7 +39,7 @@ export default function ManageTeam() {
         ) : (
           <Card className="gap-0 p-0">
             {(members ?? []).map((m) => {
-              const label = ROLE_LABELS[m.role as TeamRole]?.en ?? m.role;
+              const label = ROLE_LABELS[m.role as TeamRole]?.[language] ?? m.role;
               const initials = (m.full_name ?? m.email ?? '?')
                 .split(' ')
                 .map((s) => s[0])
@@ -54,10 +57,10 @@ export default function ManageTeam() {
                   </View>
                   <View className="flex-1">
                     <Text className="text-base font-semibold text-ink">
-                      {m.full_name ?? m.email ?? 'Member'}
+                      {m.full_name ?? m.email ?? t.mobileTeam.memberFallback}
                     </Text>
                     {m.status === 'pending' ? (
-                      <Text className="text-xs text-ink-subtle">Pending</Text>
+                      <Text className="text-xs text-ink-subtle">{t.mobileTeam.pending}</Text>
                     ) : null}
                   </View>
                   <View className="rounded-full bg-surface-sunken px-3 py-1">
@@ -70,9 +73,7 @@ export default function ManageTeam() {
           </Card>
         )}
 
-        <Text className="px-1 text-xs text-ink-subtle">
-          Tap a member to view and edit their role. Inviting new members is done from the web app.
-        </Text>
+        <Text className="px-1 text-xs text-ink-subtle">{t.mobileTeam.manageTeamHint}</Text>
       </View>
     </ScreenContainer>
   );

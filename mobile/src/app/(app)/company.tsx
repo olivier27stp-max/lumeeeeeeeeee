@@ -6,6 +6,7 @@ import { ActivityIndicator, Alert, View } from 'react-native';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { useTranslation } from '@/lib/i18n';
 import { CompanySettings, getCompany, updateCompany } from '@/lib/api/org';
 import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
@@ -14,6 +15,7 @@ type Form = Partial<Omit<CompanySettings, 'org_id'>>;
 
 export default function Company() {
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const { refresh } = useMembership();
   const { orgId, can, role } = usePermissions();
   const isManager = can('settings.update') || role === 'owner' || role === 'admin';
@@ -51,7 +53,7 @@ export default function Company() {
       refresh();
       router.back();
     },
-    onError: (e: Error) => Alert.alert('Could not save', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileTeam.couldNotSave, e.message),
   });
 
   if (!isManager) return <Redirect href="/(app)/(tabs)/profile" />;
@@ -68,36 +70,36 @@ export default function Company() {
   return (
     <ScreenContainer scroll>
       <View className="gap-3 py-4">
-        <Input label="Company name" value={form.company_name ?? ''} onChangeText={set('company_name')} />
-        <Input label="Phone" value={form.phone ?? ''} onChangeText={set('phone')} keyboardType="phone-pad" />
+        <Input label={t.mobileTeam.companyName} value={form.company_name ?? ''} onChangeText={set('company_name')} />
+        <Input label={t.mobileTeam.phone} value={form.phone ?? ''} onChangeText={set('phone')} keyboardType="phone-pad" />
         <Input
-          label="Email"
+          label={t.mobileTeam.email}
           value={form.email ?? ''}
           onChangeText={set('email')}
           keyboardType="email-address"
           autoCapitalize="none"
         />
-        <Input label="Website" value={form.website ?? ''} onChangeText={set('website')} autoCapitalize="none" />
-        <Input label="Street address" value={form.street1 ?? ''} onChangeText={set('street1')} />
-        <Input label="Street address 2 (optional)" value={form.street2 ?? ''} onChangeText={set('street2')} />
+        <Input label={t.mobileTeam.website} value={form.website ?? ''} onChangeText={set('website')} autoCapitalize="none" />
+        <Input label={t.mobileTeam.streetAddress} value={form.street1 ?? ''} onChangeText={set('street1')} />
+        <Input label={t.mobileTeam.streetAddress2} value={form.street2 ?? ''} onChangeText={set('street2')} />
         <View className="flex-row gap-2">
           <View className="flex-1">
-            <Input label="City" value={form.city ?? ''} onChangeText={set('city')} />
+            <Input label={t.mobileTeam.city} value={form.city ?? ''} onChangeText={set('city')} />
           </View>
           <View className="flex-1">
-            <Input label="Province" value={form.province ?? ''} onChangeText={set('province')} />
+            <Input label={t.mobileTeam.province} value={form.province ?? ''} onChangeText={set('province')} />
           </View>
         </View>
         <View className="flex-row gap-2">
           <View className="flex-1">
-            <Input label="Postal code" value={form.postal_code ?? ''} onChangeText={set('postal_code')} />
+            <Input label={t.mobileTeam.postalCode} value={form.postal_code ?? ''} onChangeText={set('postal_code')} />
           </View>
           <View className="flex-1">
-            <Input label="Country" value={form.country ?? ''} onChangeText={set('country')} />
+            <Input label={t.mobileTeam.country} value={form.country ?? ''} onChangeText={set('country')} />
           </View>
         </View>
 
-        <Button title="Save changes" onPress={() => saveMut.mutate()} loading={saveMut.isPending} />
+        <Button title={t.mobileTeam.saveChanges} onPress={() => saveMut.mutate()} loading={saveMut.isPending} />
       </View>
     </ScreenContainer>
   );

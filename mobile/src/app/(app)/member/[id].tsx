@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { useTranslation } from '@/lib/i18n';
 import { getMember, updateMemberRole } from '@/lib/api/org';
 import { ASSIGNABLE_ROLES, ROLE_LABELS, TeamRole } from '@/lib/permissions';
 import { usePermissions } from '@/lib/usePermissions';
@@ -11,6 +12,7 @@ import { usePermissions } from '@/lib/usePermissions';
 export default function MemberDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
+  const { t, language } = useTranslation();
   const { orgId, can, role } = usePermissions();
   const isManager = can('team.update') || role === 'owner' || role === 'admin';
 
@@ -26,7 +28,7 @@ export default function MemberDetail() {
       qc.invalidateQueries({ queryKey: ['member'] });
       qc.invalidateQueries({ queryKey: ['members'] });
     },
-    onError: (e: Error) => Alert.alert('Could not update role', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileTeam.couldNotUpdateRole, e.message),
   });
 
   if (!isManager) return <Redirect href="/(app)/(tabs)/profile" />;
@@ -54,20 +56,20 @@ export default function MemberDetail() {
           <View className="h-20 w-20 items-center justify-center rounded-full bg-ink">
             <Text className="text-2xl font-bold text-white">{initials}</Text>
           </View>
-          <Text className="text-xl font-bold text-ink">{member.full_name ?? 'Member'}</Text>
+          <Text className="text-xl font-bold text-ink">{member.full_name ?? t.mobileTeam.memberFallback}</Text>
           {member.email ? <Text className="text-sm text-ink-muted">{member.email}</Text> : null}
           {member.status === 'pending' ? (
             <View className="rounded-full bg-surface-sunken px-3 py-1">
-              <Text className="text-xs font-semibold text-ink-muted">Pending</Text>
+              <Text className="text-xs font-semibold text-ink-muted">{t.mobileTeam.pending}</Text>
             </View>
           ) : null}
         </View>
 
         {/* Role editor */}
         <Card className="gap-3">
-          <Text className="text-xs uppercase text-ink-muted">Role</Text>
+          <Text className="text-xs uppercase text-ink-muted">{t.mobileTeam.role}</Text>
           {isOwner ? (
-            <Text className="text-base text-ink">Owner (can't be changed)</Text>
+            <Text className="text-base text-ink">{t.mobileTeam.ownerCantBeChanged}</Text>
           ) : (
             <View className="gap-2">
               {ASSIGNABLE_ROLES.map((r: TeamRole) => {
@@ -80,7 +82,7 @@ export default function MemberDetail() {
                     className={`flex-row items-center justify-between rounded-2xl border px-4 py-3 ${selected ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
                   >
                     <Text className={`text-base font-semibold ${selected ? 'text-white' : 'text-ink'}`}>
-                      {ROLE_LABELS[r].en}
+                      {ROLE_LABELS[r][language]}
                     </Text>
                     {selected ? <Text className="text-white">✓</Text> : null}
                   </Pressable>
