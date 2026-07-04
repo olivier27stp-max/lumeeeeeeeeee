@@ -69,7 +69,7 @@ import { JobModalControllerProvider } from './contexts/JobModalController';
 import { useTranslation } from './i18n';
 import InvoiceDetails from './pages/InvoiceDetails';
 import InvoiceEdit from './pages/InvoiceEdit';
-import Statistiques from './pages/Statistiques';
+import Insights from './pages/Insights';
 import Finances from './pages/Finances';
 import PaymentSettings from './pages/PaymentSettings';
 import Automations from './pages/Automations';
@@ -1200,7 +1200,7 @@ function AuthenticatedApp({
                     <Route path="/invoices/new" element={<Gated permission="invoices.create"><PageWrapper><InvoiceEdit /></PageWrapper></Gated>} />
                     <Route path="/invoices/:id" element={<Gated permission="invoices.read"><PageWrapper><InvoiceDetails /></PageWrapper></Gated>} />
                     <Route path="/invoices/:id/edit" element={<Gated permission="invoices.update"><PageWrapper><InvoiceEdit /></PageWrapper></Gated>} />
-                    <Route path="/insights" element={<Gated permission="reports.read"><PageWrapper><Statistiques /></PageWrapper></Gated>} />
+                    <Route path="/insights" element={<Gated permission="reports.read"><PageWrapper><Insights /></PageWrapper></Gated>} />
                     <Route path="/payments" element={<PaymentsRedirect />} />
                     <Route path="/payments/settings" element={<Navigate to="/settings?tab=payments" replace />} />
                     <Route path="/timesheets" element={<Gated permission="timesheets.read"><PageWrapper><Timesheets /></PageWrapper></Gated>} />
