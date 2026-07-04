@@ -125,6 +125,20 @@ function deriveJobDisplayStatus(raw: {
   return 'Action Required';
 }
 
+/** Map the DB-computed jobs_active.derived_status (snake_case) → display label.
+ *  The view (migration 20260714000000) is the precise source of truth; it accounts
+ *  for visit completion, which deriveJobDisplayStatus (job-row only) cannot. */
+function displayFromDerivedStatus(derived: string): string {
+  switch (derived) {
+    case 'upcoming': return 'Upcoming';
+    case 'late': return 'Late';
+    case 'action_required': return 'Action Required';
+    case 'archived': return 'Archived';
+    case 'requires_invoicing': return 'Requires Invoicing';
+    default: return formatStatusLabel(derived);
+  }
+}
+
 /** Simple label formatter (no business logic — used when raw context is unavailable) */
 function formatStatusLabel(value: string | null | undefined): string {
   if (!value) return 'Action Required';
@@ -228,7 +242,7 @@ function mapJob(raw: any, clientNameFallback?: string | null): Job {
     property_address: raw.property_address || '',
     scheduled_at: raw.scheduled_at || null,
     end_at: raw.end_at || null,
-    status: deriveJobDisplayStatus(raw),
+    status: raw.derived_status ? displayFromDerivedStatus(raw.derived_status) : deriveJobDisplayStatus(raw),
     total_cents: raw.total_cents ?? Math.round(Number(raw.total_amount || 0) * 100),
     currency: raw.currency || 'CAD',
     subtotal: raw.subtotal == null ? undefined : Number(raw.subtotal),
@@ -287,20 +301,13 @@ function applyTableFilters(request: any, query: JobsQuery) {
   const { status, jobType, clientId, q } = query;
   if (status && status !== 'All') {
     const normalized = status.trim().toLowerCase().replace(/\s+/g, '_');
-    const nowIso = new Date().toISOString();
-    // 4-status system: Upcoming / Late / Action Required / Archived.
-    if (normalized === 'archived' || normalized === 'completed' || normalized === 'cancelled') {
-      // Closed jobs
-      builder = builder.in('status', ['completed', 'cancelled']);
-    } else if (normalized === 'upcoming') {
-      // Active job with an upcoming visit
-      builder = builder.in('status', ['scheduled', 'in_progress']).gte('scheduled_at', nowIso);
-    } else if (normalized === 'late') {
-      // Active job whose visit is in the past (not closed out)
-      builder = builder.in('status', ['scheduled', 'in_progress']).lt('scheduled_at', nowIso);
-    } else if (normalized === 'action_required' || normalized === 'unscheduled') {
-      // Active job with no visit at all
-      builder = builder.is('scheduled_at', null).in('status', ['draft', 'scheduled', 'in_progress']);
+    // Filter on the precise visit-based derived_status (jobs_active view).
+    const derivedFilter =
+      normalized === 'unscheduled' ? 'action_required'
+      : (normalized === 'completed' || normalized === 'cancelled') ? 'archived'
+      : normalized;
+    if (['upcoming', 'late', 'action_required', 'archived', 'requires_invoicing'].includes(derivedFilter)) {
+      builder = builder.eq('derived_status', derivedFilter);
     } else {
       // Direct DB status match — skip filter if the requested value cannot map to a DB state
       const dbStatus = normalizeStatusForFilter(status);
@@ -357,11 +364,11 @@ export async function getJobsKpis(params: { status?: string; jobType?: string; q
     recentVisitsRes, prevRecentVisitsRes,
     visitsScheduledRes, prevVisitsScheduledRes,
   ] = await Promise.all([
-    // 4-status system
-    base().in('status', ['scheduled', 'in_progress']).gte('scheduled_at', nowIso),
-    base().in('status', ['scheduled', 'in_progress']).lt('scheduled_at', nowIso),
-    base().is('scheduled_at', null).in('status', ['draft', 'scheduled', 'in_progress']),
-    base().in('status', ['completed', 'cancelled']),
+    // 4-status system (precise, visit-based — jobs_active.derived_status)
+    base().eq('derived_status', 'upcoming'),
+    base().eq('derived_status', 'late'),
+    base().eq('derived_status', 'action_required'),
+    base().eq('derived_status', 'archived'),
     // Visit metrics (unchanged)
     base().gte('scheduled_at', minus30Iso).lte('scheduled_at', nowIso),
     base().gte('scheduled_at', minus60Iso).lt('scheduled_at', minus30Iso),
