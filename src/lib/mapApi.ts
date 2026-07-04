@@ -6,6 +6,7 @@ export type MapDateRange = 'today' | 'tomorrow' | 'this_week' | 'all';
 export interface MapJobPin {
   id: string;
   jobId: string;
+  clientId: string | null;
   jobNumber: string;
   title: string;
   clientName: string | null;
@@ -80,7 +81,7 @@ export async function fetchMapJobs(range: MapDateRange): Promise<MapJobResult> {
       `
       id, start_at, end_at, status, team_id,
       team:teams!schedule_events_team_id_fkey(name, color_hex),
-      job:jobs!schedule_events_job_id_fkey(id, job_number, title, client_name, property_address, status, total_cents, latitude, longitude)
+      job:jobs!schedule_events_job_id_fkey(id, client_id, job_number, title, client_name, property_address, status, total_cents, latitude, longitude)
       `
     )
     .eq('org_id', orgId)
@@ -100,6 +101,7 @@ export async function fetchMapJobs(range: MapDateRange): Promise<MapJobResult> {
   const pins: MapJobPin[] = withCoords.map((event) => ({
     id: event.id,
     jobId: event.job?.id || event.id,
+    clientId: event.job?.client_id || null,
     jobNumber: event.job?.job_number || '',
     title: event.job?.title || 'Untitled',
     clientName: event.job?.client_name || null,
@@ -135,7 +137,7 @@ export async function fetchMapJobsInRange(startISO: string, endISO: string): Pro
       `
       id, start_at, end_at, status, team_id,
       team:teams!schedule_events_team_id_fkey(name, color_hex),
-      job:jobs!schedule_events_job_id_fkey(id, job_number, title, client_name, property_address, status, total_cents, latitude, longitude)
+      job:jobs!schedule_events_job_id_fkey(id, client_id, job_number, title, client_name, property_address, status, total_cents, latitude, longitude)
       `
     )
     .eq('org_id', orgId)
@@ -152,6 +154,7 @@ export async function fetchMapJobsInRange(startISO: string, endISO: string): Pro
   const pins: MapJobPin[] = withCoords.map((event) => ({
     id: event.id,
     jobId: event.job?.id || event.id,
+    clientId: event.job?.client_id || null,
     jobNumber: event.job?.job_number || '',
     title: event.job?.title || 'Untitled',
     clientName: event.job?.client_name || null,

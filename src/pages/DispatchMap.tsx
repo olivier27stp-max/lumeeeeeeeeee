@@ -456,6 +456,7 @@ export default function DispatchMap() {
                 pin={selectedJobPin}
                 onClose={() => setSelectedJobPin(null)}
                 onOpenJob={(jobId) => navigate(`/jobs/${jobId}`)}
+                onOpenClient={(clientId) => navigate(`/clients/${clientId}`)}
               />
             )}
           </MapContainer>

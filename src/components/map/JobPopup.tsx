@@ -1,6 +1,6 @@
 import React from 'react';
 import { Popup } from 'react-leaflet';
-import { ArrowUpRight, Briefcase, Calendar, MapPin } from 'lucide-react';
+import { ArrowUpRight, Briefcase, Calendar, MapPin, User } from 'lucide-react';
 import type { MapJobPin } from '../../lib/mapApi';
 import StatusBadge from '../ui/StatusBadge';
 import IconTile from '../ui/IconTile';
@@ -10,6 +10,7 @@ interface JobPopupProps {
   pin: MapJobPin;
   onClose: () => void;
   onOpenJob?: (jobId: string) => void;
+  onOpenClient?: (clientId: string) => void;
 }
 
 function formatTime(iso: string | null) {
@@ -30,11 +31,12 @@ function formatDate(iso: string | null) {
   }
 }
 
-export default function JobPopup({ pin, onClose, onOpenJob }: JobPopupProps) {
+export default function JobPopup({ pin, onClose, onOpenJob, onOpenClient }: JobPopupProps) {
   const startTime = formatTime(pin.scheduledAt);
   const endTime = formatTime(pin.endAt);
   const dateLabel = formatDate(pin.scheduledAt);
   const timeLabel = startTime && endTime ? `${startTime} - ${endTime}` : startTime;
+  const openClient = onOpenClient && pin.clientId ? () => onOpenClient(pin.clientId!) : null;
 
   return (
     <Popup
@@ -56,7 +58,17 @@ export default function JobPopup({ pin, onClose, onOpenJob }: JobPopupProps) {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-text-primary truncate">{pin.title}</p>
               {pin.clientName && (
-                <p className="text-xs text-text-secondary font-medium truncate">{pin.clientName}</p>
+                openClient ? (
+                  <button
+                    type="button"
+                    onClick={openClient}
+                    className="text-xs text-primary font-semibold truncate hover:underline text-left"
+                  >
+                    {pin.clientName}
+                  </button>
+                ) : (
+                  <p className="text-xs text-text-secondary font-medium truncate">{pin.clientName}</p>
+                )
               )}
               {pin.jobNumber && (
                 <p className="text-[11px] text-text-tertiary font-medium mt-0.5">#{pin.jobNumber}</p>
@@ -99,17 +111,28 @@ export default function JobPopup({ pin, onClose, onOpenJob }: JobPopupProps) {
         </div>
 
         {/* Actions */}
-        <div className="px-3.5 pb-3 flex items-center gap-2">
-          {onOpenJob && (
-            <button
-              type="button"
-              onClick={() => onOpenJob(pin.jobId)}
-              className="glass-button flex-1 inline-flex items-center justify-center gap-1.5 text-xs"
-            >
-              Open Job <ArrowUpRight size={12} />
-            </button>
-          )}
-        </div>
+        {(openClient || onOpenJob) && (
+          <div className="px-3.5 pb-3 flex items-center gap-2">
+            {openClient && (
+              <button
+                type="button"
+                onClick={openClient}
+                className="glass-button-primary flex-1 inline-flex items-center justify-center gap-1.5 text-xs"
+              >
+                <User size={12} /> Open Client
+              </button>
+            )}
+            {onOpenJob && (
+              <button
+                type="button"
+                onClick={() => onOpenJob(pin.jobId)}
+                className="glass-button flex-1 inline-flex items-center justify-center gap-1.5 text-xs"
+              >
+                Open Job <ArrowUpRight size={12} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </Popup>
   );
