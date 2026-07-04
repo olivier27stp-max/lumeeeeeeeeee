@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import UnifiedAvatar from '@/components/ui/UnifiedAvatar';
 import { getMember } from '@/lib/api/org';
 import { useViewMode } from '@/lib/view-mode';
+import { useTranslation } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
 import { ROLE_LABELS } from '@/lib/permissions';
@@ -42,6 +43,7 @@ export default function More() {
   const { current } = useMembership();
   const { can, orgId } = usePermissions();
   const { mode, setMode, canSwitch } = useViewMode();
+  const { language, setLanguage } = useTranslation();
   const me = session?.user.id ?? '';
   const { data: meMember } = useQuery({
     queryKey: ['member', orgId, me],
@@ -146,6 +148,24 @@ export default function More() {
           <Row icon="bell" label="Notifications" onPress={() => router.push('/(app)/notifications' as any)} />
           <Row icon="bubble.left.and.bubble.right" label="Messages" onPress={() => router.push('/(app)/messages' as any)} />
           <Row icon="person.crop.circle.badge.plus" label="Refer a friend" onPress={() => router.push('/(app)/refer')} />
+        </View>
+
+        {/* Langue / Language */}
+        <View className="rounded-3xl bg-white p-4 gap-2">
+          <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Langue · Language</Text>
+          <View className="flex-row rounded-2xl bg-surface-sunken p-1">
+            {(['fr', 'en'] as const).map((l) => (
+              <Pressable
+                key={l}
+                onPress={() => setLanguage(l)}
+                className={`flex-1 items-center rounded-xl py-2 ${language === l ? 'bg-white' : ''}`}
+              >
+                <Text className={`text-sm font-semibold ${language === l ? 'text-ink' : 'text-ink-muted'}`}>
+                  {l === 'fr' ? 'Français' : 'English'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
 
         <View className="overflow-hidden rounded-3xl bg-white">

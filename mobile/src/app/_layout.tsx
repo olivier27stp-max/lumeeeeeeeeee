@@ -7,11 +7,13 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider } from '@/lib/auth';
 import { MembershipProvider } from '@/lib/membership-context';
+import { LanguageProvider } from '@/lib/i18n';
 import { asyncPersister, queryClient } from '@/lib/queryClient';
 
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <LanguageProvider>
       <PersistQueryClientProvider
         client={queryClient}
         persistOptions={{ persister: asyncPersister, maxAge: 24 * 60 * 60_000 }}
@@ -31,6 +33,7 @@ export default function RootLayout() {
           </MembershipProvider>
         </AuthProvider>
       </PersistQueryClientProvider>
+      </LanguageProvider>
     </GestureHandlerRootView>
   );
 }
