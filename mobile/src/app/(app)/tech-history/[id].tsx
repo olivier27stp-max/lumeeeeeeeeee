@@ -10,22 +10,15 @@ import { getTrackingHistory, TrackPoint } from '@/lib/api/tracking';
 import { listEntriesInRange, workedMs, TimeEntryRow } from '@/lib/api/timesheets';
 import { getDoorStats } from '@/lib/api/salesRep';
 import { listCommissions } from '@/lib/api/commissions';
+import { useTranslation, type TranslationKeys } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
-const ROLE_LABEL: Record<string, string> = {
-  owner: 'Propriétaire',
-  admin: 'Admin',
-  manager: 'Gérant',
-  technician: 'Technicien',
-  sales_rep: 'Représentant',
-};
-
 type Period = 'today' | 'week' | 'month' | 'all';
-const PERIODS: { key: Period; label: string }[] = [
-  { key: 'today', label: "Aujourd'hui" },
-  { key: 'week', label: '7 jours' },
-  { key: 'month', label: '30 jours' },
-  { key: 'all', label: 'Tout' },
+const PERIODS: { key: Period; labelKey: keyof TranslationKeys['mobileField'] }[] = [
+  { key: 'today', labelKey: 'periodToday' },
+  { key: 'week', labelKey: 'periodWeek' },
+  { key: 'month', labelKey: 'periodMonth' },
+  { key: 'all', labelKey: 'periodAll' },
 ];
 
 const money = (n: number) =>
@@ -72,9 +65,18 @@ function Kpi({ label, value }: { label: string; value: string }) {
 
 /** A team member's full history/profile, filterable by period. */
 export default function TechDetail() {
+  const { t } = useTranslation();
   const { orgId, role } = usePermissions();
   const isManager = role === 'owner' || role === 'admin';
   const { id, name, role: techRole } = useLocalSearchParams<{ id: string; name?: string; role?: string }>();
+
+  const roleLabel: Record<string, string> = {
+    owner: t.mobileField.roleOwner,
+    admin: t.mobileField.roleAdmin,
+    manager: t.mobileField.roleManager,
+    technician: t.mobileField.roleTechnician,
+    sales_rep: t.mobileField.roleSalesRep,
+  };
   const [period, setPeriod] = useState<Period>('today');
 
   const { start, end } = useMemo(() => rangeFor(period), [period]);
@@ -140,7 +142,7 @@ export default function TechDetail() {
         <UnifiedAvatar id={String(id)} name={String(name || '—')} size={52} />
         <View className="flex-1">
           <Text className="text-xl font-bold text-ink">{name || '—'}</Text>
-          <Text className="text-xs text-ink-muted">{ROLE_LABEL[String(techRole)] ?? techRole}</Text>
+          <Text className="text-xs text-ink-muted">{roleLabel[String(techRole)] ?? techRole}</Text>
         </View>
       </View>
 
@@ -154,7 +156,7 @@ export default function TechDetail() {
               onPress={() => setPeriod(p.key)}
               className={`flex-1 items-center rounded-xl py-2 ${sel ? 'bg-white' : ''}`}
             >
-              <Text className={`text-xs font-semibold ${sel ? 'text-ink' : 'text-ink-muted'}`}>{p.label}</Text>
+              <Text className={`text-xs font-semibold ${sel ? 'text-ink' : 'text-ink-muted'}`}>{t.mobileField[p.labelKey]}</Text>
             </Pressable>
           );
         })}
@@ -162,14 +164,14 @@ export default function TechDetail() {
 
       {/* KPIs */}
       <View className="flex-row gap-3">
-        <Kpi label="Heures" value={fmtHM(workedTotal)} />
-        <Kpi label="Distance" value={`${distanceKm.toFixed(1)} km`} />
+        <Kpi label={t.mobileField.kpiHours} value={fmtHM(workedTotal)} />
+        <Kpi label={t.mobileField.kpiDistance} value={`${distanceKm.toFixed(1)} km`} />
       </View>
       {hasDoors || commTotal > 0 ? (
         <View className="flex-row gap-3">
-          {hasDoors ? <Kpi label="Portes" value={String(doors?.knocks ?? 0)} /> : null}
-          {hasDoors ? <Kpi label="Ventes" value={String(doors?.sales ?? 0)} /> : null}
-          {commTotal > 0 ? <Kpi label="Commissions" value={money(commTotal)} /> : null}
+          {hasDoors ? <Kpi label={t.mobileField.kpiDoors} value={String(doors?.knocks ?? 0)} /> : null}
+          {hasDoors ? <Kpi label={t.mobileField.kpiSales} value={String(doors?.sales ?? 0)} /> : null}
+          {commTotal > 0 ? <Kpi label={t.mobileField.kpiCommissions} value={money(commTotal)} /> : null}
         </View>
       ) : null}
 
@@ -178,33 +180,33 @@ export default function TechDetail() {
         <View className="h-64 overflow-hidden rounded-3xl border border-surface-border">
           <MapView style={{ flex: 1 }} initialRegion={region} userInterfaceStyle="light">
             {trail.length > 1 ? <Polyline coordinates={trail} strokeColor="#2563EB" strokeWidth={4} /> : null}
-            {trail.length > 0 ? <Marker coordinate={trail[0]} title="Début" pinColor="green" /> : null}
-            {trail.length > 1 ? <Marker coordinate={trail[trail.length - 1]} title="Fin" pinColor="red" /> : null}
+            {trail.length > 0 ? <Marker coordinate={trail[0]} title={t.mobileField.routeStart} pinColor="green" /> : null}
+            {trail.length > 1 ? <Marker coordinate={trail[trail.length - 1]} title={t.mobileField.routeEnd} pinColor="red" /> : null}
           </MapView>
         </View>
       ) : (
         <View className="items-center rounded-3xl bg-white p-8">
           <SymbolView name="map" tintColor="#A3A3A3" size={32} resizeMode="scaleAspectFit" />
-          <Text className="mt-2 text-sm text-ink-muted">Aucune position enregistrée pour cette période.</Text>
+          <Text className="mt-2 text-sm text-ink-muted">{t.mobileField.noPositionForPeriod}</Text>
         </View>
       )}
 
       {/* Pointages */}
-      <Text className="px-1 pt-1 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Pointages</Text>
+      <Text className="px-1 pt-1 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileField.punches}</Text>
       {(entries ?? []).length === 0 ? (
-        <Text className="px-1 text-sm text-ink-muted">Aucun pointage pour cette période.</Text>
+        <Text className="px-1 text-sm text-ink-muted">{t.mobileField.noPunchesForPeriod}</Text>
       ) : (
         (entries ?? []).map((e: TimeEntryRow) => (
           <View key={e.id} className="rounded-2xl bg-white p-4">
             <View className="flex-row items-center justify-between">
               <Text className="text-base font-semibold text-ink">
-                {fmtClock(e.punch_in_at)} → {e.punch_out_at ? fmtClock(e.punch_out_at) : 'en cours'}
+                {fmtClock(e.punch_in_at)} → {e.punch_out_at ? fmtClock(e.punch_out_at) : t.mobileField.entryInProgress}
               </Text>
               <Text className="text-sm font-bold text-ink">{fmtHM(workedMs(e))}</Text>
             </View>
             <Text className="mt-0.5 text-xs text-ink-muted">
               {e.punch_in_at ? new Date(e.punch_in_at).toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric', month: 'short' }) : ''}
-              {(e.breaks?.length ?? 0) > 0 ? ` · ${e.breaks.length} pause${e.breaks.length === 1 ? '' : 's'}` : ''}
+              {(e.breaks?.length ?? 0) > 0 ? ` · ${e.breaks.length} ${e.breaks.length === 1 ? t.mobileField.pauseSingular : t.mobileField.pausePlural}` : ''}
             </Text>
           </View>
         ))

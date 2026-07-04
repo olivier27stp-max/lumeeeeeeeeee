@@ -22,6 +22,7 @@ import { formatTime, formatDateTime } from '@/lib/format';
 import { statusStyle } from '@/lib/statusColors';
 import { Job } from '@/types/db';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
 
@@ -149,6 +150,7 @@ function DayJobBlock({
 }
 
 export default function Schedule() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const { orgId, teamId, scope, permissions, role } = usePermissions();
@@ -189,7 +191,7 @@ export default function Schedule() {
       );
       setShowResched(true);
     },
-    onError: (e: Error) => Alert.alert('Reprogrammer', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileField.reschedule, e.message),
   });
 
   // Drop handler: pixel position → snapped new time (keeps the job's duration).
@@ -211,7 +213,7 @@ export default function Schedule() {
     const j = reschedJob?.job;
     if (!reschedJob || !j) return;
     if (!orgId || !j.client_id) {
-      Alert.alert('Confirmation', "Ce rendez-vous n'est pas lié à un client — impossible d'envoyer le message.");
+      Alert.alert(t.mobileField.confirmation, t.mobileField.apptNoClient);
       return;
     }
     setSendingResched(true);
@@ -219,7 +221,7 @@ export default function Schedule() {
       const full = await getClient(j.client_id);
       const phone = full?.phone ?? null;
       if (!phone) {
-        Alert.alert('Confirmation', "Ce client n'a pas de numéro de téléphone.");
+        Alert.alert(t.mobileField.confirmation, t.mobileField.clientNoPhone);
         setSendingResched(false);
         return;
       }
@@ -252,7 +254,7 @@ export default function Schedule() {
         `/(app)/conversation/${cid}?phone=${encodeURIComponent(phone)}&name=${encodeURIComponent(j.client_name ?? '')}&clientId=${encodeURIComponent(j.client_id)}` as any,
       );
     } catch (e) {
-      Alert.alert('Confirmation', (e as Error).message);
+      Alert.alert(t.mobileField.confirmation, (e as Error).message);
     } finally {
       setSendingResched(false);
     }
@@ -287,8 +289,8 @@ export default function Schedule() {
   const rangeJobs = isManager && selectedTeam ? allJobs.filter((j) => j.team_id === selectedTeam) : allJobs;
 
   const teamChips: { id: string | null; name: string }[] = [
-    { id: null, name: 'Toutes les équipes' },
-    ...(teams ?? []).map((t) => ({ id: t.id, name: t.name })),
+    { id: null, name: t.mobileField.allTeams },
+    ...(teams ?? []).map((tm) => ({ id: tm.id, name: tm.name })),
   ];
 
   const jobsOn = (d: Date): Job[] =>
@@ -348,7 +350,7 @@ export default function Schedule() {
 
   const dayJobs = jobsOn(cursor);
   const doneCount = dayJobs.filter((j) => DONE.has(j.status)).length;
-  const meName = meMember?.full_name ?? 'Mes jobs';
+  const meName = meMember?.full_name ?? t.mobileField.myJobs;
 
   // Hour labels for the day timeline.
   const hours = useMemo(() => Array.from({ length: DAY_END - DAY_START + 1 }, (_, i) => DAY_START + i), []);
@@ -366,7 +368,7 @@ export default function Schedule() {
   return (
     <View className="flex-1 bg-surface-alt" style={{ paddingTop: insets.top }}>
       <View className="flex-row items-center justify-between px-5 pb-2 pt-3">
-        <Text className="text-2xl font-bold text-ink">Horaire</Text>
+        <Text className="text-2xl font-bold text-ink">{t.mobileField.scheduleTitle}</Text>
         {isManager && teamChips.length > 1 ? (
           <Pressable
             onPress={() => setFilterOpen(true)}
@@ -375,7 +377,7 @@ export default function Schedule() {
           >
             <SymbolView name="line.3.horizontal.decrease.circle" tintColor={selectedTeam ? '#FFFFFF' : '#171717'} size={15} resizeMode="scaleAspectFit" />
             <Text className={`text-sm font-medium ${selectedTeam ? 'text-white' : 'text-ink'}`} numberOfLines={1}>
-              {selectedTeam ? teamChips.find((t) => t.id === selectedTeam)?.name ?? 'Filtrer' : 'Filtrer'}
+              {selectedTeam ? teamChips.find((tc) => tc.id === selectedTeam)?.name ?? t.mobileField.filter : t.mobileField.filter}
             </Text>
           </Pressable>
         ) : null}
@@ -386,7 +388,7 @@ export default function Schedule() {
         {(['list', 'day', 'month'] as ViewMode[]).map((v) => (
           <Pressable key={v} onPress={() => setView(v)} className={`flex-1 items-center rounded-xl py-2 ${view === v ? 'bg-white' : ''}`}>
             <Text className={`text-sm font-semibold ${view === v ? 'text-ink' : 'text-ink-muted'}`}>
-              {v === 'list' ? 'Liste' : v === 'day' ? 'Jour' : 'Mois'}
+              {v === 'list' ? t.mobileField.viewList : v === 'day' ? t.mobileField.viewDay : t.mobileField.viewMonth}
             </Text>
           </Pressable>
         ))}
@@ -520,7 +522,7 @@ export default function Schedule() {
               );
             })}
           </View>
-          <Text className="mt-3 px-1 text-xs text-ink-subtle">Touche un jour pour voir sa timeline.</Text>
+          <Text className="mt-3 px-1 text-xs text-ink-subtle">{t.mobileField.tapDayForTimeline}</Text>
         </ScrollView>
       ) : null}
 
@@ -529,16 +531,16 @@ export default function Schedule() {
         <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setFilterOpen(false)}>
           <Pressable className="rounded-t-3xl bg-white pb-8 pt-3" onPress={() => {}}>
             <View className="items-center pb-2"><View className="h-1 w-10 rounded-full bg-surface-border" /></View>
-            <Text className="px-5 pb-2 text-lg font-bold text-ink">Filtrer par équipe</Text>
-            {teamChips.map((t) => {
-              const sel = selectedTeam === t.id;
+            <Text className="px-5 pb-2 text-lg font-bold text-ink">{t.mobileField.filterByTeam}</Text>
+            {teamChips.map((tc) => {
+              const sel = selectedTeam === tc.id;
               return (
                 <Pressable
-                  key={t.id ?? 'all'}
-                  onPress={() => { setSelectedTeam(t.id); setFilterOpen(false); }}
+                  key={tc.id ?? 'all'}
+                  onPress={() => { setSelectedTeam(tc.id); setFilterOpen(false); }}
                   className="flex-row items-center justify-between px-5 py-3.5 active:bg-surface-sunken"
                 >
-                  <Text className={`text-base ${sel ? 'font-bold text-ink' : 'text-ink'}`}>{t.name}</Text>
+                  <Text className={`text-base ${sel ? 'font-bold text-ink' : 'text-ink'}`}>{tc.name}</Text>
                   {sel ? <SymbolView name="checkmark" tintColor="#171717" size={16} resizeMode="scaleAspectFit" /> : null}
                 </Pressable>
               );
@@ -556,14 +558,14 @@ export default function Schedule() {
           <Pressable className="absolute inset-0" onPress={() => Keyboard.dismiss()} />
           <View className="rounded-t-3xl bg-white p-5 gap-4" style={{ paddingBottom: 28 }}>
             <View className="gap-0.5">
-              <Text className="text-lg font-bold text-ink">Rendez-vous déplacé 📅</Text>
+              <Text className="text-lg font-bold text-ink">{t.mobileField.apptMoved}</Text>
               <Text className="text-xs text-ink-muted">
-                {reschedJob ? `Nouvelle heure : ${formatDateTime(reschedJob.when)}` : ''}
+                {reschedJob ? t.mobileField.newTimeLabel.replace('{time}', formatDateTime(reschedJob.when)) : ''}
               </Text>
             </View>
 
             <View className="gap-1.5">
-              <Text className="text-xs uppercase text-ink-muted">Message au client</Text>
+              <Text className="text-xs uppercase text-ink-muted">{t.mobileField.messageToClient}</Text>
               <TextInput
                 value={reschedNice}
                 onChangeText={setReschedNice}
@@ -585,15 +587,15 @@ export default function Schedule() {
                   color: '#171717',
                 }}
               />
-              <Text className="text-xs italic text-ink-subtle">+ la nouvelle heure (ajoutée automatiquement)</Text>
+              <Text className="text-xs italic text-ink-subtle">{t.mobileField.newTimeAutoAdded}</Text>
             </View>
 
             <View className="flex-row gap-2 pt-1">
               <View className="flex-1">
-                <Button title="Passer" variant="secondary" onPress={() => setShowResched(false)} disabled={sendingResched} />
+                <Button title={t.mobileField.skip} variant="secondary" onPress={() => setShowResched(false)} disabled={sendingResched} />
               </View>
               <View className="flex-1">
-                <Button title="Envoyer" onPress={sendReschedule} loading={sendingResched} />
+                <Button title={t.mobileField.send} onPress={sendReschedule} loading={sendingResched} />
               </View>
             </View>
           </View>

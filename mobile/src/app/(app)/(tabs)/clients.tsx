@@ -7,9 +7,11 @@ import { ClientCard } from '@/components/ClientCard';
 import { Input } from '@/components/ui/Input';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { listClients } from '@/lib/api/clients';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 export default function ClientsTab() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const { canCreateClients } = usePermissions();
@@ -29,7 +31,7 @@ export default function ClientsTab() {
     <ScreenContainer padded={false}>
       <View className="px-5 pt-2 pb-3 gap-3">
         <View className="flex-row items-center justify-between">
-          <Text className="text-3xl font-bold text-ink">Clients</Text>
+          <Text className="text-3xl font-bold text-ink">{t.mobileField.clientsTitle}</Text>
           {canCreateClients ? (
             <Pressable
               onPress={() => router.push('/(app)/clients/new')}
@@ -42,7 +44,7 @@ export default function ClientsTab() {
         <Input
           value={search}
           onChangeText={setSearch}
-          placeholder="Search clients…"
+          placeholder={t.mobileField.searchClientsPlaceholder}
           autoCapitalize="none"
         />
       </View>
@@ -61,7 +63,9 @@ export default function ClientsTab() {
           !isLoading ? (
             <View className="items-center py-16">
               <Text className="text-base text-ink-muted text-center">
-                {error ? `Error: ${(error as Error).message}` : 'No clients found.'}
+                {error
+                  ? t.mobileField.errorPrefix.replace('{message}', (error as Error).message)
+                  : t.mobileField.noClientsFound}
               </Text>
             </View>
           ) : null

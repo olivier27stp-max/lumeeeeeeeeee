@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import UnifiedAvatar from '@/components/ui/UnifiedAvatar';
 import { getActiveLiveLocations } from '@/lib/api/tracking';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
 import { MK } from '@/lib/offline/mutationKeys';
@@ -55,6 +56,7 @@ function addDays(d: Date, n: number): Date {
 const DAY_ABBR = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function Timesheets() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const { session } = useAuth();
@@ -162,7 +164,7 @@ export default function Timesheets() {
     ? { ...mePos, latitudeDelta: 0.02, longitudeDelta: 0.02 }
     : liveAvg;
 
-  const onErr = (e: Error) => Alert.alert('Time tracking', e.message);
+  const onErr = (e: Error) => Alert.alert(t.mobileField.timeTracking, e.message);
   const punchInMut = useMutation<unknown, Error, { orgId: string; employeeId: string; employeeName: string | null; teamId: string | null }>({ mutationKey: MK.punchIn, onError: onErr });
   const punchOutMut = useMutation<unknown, Error, { entryId: string }>({ mutationKey: MK.punchOut, onError: onErr });
   const startBreakMut = useMutation<unknown, Error, { entryId: string }>({ mutationKey: MK.startBreak, onError: onErr });
@@ -203,7 +205,7 @@ export default function Timesheets() {
   return (
     <View className="flex-1 bg-surface-alt" style={{ paddingTop: insets.top }}>
       <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}>
-        <Text className="pb-3 pt-3 text-2xl font-bold text-ink">Timesheets</Text>
+        <Text className="pb-3 pt-3 text-2xl font-bold text-ink">{t.mobileField.timesheets}</Text>
 
         {/* Timer card */}
         <View
@@ -216,34 +218,34 @@ export default function Timesheets() {
               className={active ? (onBreak ? 'bg-status-inProgress' : 'bg-status-completed') : 'bg-surface-border'}
             />
             <Text className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              {active ? (onBreak ? 'On break' : 'On the clock') : 'Not punched in'}
+              {active ? (onBreak ? t.mobileField.onBreak : t.mobileField.onTheClock) : t.mobileField.notPunchedIn}
             </Text>
           </View>
           <Text className="mt-2 text-5xl font-bold text-ink" style={{ fontVariant: ['tabular-nums'] }}>
             {active ? fmtTimer(workedMs(active, now)) : '00:00:00'}
           </Text>
           {active?.punch_in_at ? (
-            <Text className="mt-1 text-sm text-ink-muted">Started {fmtClock(active.punch_in_at)}</Text>
+            <Text className="mt-1 text-sm text-ink-muted">{t.mobileField.started.replace('{time}', fmtClock(active.punch_in_at))}</Text>
           ) : null}
 
           <View className="mt-6 w-full gap-3 px-6">
             {!active ? (
-              <Button title="Punch in" onPress={punchIn} loading={busy} disabled={!orgId} />
+              <Button title={t.mobileField.punchIn} onPress={punchIn} loading={busy} disabled={!orgId} />
             ) : (
               <>
                 {onBreak ? (
-                  <Button title="End break" onPress={() => endBreakMut.mutate({ entryId: active.id })} loading={busy} />
+                  <Button title={t.mobileField.endBreak} onPress={() => endBreakMut.mutate({ entryId: active.id })} loading={busy} />
                 ) : (
-                  <Button title="Start break" variant="secondary" onPress={() => startBreakMut.mutate({ entryId: active.id })} loading={busy} />
+                  <Button title={t.mobileField.startBreak} variant="secondary" onPress={() => startBreakMut.mutate({ entryId: active.id })} loading={busy} />
                 )}
                 <Button
-                  title="Punch out"
+                  title={t.mobileField.punchOut}
                   variant="danger"
                   loading={busy}
                   onPress={() =>
-                    Alert.alert('Punch out', 'End your shift now?', [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Punch out', style: 'destructive', onPress: () => punchOutMut.mutate({ entryId: active.id }) },
+                    Alert.alert(t.mobileField.punchOut, t.mobileField.endYourShiftNow, [
+                      { text: t.mobileField.cancel, style: 'cancel' },
+                      { text: t.mobileField.punchOut, style: 'destructive', onPress: () => punchOutMut.mutate({ entryId: active.id }) },
                     ])
                   }
                 />
@@ -256,9 +258,9 @@ export default function Timesheets() {
         {isManager && (initialRegion || mePos) ? (
           <View className="mt-5">
             <View className="flex-row items-center justify-between px-1 pb-3">
-              <Text className="text-sm text-ink-muted">Techniciens en direct · {live.length}</Text>
+              <Text className="text-sm text-ink-muted">{t.mobileField.liveTechnicians.replace('{count}', String(live.length))}</Text>
               <Pressable onPress={() => router.push('/(app)/tech-history' as any)}>
-                <Text className="text-sm font-medium text-brand">Historique →</Text>
+                <Text className="text-sm font-medium text-brand">{t.mobileField.history}</Text>
               </Pressable>
             </View>
             <View
@@ -279,8 +281,8 @@ export default function Timesheets() {
                     <Marker
                       key={l.user_id}
                       coordinate={{ latitude: l.latitude, longitude: l.longitude }}
-                      title={l.user_name ?? 'Technicien'}
-                      description={l.is_moving ? 'En déplacement' : 'Sur place'}
+                      title={l.user_name ?? t.mobileField.technician}
+                      description={l.is_moving ? t.mobileField.moving : t.mobileField.onSite}
                     >
                       <View
                         className="h-7 w-7 items-center justify-center rounded-full border-2 border-white"
@@ -302,7 +304,7 @@ export default function Timesheets() {
         {isManager && (rosterQ.data?.length ?? 0) > 0 ? (
           <View className="mt-5">
             <View className="flex-row items-center justify-between px-1 pb-3">
-              <Text className="text-sm text-ink-muted">On the clock</Text>
+              <Text className="text-sm text-ink-muted">{t.mobileField.onTheClock}</Text>
               <Text className="text-base font-bold text-ink">{rosterQ.data!.length}</Text>
             </View>
             <View
@@ -313,10 +315,10 @@ export default function Timesheets() {
                 const paused = e.status === 'paused';
                 return (
                   <View key={e.id} className="flex-row items-center gap-3">
-                    <UnifiedAvatar id={e.employee_id} name={e.employee_name ?? 'Unknown'} size={36} />
+                    <UnifiedAvatar id={e.employee_id} name={e.employee_name ?? t.mobileField.unknown} size={36} />
                     <View className="flex-1">
                       <Text className="text-base font-semibold text-ink" numberOfLines={1}>
-                        {e.employee_name ?? 'Unknown'}
+                        {e.employee_name ?? t.mobileField.unknown}
                       </Text>
                       <View className="flex-row items-center gap-1.5">
                         <View
@@ -324,7 +326,7 @@ export default function Timesheets() {
                           className={paused ? 'bg-status-inProgress' : 'bg-status-completed'}
                         />
                         <Text className="text-xs text-ink-muted">
-                          {paused ? 'On break' : 'On the clock'} · since {fmtClock(e.punch_in_at)}
+                          {paused ? t.mobileField.onBreak : t.mobileField.onTheClock} · {t.mobileField.since} {fmtClock(e.punch_in_at)}
                         </Text>
                       </View>
                     </View>
@@ -347,7 +349,7 @@ export default function Timesheets() {
               className={`flex-1 items-center rounded-xl py-2 ${view === v ? 'bg-white' : ''}`}
             >
               <Text className={`text-sm font-semibold ${view === v ? 'text-ink' : 'text-ink-muted'}`}>
-                {v === 'day' ? 'Today' : 'This week'}
+                {v === 'day' ? t.mobileField.today : t.mobileField.thisWeek}
               </Text>
             </Pressable>
           ))}
@@ -356,12 +358,12 @@ export default function Timesheets() {
         {view === 'day' ? (
           <View className="mt-4 gap-3">
             <View className="flex-row items-center justify-between px-1">
-              <Text className="text-sm text-ink-muted">Today</Text>
+              <Text className="text-sm text-ink-muted">{t.mobileField.today}</Text>
               <Text className="text-base font-bold text-ink">{fmtHM(todayTotal)}</Text>
             </View>
             {todayEntries.length === 0 ? (
               <View className="items-center rounded-3xl bg-white p-8">
-                <Text className="text-sm text-ink-muted">No punches today.</Text>
+                <Text className="text-sm text-ink-muted">{t.mobileField.noPunchesToday}</Text>
               </View>
             ) : (
               todayEntries.map((e: TimeEntryRow) => (
@@ -372,11 +374,11 @@ export default function Timesheets() {
                 >
                   <View>
                     <Text className="text-base font-semibold text-ink">
-                      {fmtClock(e.punch_in_at)} → {e.punch_out_at ? fmtClock(e.punch_out_at) : 'In progress'}
+                      {fmtClock(e.punch_in_at)} → {e.punch_out_at ? fmtClock(e.punch_out_at) : t.mobileField.inProgress}
                     </Text>
                     {(e.breaks?.length ?? 0) > 0 ? (
                       <Text className="text-xs text-ink-muted">
-                        {e.breaks.length} break{e.breaks.length === 1 ? '' : 's'}
+                        {e.breaks.length} {e.breaks.length === 1 ? t.mobileField.breakSingular : t.mobileField.breakPlural}
                       </Text>
                     ) : null}
                   </View>
@@ -388,7 +390,7 @@ export default function Timesheets() {
         ) : (
           <View className="mt-4">
             <View className="flex-row items-center justify-between px-1 pb-3">
-              <Text className="text-sm text-ink-muted">This week</Text>
+              <Text className="text-sm text-ink-muted">{t.mobileField.thisWeek}</Text>
               <Text className="text-base font-bold text-ink">{fmtHM(weekTotal)}</Text>
             </View>
             <View
