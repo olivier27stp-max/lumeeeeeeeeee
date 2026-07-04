@@ -10,12 +10,14 @@ import {
   joinChallenge,
 } from '@/lib/api/gamification';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 export default function Gamification() {
   const qc = useQueryClient();
   const { session } = useAuth();
   const { orgId } = usePermissions();
+  const { t } = useTranslation();
   const userId = session?.user.id ?? '';
 
   const badges = useQuery({
@@ -37,7 +39,7 @@ export default function Gamification() {
   const join = useMutation({
     mutationFn: (challengeId: string) => joinChallenge(challengeId, userId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['gam-challenges'] }),
-    onError: (e: Error) => Alert.alert('Défi', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileD2D.challengeAlertTitle, e.message),
   });
 
   const loading = badges.isLoading || challenges.isLoading || battles.isLoading;
@@ -53,9 +55,9 @@ export default function Gamification() {
     <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt" contentContainerStyle={{ padding: 16, gap: 18 }}>
       {/* Badges */}
       <View className="gap-2">
-        <Text className="text-lg font-bold text-ink">Mes badges</Text>
+        <Text className="text-lg font-bold text-ink">{t.mobileD2D.myBadges}</Text>
         {(badges.data?.length ?? 0) === 0 ? (
-          <Text className="text-sm text-ink-muted">Aucun badge encore. Cogne aux portes ! 🚪</Text>
+          <Text className="text-sm text-ink-muted">{t.mobileD2D.noBadgesKnock}</Text>
         ) : (
           <View className="flex-row flex-wrap gap-3">
             {badges.data!.map((b) => (
@@ -77,9 +79,9 @@ export default function Gamification() {
 
       {/* Challenges */}
       <View className="gap-2">
-        <Text className="text-lg font-bold text-ink">Défis actifs</Text>
+        <Text className="text-lg font-bold text-ink">{t.mobileD2D.activeChallenges}</Text>
         {(challenges.data?.length ?? 0) === 0 ? (
-          <Text className="text-sm text-ink-muted">Aucun défi en cours.</Text>
+          <Text className="text-sm text-ink-muted">{t.mobileD2D.noActiveChallenges}</Text>
         ) : (
           challenges.data!.map((c) => {
             const joined = c.my_value != null;
@@ -88,7 +90,7 @@ export default function Gamification() {
               <View key={c.id} className="gap-2 rounded-2xl bg-white p-4">
                 <View className="flex-row items-center justify-between">
                   <Text className="flex-1 text-base font-semibold text-ink">{c.name}</Text>
-                  <Text className="text-xs font-semibold uppercase text-ink-subtle">{c.type === 'daily' ? 'Quotidien' : 'Hebdo'}</Text>
+                  <Text className="text-xs font-semibold uppercase text-ink-subtle">{c.type === 'daily' ? t.mobileD2D.challengeDaily : t.mobileD2D.challengeWeekly}</Text>
                 </View>
                 {c.description ? <Text className="text-sm text-ink-muted">{c.description}</Text> : null}
                 {c.prize_description ? <Text className="text-sm text-brand">🏆 {c.prize_description}</Text> : null}
@@ -102,7 +104,7 @@ export default function Gamification() {
                     </Text>
                   </>
                 ) : (
-                  <Button title="Rejoindre le défi" variant="secondary" onPress={() => join.mutate(c.id)} loading={join.isPending} />
+                  <Button title={t.mobileD2D.joinChallenge} variant="secondary" onPress={() => join.mutate(c.id)} loading={join.isPending} />
                 )}
               </View>
             );
@@ -112,19 +114,19 @@ export default function Gamification() {
 
       {/* Battles */}
       <View className="gap-2">
-        <Text className="text-lg font-bold text-ink">Duels</Text>
+        <Text className="text-lg font-bold text-ink">{t.mobileD2D.battles}</Text>
         {(battles.data?.length ?? 0) === 0 ? (
-          <Text className="text-sm text-ink-muted">Aucun duel en cours.</Text>
+          <Text className="text-sm text-ink-muted">{t.mobileD2D.noActiveBattles}</Text>
         ) : (
           battles.data!.map((b) => (
             <View key={b.id} className="gap-2 rounded-2xl bg-white p-4">
               <Text className="text-base font-semibold text-ink">{b.name}</Text>
               <View className="flex-row items-center justify-center gap-4">
                 <Text className="text-2xl font-bold text-brand">{b.challenger_score}</Text>
-                <Text className="text-sm text-ink-subtle">vs</Text>
+                <Text className="text-sm text-ink-subtle">{t.mobileD2D.battleVs}</Text>
                 <Text className="text-2xl font-bold text-ink">{b.opponent_score}</Text>
               </View>
-              <Text className="text-center text-xs text-ink-subtle">jusqu’au {new Date(b.end_date).toLocaleDateString('fr-CA')}</Text>
+              <Text className="text-center text-xs text-ink-subtle">{t.mobileD2D.battleUntil.replace('{date}', new Date(b.end_date).toLocaleDateString('fr-CA'))}</Text>
             </View>
           ))
         )}

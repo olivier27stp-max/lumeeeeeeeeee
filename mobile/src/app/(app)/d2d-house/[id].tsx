@@ -12,28 +12,50 @@ import {
   HouseStatus,
   listHouseEvents,
   STATUS_COLOR,
-  STATUS_LABEL,
 } from '@/lib/api/fieldSales';
 import { createLead } from '@/lib/api/leads';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 import { MK } from '@/lib/offline/mutationKeys';
 
-const QUICK_ACTIONS: { type: HouseEventType; label: string; status?: HouseStatus }[] = [
-  { type: 'knock', label: 'Knock' },
-  { type: 'no_answer', label: 'No answer' },
-  { type: 'lead', label: 'Lead' },
-  { type: 'callback', label: 'Callback' },
-  { type: 'quote_sent', label: 'Quote sent' },
-  { type: 'sale', label: 'Sale' },
-  { type: 'status_change', label: 'Not interested', status: 'not_interested' },
-  { type: 'do_not_knock', label: 'Do not knock' },
+// `labelKey` refs a key under t.mobileD2D; it is resolved at render time.
+const QUICK_ACTIONS: { type: HouseEventType; labelKey: string; status?: HouseStatus }[] = [
+  { type: 'knock', labelKey: 'actionKnock' },
+  { type: 'no_answer', labelKey: 'actionNoAnswer' },
+  { type: 'lead', labelKey: 'actionLead' },
+  { type: 'callback', labelKey: 'actionCallback' },
+  { type: 'quote_sent', labelKey: 'actionQuoteSent' },
+  { type: 'sale', labelKey: 'actionSale' },
+  { type: 'status_change', labelKey: 'actionNotInterested', status: 'not_interested' },
+  { type: 'do_not_knock', labelKey: 'actionDoNotKnock' },
 ];
+
+// Maps a house status / event slug to its t.mobileD2D key (label resolved in render).
+const STATUS_LABEL_KEY: Record<string, string> = {
+  unknown: 'statusUnknown',
+  no_answer: 'statusNoAnswer',
+  not_interested: 'statusNotInterested',
+  lead: 'statusLead',
+  quote_sent: 'statusQuoteSent',
+  sale: 'statusSale',
+  callback: 'statusCallback',
+  do_not_knock: 'statusDoNotKnock',
+  revisit: 'statusRevisit',
+  knock: 'actionKnock',
+};
 
 export default function HouseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session } = useAuth();
   const { orgId, can } = usePermissions();
+  const { t } = useTranslation();
+
+  const d2d = t.mobileD2D as Record<string, string>;
+  const statusLabel = (slug: string) => {
+    const key = STATUS_LABEL_KEY[slug];
+    return key ? d2d[key] : slug;
+  };
 
   const [note, setNote] = useState('');
   const [name, setName] = useState('');
@@ -66,7 +88,7 @@ export default function HouseDetail() {
   >({
     mutationKey: MK.d2dLogEvent,
     onSuccess: () => setNote(''),
-    onError: (e: Error) => Alert.alert('Could not log', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileD2D.couldNotLog, e.message),
   });
 
   const logAction = (action: { type: HouseEventType; status?: HouseStatus }) => {
@@ -86,7 +108,7 @@ export default function HouseDetail() {
       const [firstName, ...rest] = name.trim().split(/\s+/);
       createLead({
         orgId,
-        firstName: firstName || 'Lead',
+        firstName: firstName || t.mobileD2D.leadFirstNameFallback,
         lastName: rest.join(' '),
         phone: phone.trim() || null,
         notes: note.trim() || null,
@@ -114,30 +136,30 @@ export default function HouseDetail() {
               }}
             />
             <Text className="text-sm font-medium text-ink">
-              {STATUS_LABEL[status] ?? status}
+              {statusLabel(status)}
             </Text>
           </View>
-          <Text className="text-xl font-bold text-ink">{house?.address ?? 'House'}</Text>
+          <Text className="text-xl font-bold text-ink">{house?.address ?? t.mobileD2D.houseFallback}</Text>
           <Text className="text-xs text-ink-muted">
-            {house?.visit_count ?? 0} visits
+            {t.mobileD2D.visitsCount.replace('{count}', String(house?.visit_count ?? 0))}
           </Text>
         </View>
 
         <Card className="gap-3">
-          <Text className="text-xs uppercase text-ink-muted">Customer (optional)</Text>
-          <Input label="Name" value={name} onChangeText={setName} placeholder="Jane Doe" />
+          <Text className="text-xs uppercase text-ink-muted">{t.mobileD2D.customerOptional}</Text>
+          <Input label={t.mobileD2D.nameLabel} value={name} onChangeText={setName} placeholder={t.mobileD2D.namePlaceholder} />
           <Input
-            label="Phone"
+            label={t.mobileD2D.phoneLabel}
             value={phone}
             onChangeText={setPhone}
-            placeholder="(555) 123-4567"
+            placeholder={t.mobileD2D.phonePlaceholder}
             keyboardType="phone-pad"
           />
           <Input
-            label="Note"
+            label={t.mobileD2D.noteLabel}
             value={note}
             onChangeText={setNote}
-            placeholder="Anything worth remembering…"
+            placeholder={t.mobileD2D.notePlaceholder}
             multiline
             numberOfLines={3}
             style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }}
@@ -145,7 +167,7 @@ export default function HouseDetail() {
         </Card>
 
         <View className="gap-2">
-          <Text className="text-xs uppercase text-ink-muted">Log an interaction</Text>
+          <Text className="text-xs uppercase text-ink-muted">{t.mobileD2D.logInteraction}</Text>
           <View className="flex-row flex-wrap gap-2">
             {QUICK_ACTIONS.map((a) => (
               <Pressable
@@ -154,7 +176,7 @@ export default function HouseDetail() {
                 onPress={() => logAction({ type: a.type, status: a.status })}
                 className="rounded-full border border-slate-300 bg-white px-4 py-2"
               >
-                <Text className="text-sm text-ink">{a.label}</Text>
+                <Text className="text-sm text-ink">{d2d[a.labelKey]}</Text>
               </Pressable>
             ))}
           </View>
@@ -162,24 +184,24 @@ export default function HouseDetail() {
 
         {can('jobs.create') ? (
           <Button
-            title="Planifier un RDV / une visite"
+            title={t.mobileD2D.scheduleVisit}
             variant="secondary"
             onPress={() =>
               router.push(
-                `/(app)/jobs/new?address=${encodeURIComponent(house?.address ?? '')}&title=${encodeURIComponent('RDV — ' + (name || house?.address || ''))}` as any,
+                `/(app)/jobs/new?address=${encodeURIComponent(house?.address ?? '')}&title=${encodeURIComponent(t.mobileD2D.appointmentPrefix + (name || house?.address || ''))}` as any,
               )
             }
           />
         ) : null}
 
         <Card className="gap-2">
-          <Text className="text-xs uppercase text-ink-muted">History</Text>
+          <Text className="text-xs uppercase text-ink-muted">{t.mobileD2D.history}</Text>
           {(events ?? []).length === 0 ? (
-            <Text className="text-sm text-ink-subtle">No activity yet.</Text>
+            <Text className="text-sm text-ink-subtle">{t.mobileD2D.noActivityYet}</Text>
           ) : (
             (events ?? []).map((e) => (
               <View key={e.id} className="flex-row justify-between border-b border-slate-100 py-1">
-                <Text className="text-sm text-ink">{STATUS_LABEL[e.event_type] ?? e.event_type}</Text>
+                <Text className="text-sm text-ink">{statusLabel(e.event_type)}</Text>
                 <Text className="text-xs text-ink-subtle">
                   {new Date(e.created_at).toLocaleDateString()}
                 </Text>

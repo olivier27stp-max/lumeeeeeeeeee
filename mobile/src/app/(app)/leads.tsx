@@ -7,12 +7,28 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Lead, LEAD_STAGES, createLead, listLeads, updateLeadStatus } from '@/lib/api/leads';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
+
+// Maps a lead stage slug to its t.mobileD2D key (label resolved in render).
+const STAGE_LABEL_KEY: Record<string, string> = {
+  new: 'stageNew',
+  contacted: 'stageContacted',
+  follow_up_1: 'stageFollowUp1',
+  follow_up_2: 'stageFollowUp2',
+  quote_sent: 'stageQuoteSent',
+  won: 'stageWon',
+  lost: 'stageLost',
+};
 
 export default function Leads() {
   const qc = useQueryClient();
   const { session } = useAuth();
   const { orgId, role } = usePermissions();
+  const { t } = useTranslation();
+
+  const d2d = t.mobileD2D as Record<string, string>;
+  const stageLabel = (key: string) => d2d[STAGE_LABEL_KEY[key]] ?? key;
   const userId = session?.user.id ?? '';
   const isManager = role === 'owner' || role === 'admin';
 
@@ -33,10 +49,10 @@ export default function Leads() {
 
   const create = useMutation({
     mutationFn: () => {
-      if (!first.trim() && !phone.trim()) throw new Error('Nom ou téléphone requis.');
+      if (!first.trim() && !phone.trim()) throw new Error(t.mobileD2D.nameOrPhoneRequired);
       return createLead({
         orgId: String(orgId),
-        firstName: first || 'Lead',
+        firstName: first || t.mobileD2D.leadFallback,
         lastName: last,
         phone: phone || null,
         email: email || null,
@@ -51,7 +67,7 @@ export default function Leads() {
       setEmail('');
       qc.invalidateQueries({ queryKey: ['leads'] });
     },
-    onError: (e: Error) => Alert.alert('Lead', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileD2D.leadAlertTitle, e.message),
   });
 
   const move = useMutation({
@@ -76,7 +92,7 @@ export default function Leads() {
             {(['mine', 'all'] as const).map((s) => (
               <Pressable key={s} onPress={() => setScope(s)} className={`rounded-xl px-4 py-1.5 ${scope === s ? 'bg-white' : ''}`}>
                 <Text className={`text-sm font-semibold ${scope === s ? 'text-ink' : 'text-ink-muted'}`}>
-                  {s === 'mine' ? 'Mes leads' : 'Tous'}
+                  {s === 'mine' ? t.mobileD2D.scopeMine : t.mobileD2D.scopeAll}
                 </Text>
               </Pressable>
             ))}
@@ -85,13 +101,13 @@ export default function Leads() {
 
         {byStage.length === 0 ? (
           <View className="items-center py-16">
-            <Text className="text-sm text-ink-muted">Aucun lead. Touchez « + » pour en ajouter.</Text>
+            <Text className="text-sm text-ink-muted">{t.mobileD2D.noLeadsHint}</Text>
           </View>
         ) : (
           byStage.map((g) => (
             <View key={g.key} className="gap-2">
               <Text className="text-[11px] font-bold uppercase tracking-widest text-ink-subtle">
-                {g.label} · {g.leads.length}
+                {stageLabel(g.key)} · {g.leads.length}
               </Text>
               {g.leads.map((l) => (
                 <Pressable
@@ -101,7 +117,7 @@ export default function Leads() {
                 >
                   <View className="flex-1">
                     <Text className="text-base font-semibold text-ink">
-                      {[l.first_name, l.last_name].filter(Boolean).join(' ') || 'Lead'}
+                      {[l.first_name, l.last_name].filter(Boolean).join(' ') || t.mobileD2D.leadFallback}
                     </Text>
                     <Text className="text-sm text-ink-muted">{l.phone ?? l.email ?? l.company ?? '—'}</Text>
                   </View>
@@ -126,12 +142,12 @@ export default function Leads() {
       <Modal visible={creating} transparent animationType="slide" onRequestClose={() => setCreating(false)}>
         <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setCreating(false)}>
           <Pressable className="gap-3 rounded-t-3xl bg-white p-5" onPress={(e) => e.stopPropagation()}>
-            <Text className="text-lg font-bold text-ink">Nouveau lead</Text>
-            <Input label="Prénom" value={first} onChangeText={setFirst} placeholder="Jean" />
-            <Input label="Nom" value={last} onChangeText={setLast} placeholder="Tremblay" />
-            <Input label="Téléphone" value={phone} onChangeText={setPhone} placeholder="(514)…" keyboardType="phone-pad" />
-            <Input label="Courriel" value={email} onChangeText={setEmail} placeholder="optionnel" keyboardType="email-address" autoCapitalize="none" />
-            <Button title="Créer le lead" onPress={() => create.mutate()} loading={create.isPending} />
+            <Text className="text-lg font-bold text-ink">{t.mobileD2D.newLead}</Text>
+            <Input label={t.mobileD2D.firstNameLabel} value={first} onChangeText={setFirst} placeholder={t.mobileD2D.firstNamePlaceholder} />
+            <Input label={t.mobileD2D.lastNameLabel} value={last} onChangeText={setLast} placeholder={t.mobileD2D.lastNamePlaceholder} />
+            <Input label={t.mobileD2D.leadPhoneLabel} value={phone} onChangeText={setPhone} placeholder={t.mobileD2D.leadPhonePlaceholder} keyboardType="phone-pad" />
+            <Input label={t.mobileD2D.emailLabel} value={email} onChangeText={setEmail} placeholder={t.mobileD2D.emailPlaceholder} keyboardType="email-address" autoCapitalize="none" />
+            <Button title={t.mobileD2D.createLead} onPress={() => create.mutate()} loading={create.isPending} />
           </Pressable>
         </Pressable>
       </Modal>
@@ -143,7 +159,7 @@ export default function Leads() {
             <Text className="text-lg font-bold text-ink">
               {editLead ? [editLead.first_name, editLead.last_name].filter(Boolean).join(' ') : ''}
             </Text>
-            <Text className="text-sm text-ink-muted">Changer l’étape</Text>
+            <Text className="text-sm text-ink-muted">{t.mobileD2D.changeStage}</Text>
             {LEAD_STAGES.map((s) => {
               const sel = editLead?.status === s.key;
               return (
@@ -152,7 +168,7 @@ export default function Leads() {
                   onPress={() => editLead && move.mutate({ id: editLead.id, status: s.key })}
                   className={`flex-row items-center justify-between rounded-xl border p-3 ${sel ? 'border-ink bg-ink' : 'border-surface-border'}`}
                 >
-                  <Text className={`text-base font-semibold ${sel ? 'text-white' : 'text-ink'}`}>{s.label}</Text>
+                  <Text className={`text-base font-semibold ${sel ? 'text-white' : 'text-ink'}`}>{stageLabel(s.key)}</Text>
                   {sel ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={14} /> : null}
                 </Pressable>
               );
