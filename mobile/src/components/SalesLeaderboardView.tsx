@@ -7,16 +7,19 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 import UnifiedAvatar from '@/components/ui/UnifiedAvatar';
 import { getLeaderboard, RepRank } from '@/lib/api/salesRep';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 type Period = 'day' | 'week' | 'month' | 'all';
 type Metric = 'sales' | 'revenue';
 
-const PERIODS: { id: Period; label: string }[] = [
-  { id: 'day', label: 'Jour' },
-  { id: 'week', label: 'Semaine' },
-  { id: 'month', label: 'Mois' },
-  { id: 'all', label: 'Toujours' },
+type SalesT = ReturnType<typeof useTranslation>['t']['mobileSales'];
+
+const PERIODS: { id: Period; labelKey: keyof SalesT }[] = [
+  { id: 'day', labelKey: 'periodDay' },
+  { id: 'week', labelKey: 'periodWeek' },
+  { id: 'month', labelKey: 'periodMonth' },
+  { id: 'all', labelKey: 'periodAll' },
 ];
 
 // Each close = one treat. Cycle a few for variety; cap so rows don't overflow.
@@ -29,9 +32,9 @@ function treats(n: number): string {
   for (let i = 0; i < shown; i++) s += TREATS[i % TREATS.length];
   return n > cap ? `${s} +${n - cap}` : s;
 }
-const METRICS: { id: Metric; label: string }[] = [
-  { id: 'sales', label: 'Ventes' },
-  { id: 'revenue', label: 'Revenus' },
+const METRICS: { id: Metric; labelKey: keyof SalesT }[] = [
+  { id: 'sales', labelKey: 'metricSales' },
+  { id: 'revenue', labelKey: 'metricRevenue' },
 ];
 
 const money = (cents: number) =>
@@ -81,6 +84,7 @@ function PodiumAvatar({ rank, id, name, size, url }: { rank: number; id: string;
 }
 
 export function SalesLeaderboardView() {
+  const { t } = useTranslation();
   const { orgId } = usePermissions();
   const { session } = useAuth();
   const me = session?.user.id ?? '';
@@ -130,7 +134,7 @@ export function SalesLeaderboardView() {
         <View className="flex-1">
           <Text numberOfLines={1} className="text-base font-medium text-ink">
             {r.name}
-            {mine ? ' (moi)' : ''}
+            {mine ? ` (${t.mobileSales.me})` : ''}
           </Text>
           <Text className="text-xs text-ink-muted">{subText(r)}</Text>
         </View>
@@ -150,7 +154,7 @@ export function SalesLeaderboardView() {
           <View className="flex-row rounded-2xl bg-surface-sunken p-1">
             {PERIODS.map((p) => (
               <Pressable key={p.id} onPress={() => setPeriod(p.id)} className={`flex-1 items-center rounded-xl py-2 ${period === p.id ? 'bg-white' : ''}`}>
-                <Text className={`text-sm font-semibold ${period === p.id ? 'text-ink' : 'text-ink-muted'}`}>{p.label}</Text>
+                <Text className={`text-sm font-semibold ${period === p.id ? 'text-ink' : 'text-ink-muted'}`}>{t.mobileSales[p.labelKey]}</Text>
               </Pressable>
             ))}
           </View>
@@ -161,7 +165,7 @@ export function SalesLeaderboardView() {
                 onPress={() => setMetric(mt.id)}
                 className={`rounded-full border px-4 py-1.5 ${metric === mt.id ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
               >
-                <Text className={`text-xs font-semibold ${metric === mt.id ? 'text-white' : 'text-ink'}`}>{mt.label}</Text>
+                <Text className={`text-xs font-semibold ${metric === mt.id ? 'text-white' : 'text-ink'}`}>{t.mobileSales[mt.labelKey]}</Text>
               </Pressable>
             ))}
           </View>
@@ -173,7 +177,7 @@ export function SalesLeaderboardView() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Rechercher un rep…"
+            placeholder={t.mobileSales.searchRepPlaceholder}
             placeholderTextColor="#A3A3A3"
             className="flex-1 text-base text-ink"
             autoCapitalize="none"
@@ -189,7 +193,7 @@ export function SalesLeaderboardView() {
         {usingDemo && !searching ? (
           <View className="flex-row items-center justify-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5">
             <SymbolView name="sparkles" tintColor="#A3A3A3" size={12} resizeMode="scaleAspectFit" />
-            <Text className="text-xs text-ink-subtle">Inclut des données d&apos;exemple (aperçu)</Text>
+            <Text className="text-xs text-ink-subtle">{t.mobileSales.includesSampleData}</Text>
           </View>
         ) : null}
 
@@ -200,7 +204,7 @@ export function SalesLeaderboardView() {
         ) : searching ? (
           filtered.length === 0 ? (
             <View className="items-center py-16">
-              <Text className="text-sm text-ink-muted">Aucun rep pour « {query} ».</Text>
+              <Text className="text-sm text-ink-muted">{t.mobileSales.noRepForQuery.replace('{query}', query)}</Text>
             </View>
           ) : (
             <View className="rounded-2xl bg-white px-2 py-1">
@@ -214,7 +218,7 @@ export function SalesLeaderboardView() {
         ) : board.length === 0 ? (
           <View className="items-center py-20">
             <SymbolView name="trophy" tintColor="#D4D4D4" size={44} resizeMode="scaleAspectFit" />
-            <Text className="mt-2 text-sm text-ink-muted">Pas encore d&apos;activité pour cette période.</Text>
+            <Text className="mt-2 text-sm text-ink-muted">{t.mobileSales.noActivityForPeriod}</Text>
           </View>
         ) : (
           <>
@@ -228,7 +232,7 @@ export function SalesLeaderboardView() {
                     <PodiumAvatar rank={place} id={r.user_id} name={r.name} size={isFirst ? 76 : 58} url={r.avatarUrl} />
                     <Text numberOfLines={1} className="mt-2 max-w-[100px] text-center text-sm font-semibold text-ink">
                       {r.name}
-                      {r.user_id === me ? ' (moi)' : ''}
+                      {r.user_id === me ? ` (${t.mobileSales.me})` : ''}
                     </Text>
                     <Text className={`text-center font-bold text-ink ${isFirst ? 'text-xl' : 'text-lg'}`}>{valText(r)}</Text>
                   </Pressable>

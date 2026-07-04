@@ -5,6 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { getDoorStats, getLeadPipeline } from '@/lib/api/salesRep';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 const SHADOW = { shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } } as const;
@@ -15,22 +16,21 @@ function startOfToday(): string {
   return d.toISOString();
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  new: 'Nouveau',
-  new_prospect: 'Nouveau',
-  contacted: 'Contacté',
-  no_response: 'Sans réponse',
-  follow_up_1: 'Suivi',
-  follow_up_2: 'Suivi',
-  follow_up_3: 'Suivi',
-  quote_sent: 'Soumission',
-  closed: 'Gagné',
-  closed_won: 'Gagné',
-  won: 'Gagné',
-  lost: 'Perdu',
-  closed_lost: 'Perdu',
+const STATUS_KEY: Record<string, keyof ReturnType<typeof useTranslation>['t']['mobileSales']> = {
+  new: 'statusNew',
+  new_prospect: 'statusNew',
+  contacted: 'statusContacted',
+  no_response: 'statusNoResponse',
+  follow_up_1: 'statusFollowUp',
+  follow_up_2: 'statusFollowUp',
+  follow_up_3: 'statusFollowUp',
+  quote_sent: 'statusQuoteSent',
+  closed: 'statusWon',
+  closed_won: 'statusWon',
+  won: 'statusWon',
+  lost: 'statusLost',
+  closed_lost: 'statusLost',
 };
-const label = (s: string) => STATUS_LABEL[s] ?? s;
 
 function Tile({ label: l, value, tint }: { label: string; value: string; tint?: string }) {
   return (
@@ -73,8 +73,10 @@ function NavTile({
 }
 
 export default function SalesHome() {
+  const { t } = useTranslation();
   const { orgId, role } = usePermissions();
   const { session } = useAuth();
+  const label = (s: string) => (STATUS_KEY[s] ? t.mobileSales[STATUS_KEY[s]] : s);
   const isRep = role === 'sales_rep';
   const me = session?.user.id ?? '';
   const scopeUser = isRep ? me : null; // rep = own data, manager = whole org
@@ -97,18 +99,18 @@ export default function SalesHome() {
 
   return (
     <View className="gap-3 px-5 pt-4">
-      <Text className="text-2xl font-bold text-ink">Aujourd&apos;hui</Text>
+      <Text className="text-2xl font-bold text-ink">{t.mobileSales.today}</Text>
       <View className="flex-row gap-3">
-        <Tile label="Portes" value={String(d.knocks)} />
-        <Tile label="Leads" value={String(d.leads)} tint="#CA8A04" />
-        <Tile label="Ventes" value={String(d.sales)} tint="#16A34A" />
+        <Tile label={t.mobileSales.doors} value={String(d.knocks)} />
+        <Tile label={t.mobileSales.leads} value={String(d.leads)} tint="#CA8A04" />
+        <Tile label={t.mobileSales.sales} value={String(d.sales)} tint="#16A34A" />
       </View>
 
       <View className="rounded-2xl bg-ink p-4" style={SHADOW}>
-        <Text className="text-[11px] font-bold uppercase tracking-widest text-white/60">Taux de conversion</Text>
+        <Text className="text-[11px] font-bold uppercase tracking-widest text-white/60">{t.mobileSales.conversionRate}</Text>
         <Text className="text-3xl font-bold text-white">{conv}%</Text>
         <Text className="text-sm text-white/70">
-          {d.sales} ventes / {d.knocks} portes
+          {t.mobileSales.salesOverDoors.replace('{sales}', String(d.sales)).replace('{doors}', String(d.knocks))}
         </Text>
       </View>
 
@@ -122,20 +124,20 @@ export default function SalesHome() {
           <SymbolView name="map.fill" tintColor="#2563EB" size={22} resizeMode="scaleAspectFit" />
         </View>
         <View className="flex-1">
-          <Text className="text-base font-semibold text-ink">Carte D2D / territoire</Text>
-          <Text className="text-sm text-ink-muted">Cogner aux portes</Text>
+          <Text className="text-base font-semibold text-ink">{t.mobileSales.d2dMapTitle}</Text>
+          <Text className="text-sm text-ink-muted">{t.mobileSales.d2dMapSubtitle}</Text>
         </View>
         <SymbolView name="chevron.right" tintColor="#A3A3A3" size={14} resizeMode="scaleAspectFit" />
       </Pressable>
 
       {/* Navigation grid — the real "pages" of rep mode */}
       <View className="flex-row gap-3">
-        <NavTile icon="trophy.fill" title="Classement" subtitle="Podium & rangs" tint="#F59E0B" href="/(app)/leaderboard" />
-        <NavTile icon="dollarsign.circle.fill" title="Commissions" subtitle="Mes gains" tint="#16A34A" href="/(app)/commissions" />
+        <NavTile icon="trophy.fill" title={t.mobileSales.leaderboard} subtitle={t.mobileSales.leaderboardSubtitle} tint="#F59E0B" href="/(app)/leaderboard" />
+        <NavTile icon="dollarsign.circle.fill" title={t.mobileSales.commissions} subtitle={t.mobileSales.commissionsSubtitle} tint="#16A34A" href="/(app)/commissions" />
       </View>
       <View className="flex-row gap-3">
-        <NavTile icon="person.crop.rectangle.stack.fill" title="Pipeline" subtitle={`${totalLeads} leads`} tint="#2563EB" href="/(app)/leads" />
-        <NavTile icon="rosette" title="Défis & badges" subtitle="Défis · duels" tint="#D97706" href="/(app)/gamification" />
+        <NavTile icon="person.crop.rectangle.stack.fill" title={t.mobileSales.pipeline} subtitle={t.mobileSales.pipelineLeads.replace('{count}', String(totalLeads))} tint="#2563EB" href="/(app)/leads" />
+        <NavTile icon="rosette" title={t.mobileSales.challengesBadges} subtitle={t.mobileSales.challengesSubtitle} tint="#D97706" href="/(app)/gamification" />
       </View>
 
       {me ? (
@@ -148,8 +150,8 @@ export default function SalesHome() {
             <SymbolView name="person.fill" tintColor="#171717" size={20} resizeMode="scaleAspectFit" />
           </View>
           <View className="flex-1">
-            <Text className="text-base font-semibold text-ink">Mon profil vente</Text>
-            <Text className="text-sm text-ink-muted">Badges, stats, ventes par mois</Text>
+            <Text className="text-base font-semibold text-ink">{t.mobileSales.mySalesProfile}</Text>
+            <Text className="text-sm text-ink-muted">{t.mobileSales.mySalesProfileSubtitle}</Text>
           </View>
           <SymbolView name="chevron.right" tintColor="#A3A3A3" size={14} resizeMode="scaleAspectFit" />
         </Pressable>
@@ -157,14 +159,14 @@ export default function SalesHome() {
 
       {/* Pipeline snapshot */}
       <View className="flex-row items-baseline justify-between pt-1">
-        <Text className="text-lg font-bold text-ink">{isRep ? 'Mon pipeline' : 'Pipeline'}</Text>
+        <Text className="text-lg font-bold text-ink">{isRep ? t.mobileSales.myPipeline : t.mobileSales.pipeline}</Text>
         <Pressable onPress={() => router.push('/(app)/leads' as any)}>
-          <Text className="text-sm font-semibold text-brand">Tout voir</Text>
+          <Text className="text-sm font-semibold text-brand">{t.mobileSales.seeAll}</Text>
         </Pressable>
       </View>
       {pipe.length === 0 ? (
         <View className="items-center rounded-2xl bg-white p-6" style={SHADOW}>
-          <Text className="text-sm text-ink-muted">Aucun lead.</Text>
+          <Text className="text-sm text-ink-muted">{t.mobileSales.noLeads}</Text>
         </View>
       ) : (
         <View className="rounded-2xl bg-white px-3 py-1" style={SHADOW}>

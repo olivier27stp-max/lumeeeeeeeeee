@@ -11,14 +11,17 @@ import { getPeerPayoutsVisible } from '@/lib/api/fieldSales';
 import { getMember } from '@/lib/api/org';
 import { captureAvatar, pickAvatar, uploadMyAvatar, clearMyAvatar } from '@/lib/api/avatars';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
-const ROLE_LABEL: Record<string, string> = {
-  owner: 'Propriétaire',
-  admin: 'Admin',
-  sales_rep: 'Représentant',
-  technician: 'Technicien',
-  member: 'Membre',
+type SalesT = ReturnType<typeof useTranslation>['t']['mobileSales'];
+
+const ROLE_KEY: Record<string, keyof SalesT> = {
+  owner: 'roleOwner',
+  admin: 'roleAdmin',
+  sales_rep: 'roleSalesRep',
+  technician: 'roleTechnician',
+  member: 'roleMember',
 };
 
 const money = (n: number) =>
@@ -38,6 +41,8 @@ function SectionLabel({ children }: { children: string }) {
 }
 
 export function RepProfileView({ userId, name }: { userId: string; name?: string }) {
+  const { t } = useTranslation();
+  const roleLabel = (r?: string) => (r && ROLE_KEY[r] ? t.mobileSales[ROLE_KEY[r]] : undefined);
   const qc = useQueryClient();
   const { orgId, role } = usePermissions();
   const { session } = useAuth();
@@ -56,7 +61,7 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
   const commQ = useQuery({ queryKey: ['rep-comm', orgId, userId], queryFn: () => listCommissions(String(orgId), userId), enabled: !!orgId && canSeePayout });
 
   const member = memberQ.data;
-  const displayName = member?.full_name || name || 'Représentant';
+  const displayName = member?.full_name || name || t.mobileSales.salesRepFallback;
   const s = statsQ.data ?? { knocks: 0, leads: 0, sales: 0, total: 0 };
   const conv = s.knocks > 0 ? Math.round((s.sales / s.knocks) * 100) : 0;
   const badges = badgesQ.data ?? [];
@@ -71,17 +76,17 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
       qc.invalidateQueries({ queryKey: ['member'] });
       qc.invalidateQueries({ queryKey: ['members'] });
     } catch (e) {
-      Alert.alert('Photo', (e as Error).message);
+      Alert.alert(t.mobileSales.photo, (e as Error).message);
     } finally {
       setUploading(false);
     }
   };
   const choosePhoto = () => {
-    Alert.alert('Photo de profil', undefined, [
-      { text: 'Prendre une photo', onPress: async () => { const uri = await captureAvatar().catch(() => null); if (uri) doUpload(uri); } },
-      { text: 'Choisir dans la galerie', onPress: async () => { const uri = await pickAvatar().catch(() => null); if (uri) doUpload(uri); } },
-      ...(member?.avatar_url ? [{ text: 'Avatar généré', onPress: async () => { setUploading(true); try { await clearMyAvatar(me); qc.invalidateQueries({ queryKey: ['member'] }); } finally { setUploading(false); } } }] : []),
-      { text: 'Annuler', style: 'cancel' as const },
+    Alert.alert(t.mobileSales.profilePhoto, undefined, [
+      { text: t.mobileSales.takePhoto, onPress: async () => { const uri = await captureAvatar().catch(() => null); if (uri) doUpload(uri); } },
+      { text: t.mobileSales.chooseFromGallery, onPress: async () => { const uri = await pickAvatar().catch(() => null); if (uri) doUpload(uri); } },
+      ...(member?.avatar_url ? [{ text: t.mobileSales.generatedAvatar, onPress: async () => { setUploading(true); try { await clearMyAvatar(me); qc.invalidateQueries({ queryKey: ['member'] }); } finally { setUploading(false); } } }] : []),
+      { text: t.mobileSales.cancel, style: 'cancel' as const },
     ]);
   };
 
@@ -122,17 +127,17 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
         <Text className="mt-2 text-2xl font-bold text-ink">{displayName}</Text>
         <View className="mt-1.5 flex-row items-center gap-2">
           <View className="rounded-full bg-surface-sunken px-3 py-1">
-            <Text className="text-xs font-semibold text-ink-muted">{ROLE_LABEL[member?.role ?? ''] ?? 'Représentant'}</Text>
+            <Text className="text-xs font-semibold text-ink-muted">{roleLabel(member?.role) ?? t.mobileSales.salesRepFallback}</Text>
           </View>
-          {s.sales > 0 ? <Text className="text-xs text-ink-subtle">· {s.sales} ventes ce mois</Text> : null}
+          {s.sales > 0 ? <Text className="text-xs text-ink-subtle">· {t.mobileSales.salesThisMonth.replace('{count}', String(s.sales))}</Text> : null}
         </View>
       </View>
 
       {/* ── Tabs ── */}
       <View className="mx-4 mt-5 flex-row rounded-2xl bg-surface-sunken p-1">
-        {(['stats', 'badges'] as const).map((t) => (
-          <Pressable key={t} onPress={() => setTab(t)} className={`flex-1 items-center rounded-xl py-2 ${tab === t ? 'bg-white' : ''}`}>
-            <Text className={`text-sm font-semibold ${tab === t ? 'text-ink' : 'text-ink-muted'}`}>{t === 'stats' ? 'Stats' : 'Badges'}</Text>
+        {(['stats', 'badges'] as const).map((tabId) => (
+          <Pressable key={tabId} onPress={() => setTab(tabId)} className={`flex-1 items-center rounded-xl py-2 ${tab === tabId ? 'bg-white' : ''}`}>
+            <Text className={`text-sm font-semibold ${tab === tabId ? 'text-ink' : 'text-ink-muted'}`}>{tabId === 'stats' ? t.mobileSales.stats : t.mobileSales.badges}</Text>
           </Pressable>
         ))}
       </View>
@@ -142,13 +147,13 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
           <>
             {/* KPI strip */}
             <View className="flex-row rounded-2xl bg-white py-4" style={CARD}>
-              <Kpi label="Portes" value={String(s.knocks)} />
+              <Kpi label={t.mobileSales.doorsShort} value={String(s.knocks)} />
               <Divider />
-              <Kpi label="Leads" value={String(s.leads)} tint="#CA8A04" />
+              <Kpi label={t.mobileSales.leads} value={String(s.leads)} tint="#CA8A04" />
               <Divider />
-              <Kpi label="Ventes" value={String(s.sales)} tint="#16A34A" />
+              <Kpi label={t.mobileSales.sales} value={String(s.sales)} tint="#16A34A" />
               <Divider />
-              <Kpi label="Conv." value={`${conv}%`} />
+              <Kpi label={t.mobileSales.convShort} value={`${conv}%`} />
             </View>
 
             {/* Next payout */}
@@ -159,18 +164,18 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
                     <SymbolView name="dollarsign.circle.fill" tintColor="#16A34A" size={24} resizeMode="scaleAspectFit" />
                   </View>
                   <View className="flex-1">
-                    <SectionLabel>Prochain versement</SectionLabel>
+                    <SectionLabel>{t.mobileSales.nextPayout}</SectionLabel>
                     <Text className="text-2xl font-bold text-ink">{money(comm.approved)}</Text>
                   </View>
                 </View>
                 <View className="flex-row border-t border-surface-border">
                   <View className="flex-1 items-center py-2.5">
-                    <Text className="text-[11px] uppercase tracking-wide text-ink-subtle">En attente</Text>
+                    <Text className="text-[11px] uppercase tracking-wide text-ink-subtle">{t.mobileSales.pending}</Text>
                     <Text className="text-sm font-semibold text-ink">{money(comm.pending)}</Text>
                   </View>
                   <View className="w-px bg-surface-border" />
                   <View className="flex-1 items-center py-2.5">
-                    <Text className="text-[11px] uppercase tracking-wide text-ink-subtle">Déjà payé</Text>
+                    <Text className="text-[11px] uppercase tracking-wide text-ink-subtle">{t.mobileSales.alreadyPaid}</Text>
                     <Text className="text-sm font-semibold text-ink">{money(comm.paid)}</Text>
                   </View>
                 </View>
@@ -181,10 +186,10 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
             <View className="gap-3 rounded-2xl bg-white p-5" style={CARD}>
               <View className="flex-row items-center gap-2">
                 <SymbolView name="chart.bar.fill" tintColor="#A3A3A3" size={14} resizeMode="scaleAspectFit" />
-                <SectionLabel>Ventes par mois</SectionLabel>
+                <SectionLabel>{t.mobileSales.salesByMonth}</SectionLabel>
               </View>
               {months.every((m) => m.sales === 0) ? (
-                <Text className="py-1 text-sm text-ink-muted">Aucune vente sur la période.</Text>
+                <Text className="py-1 text-sm text-ink-muted">{t.mobileSales.noSalesOverPeriod}</Text>
               ) : (
                 months.map((m) => (
                   <View key={m.label} className="flex-row items-center gap-3">
@@ -200,10 +205,10 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
 
             {/* Rep details */}
             <View className="rounded-2xl bg-white px-5 py-2" style={CARD}>
-              <View className="py-2"><SectionLabel>Détails</SectionLabel></View>
-              <DetailRow label="Rôle" value={ROLE_LABEL[member?.role ?? ''] ?? '—'} />
-              <DetailRow label="Statut" value={member?.status === 'pending' ? 'Invitation en attente' : 'Actif'} />
-              {member?.email ? <DetailRow label="Courriel" value={member.email} last /> : null}
+              <View className="py-2"><SectionLabel>{t.mobileSales.details}</SectionLabel></View>
+              <DetailRow label={t.mobileSales.role} value={roleLabel(member?.role) ?? '—'} />
+              <DetailRow label={t.mobileSales.status} value={member?.status === 'pending' ? t.mobileSales.invitationPending : t.mobileSales.active} />
+              {member?.email ? <DetailRow label={t.mobileSales.emailLabel} value={member.email} last /> : null}
             </View>
           </>
         ) : (
@@ -212,7 +217,7 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
             {badges.length === 0 ? (
               <View className="items-center py-8">
                 <SymbolView name="rosette" tintColor="#D4D4D4" size={40} resizeMode="scaleAspectFit" />
-                <Text className="mt-2 text-sm text-ink-muted">Aucun badge gagné pour l&apos;instant.</Text>
+                <Text className="mt-2 text-sm text-ink-muted">{t.mobileSales.noBadgeYet}</Text>
               </View>
             ) : (
               <View className="flex-row flex-wrap gap-y-4">
