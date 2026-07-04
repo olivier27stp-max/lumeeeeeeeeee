@@ -157,6 +157,91 @@ router.get('/taxes/resolve', async (req, res) => {
   }
 });
 
+// ── GET /taxes/collected?from=YYYY-MM-DD&to=YYYY-MM-DD ──
+// Taxes collected (to remit) over a period: sums tax_cents on invoices paid in
+// the window, then splits the total across the org's default tax config by rate.
+// The split is exact when invoices share the default composition (the common
+// case, e.g. TPS+TVQ); it is a proportional estimate otherwise.
+router.get('/taxes/collected', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+
+    const from = (req.query.from as string) || '';
+    const to = (req.query.to as string) || '';
+
+    // 1) Default tax group → its active, non-zero taxes (name + rate + reg #)
+    const { data: group } = await admin
+      .from('tax_groups')
+      .select('id')
+      .eq('org_id', auth.orgId)
+      .eq('is_default', true)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    let configured: Array<{ name: string; rate: number; registration_number: string | null }> = [];
+    if (group) {
+      const { data: items } = await admin
+        .from('tax_group_items')
+        .select('sort_order, tax_configs(*)')
+        .eq('tax_group_id', group.id)
+        .order('sort_order');
+      configured = (items || [])
+        .map((i: any) => i.tax_configs)
+        .filter((t: any) => t && t.is_active && Number(t.rate) > 0)
+        .map((t: any) => ({
+          name: t.name,
+          rate: Number(t.rate),
+          registration_number: t.registration_number || null,
+        }));
+    }
+
+    // 2) Sum tax on invoices fully paid within the window
+    let q = admin
+      .from('invoices')
+      .select('tax_cents')
+      .eq('org_id', auth.orgId)
+      .is('deleted_at', null)
+      .eq('status', 'paid');
+    if (from) q = q.gte('paid_at', from);
+    if (to) q = q.lte('paid_at', `${to}T23:59:59.999Z`);
+    const { data: invoices, error } = await q.limit(10000);
+    if (error) throw error;
+
+    const totalTaxCents = (invoices || []).reduce(
+      (s: number, r: any) => s + (Number(r.tax_cents) || 0),
+      0,
+    );
+
+    // 3) Split total proportionally by configured rate (last tax gets the
+    // remainder so the parts always sum back to the exact total).
+    const sumRates = configured.reduce((s, t) => s + t.rate, 0);
+    let allocated = 0;
+    const taxes = configured.map((t, i) => {
+      let cents: number;
+      if (i === configured.length - 1) {
+        cents = totalTaxCents - allocated;
+      } else {
+        cents = sumRates > 0 ? Math.round(totalTaxCents * (t.rate / sumRates)) : 0;
+        allocated += cents;
+      }
+      return { name: t.name, rate: t.rate, cents: Math.max(0, cents), registration_number: t.registration_number };
+    });
+
+    return res.json({
+      from,
+      to,
+      total_cents: totalTaxCents,
+      configured: configured.length > 0,
+      taxes,
+    });
+  } catch (err: any) {
+    console.error('[taxes] collected failed:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ── POST /taxes/setup — setup taxes from a preset (e.g. "QC") ──
 router.post('/taxes/setup', async (req, res) => {
   try {

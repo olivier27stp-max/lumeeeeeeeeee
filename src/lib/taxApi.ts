@@ -76,6 +76,24 @@ export async function listTaxes(): Promise<{
   return body;
 }
 
+export interface TaxesCollected {
+  from: string;
+  to: string;
+  total_cents: number;
+  configured: boolean;
+  taxes: Array<{ name: string; rate: number; cents: number; registration_number: string | null }>;
+}
+
+/** Taxes collected (to remit) over a period, split by the org's tax config. */
+export async function fetchTaxesCollected(from: string, to: string): Promise<TaxesCollected> {
+  const h = await headers();
+  const params = new URLSearchParams({ from, to });
+  const res = await fetch(`${API}/taxes/collected?${params.toString()}`, { headers: h });
+  const body = await jsonOrEmpty(res);
+  if (!res.ok) throw new Error(body?.error || 'Failed');
+  return body as TaxesCollected;
+}
+
 export async function resolveTaxes(clientId?: string | null, leadId?: string | null): Promise<ResolvedTaxes> {
   const h = await headers();
   const params = new URLSearchParams();

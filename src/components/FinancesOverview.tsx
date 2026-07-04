@@ -20,6 +20,7 @@ import {
 } from '../lib/invoicesApi';
 import { getRevenueSeries } from '../lib/revenueSeriesApi';
 import { getPayrollPreview } from '../lib/commissionsApi';
+import { fetchTaxesCollected, type TaxesCollected } from '../lib/taxApi';
 import RevenueOverviewCard from './RevenueOverviewCard';
 import type { FsCommissionEntry } from '../types';
 
@@ -118,6 +119,53 @@ function Kpi({ label, value, sub, loading, danger }: { label: string; value: str
   );
 }
 
+function TaxesCard({ data, loading, periodLabel, fr }: { data?: TaxesCollected; loading?: boolean; periodLabel: string; fr: boolean }) {
+  const regLine = (data?.taxes || [])
+    .filter((t) => t.registration_number)
+    .map((t) => `${t.name} nº ${t.registration_number}`)
+    .join(' · ');
+  return (
+    <div className="bg-surface-card border border-border rounded-xl p-5">
+      <div className="flex items-baseline justify-between mb-4">
+        <h3 className="text-[15px] font-semibold text-text-primary">{fr ? 'Taxes à remettre' : 'Taxes to remit'}</h3>
+        <span className="text-[11.5px] text-text-muted font-medium capitalize">{periodLabel}</span>
+      </div>
+      {loading ? (
+        <div className="space-y-2">
+          {[0, 1].map((i) => <div key={i} className="h-10 bg-surface-tertiary/50 rounded animate-pulse" />)}
+        </div>
+      ) : !data || !data.configured ? (
+        <div className="py-8 text-center text-[12px] text-text-muted">
+          {fr ? 'Aucune taxe configurée' : 'No tax configured'}
+        </div>
+      ) : (
+        <>
+          {data.taxes.map((t) => (
+            <div key={t.name} className="flex items-baseline justify-between py-2.5 border-b border-border-light last:border-b-0">
+              <span className="text-[13px] font-semibold text-text-primary">
+                {t.name}
+                <span className="block text-[11px] text-text-muted font-medium mt-0.5">
+                  {t.rate} % · {fr ? 'collectée' : 'collected'}
+                </span>
+              </span>
+              <span className="text-[15px] font-bold text-text-primary tabular-nums">{formatMoneyFromCents(t.cents)}</span>
+            </div>
+          ))}
+          <div className="flex items-baseline justify-between mt-3 pt-3 border-t border-border">
+            <span className="text-[12.5px] font-semibold text-text-secondary">{fr ? 'Total à remettre' : 'Total to remit'}</span>
+            <span className="text-[22px] font-bold text-text-primary tracking-tight tabular-nums">{formatMoneyFromCents(data.total_cents)}</span>
+          </div>
+          {regLine && (
+            <div className="mt-3 text-[11.5px] text-text-muted font-medium bg-surface-secondary rounded-lg px-3 py-2.5">
+              {regLine}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function FinancesOverview() {
   const navigate = useNavigate();
   const { language } = useTranslation();
@@ -161,6 +209,12 @@ export default function FinancesOverview() {
     staleTime: 60_000,
   });
 
+  const { data: taxes, isLoading: taxesLoading } = useQuery({
+    queryKey: ['fin-overview-taxes', monthRange.from, monthRange.to],
+    queryFn: () => fetchTaxesCollected(monthRange.from, monthRange.to),
+    staleTime: 60_000,
+  });
+
   const aging = useMemo(() => computeAging(outstanding || [], fr), [outstanding, fr]);
   const reps = useMemo(() => groupCommissions(payroll?.entries || [], fr), [payroll, fr]);
   const maxBucket = Math.max(1, ...aging.buckets.map((b) => b.cents));
@@ -168,6 +222,7 @@ export default function FinancesOverview() {
 
   const arCents = (kpis?.past_due_total_cents || 0) + (kpis?.sent_not_due_total_cents || 0);
   const arCount = (kpis?.past_due_count || 0) + (kpis?.sent_not_due_count || 0);
+  const periodLabel = new Date().toLocaleDateString(fr ? 'fr-CA' : 'en-US', { month: 'long', year: 'numeric' });
 
   return (
     <div className="mt-2">
@@ -203,8 +258,10 @@ export default function FinancesOverview() {
         />
       </div>
 
+      {/* Ancienneté (2/3) + Taxes (1/3) */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 mb-3 items-start">
       {/* Comptes clients — ancienneté */}
-      <div className="bg-surface-card border border-border rounded-xl p-5 mb-3">
+      <div className="bg-surface-card border border-border rounded-xl p-5 xl:col-span-2">
         <div className="flex items-baseline justify-between mb-4">
           <h3 className="text-[15px] font-semibold text-text-primary">
             {fr ? 'Comptes clients — ancienneté' : 'Accounts receivable — aging'}
@@ -280,6 +337,9 @@ export default function FinancesOverview() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <TaxesCard data={taxes} loading={taxesLoading} periodLabel={periodLabel} fr={fr} />
       </div>
 
       {/* Commissions & paie */}
