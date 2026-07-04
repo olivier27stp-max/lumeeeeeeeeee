@@ -43,7 +43,7 @@ export default function More() {
   const { current } = useMembership();
   const { can, orgId } = usePermissions();
   const { mode, setMode, canSwitch } = useViewMode();
-  const { language, setLanguage } = useTranslation();
+  const { t, language, setLanguage } = useTranslation();
   const me = session?.user.id ?? '';
   const { data: meMember } = useQuery({
     queryKey: ['member', orgId, me],
@@ -68,7 +68,7 @@ export default function More() {
   return (
     <View className="flex-1 bg-surface-alt" style={{ paddingTop: insets.top }}>
       <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 16 }}>
-        <Text className="text-2xl font-bold text-ink">More</Text>
+        <Text className="text-2xl font-bold text-ink">{t.mobileProfile.more}</Text>
 
         {/* Profile header */}
         <View className="flex-row items-center gap-3 rounded-3xl bg-white p-4">
@@ -91,13 +91,13 @@ export default function More() {
           className="flex-row items-center gap-2 rounded-2xl bg-white px-4 py-3"
         >
           <SymbolView name="magnifyingglass" tintColor="#A3A3A3" size={18} resizeMode="scaleAspectFit" />
-          <Text className="text-base text-ink-subtle">Rechercher : client, job, technicien…</Text>
+          <Text className="text-base text-ink-subtle">{t.mobileProfile.searchPlaceholder}</Text>
         </Pressable>
 
         {/* App mode switcher (owner/admin) — Technician vs Sales reps */}
         {canSwitch ? (
           <View className="gap-2">
-            <Text className="px-1 text-[11px] font-bold uppercase tracking-widest text-ink-subtle">Mode d&apos;affichage</Text>
+            <Text className="px-1 text-[11px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileProfile.displayMode}</Text>
             <View className="flex-row rounded-2xl bg-surface-sunken p-1">
               {(['tech', 'sales'] as const).map((m) => (
                 <Pressable
@@ -106,7 +106,7 @@ export default function More() {
                   className={`flex-1 items-center rounded-xl py-2.5 ${mode === m ? 'bg-white' : ''}`}
                 >
                   <Text className={`text-sm font-semibold ${mode === m ? 'text-ink' : 'text-ink-muted'}`}>
-                    {m === 'tech' ? 'Technicien' : 'Sales reps'}
+                    {m === 'tech' ? t.mobileProfile.technician : t.mobileProfile.salesReps}
                   </Text>
                 </Pressable>
               ))}
@@ -118,16 +118,16 @@ export default function More() {
             Dashboard/team/company stay manager-gated in both personas. */}
         {isManager || salesPersona ? (
           <View className="overflow-hidden rounded-3xl bg-white">
-            <Row icon="chart.bar.xaxis" label="Tableau de bord" onPress={() => router.push('/(app)/dashboard' as any)} />
+            <Row icon="chart.bar.xaxis" label={t.mobileProfile.dashboard} onPress={() => router.push('/(app)/dashboard' as any)} />
             {isManager ? (
               <>
-                <Row icon="person.2" label="Manage team" onPress={() => router.push('/(app)/manage-team')} />
-                <Row icon="building.2" label="Company details" onPress={() => router.push('/(app)/company')} />
-                <Row icon="creditcard" label="Paiements" onPress={() => router.push('/(app)/payments-setup' as any)} />
+                <Row icon="person.2" label={t.mobileProfile.manageTeam} onPress={() => router.push('/(app)/manage-team')} />
+                <Row icon="building.2" label={t.mobileProfile.companyDetails} onPress={() => router.push('/(app)/company')} />
+                <Row icon="creditcard" label={t.mobileProfile.payments} onPress={() => router.push('/(app)/payments-setup' as any)} />
               </>
             ) : null}
             {isManager && salesPersona ? (
-              <Row icon="slider.horizontal.3" label="Réglages vente" onPress={() => router.push('/(app)/sales-settings' as any)} />
+              <Row icon="slider.horizontal.3" label={t.mobileProfile.salesSettings} onPress={() => router.push('/(app)/sales-settings' as any)} />
             ) : null}
           </View>
         ) : null}
@@ -135,19 +135,19 @@ export default function More() {
         {/* Paie & commissions — sales persona only (techs don't see them) */}
         {salesPersona ? (
           <View className="overflow-hidden rounded-3xl bg-white">
-            <Row icon="dollarsign.circle" label="Commissions" onPress={() => router.push('/(app)/commissions' as any)} />
-            <Row icon="banknote" label="Ma paie" onPress={() => router.push('/(app)/payroll' as any)} />
+            <Row icon="dollarsign.circle" label={t.mobileProfile.commissions} onPress={() => router.push('/(app)/commissions' as any)} />
+            <Row icon="banknote" label={t.mobileProfile.myPay} onPress={() => router.push('/(app)/payroll' as any)} />
           </View>
         ) : null}
 
         {/* General — everyone */}
         <View className="overflow-hidden rounded-3xl bg-white">
           {can('clients.read') ? (
-            <Row icon="folder" label="Dossiers clients" onPress={() => router.push('/(app)/clients' as any)} />
+            <Row icon="folder" label={t.mobileProfile.clientRecords} onPress={() => router.push('/(app)/clients' as any)} />
           ) : null}
-          <Row icon="bell" label="Notifications" onPress={() => router.push('/(app)/notifications' as any)} />
-          <Row icon="bubble.left.and.bubble.right" label="Messages" onPress={() => router.push('/(app)/messages' as any)} />
-          <Row icon="person.crop.circle.badge.plus" label="Refer a friend" onPress={() => router.push('/(app)/refer')} />
+          <Row icon="bell" label={t.mobileProfile.notifications} onPress={() => router.push('/(app)/notifications' as any)} />
+          <Row icon="bubble.left.and.bubble.right" label={t.mobileProfile.messages} onPress={() => router.push('/(app)/messages' as any)} />
+          <Row icon="person.crop.circle.badge.plus" label={t.mobileProfile.referAFriend} onPress={() => router.push('/(app)/refer')} />
         </View>
 
         {/* Langue / Language */}
@@ -169,10 +169,10 @@ export default function More() {
         </View>
 
         <View className="overflow-hidden rounded-3xl bg-white">
-          <Row icon="rectangle.portrait.and.arrow.right" label="Log out" onPress={onSignOut} danger />
+          <Row icon="rectangle.portrait.and.arrow.right" label={t.mobileProfile.logOut} onPress={onSignOut} danger />
         </View>
 
-        <Text className="pt-2 text-center text-xs text-ink-subtle">Lume CRM · v1.0</Text>
+        <Text className="pt-2 text-center text-xs text-ink-subtle">{t.mobileProfile.version}</Text>
       </ScrollView>
     </View>
   );

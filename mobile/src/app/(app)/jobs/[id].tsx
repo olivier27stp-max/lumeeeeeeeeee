@@ -31,6 +31,7 @@ import { clientFullName, formatCurrencyCents, formatDateTime } from '@/lib/forma
 import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
+import { useTranslation } from '@/lib/i18n';
 
 function fmtDur(sec: number): string {
   const h = Math.floor(sec / 3600);
@@ -55,6 +56,7 @@ export default function JobDetail() {
   const [savedTemplate, setSavedTemplate] = useState<string | null>(null);
   const { session } = useAuth();
   const { current } = useMembership();
+  const { t } = useTranslation();
   const { teamId, scope, permissions, role, canSeePricing, orgId, can } = usePermissions();
   const access = { teamId, scope, permissions, role };
   const isManager = role === 'owner' || role === 'admin';
@@ -69,7 +71,7 @@ export default function JobDetail() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['jobs'] });
     },
-    onError: (e: Error) => Alert.alert('Assignation', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileJobs.assignment, e.message),
   });
 
   // Per-job timer (time spent on this specific job).
@@ -118,12 +120,12 @@ export default function JobDetail() {
       qc.invalidateQueries({ queryKey: ['timesheet'] });
       qc.invalidateQueries({ queryKey: ['timeEntries'] });
     },
-    onError: (e: Error) => Alert.alert('Minuteur', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileJobs.timer, e.message),
   });
   const stopTimerMut = useMutation({
     mutationFn: () => stopJobTimer(String(id), timerUserId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobTime', id] }),
-    onError: (e: Error) => Alert.alert('Minuteur', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileJobs.timer, e.message),
   });
 
   const { data: job, isLoading, error } = useQuery({
@@ -197,7 +199,7 @@ export default function JobDetail() {
         `/(app)/conversation/${cid}?phone=${encodeURIComponent(phone)}&name=${encodeURIComponent(job?.client_name ?? '')}&clientId=${encodeURIComponent(job?.client_id ?? '')}` as any,
       );
     } catch (e) {
-      Alert.alert('En route', (e as Error).message);
+      Alert.alert(t.mobileJobs.onTheWay, (e as Error).message);
     }
   };
 
@@ -215,7 +217,7 @@ export default function JobDetail() {
         `/(app)/conversation/${cid}?phone=${encodeURIComponent(phone)}&name=${encodeURIComponent(job?.client_name ?? '')}&clientId=${encodeURIComponent(job?.client_id ?? '')}` as any,
       );
     } catch (e) {
-      Alert.alert('Message', (e as Error).message);
+      Alert.alert(t.mobileJobs.message, (e as Error).message);
     }
   };
 
@@ -230,7 +232,7 @@ export default function JobDetail() {
       // (the Billing card / "Send invoice"), never bundled with this pop-up.
       completeMut.mutate({ id: String(id), notes });
     } catch (e) {
-      Alert.alert('Signature', (e as Error).message);
+      Alert.alert(t.mobileJobs.signature, (e as Error).message);
     } finally {
       setSavingSig(false);
     }
@@ -250,7 +252,7 @@ export default function JobDetail() {
   // and queue when offline, then resume automatically when back online.
   const startMut = useMutation<unknown, Error, { id: string }>({
     mutationKey: MK.jobStart,
-    onError: (e: Error) => Alert.alert('Impossible de démarrer le job', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileJobs.couldNotStartJob, e.message),
   });
 
   const completeMut = useMutation<unknown, Error, { id: string; notes?: string }>({
@@ -261,7 +263,7 @@ export default function JobDetail() {
       // RPC, then opens it directly — no "do you want to invoice?" prompt. Only for
       // users who can invoice / see prices; technicians just see "done".
       if (!(can('invoices.create') || canSeePricing)) {
-        Alert.alert('Job terminé', 'Beau travail !', [
+        Alert.alert(t.mobileJobs.jobCompleted, t.mobileJobs.niceWork, [
           { text: 'OK', onPress: () => router.back() },
         ]);
         return;
@@ -273,12 +275,12 @@ export default function JobDetail() {
         router.replace(`/(app)/invoices/send?id=${invoiceId}` as any);
       } catch (e) {
         // Job is completed regardless; surface why the invoice couldn't be prepared.
-        Alert.alert('Job terminé', `Facture non préparée : ${(e as Error).message}`, [
+        Alert.alert(t.mobileJobs.jobCompleted, t.mobileJobs.invoiceNotPrepared.replace('{message}', (e as Error).message), [
           { text: 'OK', onPress: () => router.back() },
         ]);
       }
     },
-    onError: (e: Error) => Alert.alert('Impossible de terminer le job', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileJobs.couldNotCompleteJob, e.message),
   });
 
   // Delete the job (confirm first), then leave the screen.
@@ -288,12 +290,12 @@ export default function JobDetail() {
       qc.invalidateQueries({ queryKey: ['jobs'] });
       router.back();
     },
-    onError: (e: Error) => Alert.alert('Suppression', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileJobs.deleteAlt, e.message),
   });
   const confirmDelete = () => {
-    Alert.alert('Supprimer le job', 'Cette action est irréversible. Continuer ?', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Supprimer', style: 'destructive', onPress: () => deleteMut.mutate() },
+    Alert.alert(t.mobileJobs.deleteJobTitle, t.mobileJobs.deleteJobConfirm, [
+      { text: t.common.cancel, style: 'cancel' },
+      { text: t.common.delete, style: 'destructive', onPress: () => deleteMut.mutate() },
     ]);
   };
 
@@ -304,12 +306,12 @@ export default function JobDetail() {
       qc.invalidateQueries({ queryKey: ['jobs', id] });
       qc.invalidateQueries({ queryKey: ['jobs'] });
     },
-    onError: (e: Error) => Alert.alert('Ré-ouvrir le job', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileJobs.reopenJobAlt, e.message),
   });
   const confirmReopen = () => {
-    Alert.alert('Ré-ouvrir le job', 'Le job repassera à « planifié » et tu pourras le modifier puis le re-compléter. Continuer ?', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Ré-ouvrir', onPress: () => reopenMut.mutate() },
+    Alert.alert(t.mobileJobs.reopenJobAlt, t.mobileJobs.reopenJobConfirm, [
+      { text: t.common.cancel, style: 'cancel' },
+      { text: t.mobileJobs.reopen, onPress: () => reopenMut.mutate() },
     ]);
   };
 
@@ -321,13 +323,13 @@ export default function JobDetail() {
   const saveDescMut = useMutation({
     mutationFn: () => updateJob(String(id), { description: desc.trim() || null }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs', id] }),
-    onError: (e: Error) => Alert.alert('Description', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileJobs.description, e.message),
   });
 
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-surface-alt">
-        <Text className="text-ink-muted">Chargement…</Text>
+        <Text className="text-ink-muted">{t.mobileJobs.loading}</Text>
       </View>
     );
   }
@@ -336,7 +338,7 @@ export default function JobDetail() {
     return (
       <View className="flex-1 items-center justify-center bg-surface-alt p-6">
         <Text className="text-ink-muted text-center">
-          {error ? (error as Error).message : 'Job introuvable.'}
+          {error ? (error as Error).message : t.mobileJobs.jobNotFound}
         </Text>
       </View>
     );
@@ -361,7 +363,7 @@ export default function JobDetail() {
             <Text className="text-xs text-ink-muted">#{job.job_number}</Text>
             {can('jobs.update') ? (
               <Pressable onPress={() => router.push(`/(app)/jobs/edit?id=${job.id}`)}>
-                <Text className="text-sm font-medium text-brand">Modifier</Text>
+                <Text className="text-sm font-medium text-brand">{t.mobileJobs.edit}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -385,13 +387,13 @@ export default function JobDetail() {
               </View>
               {can('clients.update') ? (
                 <Pressable hitSlop={8} onPress={() => router.push(`/(app)/clients/edit?id=${client.id}`)}>
-                  <Text className="text-sm font-medium text-brand">Modifier</Text>
+                  <Text className="text-sm font-medium text-brand">{t.mobileJobs.edit}</Text>
                 </Pressable>
               ) : null}
             </Pressable>
           ) : job.client_name ? (
             <View>
-              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Client</Text>
+              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileJobs.client}</Text>
               <Text className="text-lg font-bold text-ink">{job.client_name}</Text>
             </View>
           ) : null}
@@ -399,12 +401,12 @@ export default function JobDetail() {
           {/* Quick call / text shortcuts */}
           {phone ? (
             <View className="flex-row gap-2">
-              <View className="flex-1"><Button title="Appeler" onPress={() => callNumber(phone)} /></View>
-              <View className="flex-1"><Button title="Texter" variant="secondary" onPress={openThread} /></View>
+              <View className="flex-1"><Button title={t.mobileJobs.call} onPress={() => callNumber(phone)} /></View>
+              <View className="flex-1"><Button title={t.mobileJobs.text} variant="secondary" onPress={openThread} /></View>
             </View>
           ) : null}
           {phone && !isDone ? (
-            <Button title="En route 🚗" variant="secondary" onPress={openOnMyWay} />
+            <Button title={t.mobileJobs.onTheWayBtn} variant="secondary" onPress={openOnMyWay} />
           ) : null}
           {client?.email ? (
             <Pressable onPress={() => Linking.openURL(`mailto:${client.email}`)}>
@@ -415,12 +417,12 @@ export default function JobDetail() {
           {/* Appointment + contract total */}
           <View className="flex-row items-end justify-between border-t border-surface-border pt-3">
             <View className="flex-1 pr-3">
-              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Rendez-vous</Text>
+              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileJobs.appointment}</Text>
               <Text className="text-sm text-ink">{formatDateTime(when)}</Text>
             </View>
             {canSeePricing ? (
               <View className="items-end">
-                <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Total contrat</Text>
+                <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileJobs.contractTotal}</Text>
                 <Text className="text-xl font-bold text-ink">{formatCurrencyCents(job.total_cents, job.currency)}</Text>
               </View>
             ) : null}
@@ -429,7 +431,7 @@ export default function JobDetail() {
           {/* Job location (separate from the client's address) */}
           {address ? (
             <Pressable onPress={() => Linking.openURL(`https://maps.apple.com/?q=${encodeURIComponent(address)}`)}>
-              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Adresse du job</Text>
+              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileJobs.jobAddress}</Text>
               <Text className="text-sm text-brand underline">{address}</Text>
             </Pressable>
           ) : null}
@@ -437,17 +439,17 @@ export default function JobDetail() {
 
         {/* Détails du job — type, schedule window. */}
         <Card className="gap-3">
-          <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Détails du job</Text>
+          <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileJobs.jobDetails}</Text>
           <View className="flex-row items-center justify-between">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Type</Text>
-            <Text className="text-sm text-ink">{job.job_type || 'Ponctuel'}</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileJobs.type}</Text>
+            <Text className="text-sm text-ink">{job.job_type || t.mobileJobs.oneOff}</Text>
           </View>
           <View className="flex-row items-center justify-between">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Début</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileJobs.start_}</Text>
             <Text className="text-sm text-ink">{formatDateTime(when)}</Text>
           </View>
           <View className="flex-row items-center justify-between">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Fin</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileJobs.end}</Text>
             <Text className="text-sm text-ink">{job.end_at ? formatDateTime(job.end_at) : '—'}</Text>
           </View>
         </Card>
@@ -461,7 +463,7 @@ export default function JobDetail() {
               }
             >
               <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
-                Adresse du client
+                {t.mobileJobs.clientAddress}
               </Text>
               <Text className="text-base text-brand underline">{clientAddress}</Text>
             </Pressable>
@@ -471,7 +473,7 @@ export default function JobDetail() {
         {/* Quick team assignment (owner/admin) */}
         {isManager && (teams?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Équipe assignée</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileJobs.assignedTeam}</Text>
             <View className="flex-row flex-wrap gap-2">
               {(teams ?? []).map((t) => {
                 const sel = job.team_id === t.id;
@@ -496,25 +498,25 @@ export default function JobDetail() {
         {/* Per-job timer */}
         {can('jobs.update') ? (
           <Card className="gap-2">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Temps sur ce job</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileJobs.timeOnThisJob}</Text>
             <View className="flex-row items-center justify-between">
               <Text className="text-2xl font-bold text-ink" style={{ fontVariant: ['tabular-nums'] }}>
                 {fmtDur(jobElapsedSec)}
               </Text>
               {jobTimerActive ? (
-                <Button title="Arrêter" variant="danger" onPress={() => stopTimerMut.mutate()} loading={stopTimerMut.isPending} />
+                <Button title={t.mobileJobs.stop} variant="danger" onPress={() => stopTimerMut.mutate()} loading={stopTimerMut.isPending} />
               ) : (
-                <Button title="Démarrer" onPress={() => startTimerMut.mutate()} loading={startTimerMut.isPending} />
+                <Button title={t.mobileJobs.start} onPress={() => startTimerMut.mutate()} loading={startTimerMut.isPending} />
               )}
             </View>
-            {jobTimerActive ? <Text className="text-xs font-medium text-status-completed">⏱ En cours…</Text> : null}
+            {jobTimerActive ? <Text className="text-xs font-medium text-status-completed">{t.mobileJobs.inProgress}</Text> : null}
           </Card>
         ) : null}
 
         {/* Services — what the tech will actually do, with prices (behind pricing access). */}
         {lineItems && lineItems.length > 0 ? (
           <Card className="gap-2">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Services</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileJobs.services}</Text>
             {lineItems.map((li) => (
               <View key={li.id} className="flex-row items-center justify-between border-t border-surface-border pt-2.5">
                 <Text className="flex-1 pr-3 text-base text-ink">
@@ -530,7 +532,7 @@ export default function JobDetail() {
             ))}
             {canSeePricing ? (
               <View className="flex-row items-center justify-between border-t border-surface-border pt-2.5">
-                <Text className="text-base font-semibold text-ink">Total</Text>
+                <Text className="text-base font-semibold text-ink">{t.mobileJobs.total}</Text>
                 <Text className="text-base font-bold text-ink">
                   {formatCurrencyCents(job.total_cents, job.currency)}
                 </Text>
@@ -578,13 +580,13 @@ export default function JobDetail() {
           <View className="gap-3 pt-2">
             {!isActive ? (
               <Button
-                title="Démarrer le job"
+                title={t.mobileJobs.startJob}
                 onPress={() => startMut.mutate({ id: String(id) })}
                 loading={startMut.isPending}
               />
             ) : null}
             <Button
-              title="Marquer terminé"
+              title={t.mobileJobs.markComplete}
               variant={isActive ? 'primary' : 'secondary'}
               onPress={handleComplete}
               loading={completeMut.isPending || savingSig}
@@ -592,28 +594,28 @@ export default function JobDetail() {
             {can('jobs.update') ? (
               <Text className="text-center text-xs text-ink-muted">
                 {hasSignature
-                  ? 'Signature du client capturée ✓'
-                  : 'La signature du client sera demandée avant de terminer'}
+                  ? t.mobileJobs.signatureCaptured
+                  : t.mobileJobs.signatureWillBeRequested}
               </Text>
             ) : null}
           </View>
         ) : (
           <Card className="bg-emerald-50 border-emerald-200 gap-2">
             <Text className="text-emerald-700 font-semibold">
-              Terminé {formatDateTime(job.completed_at)}
+              {t.mobileJobs.completedAt.replace('{date}', formatDateTime(job.completed_at))}
             </Text>
             {hasSignature ? (
-              <Text className="text-emerald-700 text-sm">Signé par le client ✓</Text>
+              <Text className="text-emerald-700 text-sm">{t.mobileJobs.signedByClient}</Text>
             ) : null}
             {can('jobs.update') ? (
-              <Button title="Ré-ouvrir le job" variant="secondary" onPress={confirmReopen} loading={reopenMut.isPending} />
+              <Button title={t.mobileJobs.reopenJob} variant="secondary" onPress={confirmReopen} loading={reopenMut.isPending} />
             ) : null}
           </Card>
         )}
 
         {can('jobs.delete') ? (
           <Button
-            title="Supprimer le job"
+            title={t.mobileJobs.deleteJob}
             variant="danger"
             onPress={confirmDelete}
             loading={deleteMut.isPending}
@@ -631,10 +633,10 @@ export default function JobDetail() {
         >
           <Pressable className="absolute inset-0" onPress={() => Keyboard.dismiss()} />
           <View className="rounded-t-3xl bg-white p-5 gap-4" style={{ paddingBottom: 28 }}>
-            <Text className="text-lg font-bold text-ink">En route 🚗</Text>
+            <Text className="text-lg font-bold text-ink">{t.mobileJobs.onTheWayBtn}</Text>
 
             <View className="gap-1.5">
-              <Text className="text-xs uppercase text-ink-muted">J&apos;arrive dans…</Text>
+              <Text className="text-xs uppercase text-ink-muted">{t.mobileJobs.arriveIn}</Text>
               <View className="flex-row gap-2">
                 {[5, 15, 30, 60].map((m) => (
                   <Pressable
@@ -643,7 +645,7 @@ export default function JobDetail() {
                     className={`flex-1 items-center rounded-xl py-2.5 ${etaMin === m ? 'bg-ink' : 'bg-surface-sunken'}`}
                   >
                     <Text className={`text-sm font-semibold ${etaMin === m ? 'text-white' : 'text-ink-muted'}`}>
-                      {m} min
+                      {t.mobileJobs.minutes.replace('{n}', String(m))}
                     </Text>
                   </Pressable>
                 ))}
@@ -651,7 +653,7 @@ export default function JobDetail() {
             </View>
 
             <View className="gap-1.5">
-              <Text className="text-xs uppercase text-ink-muted">Message</Text>
+              <Text className="text-xs uppercase text-ink-muted">{t.mobileJobs.message}</Text>
               <TextInput
                 value={omwText}
                 onChangeText={setOmwText}
@@ -674,16 +676,16 @@ export default function JobDetail() {
                 }}
               />
               <Text className="text-xs italic text-ink-subtle">
-                + {etaSentence(etaMin, lang).trim()} (ajouté automatiquement · sauvegardé pour la prochaine fois)
+                {t.mobileJobs.addedAutomatically.replace('{sentence}', etaSentence(etaMin, lang).trim())}
               </Text>
             </View>
 
             <View className="flex-row gap-2 pt-1">
               <View className="flex-1">
-                <Button title="Annuler" variant="secondary" onPress={() => setShowOnMyWay(false)} />
+                <Button title={t.common.cancel} variant="secondary" onPress={() => setShowOnMyWay(false)} />
               </View>
               <View className="flex-1">
-                <Button title="Envoyer" onPress={handleOnMyWay} />
+                <Button title={t.mobileJobs.send} onPress={handleOnMyWay} />
               </View>
             </View>
           </View>

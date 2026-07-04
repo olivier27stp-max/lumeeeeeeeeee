@@ -22,15 +22,9 @@ import { formatCurrencyCents, formatDateTime, formatTime } from '@/lib/format';
 import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
+import { useTranslation } from '@/lib/i18n';
 
-const FREQUENCIES = [
-  { key: 'daily', label: 'Quotidien' },
-  { key: 'weekly', label: 'Hebdomadaire' },
-  { key: 'biweekly', label: 'Aux 2 semaines' },
-  { key: 'monthly', label: 'Mensuel' },
-  { key: 'annual', label: 'Annuel' },
-  { key: 'custom', label: 'Personnalisé' },
-];
+const FREQUENCY_KEYS = ['daily', 'weekly', 'biweekly', 'monthly', 'annual', 'custom'] as const;
 const DEFAULT_TAX = '14.975';
 
 function SectionLabel({ children }: { children: string }) {
@@ -42,7 +36,17 @@ export default function NewJob() {
   const { orgId, teamId, scope, permissions, role, canCreateJobs, canSeePricing } = usePermissions();
   const { session } = useAuth();
   const { current } = useMembership();
+  const { t } = useTranslation();
   const isManager = role === 'owner' || role === 'admin';
+
+  const freqLabels: Record<(typeof FREQUENCY_KEYS)[number], string> = {
+    daily: t.mobileJobs.freqDaily,
+    weekly: t.mobileJobs.freqWeekly,
+    biweekly: t.mobileJobs.freqBiweekly,
+    monthly: t.mobileJobs.freqMonthly,
+    annual: t.mobileJobs.freqAnnual,
+    custom: t.mobileJobs.freqCustom,
+  };
 
   // Booking-confirmation popup (after Save): send the client the appointment
   // details (time / amount / address) + an editable, persisted nice message.
@@ -172,7 +176,7 @@ export default function NewJob() {
       );
       setShowBooking(true);
     },
-    onError: (e: Error) => Alert.alert('Impossible de créer le job', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileJobs.couldNotCreateJob, e.message),
   });
 
   // The auto-filled appointment details appended under the nice message.
@@ -192,7 +196,7 @@ export default function NewJob() {
   // Send the booking confirmation to the client via Twilio (in-app thread).
   const sendBooking = async () => {
     if (!orgId || !client?.id) {
-      Alert.alert('Confirmation', "Aucun client n'est rattaché à ce job.");
+      Alert.alert(t.mobileJobs.confirmation, t.mobileJobs.noClientAttached);
       return;
     }
     setSendingBooking(true);
@@ -200,7 +204,7 @@ export default function NewJob() {
       const full = await getClient(client.id);
       const phone = full?.phone ?? null;
       if (!phone) {
-        Alert.alert('Confirmation', "Ce client n'a pas de numéro de téléphone.");
+        Alert.alert(t.mobileJobs.confirmation, t.mobileJobs.clientNoPhone);
         setSendingBooking(false);
         return;
       }
@@ -214,7 +218,7 @@ export default function NewJob() {
         `/(app)/conversation/${cid}?phone=${encodeURIComponent(phone)}&name=${encodeURIComponent(client.name)}&clientId=${encodeURIComponent(client.id)}` as any,
       );
     } catch (e) {
-      Alert.alert('Confirmation', (e as Error).message);
+      Alert.alert(t.mobileJobs.confirmation, (e as Error).message);
     } finally {
       setSendingBooking(false);
     }
@@ -224,17 +228,17 @@ export default function NewJob() {
 
   return (
     <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt" contentContainerStyle={{ padding: 20, gap: 14 }}>
-      <Input label="Titre du job" value={title} onChangeText={setTitle} placeholder="ex. Entretien climatisation — Smith" />
+      <Input label={t.mobileJobs.jobTitle} value={title} onChangeText={setTitle} placeholder={t.mobileJobs.jobTitlePlaceholder} />
 
       <View className="gap-2">
-        <SectionLabel>Client</SectionLabel>
+        <SectionLabel>{t.mobileJobs.client}</SectionLabel>
         <ClientPicker value={client} onChange={setClient} />
       </View>
 
       {/* Team assignment (owner/admin) */}
       {isManager && (teams?.length ?? 0) > 0 ? (
         <View className="gap-2">
-          <SectionLabel>Équipe assignée</SectionLabel>
+          <SectionLabel>{t.mobileJobs.assignedTeam}</SectionLabel>
           <View className="flex-row flex-wrap gap-2">
             {(teams ?? []).map((t) => {
               const sel = assignedTeam === t.id;
@@ -255,29 +259,29 @@ export default function NewJob() {
         </View>
       ) : null}
 
-      <AddressAutocomplete label="Adresse du chantier" value={address} onChangeText={setAddress} onSelect={(a) => setAddress(a.address)} />
+      <AddressAutocomplete label={t.mobileJobs.jobSiteAddress} value={address} onChangeText={setAddress} onSelect={(a) => setAddress(a.address)} />
 
       {/* Job type */}
       <View className="gap-2">
-        <SectionLabel>Type de job</SectionLabel>
+        <SectionLabel>{t.mobileJobs.jobType}</SectionLabel>
         <View className="flex-row rounded-2xl bg-surface-sunken p-1">
-          {(['one_off', 'recurring'] as const).map((t) => (
-            <Pressable key={t} onPress={() => setJobType(t)} className={`flex-1 items-center rounded-xl py-2 ${jobType === t ? 'bg-white' : ''}`}>
-              <Text className={`text-sm font-semibold ${jobType === t ? 'text-ink' : 'text-ink-muted'}`}>
-                {t === 'one_off' ? 'Ponctuel' : 'Récurrent'}
+          {(['one_off', 'recurring'] as const).map((jt) => (
+            <Pressable key={jt} onPress={() => setJobType(jt)} className={`flex-1 items-center rounded-xl py-2 ${jobType === jt ? 'bg-white' : ''}`}>
+              <Text className={`text-sm font-semibold ${jobType === jt ? 'text-ink' : 'text-ink-muted'}`}>
+                {jt === 'one_off' ? t.mobileJobs.oneOffTab : t.mobileJobs.recurringTab}
               </Text>
             </Pressable>
           ))}
         </View>
         {jobType === 'recurring' ? (
           <View className="flex-row flex-wrap gap-2 pt-1">
-            {FREQUENCIES.map((f) => (
+            {FREQUENCY_KEYS.map((fk) => (
               <Pressable
-                key={f.key}
-                onPress={() => setFrequency(f.key)}
-                className={`rounded-full border px-3.5 py-1.5 ${frequency === f.key ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
+                key={fk}
+                onPress={() => setFrequency(fk)}
+                className={`rounded-full border px-3.5 py-1.5 ${frequency === fk ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
               >
-                <Text className={`text-xs font-semibold ${frequency === f.key ? 'text-white' : 'text-ink'}`}>{f.label}</Text>
+                <Text className={`text-xs font-semibold ${frequency === fk ? 'text-white' : 'text-ink'}`}>{freqLabels[fk]}</Text>
               </Pressable>
             ))}
           </View>
@@ -286,7 +290,7 @@ export default function NewJob() {
 
       {/* Date & time */}
       <View className="gap-2">
-        <SectionLabel>Date et heure</SectionLabel>
+        <SectionLabel>{t.mobileJobs.dateAndTime}</SectionLabel>
 
         <MiniWeekCalendar selected={startDate} onSelect={pickDay} counts={countForDay} />
 
@@ -294,10 +298,10 @@ export default function NewJob() {
         <View className="rounded-2xl bg-white p-3">
           <Text className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
             {startDate.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} ·{' '}
-            {dayJobs.length === 0 ? 'journée libre' : `${dayJobs.length} réservé(s)`}
+            {dayJobs.length === 0 ? t.mobileJobs.freeDay : t.mobileJobs.bookedCount.replace('{n}', String(dayJobs.length))}
           </Text>
           {dayJobs.length === 0 ? (
-            <Text className="text-xs text-ink-subtle">Aucun job — agenda libre.</Text>
+            <Text className="text-xs text-ink-subtle">{t.mobileJobs.noJobsFreeAgenda}</Text>
           ) : (
             dayJobs.map((j) => (
               <View key={j.id} className="flex-row justify-between border-t border-surface-border py-1.5">
@@ -311,7 +315,7 @@ export default function NewJob() {
         {/* Start / End time — compact pickers (tap, choose, auto-close) */}
         <View className="flex-row gap-3">
           <View className="flex-1 flex-row items-center justify-between rounded-xl border border-surface-border bg-surface-sunken px-4 py-2.5">
-            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">Début</Text>
+            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">{t.mobileJobs.start_}</Text>
             <DateTimePicker
               value={startDate}
               mode="time"
@@ -322,7 +326,7 @@ export default function NewJob() {
             />
           </View>
           <View className="flex-1 flex-row items-center justify-between rounded-xl border border-surface-border bg-surface-sunken px-4 py-2.5">
-            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">Fin</Text>
+            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">{t.mobileJobs.end}</Text>
             <DateTimePicker
               value={endDate}
               mode="time"
@@ -336,10 +340,10 @@ export default function NewJob() {
       </View>
 
       <Input
-        label="Description"
+        label={t.mobileJobs.description}
         value={description}
         onChangeText={setDescription}
-        placeholder="Description des travaux…"
+        placeholder={t.mobileJobs.descriptionPlaceholder}
         multiline
         numberOfLines={3}
         style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }}
@@ -349,16 +353,16 @@ export default function NewJob() {
       {canSeePricing ? (
         <>
           <LineItemsEditor onChange={setItems} />
-          <Input label="Taux de taxe (%)" value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
+          <Input label={t.mobileJobs.taxRate} value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
           <View className="gap-1 rounded-2xl bg-white p-4">
-            <Row label="Sous-total" value={formatCurrencyCents(totals.subtotal, 'CAD')} />
-            <Row label="Taxe" value={formatCurrencyCents(totals.tax, 'CAD')} />
-            <Row label="Total" value={formatCurrencyCents(totals.total, 'CAD')} bold />
+            <Row label={t.mobileJobs.subtotal} value={formatCurrencyCents(totals.subtotal, 'CAD')} />
+            <Row label={t.mobileJobs.tax} value={formatCurrencyCents(totals.tax, 'CAD')} />
+            <Row label={t.mobileJobs.total} value={formatCurrencyCents(totals.total, 'CAD')} bold />
           </View>
         </>
       ) : null}
 
-      <Button title="Créer le job" onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!title.trim() || !orgId} />
+      <Button title={t.mobileJobs.createJob} onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!title.trim() || !orgId} />
 
       {/* Booking confirmation — pops up after Save: send the client the details. */}
       <Modal visible={showBooking} transparent animationType="fade" onRequestClose={goToJob}>
@@ -369,12 +373,12 @@ export default function NewJob() {
           <Pressable className="absolute inset-0" onPress={() => Keyboard.dismiss()} />
           <View className="rounded-t-3xl bg-white p-5 gap-4" style={{ paddingBottom: 28 }}>
             <View className="gap-0.5">
-              <Text className="text-lg font-bold text-ink">Send booking information 📅</Text>
-              <Text className="text-xs text-ink-muted">Confirme le rendez-vous au client par message.</Text>
+              <Text className="text-lg font-bold text-ink">{t.mobileJobs.sendBookingInfo}</Text>
+              <Text className="text-xs text-ink-muted">{t.mobileJobs.confirmAppointmentByMessage}</Text>
             </View>
 
             <View className="gap-1.5">
-              <Text className="text-xs uppercase text-ink-muted">Message</Text>
+              <Text className="text-xs uppercase text-ink-muted">{t.mobileJobs.message}</Text>
               <TextInput
                 value={bookingNice}
                 onChangeText={setBookingNice}
@@ -401,17 +405,17 @@ export default function NewJob() {
             {/* Auto-filled appointment details preview */}
             <View className="gap-1 rounded-2xl bg-surface-sunken p-3">
               <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
-                Détails ajoutés automatiquement
+                {t.mobileJobs.autoAddedDetails}
               </Text>
               <Text className="text-sm leading-5 text-ink">{bookingDetails()}</Text>
             </View>
 
             <View className="flex-row gap-2 pt-1">
               <View className="flex-1">
-                <Button title="Passer" variant="secondary" onPress={goToJob} disabled={sendingBooking} />
+                <Button title={t.mobileJobs.skip} variant="secondary" onPress={goToJob} disabled={sendingBooking} />
               </View>
               <View className="flex-1">
-                <Button title="Envoyer" onPress={sendBooking} loading={sendingBooking} />
+                <Button title={t.mobileJobs.send} onPress={sendBooking} loading={sendingBooking} />
               </View>
             </View>
           </View>

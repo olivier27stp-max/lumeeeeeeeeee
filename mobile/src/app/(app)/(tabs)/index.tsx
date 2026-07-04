@@ -32,6 +32,7 @@ import { useViewMode } from '@/lib/view-mode';
 import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
+import { useTranslation } from '@/lib/i18n';
 
 // Full-screen construction-site backdrop, desaturated (B&W) and very light.
 // `sat=-100` removes colour; we keep a low opacity so content stays readable.
@@ -96,6 +97,7 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const { orgId, teamId, scope, permissions, role, can, canSeePricing } = usePermissions();
+  const { t } = useTranslation();
   const { session } = useAuth();
   const { current: membership } = useMembership();
   const employeeId = session?.user.id ?? '';
@@ -108,10 +110,10 @@ export default function Home() {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const createOptions: { label: string; icon: string; route: string }[] = [];
-  if (can('jobs.create')) createOptions.push({ label: 'New job', icon: 'wrench.and.screwdriver', route: '/(app)/jobs/new' });
-  if (can('clients.create')) createOptions.push({ label: 'New client', icon: 'person.badge.plus', route: '/(app)/clients/new' });
-  if (can('quotes.create') || canSeePricing) createOptions.push({ label: 'New quote', icon: 'doc.text', route: '/(app)/quotes/new' });
-  if (can('invoices.create') || canSeePricing) createOptions.push({ label: 'New invoice', icon: 'dollarsign.circle', route: '/(app)/invoices/new' });
+  if (can('jobs.create')) createOptions.push({ label: t.mobileHome.newJob, icon: 'wrench.and.screwdriver', route: '/(app)/jobs/new' });
+  if (can('clients.create')) createOptions.push({ label: t.mobileHome.newClient, icon: 'person.badge.plus', route: '/(app)/clients/new' });
+  if (can('quotes.create') || canSeePricing) createOptions.push({ label: t.mobileHome.newQuote, icon: 'doc.text', route: '/(app)/quotes/new' });
+  if (can('invoices.create') || canSeePricing) createOptions.push({ label: t.mobileHome.newInvoice, icon: 'dollarsign.circle', route: '/(app)/invoices/new' });
   const canCreateAny = createOptions.length > 0;
 
   const goCreate = (route: string) => {
@@ -174,7 +176,7 @@ export default function Home() {
 
   // (B) Greeting + date for the header.
   const firstName = (membership?.fullName ?? '').trim().split(' ')[0];
-  const greeting = `Bonjour${firstName ? ` ${firstName}` : ''} 👋`;
+  const greeting = `${t.mobileHome.greeting}${firstName ? ` ${firstName}` : ''} 👋`;
   const dateLabel = new Date().toLocaleDateString('fr-CA', {
     weekday: 'long',
     day: 'numeric',
@@ -183,8 +185,8 @@ export default function Home() {
 
   const completeMut = useMutation<unknown, Error, { id: string }>({
     mutationKey: MK.jobComplete,
-    onSuccess: () => Alert.alert('Job complétée', 'Beau travail !'),
-    onError: (e) => Alert.alert('Erreur', e.message),
+    onSuccess: () => Alert.alert(t.mobileHome.jobCompletedTitle, t.mobileHome.jobCompletedMsg),
+    onError: (e) => Alert.alert(t.mobileHome.error, e.message),
     onSettled: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   });
 
@@ -193,9 +195,14 @@ export default function Home() {
     mutationFn: () => spreadJobsAcrossTodayTomorrow(String(orgId)),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['jobs'] });
-      Alert.alert('Jobs de test', `${r.today} aujourd'hui · ${r.tomorrow} demain.`);
+      Alert.alert(
+        t.mobileHome.testJobsTitle,
+        t.mobileHome.testJobsMsg
+          .replace('{today}', String(r.today))
+          .replace('{tomorrow}', String(r.tomorrow)),
+      );
     },
-    onError: (e: Error) => Alert.alert('Erreur', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileHome.error, e.message),
   });
 
   // Time clock — shares the ['timesheet','active'] key with the Time tab.
@@ -212,19 +219,19 @@ export default function Home() {
     { orgId: string; employeeId: string; employeeName?: string | null; teamId?: string | null; jobId?: string | null }
   >({
     mutationKey: MK.punchIn,
-    onError: (e) => Alert.alert('Clock in', e.message),
+    onError: (e) => Alert.alert(t.mobileHome.clockInLabel, e.message),
   });
   const punchOutMut = useMutation<unknown, Error, { entryId: string }>({
     mutationKey: MK.punchOut,
-    onError: (e) => Alert.alert('Clock out', e.message),
+    onError: (e) => Alert.alert(t.mobileHome.clockOutLabel, e.message),
   });
   const startBreakMut = useMutation<unknown, Error, { entryId: string }>({
     mutationKey: MK.startBreak,
-    onError: (e) => Alert.alert('Pause', e.message),
+    onError: (e) => Alert.alert(t.mobileHome.breakLabel, e.message),
   });
   const endBreakMut = useMutation<unknown, Error, { entryId: string }>({
     mutationKey: MK.endBreak,
-    onError: (e) => Alert.alert('Pause', e.message),
+    onError: (e) => Alert.alert(t.mobileHome.breakLabel, e.message),
   });
   const onBreak = activeEntry?.status === 'paused';
   const clockBusy =
@@ -239,9 +246,9 @@ export default function Home() {
   const toggleClock = () => {
     if (!orgId || !employeeId) return;
     if (isClockedIn && activeEntry) {
-      Alert.alert('Clock out', 'Terminer votre quart de travail ?', [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Clock out', onPress: () => punchOutMut.mutate({ entryId: activeEntry.id }) },
+      Alert.alert(t.mobileHome.clockOutLabel, t.mobileHome.endShiftConfirm, [
+        { text: t.mobileHome.cancel, style: 'cancel' },
+        { text: t.mobileHome.clockOutLabel, onPress: () => punchOutMut.mutate({ entryId: activeEntry.id }) },
       ]);
     } else {
       punchInMut.mutate({
@@ -280,9 +287,9 @@ export default function Home() {
   const openJob = (j: Job) => router.push(`/(app)/jobs/${j.id}` as any);
 
   const confirmComplete = (j: Job) => {
-    Alert.alert('Compléter la job', 'Marquer cette job comme complétée ?', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Compléter', onPress: () => completeMut.mutate({ id: j.id }) },
+    Alert.alert(t.mobileHome.completeJobTitle, t.mobileHome.completeJobMsg, [
+      { text: t.mobileHome.cancel, style: 'cancel' },
+      { text: t.mobileHome.complete, onPress: () => completeMut.mutate({ id: j.id }) },
     ]);
   };
 
@@ -292,7 +299,7 @@ export default function Home() {
     const p = phoneFor(j);
     return (
       <View className="flex-row gap-2">
-        {p ? <CircleButton icon="phone.fill" onPress={() => promptCall(j.client_name ?? 'Client', p)} /> : null}
+        {p ? <CircleButton icon="phone.fill" onPress={() => promptCall(j.client_name ?? t.mobileHome.client, p)} /> : null}
         <CircleButton icon="location.north.fill" onPress={() => directionsTo(j)} />
         <CircleButton icon="checkmark" onPress={() => confirmComplete(j)} />
       </View>
@@ -412,7 +419,7 @@ export default function Home() {
           style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
         >
           <SymbolView name="magnifyingglass" tintColor="#A3A3A3" size={16} resizeMode="scaleAspectFit" />
-          <Text className="text-sm text-ink-muted">Rechercher un client…</Text>
+          <Text className="text-sm text-ink-muted">{t.mobileHome.searchClientPlaceholder}</Text>
         </Pressable>
 
         {/* Test helper — spread real jobs across today/tomorrow to demo carousels (dev builds only) */}
@@ -424,7 +431,7 @@ export default function Home() {
           >
             <SymbolView name="calendar.badge.clock" tintColor="#525252" size={13} resizeMode="scaleAspectFit" />
             <Text className="text-[13px] font-semibold text-ink-muted">
-              {spreadMut.isPending ? 'Replanification…' : 'Test : étaler des jobs sur aujourd’hui / demain'}
+              {spreadMut.isPending ? t.mobileHome.rescheduling : t.mobileHome.testSpreadJobs}
             </Text>
           </Pressable>
         ) : null}
@@ -439,7 +446,7 @@ export default function Home() {
               >
                 <SymbolView name={onBreak ? 'pause.circle.fill' : 'clock.badge.checkmark'} tintColor="#FFFFFF" size={16} resizeMode="scaleAspectFit" />
                 <Text className="text-base font-semibold text-white">
-                  {onBreak ? `En pause · ${clockedLabel}` : `Au travail · ${clockedLabel}`}
+                  {onBreak ? `${t.mobileHome.onBreak} · ${clockedLabel}` : `${t.mobileHome.atWork} · ${clockedLabel}`}
                 </Text>
               </View>
               <View className="flex-row gap-2">
@@ -450,7 +457,7 @@ export default function Home() {
                   style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
                 >
                   <SymbolView name={onBreak ? 'play.fill' : 'pause.fill'} tintColor="#171717" size={14} resizeMode="scaleAspectFit" />
-                  <Text className="text-sm font-semibold text-ink">{onBreak ? 'Reprendre' : 'Pause'}</Text>
+                  <Text className="text-sm font-semibold text-ink">{onBreak ? t.mobileHome.resume : t.mobileHome.pause}</Text>
                 </Pressable>
                 <Pressable
                   onPress={toggleClock}
@@ -458,7 +465,7 @@ export default function Home() {
                   className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-status-late py-3"
                 >
                   <SymbolView name="stop.fill" tintColor="#FFFFFF" size={14} resizeMode="scaleAspectFit" />
-                  <Text className="text-sm font-semibold text-white">Terminer</Text>
+                  <Text className="text-sm font-semibold text-white">{t.mobileHome.finish}</Text>
                 </Pressable>
               </View>
             </View>
@@ -470,7 +477,7 @@ export default function Home() {
               style={{ shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } }}
             >
               <SymbolView name="clock" tintColor="#171717" size={16} resizeMode="scaleAspectFit" />
-              <Text className="text-base font-semibold text-ink">Clock in</Text>
+              <Text className="text-base font-semibold text-ink">{t.mobileHome.clockIn}</Text>
             </Pressable>
           )
         ) : null}
@@ -478,12 +485,12 @@ export default function Home() {
         {/* Today's Jobs — pushed down to where "Tomorrow's Jobs" used to sit,
             so the construction backdrop shows through the top of the screen. */}
         <View className="flex-row items-baseline gap-2 px-5 pb-3 pt-[230px]">
-          <Text className="text-2xl font-bold text-ink">Today&apos;s Jobs</Text>
+          <Text className="text-2xl font-bold text-ink">{t.mobileHome.todaysJobs}</Text>
           {todays.length > 0 ? (
             <Text className="text-lg font-semibold text-ink-muted">· {todays.length}</Text>
           ) : null}
         </View>
-        <Carousel jobs={todays} renderCard={renderJobCard} empty="Aucune job aujourd’hui." />
+        <Carousel jobs={todays} renderCard={renderJobCard} empty={t.mobileHome.noJobsToday} />
       </ScrollView>
 
       {/* Tap-outside catcher */}
