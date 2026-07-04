@@ -13,9 +13,9 @@ export default function InsightsTabs({
   const { language } = useTranslation();
   const fr = language === 'fr';
   const TAB_OPTIONS: Array<{ id: InsightsTab; label: string }> = [
-    { id: 'finance', label: 'Finance' },
     { id: 'reports', label: fr ? 'Rapports' : 'Reports' },
     { id: 'revenue', label: 'Performance' },
+    { id: 'finance', label: 'Finance' },
   ];
   return (
     <div className="inline-flex rounded-md border border-outline overflow-hidden">

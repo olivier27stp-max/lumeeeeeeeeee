@@ -67,7 +67,7 @@ function parseTab(raw: string | null): InsightsTab {
   if (raw === 'finance') return 'finance';
   if (raw === 'revenue') return 'revenue';
   if (raw === 'reports') return 'reports';
-  return 'finance';
+  return 'reports';
 }
 
 function fmtMoney(cents: number, locale: string = 'en-CA') {
@@ -187,7 +187,7 @@ export default function Insights() {
     let changed = false;
     if (!isIsoDate(searchParams.get('from'))) { next.set('from', defaults.from); changed = true; }
     if (!isIsoDate(searchParams.get('to'))) { next.set('to', defaults.to); changed = true; }
-    if (!searchParams.get('tab')) { next.set('tab', 'finance'); changed = true; }
+    if (!searchParams.get('tab')) { next.set('tab', 'reports'); changed = true; }
     if (changed) setSearchParams(next, { replace: true });
   }, [defaults.from, defaults.to, searchParams, setSearchParams]);
 
