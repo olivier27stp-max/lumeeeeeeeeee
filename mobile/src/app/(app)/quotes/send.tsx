@@ -24,23 +24,36 @@ import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
 import { buildQuotePreviewHtml } from '@/lib/invoicePreview';
+import { useTranslation } from '@/lib/i18n';
 
-const QSTATUS: Record<string, { label: string; bg: string; fg: string }> = {
-  draft: { label: 'Brouillon', bg: '#f1f5f9', fg: '#475569' },
-  sent: { label: 'Envoyée', bg: '#dbeafe', fg: '#1d4ed8' },
-  approved: { label: 'Approuvée', bg: '#dcfce7', fg: '#15803d' },
-  declined: { label: 'Refusée', bg: '#fee2e2', fg: '#b91c1c' },
-  action_required: { label: 'Action requise', bg: '#fef3c7', fg: '#a16207' },
-  converted: { label: 'Convertie', bg: '#e0e7ff', fg: '#4338ca' },
+// Status colors are stable; the label strings are resolved from `t` inside the
+// component (see QSTATUS below) so they stay in sync with the app language.
+const QSTATUS_STYLE: Record<string, { bg: string; fg: string }> = {
+  draft: { bg: '#f1f5f9', fg: '#475569' },
+  sent: { bg: '#dbeafe', fg: '#1d4ed8' },
+  approved: { bg: '#dcfce7', fg: '#15803d' },
+  declined: { bg: '#fee2e2', fg: '#b91c1c' },
+  action_required: { bg: '#fef3c7', fg: '#a16207' },
+  converted: { bg: '#e0e7ff', fg: '#4338ca' },
 };
 
 export default function SendQuote() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const { session } = useAuth();
   const { orgId } = usePermissions();
   const { current } = useMembership();
   const [sent, setSent] = useState(false);
+
+  const QSTATUS: Record<string, { label: string; bg: string; fg: string }> = {
+    draft: { label: t.mobileBilling.statusDraft, ...QSTATUS_STYLE.draft },
+    sent: { label: t.mobileBilling.statusSent, ...QSTATUS_STYLE.sent },
+    approved: { label: t.mobileBilling.statusApproved, ...QSTATUS_STYLE.approved },
+    declined: { label: t.mobileBilling.statusDeclined, ...QSTATUS_STYLE.declined },
+    action_required: { label: t.mobileBilling.statusActionRequired, ...QSTATUS_STYLE.action_required },
+    converted: { label: t.mobileBilling.statusConverted, ...QSTATUS_STYLE.converted },
+  };
 
   const { data: quote, isLoading } = useQuery({
     queryKey: ['quotes', id],
@@ -140,7 +153,7 @@ export default function SendQuote() {
       }
     },
     onSuccess: markSent,
-    onError: (e: Error) => Alert.alert('Soumission', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileBilling.quote, e.message),
   });
 
   const sendByEmail = useMutation({
@@ -169,10 +182,10 @@ export default function SendQuote() {
         body: buildBody(),
         attachments,
       });
-      if (res === 'unavailable') throw new Error('Aucune app de courriel configurée sur cet appareil.');
+      if (res === 'unavailable') throw new Error(t.mobileBilling.noEmailApp);
     },
     onSuccess: markSent,
-    onError: (e: Error) => Alert.alert('Courriel', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileBilling.email, e.message),
   });
 
   // Convert this quote into a job (Jobber-style). Especially the CTA once the
@@ -184,7 +197,7 @@ export default function SendQuote() {
       qc.invalidateQueries({ queryKey: ['quotes', id] });
       router.replace(`/(app)/jobs/${jobId}` as any);
     },
-    onError: (e: Error) => Alert.alert('Convertir en job', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileBilling.convertToJobTitle, e.message),
   });
 
   const shareIt = async () => {
@@ -199,14 +212,14 @@ export default function SendQuote() {
     try {
       if (previewHtml) await shareHtmlAsPdf(previewHtml, fileName);
     } catch (e) {
-      Alert.alert('PDF', (e as Error).message);
+      Alert.alert(t.mobileBilling.pdf, (e as Error).message);
     }
   };
 
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-surface-alt">
-        <Text className="text-sm text-ink-subtle">Chargement…</Text>
+        <Text className="text-sm text-ink-subtle">{t.mobileBilling.loading}</Text>
       </View>
     );
   }
@@ -216,7 +229,9 @@ export default function SendQuote() {
       <View className="gap-3 p-4">
         <View className="flex-row items-center justify-between">
           <Text className="flex-1 pr-2 text-lg font-bold text-ink">
-            Soumission {quote?.quote_number ?? ''} · {formatCurrencyCents(amount, currency)}
+            {t.mobileBilling.quoteLineSummary
+              .replace('{number}', String(quote?.quote_number ?? ''))
+              .replace('{amount}', formatCurrencyCents(amount, currency))}
           </Text>
           {quote?.status ? (
             <View style={{ backgroundColor: (QSTATUS[quote.status] ?? QSTATUS.sent).bg }} className="rounded-full px-2.5 py-1">
@@ -229,7 +244,7 @@ export default function SendQuote() {
 
         {quote?.status !== 'converted' ? (
           <Button
-            title="Convertir en job"
+            title={t.mobileBilling.convertToJob}
             variant={quote?.status === 'approved' ? 'primary' : 'secondary'}
             onPress={() => convert.mutate()}
             loading={convert.isPending}
@@ -239,33 +254,33 @@ export default function SendQuote() {
         {!sent ? (
           <View className="gap-2">
             <Button
-              title={client?.phone ? 'Envoyer par message' : 'Pas de numéro'}
+              title={client?.phone ? t.mobileBilling.sendByMessage : t.mobileBilling.noPhone}
               onPress={() => sendText.mutate()}
               loading={sendText.isPending}
               disabled={!client?.phone}
             />
             <Button
-              title={client?.email ? 'Envoyer par courriel' : 'Envoyer par courriel (choisir)'}
+              title={client?.email ? t.mobileBilling.sendByEmail : t.mobileBilling.sendByEmailChoose}
               variant="secondary"
               onPress={() => sendByEmail.mutate()}
               loading={sendByEmail.isPending}
             />
             <View className="flex-row items-center justify-center gap-4 pt-0.5">
-              <Pressable onPress={exportPdf}><Text className="text-sm text-brand">PDF…</Text></Pressable>
+              <Pressable onPress={exportPdf}><Text className="text-sm text-brand">{t.mobileBilling.pdf}…</Text></Pressable>
               <Text className="text-ink-subtle">·</Text>
-              <Pressable onPress={shareIt}><Text className="text-sm text-brand">Partager…</Text></Pressable>
+              <Pressable onPress={shareIt}><Text className="text-sm text-brand">{t.mobileBilling.share}…</Text></Pressable>
               <Text className="text-ink-subtle">·</Text>
-              <Pressable onPress={markSent}><Text className="text-sm text-ink-muted">Marquer envoyée</Text></Pressable>
+              <Pressable onPress={markSent}><Text className="text-sm text-ink-muted">{t.mobileBilling.markSent}</Text></Pressable>
             </View>
           </View>
         ) : (
-          <Button title="Terminé" onPress={() => router.replace('/(app)/(tabs)')} />
+          <Button title={t.mobileBilling.done} onPress={() => router.replace('/(app)/(tabs)')} />
         )}
       </View>
 
       <View className="flex-1 border-t border-surface-border bg-white">
         <Text className="px-4 pb-1 pt-3 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
-          Aperçu de la soumission
+          {t.mobileBilling.quotePreviewTitle}
         </Text>
         {previewHtml ? (
           <WebView
@@ -276,7 +291,7 @@ export default function SendQuote() {
           />
         ) : (
           <View className="flex-1 items-center justify-center p-6">
-            <Text className="text-center text-sm text-ink-subtle">Préparation de l'aperçu…</Text>
+            <Text className="text-center text-sm text-ink-subtle">{t.mobileBilling.preparingPreview}</Text>
           </View>
         )}
       </View>

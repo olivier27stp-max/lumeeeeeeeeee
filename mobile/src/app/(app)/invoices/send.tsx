@@ -19,10 +19,12 @@ import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
 import { buildInvoicePreviewHtml } from '@/lib/invoicePreview';
 import { shareHtmlAsPdf } from '@/lib/pdf';
+import { useTranslation } from '@/lib/i18n';
 
 export default function SendInvoice() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const { session } = useAuth();
   const { orgId } = usePermissions();
   const { current } = useMembership();
@@ -142,7 +144,7 @@ export default function SendInvoice() {
         }
       }
     },
-    onError: (e: Error) => Alert.alert('Envoyer par message', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileBilling.sendByMessage, e.message),
   });
 
   const sendEmail = useMutation({
@@ -151,7 +153,7 @@ export default function SendInvoice() {
       await sendInvoiceEmailViaServer({ invoiceId: String(id) });
     },
     onSuccess: markSent,
-    onError: (e: Error) => Alert.alert('Envoyer par courriel', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileBilling.sendByEmail, e.message),
   });
 
   // Collect the payment right now, in person, with the native Stripe sheet
@@ -171,19 +173,19 @@ export default function SendInvoice() {
         qc.invalidateQueries({ queryKey: ['invoices'] });
         qc.invalidateQueries({ queryKey: ['invoices', id] });
         qc.invalidateQueries({ queryKey: ['pay-link', id] });
-        Alert.alert('Paiement reçu', 'Le paiement a été encaissé. ✅');
+        Alert.alert(t.mobileBilling.paymentReceived, t.mobileBilling.paymentReceivedMsg);
         setSent(true);
       } else if (res.status === 'not_ready') {
         Alert.alert(
-          'Paiements pas encore actifs',
-          "Termine d'abord la configuration Stripe (Plus → Paiements) pour pouvoir encaisser des cartes.",
+          t.mobileBilling.paymentsNotActive,
+          t.mobileBilling.paymentsNotActiveMsg,
         );
       } else if (res.status === 'error') {
-        Alert.alert('Paiement', res.message);
+        Alert.alert(t.mobileBilling.payment, res.message);
       }
       // 'canceled' → silent
     },
-    onError: (e: Error) => Alert.alert('Paiement', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileBilling.payment, e.message),
   });
 
   const shareIt = async () => {
@@ -199,14 +201,14 @@ export default function SendInvoice() {
     try {
       if (previewHtml) await shareHtmlAsPdf(previewHtml, `Facture-${invoice?.invoice_number ?? id}`);
     } catch (e) {
-      Alert.alert('PDF', (e as Error).message);
+      Alert.alert(t.mobileBilling.pdf, (e as Error).message);
     }
   };
 
   if (isLoading || !invoice) {
     return (
       <View className="flex-1 items-center justify-center bg-surface-alt">
-        <Text className="text-ink-muted">Chargement…</Text>
+        <Text className="text-ink-muted">{t.mobileBilling.loading}</Text>
       </View>
     );
   }
@@ -216,16 +218,18 @@ export default function SendInvoice() {
       {/* Header — like the web invoice modal: title + invoice no. + status. */}
       <View className="flex-row items-center justify-between border-b border-surface-border bg-white px-4 py-3">
         <View className="flex-1 pr-3">
-          <Text className="text-base font-bold text-ink">Aperçu de la facture</Text>
+          <Text className="text-base font-bold text-ink">{t.mobileBilling.invoicePreviewTitle}</Text>
           <Text className="text-xs text-ink-muted" numberOfLines={1}>
-            Facture {invoice.invoice_number ? `#${invoice.invoice_number}` : ''} · {formatCurrencyCents(amount, 'CAD')}
+            {t.mobileBilling.invoiceLineSummary
+              .replace('{number}', invoice.invoice_number ? `#${invoice.invoice_number}` : '')
+              .replace('{amount}', formatCurrencyCents(amount, 'CAD'))}
             {client ? ` · ${clientFullName(client)}` : ''}
           </Text>
         </View>
         {sent ? (
           <View className="flex-row items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1">
             <SymbolView name="checkmark.circle.fill" tintColor="#16A34A" size={13} resizeMode="scaleAspectFit" />
-            <Text className="text-xs font-semibold text-emerald-700">Envoyée</Text>
+            <Text className="text-xs font-semibold text-emerald-700">{t.mobileBilling.sent}</Text>
           </View>
         ) : null}
       </View>
@@ -242,7 +246,7 @@ export default function SendInvoice() {
           />
         ) : (
           <View className="flex-1 items-center justify-center p-6">
-            <Text className="text-center text-sm text-ink-subtle">Préparation de l&apos;aperçu…</Text>
+            <Text className="text-center text-sm text-ink-subtle">{t.mobileBilling.preparingPreview}</Text>
           </View>
         )}
       </View>
@@ -252,10 +256,10 @@ export default function SendInvoice() {
         {!sent ? (
           <>
             <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
-              Options d&apos;envoi
+              {t.mobileBilling.sendOptions}
             </Text>
             <Button
-              title={`Encaisser ${formatCurrencyCents(amount, invoice.currency ?? 'CAD')}`}
+              title={t.mobileBilling.collect.replace('{amount}', formatCurrencyCents(amount, invoice.currency ?? 'CAD'))}
               onPress={() => collect.mutate()}
               loading={collect.isPending}
               disabled={amount <= 0}
@@ -263,7 +267,7 @@ export default function SendInvoice() {
             <View className="flex-row gap-2">
               <View className="flex-1">
                 <Button
-                  title={client?.phone ? 'Message' : 'Partager'}
+                  title={client?.phone ? t.mobileBilling.message : t.mobileBilling.share}
                   variant="secondary"
                   onPress={() => sendText.mutate()}
                   loading={sendText.isPending}
@@ -272,7 +276,7 @@ export default function SendInvoice() {
               </View>
               <View className="flex-1">
                 <Button
-                  title="Courriel"
+                  title={t.mobileBilling.email}
                   variant="secondary"
                   onPress={() => sendEmail.mutate()}
                   loading={sendEmail.isPending}
@@ -282,7 +286,7 @@ export default function SendInvoice() {
             </View>
           </>
         ) : (
-          <Button title="Terminé" onPress={() => router.replace('/(app)/(tabs)')} />
+          <Button title={t.mobileBilling.done} onPress={() => router.replace('/(app)/(tabs)')} />
         )}
       </View>
     </View>

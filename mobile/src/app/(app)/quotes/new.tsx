@@ -22,6 +22,7 @@ import { buildQuotePreviewHtml } from '@/lib/invoicePreview';
 import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
+import { useTranslation } from '@/lib/i18n';
 
 const DEFAULT_TAX = '14.975';
 
@@ -31,6 +32,7 @@ function SectionLabel({ children }: { children: string }) {
 
 export default function NewQuote() {
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const { session } = useAuth();
   const { current } = useMembership();
   const { orgId, can, canSeePricing } = usePermissions();
@@ -106,7 +108,7 @@ export default function NewQuote() {
       );
       setShowSend(true);
     },
-    onError: (e: Error) => Alert.alert('Impossible de créer la soumission', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileBilling.couldNotCreateQuote, e.message),
   });
 
   // Deposit amount (cents) from the form, for the message note.
@@ -158,7 +160,7 @@ export default function NewQuote() {
   const sendQuote = async () => {
     if (!orgId || !client?.id || !sentQuote) return;
     if (!sentQuote.viewToken) {
-      Alert.alert('Soumission', "Impossible de générer le lien (view_token manquant).");
+      Alert.alert(t.mobileBilling.quote, t.mobileBilling.couldNotGenerateLink);
       return;
     }
     setSendingQuote(true);
@@ -166,7 +168,7 @@ export default function NewQuote() {
       const full = await getClient(client.id);
       const phone = full?.phone ?? null;
       if (!phone) {
-        Alert.alert('Soumission', "Ce client n'a pas de numéro de téléphone.");
+        Alert.alert(t.mobileBilling.quote, t.mobileBilling.clientNoPhone);
         setSendingQuote(false);
         return;
       }
@@ -180,7 +182,7 @@ export default function NewQuote() {
         `/(app)/conversation/${cid}?phone=${encodeURIComponent(phone)}&name=${encodeURIComponent(client.name)}&clientId=${encodeURIComponent(client.id)}` as any,
       );
     } catch (e) {
-      Alert.alert('Soumission', (e as Error).message);
+      Alert.alert(t.mobileBilling.quote, (e as Error).message);
     } finally {
       setSendingQuote(false);
     }
@@ -206,7 +208,7 @@ export default function NewQuote() {
         attachments,
       });
       if (res === 'unavailable') {
-        Alert.alert('Courriel', 'Aucune app de courriel configurée sur cet appareil.');
+        Alert.alert(t.mobileBilling.email, t.mobileBilling.noEmailApp);
         return;
       }
       await markQuoteSent(sentQuote.id);
@@ -214,7 +216,7 @@ export default function NewQuote() {
       setShowSend(false);
       router.replace('/(app)/(tabs)');
     } catch (e) {
-      Alert.alert('Courriel', (e as Error).message);
+      Alert.alert(t.mobileBilling.email, (e as Error).message);
     } finally {
       setSendingQuote(false);
     }
@@ -224,7 +226,7 @@ export default function NewQuote() {
     try {
       if (previewHtml) await shareHtmlAsPdf(previewHtml, `Soumission-${sentQuote?.id ?? 'devis'}`);
     } catch (e) {
-      Alert.alert('PDF', (e as Error).message);
+      Alert.alert(t.mobileBilling.pdf, (e as Error).message);
     }
   };
 
@@ -233,20 +235,20 @@ export default function NewQuote() {
   return (
     <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt" contentContainerStyle={{ padding: 20, gap: 14 }}>
       <View className="gap-2">
-        <SectionLabel>Client</SectionLabel>
+        <SectionLabel>{t.invoices.client}</SectionLabel>
         <ClientPicker value={client} onChange={setClient} />
       </View>
 
       <View className="flex-row gap-3">
-        <View className="flex-1"><Input label="Titre" value={title} onChangeText={setTitle} placeholder="Remplacement climatisation" /></View>
-        <View className="w-28"><Input label="Validité (jours)" value={validDays} onChangeText={setValidDays} keyboardType="number-pad" /></View>
+        <View className="flex-1"><Input label={t.mobileBilling.title} value={title} onChangeText={setTitle} placeholder={t.mobileBilling.titlePlaceholder} /></View>
+        <View className="w-28"><Input label={t.mobileBilling.validityDays} value={validDays} onChangeText={setValidDays} keyboardType="number-pad" /></View>
       </View>
 
       <LineItemsEditor onChange={setItems} />
 
       {/* Discount */}
       <Pressable onPress={() => setDiscountOn((d) => !d)} className="flex-row items-center justify-between rounded-2xl bg-white px-4 py-3">
-        <Text className="text-sm text-ink">Ajouter un rabais</Text>
+        <Text className="text-sm text-ink">{t.mobileBilling.addDiscount}</Text>
         <Text className="text-lg">{discountOn ? '☑️' : '⬜️'}</Text>
       </Pressable>
       {discountOn ? (
@@ -258,15 +260,15 @@ export default function NewQuote() {
               </Pressable>
             ))}
           </View>
-          <View className="flex-1"><Input label="Rabais" value={discountValue} onChangeText={setDiscountValue} keyboardType="decimal-pad" /></View>
+          <View className="flex-1"><Input label={t.mobileBilling.discount} value={discountValue} onChangeText={setDiscountValue} keyboardType="decimal-pad" /></View>
         </View>
       ) : null}
 
-      <Input label="Taux de taxe (%)" value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
+      <Input label={t.mobileBilling.taxRate} value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
 
       {/* Deposit */}
       <Pressable onPress={() => setDepositOn((d) => !d)} className="flex-row items-center justify-between rounded-2xl bg-white px-4 py-3">
-        <Text className="text-sm text-ink">Exiger un dépôt</Text>
+        <Text className="text-sm text-ink">{t.mobileBilling.requireDeposit}</Text>
         <Text className="text-lg">{depositOn ? '☑️' : '⬜️'}</Text>
       </Pressable>
       {depositOn ? (
@@ -278,35 +280,35 @@ export default function NewQuote() {
               </Pressable>
             ))}
           </View>
-          <View className="flex-1"><Input label="Dépôt" value={depositValue} onChangeText={setDepositValue} keyboardType="decimal-pad" /></View>
+          <View className="flex-1"><Input label={t.mobileBilling.deposit} value={depositValue} onChangeText={setDepositValue} keyboardType="decimal-pad" /></View>
         </View>
       ) : null}
 
-      <Input label="Notes (visibles au client)" value={notes} onChangeText={setNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }} />
+      <Input label={t.mobileBilling.clientVisibleNotes} value={notes} onChangeText={setNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }} />
 
       {/* Totals */}
       <View className="gap-1 rounded-2xl bg-white p-4">
-        <Row label="Sous-total" value={formatCurrencyCents(totals.subtotal, 'CAD')} />
-        {totals.discount > 0 ? <Row label="Rabais" value={`- ${formatCurrencyCents(totals.discount, 'CAD')}`} /> : null}
-        <Row label="Taxe" value={formatCurrencyCents(totals.tax, 'CAD')} />
-        <Row label="Total" value={formatCurrencyCents(totals.total, 'CAD')} bold />
+        <Row label={t.mobileBilling.subtotal} value={formatCurrencyCents(totals.subtotal, 'CAD')} />
+        {totals.discount > 0 ? <Row label={t.mobileBilling.discount} value={`- ${formatCurrencyCents(totals.discount, 'CAD')}`} /> : null}
+        <Row label={t.mobileBilling.tax} value={formatCurrencyCents(totals.tax, 'CAD')} />
+        <Row label={t.mobileBilling.total} value={formatCurrencyCents(totals.total, 'CAD')} bold />
       </View>
 
       <Button
-        title="Aperçu"
+        title={t.mobileBilling.preview}
         variant="secondary"
         onPress={() => setShowPreview(true)}
         disabled={items.length === 0}
       />
-      <Button title="Créer la soumission" onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!client || items.length === 0 || !orgId} />
+      <Button title={t.mobileBilling.createQuote} onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!client || items.length === 0 || !orgId} />
 
       {/* Full-screen in-app preview of the quote (logo + name + items + totals). */}
       <Modal visible={showPreview} animationType="slide" onRequestClose={() => setShowPreview(false)}>
         <View className="flex-1 bg-surface-alt">
           <View className="flex-row items-center justify-between border-b border-surface-border bg-white px-4 py-3">
-            <Text className="text-base font-bold text-ink">Aperçu de la soumission</Text>
+            <Text className="text-base font-bold text-ink">{t.mobileBilling.quotePreviewTitle}</Text>
             <Pressable onPress={() => setShowPreview(false)} hitSlop={10}>
-              <Text className="text-sm font-semibold text-brand">Fermer</Text>
+              <Text className="text-sm font-semibold text-brand">{t.mobileBilling.close}</Text>
             </Pressable>
           </View>
           <WebView
@@ -327,15 +329,17 @@ export default function NewQuote() {
           <Pressable className="absolute inset-0" onPress={() => Keyboard.dismiss()} />
           <View className="rounded-t-3xl bg-white p-5 gap-4" style={{ paddingBottom: 28 }}>
             <View className="gap-0.5">
-              <Text className="text-lg font-bold text-ink">Envoyer la soumission 📄</Text>
+              <Text className="text-lg font-bold text-ink">{t.mobileBilling.sendQuoteTitle}</Text>
               <Text className="text-xs text-ink-muted">
-                Le client reçoit le lien pour la consulter, l&apos;accepter et signer
-                {depositOn && depositCents > 0 ? ' (avec le dépôt)' : ''}.
+                {t.mobileBilling.sendQuoteDesc.replace(
+                  '{deposit}',
+                  depositOn && depositCents > 0 ? t.mobileBilling.withDeposit : '',
+                )}
               </Text>
             </View>
 
             <View className="gap-1.5">
-              <Text className="text-xs uppercase text-ink-muted">Message</Text>
+              <Text className="text-xs uppercase text-ink-muted">{t.mobileBilling.message}</Text>
               <TextInput
                 value={quoteNice}
                 onChangeText={setQuoteNice}
@@ -358,25 +362,30 @@ export default function NewQuote() {
                 }}
               />
               <Text className="text-xs italic text-ink-subtle">
-                + le lien d&apos;acceptation{depositOn && depositCents > 0 ? ` + dépôt de ${formatCurrencyCents(depositCents, 'CAD')}` : ''} (ajoutés automatiquement)
+                {t.mobileBilling.acceptLinkAuto.replace(
+                  '{deposit}',
+                  depositOn && depositCents > 0
+                    ? t.mobileBilling.depositTail.replace('{amount}', formatCurrencyCents(depositCents, 'CAD'))
+                    : '',
+                )}
               </Text>
             </View>
 
             <View className="flex-row gap-2 pt-1">
               <View className="flex-1">
-                <Button title="Passer" variant="secondary" onPress={goBack} disabled={sendingQuote} />
+                <Button title={t.mobileBilling.skip} variant="secondary" onPress={goBack} disabled={sendingQuote} />
               </View>
               <View className="flex-1">
-                <Button title="Envoyer" onPress={sendQuote} loading={sendingQuote} />
+                <Button title={t.mobileBilling.send} onPress={sendQuote} loading={sendingQuote} />
               </View>
             </View>
             <View className="flex-row items-center justify-center gap-4 pt-2">
               <Pressable onPress={emailQuote} disabled={sendingQuote}>
-                <Text className="text-sm text-brand">Courriel…</Text>
+                <Text className="text-sm text-brand">{t.mobileBilling.email}…</Text>
               </Pressable>
               <Text className="text-ink-subtle">·</Text>
               <Pressable onPress={pdfQuote}>
-                <Text className="text-sm text-brand">PDF…</Text>
+                <Text className="text-sm text-brand">{t.mobileBilling.pdf}…</Text>
               </Pressable>
             </View>
           </View>

@@ -12,6 +12,7 @@ import { getJob, listJobLineItems, listJobsInRange } from '@/lib/api/jobs';
 import { Job } from '@/types/db';
 import { formatCurrencyCents, formatTime } from '@/lib/format';
 import { usePermissions } from '@/lib/usePermissions';
+import { useTranslation } from '@/lib/i18n';
 
 const DEFAULT_TAX = '14.975';
 
@@ -24,6 +25,7 @@ function net30FromToday(): string {
 
 export default function NewInvoice() {
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const { orgId, teamId, scope, permissions, role, can, canSeePricing } = usePermissions();
   const access = { teamId, scope, permissions, role };
 
@@ -106,7 +108,7 @@ export default function NewInvoice() {
       // After creating → the send-confirmation page.
       router.replace(`/(app)/invoices/send?id=${data.id}`);
     },
-    onError: (e: Error) => Alert.alert('Impossible de créer la facture', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileBilling.couldNotCreateInvoice, e.message),
   });
 
   if (!(can('invoices.create') || canSeePricing)) return <Redirect href="/(app)/(tabs)" />;
@@ -122,7 +124,7 @@ export default function NewInvoice() {
             className={`flex-1 items-center rounded-xl py-2 ${mode === m ? 'bg-white' : ''}`}
           >
             <Text className={`text-sm font-semibold ${mode === m ? 'text-ink' : 'text-ink-muted'}`}>
-              {m === 'client' ? 'D\'un client' : 'D\'un job'}
+              {m === 'client' ? t.mobileBilling.fromClient : t.mobileBilling.fromJob}
             </Text>
           </Pressable>
         ))}
@@ -131,7 +133,7 @@ export default function NewInvoice() {
       {/* From job: pick a job (prefills client + items) */}
       {mode === 'job' && !job ? (
         <View className="gap-2">
-          <Input label="Rechercher un job" value={jobSearch} onChangeText={setJobSearch} placeholder="Titre du job ou client…" />
+          <Input label={t.mobileBilling.searchJob} value={jobSearch} onChangeText={setJobSearch} placeholder={t.mobileBilling.searchJobPlaceholder} />
           {filteredJobs.slice(0, 12).map((j) => (
             <Pressable key={j.id} onPress={() => pickJob(j)} className="rounded-xl border border-surface-border bg-white px-4 py-3">
               <View className="flex-row items-center justify-between gap-2">
@@ -145,50 +147,50 @@ export default function NewInvoice() {
               </Text>
             </Pressable>
           ))}
-          {filteredJobs.length === 0 ? <Text className="text-xs text-ink-subtle">Aucun job trouvé.</Text> : null}
+          {filteredJobs.length === 0 ? <Text className="text-xs text-ink-subtle">{t.mobileBilling.noJobFound}</Text> : null}
         </View>
       ) : null}
 
       {/* Client (from-client mode, or the chosen job's client) */}
       {mode === 'client' ? (
         <>
-          <Text className="px-1 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Client</Text>
+          <Text className="px-1 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.invoices.client}</Text>
           <ClientPicker value={client} onChange={setClient} />
         </>
       ) : job ? (
         <View className="flex-row items-center justify-between rounded-2xl bg-white p-4">
           <View>
-            <Text className="text-[11px] uppercase text-ink-subtle">D&apos;un job</Text>
+            <Text className="text-[11px] uppercase text-ink-subtle">{t.mobileBilling.fromJob}</Text>
             <Text className="text-base font-semibold text-ink">{job.title}</Text>
-            <Text className="text-xs text-ink-muted">{client?.name ?? 'Aucun client sur le job'}</Text>
+            <Text className="text-xs text-ink-muted">{client?.name ?? t.mobileBilling.noClientOnJob}</Text>
           </View>
           <Pressable onPress={() => { setJob(null); setClient(null); }}>
-            <Text className="text-sm text-brand">Changer</Text>
+            <Text className="text-sm text-brand">{t.mobileBilling.change}</Text>
           </Pressable>
         </View>
       ) : null}
 
-      <Input label="Objet" value={subject} onChangeText={setSubject} placeholder="ex. Service de juin" />
+      <Input label={t.mobileBilling.subject} value={subject} onChangeText={setSubject} placeholder={t.mobileBilling.subjectPlaceholder} />
       <Input
-        label="Échéance (AAAA-MM-JJ) — 30 jours par défaut"
+        label={t.mobileBilling.dueDateLabel}
         value={dueDate}
         onChangeText={setDueDate}
-        placeholder="2026-07-14"
+        placeholder={t.mobileBilling.dueDatePlaceholder}
         autoCapitalize="none"
       />
 
       <LineItemsEditor onChange={setItems} seed={seed} seedKey={job?.id} />
 
-      <Input label="Taux de taxe (%)" value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
+      <Input label={t.mobileBilling.taxRate} value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
 
       <View className="gap-1 rounded-2xl bg-white p-4">
-        <Row label="Sous-total" value={formatCurrencyCents(totals.subtotal, 'CAD')} />
-        <Row label="Taxe" value={formatCurrencyCents(totals.tax, 'CAD')} />
-        <Row label="Total" value={formatCurrencyCents(totals.total, 'CAD')} bold />
+        <Row label={t.mobileBilling.subtotal} value={formatCurrencyCents(totals.subtotal, 'CAD')} />
+        <Row label={t.mobileBilling.tax} value={formatCurrencyCents(totals.tax, 'CAD')} />
+        <Row label={t.mobileBilling.total} value={formatCurrencyCents(totals.total, 'CAD')} bold />
       </View>
 
       <Button
-        title="Créer la facture"
+        title={t.mobileBilling.createInvoice}
         onPress={() => saveMut.mutate()}
         loading={saveMut.isPending}
         disabled={!client || items.length === 0 || !orgId}
