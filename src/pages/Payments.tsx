@@ -456,7 +456,7 @@ export default function Payments({
 
           {/* ── TABLE (CSS Grid — identical pattern to Invoices) ── */}
           <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 120px 110px 130px 44px' }}>
+            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 120px 200px 130px 44px' }}>
               {/* HEADER */}
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
                 {t.payments.client || (fr ? 'Client' : 'Client')}
@@ -637,7 +637,7 @@ export default function Payments({
 
           {/* ── TABLE (CSS Grid — same as overview) ── */}
           <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-            <div className="grid" style={{ gridTemplateColumns: '1fr 120px 120px 130px' }}>
+            <div className="grid" style={{ gridTemplateColumns: '1fr 120px 200px 130px' }}>
               {/* HEADER */}
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
                 Date

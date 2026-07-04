@@ -237,8 +237,9 @@ export default function StatusBadge({ status, variant, className }: StatusBadgeP
         alignItems: 'center',
         justifyContent: 'center',
         height: 24,
-        minWidth: 92,
-        padding: '0 8px',
+        // No minWidth: the bubble hugs its label, so short statuses stay
+        // compact and long ones grow naturally.
+        padding: '0 10px',
         borderRadius: 999,
         background: style.bg,
         border: isYellow ? '1px solid rgba(0,0,0,0.10)' : '1px solid rgba(255,255,255,0.08)',

@@ -517,7 +517,7 @@ export default function Tasks() {
 
       {/* ── TABLE ── */}
       <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: '48px 90px 90px 1fr 100px 100px 80px 48px' }}>
+        <div className="grid" style={{ gridTemplateColumns: '48px 90px 90px 1fr 200px 100px 80px 48px' }}>
           {/* Header */}
           <div className="pl-4 py-3 border-b border-outline flex items-center">
             <input

@@ -158,7 +158,7 @@ const DEFAULT_INVOICE_SUBJECT_EN = 'For services rendered';
 
 // Grid template + empty-state col span for the Facturation table.
 // Columns: checkbox | Client | Invoice # | Due date | Subject | Status | Total | Balance | actions
-const INVOICE_GRID_COLUMNS = '40px 1.4fr 110px 120px 1.4fr 150px 120px 120px 44px';
+const INVOICE_GRID_COLUMNS = '40px 1.4fr 110px 120px 1.4fr 200px 120px 120px 44px';
 const INVOICE_GRID_COL_COUNT = 9;
 
 export default function Invoices({ embedded = false }: { embedded?: boolean } = {}) {

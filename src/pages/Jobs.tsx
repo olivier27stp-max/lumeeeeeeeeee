@@ -657,7 +657,7 @@ export default function Jobs() {
       {/* ── TABLE (grid layout — identical structure to Clients & Devis) ── */}
       {/* dark interior pinned to #0e0e11 (= CRM page card color); white in light mode */}
       <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: '40px 1fr 1fr 1fr 1fr 100px 48px' }} onMouseLeave={() => setHoveredId(null)}>
+        <div className="grid" style={{ gridTemplateColumns: '40px 1fr 1fr 1fr 1fr 200px 48px' }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Titre' : 'Title'} {IconSort}</span></div>
