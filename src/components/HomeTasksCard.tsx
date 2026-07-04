@@ -17,7 +17,7 @@ function formatDueDate(due: string, fr: boolean): string {
   return d.toLocaleDateString(fr ? 'fr-CA' : 'en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function HomeTasksCard() {
+export default function HomeTasksCard({ className = '' }: { className?: string }) {
   const navigate = useNavigate();
   const { language } = useTranslation();
   const fr = language === 'fr';
@@ -47,7 +47,7 @@ export default function HomeTasksCard() {
   const list = view === 'late' ? late : next;
 
   return (
-    <div className="bg-surface-card border border-border rounded-xl p-5 mb-5 flex flex-col">
+    <div className={`bg-surface-card border border-border rounded-xl p-5 flex flex-col ${className}`}>
       {/* Header */}
       <div className="flex items-center gap-2 mb-3">
         <ListChecks size={16} className="text-primary" />
@@ -63,7 +63,7 @@ export default function HomeTasksCard() {
           className={
             'flex-1 h-7 px-3 rounded-md text-[12px] font-medium transition-colors ' +
             (view === 'late'
-              ? 'bg-surface-card text-red-500 shadow-sm'
+              ? 'bg-surface-card text-text-primary shadow-sm'
               : 'text-text-secondary hover:text-text-primary')
           }
         >
@@ -103,10 +103,10 @@ export default function HomeTasksCard() {
                 className={
                   'w-2 h-2 rounded-full shrink-0 mt-1.5 ' +
                   (task.priority === 'high'
-                    ? 'bg-red-500'
+                    ? 'bg-text-primary'
                     : task.priority === 'medium'
-                    ? 'bg-amber-400'
-                    : 'bg-gray-400')
+                    ? 'bg-text-secondary'
+                    : 'bg-text-muted')
                 }
               />
               <div className="flex-1 min-w-0">
@@ -116,7 +116,7 @@ export default function HomeTasksCard() {
                 <p
                   className={
                     'text-[11px] tabular-nums mt-0.5 ' +
-                    (view === 'late' ? 'text-red-500' : 'text-text-muted')
+                    (view === 'late' ? 'text-text-secondary' : 'text-text-muted')
                   }
                 >
                   {formatDueDate(task.due_date, fr)}

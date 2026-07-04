@@ -13,7 +13,7 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { formatCurrency } from '../lib/utils';
 
 const PLANS_COLOR = 'var(--color-primary)';
-const ONEOFF_COLOR = '#3b82f6';
+const ONEOFF_COLOR = 'var(--color-text-tertiary)';
 
 async function fetchServiceMix() {
   const orgId = await getCurrentOrgIdOrThrow();
@@ -37,7 +37,7 @@ async function fetchServiceMix() {
   return { plans: plans / 100, oneoff: oneoff / 100 };
 }
 
-export default function HomeServiceMixCard() {
+export default function HomeServiceMixCard({ className = '' }: { className?: string }) {
   const navigate = useNavigate();
   const { language } = useTranslation();
   const fr = language === 'fr';
@@ -63,7 +63,7 @@ export default function HomeServiceMixCard() {
   const gapAngle = slices.length > 1 ? 2 : 0;
 
   return (
-    <div className="bg-surface-card border border-border rounded-xl p-5 mb-5 flex flex-col">
+    <div className={`bg-surface-card border border-border rounded-xl p-5 flex flex-col ${className}`}>
       <div className="mb-1">
         <h3 className="text-[15px] font-semibold text-text-primary">
           {fr ? 'Revenus par type' : 'Revenue by type'}

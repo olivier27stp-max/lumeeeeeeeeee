@@ -1,46 +1,80 @@
 /**
  * CRM Workspace — Home page.
- * Shows the date/greeting and the wide horizontal revenue overview card.
+ * Personalized hero + quick actions, a KPI strip, then a modular widget grid.
+ * One shared dashboard query feeds the hero, KPIs, agenda, pipeline and
+ * receivables; the revenue / tasks / service-mix cards keep their own queries.
  */
-import { useTranslation } from '../i18n';
-import { useCompany } from '../contexts/CompanyContext';
+import { useQuery } from '@tanstack/react-query';
+import {
+  getDashboardData,
+  type BusinessPerformance,
+  type TodayAppointmentsSummary,
+  type WorkflowSummary,
+} from '../lib/dashboardApi';
+import HomeHero from '../components/HomeHero';
+import HomeKpiStrip from '../components/HomeKpiStrip';
+import HomeAgendaCard from '../components/HomeAgendaCard';
+import HomePipelineCard from '../components/HomePipelineCard';
+import HomeReceivablesCard from '../components/HomeReceivablesCard';
 import RevenueOverviewCard from '../components/RevenueOverviewCard';
 import HomeTasksCard from '../components/HomeTasksCard';
 import HomeServiceMixCard from '../components/HomeServiceMixCard';
 
+const EMPTY_APPOINTMENTS: TodayAppointmentsSummary = {
+  total: 0,
+  active: 0,
+  completed: 0,
+  overdue: 0,
+  remaining: 0,
+  items: [],
+};
+
+const EMPTY_PERFORMANCE: BusinessPerformance = {
+  receivables: { totalDue: 0, clientsOwing: 0, topClients: [] },
+  upcomingJobs: { next7Days: 0 },
+  revenue: { today: 0 },
+  outstanding: { totalCents: 0 },
+  todayJobs: 0,
+  newLeadsToday: 0,
+  conversionRate: 0,
+  upcomingAppointments: 0,
+  upcomingPayouts: { total: 0, processing: 0 },
+};
+
+const EMPTY_WORKFLOW: WorkflowSummary = {
+  quotes: { activeLeads: 0, approvedAmount: 0, draft: 0, approved: 0, changesRequested: 0 },
+  jobs: { active: 0, inProgressAmount: 0, activeSubCount: 0, actionRequired: 0 },
+  invoices: { total: 0, comingSoon: false },
+};
+
 export default function CrmWorkspace() {
-  const { language } = useTranslation();
-  const fr = language === 'fr';
-  const { current } = useCompany();
-  // Greeting block (top-left of the Home page): bold date + "welcome back, <name>"
-  const firstName = current?.fullName?.trim().split(/\s+/)[0] || '';
-  const todayLabel = new Date().toLocaleDateString(fr ? 'fr-CA' : 'en-US', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  const { data, isLoading } = useQuery({
+    queryKey: ['home-dashboard'],
+    queryFn: getDashboardData,
+    staleTime: 30_000,
+    // Refresh the Home every time you come back to it (navigation or tab focus).
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
-  const greeting = firstName
-    ? `${fr ? 'Bon retour' : 'Welcome back'}, ${firstName}`
-    : (fr ? 'Bon retour' : 'Welcome back');
+
+  const appointments = data?.appointments ?? EMPTY_APPOINTMENTS;
+  const performance = data?.performance ?? EMPTY_PERFORMANCE;
+  const workflow = data?.workflow ?? EMPTY_WORKFLOW;
 
   return (
     <div className="bg-surface min-h-screen p-6 lg:p-8">
-      {/* Page content */}
-      <div>
-        {/* TOP BAR — bold date + "welcome back, <name>" greeting */}
-        <div className="mb-5">
-          <h1 className="text-[24px] font-bold text-text first-letter:uppercase">{todayLabel}</h1>
-          <p className="text-[16px] font-bold text-text-muted mt-0.5">{greeting}</p>
-        </div>
+      <HomeHero appointmentsTotal={appointments.total} overdue={appointments.overdue} />
 
-        {/* Tasks box (1/3, left) + revenue overview chart (2/3, right) */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
-          <div className="xl:col-span-1">
-            <HomeTasksCard />
-            <HomeServiceMixCard />
-          </div>
-          <div className="xl:col-span-2">
-            <RevenueOverviewCard />
-          </div>
-        </div>
+      <HomeKpiStrip performance={performance} appointments={appointments} loading={isLoading} />
+
+      {/* Modular widget grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 grid-flow-row-dense items-start">
+        <HomeAgendaCard appointments={appointments} loading={isLoading} className="xl:row-span-2" />
+        <RevenueOverviewCard className="xl:col-span-2" />
+        <HomeTasksCard />
+        <HomePipelineCard workflow={workflow} loading={isLoading} />
+        <HomeReceivablesCard receivables={performance.receivables} loading={isLoading} />
+        <HomeServiceMixCard />
       </div>
     </div>
   );

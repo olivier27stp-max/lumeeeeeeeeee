@@ -25,13 +25,13 @@ import { formatCurrency } from '../lib/utils';
 import { getRevenueSeries, type RevenuePeriod } from '../lib/revenueSeriesApi';
 
 const COLLECTED_COLOR = 'var(--color-primary)';
-const SCHEDULED_COLOR = '#3b82f6';
+const SCHEDULED_COLOR = 'var(--color-text-tertiary)';
 
 function useIsDark() {
   return document.documentElement.classList.contains('dark');
 }
 
-export default function RevenueOverviewCard() {
+export default function RevenueOverviewCard({ className = '' }: { className?: string }) {
   const navigate = useNavigate();
   const { language } = useTranslation();
   const fr = language === 'fr';
@@ -58,7 +58,7 @@ export default function RevenueOverviewCard() {
   ];
 
   return (
-    <div className="bg-surface-card border border-border rounded-xl p-5 mb-5">
+    <div className={`bg-surface-card border border-border rounded-xl p-5 ${className}`}>
       {/* Header: title (top-left) + period toggle (top-right) */}
       <div className="flex items-start justify-between mb-3">
         <h3 className="text-[15px] font-semibold text-text-primary">
