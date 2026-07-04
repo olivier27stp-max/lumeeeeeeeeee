@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import { useTranslation } from '../../i18n';
 
-const COLORS = ['#1961ED', '#10B981', '#F59E0B', '#8B5CF6', '#94A3B8'];
+const COLORS = ['var(--color-primary)', 'var(--color-text-secondary)', 'var(--color-text-tertiary)', 'var(--color-outline-strong)', 'var(--color-border)'];
 
 function fmtMoney(cents: number) {
   return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format((cents || 0) / 100);

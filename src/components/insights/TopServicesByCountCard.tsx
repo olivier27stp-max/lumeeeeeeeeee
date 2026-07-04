@@ -47,7 +47,7 @@ export default function TopServicesByCountCard() {
               <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
               <YAxis type="category" dataKey="name" width={120} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
               <Tooltip />
-              <Bar dataKey="count" fill="#1961ED" radius={[0, 4, 4, 0]} maxBarSize={20} />
+              <Bar dataKey="count" fill="var(--color-primary)" radius={[0, 4, 4, 0]} maxBarSize={20} />
             </BarChart>
           </ResponsiveContainer>
         </div>

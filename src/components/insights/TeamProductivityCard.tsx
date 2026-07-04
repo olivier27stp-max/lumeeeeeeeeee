@@ -47,7 +47,7 @@ export default function TeamProductivityCard() {
               <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
               <YAxis type="category" dataKey="name" width={110} axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
               <Tooltip />
-              <Bar dataKey="count" fill="#10B981" radius={[0, 6, 6, 0]} maxBarSize={28} />
+              <Bar dataKey="count" fill="var(--color-primary)" radius={[0, 6, 6, 0]} maxBarSize={28} />
             </BarChart>
           </ResponsiveContainer>
         </div>

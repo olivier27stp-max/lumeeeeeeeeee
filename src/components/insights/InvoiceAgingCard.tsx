@@ -64,7 +64,7 @@ export default function InvoiceAgingCard() {
               <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 100).toFixed(0)}`} />
               <Tooltip formatter={(v: number) => fmtMoney(v)} />
-              <Bar dataKey="value" fill="#F59E0B" radius={[6, 6, 0, 0]} maxBarSize={50} />
+              <Bar dataKey="value" fill="var(--color-primary)" radius={[6, 6, 0, 0]} maxBarSize={50} />
             </BarChart>
           </ResponsiveContainer>
         </div>

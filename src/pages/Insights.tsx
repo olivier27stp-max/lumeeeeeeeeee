@@ -88,7 +88,7 @@ function ChangeIndicator({ value }: { value: number | null }) {
   const isUp = value > 0;
   const isDown = value < 0;
   const Icon = isUp ? ArrowUp : isDown ? ArrowDown : Minus;
-  const color = isUp ? 'text-emerald-600' : isDown ? 'text-rose-500' : 'text-text-tertiary';
+  const color = isUp ? 'text-text-primary' : isDown ? 'text-text-tertiary' : 'text-text-tertiary';
   return (
     <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold ${color}`}>
       <Icon size={11} />
@@ -122,7 +122,7 @@ function MetricCard({ label, value, prevValue, changePct, format = 'count', icon
         <div className="flex items-center gap-2 mt-1">
           <div className="flex-1 h-1.5 rounded-full bg-surface-tertiary overflow-hidden">
             <div
-              className={cn('h-1.5 rounded-full transition-all', (changePct ?? 0) >= 0 ? 'bg-emerald-500' : 'bg-rose-400')}
+              className={cn('h-1.5 rounded-full transition-all', (changePct ?? 0) >= 0 ? 'bg-text-primary' : 'bg-text-tertiary')}
               style={{ width: `${Math.min(100, Math.max(5, (value / (Math.max(value, prevValue) || 1)) * 100))}%` }}
             />
           </div>
