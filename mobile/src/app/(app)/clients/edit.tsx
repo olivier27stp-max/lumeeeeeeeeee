@@ -7,11 +7,13 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { ClientInput, getClient, updateClient } from '@/lib/api/clients';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 export default function EditClient() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const { can } = usePermissions();
   const [form, setForm] = useState<ClientInput>({});
 
@@ -46,7 +48,7 @@ export default function EditClient() {
       qc.invalidateQueries({ queryKey: ['clients'] });
       router.back();
     },
-    onError: (e: Error) => Alert.alert('Could not save', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileClients.couldNotSave, e.message),
   });
 
   if (!can('clients.update')) return <Redirect href="/(app)/(tabs)/clients" />;
@@ -61,34 +63,34 @@ export default function EditClient() {
   return (
     <ScreenContainer scroll>
       <View className="gap-3 py-4">
-        <Input label="First name" value={form.first_name ?? ''} onChangeText={set('first_name')} />
-        <Input label="Last name" value={form.last_name ?? ''} onChangeText={set('last_name')} />
-        <Input label="Company" value={form.company ?? ''} onChangeText={set('company')} />
+        <Input label={t.mobileClients.firstName} value={form.first_name ?? ''} onChangeText={set('first_name')} />
+        <Input label={t.mobileClients.lastName} value={form.last_name ?? ''} onChangeText={set('last_name')} />
+        <Input label={t.mobileClients.company} value={form.company ?? ''} onChangeText={set('company')} />
         <Input
-          label="Phone"
+          label={t.mobileClients.phone}
           value={form.phone ?? ''}
           onChangeText={set('phone')}
           keyboardType="phone-pad"
         />
         <Input
-          label="Email"
+          label={t.mobileClients.email}
           value={form.email ?? ''}
           onChangeText={set('email')}
           keyboardType="email-address"
           autoCapitalize="none"
         />
-        <Input label="Address" value={form.address ?? ''} onChangeText={set('address')} />
+        <Input label={t.mobileClients.address} value={form.address ?? ''} onChangeText={set('address')} />
         <View className="flex-row gap-2">
           <View className="flex-1">
-            <Input label="City" value={form.city ?? ''} onChangeText={set('city')} />
+            <Input label={t.mobileClients.city} value={form.city ?? ''} onChangeText={set('city')} />
           </View>
           <View className="flex-1">
-            <Input label="Province" value={form.province ?? ''} onChangeText={set('province')} />
+            <Input label={t.mobileClients.province} value={form.province ?? ''} onChangeText={set('province')} />
           </View>
         </View>
-        <Input label="Postal code" value={form.postal_code ?? ''} onChangeText={set('postal_code')} />
+        <Input label={t.mobileClients.postalCode} value={form.postal_code ?? ''} onChangeText={set('postal_code')} />
         <Input
-          label="Notes"
+          label={t.mobileClients.notes}
           value={form.notes ?? ''}
           onChangeText={set('notes')}
           multiline
@@ -96,7 +98,7 @@ export default function EditClient() {
           style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }}
         />
 
-        <Button title="Save changes" onPress={() => saveMut.mutate()} loading={saveMut.isPending} />
+        <Button title={t.mobileClients.saveChanges} onPress={() => saveMut.mutate()} loading={saveMut.isPending} />
       </View>
     </ScreenContainer>
   );

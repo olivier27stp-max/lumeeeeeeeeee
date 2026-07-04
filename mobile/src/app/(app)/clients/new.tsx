@@ -8,12 +8,14 @@ import { Input } from '@/components/ui/Input';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import { ClientInput, createClient } from '@/lib/api/clients';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 // Mirrors the web ClientForm: First/Last, Company, Email/Phone, collapsible
 // Address (autocomplete + readonly city/province/postal). No notes on create.
 export default function NewClient() {
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const { orgId, canCreateClients } = usePermissions();
   const [form, setForm] = useState<ClientInput>({});
   const [showAddress, setShowAddress] = useState(false);
@@ -26,7 +28,7 @@ export default function NewClient() {
       qc.invalidateQueries({ queryKey: ['clients'] });
       router.replace(`/(app)/clients/${client.id}`);
     },
-    onError: (e: Error) => Alert.alert('Impossible de créer le client', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileClients.couldNotCreateClient, e.message),
   });
 
   if (!canCreateClients) return <Redirect href="/(app)/(tabs)/clients" />;
@@ -39,29 +41,29 @@ export default function NewClient() {
         {/* Name row */}
         <View className="flex-row gap-3">
           <View className="flex-1">
-            <Input label="Prénom" value={form.first_name ?? ''} onChangeText={set('first_name')} placeholder="Jean" />
+            <Input label={t.mobileClients.firstName} value={form.first_name ?? ''} onChangeText={set('first_name')} placeholder={t.mobileClients.firstNamePlaceholder} />
           </View>
           <View className="flex-1">
-            <Input label="Nom" value={form.last_name ?? ''} onChangeText={set('last_name')} placeholder="Tremblay" />
+            <Input label={t.mobileClients.lastName} value={form.last_name ?? ''} onChangeText={set('last_name')} placeholder={t.mobileClients.lastNamePlaceholder} />
           </View>
         </View>
 
-        <Input label="Entreprise" value={form.company ?? ''} onChangeText={set('company')} placeholder="Acme Inc." />
+        <Input label={t.mobileClients.company} value={form.company ?? ''} onChangeText={set('company')} placeholder={t.mobileClients.companyPlaceholder} />
 
         {/* Contact row */}
         <View className="flex-row gap-3">
           <View className="flex-1">
-            <Input label="Courriel" value={form.email ?? ''} onChangeText={set('email')} keyboardType="email-address" autoCapitalize="none" placeholder="jean@exemple.com" />
+            <Input label={t.mobileClients.email} value={form.email ?? ''} onChangeText={set('email')} keyboardType="email-address" autoCapitalize="none" placeholder={t.mobileClients.emailPlaceholder} />
           </View>
           <View className="flex-1">
-            <Input label="Téléphone" value={form.phone ?? ''} onChangeText={set('phone')} keyboardType="phone-pad" placeholder="(555) 123-4567" />
+            <Input label={t.mobileClients.phone} value={form.phone ?? ''} onChangeText={set('phone')} keyboardType="phone-pad" placeholder={t.mobileClients.phonePlaceholder} />
           </View>
         </View>
 
         {/* Address — collapsed by default, like the web */}
         {!showAddress ? (
           <Pressable onPress={() => setShowAddress(true)} className="self-start">
-            <Text className="text-sm font-semibold text-brand">+ Adresse</Text>
+            <Text className="text-sm font-semibold text-brand">{t.mobileClients.addAddress}</Text>
           </Pressable>
         ) : (
           <View className="gap-3">
@@ -80,15 +82,15 @@ export default function NewClient() {
             />
             {form.city ? (
               <View className="flex-row gap-3">
-                <View className="flex-1"><Input label="Ville" value={form.city ?? ''} onChangeText={set('city')} /></View>
-                <View className="flex-1"><Input label="Province" value={form.province ?? ''} onChangeText={set('province')} /></View>
+                <View className="flex-1"><Input label={t.mobileClients.city} value={form.city ?? ''} onChangeText={set('city')} /></View>
+                <View className="flex-1"><Input label={t.mobileClients.province} value={form.province ?? ''} onChangeText={set('province')} /></View>
               </View>
             ) : null}
-            {form.city ? <Input label="Code postal" value={form.postal_code ?? ''} onChangeText={set('postal_code')} /> : null}
+            {form.city ? <Input label={t.mobileClients.postalCode} value={form.postal_code ?? ''} onChangeText={set('postal_code')} /> : null}
           </View>
         )}
 
-        <Button title="Créer le client" onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!valid || !orgId} />
+        <Button title={t.mobileClients.createClient} onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!valid || !orgId} />
       </View>
     </ScreenContainer>
   );

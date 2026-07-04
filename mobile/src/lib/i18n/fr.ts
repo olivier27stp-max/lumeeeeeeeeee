@@ -3703,6 +3703,74 @@ const fr: TranslationKeys = {
     address: 'Adresse',
     saveChanges: 'Enregistrer les modifications',
   },
+
+  // Mobile app — client detail / new / edit / list screens
+  mobileClients: {
+    // Contact rows
+    phone: 'Téléphone',
+    email: 'Courriel',
+    address: 'Adresse',
+    // Status / source card
+    status: 'Statut',
+    source: 'Source',
+    sourceUnspecified: 'Non spécifiée',
+    clientSince: 'Client depuis',
+    // Billing rollup
+    billing: 'Facturation',
+    invoiced: 'Facturé',
+    paid: 'Payé',
+    balance: 'Solde',
+    invoiceLabel: 'Facture {number}',
+    quoteLabel: 'Soumission {number}',
+    due: 'dû',
+    quotes: 'Soumissions',
+    invoices: 'Factures',
+    // Quick actions
+    call: 'Appeler',
+    text: 'Texter',
+    // Notes
+    notes: 'Notes',
+    addNotePlaceholder: 'Ajouter une note…',
+    // Communications
+    communications: 'Communications',
+    openThread: 'Ouvrir le fil',
+    noMessagesYet: 'Aucun message pour l\'instant.',
+    sent: 'Envoyé',
+    received: 'Reçu',
+    // Jobs
+    jobs: 'Jobs',
+    // Activity
+    activity: 'Activité',
+    // Footer / actions
+    editClient: 'Modifier le client',
+    // Loading / empty / error states
+    loading: 'Chargement…',
+    clientNotFound: 'Client introuvable.',
+    // Alert titles
+    message: 'Message',
+    couldNotCreateClient: 'Impossible de créer le client',
+    couldNotSave: 'Impossible d\'enregistrer',
+    // New client form
+    firstName: 'Prénom',
+    firstNamePlaceholder: 'Jean',
+    lastName: 'Nom',
+    lastNamePlaceholder: 'Tremblay',
+    company: 'Entreprise',
+    companyPlaceholder: 'Acme Inc.',
+    emailPlaceholder: 'jean@exemple.com',
+    phonePlaceholder: '(555) 123-4567',
+    addAddress: '+ Adresse',
+    city: 'Ville',
+    province: 'Province',
+    postalCode: 'Code postal',
+    createClient: 'Créer le client',
+    // List screen
+    searchPlaceholder: 'Rechercher un client…',
+    errorPrefix: 'Erreur : {message}',
+    noClientsFound: 'Aucun client trouvé.',
+    // Edit form
+    saveChanges: 'Enregistrer les modifications',
+  },
 } as const;
 
 export default fr;

@@ -3711,6 +3711,74 @@ const en = {
     address: 'Address',
     saveChanges: 'Save changes',
   },
+
+  // Mobile app — client detail / new / edit / list screens
+  mobileClients: {
+    // Contact rows
+    phone: 'Phone',
+    email: 'Email',
+    address: 'Address',
+    // Status / source card
+    status: 'Status',
+    source: 'Source',
+    sourceUnspecified: 'Unspecified',
+    clientSince: 'Client since',
+    // Billing rollup
+    billing: 'Billing',
+    invoiced: 'Invoiced',
+    paid: 'Paid',
+    balance: 'Balance',
+    invoiceLabel: 'Invoice {number}',
+    quoteLabel: 'Quote {number}',
+    due: 'due',
+    quotes: 'Quotes',
+    invoices: 'Invoices',
+    // Quick actions
+    call: 'Call',
+    text: 'Text',
+    // Notes
+    notes: 'Notes',
+    addNotePlaceholder: 'Add a note…',
+    // Communications
+    communications: 'Communications',
+    openThread: 'Open thread',
+    noMessagesYet: 'No message yet.',
+    sent: 'Sent',
+    received: 'Received',
+    // Jobs
+    jobs: 'Jobs',
+    // Activity
+    activity: 'Activity',
+    // Footer / actions
+    editClient: 'Edit client',
+    // Loading / empty / error states
+    loading: 'Loading…',
+    clientNotFound: 'Client not found.',
+    // Alert titles
+    message: 'Message',
+    couldNotCreateClient: 'Could not create the client',
+    couldNotSave: 'Could not save',
+    // New client form
+    firstName: 'First name',
+    firstNamePlaceholder: 'John',
+    lastName: 'Last name',
+    lastNamePlaceholder: 'Smith',
+    company: 'Company',
+    companyPlaceholder: 'Acme Inc.',
+    emailPlaceholder: 'john@example.com',
+    phonePlaceholder: '(555) 123-4567',
+    addAddress: '+ Address',
+    city: 'City',
+    province: 'Province',
+    postalCode: 'Postal code',
+    createClient: 'Create client',
+    // List screen
+    searchPlaceholder: 'Search for a client…',
+    errorPrefix: 'Error: {message}',
+    noClientsFound: 'No client found.',
+    // Edit form
+    saveChanges: 'Save changes',
+  },
 } as const;
 
 // Deep structure type that preserves shape but allows any string values

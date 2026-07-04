@@ -17,6 +17,7 @@ import { getClientLeadSource } from '@/lib/api/leads';
 import { listActivityLog, activityLabel } from '@/lib/api/activity';
 import { deviceLanguage } from '@/lib/contact';
 import { clientFullName, formatCurrencyCents, formatDateTime } from '@/lib/format';
+import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
 function Row({
@@ -41,6 +42,7 @@ function Row({
 
 export default function ClientDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { t } = useTranslation();
   const { can, canSeePricing, teamId, scope, permissions, role, orgId } = usePermissions();
   const { data: client, isLoading, error } = useQuery({
     queryKey: ['clients', id],
@@ -98,7 +100,7 @@ export default function ClientDetail() {
   const saveNotesMut = useMutation({
     mutationFn: () => updateClient(String(id), { notes: notes.trim() }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['clients', id] }),
-    onError: (e: Error) => Alert.alert('Notes', e.message),
+    onError: (e: Error) => Alert.alert(t.mobileClients.notes, e.message),
   });
 
   // Open (or create) the in-app Twilio conversation with this client.
@@ -115,14 +117,14 @@ export default function ClientDetail() {
         `/(app)/conversation/${cid}?phone=${encodeURIComponent(client.phone)}&name=${encodeURIComponent(clientFullName(client))}&clientId=${encodeURIComponent(client.id)}` as any,
       );
     } catch (e) {
-      Alert.alert('Message', (e as Error).message);
+      Alert.alert(t.mobileClients.message, (e as Error).message);
     }
   };
 
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-surface-alt">
-        <Text className="text-ink-muted">Chargement…</Text>
+        <Text className="text-ink-muted">{t.mobileClients.loading}</Text>
       </View>
     );
   }
@@ -130,7 +132,7 @@ export default function ClientDetail() {
     return (
       <View className="flex-1 items-center justify-center bg-surface-alt p-6">
         <Text className="text-ink-muted text-center">
-          {error ? (error as Error).message : 'Client introuvable.'}
+          {error ? (error as Error).message : t.mobileClients.clientNotFound}
         </Text>
       </View>
     );
@@ -156,21 +158,21 @@ export default function ClientDetail() {
         <Card className="gap-4">
           {client.phone ? (
             <Row
-              label="Téléphone"
+              label={t.mobileClients.phone}
               value={client.phone}
               onPress={() => Linking.openURL(`tel:${client.phone}`)}
             />
           ) : null}
           {client.email ? (
             <Row
-              label="Courriel"
+              label={t.mobileClients.email}
               value={client.email}
               onPress={() => Linking.openURL(`mailto:${client.email}`)}
             />
           ) : null}
           {address ? (
             <Row
-              label="Adresse"
+              label={t.mobileClients.address}
               value={address}
               onPress={() =>
                 Linking.openURL(`https://maps.apple.com/?q=${encodeURIComponent(address)}`)
@@ -182,15 +184,15 @@ export default function ClientDetail() {
         {/* Status · lead source · client since */}
         <Card className="gap-3">
           <View className="flex-row items-center justify-between">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Statut</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileClients.status}</Text>
             <StatusPill status={client.status} />
           </View>
           <View className="flex-row items-center justify-between border-t border-surface-border pt-3">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Source</Text>
-            <Text className="text-sm text-ink">{leadSource || 'Non spécifiée'}</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileClients.source}</Text>
+            <Text className="text-sm text-ink">{leadSource || t.mobileClients.sourceUnspecified}</Text>
           </View>
           <View className="flex-row items-center justify-between border-t border-surface-border pt-3">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Client depuis</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileClients.clientSince}</Text>
             <Text className="text-sm text-ink">{formatDateTime(client.created_at)}</Text>
           </View>
         </Card>
@@ -198,18 +200,18 @@ export default function ClientDetail() {
         {/* Billing rollup + tappable invoices (admin) — open one to view/manage it. */}
         {canSeePricing && (invoices?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle mb-1">Facturation</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle mb-1">{t.mobileClients.billing}</Text>
             <View className="flex-row justify-between">
               <View className="items-center flex-1">
-                <Text className="text-[10px] uppercase text-ink-subtle">Facturé</Text>
+                <Text className="text-[10px] uppercase text-ink-subtle">{t.mobileClients.invoiced}</Text>
                 <Text className="text-base font-bold text-ink">{formatCurrencyCents(invoiced, 'CAD')}</Text>
               </View>
               <View className="items-center flex-1">
-                <Text className="text-[10px] uppercase text-ink-subtle">Payé</Text>
+                <Text className="text-[10px] uppercase text-ink-subtle">{t.mobileClients.paid}</Text>
                 <Text className="text-base font-bold text-emerald-600">{formatCurrencyCents(paid, 'CAD')}</Text>
               </View>
               <View className="items-center flex-1">
-                <Text className="text-[10px] uppercase text-ink-subtle">Solde</Text>
+                <Text className="text-[10px] uppercase text-ink-subtle">{t.mobileClients.balance}</Text>
                 <Text className={`text-base font-bold ${balance > 0 ? 'text-status-late' : 'text-ink'}`}>
                   {formatCurrencyCents(balance, 'CAD')}
                 </Text>
@@ -222,10 +224,10 @@ export default function ClientDetail() {
                 className="flex-row items-center justify-between border-t border-surface-border pt-2.5"
               >
                 <View className="flex-1 pr-3">
-                  <Text className="text-sm font-medium text-ink">Facture {inv.invoice_number ?? ''}</Text>
+                  <Text className="text-sm font-medium text-ink">{t.mobileClients.invoiceLabel.replace('{number}', inv.invoice_number ?? '')}</Text>
                   <Text className="text-xs text-ink-muted">
                     {inv.status ?? '—'}
-                    {inv.balance_cents != null && inv.balance_cents > 0 ? ` · ${formatCurrencyCents(inv.balance_cents, 'CAD')} dû` : ''}
+                    {inv.balance_cents != null && inv.balance_cents > 0 ? ` · ${formatCurrencyCents(inv.balance_cents, 'CAD')} ${t.mobileClients.due}` : ''}
                   </Text>
                 </View>
                 <Text className="text-sm text-ink">{formatCurrencyCents(inv.total_cents ?? 0, 'CAD')}</Text>
@@ -237,7 +239,7 @@ export default function ClientDetail() {
         {/* Quotes — tappable to open/send (admin). */}
         {canSeePricing && (quotes?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle mb-1">Soumissions</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle mb-1">{t.mobileClients.quotes}</Text>
             {(quotes ?? []).map((q) => (
               <Pressable
                 key={q.id}
@@ -245,7 +247,7 @@ export default function ClientDetail() {
                 className="flex-row items-center justify-between border-t border-surface-border pt-2.5"
               >
                 <View className="flex-1 pr-3">
-                  <Text className="text-sm font-medium text-ink">Soumission {q.quote_number ?? ''}</Text>
+                  <Text className="text-sm font-medium text-ink">{t.mobileClients.quoteLabel.replace('{number}', q.quote_number ?? '')}</Text>
                   <Text className="text-xs text-ink-muted">{q.status ?? '—'}</Text>
                 </View>
                 <Text className="text-sm text-ink">{formatCurrencyCents(q.total_cents ?? 0, 'CAD')}</Text>
@@ -258,10 +260,10 @@ export default function ClientDetail() {
         {client.phone ? (
           <View className="flex-row gap-2">
             <View className="flex-1">
-              <Button title="Appeler" variant="secondary" onPress={() => Linking.openURL(`tel:${client.phone}`)} />
+              <Button title={t.mobileClients.call} variant="secondary" onPress={() => Linking.openURL(`tel:${client.phone}`)} />
             </View>
             <View className="flex-1">
-              <Button title="Texter" variant="secondary" onPress={openThread} />
+              <Button title={t.mobileClients.text} variant="secondary" onPress={openThread} />
             </View>
           </View>
         ) : null}
@@ -269,11 +271,11 @@ export default function ClientDetail() {
         {/* Notes — editable on the spot (saves on blur) */}
         {can('clients.update') ? (
           <Card>
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle mb-1">Notes</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle mb-1">{t.mobileClients.notes}</Text>
             <Input
               value={notes}
               onChangeText={setNotes}
-              placeholder="Ajouter une note…"
+              placeholder={t.mobileClients.addNotePlaceholder}
               multiline
               onBlur={() => saveNotesMut.mutate()}
               style={{ height: 90, textAlignVertical: 'top', paddingTop: 10 }}
@@ -281,7 +283,7 @@ export default function ClientDetail() {
           </Card>
         ) : client.notes ? (
           <Card>
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle mb-1">Notes</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle mb-1">{t.mobileClients.notes}</Text>
             <Text className="text-base text-ink leading-6">{client.notes}</Text>
           </Card>
         ) : null}
@@ -290,19 +292,19 @@ export default function ClientDetail() {
         {client.phone ? (
           <Card className="gap-2">
             <View className="flex-row items-center justify-between">
-              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Communications</Text>
+              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileClients.communications}</Text>
               <Pressable onPress={openThread}>
-                <Text className="text-xs font-semibold text-brand">Ouvrir le fil</Text>
+                <Text className="text-xs font-semibold text-brand">{t.mobileClients.openThread}</Text>
               </Pressable>
             </View>
             {(messages?.length ?? 0) === 0 ? (
-              <Text className="text-sm text-ink-muted">Aucun message pour l&apos;instant.</Text>
+              <Text className="text-sm text-ink-muted">{t.mobileClients.noMessagesYet}</Text>
             ) : (
               messages!.slice(-5).map((m) => (
                 <View key={m.id} className="border-t border-surface-border pt-2">
                   <View className="flex-row items-center justify-between">
                     <Text className="text-[11px] font-semibold uppercase text-ink-subtle">
-                      {m.direction === 'outbound' ? 'Envoyé' : 'Reçu'}
+                      {m.direction === 'outbound' ? t.mobileClients.sent : t.mobileClients.received}
                     </Text>
                     <Text className="text-[11px] text-ink-subtle">{formatDateTime(m.created_at)}</Text>
                   </View>
@@ -318,7 +320,7 @@ export default function ClientDetail() {
         {/* Jobs */}
         {(jobs?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Jobs ({jobs!.length})</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileClients.jobs} ({jobs!.length})</Text>
             {jobs!.map((j) => (
               <Pressable
                 key={j.id}
@@ -337,10 +339,10 @@ export default function ClientDetail() {
         {/* Quotes (admin) */}
         {canSeePricing && (quotes?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Soumissions ({quotes!.length})</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileClients.quotes} ({quotes!.length})</Text>
             {quotes!.map((q) => (
               <View key={q.id} className="flex-row items-center justify-between border-t border-surface-border py-2.5">
-                <Text className="text-sm text-ink">Soumission {q.quote_number ?? ''} · {q.status ?? '—'}</Text>
+                <Text className="text-sm text-ink">{t.mobileClients.quoteLabel.replace('{number}', q.quote_number ?? '')} · {q.status ?? '—'}</Text>
                 <Text className="text-sm font-medium text-ink">
                   {formatCurrencyCents(q.total_cents ?? 0, 'CAD')}
                 </Text>
@@ -352,11 +354,11 @@ export default function ClientDetail() {
         {/* Invoices (admin) */}
         {canSeePricing && (invoices?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Factures ({invoices!.length})</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileClients.invoices} ({invoices!.length})</Text>
             {invoices!.map((inv) => (
               <View key={inv.id} className="flex-row items-center justify-between border-t border-surface-border py-2.5">
                 <Text className="text-sm text-ink">
-                  Facture {inv.invoice_number ?? ''} · {inv.status ?? '—'}
+                  {t.mobileClients.invoiceLabel.replace('{number}', inv.invoice_number ?? '')} · {inv.status ?? '—'}
                 </Text>
                 <Text className="text-sm font-medium text-ink">
                   {formatCurrencyCents(inv.total_cents ?? 0, 'CAD')}
@@ -369,7 +371,7 @@ export default function ClientDetail() {
         {/* Activity timeline */}
         {(activity?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Activité</Text>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileClients.activity}</Text>
             {activity!.map((a) => (
               <View key={a.id} className="flex-row items-start justify-between border-t border-surface-border pt-2">
                 <Text className="flex-1 text-sm text-ink" numberOfLines={2}>
@@ -385,7 +387,7 @@ export default function ClientDetail() {
 
         {can('clients.update') ? (
           <Button
-            title="Modifier le client"
+            title={t.mobileClients.editClient}
             variant="secondary"
             onPress={() => router.push(`/(app)/clients/edit?id=${client.id}`)}
           />
