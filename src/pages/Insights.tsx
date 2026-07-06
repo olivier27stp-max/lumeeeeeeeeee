@@ -48,6 +48,7 @@ import CancellationRateCard from '../components/insights/CancellationRateCard';
 import QuoteConversionCard from '../components/insights/QuoteConversionCard';
 import JobsPerWeekdayCard from '../components/insights/JobsPerWeekdayCard';
 import RecurringRevenueCard from '../components/insights/RecurringRevenueCard';
+import RecurringVsOneOffCard from '../components/insights/RecurringVsOneOffCard';
 import TopServicesByCountCard from '../components/insights/TopServicesByCountCard';
 
 const TEAM_COLORS = ['#1961ED', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
@@ -556,10 +557,11 @@ export default function Insights() {
               <section>
                 <h2 className="text-[19px] font-bold text-text-primary tracking-tight mb-3">Jobs</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  <RecurringRevenueCard />
+                  <RecurringVsOneOffCard from={from} to={to} />
                   <AverageJobValueCard />
                   <TopServicesByCountCard />
                   <JobsPerWeekdayCard />
+                  <RecurringRevenueCard />
                   <div className="xl:col-span-2">
                     <TopTeamCard
                       title={fr ? 'Meilleures équipes' : 'Top teams'}
