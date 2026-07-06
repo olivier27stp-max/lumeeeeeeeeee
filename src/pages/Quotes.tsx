@@ -18,6 +18,7 @@ import {
   type QuoteStatus,
 } from '../lib/quotesApi';
 import { listSalespeople } from '../lib/jobsApi';
+import { clientDisplayName } from '../lib/clientsApi';
 import { formatDate, cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
@@ -193,11 +194,25 @@ export default function Quotes() {
     return l;
   }, [rows, sort]);
 
-  function name(q: any): string {
+  function clientRecord(q: any) {
     const c = q.clients as any, l = q.leads as any;
-    if (c && !c.deleted_at) return `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.company || 'Client';
-    if (l && !l.deleted_at) return `${l.first_name || ''} ${l.last_name || ''}`.trim() || l.company || 'Lead';
-    return '—';
+    if (c && !c.deleted_at) return c;
+    if (l && !l.deleted_at) return l;
+    return null;
+  }
+
+  function name(q: any): string {
+    return clientDisplayName(clientRecord(q)) || '—';
+  }
+
+  // Same secondary-line rule as the Jobs/Clients pages: company under the
+  // name, or the person's name when the client is displayed as a company.
+  function secondaryName(q: any): string | null {
+    const r = clientRecord(q);
+    if (!r) return null;
+    return r.display_as_company && r.company
+      ? `${r.first_name || ''} ${r.last_name || ''}`.trim() || null
+      : (r.company || '').trim() || null;
   }
 
   function propertyLabel(q: any): string {
@@ -363,8 +378,13 @@ export default function Quotes() {
                 </div>
                 <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                   <div className="flex items-center gap-3 min-w-0">
-                    <UnifiedAvatar id={(q as any).clients?.id || (q as any).client_id || q.id} name={name(q)} />
-                    <span className="text-[14px] text-text-primary truncate">{name(q)}</span>
+                    <UnifiedAvatar id={clientRecord(q)?.id || (q as any).client_id || q.id} name={name(q)} />
+                    <div className="min-w-0">
+                      <p className="text-[14px] font-bold text-text-primary truncate leading-tight">{name(q)}</p>
+                      {secondaryName(q) && (
+                        <p className="text-[12px] font-normal text-text-tertiary truncate leading-tight mt-0.5">{secondaryName(q)}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{q.quote_number}</span></div>
