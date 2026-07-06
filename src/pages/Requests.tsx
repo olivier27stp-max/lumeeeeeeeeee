@@ -178,7 +178,7 @@ export default function Requests() {
               <div
                 key={s.id}
                 onClick={() => navigate(`/requests/${s.id}`)}
-                className="group cursor-pointer overflow-hidden rounded-xl border border-border-subtle bg-surface transition-colors hover:border-primary/40 hover:bg-surface-elevated"
+                className="group cursor-pointer overflow-hidden rounded-xl border border-border-subtle dark:border-white bg-surface transition-colors hover:border-primary/40 dark:hover:border-white hover:bg-surface-elevated"
               >
                 {/* Headbar — name · photo count · date */}
                 <div className="flex items-center justify-between gap-3 bg-[#d8d0c2] px-4 py-2.5">
@@ -205,31 +205,31 @@ export default function Requests() {
 
                 <div className="space-y-3 p-4">
                   {s.company && (
-                    <p className="flex items-center gap-1 text-xs text-text-tertiary">
+                    <p className="flex items-center gap-1 text-xs text-text-tertiary dark:text-white">
                       <Building2 className="h-3 w-3" /> {s.company}
                     </p>
                   )}
 
                   {/* Contact */}
-                  <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-text-secondary">
+                  <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-text-secondary dark:text-white">
                     {s.email && (
                       <a href={`mailto:${s.email}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 hover:text-text-primary">
-                        <Mail className="h-3.5 w-3.5 text-text-muted" /> {s.email}
+                        <Mail className="h-3.5 w-3.5 text-text-muted dark:text-white" /> {s.email}
                       </a>
                     )}
                     {s.phone && (
                       <>
                         <a href={`tel:${s.phone}`} onClick={(e) => e.stopPropagation()} className="md:hidden flex items-center gap-1.5 hover:text-text-primary">
-                          <Phone className="h-3.5 w-3.5 text-text-muted" /> {s.phone}
+                          <Phone className="h-3.5 w-3.5 text-text-muted dark:text-white" /> {s.phone}
                         </a>
                         <span className="hidden md:flex items-center gap-1.5">
-                          <Phone className="h-3.5 w-3.5 text-text-muted" /> {s.phone}
+                          <Phone className="h-3.5 w-3.5 text-text-muted dark:text-white" /> {s.phone}
                         </span>
                       </>
                     )}
                     {addr && (
                       <span className="flex items-center gap-1.5">
-                        <MapPin className="h-3.5 w-3.5 text-text-muted" /> {addr}
+                        <MapPin className="h-3.5 w-3.5 text-text-muted dark:text-white" /> {addr}
                       </span>
                     )}
                   </div>
@@ -243,7 +243,7 @@ export default function Requests() {
                         </div>
                       ))}
                       {photos.length > 4 && (
-                        <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-border-subtle bg-surface text-xs font-medium text-text-tertiary">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-border-subtle bg-surface text-xs font-medium text-text-tertiary dark:text-white">
                           +{photos.length - 4}
                         </div>
                       )}
@@ -255,8 +255,8 @@ export default function Requests() {
                     <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                       {customEntries.map(([k, v]) => (
                         <div key={k} className="rounded-lg bg-surface px-2.5 py-1.5">
-                          <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{labelFor(k)}</p>
-                          <p className="text-xs text-text-primary">{fmtValue(v)}</p>
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted dark:text-white">{labelFor(k)}</p>
+                          <p className="text-xs text-text-primary dark:text-white">{fmtValue(v)}</p>
                         </div>
                       ))}
                     </div>
