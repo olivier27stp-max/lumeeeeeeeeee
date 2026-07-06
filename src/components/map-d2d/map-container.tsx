@@ -85,6 +85,8 @@ export interface MapContainerProps {
   onPinClosedWon?: (pin: LeadPinData) => void;
   /** Called when a pin is set to appointment — should open the Quote modal */
   onPinAppointment?: (pin: LeadPinData) => void;
+  /** Called when the "Open client" popup action is used — resolves + navigates to the client page */
+  onOpenClient?: (pin: LeadPinData) => void;
   /** Initial pins to render (loaded from API by parent) */
   initialPins?: LeadPinData[];
   /** Called when a new pin is created on the map */
@@ -99,7 +101,7 @@ export interface MapContainerProps {
   pinLinkUpdates?: Record<string, { job_id?: string | null; quote_id?: string | null; client_id?: string | null; lead_id?: string | null }>;
 }
 
-export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, onPinCreated, onPinDeleted, onPinUpdated, liveReps: liveRepsProp, pinLinkUpdates }: MapContainerProps = {}) {
+export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, initialPins, onPinCreated, onPinDeleted, onPinUpdated, liveReps: liveRepsProp, pinLinkUpdates }: MapContainerProps = {}) {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const containerRef = useRef<HTMLDivElement>(null);
@@ -110,6 +112,8 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
   onPinClosedWonRef.current = onPinClosedWon;
   const onPinAppointmentRef = useRef(onPinAppointment);
   onPinAppointmentRef.current = onPinAppointment;
+  const onOpenClientRef = useRef(onOpenClient);
+  onOpenClientRef.current = onOpenClient;
   const onPinCreatedRef = useRef(onPinCreated);
   onPinCreatedRef.current = onPinCreated;
   const onPinDeletedRef = useRef(onPinDeleted);
@@ -440,6 +444,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
     const editId = `e-${pin.id}`;
     const delId = `d-${pin.id}`;
     const crmId = `crm-${pin.id}`;
+    const clientId = `client-${pin.id}`;
 
     const popup = new mapboxgl.Popup({
       offset: 18, closeButton: false, closeOnClick: true, maxWidth: '280px', className: 'fp-popup', anchor: 'bottom',
@@ -447,7 +452,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
 
     function refreshPopupHTML() {
       const current = markersRef.current.get(pin.id)?.pin || pin;
-      popup.setHTML(createLeadPinPopupHTML(current, editId, delId, crmId, fr ? 'fr' : 'en'));
+      popup.setHTML(createLeadPinPopupHTML(current, editId, delId, crmId, fr ? 'fr' : 'en', clientId));
     }
 
     popup.on('open', () => {
@@ -490,6 +495,15 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, initialPins, on
               } else if (current.status === 'appointment' && onPinAppointmentRef.current) {
                 onPinAppointmentRef.current(current);
               }
+            };
+          }
+          const clientBtn = document.getElementById(clientId);
+          if (clientBtn) {
+            clientBtn.onclick = (e) => {
+              e.stopPropagation();
+              const current = markersRef.current.get(pin.id)?.pin || pin;
+              popup.remove();
+              onOpenClientRef.current?.(current);
             };
           }
         }, 50);

@@ -134,6 +134,7 @@ export function createLeadPinPopupHTML(
   deleteBtnId: string,
   crmBtnId?: string,
   lang: 'fr' | 'en' = 'fr',
+  clientBtnId?: string,
 ): string {
   const cfg = PIN_STATUS_CONFIG[pin.status];
   const fr = lang === 'fr';
@@ -143,7 +144,19 @@ export function createLeadPinPopupHTML(
     createQuote: fr ? '+ Créer un Devis' : '+ Create Quote',
     quoteLinked: fr ? '✓ Devis lié' : '✓ Quote linked',
     edit: fr ? '✎ Modifier' : '✎ Edit',
+    openClient: fr ? '→ Voir la fiche client' : '→ Open client',
   };
+
+  // "Open client" — shown whenever a client can be resolved (directly, or via
+  // the linked job/lead). Handler in map-container resolves the id and navigates.
+  const hasClient = !!(pin.client_id || pin.lead_id || pin.job_id || pin.lume_job_id);
+  const clientRow = clientBtnId && hasClient ? `
+    <button id="${clientBtnId}" style="
+      width:100%;padding:7px 0;border-radius:8px;margin-top:6px;
+      border:1px solid rgba(96,165,250,.3);background:rgba(96,165,250,.1);color:#60a5fa;
+      font-size:11px;font-weight:600;cursor:pointer;
+    ">${L.openClient}</button>
+  ` : '';
 
   // CRM action button based on pin status
   let crmRow = '';
@@ -207,6 +220,7 @@ export function createLeadPinPopupHTML(
         ">✕</button>
       </div>
       ${crmRow}
+      ${clientRow}
     </div>
   `;
 }

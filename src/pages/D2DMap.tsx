@@ -15,6 +15,8 @@ import {
 } from '../lib/fieldSalesApi';
 import { getActiveLiveLocations, type LiveLocation } from '../lib/trackingApi';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 // Map FieldSales API status → LeadPinData status
 const STATUS_MAP: Record<string, PinStatus> = {
@@ -55,6 +57,7 @@ function apiPinToLeadPin(pin: FieldPinLight): LeadPinData {
 
 export default function D2DMap() {
   const { openJobModal } = useJobModalController();
+  const navigate = useNavigate();
 
   // Pins loaded from API
   const [initialPins, setInitialPins] = useState<LeadPinData[]>([]);
@@ -188,6 +191,23 @@ export default function D2DMap() {
     setShowQuoteModal(true);
   }, []);
 
+  // Open the existing client from a pin. The id may be on the pin directly,
+  // or only on its linked job (client_id ?? lead_id) — resolve both.
+  const handleOpenClient = useCallback(async (pin: LeadPinData) => {
+    let clientId: string | null = pin.client_id || pin.lead_id || null;
+    const jobId = pin.job_id || pin.lume_job_id || null;
+    if (!clientId && jobId) {
+      const { data } = await supabase
+        .from('jobs')
+        .select('client_id, lead_id')
+        .eq('id', jobId)
+        .maybeSingle();
+      clientId = (data?.client_id as string) || (data?.lead_id as string) || null;
+    }
+    if (clientId) navigate(`/clients/${clientId}`);
+    else toast.error('Aucune fiche client liée.');
+  }, [navigate]);
+
   const handleQuoteCreated = useCallback((detail: any) => {
     // Link the pin/house to the created quote
     if (pendingQuotePin && detail?.id) {
@@ -223,6 +243,7 @@ export default function D2DMap() {
       <MapContainer
         onPinClosedWon={handlePinClosedWon}
         onPinAppointment={handlePinAppointment}
+        onOpenClient={handleOpenClient}
         initialPins={initialPins}
         onPinCreated={handlePinCreated}
         onPinDeleted={handlePinDeleted}
