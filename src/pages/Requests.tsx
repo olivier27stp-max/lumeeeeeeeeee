@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { Loader2, Inbox, Mail, Phone, MapPin, Building2, ExternalLink, RefreshCw, Clock, Copy, Check, ImageIcon, X, ChevronRight, CheckSquare, Square, CheckCircle2, Circle } from 'lucide-react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Loader2, Inbox, Mail, Phone, MapPin, Building2, ExternalLink, RefreshCw, Clock, Copy, Check, ImageIcon, Archive, ChevronRight } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { fetchFormSubmissions, fetchRequestForm } from '../lib/requestFormsApi';
-import type { FormSubmission, RequestForm, FormField } from '../types';
+import type { FormSubmission, RequestForm } from '../types';
 
 /** Reserved custom_responses key where the public form stores uploaded photo URLs. */
 const PHOTOS_KEY = '__photos';
@@ -28,13 +28,14 @@ const fmtValue = (v: unknown): string =>
 export default function Requests() {
   const { language } = useTranslation();
   const fr = language === 'fr';
+  const navigate = useNavigate();
 
   const [submissions, setSubmissions] = useState<FormSubmission[]>([]);
   const [form, setForm] = useState<RequestForm | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [selected, setSelected] = useState<FormSubmission | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,19 +73,35 @@ export default function Requests() {
   /** Map a custom_responses key to its human label using the form config. */
   const labelFor = (key: string) => form?.custom_fields.find((f) => f.id === key)?.label || key;
 
+  const archivedCount = useMemo(() => submissions.filter((s) => s.archived_at).length, [submissions]);
+  const visible = useMemo(
+    () => (showArchived ? submissions : submissions.filter((s) => !s.archived_at)),
+    [submissions, showArchived],
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[28px] font-bold text-text-primary leading-tight">{fr ? 'Demandes' : 'Requests'}{!loading && <span className="ml-2 text-[15px] font-normal text-text-tertiary tabular-nums">{submissions.length}</span>}</h1>
+          <h1 className="text-[28px] font-bold text-text-primary leading-tight">{fr ? 'Demandes' : 'Requests'}{!loading && <span className="ml-2 text-[15px] font-normal text-text-tertiary tabular-nums">{visible.length}</span>}</h1>
         </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-elevated"
-        >
-          <RefreshCw className="h-3.5 w-3.5" /> {fr ? 'Actualiser' : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-2">
+          {archivedCount > 0 && (
+            <button
+              onClick={() => setShowArchived((p) => !p)}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${showArchived ? 'border-primary/40 bg-primary/5 text-primary' : 'border-border-subtle text-text-secondary hover:bg-surface-elevated'}`}
+            >
+              <Archive className="h-3.5 w-3.5" /> {fr ? 'Archivées' : 'Archived'} ({archivedCount})
+            </button>
+          )}
+          <button
+            onClick={load}
+            className="flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-elevated"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> {fr ? 'Actualiser' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* States */}
@@ -153,14 +170,14 @@ export default function Requests() {
         </div>
       ) : (
         <div className="space-y-3">
-          {submissions.map((s) => {
+          {visible.map((s) => {
             const addr = fullAddress(s);
             const customEntries = customEntriesOf(s);
             const photos = photosOf(s);
             return (
               <div
                 key={s.id}
-                onClick={() => setSelected(s)}
+                onClick={() => navigate(`/requests/${s.id}`)}
                 className="group cursor-pointer overflow-hidden rounded-xl border border-border-subtle bg-surface transition-colors hover:border-primary/40 hover:bg-surface-elevated"
               >
                 {/* Headbar — name · photo count · date */}
@@ -169,6 +186,11 @@ export default function Requests() {
                     {s.first_name} {s.last_name}
                   </p>
                   <div className="flex shrink-0 items-center gap-2">
+                    {s.archived_at && (
+                      <span className="flex items-center gap-1 rounded-full bg-black/10 px-2 py-0.5 text-[11px] font-medium text-[#000]">
+                        <Archive className="h-3 w-3" /> {fr ? 'Archivée' : 'Archived'}
+                      </span>
+                    )}
                     {photos.length > 0 && (
                       <span className="flex items-center gap-1 rounded-full bg-black/10 px-2 py-0.5 text-[11px] font-medium text-[#000]">
                         <ImageIcon className="h-3 w-3" /> {photos.length}
@@ -245,208 +267,6 @@ export default function Requests() {
           })}
         </div>
       )}
-
-      {/* Detail modal */}
-      {selected && (
-        <SubmissionDetail
-          submission={selected}
-          form={form}
-          fr={fr}
-          fmtDate={fmtDate}
-          onClose={() => setSelected(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-// ── Submission detail — full list of all entered elements ──
-function SubmissionDetail({
-  submission: s,
-  form,
-  fr,
-  fmtDate,
-  onClose,
-}: {
-  submission: FormSubmission;
-  form: RequestForm | null;
-  fr: boolean;
-  fmtDate: (iso: string) => string;
-  onClose: () => void;
-}) {
-  const photos = photosOf(s);
-  const fields = form?.custom_fields || [];
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Close bar */}
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border-subtle bg-surface px-6 py-3">
-          <p className="flex items-center gap-1.5 text-[11px] text-text-muted">
-            <Clock className="h-3 w-3" /> {fr ? 'Soumise le' : 'Submitted'} {fmtDate(s.created_at)}
-          </p>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-primary">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="space-y-6 px-6 py-5">
-          {/* Client info block */}
-          <ClientHeader submission={s} />
-
-          {/* Custom fields — render each per its type, choices show all options */}
-          {fields.length > 0 && (
-            <Group title={fr ? 'Réponses du formulaire' : 'Form answers'}>
-              {fields.map((f) => (
-                <CustomAnswer key={f.id} field={f} value={s.custom_responses?.[f.id]} fr={fr} />
-              ))}
-            </Group>
-          )}
-
-          {/* Default notes */}
-          {s.notes && (
-            <Group title={fr ? 'Notes additionnelles' : 'Additional notes'}>
-              <p className="whitespace-pre-wrap text-sm text-text-primary">{s.notes}</p>
-            </Group>
-          )}
-
-          {/* Photos */}
-          {photos.length > 0 && (
-            <Group title={`${fr ? 'Photos' : 'Photos'} (${photos.length})`}>
-              <div className="grid grid-cols-3 gap-2">
-                {photos.map((url) => (
-                  <a
-                    key={url}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group relative aspect-square overflow-hidden rounded-lg border border-border-subtle"
-                  >
-                    <img src={url} alt="" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
-                    <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:bg-black/30 group-hover:opacity-100">
-                      <ExternalLink className="h-4 w-4 text-white" />
-                    </span>
-                  </a>
-                ))}
-              </div>
-            </Group>
-          )}
-
-          {/* Linked CRM entity */}
-          {s.client_id && (
-            <Link
-              to={`/clients/${s.client_id}`}
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
-            >
-              {fr ? 'Voir le client dans le CRM' : 'View client in CRM'} <ExternalLink className="h-3.5 w-3.5" />
-            </Link>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <h4 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-text-tertiary">{title}</h4>
-      <div className="divide-y divide-border-subtle/60 rounded-xl border border-border-subtle">{children}</div>
-    </div>
-  );
-}
-
-/** Client identity block shown at the top of the detail, address-card style. */
-function ClientHeader({ submission: s }: { submission: FormSubmission }) {
-  const line1 = [s.street_address, s.unit].filter(Boolean).join(', ');
-  const line2 = [s.city, [s.region, s.postal_code].filter(Boolean).join(' ').trim()]
-    .filter(Boolean)
-    .join(', ');
-  const addressLines = [line1, line2, s.country].filter(Boolean);
-
-  return (
-    <div className="space-y-3">
-      <div>
-        <h3 className="text-lg font-bold text-text-primary">{s.first_name} {s.last_name}</h3>
-        {s.company && <p className="text-sm text-text-tertiary">{s.company}</p>}
-      </div>
-
-      {addressLines.length > 0 && (
-        <div className="text-sm leading-relaxed text-text-secondary">
-          {addressLines.map((l, i) => <div key={i}>{l}</div>)}
-        </div>
-      )}
-
-      {s.phone && (
-        <>
-          <a href={`tel:${s.phone}`} className="md:hidden block text-sm text-text-secondary hover:text-primary">{s.phone}</a>
-          <span className="hidden md:block text-sm text-text-secondary">{s.phone}</span>
-        </>
-      )}
-      {s.email && (
-        <a href={`mailto:${s.email}`} className="block break-words text-sm text-primary hover:underline">{s.email}</a>
-      )}
-    </div>
-  );
-}
-
-/** Renders one custom field answer; choice fields list every option with selection marks. */
-function CustomAnswer({ field, value, fr }: { field: FormField; value: unknown; fr: boolean }) {
-  const opts = field.options || [];
-  const isChoiceGroup =
-    field.type === 'multiselect' || (field.type === 'checkbox' && opts.length > 0) || (field.type === 'dropdown' && opts.length > 0);
-
-  // Choice field with a list of options → show all options, mark the selected ones.
-  if (isChoiceGroup) {
-    const isMulti = field.type === 'multiselect' || field.type === 'checkbox';
-    const selected = Array.isArray(value)
-      ? (value as unknown[]).map(String)
-      : value !== null && value !== undefined && value !== ''
-      ? [String(value)]
-      : [];
-    return (
-      <div className="px-3 py-2.5">
-        <p className="text-sm text-text-tertiary">{field.label}</p>
-        <div className="mt-1.5 space-y-1.5">
-          {opts.map((o) => {
-            const on = selected.includes(o);
-            const OnIcon = isMulti ? CheckSquare : CheckCircle2;
-            const OffIcon = isMulti ? Square : Circle;
-            return (
-              <div key={o} className="flex items-center gap-2 text-sm">
-                {on ? <OnIcon className="h-4 w-4 shrink-0 text-primary" /> : <OffIcon className="h-4 w-4 shrink-0 text-text-muted/40" />}
-                <span className={on ? 'font-medium text-text-primary' : 'text-text-tertiary'}>{o}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  // Single yes/no checkbox (no options) → show as checked/unchecked.
-  if (field.type === 'checkbox') {
-    const on = value === true;
-    return (
-      <div className="flex items-center gap-2 px-3 py-2.5 text-sm">
-        {on ? <CheckSquare className="h-4 w-4 shrink-0 text-primary" /> : <Square className="h-4 w-4 shrink-0 text-text-muted/40" />}
-        <span className={on ? 'font-medium text-text-primary' : 'text-text-tertiary'}>{field.label}</span>
-        <span className="ml-auto text-xs text-text-muted">{on ? (fr ? 'Oui' : 'Yes') : (fr ? 'Non' : 'No')}</span>
-      </div>
-    );
-  }
-
-  // Text / number / paragraph → label + value.
-  const text = value === null || value === undefined ? '' : String(value);
-  return (
-    <div className="px-3 py-2.5">
-      <p className="text-sm text-text-tertiary">{field.label}</p>
-      <p className="mt-0.5 whitespace-pre-wrap text-sm font-medium text-text-primary">
-        {text || <span className="font-normal text-text-muted">—</span>}
-      </p>
     </div>
   );
 }

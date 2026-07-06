@@ -324,6 +324,17 @@ export const upsertRequestFormSchema = z.object({
   notify_in_app: z.boolean().optional(),
 });
 
+// PATCH /request-forms/submissions/:id — assessment scheduling + archive.
+// Every field optional; only provided keys are written.
+export const updateFormSubmissionSchema = z.object({
+  assessment_start_at: z.string().datetime({ offset: true }).nullable().optional(),
+  assessment_end_at: z.string().datetime({ offset: true }).nullable().optional(),
+  assessment_team_id: z.string().uuid().nullable().optional(),
+  assessment_user_id: z.string().uuid().nullable().optional(),
+  assessment_instructions: z.string().trim().max(5000).nullable().optional(),
+  archived: z.boolean().optional(),
+});
+
 export const publicFormSubmissionSchema = z.object({
   first_name: z.string().trim().min(1, 'First name is required.'),
   last_name: z.string().trim().min(1, 'Last name is required.'),

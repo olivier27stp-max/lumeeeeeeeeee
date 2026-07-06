@@ -2,7 +2,7 @@ import express, { Router } from 'express';
 import { randomBytes } from 'crypto';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
-import { validate, upsertRequestFormSchema, publicFormSubmissionSchema } from '../lib/validation';
+import { validate, upsertRequestFormSchema, publicFormSubmissionSchema, updateFormSubmissionSchema } from '../lib/validation';
 import { ensureClientForLead } from '../lib/leadClientSync';
 import { upsertLeadPinForClient } from '../lib/fieldPinSync';
 import { eventBus } from '../lib/eventBus';
@@ -114,8 +114,41 @@ router.post('/request-forms/regenerate-key', async (req, res) => {
   }
 });
 
+/** True when the error is "column does not exist" — migration
+ *  20260718000000_request_assessment_archive not applied yet. */
+const isMissingColumn = (err: any) => err?.code === '42703';
+
 // ── GET /request-forms/submissions — list submissions ─────────────
 router.get('/request-forms/submissions', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const admin = getServiceClient();
+    const list = (withDeletedFilter: boolean) => {
+      let q = admin
+        .from('form_submissions')
+        .select('*')
+        .eq('org_id', auth.orgId)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (withDeletedFilter) q = q.is('deleted_at', null);
+      return q;
+    };
+
+    // deleted_at ships with migration 20260718000000 — keep listing working
+    // on a DB that hasn't applied it yet.
+    let { data, error } = await list(true);
+    if (error && isMissingColumn(error)) ({ data, error } = await list(false));
+    if (error) throw error;
+    return res.json({ submissions: data || [] });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Unable to fetch submissions.', '[request-forms]');
+  }
+});
+
+// ── GET /request-forms/submissions/:id — single submission ────────
+router.get('/request-forms/submissions/:id', async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
@@ -125,13 +158,87 @@ router.get('/request-forms/submissions', async (req, res) => {
       .from('form_submissions')
       .select('*')
       .eq('org_id', auth.orgId)
-      .order('created_at', { ascending: false })
-      .limit(100);
+      .eq('id', String(req.params.id))
+      .maybeSingle();
 
     if (error) throw error;
-    return res.json({ submissions: data || [] });
+    if (!data || data.deleted_at) return res.status(404).json({ error: 'Submission not found.' });
+    return res.json({ submission: data });
   } catch (err: any) {
-    return sendSafeError(res, err, 'Unable to fetch submissions.', '[request-forms]');
+    return sendSafeError(res, err, 'Unable to fetch submission.', '[request-forms]');
+  }
+});
+
+// ── PATCH /request-forms/submissions/:id — assessment + archive ───
+router.patch('/request-forms/submissions/:id', validate(updateFormSubmissionSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const patch: Record<string, unknown> = {};
+    for (const key of [
+      'assessment_start_at',
+      'assessment_end_at',
+      'assessment_team_id',
+      'assessment_user_id',
+      'assessment_instructions',
+    ] as const) {
+      if (req.body[key] !== undefined) patch[key] = req.body[key];
+    }
+    if (req.body.archived !== undefined) {
+      patch.archived_at = req.body.archived ? new Date().toISOString() : null;
+    }
+    if (Object.keys(patch).length === 0) {
+      return res.status(400).json({ error: 'Nothing to update.' });
+    }
+
+    const admin = getServiceClient();
+    const { data, error } = await admin
+      .from('form_submissions')
+      .update(patch)
+      .eq('org_id', auth.orgId)
+      .eq('id', String(req.params.id))
+      .select('*')
+      .maybeSingle();
+
+    if (error && isMissingColumn(error)) {
+      return res.status(409).json({
+        error: 'Database migration pending: apply 20260718000000_request_assessment_archive.sql first.',
+      });
+    }
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Submission not found.' });
+    return res.json({ submission: data });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Unable to update submission.', '[request-forms]');
+  }
+});
+
+// ── DELETE /request-forms/submissions/:id — soft delete ───────────
+router.delete('/request-forms/submissions/:id', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const admin = getServiceClient();
+    const { data, error } = await admin
+      .from('form_submissions')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('org_id', auth.orgId)
+      .eq('id', String(req.params.id))
+      .select('id')
+      .maybeSingle();
+
+    if (error && isMissingColumn(error)) {
+      return res.status(409).json({
+        error: 'Database migration pending: apply 20260718000000_request_assessment_archive.sql first.',
+      });
+    }
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Submission not found.' });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Unable to delete submission.', '[request-forms]');
   }
 });
 

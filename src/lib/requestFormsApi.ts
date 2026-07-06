@@ -59,3 +59,41 @@ export async function fetchFormSubmissions(): Promise<FormSubmission[]> {
   const { submissions } = await res.json();
   return submissions || [];
 }
+
+export async function fetchFormSubmission(id: string): Promise<FormSubmission> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/request-forms/submissions/${id}`, { headers });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to fetch submission');
+  const { submission } = await res.json();
+  return submission;
+}
+
+export interface FormSubmissionPatch {
+  assessment_start_at?: string | null;
+  assessment_end_at?: string | null;
+  assessment_team_id?: string | null;
+  assessment_user_id?: string | null;
+  assessment_instructions?: string | null;
+  archived?: boolean;
+}
+
+export async function updateFormSubmission(id: string, patch: FormSubmissionPatch): Promise<FormSubmission> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/request-forms/submissions/${id}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to update submission');
+  const { submission } = await res.json();
+  return submission;
+}
+
+export async function deleteFormSubmission(id: string): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/request-forms/submissions/${id}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete submission');
+}

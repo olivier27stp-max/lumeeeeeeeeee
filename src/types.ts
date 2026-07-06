@@ -257,6 +257,14 @@ export interface FormSubmission {
   client_id: string | null;
   ip_address: string | null;
   created_at: string;
+  /** On-site assessment scheduling + archive — migration 20260718000000. */
+  assessment_start_at?: string | null;
+  assessment_end_at?: string | null;
+  assessment_team_id?: string | null;
+  assessment_user_id?: string | null;
+  assessment_instructions?: string | null;
+  archived_at?: string | null;
+  deleted_at?: string | null;
 }
 
 // ── Quote Content Presets ──────────────────────────────────

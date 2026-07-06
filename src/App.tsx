@@ -123,6 +123,7 @@ import ClientPortal from './pages/ClientPortal';
 import PublicPayment from './pages/PublicPayment';
 import PublicRequestForm from './pages/PublicRequestForm';
 import Requests from './pages/Requests';
+import RequestDetails from './pages/RequestDetails';
 import Leaderboard from './pages/Leaderboard';
 import Commissions from './pages/Commissions';
 import RepProfile from './pages/RepProfile';
@@ -1188,6 +1189,7 @@ function AuthenticatedApp({
                     <Route path="/clients" element={<Gated permission="clients.read"><div className="px-8 py-6"><Clients /></div></Gated>} />
                     <Route path="/clients/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><ClientDetails /></div></Gated>} />
                     <Route path="/requests" element={<Gated permission="clients.read"><div className="px-8 py-6"><Requests /></div></Gated>} />
+                    <Route path="/requests/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><RequestDetails /></div></Gated>} />
                     <Route path="/jobs" element={<Gated permission="jobs.read"><div className="px-8 py-6"><Jobs /></div></Gated>} />
                     <Route path="/jobs/:id" element={<Gated permission="jobs.read"><PageWrapper><JobDetails /></PageWrapper></Gated>} />
                     <Route path="/calendar" element={<Gated permission="calendar.read"><Schedule /></Gated>} />
