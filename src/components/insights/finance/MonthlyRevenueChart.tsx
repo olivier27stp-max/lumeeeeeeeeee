@@ -34,16 +34,16 @@ export default function MonthlyRevenueChart({
   const ti = t.insights as any;
 
   return (
-    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-5 flex flex-col h-full">
+    <div className="rounded-xl border border-border bg-surface-card p-5 flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-1">
         <div>
-          <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{ti.monthlyRevenue}</h3>
-          <p className="text-xs text-zinc-400 dark:text-zinc-500">{ti.last6Months}</p>
+          <h3 className="text-[15px] font-semibold text-text-primary">{ti.monthlyRevenue}</h3>
+          <p className="text-xs text-text-tertiary">{ti.last6Months}</p>
         </div>
         <button
           onClick={onViewReport}
-          className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
+          className="rounded-lg border border-border bg-surface-card px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-secondary transition-colors"
         >
           {ti.viewReport}
         </button>

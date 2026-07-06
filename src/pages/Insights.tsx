@@ -522,11 +522,13 @@ export default function Insights() {
               {/* ── Revenu ── */}
               <section>
                 <h2 className="text-[19px] font-bold text-text-primary tracking-tight mb-3">{fr ? 'Revenu' : 'Revenue'}</h2>
-                <MonthlyRevenueChart
-                  data={financeRevenueChartData}
-                  trendPct={cmp('revenue').pct ?? null}
-                  onViewReport={() => updateParam('tab', 'revenue')}
-                />
+                <div className="h-[380px]">
+                  <MonthlyRevenueChart
+                    data={financeRevenueChartData}
+                    trendPct={cmp('revenue').pct ?? null}
+                    onViewReport={() => updateParam('tab', 'revenue')}
+                  />
+                </div>
               </section>
 
               {/* ── Conversion ── */}
