@@ -57,10 +57,11 @@ const TEAM_COLORS = ['#1961ED', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC
 function toIsoDate(date: Date) { return date.toISOString().slice(0, 10); }
 
 function getDefaultRange() {
+  // Last 90 days — a populated default (current-month often has little data yet).
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { from: toIsoDate(monthStart), to: toIsoDate(monthEnd) };
+  const start = new Date(now);
+  start.setDate(start.getDate() - 90);
+  return { from: toIsoDate(start), to: toIsoDate(now) };
 }
 
 function isIsoDate(value: string | null) { return !!value && /^\d{4}-\d{2}-\d{2}$/.test(value); }
@@ -515,8 +516,8 @@ export default function Insights() {
                     { label: fr ? 'Nouvelles demandes' : 'New requests', value: String(overview?.requests_count || 0), pct: cmp('requests').pct },
                     { label: fr ? 'Devis convertis' : 'Converted quotes', value: String(overview?.converted_quotes_count || 0), pct: cmp('converted_quotes').pct },
                     { label: fr ? 'Jobs ponctuels' : 'One-off jobs', value: String(overview?.new_oneoff_jobs_count || 0), pct: cmp('new_oneoff_jobs').pct },
-                    { label: fr ? 'Revenu' : 'Revenue', value: fmtMoney(overview?.revenue_cents || 0), pct: cmp('revenue').pct },
-                    { label: fr ? 'Valeur facturée' : 'Invoiced value', value: fmtMoney(overview?.invoiced_value_cents || 0), pct: cmp('invoiced_value').pct },
+                    { label: fr ? 'Revenu' : 'Revenue', value: fmtMoney(overview?.revenue_cents || 0, fr ? 'fr-CA' : 'en-CA'), pct: cmp('revenue').pct },
+                    { label: fr ? 'Valeur facturée' : 'Invoiced value', value: fmtMoney(overview?.invoiced_value_cents || 0, fr ? 'fr-CA' : 'en-CA'), pct: cmp('invoiced_value').pct },
                   ]}
                 />
               </section>
