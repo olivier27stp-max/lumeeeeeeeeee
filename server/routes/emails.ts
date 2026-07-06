@@ -137,6 +137,20 @@ ${(company.tax_registration_lines || []).length > 0 ? `<p style="margin:6px 0 0;
 </html>`;
 }
 
+// Branded sender: keep the platform's VERIFIED sending address (deliverability),
+// but show the company's name and route replies to the company's own inbox. So a
+// client sees "From: {Company}" and replies land straight in the business's email
+// — the "connect your email" experience with zero per-company SMTP/DNS setup.
+// (Each org's email lives in company_settings; no per-tenant config needed.)
+function senderFor(company: CompanyInfo): { from: string; replyTo?: string } {
+  const baseAddr = emailFrom.match(/<([^>]+)>/)?.[1] || process.env.SMTP_USER || 'noreply@lume.crm';
+  const name = company.company_name || 'Lume';
+  return {
+    from: `${name} <${baseAddr}>`,
+    replyTo: company.company_email || undefined,
+  };
+}
+
 // ── POST /api/emails/send-invoice ──
 
 router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req, res) => {
@@ -249,7 +263,7 @@ ${viewUrl ? `
 
     ensureMailer();
     const emailResult = await sendEmail({
-      from: emailFrom,
+      ...senderFor(company),
       to: clientData.email,
       subject: emailSubject,
       html: buildEmailLayout(company, bodyHtml),
@@ -384,7 +398,7 @@ ${viewUrl ? `
 
     ensureMailer();
     const emailResult = await sendEmail({
-      from: emailFrom,
+      ...senderFor(company),
       to: clientData.email,
       subject: `Quote ${quote.invoice_number || ''} — ${amountStr}`,
       html: buildEmailLayout(company, bodyHtml),
@@ -463,7 +477,7 @@ ${viewUrl ? `<div style="text-align:center;margin-bottom:16px;"><a href="${viewU
 
     ensureMailer();
     const emailResult = await sendEmail({
-      from: emailFrom,
+      ...senderFor(company),
       to: clientData.email,
       subject: `Soumission ${quote.quote_number || ''} — ${amountStr}`,
       html: buildEmailLayout(company, bodyHtml),
@@ -501,7 +515,7 @@ router.post('/emails/send-custom', validate(sendCustomEmailSchema), async (req, 
 
     ensureMailer();
     const emailResult = await sendEmail({
-      from: emailFrom,
+      ...senderFor(company),
       to,
       subject: sanitizeHtml(subject),
       html: buildEmailLayout(company, sanitizeHtml(html)),
