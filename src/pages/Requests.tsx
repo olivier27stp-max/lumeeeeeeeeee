@@ -165,12 +165,12 @@ export default function Requests() {
               >
                 {/* Headbar — name · photo count · date */}
                 <div className="flex items-center justify-between gap-3 bg-[#d8d0c2] px-4 py-2.5">
-                  <p className="min-w-0 truncate text-sm font-semibold text-black">
+                  <p className="min-w-0 truncate text-sm font-semibold text-[#000]">
                     {s.first_name} {s.last_name}
                   </p>
                   <div className="flex shrink-0 items-center gap-2">
                     {photos.length > 0 && (
-                      <span className="flex items-center gap-1 rounded-full bg-black/10 px-2 py-0.5 text-[11px] font-medium text-black">
+                      <span className="flex items-center gap-1 rounded-full bg-black/10 px-2 py-0.5 text-[11px] font-medium text-[#000]">
                         <ImageIcon className="h-3 w-3" /> {photos.length}
                       </span>
                     )}
