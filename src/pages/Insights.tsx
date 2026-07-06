@@ -132,6 +132,39 @@ function MetricCard({ label, value, prevValue, changePct, format = 'count', icon
   );
 }
 
+/* ── Jobber-style delta pill (monochrome; red only for a drop) ── */
+function DeltaPill({ pct }: { pct?: number | null }) {
+  if (pct === undefined || pct === null || Number.isNaN(pct)) {
+    return <span className="text-[10.5px] font-bold text-text-tertiary bg-surface-secondary rounded-full px-2 py-0.5">0%</span>;
+  }
+  const down = pct < 0;
+  return (
+    <span className={cn('text-[10.5px] font-bold rounded-full px-2 py-0.5 bg-surface-secondary whitespace-nowrap', down ? 'text-danger' : 'text-text-secondary')}>
+      {down ? '↓' : '↑'} {Math.abs(Math.round(pct))}%
+    </span>
+  );
+}
+
+/* ── Jobber-style Overview strip: one card split into columns ── */
+function OverviewStrip({ items }: { items: Array<{ label: string; value: string; pct?: number | null }> }) {
+  return (
+    <div className="bg-surface-card border border-border rounded-xl grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 divide-x divide-y xl:divide-y-0 divide-border-light overflow-hidden">
+      {items.map((k) => (
+        <div key={k.label} className="p-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12px] font-semibold text-text-secondary leading-tight">{k.label}</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 text-text-tertiary shrink-0"><path d="M7 17L17 7M17 7H8M17 7v9" /></svg>
+          </div>
+          <div className="flex items-center gap-2 mt-3">
+            <span className="text-[24px] font-extrabold text-text-primary tabular-nums tracking-tight leading-none">{k.value}</span>
+            <DeltaPill pct={k.pct} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ── Main ─────────────────────────────────────────────────── */
 export default function Insights() {
   const { t, language } = useTranslation();
@@ -402,17 +435,22 @@ export default function Insights() {
               ═══════════════════════════════════════════════════ */}
           {tab === 'reports' && (
             <div className="space-y-8">
-              {/* ── Vue d'ensemble ── */}
+              {/* ── Vue d'ensemble (bande KPI style Jobber) ── */}
               <section>
-                <h2 className="text-[19px] font-bold text-text-primary tracking-tight mb-3">{fr ? "Vue d'ensemble" : 'Overview'}</h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-                  <MetricCard label={fr ? 'Nouveaux leads' : 'New leads'} value={overview?.new_leads_count || 0} changePct={cmp('new_leads').pct} icon={Users} />
-                  <MetricCard label={fr ? 'Nouvelles demandes' : 'New requests'} value={overview?.requests_count || 0} icon={Calendar} />
-                  <MetricCard label={fr ? 'Devis convertis' : 'Converted quotes'} value={overview?.converted_quotes_count || 0} icon={Target} />
-                  <MetricCard label={fr ? 'Jobs ponctuels' : 'One-off jobs'} value={overview?.new_oneoff_jobs_count || 0} icon={Zap} />
-                  <MetricCard label={fr ? 'Revenu' : 'Revenue'} value={overview?.revenue_cents || 0} format="money" changePct={cmp('revenue').pct ?? null} icon={DollarSign} />
-                  <MetricCard label={fr ? 'Valeur facturée' : 'Invoiced value'} value={overview?.invoiced_value_cents || 0} format="money" icon={BarChart3} />
+                <div className="flex items-center gap-3 mb-3 flex-wrap">
+                  <h2 className="text-[19px] font-bold text-text-primary tracking-tight">{fr ? "Vue d'ensemble" : 'Overview'}</h2>
+                  <span className="text-[12.5px] font-semibold text-text-tertiary">{formatDateRange(from, to, fr ? 'fr-CA' : 'en-CA')}</span>
                 </div>
+                <OverviewStrip
+                  items={[
+                    { label: fr ? 'Nouveaux leads' : 'New leads', value: String(overview?.new_leads_count || 0), pct: cmp('new_leads').pct },
+                    { label: fr ? 'Nouvelles demandes' : 'New requests', value: String(overview?.requests_count || 0), pct: cmp('requests').pct },
+                    { label: fr ? 'Devis convertis' : 'Converted quotes', value: String(overview?.converted_quotes_count || 0), pct: cmp('converted_quotes').pct },
+                    { label: fr ? 'Jobs ponctuels' : 'One-off jobs', value: String(overview?.new_oneoff_jobs_count || 0), pct: cmp('new_oneoff_jobs').pct },
+                    { label: fr ? 'Revenu' : 'Revenue', value: fmtMoney(overview?.revenue_cents || 0), pct: cmp('revenue').pct },
+                    { label: fr ? 'Valeur facturée' : 'Invoiced value', value: fmtMoney(overview?.invoiced_value_cents || 0), pct: cmp('invoiced_value').pct },
+                  ]}
+                />
               </section>
 
               {/* ── Revenu ── */}
