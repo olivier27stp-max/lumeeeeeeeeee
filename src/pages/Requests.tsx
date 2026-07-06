@@ -77,7 +77,7 @@ export default function Requests() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[28px] font-bold text-text-primary leading-tight">{fr ? 'Demandes' : 'Requests'}</h1>
+          <h1 className="text-[28px] font-bold text-text-primary leading-tight">{fr ? 'Demandes' : 'Requests'}{!loading && <span className="ml-2 text-[15px] font-normal text-text-tertiary tabular-nums">{submissions.length}</span>}</h1>
         </div>
         <button
           onClick={load}

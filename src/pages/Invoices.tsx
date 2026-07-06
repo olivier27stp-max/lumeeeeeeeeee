@@ -459,6 +459,7 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
         {!embedded && (
           <h1 className="text-[28px] font-bold text-text-primary leading-tight">
             {fr ? 'Factures' : 'Invoices'}
+            {!invoicesQuery.isLoading && <span className="ml-2 text-[15px] font-normal text-text-tertiary tabular-nums">{total}</span>}
           </h1>
         )}
         <button

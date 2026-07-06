@@ -243,7 +243,7 @@ export default function Quotes() {
     <>
       {/* ── PAGE HEADER ── */}
       <div className="flex items-center justify-between">
-        <h1 className="text-[28px] font-bold text-text-primary leading-tight">{fr ? 'Devis' : 'Quotes'}</h1>
+        <h1 className="text-[28px] font-bold text-text-primary leading-tight">{fr ? 'Devis' : 'Quotes'}{!isLoading && <span className="ml-2 text-[15px] font-normal text-text-tertiary tabular-nums">{total}</span>}</h1>
         <div className="flex items-center gap-2">
           <button onClick={() => nav('/quotes/presets')}
             className="inline-flex items-center gap-2 h-10 px-4 bg-surface-card border border-outline text-text-secondary rounded-md text-[13px] font-medium hover:bg-surface-secondary transition-all">
