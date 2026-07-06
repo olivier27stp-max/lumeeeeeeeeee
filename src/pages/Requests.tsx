@@ -161,84 +161,85 @@ export default function Requests() {
               <div
                 key={s.id}
                 onClick={() => setSelected(s)}
-                className="group cursor-pointer rounded-xl border border-border-subtle bg-surface p-4 transition-colors hover:border-primary/40 hover:bg-surface-elevated"
+                className="group cursor-pointer overflow-hidden rounded-xl border border-border-subtle bg-surface transition-colors hover:border-primary/40 hover:bg-surface-elevated"
               >
-                {/* Top row */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-text-primary">
-                      {s.first_name} {s.last_name}
-                    </p>
-                    {s.company && (
-                      <p className="mt-0.5 flex items-center gap-1 text-xs text-text-tertiary">
-                        <Building2 className="h-3 w-3" /> {s.company}
-                      </p>
-                    )}
-                  </div>
+                {/* Headbar — name · photo count · date */}
+                <div className="flex items-center justify-between gap-3 bg-[#d8d0c2] px-4 py-2.5">
+                  <p className="min-w-0 truncate text-sm font-semibold text-black">
+                    {s.first_name} {s.last_name}
+                  </p>
                   <div className="flex shrink-0 items-center gap-2">
                     {photos.length > 0 && (
-                      <span className="flex items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-text-tertiary">
+                      <span className="flex items-center gap-1 rounded-full bg-black/10 px-2 py-0.5 text-[11px] font-medium text-black">
                         <ImageIcon className="h-3 w-3" /> {photos.length}
                       </span>
                     )}
-                    <span className="flex items-center gap-1 text-[11px] text-text-muted">
+                    <span className="flex items-center gap-1 text-[11px] text-black/70">
                       <Clock className="h-3 w-3" /> {fmtDate(s.created_at)}
                     </span>
-                    <ChevronRight className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                    <ChevronRight className="h-4 w-4 text-black/50 transition-transform group-hover:translate-x-0.5" />
                   </div>
                 </div>
 
-                {/* Contact */}
-                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-text-secondary">
-                  {s.email && (
-                    <a href={`mailto:${s.email}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 hover:text-text-primary">
-                      <Mail className="h-3.5 w-3.5 text-text-muted" /> {s.email}
-                    </a>
+                <div className="space-y-3 p-4">
+                  {s.company && (
+                    <p className="flex items-center gap-1 text-xs text-text-tertiary">
+                      <Building2 className="h-3 w-3" /> {s.company}
+                    </p>
                   )}
-                  {s.phone && (
-                    <>
-                      <a href={`tel:${s.phone}`} onClick={(e) => e.stopPropagation()} className="md:hidden flex items-center gap-1.5 hover:text-text-primary">
-                        <Phone className="h-3.5 w-3.5 text-text-muted" /> {s.phone}
-                      </a>
-                      <span className="hidden md:flex items-center gap-1.5">
-                        <Phone className="h-3.5 w-3.5 text-text-muted" /> {s.phone}
-                      </span>
-                    </>
-                  )}
-                  {addr && (
-                    <span className="flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5 text-text-muted" /> {addr}
-                    </span>
-                  )}
-                </div>
 
-                {/* Photo thumbnails preview */}
-                {photos.length > 0 && (
-                  <div className="mt-3 flex gap-2">
-                    {photos.slice(0, 4).map((url) => (
-                      <div key={url} className="h-14 w-14 overflow-hidden rounded-lg border border-border-subtle">
-                        <img src={url} alt="" className="h-full w-full object-cover" />
-                      </div>
-                    ))}
-                    {photos.length > 4 && (
-                      <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-border-subtle bg-surface text-xs font-medium text-text-tertiary">
-                        +{photos.length - 4}
-                      </div>
+                  {/* Contact */}
+                  <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-text-secondary">
+                    {s.email && (
+                      <a href={`mailto:${s.email}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 hover:text-text-primary">
+                        <Mail className="h-3.5 w-3.5 text-text-muted" /> {s.email}
+                      </a>
+                    )}
+                    {s.phone && (
+                      <>
+                        <a href={`tel:${s.phone}`} onClick={(e) => e.stopPropagation()} className="md:hidden flex items-center gap-1.5 hover:text-text-primary">
+                          <Phone className="h-3.5 w-3.5 text-text-muted" /> {s.phone}
+                        </a>
+                        <span className="hidden md:flex items-center gap-1.5">
+                          <Phone className="h-3.5 w-3.5 text-text-muted" /> {s.phone}
+                        </span>
+                      </>
+                    )}
+                    {addr && (
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-text-muted" /> {addr}
+                      </span>
                     )}
                   </div>
-                )}
 
-                {/* Custom responses (labeled) */}
-                {customEntries.length > 0 && (
-                  <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    {customEntries.map(([k, v]) => (
-                      <div key={k} className="rounded-lg bg-surface px-2.5 py-1.5">
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{labelFor(k)}</p>
-                        <p className="text-xs text-text-primary">{fmtValue(v)}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                  {/* Photo thumbnails preview */}
+                  {photos.length > 0 && (
+                    <div className="flex gap-2">
+                      {photos.slice(0, 4).map((url) => (
+                        <div key={url} className="h-14 w-14 overflow-hidden rounded-lg border border-border-subtle">
+                          <img src={url} alt="" className="h-full w-full object-cover" />
+                        </div>
+                      ))}
+                      {photos.length > 4 && (
+                        <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-border-subtle bg-surface text-xs font-medium text-text-tertiary">
+                          +{photos.length - 4}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Custom responses (labeled) */}
+                  {customEntries.length > 0 && (
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                      {customEntries.map(([k, v]) => (
+                        <div key={k} className="rounded-lg bg-surface px-2.5 py-1.5">
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{labelFor(k)}</p>
+                          <p className="text-xs text-text-primary">{fmtValue(v)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
