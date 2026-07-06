@@ -3148,7 +3148,7 @@ const en = {
     partial: 'Partial',
     partialPaid: 'Partially Paid',
     paid: 'Paid',
-    void: 'Void',
+    void: 'Voided',
     overdue: 'Overdue',
     past_due: 'Past Due',
     cancelled: 'Cancelled',
