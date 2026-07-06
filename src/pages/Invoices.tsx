@@ -668,12 +668,12 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
                     </div>
                     {/* Total */}
                     <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
-                      <span className="text-[14px] font-semibold text-text-primary tabular-nums">{formatMoneyFromCents(row.total_cents)}</span>
+                      <span className="text-[14px] font-bold text-text-primary tabular-nums">{formatMoneyFromCents(row.total_cents)}</span>
                     </div>
                     {/* Balance */}
                     <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                       <span className={cn(
-                        'text-[14px] font-semibold tabular-nums',
+                        'text-[14px] font-bold tabular-nums',
                         row.balance_cents === 0 ? 'text-text-muted' : isPastDue ? 'text-[#dc2626]' : 'text-text-primary'
                       )}>
                         {row.balance_cents === 0 ? formatMoneyFromCents(0) : formatMoneyFromCents(row.balance_cents)}

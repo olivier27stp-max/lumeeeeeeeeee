@@ -532,7 +532,7 @@ export default function Payments({
                     </div>
                     {/* Amount */}
                     <div className={`py-3 px-4 flex items-center justify-end ${rowCls}`} onClick={click}>
-                      <span className="text-[14px] font-semibold text-text-primary tabular-nums">{formatMoneyFromCents(r.amount_cents, r.currency)}</span>
+                      <span className="text-[14px] font-bold text-text-primary tabular-nums">{formatMoneyFromCents(r.amount_cents, r.currency)}</span>
                     </div>
                     {/* Payment detail icon */}
                     <div className="py-3 flex items-center justify-center border-b border-outline/30" onClick={e => e.stopPropagation()}>
