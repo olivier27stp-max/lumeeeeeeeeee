@@ -180,7 +180,7 @@ function LeadFunnelCard({ title, hint, stages }: { title: string; hint: string; 
         {stages.map((s, i) => (
           <div key={i} className="flex-1 flex flex-col items-center justify-end h-full gap-2">
             <div
-              className="w-4/5 max-w-[90px] bg-primary rounded-t-md flex items-start justify-center text-primary-foreground font-extrabold text-[14px] pt-1.5 tabular-nums"
+              className="w-4/5 max-w-[90px] bg-[var(--color-chart-primary)] rounded-t-md flex items-start justify-center text-white font-extrabold text-[14px] pt-1.5 tabular-nums"
               style={{ height: `${Math.max(10, (s.value / max) * 100)}%` }}
             >
               {s.value}

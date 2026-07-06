@@ -84,7 +84,7 @@ export default function MonthlyRevenueChart({
             />
             <Bar
               dataKey="value"
-              fill={dark ? '#e4e4e7' : '#171717'}
+              fill="var(--color-chart-primary)"
               radius={[6, 6, 0, 0]}
               maxBarSize={42}
             />

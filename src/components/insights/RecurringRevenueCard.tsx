@@ -61,7 +61,7 @@ export default function RecurringRevenueCard() {
               <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 100).toFixed(0)}`} />
               <Tooltip formatter={(v: number) => fmtMoney(v)} />
-              <Line type="monotone" dataKey="value" stroke="var(--color-primary)" strokeWidth={2.5} dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="value" stroke="var(--color-chart-primary)" strokeWidth={2.5} dot={{ r: 4 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
