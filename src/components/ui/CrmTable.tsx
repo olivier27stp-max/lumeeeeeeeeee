@@ -87,7 +87,7 @@ export function CrmPageHeader({ title, onAdd, addLabel }: { title: string; onAdd
       <h1 className="text-[28px] font-bold text-text-primary leading-tight">{title}</h1>
       {onAdd && (
         <button onClick={onAdd}
-          className="inline-flex items-center gap-2 h-10 px-5 bg-[#d8d0c2] text-black hover:bg-[#cabfad] dark:bg-primary dark:text-white dark:hover:bg-primary-hover rounded-md text-[14px] font-medium active:scale-[0.98] transition-all">
+          className="inline-flex items-center gap-2 h-10 px-5 bg-[#d8d0c2] text-[#000] hover:bg-[#cabfad] rounded-md text-[14px] font-medium active:scale-[0.98] transition-all">
           <CirclePlus size={16} strokeWidth={1.5} />
           {addLabel || 'Add New'}
         </button>

@@ -270,7 +270,7 @@ export default function Quotes() {
             Mesure
           </button>
           <button onClick={handleNewQuote}
-            className="inline-flex items-center gap-2 h-10 px-5 bg-[#d8d0c2] text-black hover:bg-[#cabfad] dark:bg-primary dark:text-white dark:hover:bg-primary-hover rounded-md text-[14px] font-medium active:scale-[0.98] transition-all">
+            className="inline-flex items-center gap-2 h-10 px-5 bg-[#d8d0c2] text-[#000] hover:bg-[#cabfad] rounded-md text-[14px] font-medium active:scale-[0.98] transition-all">
             {fr ? 'Nouveau devis' : 'New Quote'}
           </button>
         </div>
