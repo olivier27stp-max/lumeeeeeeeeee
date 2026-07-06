@@ -49,6 +49,7 @@ import QuoteConversionCard from '../components/insights/QuoteConversionCard';
 import JobsPerWeekdayCard from '../components/insights/JobsPerWeekdayCard';
 import RecurringRevenueCard from '../components/insights/RecurringRevenueCard';
 import RecurringVsOneOffCard from '../components/insights/RecurringVsOneOffCard';
+import RevenueYearCompareCard from '../components/insights/RevenueYearCompareCard';
 import TopServicesByCountCard from '../components/insights/TopServicesByCountCard';
 
 const TEAM_COLORS = ['#1961ED', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
@@ -523,13 +524,7 @@ export default function Insights() {
               {/* ── Revenu ── */}
               <section>
                 <h2 className="text-[19px] font-bold text-text-primary tracking-tight mb-3">{fr ? 'Revenu' : 'Revenue'}</h2>
-                <div className="h-[380px]">
-                  <MonthlyRevenueChart
-                    data={financeRevenueChartData}
-                    trendPct={cmp('revenue').pct ?? null}
-                    onViewReport={() => updateParam('tab', 'revenue')}
-                  />
-                </div>
+                <RevenueYearCompareCard />
               </section>
 
               {/* ── Conversion ── */}
@@ -561,7 +556,6 @@ export default function Insights() {
                   <AverageJobValueCard />
                   <TopServicesByCountCard />
                   <JobsPerWeekdayCard />
-                  <RecurringRevenueCard />
                   <div className="xl:col-span-2">
                     <TopTeamCard
                       title={fr ? 'Meilleures équipes' : 'Top teams'}
