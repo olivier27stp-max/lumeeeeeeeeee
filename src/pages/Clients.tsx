@@ -630,7 +630,7 @@ export default function Clients() {
         <h1 className="text-[28px] font-bold text-[var(--color-text-primary)] leading-tight">Clients{!loading && <span className="ml-2 text-[15px] font-normal text-[var(--color-text-tertiary)] tabular-nums">{total}</span>}</h1>
         <button
           onClick={() => { setForm(EMPTY_FORM); setSaveError(null); setIsCreateOpen(true); }}
-          className="inline-flex items-center gap-2 h-10 px-5 bg-primary text-white rounded-lg text-[14px] font-medium hover:bg-primary-hover active:scale-[0.98] transition-all"
+          className="inline-flex items-center gap-2 h-10 px-5 bg-gray-200 text-black hover:bg-gray-300 dark:bg-primary dark:text-white dark:hover:bg-primary-hover rounded-lg text-[14px] font-medium active:scale-[0.98] transition-all"
         >
           {fr ? 'Nouveau client' : 'New Client'}
         </button>

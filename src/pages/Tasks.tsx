@@ -475,7 +475,7 @@ export default function Tasks() {
         <h1 className="text-[28px] font-bold text-text-primary leading-tight">Tasks{!loading && <span className="ml-2 text-[15px] font-normal text-text-tertiary tabular-nums">{total}</span>}</h1>
         <button
           onClick={() => setModalOpen(true)}
-          className="inline-flex items-center gap-2 h-10 px-5 bg-primary text-white rounded-md text-[14px] font-medium hover:bg-primary-hover active:scale-[0.98] transition-all"
+          className="inline-flex items-center gap-2 h-10 px-5 bg-gray-200 text-black hover:bg-gray-300 dark:bg-primary dark:text-white dark:hover:bg-primary-hover rounded-md text-[14px] font-medium active:scale-[0.98] transition-all"
         >
           Add Task
         </button>
