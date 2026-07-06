@@ -286,9 +286,7 @@ export default function NewJobModal({
   // Assignment: choose between assigning an individual user or a team (tabs)
   const [assignMode, setAssignMode] = useState<'user' | 'team'>('team');
   const [assignedUserId, setAssignedUserId] = useState('');
-  // Job tags + "ask for a review" setup
-  const [tags, setTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState('');
+  // "Ask for a review" setup
   const [askForReview, setAskForReview] = useState(false);
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [startTime, setStartTime] = useState('09:00');
@@ -431,13 +429,11 @@ export default function NewJobModal({
         .catch(() => {});
     }
     setJobType(initialValues?.job_type || 'one_off');
-    // Assignment / tags / review (best-effort fields — may be absent on the draft)
+    // Assignment / review (best-effort fields — may be absent on the draft)
     const iv = initialValues as any;
     const initialAssignedUser = iv?.assigned_user_id || '';
     setAssignedUserId(initialAssignedUser);
     setAssignMode(initialAssignedUser && !(initialValues?.team_id) ? 'user' : 'team');
-    setTags(Array.isArray(iv?.tags) ? iv.tags : []);
-    setTagInput('');
     setAskForReview(Boolean(iv?.ask_for_review));
     setServiceYear(new Date().getFullYear());
     setServiceMonthDates({});
@@ -859,14 +855,6 @@ export default function NewJobModal({
     return null;
   }, [selectedTeamSuggestion, startTime, endTime, t]);
 
-  const addTag = (raw: string) => {
-    const value = raw.trim();
-    if (!value) return;
-    setTags((prev) => (prev.some((tag) => tag.toLowerCase() === value.toLowerCase()) ? prev : [...prev, value]));
-    setTagInput('');
-  };
-  const removeTag = (value: string) => setTags((prev) => prev.filter((tag) => tag !== value));
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setInlineError(null);
@@ -1091,11 +1079,10 @@ export default function NewJobModal({
         total: grandTotalCents / 100,
         tax_lines: taxLines,
       });
-      // Persist tags / ask-for-review / individual assignee (best-effort —
+      // Persist ask-for-review / individual assignee (best-effort —
       // no-ops gracefully if the migration hasn't been applied yet).
       if (createdJob?.id) {
         await applyJobExtras(createdJob.id, {
-          tags,
           askForReview,
           assignedUserId: assignedUserPayload,
         });
@@ -1214,25 +1201,6 @@ export default function NewJobModal({
                         </option>
                       ))}
                     </select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Étiquettes' : 'Tags'}</label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {tags.map((tag) => (
-                      <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary text-[12px] font-medium px-2.5 py-1">
-                        {tag}
-                        <button type="button" onClick={() => removeTag(tag)} className="hover:text-danger"><X size={12} /></button>
-                      </span>
-                    ))}
-                    <input
-                      value={tagInput}
-                      onChange={(e) => setTagInput(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); } }}
-                      onBlur={() => addTag(tagInput)}
-                      className="glass-input flex-1 min-w-[160px]"
-                      placeholder={language === 'fr' ? 'Ajouter une étiquette…' : 'Add a tag…'}
-                    />
                   </div>
                 </div>
                 <label className="flex items-start gap-3 cursor-pointer">

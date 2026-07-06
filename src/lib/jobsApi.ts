@@ -1033,17 +1033,16 @@ export async function getSuggestedJobNumber(): Promise<string> {
 }
 
 /**
- * Best-effort persistence for job "extras" (tags, ask-for-review flag,
+ * Best-effort persistence for job "extras" (ask-for-review flag,
  * individual user assignment). These live in columns added by migration
  * 20260710000000. If that migration hasn't been applied yet the update
  * silently no-ops so job creation/editing never breaks.
  */
 export async function applyJobExtras(
   jobId: string,
-  extras: { tags?: string[]; askForReview?: boolean; assignedUserId?: string | null }
+  extras: { askForReview?: boolean; assignedUserId?: string | null }
 ): Promise<void> {
   const patch: Record<string, unknown> = {};
-  if (extras.tags !== undefined) patch.tags = extras.tags;
   if (extras.askForReview !== undefined) patch.ask_for_review = extras.askForReview;
   if (extras.assignedUserId !== undefined) patch.assigned_user_id = extras.assignedUserId || null;
   if (Object.keys(patch).length === 0) return;
