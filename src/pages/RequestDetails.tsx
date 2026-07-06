@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Archive,
   ArchiveRestore,
@@ -15,14 +15,12 @@ import {
   FileText,
   Inbox,
   Loader2,
-  Mail,
-  MapPin,
   MoreHorizontal,
-  Phone,
   Printer,
   Square,
   Trash2,
 } from 'lucide-react';
+import EntityHubHeader from '../components/EntityHubHeader';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
@@ -206,125 +204,82 @@ export default function RequestDetails() {
         <span className="text-text-primary font-medium">{name}</span>
       </nav>
 
-      {/* ═══ HEADER ═══ */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-4">
-          <div className="icon-tile icon-tile-lg icon-tile-blue">
-            <Inbox size={18} strokeWidth={2} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-[22px] font-bold text-text-primary leading-tight">{name}</h1>
-              {s.archived_at && (
-                <span className="badge-neutral text-[11px]">{fr ? 'Archivée' : 'Archived'}</span>
+      {/* ═══ HUB HEADER ═══ */}
+      <EntityHubHeader
+        icon={<Inbox size={18} strokeWidth={2} />}
+        status={s.archived_at ? 'archived' : 'new'}
+        title={name ? (fr ? `Demande de ${name}` : `Request from ${name}`) : (fr ? 'Demande' : 'Request')}
+        client={{ id: s.client_id, name: name || s.company || '' }}
+        address={fullAddress(s) || null}
+        phone={s.phone}
+        email={s.email}
+        meta={
+          <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            {s.company && (
+              <span className="flex items-center gap-1.5">
+                <Building2 size={12} className="text-text-muted" /> {s.company}
+              </span>
+            )}
+            <span className="flex items-center gap-1.5">
+              <Clock size={12} className="text-text-muted" />
+              {fr ? 'Demande reçue le' : 'Request received'} {fmtDate(s.created_at)}
+            </span>
+          </span>
+        }
+        actions={
+          <>
+            <button onClick={scrollToAssessment} className="glass-button-primary inline-flex items-center gap-1.5">
+              <CalendarClock size={14} /> {fr ? 'Planifier une évaluation' : 'Schedule assessment'}
+            </button>
+
+            {/* More dropdown */}
+            <div className="relative">
+              <button onClick={() => setMoreOpen((p) => !p)} className="glass-button inline-flex items-center gap-1.5">
+                <MoreHorizontal size={14} /> {fr ? 'Plus' : 'More'}
+              </button>
+              {moreOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-50 w-52 rounded-lg border border-outline bg-surface shadow-lg py-1">
+                    <DropdownItem
+                      icon={<FileText size={13} />}
+                      label={fr ? 'Convertir en devis' : 'Convert to quote'}
+                      onClick={() => { setMoreOpen(false); setQuoteModalOpen(true); }}
+                    />
+                    <DropdownItem
+                      icon={<Briefcase size={13} />}
+                      label={fr ? 'Convertir en job' : 'Convert to job'}
+                      onClick={handleConvertToJob}
+                    />
+                    <div className="border-t border-border my-1" />
+                    <DropdownItem
+                      icon={s.archived_at ? <ArchiveRestore size={13} /> : <Archive size={13} />}
+                      label={isArchiving
+                        ? (fr ? 'En cours…' : 'Working…')
+                        : s.archived_at ? (fr ? 'Désarchiver' : 'Unarchive') : (fr ? 'Archiver' : 'Archive')}
+                      onClick={handleArchiveToggle}
+                      disabled={isArchiving}
+                    />
+                    <DropdownItem
+                      icon={<Printer size={13} />}
+                      label={fr ? 'Imprimer' : 'Print'}
+                      onClick={handlePrint}
+                    />
+                    <div className="border-t border-border my-1" />
+                    <DropdownItem
+                      icon={<Trash2 size={13} />}
+                      label={isDeleting ? (fr ? 'Suppression…' : 'Deleting…') : (fr ? 'Supprimer' : 'Delete')}
+                      onClick={handleDelete}
+                      disabled={isDeleting}
+                      danger
+                    />
+                  </div>
+                </>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-0.5 text-[13px] text-text-secondary">
-              <Clock size={13} className="text-text-muted" />
-              {fr ? 'Demande reçue le' : 'Request received'} {fmtDate(s.created_at)}
-            </div>
-          </div>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-2 print:hidden">
-          <button onClick={scrollToAssessment} className="glass-button-primary inline-flex items-center gap-1.5">
-            <CalendarClock size={14} /> {fr ? 'Planifier une évaluation' : 'Schedule assessment'}
-          </button>
-
-          {/* More dropdown */}
-          <div className="relative">
-            <button onClick={() => setMoreOpen((p) => !p)} className="glass-button inline-flex items-center gap-1.5">
-              <MoreHorizontal size={14} /> {fr ? 'Plus' : 'More'}
-            </button>
-            {moreOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 z-50 w-52 rounded-lg border border-outline bg-surface shadow-lg py-1">
-                  <DropdownItem
-                    icon={<FileText size={13} />}
-                    label={fr ? 'Convertir en devis' : 'Convert to quote'}
-                    onClick={() => { setMoreOpen(false); setQuoteModalOpen(true); }}
-                  />
-                  <DropdownItem
-                    icon={<Briefcase size={13} />}
-                    label={fr ? 'Convertir en job' : 'Convert to job'}
-                    onClick={handleConvertToJob}
-                  />
-                  <div className="border-t border-border my-1" />
-                  <DropdownItem
-                    icon={s.archived_at ? <ArchiveRestore size={13} /> : <Archive size={13} />}
-                    label={isArchiving
-                      ? (fr ? 'En cours…' : 'Working…')
-                      : s.archived_at ? (fr ? 'Désarchiver' : 'Unarchive') : (fr ? 'Archiver' : 'Archive')}
-                    onClick={handleArchiveToggle}
-                    disabled={isArchiving}
-                  />
-                  <DropdownItem
-                    icon={<Printer size={13} />}
-                    label={fr ? 'Imprimer' : 'Print'}
-                    onClick={handlePrint}
-                  />
-                  <div className="border-t border-border my-1" />
-                  <DropdownItem
-                    icon={<Trash2 size={13} />}
-                    label={isDeleting ? (fr ? 'Suppression…' : 'Deleting…') : (fr ? 'Supprimer' : 'Delete')}
-                    onClick={handleDelete}
-                    disabled={isDeleting}
-                    danger
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ═══ CLIENT INFO ═══ */}
-      <div className="section-card p-6">
-        <h2 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-4">
-          {fr ? 'Informations du client' : 'Client information'}
-        </h2>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <p className="text-[16px] font-bold text-text-primary">{name}</p>
-            {s.company && (
-              <p className="flex items-center gap-1.5 text-sm text-text-secondary">
-                <Building2 size={14} className="text-text-muted" /> {s.company}
-              </p>
-            )}
-            {s.email && (
-              <a href={`mailto:${s.email}`} className="flex items-center gap-1.5 text-sm text-primary hover:underline break-words">
-                <Mail size={14} className="text-text-muted shrink-0" /> {s.email}
-              </a>
-            )}
-            {s.phone && (
-              <a href={`tel:${s.phone}`} className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary">
-                <Phone size={14} className="text-text-muted" /> {s.phone}
-              </a>
-            )}
-          </div>
-          <div className="space-y-2">
-            {fullAddress(s) && (
-              <p className="flex items-start gap-1.5 text-sm text-text-secondary leading-relaxed">
-                <MapPin size={14} className="mt-0.5 shrink-0 text-text-muted" /> {fullAddress(s)}
-              </p>
-            )}
-            <p className="flex items-center gap-1.5 text-sm text-text-secondary">
-              <Clock size={14} className="text-text-muted" />
-              {fr ? 'Date de la demande :' : 'Request date:'} <span className="font-medium text-text-primary">{fmtDate(s.created_at)}</span>
-            </p>
-            {s.client_id && (
-              <Link
-                to={`/clients/${s.client_id}`}
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline print:hidden"
-              >
-                {fr ? 'Voir le client dans le CRM' : 'View client in CRM'} <ExternalLink size={13} />
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* ═══ FORM ANSWERS ═══ */}
       {fields.length > 0 && (

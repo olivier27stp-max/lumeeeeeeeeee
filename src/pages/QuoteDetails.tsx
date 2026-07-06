@@ -7,7 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MoreHorizontal, Mail, MessageSquare, Briefcase, Copy,
   Eye, Printer, FileSignature, Trash2, Clock, CheckCircle2,
-  MapPin, Phone as PhoneIcon, Mail as MailIcon, Pencil, FileText,
+  Pencil, FileText,
   Plus, Check, X, Save, Ruler, Package, Archive,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -20,7 +20,8 @@ import {
   convertQuoteToJob, convertQuoteToInvoice, duplicateQuote, deleteQuote,
 } from '../lib/quotesApi';
 import { supabase } from '../lib/supabase';
-import { StatusBadge } from '../components/ui';
+import { clientDisplayName } from '../lib/clientsApi';
+import EntityHubHeader from '../components/EntityHubHeader';
 import { downloadQuotePdf } from '../lib/generateQuotePdf';
 import { getCompanySettings } from '../lib/invoicesApi';
 import QuoteRenderer from '../components/quote/QuoteRenderer';
@@ -30,7 +31,6 @@ import SpecificNotes from '../components/SpecificNotes';
 import { format } from 'date-fns';
 import { frCA as dfFr, enCA as dfEn } from 'date-fns/locale';
 import { useTranslation } from '../i18n';
-import { displayEmail, displayPhone, displayAddress } from '../lib/piiSanitizer';
 import ServicePicker from '../components/ServicePicker';
 import type { PredefinedService } from '../lib/servicesApi';
 
@@ -107,7 +107,7 @@ export default function QuoteDetails() {
 
   const { quote, line_items, sections, lead, client } = detail;
   const entity = client || lead;
-  const entityName = entity ? `${entity.first_name || ''} ${entity.last_name || ''}`.trim() : 'Unknown';
+  const entityName = entity ? (clientDisplayName(entity as any) || 'Unknown') : 'Unknown';
   const entityEmail = entity?.email || null;
   const entityPhone = entity?.phone || null;
   const entityAddress = (entity as any)?.address || null;
@@ -207,31 +207,29 @@ export default function QuoteDetails() {
       <div className="h-1.5 bg-gradient-to-r from-primary to-primary/70" />
 
       {/* ── Header ── */}
-      <div className="px-8 pt-5 pb-4 flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-3 mb-3">
-            <button onClick={() => navigate('/quotes')} className="text-text-tertiary hover:text-text-primary transition-colors"><ArrowLeft size={16} /></button>
-            <FileText size={16} className="text-text-tertiary" />
-            <StatusBadge status={quote.status} />
-          </div>
-          {editing === 'title' ? (
-            <div className="flex items-center gap-2">
+      <div className="px-8 pt-5 pb-4">
+        <button onClick={() => navigate('/quotes')} className="mb-3 text-text-tertiary hover:text-text-primary transition-colors"><ArrowLeft size={16} /></button>
+        <EntityHubHeader
+          icon={<FileText size={18} strokeWidth={2} />}
+          status={quote.status}
+          title={editing === 'title' ? (
+            <span className="flex items-center gap-2">
               <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
                 className={cn(inputCls, 'text-[22px] font-bold py-1 w-96')} autoFocus />
               {editButtons}
-            </div>
+            </span>
           ) : (
-            <div className="flex items-center gap-2 group">
-              <h1 className="text-[26px] font-bold text-text-primary leading-tight">
-                {quote.title || `Quote for ${entityName}`}
-              </h1>
-              <button onClick={() => startEdit('title')} className="p-1 text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-text-primary transition-all"><Pencil size={14} /></button>
-            </div>
+            <span className="group inline-flex items-center gap-2">
+              {quote.title || `Quote for ${entityName}`}
+              <button onClick={() => startEdit('title')} className="p-1 text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-text-primary transition-all"><Pencil size={15} /></button>
+            </span>
           )}
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-2 shrink-0">
+          client={entity ? { id: (entity as any).id, name: entityName } : null}
+          address={entityAddress}
+          phone={entityPhone}
+          email={entityEmail}
+          actions={
+          <>
           <button onClick={() => navigate(`/quotes/${id}/measure`)}
             className="glass-button px-3 py-2 text-[13px] font-medium flex items-center gap-1.5">
             <Ruler size={15} /> Mesure
@@ -315,34 +313,28 @@ export default function QuoteDetails() {
             >
               <MessageSquare size={14} /> {language === 'fr' ? 'Texter le client' : 'Text Client'}</button>
           )}
-        </div>
+          </>
+          }
+        />
       </div>
 
       {/* ── 2-column ── */}
       <div className="px-8 pb-8 grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
         {/* ── Main ── */}
         <div className="space-y-5">
-          {/* Contact + Meta */}
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-5">
-            <div className="section-card p-5 space-y-2">
-              <p className="font-semibold text-text-primary text-[15px]">{entityName}</p>
-              {entityAddress && <><p className="text-[11px] text-text-tertiary uppercase tracking-wider font-medium">Property Address</p><p className="text-[13px] text-text-secondary">{displayAddress(entityAddress)}</p></>}
-              {entityPhone && <p className="text-[13px] text-text-secondary">{displayPhone(entityPhone)}</p>}
-              {entityEmail && <a href={`mailto:${entityEmail}`} className="text-[13px] text-primary hover:underline block">{displayEmail(entityEmail)}</a>}
+          {/* Meta (contact info now lives in the hub header) */}
+          <div className="section-card p-5 space-y-3">
+            <div className="flex justify-between text-[13px] border-b border-outline pb-2.5">
+              <span className="text-text-tertiary">{language === 'fr' ? 'Devis n°' : 'Quote #'}</span><span className="font-semibold text-text-primary">{quote.quote_number}</span>
             </div>
-            <div className="space-y-3 pt-1">
-              <div className="flex justify-between text-[13px] border-b border-outline pb-2.5">
-                <span className="text-text-tertiary">{language === 'fr' ? 'Devis n°' : 'Quote #'}</span><span className="font-semibold text-text-primary">{quote.quote_number}</span>
-              </div>
-              <div className="flex justify-between text-[13px] border-b border-outline pb-2.5">
-                <span className="text-text-tertiary">{language === 'fr' ? 'Créé le' : 'Created'}</span><span className="font-medium text-text-primary">{format(new Date(quote.created_at), 'PP', { locale: language === 'fr' ? dfFr : dfEn })}</span>
-              </div>
-              {quote.valid_until && (
-                <div className="flex justify-between text-[13px]">
-                  <span className="text-text-tertiary">{language === 'fr' ? "Valide jusqu'au" : 'Valid until'}</span><span className="font-medium text-text-primary">{format(new Date(quote.valid_until), 'PP', { locale: language === 'fr' ? dfFr : dfEn })}</span>
-                </div>
-              )}
+            <div className="flex justify-between text-[13px] border-b border-outline pb-2.5">
+              <span className="text-text-tertiary">{language === 'fr' ? 'Créé le' : 'Created'}</span><span className="font-medium text-text-primary">{format(new Date(quote.created_at), 'PP', { locale: language === 'fr' ? dfFr : dfEn })}</span>
             </div>
+            {quote.valid_until && (
+              <div className="flex justify-between text-[13px]">
+                <span className="text-text-tertiary">{language === 'fr' ? "Valide jusqu'au" : 'Valid until'}</span><span className="font-medium text-text-primary">{format(new Date(quote.valid_until), 'PP', { locale: language === 'fr' ? dfFr : dfEn })}</span>
+              </div>
+            )}
           </div>
 
           {/* Introduction */}

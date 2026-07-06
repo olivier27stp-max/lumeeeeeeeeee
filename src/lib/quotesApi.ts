@@ -353,13 +353,13 @@ export async function getQuoteById(quoteId: string): Promise<QuoteDetail | null>
   let client = null;
   if (quote.lead_id) {
     const { data } = await supabase
-      .from('clients').select('id,first_name,last_name,email,phone,address,company')
+      .from('clients').select('id,first_name,last_name,email,phone,address,company,display_as_company')
       .eq('id', quote.lead_id).maybeSingle();
     lead = data;
   }
   if (quote.client_id) {
     const { data } = await supabase
-      .from('clients').select('id,first_name,last_name,email,phone,address')
+      .from('clients').select('id,first_name,last_name,email,phone,address,company,display_as_company')
       .eq('id', quote.client_id).maybeSingle();
     client = data;
   }

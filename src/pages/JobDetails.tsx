@@ -13,10 +13,8 @@ import {
   FileText,
   Link as LinkIcon,
   Mail,
-  MapPin,
   MessageSquare,
   MoreHorizontal,
-  Phone,
   Plus,
   Printer,
   Send,
@@ -48,7 +46,7 @@ import CommunicationsTimeline from '../components/communications/CommunicationsT
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
 import SpecificNotes from '../components/SpecificNotes';
-import { displayEmail, displayPhone } from '../lib/piiSanitizer';
+import EntityHubHeader from '../components/EntityHubHeader';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface ScheduleEvent {
@@ -416,30 +414,18 @@ export default function JobDetails() {
           <span className="text-text-primary font-medium">#{job.job_number}</span>
         </nav>
 
-        {/* ═══ HEADER ═══ */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-4">
-            <div className="icon-tile icon-tile-lg icon-tile-blue">
-              <Briefcase size={18} strokeWidth={2} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-[22px] font-bold text-text-primary leading-tight">
-                  {job.client_name || 'Unassigned'}
-                </h1>
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[13px] text-text-secondary">{job.title}</span>
-                <StatusBadge status={job.status} />
-                {isToday && (
-                  <span className="badge-neutral text-[11px]">Today</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex items-center gap-2 print:hidden">
+        {/* ═══ HUB HEADER ═══ */}
+        <EntityHubHeader
+          icon={<Briefcase size={18} strokeWidth={2} />}
+          status={job.status}
+          statusExtra={isToday ? <span className="badge-neutral text-[11px]">Today</span> : null}
+          title={job.title || job.client_name || 'Job'}
+          client={{ id: job.client_id, name: job.client_name || 'Unassigned' }}
+          address={job.property_address}
+          phone={clientInfo?.phone}
+          email={clientInfo?.email}
+          actions={
+          <>
             <button
               onClick={() => {
                 if (!clientInfo?.phone) {
@@ -531,8 +517,9 @@ export default function JobDetails() {
                 </>
               )}
             </div>
-          </div>
-        </div>
+          </>
+          }
+        />
 
         {/* ═══ FLOW PROGRESS — shows where job is in the lifecycle ═══ */}
         <div className="flex items-center gap-0 px-1 pb-4">
@@ -584,69 +571,8 @@ export default function JobDetails() {
             </span>
           </div>
 
-          {/* Client name + service */}
-          <div className="px-5 pt-5 pb-1">
-            <div className="flex items-center gap-2">
-              <h2 className="text-[20px] font-bold text-text-primary">
-                {job.client_name || 'Unassigned'}
-              </h2>
-            </div>
-            <p className="text-[13px] text-text-secondary mt-0.5">{job.title}</p>
-          </div>
-
-          {/* Two-column: address/contact | job details */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 lg:divide-x lg:divide-outline-subtle">
-            {/* Left: Property address + Contact */}
-            <div className="p-5 space-y-5">
-              {/* Property address */}
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">Property address</p>
-                <div className="flex items-start gap-3">
-                  <div className="icon-tile icon-tile-sm icon-tile-blue mt-0.5">
-                    <MapPin size={13} strokeWidth={2} />
-                  </div>
-                  <div className="text-[13px] text-text-primary leading-relaxed">
-                    {job.property_address ? (
-                      job.property_address.split(',').map((part, i) => (
-                        <div key={i}>{part.trim()}</div>
-                      ))
-                    ) : (
-                      <span className="text-text-tertiary">No address</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Contact details */}
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">Contact details</p>
-                <div className="space-y-1.5">
-                  {clientInfo?.phone && (
-                    <>
-                      <a href={`tel:${clientInfo.phone}`} className="md:hidden flex items-center gap-2 text-[13px] text-text-primary hover:text-text-secondary transition-colors">
-                        <Phone size={13} className="text-text-tertiary" />
-                        {displayPhone(clientInfo.phone)}
-                      </a>
-                      <span className="hidden md:flex items-center gap-2 text-[13px] text-text-primary">
-                        <Phone size={13} className="text-text-tertiary" />
-                        {displayPhone(clientInfo.phone)}
-                      </span>
-                    </>
-                  )}
-                  {clientInfo?.email && (
-                    <a href={`mailto:${clientInfo.email}`} className="flex items-center gap-2 text-[13px] text-text-primary hover:underline">
-                      <Mail size={13} className="text-text-tertiary" />
-                      {displayEmail(clientInfo.email)}
-                    </a>
-                  )}
-                  {!clientInfo?.phone && !clientInfo?.email && (
-                    <p className="text-[13px] text-text-tertiary">No contact info</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Right: Job details */}
+          {/* Job details (client name, address and contact now live in the hub header) */}
+          <div>
             <div className="p-5">
               <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">Job details</p>
               <div className="space-y-0">

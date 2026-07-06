@@ -110,6 +110,7 @@ export interface InvoiceDetail {
     first_name: string;
     last_name: string;
     company: string | null;
+    display_as_company?: boolean | null;
     email: string | null;
     phone: string | null;
     address: string | null;
@@ -161,9 +162,11 @@ export function formatMoneyFromCents(cents: number, currency = 'CAD', locale?: s
   }).format((cents || 0) / 100);
 }
 
-export function toClientDisplayName(client: { first_name?: string | null; last_name?: string | null; company?: string | null }) {
+export function toClientDisplayName(client: { first_name?: string | null; last_name?: string | null; company?: string | null; display_as_company?: boolean | null }) {
   const fullName = `${client.first_name || ''} ${client.last_name || ''}`.trim();
-  return fullName || client.company || 'Unknown client';
+  const company = (client.company || '').trim();
+  if (client.display_as_company && company) return company;
+  return fullName || company || 'Unknown client';
 }
 
 export function getInvoiceRowUiStatus(row: InvoiceRow) {
@@ -407,7 +410,7 @@ export async function getInvoiceById(invoiceId: string): Promise<InvoiceDetail |
 
   const { data: clientRow, error: clientError } = await supabase
     .from('clients')
-    .select('id,first_name,last_name,company,email,phone,address,billing_same_as_service,billing_address')
+    .select('id,first_name,last_name,company,display_as_company,email,phone,address,billing_same_as_service,billing_address')
     .is('deleted_at', null)
     .eq('id', invoiceRow.client_id)
     .maybeSingle();

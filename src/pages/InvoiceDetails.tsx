@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   ArrowLeft, Eye, EyeOff, Copy, Link2, Check, Download, RefreshCw, Send,
-  Pencil, Ban, CopyPlus, CheckCircle2, MoreHorizontal,
+  Pencil, Ban, CopyPlus, CheckCircle2, MoreHorizontal, Receipt,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -16,14 +16,13 @@ import {
 } from '../lib/invoicesApi';
 import InvoicePaymentModal from '../components/InvoicePaymentModal';
 import { downloadInvoicePdf } from '../lib/generateInvoicePdf';
-import StatusBadge from '../components/ui/StatusBadge';
+import EntityHubHeader from '../components/EntityHubHeader';
 import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
 import ActivityTimeline from '../components/ActivityTimeline';
 import RequestPaymentModal from '../components/RequestPaymentModal';
 import InvoiceRenderer from '../components/invoice/InvoiceRenderer';
 import { buildRenderData } from '../components/invoice/buildRenderData';
-import { displayEmail, displayPhone } from '../lib/piiSanitizer';
 
 export default function InvoiceDetails() {
   const { t, language } = useTranslation();
@@ -168,14 +167,19 @@ export default function InvoiceDetails() {
         {t.invoiceDetails.backToInvoices}
       </button>
 
-      <section className="section-card p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-[15px] font-bold text-text-primary">{invoice.invoice_number}</h1>
-            <p className="mt-1 text-[13px] text-text-secondary">{invoice.subject || t.invoiceDetails.noSubject}</p>
-          </div>
-
-          <div className="flex items-center gap-2">
+      <EntityHubHeader
+        icon={<Receipt size={18} strokeWidth={2} />}
+        status={uiStatus}
+        title={invoice.invoice_number}
+        client={client
+          ? { id: client.id, name: toClientDisplayName(client) }
+          : (invoice.client_name ? { id: invoice.client_id, name: invoice.client_name } : null)}
+        address={client?.address}
+        phone={client?.phone}
+        email={client?.email}
+        meta={invoice.subject || t.invoiceDetails.noSubject}
+        actions={
+          <>
             {/* Edit */}
             {(isDraft || !isPaid) && (
               <button
@@ -324,20 +328,12 @@ export default function InvoiceDetails() {
                 )}
               </AnimatePresence>
             </div>
+          </>
+        }
+      />
 
-            <StatusBadge status={uiStatus} />
-          </div>
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="space-y-1">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">{t.invoiceDetails.client}</p>
-            <p className="text-[13px] font-bold text-text-primary">
-              {client ? toClientDisplayName(client) : invoice.client_name}
-            </p>
-            <p className="text-[13px] text-text-secondary">{displayEmail(client?.email) !== '—' ? displayEmail(client?.email) : t.common.noEmail}</p>
-            <p className="text-[13px] text-text-secondary">{displayPhone(client?.phone) !== '—' ? displayPhone(client?.phone) : t.common.noPhone}</p>
-          </div>
+      <section className="section-card p-6">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="space-y-1">
             <p className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">{t.invoiceDetails.dates}</p>
             <p className="text-[13px] text-text-secondary">{`${t.invoiceDetails.created}:`} {formatDate(invoice.created_at)}</p>
