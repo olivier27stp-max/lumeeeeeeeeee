@@ -215,9 +215,10 @@ export default function Quotes() {
       : (r.company || '').trim() || null;
   }
 
+  // Address of the assigned property (name only as fallback), like the Jobs page
   function propertyLabel(q: any): string {
     const p = q.properties as any;
-    return p?.name || p?.address || '—';
+    return p?.address || p?.name || '—';
   }
 
   async function onDel(id: string) {
