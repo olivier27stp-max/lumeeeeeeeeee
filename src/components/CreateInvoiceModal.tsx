@@ -21,6 +21,7 @@ import {
   getJobLineItems,
 } from '../lib/invoicesApi';
 import { listPredefinedServices, type PredefinedService } from '../lib/servicesApi';
+import { peekNextNumbers } from '../lib/numbersApi';
 import { listPropertiesByClient, type PropertyRecord } from '../lib/propertiesApi';
 import { cn } from '../lib/utils';
 
@@ -82,6 +83,12 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
 
   const [subject, setSubject] = useState(defaultSubject);
   const [dueDate, setDueDate] = useState('');
+  // # pré-rempli avec le prochain numéro de l'org. `touched` distingue une
+  // modification manuelle (envoyée + validée) du défaut auto (laissé au
+  // serveur pour une attribution atomique sans course).
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [invoiceNumberTouched, setInvoiceNumberTouched] = useState(false);
+  const [nextInvoice, setNextInvoice] = useState<{ label: string; seq: number } | null>(null);
   const [taxRate, setTaxRate] = useState('');  // percentage, e.g. "14.975"
   const [lines, setLines] = useState<InvoiceLineForm[]>([buildEmptyLine()]);
   const [inlineError, setInlineError] = useState<string | null>(null);
@@ -101,6 +108,13 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
     setLines([buildEmptyLine()]);
     setInlineError(null);
     setShowServicePicker(false);
+    setInvoiceNumber('');
+    setInvoiceNumberTouched(false);
+    peekNextNumbers().then((next) => {
+      if (!next?.invoice || !next.invoiceSeq) return;
+      setNextInvoice({ label: next.invoice, seq: next.invoiceSeq });
+      setInvoiceNumber((prev) => prev || next.invoice!);
+    });
   }, [isOpen]);
 
   // Debounce search
@@ -286,6 +300,46 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
       return;
     }
 
+    // Numéro de facture : le défaut auto non modifié est laissé au serveur
+    // (attribution atomique, aucune course entre deux formulaires ouverts).
+    // Un numéro modifié est validé : on ne peut pas utiliser le # d'une
+    // facture qui n'existe pas (au-delà du prochain numéro) ni un # déjà pris.
+    let invoiceNumberParam: string | null = null;
+    if (nextInvoice && invoiceNumberTouched && invoiceNumber.trim()) {
+      const digits = invoiceNumber.replace(/\D/g, '');
+      const wanted = parseInt(digits, 10);
+      if (!digits || !Number.isFinite(wanted) || wanted <= 0) {
+        setInlineError(fr ? 'Numéro de facture invalide.' : 'Invalid invoice number.');
+        return;
+      }
+      if (wanted > nextInvoice.seq) {
+        setInlineError(fr
+          ? `Le numéro ${wanted} n'existe pas — le prochain numéro disponible est ${nextInvoice.label}.`
+          : `Number ${wanted} doesn't exist yet — the next available number is ${nextInvoice.label}.`);
+        return;
+      }
+      const formatted = `INV-${String(wanted).padStart(6, '0')}`;
+      try {
+        // La contrainte unique (org_id, invoice_number) inclut les factures
+        // supprimées : on vérifie donc sans filtrer deleted_at.
+        const { data: dup } = await supabase
+          .from('invoices')
+          .select('id')
+          .eq('invoice_number', formatted)
+          .limit(1)
+          .maybeSingle();
+        if (dup?.id) {
+          setInlineError(fr
+            ? `Le numéro ${formatted} est déjà utilisé.`
+            : `Number ${formatted} is already in use.`);
+          return;
+        }
+      } catch {
+        // Échec de la vérification : la RPC tranchera côté serveur.
+      }
+      invoiceNumberParam = formatted;
+    }
+
     try {
       const created = await createDraftMutation.mutateAsync({
         clientId: selectedClient.id,
@@ -293,6 +347,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
         subject: subject.trim() || defaultSubject,
         dueDate: dueDate || null,
         jobId: selectedJob?.id || undefined,
+        invoiceNumber: invoiceNumberParam,
       });
 
       await saveDraftMutation.mutateAsync({
@@ -473,12 +528,19 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                     </div>
                   )}
 
-                  {/* Subject + Due Date */}
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {/* Subject + Invoice # + Due Date */}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                     <div className="sm:col-span-2 space-y-1.5">
                       <label className="text-xs font-medium text-text-secondary">{fr ? 'Sujet' : 'Subject'}</label>
                       <input value={subject} onChange={(e) => setSubject(e.target.value)}
                         placeholder={fr ? 'Ex: Réparation plomberie' : 'Ex: Plumbing repair'}
+                        className="glass-input w-full" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-text-secondary">{fr ? 'Facture #' : 'Invoice #'}</label>
+                      <input value={invoiceNumber}
+                        onChange={(e) => { setInvoiceNumber(e.target.value); setInvoiceNumberTouched(true); }}
+                        placeholder="Auto" disabled={!nextInvoice}
                         className="glass-input w-full" />
                     </div>
                     <div className="space-y-1.5">

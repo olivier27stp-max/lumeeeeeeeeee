@@ -300,12 +300,17 @@ export async function createInvoiceDraft(payload: {
   subject?: string | null;
   dueDate?: string | null;
   jobId?: string;
+  invoiceNumber?: string | null;
 }) {
-  const { data, error } = await supabase.rpc('rpc_create_invoice_draft', {
+  const rpcParams: Record<string, any> = {
     p_client_id: payload.clientId,
     p_subject: payload.subject || null,
     p_due_date: payload.dueDate || null,
-  });
+  };
+  // N'envoyer p_invoice_number que s'il est fourni : l'ancienne signature de
+  // la RPC (avant la migration creation_hub_numbers) ne connaît pas ce paramètre.
+  if (payload.invoiceNumber) rpcParams.p_invoice_number = payload.invoiceNumber;
+  const { data, error } = await supabase.rpc('rpc_create_invoice_draft', rpcParams);
   if (error) throw error;
 
   const row = Array.isArray(data) ? data[0] : data;

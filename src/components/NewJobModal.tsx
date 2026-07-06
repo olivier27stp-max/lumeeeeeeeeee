@@ -20,6 +20,7 @@ import type { PredefinedService } from '../lib/servicesApi';
 import { supabase } from '../lib/supabase';
 import AddressAutocomplete, { type StructuredAddress } from './AddressAutocomplete';
 import { listPropertiesByClient, createProperty, type PropertyRecord } from '../lib/propertiesApi';
+import { peekNextNumbers } from '../lib/numbersApi';
 import { resolveTaxes, type TaxConfig } from '../lib/taxApi';
 import { useTranslation } from '../i18n';
 import SpecificNotes from './SpecificNotes';
@@ -280,6 +281,11 @@ export default function NewJobModal({
   const [teamSuggestions, setTeamSuggestions] = useState<TeamSuggestion[]>([]);
   const [clients, setClients] = useState<Array<{ id: string; label: string; address: string | null; phone: string | null; street_number: string | null; street_name: string | null; city: string | null; province: string | null; postal_code: string | null; country: string | null; latitude: number | null; longitude: number | null }>>([]);
   const [jobNumber, setJobNumber] = useState('');
+  // # pré-rempli avec le prochain numéro de l'org. `touched` distingue une
+  // modification manuelle (envoyée + validée) du défaut auto (laissé au
+  // serveur pour une attribution atomique sans course).
+  const [jobNumberTouched, setJobNumberTouched] = useState(false);
+  const [nextJobNumber, setNextJobNumber] = useState<string | null>(null);
   const [salespersonId, setSalespersonId] = useState('');
   const [salespeople, setSalespeople] = useState<Array<{ id: string; label: string }>>([]);
   const [jobType, setJobType] = useState<'one_off' | 'recurring'>('one_off');
@@ -412,6 +418,15 @@ export default function NewJobModal({
       setTeamSelection(initialValues?.team_id || '');
     }
     setJobNumber(initialValues?.job_number || '');
+    setJobNumberTouched(false);
+    peekNextNumbers().then((next) => {
+      if (!next?.job) return;
+      setNextJobNumber(next.job);
+      // Nouveau job sans numéro imposé : pré-remplir avec le prochain numéro.
+      if (!isEditMode && !initialValues?.job_number) {
+        setJobNumber((prev) => prev || next.job!);
+      }
+    });
     if (initialValues?.salesperson_id) {
       setSalespersonId(initialValues.salesperson_id);
     } else if (isEditMode) {
@@ -1005,23 +1020,47 @@ export default function NewJobModal({
       if (typeof window !== 'undefined' && !window.confirm(msg)) return;
     }
 
-    // Si un numéro de job est saisi manuellement, vérifier qu'il n'est pas déjà
-    // pris dans l'org (la RLS limite la requête aux jobs de l'org courante).
+    // Numéro de job : le défaut auto non modifié est envoyé vide, le trigger
+    // serveur l'attribue atomiquement (aucune course entre deux formulaires
+    // ouverts en même temps). Un numéro saisi manuellement est envoyé tel quel.
     const trimmedJobNumber = jobNumber.trim();
-    if (trimmedJobNumber) {
+    const isUntouchedAutoDefault = !isEditMode && !jobNumberTouched
+      && !initialValues?.job_number && !!nextJobNumber && trimmedJobNumber === nextJobNumber;
+    const jobNumberToSend = isUntouchedAutoDefault ? '' : trimmedJobNumber;
+    if (jobNumberToSend && jobNumberToSend !== (initialValues?.job_number || '')) {
+      // On ne peut pas utiliser le # d'un job qui n'existe pas : numérique
+      // obligatoire et jamais au-delà du prochain numéro disponible.
+      if (!/^\d+$/.test(jobNumberToSend)) {
+        const msg = language === 'fr'
+          ? 'Le numéro de job doit être un nombre.'
+          : 'Job number must be a number.';
+        setInlineError(msg);
+        try { toast.error(msg); } catch {}
+        return;
+      }
+      if (nextJobNumber && parseInt(jobNumberToSend, 10) > parseInt(nextJobNumber, 10)) {
+        const msg = language === 'fr'
+          ? `Le numéro de job ${jobNumberToSend} n'existe pas — le prochain numéro disponible est ${nextJobNumber}.`
+          : `Job number ${jobNumberToSend} doesn't exist yet — the next available number is ${nextJobNumber}.`;
+        setInlineError(msg);
+        try { toast.error(msg); } catch {}
+        return;
+      }
+      // Vérifier qu'il n'est pas déjà pris dans l'org (la RLS limite la
+      // requête aux jobs de l'org courante).
       try {
         let dupQuery = supabase
           .from('jobs')
           .select('id')
-          .eq('job_number', trimmedJobNumber)
+          .eq('job_number', jobNumberToSend)
           .is('deleted_at', null)
           .limit(1);
         if (initialValues?.id) dupQuery = dupQuery.neq('id', initialValues.id);
         const { data: dup } = await dupQuery.maybeSingle();
         if (dup?.id) {
           const msg = language === 'fr'
-            ? `Le numéro de job « ${trimmedJobNumber} » est déjà utilisé.`
-            : `Job number "${trimmedJobNumber}" is already in use.`;
+            ? `Le numéro de job « ${jobNumberToSend} » est déjà utilisé.`
+            : `Job number "${jobNumberToSend}" is already in use.`;
           setInlineError(msg);
           try { toast.error(msg); } catch {}
           return;
@@ -1050,7 +1089,7 @@ export default function NewJobModal({
         client_id: resolvedClientId || null,
         property_id: resolvedPropertyId,
         team_id: teamIdPayload,
-        job_number: jobNumber.trim() || null,
+        job_number: jobNumberToSend || null,
         salesperson_id: salespersonId || null,
         description,
         job_type: jobType,
@@ -1182,7 +1221,7 @@ export default function NewJobModal({
                     <label className="text-xs font-medium text-text-tertiary">{t.jobs.jobNumber}</label>
                     <input
                       value={jobNumber}
-                      onChange={(event) => setJobNumber(event.target.value)}
+                      onChange={(event) => { setJobNumber(event.target.value); setJobNumberTouched(true); }}
                       className="glass-input w-full"
                       placeholder={language === 'fr' ? 'Numéro de job' : 'Job number'}
                     />

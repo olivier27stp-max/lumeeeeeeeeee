@@ -212,6 +212,7 @@ export async function createQuote(payload: {
   client_id?: string | null;
   property_id?: string | null;
   title: string;
+  quote_number?: string | null;
   salesperson_id?: string | null;
   context_type?: 'lead' | 'client' | 'job';
   currency?: string;
@@ -233,7 +234,7 @@ export async function createQuote(payload: {
 }): Promise<QuoteDetail> {
   const orgId = await getCurrentOrgIdOrThrow();
   // 1. Create quote via RPC
-  const { data: rpcResult, error: rpcError } = await supabase.rpc('rpc_create_quote', {
+  const rpcParams: Record<string, any> = {
     p_lead_id: payload.lead_id || null,
     p_client_id: payload.client_id || null,
     p_title: payload.title,
@@ -245,7 +246,11 @@ export async function createQuote(payload: {
     p_contract: payload.contract_disclaimer || null,
     p_deposit_required: payload.deposit_required || false,
     p_require_payment_method: payload.require_payment_method || false,
-  });
+  };
+  // N'envoyer p_quote_number que s'il est fourni : l'ancienne signature de la
+  // RPC (avant la migration creation_hub_numbers) ne connaît pas ce paramètre.
+  if (payload.quote_number) rpcParams.p_quote_number = payload.quote_number;
+  const { data: rpcResult, error: rpcError } = await supabase.rpc('rpc_create_quote', rpcParams);
   if (rpcError) throw rpcError;
 
   const quoteId = String((rpcResult as any)?.quote_id || '');

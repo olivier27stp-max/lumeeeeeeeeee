@@ -9,6 +9,8 @@ import {
   type QuoteLineItemInput, type QuoteSectionInput, type QuoteDetail,
 } from '../../lib/quotesApi';
 import { getCompanySettings } from '../../lib/invoicesApi';
+import { peekNextNumbers } from '../../lib/numbersApi';
+import { supabase } from '../../lib/supabase';
 import { createLeadScoped, fetchLeadsScoped } from '../../lib/leadsApi';
 import AddressAutocomplete, { type StructuredAddress } from '../AddressAutocomplete';
 import { listPropertiesByClient, type PropertyRecord } from '../../lib/propertiesApi';
@@ -73,6 +75,12 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
 
   // ── Quote fields ──
   const [title, setTitle] = useState('');
+  // # pré-rempli avec le prochain numéro de l'org. `touched` distingue une
+  // modification manuelle (envoyée + validée) du défaut auto (laissé au
+  // serveur pour une attribution atomique sans course).
+  const [quoteNumber, setQuoteNumber] = useState('');
+  const [quoteNumberTouched, setQuoteNumberTouched] = useState(false);
+  const [nextQuoteNumber, setNextQuoteNumber] = useState<string | null>(null);
   const [clientId, setClientId] = useState('');
   const [properties, setProperties] = useState<PropertyRecord[]>([]);
   const [propertyId, setPropertyId] = useState('');
@@ -133,6 +141,12 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
     setLineItems([emptyLine()]); setNotes('');
     setDiscountType(''); setDiscountValue('');
     setAddedServiceIds(new Set()); setJobLineItems([]);
+    setQuoteNumber(''); setQuoteNumberTouched(false);
+    peekNextNumbers().then(next => {
+      if (!next?.quote) return;
+      setNextQuoteNumber(next.quote);
+      setQuoteNumber(prev => prev || next.quote!);
+    });
 
     if (lead) {
       setTitle(`Quote for ${lead.first_name || ''} ${lead.last_name || ''}`.trim());
@@ -438,6 +452,44 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
     if (disclaimerEnabled) sections.push({ section_type: 'contract_disclaimer', title: 'Contract / Disclaimer', content: contractDisclaimer, sort_order: 10, enabled: true });
     if (clientMessageEnabled) sections.push({ section_type: 'client_message', title: 'Client Message', content: clientMessage, sort_order: 20, enabled: true });
 
+    // Numéro de soumission : le défaut auto non modifié est laissé au serveur
+    // (attribution atomique, aucune course entre deux formulaires ouverts).
+    // Un numéro modifié est validé : on ne peut pas utiliser le # d'une
+    // soumission qui n'existe pas (au-delà du prochain numéro) ni un # déjà pris.
+    let quoteNumberParam: string | null = null;
+    if (nextQuoteNumber && quoteNumberTouched && quoteNumber.trim()) {
+      const wanted = parseInt(quoteNumber.trim(), 10);
+      const next = parseInt(nextQuoteNumber, 10);
+      if (!Number.isFinite(wanted) || wanted <= 0) {
+        setError(language === 'fr' ? 'Le numéro de soumission doit être un nombre.' : 'Quote number must be a number.');
+        return;
+      }
+      if (Number.isFinite(next) && wanted > next) {
+        setError(language === 'fr'
+          ? `Le numéro ${wanted} n'existe pas — le prochain numéro disponible est ${next}.`
+          : `Number ${wanted} doesn't exist yet — the next available number is ${next}.`);
+        return;
+      }
+      try {
+        const { data: dup } = await supabase
+          .from('quotes')
+          .select('id')
+          .eq('quote_number', String(wanted))
+          .is('deleted_at', null)
+          .limit(1)
+          .maybeSingle();
+        if (dup?.id) {
+          setError(language === 'fr'
+            ? `Le numéro de soumission ${wanted} est déjà utilisé.`
+            : `Quote number ${wanted} is already in use.`);
+          return;
+        }
+      } catch {
+        // Échec de la vérification : la RPC tranchera côté serveur.
+      }
+      quoteNumberParam = String(wanted);
+    }
+
     setSaving(true);
     try {
       // Resolve lead
@@ -463,6 +515,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
         client_id: clientId || null,
         property_id: propertyId || null,
         title: finalTitle,
+        quote_number: quoteNumberParam,
         salesperson_id: salespersonId || null,
         context_type: leadId ? 'lead' : 'client',
         notes: notes || null,
@@ -652,7 +705,9 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                     </select></div>
                 )}
                 <div><label className={labelCls}>{tq.quoteNumber}</label>
-                  <input className={inputCls} placeholder={tq.auto} disabled /></div>
+                  <input value={quoteNumber}
+                    onChange={e => { setQuoteNumber(e.target.value.replace(/\D/g, '')); setQuoteNumberTouched(true); }}
+                    className={inputCls} placeholder={tq.auto} disabled={!nextQuoteNumber} /></div>
                 <div><label className={labelCls}>{tq.salesperson}</label>
                   <select value={salespersonId} onChange={e => setSalespersonId(e.target.value)} className={inputCls}>
                     <option value="">{tq.assign}</option>
