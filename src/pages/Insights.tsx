@@ -401,44 +401,51 @@ export default function Insights() {
               REPORTS TAB — pre-built Jobber-parity reports
               ═══════════════════════════════════════════════════ */}
           {tab === 'reports' && (
-            <div className="space-y-7">
-              {/* KPI row — real business metrics with period-over-period deltas */}
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-                <MetricCard label={fr ? 'Revenu' : 'Revenue'} value={overview?.revenue_cents || 0} format="money" changePct={cmp('revenue').pct ?? null} icon={DollarSign} />
-                <MetricCard label={fr ? 'Facturé' : 'Invoiced'} value={overview?.invoiced_value_cents || 0} format="money" icon={BarChart3} />
-                <MetricCard label={fr ? 'Nouveaux leads' : 'New leads'} value={overview?.new_leads_count || 0} icon={Users} />
-                <MetricCard label={fr ? 'Devis convertis' : 'Converted quotes'} value={overview?.converted_quotes_count || 0} icon={Target} />
-                <MetricCard label={fr ? 'Jobs fermés' : 'Closed jobs'} value={jobsSummary?.scheduledJobs || 0} icon={Zap} />
-              </div>
+            <div className="space-y-8">
+              {/* ── Vue d'ensemble ── */}
+              <section>
+                <h2 className="text-[19px] font-bold text-text-primary tracking-tight mb-3">{fr ? "Vue d'ensemble" : 'Overview'}</h2>
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+                  <MetricCard label={fr ? 'Nouveaux leads' : 'New leads'} value={overview?.new_leads_count || 0} changePct={cmp('new_leads').pct} icon={Users} />
+                  <MetricCard label={fr ? 'Nouvelles demandes' : 'New requests'} value={overview?.requests_count || 0} icon={Calendar} />
+                  <MetricCard label={fr ? 'Devis convertis' : 'Converted quotes'} value={overview?.converted_quotes_count || 0} icon={Target} />
+                  <MetricCard label={fr ? 'Jobs ponctuels' : 'One-off jobs'} value={overview?.new_oneoff_jobs_count || 0} icon={Zap} />
+                  <MetricCard label={fr ? 'Revenu' : 'Revenue'} value={overview?.revenue_cents || 0} format="money" changePct={cmp('revenue').pct ?? null} icon={DollarSign} />
+                  <MetricCard label={fr ? 'Valeur facturée' : 'Invoiced value'} value={overview?.invoiced_value_cents || 0} format="money" icon={BarChart3} />
+                </div>
+              </section>
 
-              {/* Ventes & conversion */}
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-3">{fr ? 'Ventes & conversion' : 'Sales & conversion'}</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* ── Revenu ── */}
+              <section>
+                <h2 className="text-[19px] font-bold text-text-primary tracking-tight mb-3">{fr ? 'Revenu' : 'Revenue'}</h2>
+                <MonthlyRevenueChart
+                  data={financeRevenueChartData}
+                  trendPct={cmp('revenue').pct ?? null}
+                  onViewReport={() => updateParam('tab', 'revenue')}
+                />
+              </section>
+
+              {/* ── Conversion ── */}
+              <section>
+                <h2 className="text-[19px] font-bold text-text-primary tracking-tight mb-3">{fr ? 'Conversion' : 'Conversion'}</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   <QuoteConversionCard />
                   <CancellationRateCard />
-                </div>
-              </div>
-
-              {/* Clients & services */}
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-3">{fr ? 'Clients & services' : 'Clients & services'}</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   <ClientLifetimeValueCard />
-                  <TopServicesByCountCard />
+                </div>
+              </section>
+
+              {/* ── Jobs ── */}
+              <section>
+                <h2 className="text-[19px] font-bold text-text-primary tracking-tight mb-3">Jobs</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   <RecurringRevenueCard />
                   <AverageJobValueCard />
-                </div>
-              </div>
-
-              {/* Opérations & équipe */}
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary mb-3">{fr ? 'Opérations & équipe' : 'Operations & team'}</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <TopServicesByCountCard />
                   <JobsPerWeekdayCard />
                   <TeamProductivityCard />
                 </div>
-              </div>
+              </section>
             </div>
           )}
 

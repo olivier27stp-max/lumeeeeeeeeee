@@ -99,7 +99,7 @@ export default function MonthlyRevenueChart({
             Trending {trendPct >= 0 ? 'up' : 'down'} by {Math.abs(trendPct).toFixed(1)}% this month
             <TrendingUp
               size={14}
-              className={trendPct >= 0 ? 'text-emerald-500' : 'text-rose-500'}
+              className={trendPct >= 0 ? 'text-text-primary' : 'text-text-tertiary'}
             />
           </p>
         )}
