@@ -3,8 +3,9 @@
  * Jobber-style sections (Overview · Revenue · Conversion · Jobs), monochrome
  * with one indigo data hue, wired to real data over the last 90 days.
  */
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import {
@@ -43,11 +44,17 @@ function DeltaPill({ pct }: { pct?: number | null }) {
   );
 }
 
-function OverviewStrip({ items }: { items: Array<{ label: string; value: string; pct?: number | null }> }) {
+function OverviewStrip({ items }: { items: Array<{ label: string; value: string; pct?: number | null; to?: string }> }) {
+  const navigate = useNavigate();
   return (
     <div className="bg-surface-card border border-border rounded-xl grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 divide-x divide-y xl:divide-y-0 divide-border-light overflow-hidden">
       {items.map((k) => (
-        <div key={k.label} className="p-4">
+        <button
+          key={k.label}
+          type="button"
+          onClick={() => k.to && navigate(k.to)}
+          className="text-left p-4 transition-colors hover:bg-surface-secondary focus:outline-none focus-visible:bg-surface-secondary"
+        >
           <div className="flex items-center justify-between gap-2">
             <span className="text-[12px] font-semibold text-text-secondary leading-tight">{k.label}</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 text-text-tertiary shrink-0"><path d="M7 17L17 7M17 7H8M17 7v9" /></svg>
@@ -56,8 +63,21 @@ function OverviewStrip({ items }: { items: Array<{ label: string; value: string;
             <span className="text-[24px] font-extrabold text-text-primary tabular-nums tracking-tight leading-none">{k.value}</span>
             <DeltaPill pct={k.pct} />
           </div>
-        </div>
+        </button>
       ))}
+    </div>
+  );
+}
+
+/* ── Clickable wrapper: makes a whole card navigate on click ── */
+function LinkCard({ to, children }: { to: string; children: ReactNode }) {
+  const navigate = useNavigate();
+  return (
+    <div
+      onClick={() => navigate(to)}
+      className="cursor-pointer h-full rounded-xl transition-shadow hover:shadow-md"
+    >
+      {children}
     </div>
   );
 }
@@ -169,54 +189,58 @@ export default function Statistiques() {
       <SectionHead title={fr ? "Vue d'ensemble" : 'Overview'} hint={rangeLabel} />
       <OverviewStrip
         items={[
-          { label: fr ? 'Nouveaux leads' : 'New leads', value: String(overview?.new_leads_count || 0), pct: cmp('new_leads') },
-          { label: fr ? 'Nouvelles demandes' : 'New requests', value: String(overview?.requests_count || 0), pct: cmp('requests') },
-          { label: fr ? 'Devis convertis' : 'Converted quotes', value: String(overview?.converted_quotes_count || 0), pct: cmp('converted_quotes') },
-          { label: fr ? 'Jobs ponctuels' : 'One-off jobs', value: String(overview?.new_oneoff_jobs_count || 0), pct: cmp('new_oneoff_jobs') },
-          { label: fr ? 'Revenu' : 'Revenue', value: fmtMoney(overview?.revenue_cents || 0, locale), pct: cmp('revenue') },
-          { label: fr ? 'Valeur facturée' : 'Invoiced value', value: fmtMoney(overview?.invoiced_value_cents || 0, locale), pct: cmp('invoiced_value') },
+          { label: fr ? 'Nouveaux leads' : 'New leads', value: String(overview?.new_leads_count || 0), pct: cmp('new_leads'), to: '/quotes' },
+          { label: fr ? 'Nouvelles demandes' : 'New requests', value: String(overview?.requests_count || 0), pct: cmp('requests'), to: '/requests' },
+          { label: fr ? 'Devis convertis' : 'Converted quotes', value: String(overview?.converted_quotes_count || 0), pct: cmp('converted_quotes'), to: '/quotes' },
+          { label: fr ? 'Jobs ponctuels' : 'One-off jobs', value: String(overview?.new_oneoff_jobs_count || 0), pct: cmp('new_oneoff_jobs'), to: '/jobs' },
+          { label: fr ? 'Revenu' : 'Revenue', value: fmtMoney(overview?.revenue_cents || 0, locale), pct: cmp('revenue'), to: '/finances' },
+          { label: fr ? 'Valeur facturée' : 'Invoiced value', value: fmtMoney(overview?.invoiced_value_cents || 0, locale), pct: cmp('invoiced_value'), to: '/finances' },
         ]}
       />
 
       {/* ── Revenu ── */}
       <SectionHead title={fr ? 'Revenu' : 'Revenue'} />
-      <RevenueYearCompareCard />
+      <LinkCard to="/finances"><RevenueYearCompareCard /></LinkCard>
 
       {/* ── Conversion ── */}
       <SectionHead title="Conversion" />
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4 items-stretch">
         <div className="xl:col-span-2">
-          <LeadFunnelCard
-            title={fr ? 'Entonnoir des leads' : 'Lead funnel'}
-            hint={rangeLabel}
-            stages={[
-              { label: fr ? 'Nouveaux leads' : 'New leads', value: overview?.new_leads_count || 0 },
-              { label: fr ? 'Devis convertis' : 'Converted quotes', value: overview?.converted_quotes_count || 0 },
-              { label: fr ? 'Jobs créés' : 'Jobs created', value: overview?.new_oneoff_jobs_count || 0 },
-            ]}
-          />
+          <LinkCard to="/quotes">
+            <LeadFunnelCard
+              title={fr ? 'Entonnoir des leads' : 'Lead funnel'}
+              hint={rangeLabel}
+              stages={[
+                { label: fr ? 'Nouveaux leads' : 'New leads', value: overview?.new_leads_count || 0 },
+                { label: fr ? 'Devis convertis' : 'Converted quotes', value: overview?.converted_quotes_count || 0 },
+                { label: fr ? 'Jobs créés' : 'Jobs created', value: overview?.new_oneoff_jobs_count || 0 },
+              ]}
+            />
+          </LinkCard>
         </div>
-        <QuoteConversionCard />
+        <LinkCard to="/quotes"><QuoteConversionCard /></LinkCard>
       </div>
-      <ClientLifetimeValueCard />
+      <LinkCard to="/clients"><ClientLifetimeValueCard /></LinkCard>
 
       {/* ── Jobs ── */}
       <SectionHead title="Jobs" />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <RecurringVsOneOffCard from={from} to={to} />
-        <AverageJobValueCard />
+        <LinkCard to="/jobs"><RecurringVsOneOffCard from={from} to={to} /></LinkCard>
+        <LinkCard to="/jobs"><AverageJobValueCard /></LinkCard>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <TopServicesByCountCard />
-        <JobsPerWeekdayCard />
+        <LinkCard to="/jobs"><TopServicesByCountCard /></LinkCard>
+        <LinkCard to="/jobs"><JobsPerWeekdayCard /></LinkCard>
       </div>
-      <TopTeamCard
-        title={fr ? 'Meilleures équipes' : 'Top teams'}
-        hint={rangeLabel}
-        teams={teamPerfQ.data || []}
-        loading={teamPerfQ.isLoading}
-        fr={fr}
-      />
+      <LinkCard to="/timesheets">
+        <TopTeamCard
+          title={fr ? 'Meilleures équipes' : 'Top teams'}
+          hint={rangeLabel}
+          teams={teamPerfQ.data || []}
+          loading={teamPerfQ.isLoading}
+          fr={fr}
+        />
+      </LinkCard>
     </div>
   );
 }
