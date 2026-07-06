@@ -26,7 +26,7 @@ router.post('/leads/create', validate(createLeadSchema), async (req, res) => {
     console.info('lead_create_request', {
       orgId: requestedOrgId,
       userId: auth.user.id,
-      stage: 'new',
+      stage: 'new_prospect',
       hasEmail: Boolean(email),
       nameLen: fullName.length,
     });
@@ -96,7 +96,7 @@ router.post('/leads/create', validate(createLeadSchema), async (req, res) => {
           org_id: requestedOrgId,
           created_by: auth.user.id,
           lead_id: leadId,
-          stage: 'new',
+          stage: 'new_prospect',
           title: title || fullName,
           value: Number.isFinite(value) ? value : 0,
           notes: notes || null,
@@ -116,14 +116,14 @@ router.post('/leads/create', validate(createLeadSchema), async (req, res) => {
           message: String(dealError?.message || 'unknown'),
           leadId,
           orgId: requestedOrgId,
-          stage: 'new',
+          stage: 'new_prospect',
         });
         throw dealError;
       }
 
       ensuredDealId = dealInsert?.id ? String(dealInsert.id) : null;
       // eslint-disable-next-line no-console
-      console.info('pipeline_deal_created', { orgId: requestedOrgId, leadId, dealId: ensuredDealId, stage: 'new' });
+      console.info('pipeline_deal_created', { orgId: requestedOrgId, leadId, dealId: ensuredDealId, stage: 'new_prospect' });
     }
 
     const { data: leadRow, error: leadError } = await auth.client
@@ -587,7 +587,7 @@ router.post('/leads/convert-to-job', validate(convertLeadToJobSchema), async (re
     // Update pipeline deal
     await auth.client
       .from('pipeline_deals')
-      .update({ stage: 'closed', job_id: job.id })
+      .update({ stage: 'closed_won', won_at: new Date().toISOString(), job_id: job.id })
       .eq('lead_id', leadId)
       .is('deleted_at', null);
 

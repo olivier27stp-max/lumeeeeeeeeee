@@ -31,7 +31,7 @@ export const D2D_STAGE_CONFIG: Record<D2DStage, {
     labelFr: 'Nouveau Lead',
     color: '#58A6FF',
     bgClass: 'bg-blue-500/15 text-blue-400',
-    dbValue: 'new',
+    dbValue: 'new_prospect',
     manualEntry: true,
   },
   must_recall: {
@@ -39,7 +39,7 @@ export const D2D_STAGE_CONFIG: Record<D2DStage, {
     labelFr: 'Rappel requis',
     color: '#D29922',
     bgClass: 'bg-amber-500/15 text-amber-400',
-    dbValue: 'follow_up_1',
+    dbValue: 'no_response',
     manualEntry: true,
   },
   quote_sent: {
@@ -47,7 +47,7 @@ export const D2D_STAGE_CONFIG: Record<D2DStage, {
     labelFr: 'Devis envoy\u00e9',
     color: '#9CA3AF',
     bgClass: 'bg-gray-500/15 text-gray-400',
-    dbValue: 'follow_up_2',
+    dbValue: 'quote_sent',
     manualEntry: false,
     blockReason: 'Un devis doit \u00eatre envoy\u00e9 pour d\u00e9placer ici',
   },
@@ -56,7 +56,7 @@ export const D2D_STAGE_CONFIG: Record<D2DStage, {
     labelFr: 'Gagn\u00e9',
     color: '#3FB950',
     bgClass: 'bg-green-500/15 text-green-400',
-    dbValue: 'closed',
+    dbValue: 'closed_won',
     manualEntry: false,
     blockReason: 'Une job doit \u00eatre cr\u00e9\u00e9e depuis le devis',
   },
@@ -65,13 +65,20 @@ export const D2D_STAGE_CONFIG: Record<D2DStage, {
     labelFr: 'Perdu',
     color: '#F85149',
     bgClass: 'bg-red-500/15 text-red-400',
-    dbValue: 'lost',
+    dbValue: 'closed_lost',
     manualEntry: true,
   },
 };
 
 /** Map DB stage value → D2D stage slug */
 export const DB_TO_D2D_STAGE: Record<string, D2DStage> = {
+  // Canonical DB slugs
+  'new_prospect': 'new_lead',
+  'no_response': 'must_recall',
+  'quote_sent': 'quote_sent',
+  'closed_won': 'closed_won',
+  'closed_lost': 'closed_lost',
+  // Legacy slugs (pre-20260703200000 rows)
   'new': 'new_lead',
   'follow_up_1': 'must_recall',
   'follow_up_2': 'quote_sent',
@@ -82,11 +89,11 @@ export const DB_TO_D2D_STAGE: Record<string, D2DStage> = {
 
 /** Map D2D stage slug → DB stage value */
 export const D2D_TO_DB_STAGE: Record<D2DStage, string> = {
-  new_lead: 'new',
-  must_recall: 'follow_up_1',
-  quote_sent: 'follow_up_2',
-  closed_won: 'closed',
-  closed_lost: 'lost',
+  new_lead: 'new_prospect',
+  must_recall: 'no_response',
+  quote_sent: 'quote_sent',
+  closed_won: 'closed_won',
+  closed_lost: 'closed_lost',
 };
 
 /** Secondary status layer — editable by reps, used for prioritization */

@@ -263,15 +263,15 @@ router.post('/quotes/send-email', async (req, res) => {
     const admin = getServiceClient();
     const { data: quote, error: qErr } = await admin
       .from('quotes')
-      .select('*, leads(first_name, last_name, email, phone), clients(first_name, last_name, email, phone)')
+      .select('*, lead:clients!quotes_lead_id_fkey(first_name, last_name, email, phone), client:clients!quotes_client_id_fkey(first_name, last_name, email, phone)')
       .eq('id', quoteId)
       .eq('org_id', auth.orgId)
       .single();
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
 
     // Resolve recipient email
-    const lead = quote.leads as any;
-    const client = quote.clients as any;
+    const lead = quote.lead as any;
+    const client = quote.client as any;
     const recipientEmail = client?.email || lead?.email;
     const recipientName = client
       ? `${client.first_name || ''} ${client.last_name || ''}`.trim()
@@ -420,13 +420,13 @@ router.post('/quotes/send-sms', async (req, res) => {
     const admin = getServiceClient();
     const { data: quote, error: qErr } = await admin
       .from('quotes')
-      .select('*, leads(first_name, last_name, phone), clients(first_name, last_name, phone)')
+      .select('*, lead:clients!quotes_lead_id_fkey(first_name, last_name, phone), client:clients!quotes_client_id_fkey(first_name, last_name, phone)')
       .eq('id', quoteId)
       .single();
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
 
-    const lead = quote.leads as any;
-    const client = quote.clients as any;
+    const lead = quote.lead as any;
+    const client = quote.client as any;
     const recipientPhone = client?.phone || lead?.phone;
     const recipientName = client
       ? `${client.first_name || ''} ${client.last_name || ''}`.trim()

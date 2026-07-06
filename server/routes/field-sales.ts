@@ -1698,8 +1698,8 @@ router.get('/pipeline', async (req: Request, res: Response) => {
         id, org_id, stage, title, value, notes, created_at, updated_at,
         lead_id, client_id, job_id, quote_id, pin_id, rep_id, source,
         d2d_status, lost_reason, lost_at,
-        leads(id, first_name, last_name, email, phone, status, created_by),
-        clients(id, first_name, last_name, company, email, phone)
+        lead:clients!pipeline_deals_lead_id_fkey(id, first_name, last_name, email, phone, status, created_by),
+        client:clients!pipeline_deals_client_id_fkey(id, first_name, last_name, company, email, phone)
       `)
       .eq('org_id', auth.orgId)
       .is('deleted_at', null)
@@ -1715,7 +1715,7 @@ router.get('/pipeline', async (req: Request, res: Response) => {
     // Fetch rep names + creator names for display
     const allUserIds = [...new Set([
       ...(data || []).map((d: any) => d.rep_id).filter(Boolean),
-      ...(data || []).map((d: any) => d.leads?.created_by).filter(Boolean),
+      ...(data || []).map((d: any) => d.lead?.created_by).filter(Boolean),
     ])];
     let userNameMap: Record<string, string> = {};
     if (allUserIds.length > 0) {
@@ -1733,15 +1733,15 @@ router.get('/pipeline', async (req: Request, res: Response) => {
     const enriched = (data || []).map((deal: any) => ({
       ...deal,
       rep_name: deal.rep_id ? (userNameMap[deal.rep_id] || null) : null,
-      created_by_id: deal.leads?.created_by || null,
-      created_by_name: deal.leads?.created_by ? (userNameMap[deal.leads.created_by] || null) : null,
-      lead_name: deal.leads
-        ? `${deal.leads.first_name || ''} ${deal.leads.last_name || ''}`.trim()
-        : deal.clients
-          ? `${deal.clients.first_name || ''} ${deal.clients.last_name || ''}`.trim()
+      created_by_id: deal.lead?.created_by || null,
+      created_by_name: deal.lead?.created_by ? (userNameMap[deal.lead.created_by] || null) : null,
+      lead_name: deal.lead
+        ? `${deal.lead.first_name || ''} ${deal.lead.last_name || ''}`.trim()
+        : deal.client
+          ? `${deal.client.first_name || ''} ${deal.client.last_name || ''}`.trim()
           : deal.title || 'Unnamed',
-      lead_email: deal.leads?.email || deal.clients?.email || null,
-      lead_phone: deal.leads?.phone || deal.clients?.phone || null,
+      lead_email: deal.lead?.email || deal.client?.email || null,
+      lead_phone: deal.lead?.phone || deal.client?.phone || null,
     }));
 
     return res.json(enriched);
@@ -1758,16 +1758,23 @@ router.put('/pipeline/:id', async (req: Request, res: Response) => {
 
   try {
     const { stage, d2d_status, lost_reason, rep_id } = req.body;
-    const updates: Record<string, any> = { updated_at: new Date().toISOString() };
+    const now = new Date().toISOString();
+    const updates: Record<string, any> = { updated_at: now };
 
-    if (stage) updates.stage = stage;
+    if (stage) {
+      // Tolerate legacy slugs from stale clients — DB CHECK only accepts canonical
+      const LEGACY_TO_CANONICAL: Record<string, string> = {
+        new: 'new_prospect', follow_up_1: 'no_response', follow_up_2: 'quote_sent',
+        follow_up_3: 'quote_sent', closed: 'closed_won', lost: 'closed_lost', Lost: 'closed_lost',
+      };
+      const canonical = LEGACY_TO_CANONICAL[stage] || stage;
+      updates.stage = canonical;
+      if (canonical === 'closed_lost') updates.lost_at = now;
+      if (canonical === 'closed_won') updates.won_at = now;
+    }
     if (d2d_status !== undefined) updates.d2d_status = d2d_status;
     if (lost_reason !== undefined) updates.lost_reason = lost_reason;
     if (rep_id !== undefined) updates.rep_id = rep_id;
-
-    if (stage === 'Lost') {
-      updates.lost_at = new Date().toISOString();
-    }
 
     const { data, error } = await admin
       .from('pipeline_deals')
