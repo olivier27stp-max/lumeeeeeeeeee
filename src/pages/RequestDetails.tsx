@@ -376,6 +376,8 @@ function AssessmentSection({
   const [startTime, setStartTime] = useState(start.time || '09:00');
   const [endDate, setEndDate] = useState(end.date);
   const [endTime, setEndTime] = useState(end.time || '10:00');
+  // Single-day visit by default; the checkbox reveals separate start/end dates.
+  const [multiDay, setMultiDay] = useState(!!end.date && end.date !== start.date);
   const [teamId, setTeamId] = useState(s.assessment_team_id || '');
   const [userId, setUserId] = useState(s.assessment_user_id || '');
   const [instructions, setInstructions] = useState(s.assessment_instructions || '');
@@ -390,7 +392,8 @@ function AssessmentSection({
 
   const handleSave = async () => {
     const startIso = joinIso(startDate, startTime);
-    const endIso = joinIso(endDate || startDate, endTime);
+    // Single-day visit: the end shares the start date, only the time differs.
+    const endIso = multiDay ? joinIso(endDate || startDate, endTime) : joinIso(startDate, endTime);
     if (!startIso) {
       toast.error(fr ? 'Choisissez une date de début.' : 'Pick a start date.');
       return;
@@ -436,20 +439,53 @@ function AssessmentSection({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label className={labelCls}>{fr ? 'Début' : 'Start'}</label>
-          <div className="flex gap-2">
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
-            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={cn(inputCls, 'max-w-[130px]')} />
-          </div>
-        </div>
-        <div>
-          <label className={labelCls}>{fr ? 'Fin' : 'End'}</label>
-          <div className="flex gap-2">
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} />
-            <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={cn(inputCls, 'max-w-[130px]')} />
-          </div>
-        </div>
+        {!multiDay ? (
+          <>
+            <div>
+              <label className={labelCls}>{fr ? 'Date' : 'Date'}</label>
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>{fr ? 'Horaire' : 'Time'}</label>
+              <div className="flex items-center gap-2">
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
+                <span className="mt-1.5 text-text-muted">–</span>
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <label className={labelCls}>{fr ? 'Début' : 'Start'}</label>
+              <div className="flex gap-2">
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={cn(inputCls, 'max-w-[130px]')} />
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>{fr ? 'Fin' : 'End'}</label>
+              <div className="flex gap-2">
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} />
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={cn(inputCls, 'max-w-[130px]')} />
+              </div>
+            </div>
+          </>
+        )}
+
+        <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer select-none sm:col-span-2">
+          <input
+            type="checkbox"
+            checked={multiDay}
+            onChange={(e) => {
+              setMultiDay(e.target.checked);
+              if (e.target.checked && !endDate) setEndDate(startDate);
+            }}
+            className="h-4 w-4 rounded"
+          />
+          {fr ? 'Visite sur plusieurs jours' : 'Multi-day visit'}
+        </label>
+
         <div>
           <label className={labelCls}>{fr ? 'Équipe assignée' : 'Team assigned'}</label>
           <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className={inputCls}>
