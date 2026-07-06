@@ -250,6 +250,24 @@ export async function listInvoices(query: InvoicesListQuery): Promise<InvoicesLi
   };
 }
 
+/**
+ * Sidebar badge counter — invoices sent and past their due date. Mirrors the
+ * Finances page 'past_due' filter; on query error returns 0 so the badge is
+ * hidden rather than showing a count the page can't display.
+ */
+export async function countOverdueInvoices(orgId: string): Promise<number> {
+  const today = new Date().toISOString().slice(0, 10);
+  const { count, error } = await supabase
+    .from('invoices')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
+    .eq('status', 'sent')
+    .lt('due_date', today);
+  if (error) return 0;
+  return count || 0;
+}
+
 export async function searchActiveClients(query: { q: string; page: number; pageSize: number }): Promise<{
   items: InvoiceClientOption[];
   total: number;

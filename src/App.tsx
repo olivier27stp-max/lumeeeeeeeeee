@@ -59,6 +59,8 @@ import Subprocessors from './pages/Subprocessors';
 import { CookieBanner } from './components/CookieBanner';
 import Landing from './pages/Landing';
 import { supabase } from './lib/supabase';
+import { countPendingQuotes } from './lib/quotesApi';
+import { countOverdueInvoices } from './lib/invoicesApi';
 import { User } from '@supabase/supabase-js';
 import Jobs from './pages/Jobs';
 import NotFound from './pages/NotFound';
@@ -670,12 +672,14 @@ function AuthenticatedApp({
   useEffect(() => {
     if (!user || !currentOrgId) { setPendingQuotes(0); setOverdueInvoices(0); return; }
     const load = async () => {
-      const [qRes, iRes] = await Promise.all([
-        supabase.from('quotes').select('status', { count: 'exact', head: true }).eq('org_id', currentOrgId).is('deleted_at', null).in('status', ['awaiting_response', 'changes_requested']),
-        supabase.from('invoices').select('status', { count: 'exact', head: true }).eq('org_id', currentOrgId).is('deleted_at', null).eq('status', 'sent').lt('due_date', new Date().toISOString().slice(0, 10)),
+      // Counts share the query shape of the Quotes/Finances pages: if a page
+      // query breaks, its badge disappears instead of showing an orphan count.
+      const [q, i] = await Promise.all([
+        countPendingQuotes(currentOrgId),
+        countOverdueInvoices(currentOrgId),
       ]);
-      setPendingQuotes(qRes.count || 0);
-      setOverdueInvoices(iRes.count || 0);
+      setPendingQuotes(q);
+      setOverdueInvoices(i);
     };
     load();
     const interval = setInterval(load, 60_000);

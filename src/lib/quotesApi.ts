@@ -668,7 +668,9 @@ export async function listAllQuotes(opts?: {
 
   let query = supabase
     .from('quotes')
-    .select('*, clients(first_name, last_name, company, deleted_at), leads(first_name, last_name, company, deleted_at), properties(name, address)', { count: 'exact' })
+    // quotes has two FKs to clients (client_id + lead_id since the leads merge) —
+    // embeds must name the FK explicitly or PostgREST rejects the query (PGRST201)
+    .select('*, clients!quotes_client_id_fkey(first_name, last_name, company, deleted_at), leads:clients!quotes_lead_id_fkey(first_name, last_name, company, deleted_at), properties(name, address)', { count: 'exact' })
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -688,6 +690,23 @@ export async function listAllQuotes(opts?: {
 }
 
 export const PENDING_QUOTE_STATUSES: QuoteStatus[] = ['awaiting_response', 'changes_requested'];
+
+/**
+ * Sidebar badge counter. Uses the same embeds as listAllQuotes so the count
+ * shares the fate of the Quotes page query: if the page can't display quotes
+ * (query error), this returns 0 and the badge is hidden instead of showing a
+ * count the user can't see anywhere.
+ */
+export async function countPendingQuotes(orgId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('quotes')
+    .select('id, clients!quotes_client_id_fkey(id), leads:clients!quotes_lead_id_fkey(id), properties(id)', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
+    .in('status', PENDING_QUOTE_STATUSES);
+  if (error) return 0;
+  return count || 0;
+}
 
 export async function fetchQuoteKpis(): Promise<{
   total_count: number;
