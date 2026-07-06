@@ -28,6 +28,13 @@ type ClientSort = 'recent' | 'oldest' | 'name_asc' | 'name_desc';
 
 const STATUS_OPTIONS = ['All', 'active', 'lead', 'inactive'];
 
+// Dot colors mirror the StatusBadge icon colors (variantStyle in StatusBadge.tsx).
+const STATUS_DOT_COLORS: Record<string, string> = {
+  active: '#43D17B',
+  lead: '#4F8CFF',
+  inactive: '#B5B5B5',
+};
+
 interface ClientFormState {
   first_name: string;
   last_name: string;
@@ -94,6 +101,7 @@ export default function Clients() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [statusFilter, setStatusFilter] = useState('All');
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [sortBy, setSortBy] = useState<ClientSort>('recent');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -257,9 +265,31 @@ export default function Clients() {
     return 'inactive';
   }
 
+  // Org-wide per-status counts for the filter dropdown (excludes archived clients).
+  async function loadStatusCounts() {
+    try {
+      const orgId = await getCurrentOrgIdOrThrow();
+      const countFor = (status?: string) => {
+        let q = supabase.from('clients').select('id', { count: 'exact', head: true }).eq('org_id', orgId).is('deleted_at', null);
+        if (status) q = q.eq('status', status);
+        return q;
+      };
+      const [all, active, lead, inactive] = await Promise.all([countFor(), countFor('active'), countFor('lead'), countFor('inactive')]);
+      setStatusCounts({
+        All: all.count || 0,
+        active: active.count || 0,
+        lead: lead.count || 0,
+        inactive: inactive.count || 0,
+      });
+    } catch {
+      // Counts are cosmetic — leave the dropdown without numbers on failure.
+    }
+  }
+
   async function loadClients() {
     setLoading(true);
     setError(null);
+    void loadStatusCounts();
     try {
       // Fetch without status filter first if we need to compute statuses
       const fetchStatus = statusFilter !== 'All' ? undefined : undefined;
@@ -538,12 +568,10 @@ export default function Clients() {
     return ((first?.[0] || '') + (last?.[0] || '')).toUpperCase() || '?';
   }
 
-  const statusFilterOptions = STATUS_OPTIONS.map((s) => ({
-    value: s,
-    label: s === 'All' ? t.common.allStatuses : s === 'active' ? t.clients.statusActive : s === 'lead' ? t.clients.statusLead : t.clients.statusInactive,
-  }));
-
   const fr = language === 'fr';
+
+  const statusLabel = (s: string) =>
+    s === 'All' ? (fr ? 'Tous' : 'All') : s === 'active' ? t.clients.statusActive : s === 'lead' ? t.clients.statusLead : t.clients.statusInactive;
 
 
   /* ═══════════════════════════════════════════════════════
@@ -594,7 +622,6 @@ export default function Clients() {
   }, [items, cityFilter]);
 
   const IconSort = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>;
-  const IconPlus = (c: string) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>;
 
   return (
     <>
@@ -611,27 +638,39 @@ export default function Clients() {
 
       {/* ── TOOLBAR ── */}
       <div className="flex items-center gap-2 mt-5 mb-4">
-        <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
-          placeholder={fr ? 'Rechercher clients...' : 'Search clients...'}
-          className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-[var(--color-outline)] rounded-md text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:ring-1 focus:ring-[var(--color-text-tertiary)] focus:border-[var(--color-text-tertiary)] transition-all" />
-
-        {/* Status filter with dropdown */}
+        {/* Status filter pill — "Status | All", dropdown lists statuses with colored dot + count */}
         <div className="relative">
           <button ref={statusBtnRef} onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
-            className={`inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors ${statusFilter !== 'All' ? 'bg-[var(--color-text-primary)] text-white border-[var(--color-text-primary)]' : 'bg-surface-card text-[var(--color-text-primary)] border-[var(--color-outline)] hover:bg-[var(--color-surface-secondary)]'}`}>
-            {IconPlus(statusFilter !== 'All' ? '#fff' : 'var(--color-text-secondary)')} Status
+            className="inline-flex items-center h-9 px-3.5 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-outline)] text-[13px] hover:bg-[var(--color-surface-tertiary)] transition-colors">
+            <span className="font-medium text-[var(--color-text-secondary)]">{fr ? 'Statut' : 'Status'}</span>
+            <span aria-hidden className="w-px h-4 bg-[var(--color-outline)] mx-2.5" />
+            <span className="inline-flex items-center gap-1.5 font-medium text-[var(--color-text-primary)]">
+              {statusFilter !== 'All' && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: STATUS_DOT_COLORS[statusFilter] }} />}
+              {statusLabel(statusFilter)}
+            </span>
           </button>
           {statusDropdownOpen && (
-            <div className="absolute top-full left-0 mt-1 w-48 bg-surface-card border border-[var(--color-outline)] rounded-md shadow-lg z-50 py-1">
-              {['All', 'active', 'lead', 'inactive'].map(s => (
+            <div className="absolute top-full left-0 mt-1 w-52 bg-surface-card border border-[var(--color-outline)] rounded-md shadow-lg z-50 py-1">
+              {STATUS_OPTIONS.map(s => (
                 <button key={s} onClick={() => { setStatusFilter(s); setStatusDropdownOpen(false); setPage(1); }}
-                  className={`w-full text-left px-3 py-2 text-[13px] transition-colors ${statusFilter === s ? 'bg-[var(--color-surface-tertiary)] font-medium text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}>
-                  {s === 'All' ? (fr ? 'Tous' : 'All') : s === 'active' ? (fr ? 'Actif' : 'Active') : s === 'lead' ? (fr ? 'Lead' : 'Lead') : (fr ? 'Inactif' : 'Inactive')}
+                  className={`w-full flex items-center gap-2 text-left px-3 py-2 text-[13px] transition-colors ${statusFilter === s ? 'bg-[var(--color-surface-tertiary)] font-medium text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}>
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={s === 'All' ? { border: '1px solid var(--color-text-tertiary)' } : { background: STATUS_DOT_COLORS[s] }}
+                  />
+                  <span>{statusLabel(s)}</span>
+                  {statusCounts[s] !== undefined && (
+                    <span className="text-[var(--color-text-tertiary)] tabular-nums">({statusCounts[s]})</span>
+                  )}
                 </button>
               ))}
             </div>
           )}
         </div>
+
+        <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+          placeholder={fr ? 'Rechercher clients...' : 'Search clients...'}
+          className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-[var(--color-outline)] rounded-md text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:ring-1 focus:ring-[var(--color-text-tertiary)] focus:border-[var(--color-text-tertiary)] transition-all" />
 
       </div>
 
