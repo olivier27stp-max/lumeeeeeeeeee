@@ -215,10 +215,14 @@ export default function Quotes() {
       : (r.company || '').trim() || null;
   }
 
-  // Address of the assigned property (name only as fallback), like the Jobs page
+  // Address of the assigned property. A custom property name is a useful
+  // fallback, but the auto-created defaults ('Adresse principale'/'Adresse
+  // inconnue', see 20260707000000_properties_feature.sql) are noise — show '—'.
   function propertyLabel(q: any): string {
     const p = q.properties as any;
-    return p?.address || p?.name || '—';
+    if (p?.address) return p.address;
+    if (p?.name && !['Adresse principale', 'Adresse inconnue'].includes(p.name)) return p.name;
+    return '—';
   }
 
   async function onDel(id: string) {
