@@ -780,7 +780,7 @@ function AddEventForm({ houseId, onSuccess }: { houseId: string; onSuccess: () =
 }
 
 // ── House Drawer ──────────────────────────────────────────────
-function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQuote, onOpenInvoice, onOpenClient }: {
+function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQuote, onOpenInvoice, onOpenClient, onNavigate }: {
   house: FieldHouseDetail | null;
   onClose: () => void;
   onRefresh: () => void;
@@ -789,6 +789,7 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
   onOpenQuote: () => void;
   onOpenInvoice: () => void;
   onOpenClient: () => void;
+  onNavigate: (path: string) => void;
 }) {
   const { language } = useTranslation();
   const [showDelete, setShowDelete] = useState(false);
@@ -873,6 +874,28 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
     else if (entityType === 'invoice') onOpenInvoice();
   };
 
+  // Open the EXISTING linked client page. The client id may live on the house
+  // directly, or only on its linked job (client_id ?? lead_id) — resolve both.
+  const openLinkedClient = async () => {
+    let clientId: string | null = (house as any).client_id || null;
+    if (!clientId && (house as any).job_id) {
+      const { data } = await supabase
+        .from('jobs')
+        .select('client_id, lead_id')
+        .eq('id', (house as any).job_id)
+        .maybeSingle();
+      clientId = (data?.client_id as string) || (data?.lead_id as string) || null;
+    }
+    if (clientId) {
+      onClose();
+      onNavigate(`/clients/${clientId}`);
+    } else {
+      toast.error(language === 'fr' ? 'Aucune fiche client liée.' : 'No client linked.');
+    }
+  };
+
+  const hasLinkedClient = !!((house as any).client_id || (house as any).job_id);
+
   // Quick status buttons — 1 tap to change status
   const quickStatuses = [
     { key: 'knock', label: 'Knocked', event: 'knock' },
@@ -930,9 +953,9 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
         <div className="flex items-center gap-3 mt-2.5 text-[10px] text-text-tertiary flex-wrap">
           <span className="flex items-center gap-1"><Hash size={10} /> {house.visit_count} {language === 'fr' ? 'visites' : 'visits'}</span>
           {house.last_activity_at && <span className="flex items-center gap-1"><Clock size={10} /> {new Date(house.last_activity_at).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-US')}</span>}
-          {(house as any).client_id && <span className="flex items-center gap-1 text-blue-400"><User size={10} /> {language === 'fr' ? 'Client lié' : 'Client linked'}</span>}
-          {(house as any).quote_id && <span className="flex items-center gap-1 text-slate-400"><FileText size={10} /> {language === 'fr' ? 'Devis lié' : 'Quote linked'}</span>}
-          {(house as any).job_id && <span className="flex items-center gap-1 text-green-400"><Briefcase size={10} /> {language === 'fr' ? 'Job lié' : 'Job linked'}</span>}
+          {hasLinkedClient && <button type="button" onClick={openLinkedClient} className="flex items-center gap-1 text-blue-400 hover:underline"><User size={10} /> {language === 'fr' ? 'Voir client' : 'Open client'}</button>}
+          {(house as any).quote_id && <button type="button" onClick={() => { onClose(); onNavigate(`/quotes/${(house as any).quote_id}`); }} className="flex items-center gap-1 text-slate-400 hover:underline"><FileText size={10} /> {language === 'fr' ? 'Devis lié' : 'Quote linked'}</button>}
+          {(house as any).job_id && <button type="button" onClick={() => { onClose(); onNavigate(`/jobs/${(house as any).job_id}`); }} className="flex items-center gap-1 text-green-400 hover:underline"><Briefcase size={10} /> {language === 'fr' ? 'Job lié' : 'Job linked'}</button>}
           {(house as any).closed_by_name && <span className="flex items-center gap-1 text-text-secondary"><CheckCircle2 size={10} /> {language === 'fr' ? 'Fermé par' : 'Closed by'} {(house as any).closed_by_name} ({(house as any).closed_by_role})</span>}
         </div>
 
@@ -2269,6 +2292,7 @@ export default function FieldSales() {
           onOpenQuote={() => setShowQuoteModal(true)}
           onOpenInvoice={() => setShowInvoiceModal(true)}
           onOpenClient={() => { navigate('/clients'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-client')), 300); }}
+          onNavigate={(path) => navigate(path)}
         />
       )}
     </AnimatePresence>
