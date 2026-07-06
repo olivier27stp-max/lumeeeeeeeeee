@@ -36,11 +36,11 @@ export default function TopServicesByCountCard() {
         <p className="text-xs text-zinc-400 dark:text-zinc-500">{ti.byJobCount || 'Most-booked services'}</p>
       </div>
       {isLoading ? (
-        <div className="flex-1 min-h-[240px] animate-pulse bg-zinc-100 dark:bg-zinc-800 rounded-lg" />
+        <div className="h-[260px] animate-pulse bg-zinc-100 dark:bg-zinc-800 rounded-lg" />
       ) : data.length === 0 ? (
-        <div className="flex-1 min-h-[240px] flex items-center justify-center text-sm text-zinc-400">{ti.noData || 'No data'}</div>
+        <div className="h-[260px] flex items-center justify-center text-sm text-zinc-400">{ti.noData || 'No data'}</div>
       ) : (
-        <div className="flex-1 min-h-[240px]">
+        <div className="h-[260px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} layout="vertical">
               <CartesianGrid horizontal={false} stroke="#e4e4e7" />
