@@ -39,6 +39,33 @@ export interface LeadPinInput {
 }
 
 /**
+ * Progressive simplifications of an address for geocode retries: full form,
+ * then without unit/suite parts, then street + locality tail, then locality
+ * only. Ordered from most to least precise; capped to avoid hammering the
+ * geocoders.
+ */
+function addressVariants(address: string): string[] {
+  const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
+  const variants: string[] = [parts.join(', ')];
+  const noUnit = parts.filter((p) => !/^(apt|app|unit|suite|ste|bureau|local|#)\b/i.test(p));
+  if (noUnit.length && noUnit.length !== parts.length) variants.push(noUnit.join(', '));
+  if (parts.length >= 4) variants.push([parts[0], ...parts.slice(-3)].join(', '));
+  if (parts.length >= 3) variants.push(parts.slice(-3).join(', '));
+  return [...new Set(variants)].slice(0, 4);
+}
+
+/** geocodeAddress with the fallback chain above. */
+export async function geocodeWithFallback(
+  address: string,
+): Promise<{ latitude: number; longitude: number; variant: string } | null> {
+  for (const variant of addressVariants(address)) {
+    const geo = await geocodeAddress(variant);
+    if (geo) return { latitude: geo.latitude, longitude: geo.longitude, variant };
+  }
+  return null;
+}
+
+/**
  * Create (or merge into) a map pin for an inbound lead.
  * Returns the house id, or null when the address is missing/un-geocodable.
  * Never throws — map pin creation must not break the caller's flow.
@@ -67,28 +94,35 @@ export async function upsertLeadPinForClient(
     let existingClientId: string | null = byAddress?.client_id ?? null;
     let lat: number | null = null;
     let lng: number | null = null;
+    let geocodePending = false;
 
-    // 2. No address match → geocode, then merge with any house within 50 m
+    // 2. No address match → geocode, then merge with any house within 50 m.
+    //    A geocode failure does NOT abort: the house + pin are still created
+    //    with null coords and repairMissingPinCoords() fills them in later.
     if (!houseId) {
-      const geo = await geocodeAddress(address);
-      if (!geo) {
-        console.warn('[field-pin] geocode failed, no pin created', { orgId: input.orgId, address });
-        return null;
-      }
-      lat = geo.latitude;
-      lng = geo.longitude;
+      const geo = await geocodeWithFallback(address);
+      if (geo) {
+        lat = geo.latitude;
+        lng = geo.longitude;
 
-      const { data: nearby } = await admin
-        .from('field_house_profiles')
-        .select('id, lat, lng, client_id')
-        .eq('org_id', input.orgId)
-        .is('deleted_at', null);
-      const duplicate = (nearby ?? []).find(
-        (h: any) => h.lat != null && h.lng != null && haversineMetres(lat!, lng!, h.lat, h.lng) <= 50,
-      );
-      if (duplicate) {
-        houseId = duplicate.id;
-        existingClientId = duplicate.client_id ?? null;
+        const { data: nearby } = await admin
+          .from('field_house_profiles')
+          .select('id, lat, lng, client_id')
+          .eq('org_id', input.orgId)
+          .is('deleted_at', null);
+        const duplicate = (nearby ?? []).find(
+          (h: any) => h.lat != null && h.lng != null && haversineMetres(lat!, lng!, h.lat, h.lng) <= 50,
+        );
+        if (duplicate) {
+          houseId = duplicate.id;
+          existingClientId = duplicate.client_id ?? null;
+        }
+      } else {
+        geocodePending = true;
+        console.warn('[field-pin] geocode failed, creating pin without coords (repair cron will retry)', {
+          orgId: input.orgId,
+          address,
+        });
       }
     }
 
@@ -124,6 +158,7 @@ export async function upsertLeadPinForClient(
             customer_name: input.customerName || null,
             customer_phone: input.customerPhone || null,
             customer_email: input.customerEmail || null,
+            ...(geocodePending ? { geocode_status: 'pending' } : {}),
           },
         })
         .select('id')
@@ -143,12 +178,13 @@ export async function upsertLeadPinForClient(
       .maybeSingle();
 
     if (existingPin?.id) {
-      await admin
+      const { error: pinErr } = await admin
         .from('field_pins')
         .update({ status: 'lead', pin_color: STATUS_COLORS.lead, has_note: !!input.noteText, updated_at: now })
         .eq('id', existingPin.id);
+      if (pinErr) console.error('[field-pin] pin update failed:', pinErr.message);
     } else {
-      await admin.from('field_pins').insert({
+      const { error: pinErr } = await admin.from('field_pins').insert({
         org_id: input.orgId,
         house_id: houseId,
         user_id: input.actorId,
@@ -156,6 +192,7 @@ export async function upsertLeadPinForClient(
         pin_color: STATUS_COLORS.lead,
         has_note: !!input.noteText,
       });
+      if (pinErr) console.error('[field-pin] pin insert failed:', pinErr.message);
     }
 
     // 4. Timeline event + entity link (best-effort)
@@ -184,4 +221,78 @@ export async function upsertLeadPinForClient(
     console.error('[field-pin] upsertLeadPinForClient failed:', err?.message);
     return null;
   }
+}
+
+/**
+ * Repair cron: geocode houses saved without coordinates (geocoder was down or
+ * the address needed simplifying). Falls back to the linked client's current
+ * address when the house address still fails. Also guarantees a field_pins
+ * row exists for each repaired house. Returns the number of houses repaired.
+ */
+export async function repairMissingPinCoords(admin: SupabaseClient): Promise<number> {
+  const { data: houses, error } = await admin
+    .from('field_house_profiles')
+    .select('id, org_id, address, client_id, assigned_user_id, metadata')
+    .is('deleted_at', null)
+    .is('lat', null)
+    .order('created_at', { ascending: false })
+    .limit(25);
+  if (error) {
+    console.error('[field-pin-repair] fetch failed:', error.message);
+    return 0;
+  }
+
+  let repaired = 0;
+  for (const house of houses ?? []) {
+    try {
+      let geo = house.address ? await geocodeWithFallback(house.address) : null;
+
+      if (!geo && house.client_id) {
+        const { data: client } = await admin
+          .from('clients')
+          .select('address')
+          .eq('id', house.client_id)
+          .maybeSingle();
+        const clientAddress = normalizeAddress(client?.address);
+        if (clientAddress && clientAddress.toLowerCase() !== String(house.address || '').toLowerCase()) {
+          geo = await geocodeWithFallback(clientAddress);
+        }
+      }
+
+      if (!geo) continue;
+
+      const now = new Date().toISOString();
+      const metadata = { ...(house.metadata || {}), geocode_status: 'resolved', geocode_variant: geo.variant };
+      const { error: updErr } = await admin
+        .from('field_house_profiles')
+        .update({ lat: geo.latitude, lng: geo.longitude, metadata, updated_at: now })
+        .eq('id', house.id);
+      if (updErr) {
+        console.error('[field-pin-repair] house update failed:', updErr.message);
+        continue;
+      }
+
+      const { data: pin } = await admin
+        .from('field_pins')
+        .select('id')
+        .eq('house_id', house.id)
+        .maybeSingle();
+      if (!pin?.id && house.assigned_user_id) {
+        await admin.from('field_pins').insert({
+          org_id: house.org_id,
+          house_id: house.id,
+          user_id: house.assigned_user_id,
+          status: 'lead',
+          pin_color: STATUS_COLORS.lead,
+        });
+      }
+
+      repaired++;
+    } catch (err: any) {
+      console.error('[field-pin-repair] house repair failed:', house.id, err?.message);
+    }
+  }
+
+  if (repaired > 0) console.log(`[field-pin-repair] repaired ${repaired} pin(s)`);
+  return repaired;
 }

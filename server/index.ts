@@ -584,6 +584,18 @@ app.listen(port, '0.0.0.0', () => {
         .catch((e: any) => console.error('[alerts] Startup scan error:', e?.message)), 10_000);
     });
 
+    // Map pin repair — geocode request pins saved without coords, every 10 minutes
+    Promise.all([import('./lib/fieldPinSync'), import('./lib/supabase')]).then(
+      ([{ repairMissingPinCoords }, { getServiceClient }]) => {
+        const runRepair = () =>
+          withAdvisoryLock('field-pin-repair', () => repairMissingPinCoords(getServiceClient()))
+            .catch((e: any) => console.error('[field-pin-repair] Lock error:', e?.message));
+        setInterval(runRepair, 10 * 60 * 1000);
+        setTimeout(runRepair, 20_000);
+        console.log('[field-pin-repair] Cron started (every 10min, lock-guarded)');
+      },
+    );
+
     // Scheduled reports — check every hour
     import('./lib/scheduled-reports').then(({ processScheduledReports }) => {
       setInterval(async () => {

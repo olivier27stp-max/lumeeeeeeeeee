@@ -528,16 +528,36 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     // 3b. Drop a 'lead' pin on the field-sales map (geocoded from the form
     // address). Non-fatal — the helper never throws. The pin then follows the
     // client status via the trg_clients_sync_field_pin DB trigger.
+    // The pin is mandatory: when the form has no address, fall back to the
+    // address already on file for the matched client.
     step = 'map-pin';
-    const pinResult = await upsertLeadPinForClient(admin, {
-      orgId,
-      actorId,
-      clientId: leadIdStr,
-      address: address || '',
-      customerName: fullName,
-      customerPhone: body.phone || null,
-      customerEmail: body.email || null,
-    });
+    let pinAddress = address;
+    if (!pinAddress) {
+      const { data: clientRow } = await admin
+        .from('clients')
+        .select('address')
+        .eq('id', leadIdStr)
+        .maybeSingle();
+      pinAddress = clientRow?.address?.trim() || null;
+    }
+    const pinResult = pinAddress
+      ? await upsertLeadPinForClient(admin, {
+          orgId,
+          actorId,
+          clientId: leadIdStr,
+          address: pinAddress,
+          customerName: fullName,
+          customerPhone: body.phone || null,
+          customerEmail: body.email || null,
+        })
+      : null;
+    if (!pinResult) {
+      console.error('[public/form] no map pin created for request', {
+        orgId,
+        clientId: leadIdStr,
+        hasAddress: !!pinAddress,
+      });
+    }
 
     // 4. Save submission record
     step = 'submission-record';
