@@ -10,7 +10,7 @@ interface JobPopupProps {
   pin: MapJobPin;
   onClose: () => void;
   onOpenJob?: (jobId: string) => void;
-  onOpenClient?: (clientId: string) => void;
+  onOpenClient?: (pin: MapJobPin) => void;
 }
 
 function formatTime(iso: string | null) {
@@ -36,7 +36,7 @@ export default function JobPopup({ pin, onClose, onOpenJob, onOpenClient }: JobP
   const endTime = formatTime(pin.endAt);
   const dateLabel = formatDate(pin.scheduledAt);
   const timeLabel = startTime && endTime ? `${startTime} - ${endTime}` : startTime;
-  const openClient = onOpenClient && pin.clientId ? () => onOpenClient(pin.clientId!) : null;
+  const openClient = onOpenClient && pin.clientName ? () => onOpenClient(pin) : null;
 
   return (
     <Popup

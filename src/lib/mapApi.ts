@@ -3,6 +3,53 @@ import { getCurrentOrgIdOrThrow } from './orgApi';
 
 export type MapDateRange = 'today' | 'tomorrow' | 'this_week' | 'all';
 
+/**
+ * Resolve the client id to open from a job pin. The map denormalizes
+ * client_name onto the job, but the id can live in several places:
+ *   1. pin.clientId (client_id ?? lead_id from the map query)
+ *   2. a fresh read of the job row (in case the embed lacked the columns)
+ *   3. a single client whose display name matches pin.clientName (last resort)
+ * Returns null when the job has no resolvable client record.
+ */
+export async function resolveClientIdForPin(pin: {
+  clientId: string | null;
+  jobId: string;
+  clientName: string | null;
+}): Promise<string | null> {
+  if (pin.clientId) return pin.clientId;
+
+  const { data: job } = await supabase
+    .from('jobs')
+    .select('client_id, lead_id')
+    .eq('id', pin.jobId)
+    .maybeSingle();
+  if (job?.client_id) return job.client_id as string;
+  if (job?.lead_id) return job.lead_id as string;
+
+  const name = (pin.clientName || '').replace(/[(),*%]/g, ' ').trim();
+  if (name) {
+    const orgId = await getCurrentOrgIdOrThrow();
+    const lastToken = name.split(/\s+/).pop() || name;
+    const { data: matches } = await supabase
+      .from('clients')
+      .select('id, first_name, last_name, company')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .or(`company.ilike.%${name}%,last_name.ilike.%${lastToken}%`)
+      .limit(20);
+    if (matches && matches.length) {
+      const target = (pin.clientName || '').trim();
+      const exact = matches.find((c: any) => {
+        const full = `${c.first_name || ''} ${c.last_name || ''}`.trim();
+        return full === target || (c.company || '').trim() === target;
+      });
+      if (exact) return exact.id as string;
+      if (matches.length === 1) return matches[0].id as string;
+    }
+  }
+  return null;
+}
+
 export interface MapJobPin {
   id: string;
   jobId: string;

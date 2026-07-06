@@ -16,7 +16,8 @@ import {
 } from '../lib/locationApi';
 import { type LiveLocation, getActiveLiveLocations } from '../lib/trackingApi';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
-import { fetchMapJobs, type MapJobPin, type MapDateRange } from '../lib/mapApi';
+import { fetchMapJobs, resolveClientIdForPin, type MapJobPin, type MapDateRange } from '../lib/mapApi';
+import { toast } from 'sonner';
 import { useSearchParams } from 'react-router-dom';
 import JobPopup from '../components/map/JobPopup';
 import { supabase } from '../lib/supabase';
@@ -456,7 +457,11 @@ export default function DispatchMap() {
                 pin={selectedJobPin}
                 onClose={() => setSelectedJobPin(null)}
                 onOpenJob={(jobId) => navigate(`/jobs/${jobId}`)}
-                onOpenClient={(clientId) => navigate(`/clients/${clientId}`)}
+                onOpenClient={async (pin) => {
+                  const clientId = await resolveClientIdForPin(pin);
+                  if (clientId) navigate(`/clients/${clientId}`);
+                  else toast.error('Aucune fiche client liée à ce job.');
+                }}
               />
             )}
           </MapContainer>
