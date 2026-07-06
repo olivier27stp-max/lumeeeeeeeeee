@@ -80,6 +80,8 @@ export interface Job {
   property_id?: string | null;
   team_id?: string | null;
   client_name?: string | null;
+  /** Secondary display line for the client (company, or person name when displayed as company) */
+  client_secondary_name?: string | null;
   address?: string | null;
   property_address?: string | null;
   scheduled_at?: string | null;

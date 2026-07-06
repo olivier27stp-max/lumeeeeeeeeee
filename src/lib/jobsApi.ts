@@ -276,7 +276,7 @@ function buildSearchFilter(search: string): string {
   ].join(',');
 }
 
-async function loadClientNames(clientIds: string[]): Promise<Map<string, string>> {
+async function loadClientNames(clientIds: string[]): Promise<Map<string, { name: string; secondary: string | null }>> {
   if (clientIds.length === 0) return new Map();
   const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
@@ -288,10 +288,15 @@ async function loadClientNames(clientIds: string[]): Promise<Map<string, string>
 
   if (error) return new Map();
 
-  const map = new Map<string, string>();
+  const map = new Map<string, { name: string; secondary: string | null }>();
   for (const row of data || []) {
     const label = clientDisplayName(row) || '-';
-    map.set(row.id, label);
+    // Same secondary-line rule as the Clients page: company under the name,
+    // or the person's name when the client is displayed as a company.
+    const secondary = row.display_as_company && row.company
+      ? `${row.first_name || ''} ${row.last_name || ''}`.trim() || null
+      : (row.company || '').trim() || null;
+    map.set(row.id, { name: label, secondary });
   }
   return map;
 }
@@ -340,7 +345,10 @@ export async function getJobs(query: JobsQuery): Promise<JobsResult> {
   const clientMap = await loadClientNames(rows.map((job: any) => job.client_id).filter(Boolean) as string[]);
 
   return {
-    jobs: rows.map((row: any) => mapJob(row, row.client_id ? clientMap.get(row.client_id) : null)),
+    jobs: rows.map((row: any) => {
+      const clientInfo = row.client_id ? clientMap.get(row.client_id) : undefined;
+      return { ...mapJob(row, clientInfo?.name ?? null), client_secondary_name: clientInfo?.secondary ?? null };
+    }),
     total: count || 0,
   };
 }
@@ -424,7 +432,7 @@ export async function getJobById(id: string): Promise<Job | null> {
   let clientName: string | null = null;
   if (data.client_id) {
     const clientMap = await loadClientNames([data.client_id]);
-    clientName = clientMap.get(data.client_id) ?? null;
+    clientName = clientMap.get(data.client_id)?.name ?? null;
   }
   return mapJob(data, clientName);
 }
