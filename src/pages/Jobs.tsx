@@ -33,6 +33,7 @@ import {
   Copy,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import TeamsManagerModal from '../components/TeamsManagerModal';
 import { useJobModalController } from '../contexts/JobModalController';
@@ -391,6 +392,7 @@ function JobStatusDropdown({ value, onChange, fr }: { value: string; onChange: (
 
 export default function Jobs() {
   const { t, language } = useTranslation();
+  const navigate = useNavigate();
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [total, setTotal] = useState(0);
@@ -562,7 +564,7 @@ export default function Jobs() {
   };
 
   const handleJobClick = (job: Job) => {
-    setSelectedJob(job);
+    navigate(`/jobs/${job.id}`);
   };
 
   const handleEditJob = (job: Job) => {
