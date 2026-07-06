@@ -8,6 +8,7 @@
    Invoices / Payments page bodies in embedded mode.
    ═══════════════════════════════════════════════════════════════ */
 
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from '../i18n';
 import Invoices from './Invoices';
@@ -26,6 +27,7 @@ export default function Finances() {
   const fr = language === 'fr';
   const [params, setParams] = useSearchParams();
   const tab = parseFinancesTab(params.get('tab'));
+  const [invoiceTotal, setInvoiceTotal] = useState<number | null>(null);
 
   // Switching tabs clears sub-filter params (status/method/page/etc.) so a
   // filter from one tab never bleeds into another.
@@ -45,6 +47,9 @@ export default function Finances() {
     <>
       <h1 className="text-[28px] font-bold text-text-primary leading-tight">
         {t.finances?.title || 'Finances'}
+        {tab === 'facturation' && invoiceTotal !== null && (
+          <span className="ml-2 text-[15px] font-normal text-text-tertiary tabular-nums">{invoiceTotal}</span>
+        )}
       </h1>
 
       {/* ── Sub-tabs ── */}
@@ -61,7 +66,7 @@ export default function Finances() {
       </div>
 
       <div className="mt-2">
-        {tab === 'facturation' && <Invoices embedded />}
+        {tab === 'facturation' && <Invoices embedded onTotalChange={setInvoiceTotal} />}
         {tab === 'paiements' && <Payments embedded forceTab="overview" />}
         {tab === 'versements' && <Payments embedded forceTab="payouts" />}
       </div>

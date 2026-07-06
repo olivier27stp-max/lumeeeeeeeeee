@@ -147,7 +147,7 @@ const DEFAULT_INVOICE_SUBJECT_EN = 'For services rendered';
 const INVOICE_GRID_COLUMNS = '40px 1.4fr 110px 120px 1.4fr 200px 120px 120px 44px';
 const INVOICE_GRID_COL_COUNT = 9;
 
-export default function Invoices({ embedded = false }: { embedded?: boolean } = {}) {
+export default function Invoices({ embedded = false, onTotalChange }: { embedded?: boolean; onTotalChange?: (total: number | null) => void } = {}) {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
   const navigate = useNavigate();
@@ -207,6 +207,12 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
   const rows = invoicesQuery.data?.rows || [];
   const total = invoicesQuery.data?.total || 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // When embedded, our own title is hidden — report the total to the parent
+  // shell (Finances) so it can show the count next to its page title.
+  useEffect(() => {
+    onTotalChange?.(invoicesQuery.isLoading ? null : total);
+  }, [onTotalChange, invoicesQuery.isLoading, total]);
 
   // Fetch client emails via backend
   const clientIds = [...new Set(rows.map((r) => r.client_id).filter(Boolean))];
