@@ -165,7 +165,7 @@ router.post('/clients/by-ids', async (req, res) => {
     const admin = getServiceClient();
     const { data, error } = await admin
       .from('clients')
-      .select('id, first_name, last_name, email, company, phone')
+      .select('id, first_name, last_name, email, company, display_as_company, phone')
       .eq('org_id', auth.orgId)
       .is('deleted_at', null)
       .in('id', ids);

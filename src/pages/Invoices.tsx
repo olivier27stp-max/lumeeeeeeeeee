@@ -38,7 +38,6 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
-import { displayEmail } from '../lib/piiSanitizer';
 // InvoiceTemplate type removed — no more invoice template system
 
 const PAGE_SIZE = 20;
@@ -83,7 +82,7 @@ function InvoiceStatusDropdown({ value, onChange, fr }: { value: InvoiceStatusFi
   const options: { value: InvoiceStatusFilter; label: string }[] = [
     { value: 'all', label: fr ? 'Toutes' : 'All' },
     { value: 'draft', label: fr ? 'Brouillons' : 'Draft' },
-    { value: 'sent_not_due', label: fr ? 'Envoyées' : 'Open' },
+    { value: 'sent_not_due', label: fr ? 'En attente de paiement' : 'Awaiting Payment' },
     { value: 'past_due', label: fr ? 'En retard' : 'Past Due' },
     { value: 'paid', label: fr ? 'Payées' : 'Paid' },
   ];
@@ -131,14 +130,15 @@ function InvoiceStatusDropdown({ value, onChange, fr }: { value: InvoiceStatusFi
 
 function InvoiceBadge({ status, fr }: { status: string; fr: boolean }) {
   const s = (status || 'draft').toLowerCase();
+  // 4 statuses: Awaiting Payment (yellow), Past Due (red), Draft (gray), Paid (green)
   const map: Record<string, { label: string; badge: string }> = {
     paid:        { label: fr ? 'Payée' : 'Paid',                          badge: 'badge-success' },
-    sent_not_due:{ label: fr ? 'En attente de paiement' : 'Awaiting Payment', badge: 'badge-info' },
+    sent_not_due:{ label: fr ? 'En attente de paiement' : 'Awaiting Payment', badge: 'badge-warning' },
     past_due:    { label: fr ? 'En retard' : 'Past Due',                  badge: 'badge-danger' },
     draft:       { label: fr ? 'Brouillon' : 'Draft',                     badge: 'badge-neutral' },
-    partial:     { label: fr ? 'En attente de paiement' : 'Awaiting Payment', badge: 'badge-info' },
-    void:        { label: fr ? 'Annulée' : 'Void',                        badge: 'badge-danger' },
-    sent:        { label: fr ? 'En attente de paiement' : 'Awaiting Payment', badge: 'badge-info' },
+    partial:     { label: fr ? 'En attente de paiement' : 'Awaiting Payment', badge: 'badge-warning' },
+    void:        { label: fr ? 'Annulée' : 'Void',                        badge: 'badge-neutral' },
+    sent:        { label: fr ? 'En attente de paiement' : 'Awaiting Payment', badge: 'badge-warning' },
   };
   const v = map[s] || map.draft;
   return (
@@ -239,11 +239,16 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
       });
       if (!res.ok) return {};
       const json = await res.json();
-      const map: Record<string, { email: string | null; name: string; initials: string }> = {};
+      const map: Record<string, { email: string | null; name: string; secondary: string | null; initials: string }> = {};
       for (const c of json.clients || []) {
-        const name = `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.company || '';
+        // Same display rule as the Clients/Jobs tables: company as the main
+        // name when display_as_company, with the other one on a second line.
+        const personal = `${c.first_name || ''} ${c.last_name || ''}`.trim();
+        const company = (c.company || '').trim();
+        const name = c.display_as_company && company ? company : (personal || company);
+        const secondary = c.display_as_company && company ? (personal || null) : (company || null);
         const initials = name.split(' ').slice(0, 2).map((w: string) => w[0]?.toUpperCase() || '').join('');
-        map[c.id] = { email: c.email || null, name, initials: initials || '?' };
+        map[c.id] = { email: c.email || null, name, secondary, initials: initials || '?' };
       }
       return map;
     },
@@ -447,7 +452,7 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
 
   const kpiChips = useMemo(() => [
     { key: 'past_due' as const, label: fr ? 'En retard' : 'Overdue', value: kpis?.past_due_count || 0, amount: kpis?.past_due_total_cents || 0, color: 'bg-danger', filter: 'past_due' as InvoiceStatusFilter },
-    { key: 'sent_not_due' as const, label: fr ? 'Ouvertes' : 'Open', value: kpis?.sent_not_due_count || 0, amount: kpis?.sent_not_due_total_cents || 0, color: 'bg-info', filter: 'sent_not_due' as InvoiceStatusFilter },
+    { key: 'sent_not_due' as const, label: fr ? 'En attente' : 'Awaiting', value: kpis?.sent_not_due_count || 0, amount: kpis?.sent_not_due_total_cents || 0, color: 'bg-warning', filter: 'sent_not_due' as InvoiceStatusFilter },
     { key: 'draft' as const, label: fr ? 'Brouillons' : 'Drafts', value: kpis?.draft_count || 0, amount: kpis?.draft_total_cents || 0, color: 'bg-text-tertiary', filter: 'draft' as InvoiceStatusFilter },
     { key: 'paid' as const, label: fr ? 'Payées' : 'Paid', value: paidCountQuery.data || 0, amount: 0, color: 'bg-success', filter: 'paid' as InvoiceStatusFilter },
   ], [kpis, paidCountQuery.data, fr]);
@@ -559,10 +564,10 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
                 <button onClick={() => applySort('status')} className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</button>
               </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center justify-end text-[14px] font-medium text-text-primary">
+              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
                 <button onClick={() => applySort('total')} className="inline-flex items-center gap-1">Total {IconSort}</button>
               </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center justify-end text-[14px] font-medium text-text-primary">
+              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
                 <button onClick={() => applySort('balance')} className="inline-flex items-center gap-1">{fr ? 'Balance' : 'Balance'} {IconSort}</button>
               </div>
               <div className="py-3 border-b border-outline" />
@@ -576,8 +581,8 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-28 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse ml-auto" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse ml-auto" /></div>
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 border-b border-outline/30" />
                 </React.Fragment>
               ))}
@@ -629,31 +634,31 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
                     {/* Client */}
                     <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                       <div className="flex items-center gap-3 min-w-0">
-                        <UnifiedAvatar id={row.client_id || row.id} name={row.client_name || '?'} />
+                        <UnifiedAvatar id={row.client_id || row.id} name={client?.name || row.client_name || '?'} />
                         <div className="min-w-0">
-                          <span className="text-[14px] text-text-primary truncate block">{row.client_name || '—'}</span>
-                          {client?.email && (
-                            <span className="text-[11px] text-text-muted truncate block">{displayEmail(client.email)}</span>
+                          <p className="text-[14px] font-bold text-text-primary truncate leading-tight">{client?.name || row.client_name || '—'}</p>
+                          {client?.secondary && (
+                            <p className="text-[12px] font-normal text-text-tertiary truncate leading-tight mt-0.5">{client.secondary}</p>
                           )}
                         </div>
                       </div>
                     </div>
                     {/* Invoice # */}
                     <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
-                      <span className="text-[13px] text-text-muted tabular-nums font-medium">{row.invoice_number}</span>
+                      <span className="text-[14px] text-text-primary tabular-nums truncate">{row.invoice_number}</span>
                     </div>
                     {/* Due date */}
                     <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                       <span className={cn(
-                        'text-[13px] tabular-nums font-medium',
-                        isPastDue ? 'text-[#dc2626]' : 'text-text-muted'
+                        'text-[14px] tabular-nums truncate',
+                        isPastDue ? 'text-[#dc2626]' : 'text-text-primary'
                       )}>
                         {row.due_date ? formatDate(row.due_date) : '—'}
                       </span>
                     </div>
                     {/* Subject (default "Pour service rendu") */}
                     <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
-                      <span className="text-[13px] text-text-secondary truncate">
+                      <span className="text-[14px] text-text-primary truncate">
                         {row.subject || (fr ? DEFAULT_INVOICE_SUBJECT_FR : DEFAULT_INVOICE_SUBJECT_EN)}
                       </span>
                     </div>
@@ -662,13 +667,13 @@ export default function Invoices({ embedded = false }: { embedded?: boolean } = 
                       <InvoiceBadge status={uiStatus} fr={fr} />
                     </div>
                     {/* Total */}
-                    <div className={`py-3 px-4 flex items-center justify-end cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                       <span className="text-[14px] font-semibold text-text-primary tabular-nums">{formatMoneyFromCents(row.total_cents)}</span>
                     </div>
                     {/* Balance */}
-                    <div className={`py-3 px-4 flex items-center justify-end cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                       <span className={cn(
-                        'text-[13px] font-medium tabular-nums',
+                        'text-[14px] font-semibold tabular-nums',
                         row.balance_cents === 0 ? 'text-text-muted' : isPastDue ? 'text-[#dc2626]' : 'text-text-primary'
                       )}>
                         {row.balance_cents === 0 ? formatMoneyFromCents(0) : formatMoneyFromCents(row.balance_cents)}
