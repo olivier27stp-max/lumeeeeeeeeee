@@ -147,6 +147,15 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
       setNextQuoteNumber(next.quote);
       setQuoteNumber(prev => prev || next.quote!);
     });
+    // Vendeur par défaut : l'utilisateur qui crée la soumission (modifiable
+    // via le menu déroulant) — même comportement que le formulaire de job.
+    setSalespersonId('');
+    supabase.auth.getUser()
+      .then(({ data }) => {
+        const uid = data.user?.id;
+        if (uid) setSalespersonId(prev => prev || uid);
+      })
+      .catch(() => {});
 
     if (lead) {
       setTitle(`Quote for ${lead.first_name || ''} ${lead.last_name || ''}`.trim());
