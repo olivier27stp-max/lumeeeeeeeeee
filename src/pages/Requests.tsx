@@ -178,7 +178,7 @@ export default function Requests() {
               <div
                 key={s.id}
                 onClick={() => navigate(`/requests/${s.id}`)}
-                className="group cursor-pointer overflow-hidden rounded-xl border border-border-subtle dark:border-white bg-surface transition-colors hover:border-primary/40 dark:hover:border-white hover:bg-surface-elevated"
+                className="group cursor-pointer overflow-hidden rounded-xl border border-border-subtle dark:border-[#d8d0c2] bg-surface transition-colors hover:border-primary/40 dark:hover:border-[#d8d0c2] hover:bg-surface-elevated"
               >
                 {/* Headbar — name · photo count · date */}
                 <div className="flex items-center justify-between gap-3 bg-[#d8d0c2] px-4 py-2.5">
