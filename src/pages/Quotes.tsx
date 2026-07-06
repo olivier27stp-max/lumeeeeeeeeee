@@ -6,9 +6,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
-import { StatusBadge } from '../components/ui';
+import { StatusBadge, FilterPill, statusDotColor } from '../components/ui';
 import {
   listAllQuotes,
+  fetchQuoteStatusCounts,
   formatQuoteMoney,
   deleteQuote,
   updateQuoteStatus,
@@ -16,6 +17,7 @@ import {
   QUOTE_STATUS_LABELS,
   type QuoteStatus,
 } from '../lib/quotesApi';
+import { listSalespeople } from '../lib/jobsApi';
 import { formatDate, cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
@@ -119,6 +121,7 @@ export default function Quotes() {
   const qc = useQueryClient();
 
   const [tab, setTab] = useState<StatusTab>('all');
+  const [salespersonFilter, setSalespersonFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [page, setPage] = useState(1);
@@ -162,8 +165,20 @@ export default function Quotes() {
   }, [search]);
 
   const { data: res, isLoading } = useQuery({
-    queryKey: ['quotes-list', tab, debounced, page],
-    queryFn: () => listAllQuotes({ status: tab, search: debounced, page, pageSize: PAGE_SIZE }),
+    queryKey: ['quotes-list', tab, salespersonFilter, debounced, page],
+    queryFn: () => listAllQuotes({ status: tab, salespersonId: salespersonFilter, search: debounced, page, pageSize: PAGE_SIZE }),
+  });
+
+  // Org-wide per-status counts + salespeople for the filter pills.
+  const { data: statusCounts } = useQuery({
+    queryKey: ['quotes-status-counts'],
+    queryFn: fetchQuoteStatusCounts,
+    staleTime: 30_000,
+  });
+  const { data: salespeople } = useQuery({
+    queryKey: ['salespeople'],
+    queryFn: listSalespeople,
+    staleTime: 300_000,
   });
 
   const rows = res?.data || [];
@@ -263,15 +278,29 @@ export default function Quotes() {
 
       {/* ── TOOLBAR ── */}
       <div className="flex items-center gap-2 mt-5 mb-4">
-        <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder={fr ? 'Rechercher devis...' : 'Search quotes...'}
-          className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all" />
-        <QuoteFilterDropdown
+        <FilterPill
           label={fr ? 'Statut' : 'Status'}
           value={tab}
           onChange={(v) => { setTab(v as StatusTab); setPage(1); }}
-          options={STATUS_TABS.map(s => ({ value: s, label: sLabel(s, fr) }))}
+          options={STATUS_TABS.map(s => ({
+            value: s,
+            label: sLabel(s, fr),
+            dotColor: s === 'all' ? undefined : statusDotColor(s),
+            count: statusCounts?.[s],
+          }))}
         />
+        <FilterPill
+          label={fr ? 'Vendeur' : 'Salesperson'}
+          value={salespersonFilter}
+          onChange={(v) => { setSalespersonFilter(v); setPage(1); }}
+          options={[
+            { value: 'All', label: fr ? 'Tous' : 'All' },
+            ...(salespeople || []).map((p) => ({ value: p.id, label: p.label })),
+          ]}
+        />
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder={fr ? 'Rechercher devis...' : 'Search quotes...'}
+          className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all" />
         <QuoteFilterDropdown
           label={fr ? 'Montant' : 'Amount'}
           value={sort === 'total_asc' ? 'total_asc' : sort === 'total_desc' ? 'total_desc' : 'all'}

@@ -194,6 +194,20 @@ const statusVariants: Record<string, Variant> = {
   archived: 'neutral',
 };
 
+/**
+ * Dot color for a status — the same accent the badge icon uses, so filter
+ * dropdowns and badges stay visually consistent.
+ */
+export function statusDotColor(status: string): string {
+  const key = status.includes(' ')
+    ? status.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_')
+    : status.toLowerCase().replace(/-/g, '_');
+  if (key === 'archived') return '#8A8A8E';
+  if (key === 'requires_invoicing') return '#F58A2E';
+  const variant = statusVariants[status] || statusVariants[key] || 'neutral';
+  return variantStyle[variant].icon;
+}
+
 const BASE_SHADOW = '0 4px 12px rgba(0,0,0,0.20)';
 const HOVER_SHADOW = '0 8px 20px rgba(0,0,0,0.28)';
 

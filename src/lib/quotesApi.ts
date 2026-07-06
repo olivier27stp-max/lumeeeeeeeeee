@@ -658,6 +658,7 @@ export async function convertQuoteToInvoice(quoteId: string): Promise<{ invoiceI
 export async function listAllQuotes(opts?: {
   status?: string;
   search?: string;
+  salespersonId?: string;
   page?: number;
   pageSize?: number;
 }): Promise<{ data: Quote[]; total: number }> {
@@ -680,6 +681,10 @@ export async function listAllQuotes(opts?: {
     query = query.eq('status', opts.status);
   }
 
+  if (opts?.salespersonId && opts.salespersonId !== 'All') {
+    query = query.eq('salesperson_id', opts.salespersonId);
+  }
+
   if (opts?.search) {
     query = query.or(`quote_number.ilike.%${opts.search}%,title.ilike.%${opts.search}%`);
   }
@@ -687,6 +692,24 @@ export async function listAllQuotes(opts?: {
   const { data, error, count } = await query;
   if (error) throw error;
   return { data: (data || []) as Quote[], total: count || 0 };
+}
+
+/**
+ * Org-wide count of quotes per status (plus 'all') for the status filter
+ * dropdown. Lightweight head-count queries, one per status.
+ */
+export async function fetchQuoteStatusCounts(): Promise<Record<string, number>> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const statuses: QuoteStatus[] = ['draft', 'awaiting_response', 'changes_requested', 'approved', 'converted', 'archived', 'declined', 'expired'];
+  const countFor = (status?: string) => {
+    let q = supabase.from('quotes').select('id', { count: 'exact', head: true }).eq('org_id', orgId).is('deleted_at', null);
+    if (status) q = q.eq('status', status);
+    return q;
+  };
+  const results = await Promise.all([countFor(), ...statuses.map((s) => countFor(s))]);
+  const counts: Record<string, number> = { all: results[0].count || 0 };
+  statuses.forEach((s, i) => { counts[s] = results[i + 1].count || 0; });
+  return counts;
 }
 
 export const PENDING_QUOTE_STATUSES: QuoteStatus[] = ['awaiting_response', 'changes_requested'];

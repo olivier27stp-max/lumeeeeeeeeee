@@ -27,7 +27,6 @@ import {
   ArrowRight,
   ExternalLink,
   Users,
-  Filter,
   LayoutGrid,
   List,
   Copy,
@@ -46,10 +45,13 @@ import {
   JobsKpis,
   JobSort,
   JobSortDirection,
+  listSalespeople,
+  SalespersonOption,
   softDeleteJob,
 } from '../lib/jobsApi';
 import { Job } from '../types';
-import StatusBadge from '../components/ui/StatusBadge';
+import StatusBadge, { statusDotColor } from '../components/ui/StatusBadge';
+import FilterPill from '../components/ui/FilterPill';
 import { CrmPageHeader, CrmFilterBtn, CrmTableCard, CrmAvatar, CrmBadge } from '../components/ui/CrmTable';
 import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
@@ -328,68 +330,6 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
 }
 
 // ─── Main Component ──────────────────────────────────────────────
-function JobStatusDropdown({ value, onChange, fr }: { value: string; onChange: (v: string) => void; fr: boolean }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const isActive = value !== 'All';
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  const options = [
-    { value: 'All', label: fr ? 'Tous' : 'All' },
-    { value: 'upcoming', label: fr ? 'À venir' : 'Upcoming' },
-    { value: 'late', label: fr ? 'En retard' : 'Late' },
-    { value: 'action_required', label: fr ? 'Action requise' : 'Action Required' },
-    { value: 'requires_invoicing', label: fr ? 'À facturer' : 'Requires Invoicing' },
-    { value: 'archived', label: fr ? 'Archivé' : 'Archived' },
-  ];
-
-  const activeLabel = options.find(o => o.value === value)?.label;
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className={cn(
-          'inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors',
-          isActive
-            ? 'bg-primary text-white border-primary'
-            : 'bg-surface-card text-text-primary border-outline hover:bg-surface-secondary'
-        )}
-      >
-        <Filter size={14} className={isActive ? 'text-white' : 'text-[#64748b]'} />
-        {fr ? 'Statut' : 'Status'}
-        {isActive && <span className="ml-0.5 text-[11px] opacity-80">({activeLabel})</span>}
-      </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-1.5 w-48 bg-surface-elevated border border-outline rounded-md shadow-dropdown z-50 py-1">
-          {options.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => { onChange(opt.value); setOpen(false); }}
-              className={cn(
-                'w-full text-left px-3 py-1.5 text-[13px] transition-colors',
-                value === opt.value
-                  ? 'bg-primary-light text-text-primary font-medium'
-                  : 'text-text-secondary hover:bg-surface-secondary'
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function Jobs() {
   const { t, language } = useTranslation();
   const navigate = useNavigate();
@@ -401,6 +341,8 @@ export default function Jobs() {
   const [error, setError] = useState<string | null>(null);
   const [kpis, setKpis] = useState<JobsKpis | null>(null);
   const [statusFilter, setStatusFilter] = useState('All');
+  const [salespersonFilter, setSalespersonFilter] = useState('All');
+  const [salespeople, setSalespeople] = useState<SalespersonOption[]>([]);
   // Two separate tables, one per tab: one-off jobs vs service plans.
   const [jobTypeFilter, setJobTypeFilter] = useState('one_off');
   const [searchQuery, setSearchQuery] = useState('');
@@ -455,7 +397,7 @@ export default function Jobs() {
     setLoading(true);
     setError(null);
     try {
-      const result = await getJobs({ status: statusFilter, jobType: jobTypeFilter, q: debouncedQuery, sort: sortBy, sortDirection, page, pageSize });
+      const result = await getJobs({ status: statusFilter, jobType: jobTypeFilter, salespersonId: salespersonFilter, q: debouncedQuery, sort: sortBy, sortDirection, page, pageSize });
       setJobs(result.jobs);
       setTotal(result.total);
     } catch (err: any) {
@@ -477,7 +419,8 @@ export default function Jobs() {
   };
 
   useEffect(() => { getJobTypes().then(setJobTypes).catch(() => setJobTypes([])); }, []);
-  useEffect(() => { void loadJobs(); }, [statusFilter, jobTypeFilter, debouncedQuery, sortBy, sortDirection, page, pageSize]);
+  useEffect(() => { listSalespeople().then(setSalespeople).catch(() => setSalespeople([])); }, []);
+  useEffect(() => { void loadJobs(); }, [statusFilter, jobTypeFilter, salespersonFilter, debouncedQuery, sortBy, sortDirection, page, pageSize]);
   useEffect(() => { void loadKpis(); }, [jobTypeFilter, debouncedQuery]);
 
   // Listen for command palette create event
@@ -502,7 +445,7 @@ export default function Jobs() {
         .subscribe();
     })();
     return () => { if (channel) supabase.removeChannel(channel); };
-  }, [statusFilter, jobTypeFilter, debouncedQuery, sortBy, sortDirection, page, pageSize]);
+  }, [statusFilter, jobTypeFilter, salespersonFilter, debouncedQuery, sortBy, sortDirection, page, pageSize]);
 
   const handleSort = (key: JobSort) => {
     setPage(1);
@@ -513,7 +456,7 @@ export default function Jobs() {
 
   const handleExportCsv = async () => {
     try {
-      const csv = await exportJobsCsv({ status: statusFilter, jobType: jobTypeFilter, q: debouncedQuery });
+      const csv = await exportJobsCsv({ status: statusFilter, jobType: jobTypeFilter, salespersonId: salespersonFilter, q: debouncedQuery });
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -646,14 +589,31 @@ export default function Jobs() {
 
       {/* ── TOOLBAR ── */}
       <div className="flex items-center gap-2 mt-4 mb-4">
+        <FilterPill
+          label={fr ? 'Statut' : 'Status'}
+          value={statusFilter}
+          onChange={(v) => { setStatusFilter(v); setPage(1); }}
+          options={[
+            { value: 'All', label: fr ? 'Tous' : 'All', count: kpis ? kpis.upcoming + kpis.late + kpis.action_required + kpis.requires_invoicing + kpis.archived : undefined },
+            { value: 'upcoming', label: fr ? 'À venir' : 'Upcoming', dotColor: statusDotColor('upcoming'), count: kpis?.upcoming },
+            { value: 'late', label: fr ? 'En retard' : 'Late', dotColor: statusDotColor('late'), count: kpis?.late },
+            { value: 'action_required', label: fr ? 'Action requise' : 'Action Required', dotColor: statusDotColor('action_required'), count: kpis?.action_required },
+            { value: 'requires_invoicing', label: fr ? 'À facturer' : 'Requires Invoicing', dotColor: statusDotColor('requires_invoicing'), count: kpis?.requires_invoicing },
+            { value: 'archived', label: fr ? 'Archivé' : 'Archived', dotColor: statusDotColor('archived'), count: kpis?.archived },
+          ]}
+        />
+        <FilterPill
+          label={fr ? 'Vendeur' : 'Salesperson'}
+          value={salespersonFilter}
+          onChange={(v) => { setSalespersonFilter(v); setPage(1); }}
+          options={[
+            { value: 'All', label: fr ? 'Tous' : 'All' },
+            ...salespeople.map((p) => ({ value: p.id, label: p.label })),
+          ]}
+        />
         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
           placeholder={fr ? 'Rechercher jobs...' : 'Search jobs...'}
           className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all" />
-        <JobStatusDropdown
-          value={statusFilter}
-          onChange={(v) => { setStatusFilter(v); setPage(1); }}
-          fr={fr}
-        />
       </div>
 
       {/* ── TABLE (grid layout — identical structure to Clients & Devis) ── */}

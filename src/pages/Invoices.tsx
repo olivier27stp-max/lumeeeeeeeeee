@@ -9,14 +9,15 @@ import {
   ArrowUpDown, ChevronLeft, ChevronRight, Download,
   Plus, Search, MoreHorizontal, Send, CheckCircle2, Copy,
   Trash2, Eye, FileText, DollarSign, Clock, AlertCircle,
-  Filter, X, Receipt,
+  X, Receipt,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { toast } from 'sonner';
-import { StatusBadge } from '../components/ui';
+import { StatusBadge, FilterPill, statusDotColor } from '../components/ui';
 import CreateInvoiceModal from '../components/CreateInvoiceModal';
+import { listSalespeople } from '../lib/jobsApi';
 // InvoiceTemplatesTab removed — no more invoice template system
 import {
   fetchInvoicesKpis30d,
@@ -64,67 +65,17 @@ function parsePage(raw: string | null) {
   return Number.isFinite(v) ? Math.max(1, Math.trunc(v)) : 1;
 }
 
-// ─── Status filter dropdown (Jobs pattern) ─────────────────────
+// ─── Invoice status labels (shared by the filter pill) ─────────
 
-function InvoiceStatusDropdown({ value, onChange, fr }: { value: InvoiceStatusFilter; onChange: (v: InvoiceStatusFilter) => void; fr: boolean }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const isActive = value !== 'all';
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  const options: { value: InvoiceStatusFilter; label: string }[] = [
-    { value: 'all', label: fr ? 'Toutes' : 'All' },
-    { value: 'draft', label: fr ? 'Brouillons' : 'Draft' },
-    { value: 'sent_not_due', label: fr ? 'En attente de paiement' : 'Awaiting Payment' },
-    { value: 'past_due', label: fr ? 'En retard' : 'Past Due' },
-    { value: 'paid', label: fr ? 'Payées' : 'Paid' },
-  ];
-
-  const activeLabel = options.find(o => o.value === value)?.label;
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className={cn(
-          'inline-flex items-center gap-1.5 h-9 px-3 border rounded-md text-[14px] font-normal transition-colors',
-          isActive
-            ? 'bg-primary text-white border-primary'
-            : 'bg-surface-card text-text-primary border-outline hover:bg-surface-secondary'
-        )}
-      >
-        <Filter size={14} className={isActive ? 'text-white' : 'text-[#64748b]'} />
-        {fr ? 'Statut' : 'Status'}
-        {isActive && <span className="ml-0.5 text-[11px] opacity-80">({activeLabel})</span>}
-      </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-1.5 w-48 bg-surface-elevated border border-outline rounded-md shadow-dropdown z-50 py-1">
-          {options.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => { onChange(opt.value); setOpen(false); }}
-              className={cn(
-                'w-full text-left px-3 py-1.5 text-[13px] transition-colors',
-                value === opt.value
-                  ? 'bg-primary-light text-text-primary font-medium'
-                  : 'text-text-secondary hover:bg-surface-secondary'
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+function invoiceStatusLabel(s: InvoiceStatusFilter, fr: boolean): string {
+  const labels: Record<InvoiceStatusFilter, string> = {
+    all: fr ? 'Toutes' : 'All',
+    draft: fr ? 'Brouillons' : 'Draft',
+    sent_not_due: fr ? 'En attente de paiement' : 'Awaiting Payment',
+    past_due: fr ? 'En retard' : 'Past Due',
+    paid: fr ? 'Payées' : 'Paid',
+  };
+  return labels[s];
 }
 
 // ─── Invoice Badge (same pattern as Jobs/Clients) ──────────────
@@ -166,6 +117,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
   const sort = parseSort(searchParams.get('sort'));
   const page = parsePage(searchParams.get('page'));
   const q = (searchParams.get('q') || '').trim();
+  const salesperson = (searchParams.get('sp') || 'All').trim() || 'All';
 
   const [searchInput, setSearchInput] = useState(q);
   useEffect(() => { setSearchInput(q); }, [q]);
@@ -197,11 +149,18 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
   });
 
   const invoicesQuery = useQuery({
-    queryKey: ['invoicesTable', status, sort, page, q],
+    queryKey: ['invoicesTable', status, sort, page, q, salesperson],
     queryFn: () => listInvoices({
       status, range: 'all', sort, page, q,
       pageSize: PAGE_SIZE,
+      salespersonId: salesperson,
     }),
+  });
+
+  const salespeopleQuery = useQuery({
+    queryKey: ['salespeople'],
+    queryFn: listSalespeople,
+    staleTime: 300_000,
   });
 
   const rows = invoicesQuery.data?.rows || [];
@@ -289,6 +248,13 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     });
   }
 
+  function applySalesperson(sp: string) {
+    updateParams((next) => {
+      if (sp === 'All') next.delete('sp'); else next.set('sp', sp);
+      next.delete('page');
+    });
+  }
+
   function applySort(column: 'client' | 'invoice_number' | 'due_date' | 'status' | 'total' | 'balance') {
     const prefix = `${column}_`;
     const isSame = sort.startsWith(prefix);
@@ -331,11 +297,13 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
 
   const handleExportCsv = async () => {
     try {
-      const { data, error: fetchErr } = await supabase.rpc('rpc_list_invoices', {
+      const exportParams: Record<string, unknown> = {
         p_status: status === 'all' ? 'all' : status,
         p_range: 'all', p_sort: 'due_date_desc',
         p_limit: 10000, p_offset: 0, p_q: q || null, p_from: null, p_to: null, p_org: null,
-      });
+      };
+      if (salesperson !== 'All') exportParams.p_salesperson = salesperson;
+      const { data, error: fetchErr } = await supabase.rpc('rpc_list_invoices', exportParams);
       if (fetchErr) throw fetchErr;
       const csvRows = (data || []).map((inv: any) => {
         const email = clientMap[inv.client_id]?.email || '';
@@ -508,6 +476,26 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
 
       {/* ── TOOLBAR (Jobs/Clients pattern) ── */}
       <div className="flex items-center gap-2 mt-4 mb-4">
+        <FilterPill
+          label={fr ? 'Statut' : 'Status'}
+          value={status}
+          onChange={(v) => applyStatus(v as InvoiceStatusFilter)}
+          options={(['all', 'draft', 'sent_not_due', 'past_due', 'paid'] as InvoiceStatusFilter[]).map((s) => ({
+            value: s,
+            label: invoiceStatusLabel(s, fr),
+            dotColor: s === 'all' ? undefined : statusDotColor(s),
+            count: tabCounts[s],
+          }))}
+        />
+        <FilterPill
+          label={fr ? 'Vendeur' : 'Salesperson'}
+          value={salesperson}
+          onChange={applySalesperson}
+          options={[
+            { value: 'All', label: fr ? 'Tous' : 'All' },
+            ...(salespeopleQuery.data || []).map((p) => ({ value: p.id, label: p.label })),
+          ]}
+        />
         <form onSubmit={applySearch} className="relative">
           <input
             value={searchInput}
@@ -521,11 +509,6 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
             }}
           />
         </form>
-        <InvoiceStatusDropdown
-          value={status}
-          onChange={(v) => applyStatus(v)}
-          fr={fr}
-        />
         <button type="button" onClick={() => void handleExportCsv()}
           className="inline-flex items-center gap-1.5 h-9 px-3 border border-outline rounded-md text-[14px] font-normal bg-surface-card text-text-primary hover:bg-surface-secondary transition-colors">
           <Download size={14} className="text-[#64748b]" /> CSV

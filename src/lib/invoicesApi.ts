@@ -89,6 +89,7 @@ export interface InvoicesListQuery {
   pageSize: number;
   fromDate?: string | null;
   toDate?: string | null;
+  salespersonId?: string | null;
 }
 
 export interface InvoicesListResult {
@@ -202,7 +203,7 @@ export async function fetchInvoicesKpis30d(): Promise<InvoiceKpis30d> {
 }
 
 export async function listInvoices(query: InvoicesListQuery): Promise<InvoicesListResult> {
-  const { data, error } = await supabase.rpc('rpc_list_invoices', {
+  const params: Record<string, unknown> = {
     p_status: query.status,
     p_range: query.range,
     p_q: query.q.trim() || null,
@@ -212,7 +213,11 @@ export async function listInvoices(query: InvoicesListQuery): Promise<InvoicesLi
     p_from: query.fromDate || null,
     p_to: query.toDate || null,
     p_org: null,
-  });
+  };
+  // Only send p_salesperson when filtering — keeps the call compatible with
+  // the pre-migration 9-arg rpc_list_invoices until 20260717000000 is applied.
+  if (query.salespersonId && query.salespersonId !== 'All') params.p_salesperson = query.salespersonId;
+  const { data, error } = await supabase.rpc('rpc_list_invoices', params);
 
   if (error) throw error;
 

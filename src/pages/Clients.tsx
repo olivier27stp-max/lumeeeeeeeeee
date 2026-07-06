@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertTriangle, X } from 'lucide-react';
 import StatusBadge from '../components/ui/status-badge';
+import { statusDotColor } from '../components/ui/StatusBadge';
+import FilterPill from '../components/ui/FilterPill';
 import BatchMessageModal from '../components/BatchMessageModal';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -27,13 +29,6 @@ import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 type ClientSort = 'recent' | 'oldest' | 'name_asc' | 'name_desc';
 
 const STATUS_OPTIONS = ['All', 'active', 'lead', 'inactive'];
-
-// Dot colors mirror the StatusBadge icon colors (variantStyle in StatusBadge.tsx).
-const STATUS_DOT_COLORS: Record<string, string> = {
-  active: '#43D17B',
-  lead: '#4F8CFF',
-  inactive: '#B5B5B5',
-};
 
 interface ClientFormState {
   first_name: string;
@@ -588,10 +583,6 @@ export default function Clients() {
     return <StatusBadge status={status || 'inactive'} />;
   }
 
-  // ── Status dropdown state ──
-  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
-  const statusBtnRef = useRef<HTMLButtonElement>(null);
-
   // ── City filter state ──
   const [cityFilter, setCityFilter] = useState('');
   const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
@@ -607,13 +598,12 @@ export default function Clients() {
   // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (statusDropdownOpen && statusBtnRef.current && !statusBtnRef.current.parentElement?.contains(e.target as Node)) setStatusDropdownOpen(false);
       if (cityDropdownOpen && cityBtnRef.current && !cityBtnRef.current.parentElement?.contains(e.target as Node)) setCityDropdownOpen(false);
       // Don't close action menu here — it closes itself via its own click handlers
     };
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
-  }, [statusDropdownOpen, cityDropdownOpen]);
+  }, [cityDropdownOpen]);
 
   // ── Filter items by city ──
   const displayItems = useMemo(() => {
@@ -639,34 +629,17 @@ export default function Clients() {
       {/* ── TOOLBAR ── */}
       <div className="flex items-center gap-2 mt-5 mb-4">
         {/* Status filter pill — "Status | All", dropdown lists statuses with colored dot + count */}
-        <div className="relative">
-          <button ref={statusBtnRef} onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
-            className="inline-flex items-center h-9 px-3.5 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-outline)] text-[13px] hover:bg-[var(--color-surface-tertiary)] transition-colors">
-            <span className="font-medium text-[var(--color-text-secondary)]">{fr ? 'Statut' : 'Status'}</span>
-            <span aria-hidden className="w-px h-4 bg-[var(--color-outline)] mx-2.5" />
-            <span className="inline-flex items-center gap-1.5 font-medium text-[var(--color-text-primary)]">
-              {statusFilter !== 'All' && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: STATUS_DOT_COLORS[statusFilter] }} />}
-              {statusLabel(statusFilter)}
-            </span>
-          </button>
-          {statusDropdownOpen && (
-            <div className="absolute top-full left-0 mt-1 w-52 bg-surface-card border border-[var(--color-outline)] rounded-md shadow-lg z-50 py-1">
-              {STATUS_OPTIONS.map(s => (
-                <button key={s} onClick={() => { setStatusFilter(s); setStatusDropdownOpen(false); setPage(1); }}
-                  className={`w-full flex items-center gap-2 text-left px-3 py-2 text-[13px] transition-colors ${statusFilter === s ? 'bg-[var(--color-surface-tertiary)] font-medium text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}>
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={s === 'All' ? { border: '1px solid var(--color-text-tertiary)' } : { background: STATUS_DOT_COLORS[s] }}
-                  />
-                  <span>{statusLabel(s)}</span>
-                  {statusCounts[s] !== undefined && (
-                    <span className="text-[var(--color-text-tertiary)] tabular-nums">({statusCounts[s]})</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <FilterPill
+          label={fr ? 'Statut' : 'Status'}
+          value={statusFilter}
+          onChange={(v) => { setStatusFilter(v); setPage(1); }}
+          options={STATUS_OPTIONS.map((s) => ({
+            value: s,
+            label: statusLabel(s),
+            dotColor: s === 'All' ? undefined : statusDotColor(s),
+            count: statusCounts[s],
+          }))}
+        />
 
         <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
           placeholder={fr ? 'Rechercher clients...' : 'Search clients...'}

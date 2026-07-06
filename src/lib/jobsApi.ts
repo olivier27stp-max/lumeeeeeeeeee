@@ -16,6 +16,7 @@ export interface JobsQuery {
   status?: string;
   jobType?: string;
   clientId?: string;
+  salespersonId?: string;
   q?: string;
   sort?: JobSort;
   sortDirection?: JobSortDirection;
@@ -32,6 +33,7 @@ export interface JobsKpis {
   upcoming: number;
   late: number;
   action_required: number;
+  requires_invoicing: number;
   archived: number;
   recent_visits: number;
   recent_visits_prev: number;
@@ -303,7 +305,7 @@ async function loadClientNames(clientIds: string[]): Promise<Map<string, { name:
 
 function applyTableFilters(request: any, query: JobsQuery) {
   let builder = request;
-  const { status, jobType, clientId, q } = query;
+  const { status, jobType, clientId, salespersonId, q } = query;
   if (status && status !== 'All') {
     const normalized = status.trim().toLowerCase().replace(/\s+/g, '_');
     // Filter on the precise visit-based derived_status (jobs_active view).
@@ -325,6 +327,7 @@ function applyTableFilters(request: any, query: JobsQuery) {
     else builder = builder.eq('job_type', jobType);
   }
   if (clientId && clientId !== 'All') builder = builder.eq('client_id', clientId);
+  if (salespersonId && salespersonId !== 'All') builder = builder.eq('salesperson_id', salespersonId);
   if (q && q.trim()) builder = builder.or(buildSearchFilter(q));
   return builder;
 }
@@ -368,14 +371,15 @@ export async function getJobsKpis(params: { status?: string; jobType?: string; q
   const base = () => supabase.from('jobs_active').select('*', { count: 'exact', head: true }).eq('org_id', orgId);
 
   const [
-    upcomingRes, lateRes, actionRequiredRes, archivedRes,
+    upcomingRes, lateRes, actionRequiredRes, requiresInvoicingRes, archivedRes,
     recentVisitsRes, prevRecentVisitsRes,
     visitsScheduledRes, prevVisitsScheduledRes,
   ] = await Promise.all([
-    // 4-status system (precise, visit-based — jobs_active.derived_status)
+    // Visit-based derived statuses (jobs_active.derived_status)
     base().eq('derived_status', 'upcoming'),
     base().eq('derived_status', 'late'),
     base().eq('derived_status', 'action_required'),
+    base().eq('derived_status', 'requires_invoicing'),
     base().eq('derived_status', 'archived'),
     // Visit metrics (unchanged)
     base().gte('scheduled_at', minus30Iso).lte('scheduled_at', nowIso),
@@ -387,6 +391,7 @@ export async function getJobsKpis(params: { status?: string; jobType?: string; q
   const upcoming = upcomingRes.count || 0;
   const late = lateRes.count || 0;
   const actionRequired = actionRequiredRes.count || 0;
+  const requiresInvoicing = requiresInvoicingRes.count || 0;
   const archived = archivedRes.count || 0;
   const recentVisits = recentVisitsRes.count || 0;
   const prevRecentVisits = prevRecentVisitsRes.count || 0;
@@ -397,6 +402,7 @@ export async function getJobsKpis(params: { status?: string; jobType?: string; q
     upcoming,
     late,
     action_required: actionRequired,
+    requires_invoicing: requiresInvoicing,
     archived,
     recent_visits: recentVisits,
     recent_visits_prev: prevRecentVisits,
