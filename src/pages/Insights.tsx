@@ -19,6 +19,8 @@ import {
   fetchInsightsRevenueSeries,
   fetchPeriodComparison,
   fetchTopServices,
+  fetchTeamPerformance,
+  type TeamPerformance,
   drilldownRevenueByMonth,
   drilldownJobsByTeam,
   InsightsTab,
@@ -165,6 +167,69 @@ function OverviewStrip({ items }: { items: Array<{ label: string; value: string;
   );
 }
 
+/* ── Jobber-style lead funnel ── */
+function LeadFunnelCard({ title, hint, stages }: { title: string; hint: string; stages: Array<{ label: string; value: number }> }) {
+  const max = Math.max(1, ...stages.map((s) => s.value));
+  return (
+    <div className="bg-surface-card border border-border rounded-xl p-5 flex flex-col">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-[14.5px] font-bold text-text-primary">{title}</h3>
+        <span className="text-[11.5px] text-text-tertiary font-medium">{hint}</span>
+      </div>
+      <div className="flex items-end gap-3 h-[180px] pt-4">
+        {stages.map((s, i) => (
+          <div key={i} className="flex-1 flex flex-col items-center justify-end h-full gap-2">
+            <div
+              className="w-4/5 max-w-[90px] bg-primary rounded-t-md flex items-start justify-center text-primary-foreground font-extrabold text-[14px] pt-1.5 tabular-nums"
+              style={{ height: `${Math.max(10, (s.value / max) * 100)}%` }}
+            >
+              {s.value}
+            </div>
+            <span className="text-[11px] text-text-muted font-semibold text-center leading-tight">{s.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── Jobber-style top team members table ── */
+function TopTeamCard({ title, hint, teams, loading }: { title: string; hint: string; teams: TeamPerformance[]; loading?: boolean }) {
+  const rows = [...teams].sort((a, b) => b.revenue_cents - a.revenue_cents).slice(0, 5);
+  return (
+    <div className="bg-surface-card border border-border rounded-xl flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border-light">
+        <h3 className="text-[14.5px] font-bold text-text-primary">{title}</h3>
+        <span className="text-[11.5px] text-text-tertiary font-medium">{hint}</span>
+      </div>
+      {loading ? (
+        <div className="p-5 space-y-2">{[0, 1, 2].map((i) => <div key={i} className="h-8 bg-surface-tertiary/50 rounded animate-pulse" />)}</div>
+      ) : rows.length === 0 ? (
+        <div className="py-10 text-center text-[12.5px] text-text-tertiary">—</div>
+      ) : (
+        <table className="w-full text-[13px] border-collapse">
+          <thead>
+            <tr className="text-[10.5px] uppercase tracking-wide text-text-tertiary">
+              <th className="text-left font-bold px-5 py-2.5 bg-surface-secondary border-b border-border">Équipe</th>
+              <th className="text-right font-bold px-5 py-2.5 bg-surface-secondary border-b border-border">Jobs</th>
+              <th className="text-right font-bold px-5 py-2.5 bg-surface-secondary border-b border-border">Valeur totale</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((tm) => (
+              <tr key={tm.team_id} className="hover:bg-surface-secondary">
+                <td className="px-5 py-3 font-semibold text-text-primary border-b border-border-light">{tm.team_name}</td>
+                <td className="px-5 py-3 text-right text-text-muted tabular-nums border-b border-border-light">{tm.jobs_count}</td>
+                <td className="px-5 py-3 text-right font-bold text-text-primary tabular-nums border-b border-border-light">{fmtMoney(tm.revenue_cents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 /* ── Main ─────────────────────────────────────────────────── */
 export default function Insights() {
   const { t, language } = useTranslation();
@@ -230,6 +295,7 @@ export default function Insights() {
   const invoicesSummaryQ = useQuery({ queryKey: ['insightsInvoicesSummary', from, to], queryFn: () => fetchInsightsInvoicesSummary({ from, to }) });
   const jobsSummaryQ = useQuery({ queryKey: ['insightsJobsSummary', from, to], queryFn: () => fetchInsightsJobsSummary({ from, to }) });
   const comparisonQ = useQuery({ queryKey: ['insightsPeriodComparison', from, to], queryFn: () => fetchPeriodComparison({ from, to }) });
+  const teamPerfQ = useQuery({ queryKey: ['insightsTeamPerf', from, to], queryFn: () => fetchTeamPerformance({ from, to }), staleTime: 60_000 });
 
   // Finance-specific queries
   const transactionsQ = useQuery({ queryKey: ['financeRecentTransactions'], queryFn: () => fetchRecentTransactions(8), enabled: tab === 'finance' });
@@ -467,6 +533,17 @@ export default function Insights() {
               <section>
                 <h2 className="text-[19px] font-bold text-text-primary tracking-tight mb-3">{fr ? 'Conversion' : 'Conversion'}</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  <div className="xl:col-span-2">
+                    <LeadFunnelCard
+                      title={fr ? 'Entonnoir des leads' : 'Lead funnel'}
+                      hint={formatDateRange(from, to, fr ? 'fr-CA' : 'en-CA')}
+                      stages={[
+                        { label: fr ? 'Nouveaux leads' : 'New leads', value: overview?.new_leads_count || 0 },
+                        { label: fr ? 'Devis convertis' : 'Converted quotes', value: overview?.converted_quotes_count || 0 },
+                        { label: fr ? 'Jobs créés' : 'Jobs created', value: overview?.new_oneoff_jobs_count || 0 },
+                      ]}
+                    />
+                  </div>
                   <QuoteConversionCard />
                   <CancellationRateCard />
                   <ClientLifetimeValueCard />
@@ -481,7 +558,14 @@ export default function Insights() {
                   <AverageJobValueCard />
                   <TopServicesByCountCard />
                   <JobsPerWeekdayCard />
-                  <TeamProductivityCard />
+                  <div className="xl:col-span-2">
+                    <TopTeamCard
+                      title={fr ? 'Meilleures équipes' : 'Top teams'}
+                      hint={formatDateRange(from, to, fr ? 'fr-CA' : 'en-CA')}
+                      teams={teamPerfQ.data || []}
+                      loading={teamPerfQ.isLoading}
+                    />
+                  </div>
                 </div>
               </section>
             </div>
