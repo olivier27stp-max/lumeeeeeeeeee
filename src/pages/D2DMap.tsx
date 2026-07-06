@@ -14,6 +14,7 @@ import {
   type FieldPinLight,
 } from '../lib/fieldSalesApi';
 import { getActiveLiveLocations, type LiveLocation } from '../lib/trackingApi';
+import { softDeleteClient } from '../lib/clientsApi';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
@@ -134,13 +135,23 @@ export default function D2DMap() {
     }
   }, []);
 
-  const handlePinDeleted = useCallback(async (pinId: string) => {
+  const handlePinDeleted = useCallback(async (pinId: string, opts?: { deleteClientId?: string | null }) => {
     const houseId = pinHouseMap.get(pinId);
-    if (!houseId) return; // Pin was never persisted (in-memory only)
-    try {
-      await deleteHouse(houseId);
-    } catch (err: any) {
-      console.error('[D2DMap] Failed to delete pin:', err?.message);
+    if (houseId) {
+      try {
+        await deleteHouse(houseId);
+      } catch (err: any) {
+        console.error('[D2DMap] Failed to delete pin:', err?.message);
+      }
+    }
+    // User confirmed "also delete the linked client" in the delete dialog
+    if (opts?.deleteClientId) {
+      try {
+        await softDeleteClient(opts.deleteClientId);
+        toast.success('Client supprimé');
+      } catch (err: any) {
+        toast.error(err?.message || 'Erreur lors de la suppression du client');
+      }
     }
   }, [pinHouseMap]);
 

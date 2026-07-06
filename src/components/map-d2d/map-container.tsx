@@ -91,8 +91,8 @@ export interface MapContainerProps {
   initialPins?: LeadPinData[];
   /** Called when a new pin is created on the map */
   onPinCreated?: (pin: LeadPinData) => void;
-  /** Called when a pin is deleted */
-  onPinDeleted?: (pinId: string) => void;
+  /** Called when a pin is deleted; deleteClientId is set when the user also chose to delete the linked client */
+  onPinDeleted?: (pinId: string, opts?: { deleteClientId?: string | null }) => void;
   /** Called when a pin is edited */
   onPinUpdated?: (pin: LeadPinData) => void;
   /** Live rep positions (loaded from API by parent) */
@@ -161,6 +161,11 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   const selectBoxRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
+
+  // --- Delete confirmation (single pin, or bulk selection) ---
+  const [pinPendingDelete, setPinPendingDelete] = useState<LeadPinData | null>(null);
+  const [bulkDeletePending, setBulkDeletePending] = useState(false);
+  const [deleteLinkedClient, setDeleteLinkedClient] = useState(false);
 
   // --- Edit modal ---
   const [editingPin, setEditingPin] = useState<LeadPinData | null>(null);
@@ -428,7 +433,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
     });
   }
 
-  function removePin(id: string) {
+  function removePin(id: string, opts?: { deleteClientId?: string | null }) {
     const rec = markersRef.current.get(id);
     if (!rec) return;
     rec.marker.remove();
@@ -436,7 +441,31 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
     markersRef.current.delete(id);
     bump();
     // Notify parent to delete from DB
-    onPinDeletedRef.current?.(id);
+    onPinDeletedRef.current?.(id, opts);
+  }
+
+  /** Open the delete confirmation for a single pin (popup ✕ or edit modal). */
+  function requestPinDelete(pin: LeadPinData) {
+    setDeleteLinkedClient(false);
+    setBulkDeletePending(false);
+    setPinPendingDelete(pin);
+  }
+
+  function cancelPinDelete() {
+    setPinPendingDelete(null);
+    setBulkDeletePending(false);
+    setDeleteLinkedClient(false);
+  }
+
+  function confirmPinDelete() {
+    if (pinPendingDelete) {
+      const clientId = pinPendingDelete.client_id || pinPendingDelete.lead_id || null;
+      removePin(pinPendingDelete.id, deleteLinkedClient && clientId ? { deleteClientId: clientId } : undefined);
+    } else if (bulkDeletePending) {
+      selectedPinIds.forEach((id) => removePin(id)); // each removePin calls onPinDeleted
+      exitSelectMode();
+    }
+    cancelPinDelete();
   }
 
   function placePin(map: mapboxgl.Map, pin: LeadPinData) {
@@ -480,8 +509,9 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
           if (delBtn) {
             delBtn.onclick = (e) => {
               e.stopPropagation();
+              const current = markersRef.current.get(pin.id)?.pin || pin;
               popup.remove();
-              removePin(pin.id);
+              requestPinDelete(current);
             };
           }
           const crmBtn = document.getElementById(crmId);
@@ -1101,8 +1131,10 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
     isDraggingRef.current = false;
   }
   function handleBulkDelete() {
-    selectedPinIds.forEach((id) => removePin(id)); // each removePin calls onPinDeleted
-    exitSelectMode();
+    if (selectedPinIds.size === 0) return;
+    setPinPendingDelete(null);
+    setDeleteLinkedClient(false);
+    setBulkDeletePending(true); // actual removal happens in confirmPinDelete
   }
 
   // ---------------------------------------------------------------------------
@@ -1733,8 +1765,65 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
             <div className="mt-6 flex gap-2">
               <button onClick={handleSaveEdit} className="flex-1 rounded-lg bg-indigo-500 py-2 text-[12px] font-semibold text-white hover:bg-indigo-400">{fr ? 'Sauvegarder' : 'Save'}</button>
               <button onClick={() => setEditingPin(null)} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-[12px] text-white/50">{fr ? 'Annuler' : 'Cancel'}</button>
-              <button onClick={() => { removePin(editingPin.id); setEditingPin(null); }}
+              <button onClick={() => { const current = markersRef.current.get(editingPin.id)?.pin || editingPin; setEditingPin(null); requestPinDelete(current); }}
                 className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2 text-[12px] font-medium text-red-400">{fr ? 'Supprimer' : 'Delete'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================== */}
+      {/* Delete pin confirmation modal                                      */}
+      {/* ================================================================== */}
+      {(pinPendingDelete || bulkDeletePending) && (
+        <div
+          className="absolute inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          onClick={cancelPinDelete}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0c0c14] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-2xl font-extrabold tracking-tight text-white">
+              {bulkDeletePending
+                ? (fr
+                    ? `Supprimer ${selectedPinIds.size} pin${selectedPinIds.size > 1 ? 's' : ''} ?`
+                    : `Delete ${selectedPinIds.size} pin${selectedPinIds.size > 1 ? 's' : ''}?`)
+                : (fr ? 'Supprimer ce pin ?' : 'Delete this pin?')}
+            </h3>
+            <p className="mt-3 text-[13px] font-medium text-white/60">
+              {fr ? 'Cette action est irréversible.' : 'This action cannot be undone.'}
+            </p>
+            {pinPendingDelete && (pinPendingDelete.client_id || pinPendingDelete.lead_id) && (
+              <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-xl border border-red-500/20 bg-red-500/5 p-3">
+                <input
+                  type="checkbox"
+                  checked={deleteLinkedClient}
+                  onChange={(e) => setDeleteLinkedClient(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-red-500"
+                />
+                <span className="text-[12px] font-medium leading-snug text-white/70">
+                  {fr
+                    ? 'Ce pin est lié à un client. Voulez-vous aussi supprimer le client ?'
+                    : 'This pin is linked to a client. Also delete the client?'}
+                </span>
+              </label>
+            )}
+            <div className="mt-5 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={cancelPinDelete}
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[13px] font-semibold text-white/70 transition-colors hover:bg-white/10"
+              >
+                {fr ? 'Annuler' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={confirmPinDelete}
+                className="flex-1 rounded-xl bg-red-600 px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-red-700"
+              >
+                {fr ? 'Supprimer' : 'Delete'}
+              </button>
             </div>
           </div>
         </div>
