@@ -3143,7 +3143,7 @@ const en = {
   status: {
     draft: 'Draft',
     sent: 'Sent',
-    sent_not_due: 'Open',
+    sent_not_due: 'Awaiting Payment',
     open: 'Open',
     partial: 'Partial',
     partialPaid: 'Partially Paid',

@@ -15,6 +15,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { toast } from 'sonner';
+import { StatusBadge } from '../components/ui';
 import CreateInvoiceModal from '../components/CreateInvoiceModal';
 // InvoiceTemplatesTab removed — no more invoice template system
 import {
@@ -128,24 +129,9 @@ function InvoiceStatusDropdown({ value, onChange, fr }: { value: InvoiceStatusFi
 
 // ─── Invoice Badge (same pattern as Jobs/Clients) ──────────────
 
-function InvoiceBadge({ status, fr }: { status: string; fr: boolean }) {
-  const s = (status || 'draft').toLowerCase();
-  // 4 statuses: Awaiting Payment (yellow), Past Due (red), Draft (gray), Paid (green)
-  const map: Record<string, { label: string; badge: string }> = {
-    paid:        { label: fr ? 'Payée' : 'Paid',                          badge: 'badge-success' },
-    sent_not_due:{ label: fr ? 'En attente de paiement' : 'Awaiting Payment', badge: 'badge-warning' },
-    past_due:    { label: fr ? 'En retard' : 'Past Due',                  badge: 'badge-danger' },
-    draft:       { label: fr ? 'Brouillon' : 'Draft',                     badge: 'badge-neutral' },
-    partial:     { label: fr ? 'En attente de paiement' : 'Awaiting Payment', badge: 'badge-warning' },
-    void:        { label: fr ? 'Annulée' : 'Void',                        badge: 'badge-neutral' },
-    sent:        { label: fr ? 'En attente de paiement' : 'Awaiting Payment', badge: 'badge-warning' },
-  };
-  const v = map[s] || map.draft;
-  return (
-    <span className={v.badge}>
-      {v.label}
-    </span>
-  );
+function InvoiceBadge({ status }: { status: string; fr: boolean }) {
+  // Premium shared badge (same style as Clients / Quotes / Jobs).
+  return <StatusBadge status={status || 'draft'} />;
 }
 
 // ─── Main Component ────────────────────────────────────────────

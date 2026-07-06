@@ -48,6 +48,7 @@ const statusIcons: Record<string, LucideIcon> = {
   upcoming: CalendarClock,
   // Invoice
   sent: Send,
+  sent_not_due: Clock,
   partial: Clock,
   paid: CheckCircle,
   void: XCircle,
@@ -123,15 +124,16 @@ const statusVariants: Record<string, Variant> = {
 
   // ── Invoice ──
   sent: 'info',
+  sent_not_due: 'warning',
   partial: 'warning',
   paid: 'success',
-  void: 'danger',
+  void: 'neutral',
   past_due: 'danger',
   overdue: 'danger',
   'Sent': 'info',
   'Partial': 'warning',
   'Paid': 'success',
-  'Void': 'danger',
+  'Void': 'neutral',
   'Past Due': 'danger',
   'Overdue': 'danger',
 

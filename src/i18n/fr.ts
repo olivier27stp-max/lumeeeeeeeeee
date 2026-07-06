@@ -3135,7 +3135,7 @@ const fr: TranslationKeys = {
   status: {
     draft: 'Brouillon',
     sent: 'Envoyé',
-    sent_not_due: 'Ouverte',
+    sent_not_due: 'En attente de paiement',
     open: 'Ouverte',
     partial: 'Partiel',
     partialPaid: 'Partiellement payée',
