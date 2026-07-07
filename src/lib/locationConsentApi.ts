@@ -38,6 +38,12 @@ export async function getMyLocationConsent(userId: string): Promise<boolean | nu
   return (data?.location_consent ?? null) as boolean | null;
 }
 
+/**
+ * Fired on window whenever the user's own consent is saved, so open hooks
+ * (useLocationTrackingConsent in the app shell) react without a reload.
+ */
+export const LOCATION_CONSENT_EVENT = 'lume:location-consent';
+
 /** Records the user's decision on their own profile (RLS: self-update). */
 export async function setMyLocationConsent(userId: string, consent: boolean): Promise<void> {
   const { error } = await supabase
@@ -45,4 +51,5 @@ export async function setMyLocationConsent(userId: string, consent: boolean): Pr
     .update({ location_consent: consent, location_consent_at: new Date().toISOString() })
     .eq('id', userId);
   if (error) throw error;
+  window.dispatchEvent(new CustomEvent(LOCATION_CONSENT_EVENT, { detail: { consent } }));
 }

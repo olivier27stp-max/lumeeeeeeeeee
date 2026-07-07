@@ -34,6 +34,7 @@ import SmsStepUp from '../components/auth/SmsStepUp';
 import { getSmsStatus, type SmsStatus } from '../lib/mfaSmsApi';
 import { useTranslation, Language } from '../i18n';
 import LocationServices from '../components/LocationServices';
+import MyLocationConsentCard from '../components/settings/MyLocationConsentCard';
 import ArchivesPanel from '../components/ArchivesPanel';
 import SeatsBanner from '../components/SeatsBanner';
 import OfficesManager from '../components/OfficesManager';
@@ -1347,7 +1348,10 @@ export default function Settings() {
 
             {/* ═══ PLACEHOLDER PANELS for unbuilt sections ═══ */}
             {activeTab === 'location' && (
-              <LocationServices />
+              <div className="space-y-6">
+                <MyLocationConsentCard language={isFr ? 'fr' : 'en'} />
+                <LocationServices />
+              </div>
             )}
             {activeTab === 'archives' && (
               <ArchivesPanel />

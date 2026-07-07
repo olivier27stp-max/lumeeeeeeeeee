@@ -3,6 +3,7 @@ import {
   getLocationTrackingEnabled,
   getMyLocationConsent,
   setMyLocationConsent,
+  LOCATION_CONSENT_EVENT,
 } from '../lib/locationConsentApi';
 
 export interface LocationTrackingConsent {
@@ -52,6 +53,17 @@ export function useLocationTrackingConsent(
     })();
     return () => { cancelled = true; };
   }, [userId, orgId]);
+
+  // Consent saved elsewhere (e.g. the Settings toggle) — sync so tracking
+  // starts/stops immediately instead of waiting for a reload.
+  useEffect(() => {
+    const onConsent = (e: Event) => {
+      const detail = (e as CustomEvent<{ consent: boolean }>).detail;
+      if (typeof detail?.consent === 'boolean') setConsent(detail.consent);
+    };
+    window.addEventListener(LOCATION_CONSENT_EVENT, onConsent);
+    return () => window.removeEventListener(LOCATION_CONSENT_EVENT, onConsent);
+  }, []);
 
   const record = useCallback(async (value: boolean) => {
     if (!userId) return;
