@@ -658,7 +658,16 @@ function AuthenticatedApp({
   };
   const { current, currentRole, companies, loading: companyLoading, isMultiCompany, hasNoCompany, currentOrgId } = useCompany();
   // Call realtime notifications hook INSIDE CompanyProvider (it uses useCompany() internally)
-  const { unreadCount: unreadNotifs, resetCount: resetNotifCount, countsByNav: notifCountsByNav } = useRealtimeNotifications(!!user);
+  const { unreadCount: unreadNotifs, resetCount: resetNotifCount, countsByNav: notifCountsByNav, markNavAsRead } = useRealtimeNotifications(!!user, {
+    onViewRequests: () => navigate('/requests'),
+    viewRequestsLabel: language === 'fr' ? 'Voir' : 'View',
+  });
+  // Visiting Requests or the pipeline clears their sidebar badge (marks the
+  // underlying request notifications as read).
+  useEffect(() => {
+    if (location.pathname === '/requests') markNavAsRead('requests');
+    else if (location.pathname === '/d2d-pipeline') markNavAsRead('d2d-pipeline');
+  }, [location.pathname, markNavAsRead]);
   // Current plan — used to hide locked features from sidebar
   const { currentPlan } = useCurrentPlan();
   // Hide "Discover features" on the top plan (nothing left to unlock).

@@ -395,7 +395,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     step = 'actor-resolution';
     const { data: members } = await admin
       .from('memberships')
-      .select('user_id, role')
+      .select('user_id, role, language')
       .eq('org_id', orgId);
     const memberIds = new Set((members || []).map((m: any) => String(m.user_id)));
     let actorId: string | null = null;
@@ -591,6 +591,32 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     if (subError) {
       console.error('[public/form] submission record failed:', subError.message);
       // Non-fatal — lead/deal are already created
+    }
+
+    // 4b. In-app notification — drives the sidebar badges (Requests +
+    // Pipeline) and the realtime toast via useRealtimeNotifications.
+    // Localized with the actor's membership language (org default: fr).
+    step = 'notification';
+    const actorLang = (members || []).find((m: any) => String(m.user_id) === actorId)?.language === 'en' ? 'en' : 'fr';
+    const contactLine = [body.email, body.phone, address].filter(Boolean).join(' · ');
+    const notifRow = {
+      org_id: orgId,
+      type: 'request_created',
+      title: actorLang === 'fr' ? `Nouvelle demande de ${fullName}` : `New request from ${fullName}`,
+      body: contactLine || null,
+      entity_type: 'request',
+      entity_id: submission?.id || null,
+    };
+    let { error: notifError } = await admin.from('notifications').insert(notifRow);
+    // 42703 = undefined column: migration 20260706100000 not applied yet —
+    // retry with the legacy minimal shape so the toast/bell still fire.
+    if (notifError?.code === '42703') {
+      const { entity_type: _et, entity_id: _ei, ...legacyRow } = notifRow;
+      ({ error: notifError } = await admin.from('notifications').insert(legacyRow));
+    }
+    if (notifError) {
+      console.error('[public/form] notification insert failed:', notifError.message);
+      // Non-fatal — the submission itself succeeded
     }
 
     // 5. Emit event for automations

@@ -17,6 +17,7 @@ import {
   Activity,
   Eye,
   BellRing,
+  Inbox,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
@@ -78,6 +79,7 @@ const ICON_MAP: Record<string, { icon: typeof Activity; color: string }> = {
   client_updated: { icon: Edit3, color: 'text-primary bg-primary/10' },
   client_deleted: { icon: Trash2, color: 'text-danger bg-danger/10' },
   lead_created: { icon: Contact, color: 'text-text-secondary bg-surface-tertiary' },
+  request_created: { icon: Inbox, color: 'text-primary bg-primary/10' },
   lead_updated: { icon: Edit3, color: 'text-text-secondary bg-surface-tertiary' },
   job_created: { icon: Briefcase, color: 'text-text-secondary bg-surface-tertiary' },
   job_updated: { icon: Edit3, color: 'text-text-secondary bg-surface-tertiary' },

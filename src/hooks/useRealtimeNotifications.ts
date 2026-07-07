@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import type { RealtimePostgresInsertPayload, RealtimePostgresUpdatePayload } from '@supabase/supabase-js';
+import { toast } from 'sonner';
 import { useCompany } from '../contexts/CompanyContext';
 import { showDesktopNotification } from '../lib/desktopNotifications';
 
@@ -8,27 +9,38 @@ interface Notification {
   id: string;
   is_read: boolean;
   org_id?: string;
+  type?: string | null;
   title?: string;
   body?: string | null;
   entity_type?: string | null;
   [key: string]: unknown;
 }
 
-// Maps a notification's entity_type to the sidebar nav item it belongs to, so
-// the unread count can surface as a badge on the relevant page.
-const ENTITY_TO_NAV: Record<string, string> = {
-  invoice: 'invoices',
-  quote: 'quotes',
-  quote_deposit: 'quotes',
-  client: 'clients',
-  lead: 'requests',
-  request: 'requests',
-  job: 'jobs',
-  event: 'schedule',
-  message: 'messages',
+// Maps a notification's entity_type to the sidebar nav item(s) it belongs to,
+// so the unread count can surface as a badge on the relevant page(s). A
+// request badges both Requests and the pipeline (a submission creates a deal).
+const ENTITY_TO_NAV: Record<string, string[]> = {
+  invoice: ['invoices'],
+  quote: ['quotes'],
+  quote_deposit: ['quotes'],
+  client: ['clients'],
+  lead: ['requests'],
+  request: ['requests', 'd2d-pipeline'],
+  job: ['jobs'],
+  event: ['schedule'],
+  message: ['messages'],
 };
 
-export function useRealtimeNotifications(enabled: boolean) {
+interface RealtimeNotificationOptions {
+  // Wired by App.tsx so the "new request" toast can navigate in-app.
+  onViewRequests?: () => void;
+  viewRequestsLabel?: string;
+}
+
+const isRequestNotification = (n: Notification) =>
+  n.entity_type === 'request' || n.type === 'request_created';
+
+export function useRealtimeNotifications(enabled: boolean, options?: RealtimeNotificationOptions) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [countsByNav, setCountsByNav] = useState<Record<string, number>>({});
   // Scope realtime + count to the current tenant — without this every user
@@ -37,6 +49,9 @@ export function useRealtimeNotifications(enabled: boolean) {
   const { currentOrgId } = useCompany();
   const orgRef = useRef<string | null>(null);
   orgRef.current = currentOrgId ?? null;
+  // Options in a ref so the realtime effect doesn't resubscribe every render.
+  const optionsRef = useRef<RealtimeNotificationOptions | undefined>(options);
+  optionsRef.current = options;
 
   // Tally unread notifications into per-page counts. Unread volume is small
   // (alerts are deduped), so a full refetch on each change is cheap.
@@ -51,16 +66,53 @@ export function useRealtimeNotifications(enabled: boolean) {
       .limit(500);
     const counts: Record<string, number> = {};
     for (const row of (data || []) as Array<{ entity_type: string | null }>) {
-      const navId = row.entity_type ? ENTITY_TO_NAV[row.entity_type] : undefined;
-      if (navId) counts[navId] = (counts[navId] || 0) + 1;
+      const navIds = row.entity_type ? ENTITY_TO_NAV[row.entity_type] : undefined;
+      for (const navId of navIds || []) counts[navId] = (counts[navId] || 0) + 1;
     }
     setCountsByNav(counts);
+  }, []);
+
+  const fetchUnreadTotal = useCallback(async () => {
+    const org = orgRef.current;
+    if (!org) return;
+    const { count } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', org)
+      .eq('is_read', false);
+    setUnreadCount(count || 0);
   }, []);
 
   const resetCount = useCallback(() => {
     setUnreadCount(0);
     setCountsByNav({});
   }, []);
+
+  // Mark every unread notification that badges the given nav item as read —
+  // called when the user visits the page, so its sidebar badge clears.
+  const markNavAsRead = useCallback(async (navId: string) => {
+    const org = orgRef.current;
+    if (!org) return;
+    const entityTypes = Object.keys(ENTITY_TO_NAV).filter((t) => ENTITY_TO_NAV[t].includes(navId));
+    if (entityTypes.length === 0) return;
+    // Optimistic: a 'request' notification badges two navs, so clear every
+    // nav those entity types feed, not just the visited one.
+    setCountsByNav((prev) => {
+      const next = { ...prev };
+      for (const t of entityTypes) for (const nav of ENTITY_TO_NAV[t]) delete next[nav];
+      return next;
+    });
+    await supabase
+      .from('notifications')
+      .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq('org_id', org)
+      .eq('is_read', false)
+      .in('entity_type', entityTypes);
+    // Re-sync exact counts (realtime UPDATE events also do this, but they can
+    // be dropped when the tab is backgrounded).
+    fetchCounts();
+    fetchUnreadTotal();
+  }, [fetchCounts, fetchUnreadTotal]);
 
   useEffect(() => {
     if (!enabled || !currentOrgId) {
@@ -70,15 +122,7 @@ export function useRealtimeNotifications(enabled: boolean) {
     }
 
     // Initial fetches — filter by org_id
-    const fetchCount = async () => {
-      const { count } = await supabase
-        .from('notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('org_id', currentOrgId)
-        .eq('is_read', false);
-      setUnreadCount(count || 0);
-    };
-    fetchCount();
+    fetchUnreadTotal();
     fetchCounts();
 
     // Subscribe to realtime changes scoped to this org
@@ -97,6 +141,17 @@ export function useRealtimeNotifications(enabled: boolean) {
               body: payload.new.body,
               tag: payload.new.id,
             });
+            // In-app popup when a client request lands (public form submission).
+            if (isRequestNotification(payload.new)) {
+              const opts = optionsRef.current;
+              toast.info(payload.new.title || 'Lume', {
+                description: payload.new.body || undefined,
+                duration: 8000,
+                action: opts?.onViewRequests
+                  ? { label: opts.viewRequestsLabel || 'View', onClick: () => opts.onViewRequests?.() }
+                  : undefined,
+              });
+            }
           }
           fetchCounts();
         }
@@ -124,7 +179,7 @@ export function useRealtimeNotifications(enabled: boolean) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [enabled, currentOrgId, fetchCounts]);
+  }, [enabled, currentOrgId, fetchCounts, fetchUnreadTotal]);
 
-  return { unreadCount, resetCount, countsByNav };
+  return { unreadCount, resetCount, countsByNav, markNavAsRead };
 }

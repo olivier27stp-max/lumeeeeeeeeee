@@ -210,7 +210,7 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
             body: `${clientName || 'A job'} has been completed by a technician and is ready for invoicing.`,
             entity_type: 'job',
             entity_id: jobId,
-            read: false,
+            is_read: false,
           }));
           await admin.from('notifications').insert(notifications);
         }
