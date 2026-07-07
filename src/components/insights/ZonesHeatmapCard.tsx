@@ -1,11 +1,12 @@
 /**
- * Revenue by city — one monochrome circle per city on a Leaflet basemap, shaded &
- * sized by the revenue realized there. Hover a city → a bubble shows how much you
- * made and how many jobs. Framed color legend (revenue buckets). Reuses the app's
- * Leaflet stack (leaflet CSS is imported in main.tsx). Only realized jobs count.
+ * Revenue by city — a proportional-symbol map: one monochrome circle per city on
+ * a Leaflet basemap, sized & shaded by the revenue realized there. Hover a city →
+ * a themed bubble shows how much you made and how many jobs; the top cities carry
+ * permanent labels. Framed color legend (revenue buckets). Only realized jobs
+ * count. Reuses the app's Leaflet stack (leaflet CSS is imported in main.tsx).
  */
 import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Marker, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from '../../i18n';
@@ -19,6 +20,12 @@ const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.p
 const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
 const OPACITIES = [0.3, 0.45, 0.6, 0.78, 0.95];
+const MAP_CSS = `
+.leaflet-tooltip.zone-tip{background:var(--color-surface-card);color:var(--color-text-primary);border:1px solid var(--color-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.22);padding:7px 11px;font-weight:600;font-family:inherit;}
+.leaflet-tooltip.zone-tip::before{display:none;}
+.zone-name{background:transparent!important;border:0!important;box-shadow:none!important;}
+.zone-name>div{transform:translateY(-15px);font-weight:800;font-size:11px;letter-spacing:-.01em;color:var(--color-text-primary);white-space:nowrap;text-shadow:0 0 3px var(--color-surface),0 1px 2px var(--color-surface),0 0 2px var(--color-surface);}
+`;
 
 function isDone(status?: string | null): boolean {
   const s = String(status || '').toLowerCase().trim();
@@ -56,7 +63,7 @@ function FitBounds({ zones }: { zones: Zone[] }) {
   useEffect(() => {
     if (zones.length === 0) return;
     const b = L.latLngBounds(zones.map((z) => [z.lat, z.lng] as L.LatLngTuple));
-    map.fitBounds(b, { padding: [50, 50], maxZoom: 11 });
+    map.fitBounds(b, { padding: [55, 55], maxZoom: 11 });
   }, [zones, map]);
   return null;
 }
@@ -75,6 +82,14 @@ export default function ZonesHeatmapCard({
   const locale = fr ? 'fr-CA' : 'en-CA';
   const dark = useIsDark();
   const ink = dark ? '250,250,250' : '23,23,23';
+
+  useEffect(() => {
+    if (document.getElementById('zones-map-css')) return;
+    const el = document.createElement('style');
+    el.id = 'zones-map-css';
+    el.textContent = MAP_CSS;
+    document.head.appendChild(el);
+  }, []);
 
   const q = useQuery({
     queryKey: ['zones-heat', range.from, range.to],
@@ -105,6 +120,7 @@ export default function ZonesHeatmapCard({
   const empty = !q.isLoading && zones.length === 0;
   const bucket = (rev: number) => Math.min(4, Math.max(0, Math.ceil((rev / maxRev) * 5) - 1));
   const legend = [4, 3, 2, 1, 0].map((i) => ({ i, lo: (maxRev * i) / 5, hi: (maxRev * (i + 1)) / 5 }));
+  const labelNames = new Set(stats.top.map((z) => z.name));
 
   return (
     <div className="flex flex-col">
@@ -130,29 +146,41 @@ export default function ZonesHeatmapCard({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 px-6 pt-5 pb-2">
         {/* map */}
-        <div className="lg:col-span-2 relative isolate h-[400px] rounded-xl overflow-hidden border border-border">
+        <div className="lg:col-span-2 relative isolate h-[420px] rounded-xl overflow-hidden border border-border">
           <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="h-full w-full" scrollWheelZoom={false} attributionControl={false} style={{ background: dark ? '#0a0a0a' : '#f0f0f0' }}>
             <TileLayer url={dark ? TILE_DARK : TILE_LIGHT} attribution={TILE_ATTR} maxZoom={19} />
             <FitBounds zones={zones} />
             {zones.map((z) => {
               const b = bucket(z.rev);
-              const radius = 10 + (z.rev / maxRev) * 20;
+              const radius = 10 + (z.rev / maxRev) * 22;
               return (
                 <CircleMarker
                   key={z.name}
                   center={[z.lat, z.lng]}
                   radius={radius}
                   pathOptions={{ color: `rgba(${ink},0.9)`, weight: 1.5, fillColor: `rgb(${ink})`, fillOpacity: OPACITIES[b] }}
+                  eventHandlers={{
+                    mouseover: (e) => (e.target as L.CircleMarker).setStyle({ weight: 3, fillOpacity: Math.min(1, OPACITIES[b] + 0.12) }),
+                    mouseout: (e) => (e.target as L.CircleMarker).setStyle({ weight: 1.5, fillOpacity: OPACITIES[b] }),
+                  }}
                 >
-                  <Tooltip direction="top" offset={[0, -4]} opacity={1} className="zone-tip">
-                    <div style={{ textAlign: 'center', lineHeight: 1.35 }}>
-                      <div style={{ fontWeight: 700, fontSize: 12.5 }}>{z.name}</div>
+                  <Tooltip direction="top" offset={[0, -radius - 2]} opacity={1} className="zone-tip">
+                    <div style={{ textAlign: 'center', lineHeight: 1.4 }}>
+                      <div style={{ fontWeight: 800, fontSize: 12.5 }}>{z.name}</div>
                       <div style={{ fontSize: 12 }}>{kc(z.rev)} · {z.jobs} {fr ? 'jobs' : 'jobs'}</div>
                     </div>
                   </Tooltip>
                 </CircleMarker>
               );
             })}
+            {zones.filter((z) => labelNames.has(z.name)).map((z) => (
+              <Marker
+                key={`${z.name}-label`}
+                position={[z.lat, z.lng]}
+                interactive={false}
+                icon={L.divIcon({ className: 'zone-name', html: `<div>${z.name}</div>`, iconSize: [0, 0], iconAnchor: [0, 0] })}
+              />
+            ))}
           </MapContainer>
 
           {/* framed color legend */}
