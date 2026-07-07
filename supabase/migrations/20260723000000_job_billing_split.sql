@@ -11,7 +11,7 @@
 -- the classic single-invoice flow stays idempotent.
 --
 -- Idempotent — safe to run multiple times.
--- Apply with: npx tsx scripts/apply-sql.ts supabase/migrations/20260722000000_job_billing_split.sql
+-- Apply with: npx tsx scripts/apply-sql.ts supabase/migrations/20260723000000_job_billing_split.sql
 -- ════════════════════════════════════════════════════════════════════
 
 begin;
