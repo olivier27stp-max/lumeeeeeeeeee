@@ -26,14 +26,16 @@ export interface MiniSeries {
 
 export default function MiniTrendCard({
   title,
-  data,
+  series,
+  loading,
   period,
   onPeriod,
   derive,
   fmt,
 }: {
   title: string;
-  data: Record<InsightsPeriod, MiniSeries>;
+  series: MiniSeries;
+  loading?: boolean;
   period: InsightsPeriod;
   onPeriod: (p: InsightsPeriod) => void;
   derive: (vals: number[]) => { hero: string; delta: string; sub: string };
@@ -42,7 +44,7 @@ export default function MiniTrendCard({
   const [hover, setHover] = useState<number | null>(null);
 
   const model = useMemo(() => {
-    const s = data[period];
+    const s = series;
     const vals = s.vals;
     const max = niceMax(Math.max(1, ...vals));
     const n = vals.length;
@@ -50,7 +52,7 @@ export default function MiniTrendCard({
     const line = co.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
     const area = co.length ? `${line} L${co[co.length - 1].x.toFixed(1)},${H} L${co[0].x.toFixed(1)},${H} Z` : '';
     return { labels: s.labels, vals, co, line, area, n, ...derive(vals) };
-  }, [data, period, derive]);
+  }, [series, derive]);
 
   const grid = [0, 1, 2, 3].map((s) => TOP + (H - TOP) * (s / 3));
   const hIdx = hover != null && hover >= 0 && hover < model.n ? hover : null;
@@ -69,6 +71,11 @@ export default function MiniTrendCard({
         <PeriodSelector value={period} onChange={onPeriod} />
       </div>
 
+      {loading ? (
+        <div className="h-[176px] mx-6 mt-4 rounded-lg bg-surface-secondary/40 animate-pulse" />
+      ) : model.n === 0 ? (
+        <div className="h-[176px] mx-6 mt-4 flex items-center justify-center text-[12.5px] text-text-tertiary">—</div>
+      ) : (
       <div className="relative h-[172px] mx-6 mt-4 mb-1">
         <div className="absolute inset-x-0 top-0 bottom-5">
           <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full block overflow-visible">
@@ -118,6 +125,7 @@ export default function MiniTrendCard({
           onMouseLeave={() => setHover(null)}
         />
       </div>
+      )}
     </div>
   );
 }
