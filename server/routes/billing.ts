@@ -217,6 +217,17 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
       }
     }
 
+    // Paid signups MUST go through the recurring hosted-Checkout path
+    // (/billing/create-checkout-session) so they get a real Stripe subscription
+    // with auto-renewal and the intro coupon. This legacy one-time endpoint is
+    // retained ONLY for $0 flows (free/comped plans, internal grants).
+    if (amountCents > 0) {
+      return res.status(400).json({
+        error: 'Paid plans must be purchased via Stripe Checkout.',
+        code: 'USE_CHECKOUT_SESSION',
+      });
+    }
+
     // ── Stripe payment (if amount > 0 and Stripe is configured) ──
     let stripePaymentId: string | null = null;
 
@@ -876,6 +887,12 @@ const devSwitchPlanSchema = z.object({
 
 router.post('/billing/dev-switch-plan', validate(devSwitchPlanSchema), async (req, res) => {
   try {
+    // Dev-only: this flips the plan in the DB and bypasses Stripe entirely, which
+    // would desync billing in production. Hard-disable outside development.
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(404).json({ error: 'Not found.' });
+    }
+
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
 
@@ -1483,31 +1500,19 @@ router.post('/billing/create-checkout-session', async (req, res) => {
       return res.status(404).json({ error: 'Plan not found.' });
     }
 
-    // Calculate price
+    // Base recurring amount = FULL price. The 3-month intro discount is applied
+    // via a Stripe Coupon (below), NOT by lowering the price — this keeps the
+    // subscription item's unit_amount at full price so the webhook plan-matcher
+    // (payments.ts, matches by price.unit_amount) stays correct after the promo
+    // reverts. `promo_codes` are kept for marketing analytics only (recorded in
+    // session metadata), they do not alter what Stripe charges here.
     const priceField = interval === 'yearly'
       ? (currency === 'USD' ? 'yearly_price_usd' : 'yearly_price_cad')
       : (currency === 'USD' ? 'monthly_price_usd' : 'monthly_price_cad');
-    let amountCents = plan[priceField] || 0;
+    const amountCents = plan[priceField] || 0;
 
-    // Apply promo if provided
+    // Discounts applied to the Checkout Session (populated with the intro coupon below).
     const discounts: any[] = [];
-    if (promo_code) {
-      const { data: promo } = await admin
-        .from('promo_codes')
-        .select('*')
-        .eq('code', promo_code.toUpperCase())
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (promo) {
-        // For Stripe Checkout, we'll apply as a line item discount
-        if (promo.discount_type === 'percentage') {
-          amountCents = Math.round(amountCents * (1 - promo.discount_value / 100));
-        } else {
-          amountCents = Math.max(0, amountCents - promo.discount_value);
-        }
-      }
-    }
 
     // Create Stripe customer (no auth needed — use email from request)
     const customer = await stripe.customers.create({
@@ -1550,8 +1555,39 @@ router.post('/billing/create-checkout-session', async (req, res) => {
       }).eq('id', plan.id);
     }
 
+    // Resolve the 3-month intro coupon for this interval + currency (mirrors the
+    // Price ID resolution above). Lazy-create + persist if the plan has an intro
+    // price configured but no coupon id yet. Monthly promos repeat for N months;
+    // yearly promos discount the single annual invoice once.
+    const introCouponField =
+      interval === 'yearly'
+        ? currency === 'USD' ? 'stripe_intro_coupon_id_yearly_usd' : 'stripe_intro_coupon_id_yearly_cad'
+        : currency === 'USD' ? 'stripe_intro_coupon_id_monthly_usd' : 'stripe_intro_coupon_id_monthly_cad';
+    const introPriceField =
+      interval === 'yearly'
+        ? currency === 'USD' ? 'intro_price_yearly_usd' : 'intro_price_yearly_cad'
+        : currency === 'USD' ? 'intro_price_monthly_usd' : 'intro_price_monthly_cad';
+    let introCouponId: string | null = plan[introCouponField] || null;
+    const introPrice: number | null = plan[introPriceField] ?? null;
+    const introMonths: number = plan.intro_months || 3;
+
+    if (!introCouponId && introPrice != null && introPrice < amountCents) {
+      const coupon = await stripe.coupons.create({
+        name: `Lume ${plan.name} intro`,
+        currency: (currency || 'CAD').toLowerCase(),
+        amount_off: amountCents - introPrice,
+        ...(interval === 'yearly'
+          ? { duration: 'once' as const }
+          : { duration: 'repeating' as const, duration_in_months: introMonths }),
+        metadata: { plan_id: plan.id, interval, currency },
+      });
+      introCouponId = coupon.id;
+      await admin.from('plans').update({ [introCouponField]: introCouponId }).eq('id', plan.id);
+    }
+    if (introCouponId) discounts.push({ coupon: introCouponId });
+
     // Create Stripe Checkout Session — uses the persistent Price ID, no duplicates.
-    // Promo discounts (if any) flow through Stripe Coupons, not inline price_data.
+    // The intro discount (if any) is applied via the Stripe Coupon in `discounts`.
     const session = await stripe.checkout.sessions.create({
       customer: customer.id,
       mode: 'subscription',
