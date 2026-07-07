@@ -1,12 +1,11 @@
 /**
- * Completed-job density map + zone analytics — the real map the prototype could
- * only mock. Heat weights every COMPLETED job equally, so the map shows where the
- * work actually happens (density, no revenue-definition ambiguity). Revenue stays
- * visible in the zone ranking so the money view isn't lost. Monochrome Leaflet
- * basemap (Carto light/dark); reuses the app's leaflet + leaflet.heat stack.
+ * Revenue by city — one monochrome circle per city on a Leaflet basemap, shaded &
+ * sized by the revenue realized there. Hover a city → a bubble shows how much you
+ * made and how many jobs. Framed color legend (revenue buckets). Reuses the app's
+ * Leaflet stack (leaflet CSS is imported in main.tsx). Only realized jobs count.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, useMap } from 'react-leaflet';
+import { useEffect, useMemo, useState } from 'react';
+import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from '../../i18n';
@@ -15,14 +14,12 @@ import PeriodSelector from './PeriodSelector';
 import { type InsightsPeriod, type InsightsRange } from '../../lib/insightsPeriod';
 
 const DEFAULT_CENTER: L.LatLngTuple = [45.5017, -73.5673];
-const DEFAULT_ZOOM = 10;
+const DEFAULT_ZOOM = 9;
 const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
-const GRAD_LIGHT = { 0.1: '#c4c4c4', 0.35: '#8a8a8a', 0.65: '#4a4a4a', 1.0: '#171717' };
-const GRAD_DARK = { 0.1: '#4a4a52', 0.35: '#7d7d86', 0.65: '#c0c0c6', 1.0: '#fafafa' };
+const OPACITIES = [0.3, 0.45, 0.6, 0.78, 0.95];
 
-/** A job counts as "réalisé" once it's completed / invoiced / paid. */
 function isDone(status?: string | null): boolean {
   const s = String(status || '').toLowerCase().trim();
   return s === 'completed' || s === 'complete' || s === 'done' || s === 'terminé' || s === 'termine' || s === 'invoiced' || s === 'paid';
@@ -38,7 +35,6 @@ function useIsDark() {
   return dark;
 }
 
-/** Best-effort city name from a Québec-style address ("123 Rue X, Beloeil, QC J3G 1A1"). */
 function cityFromAddress(addr?: string | null): string | null {
   if (!addr) return null;
   const parts = addr.split(',').map((s) => s.trim()).filter(Boolean);
@@ -46,42 +42,22 @@ function cityFromAddress(addr?: string | null): string | null {
     let p = parts[i];
     if (/^\d/.test(p)) continue;
     if (/^(qc|q[ée]bec|quebec|canada|on|ontario|ca)$/i.test(p)) continue;
-    if (/^[A-Za-z]\d[A-Za-z]/.test(p)) continue; // postal code
+    if (/^[A-Za-z]\d[A-Za-z]/.test(p)) continue;
     p = p.replace(/\b(QC|Q[ée]bec|Quebec|Canada)\b/gi, '').replace(/[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d/g, '').trim();
     if (p) return p;
   }
   return null;
 }
 
-/** Heat layer via dynamic import of leaflet.heat (same approach as FieldSales). */
-function HeatLayer({ points, dark }: { points: [number, number, number][]; dark: boolean }) {
-  const map = useMap();
-  const layerRef = useRef<L.Layer | null>(null);
-  const [loaded, setLoaded] = useState(false);
+interface Zone { name: string; lat: number; lng: number; rev: number; jobs: number; }
 
-  useEffect(() => {
-    if ((L as unknown as { heatLayer?: unknown }).heatLayer) { setLoaded(true); return; }
-    import('leaflet.heat').then(() => setLoaded(true)).catch(() => setLoaded(false));
-  }, []);
-
-  useEffect(() => {
-    if (layerRef.current) { map.removeLayer(layerRef.current); layerRef.current = null; }
-    const heat = (L as unknown as { heatLayer?: (p: unknown, o: unknown) => L.Layer }).heatLayer;
-    if (!loaded || points.length === 0 || !heat) return;
-    layerRef.current = heat(points, { radius: 45, blur: 30, maxZoom: 15, max: 1.0, minOpacity: 0.35, gradient: dark ? GRAD_DARK : GRAD_LIGHT }).addTo(map);
-    return () => { if (layerRef.current) { map.removeLayer(layerRef.current); layerRef.current = null; } };
-  }, [map, points, loaded, dark]);
-
-  return null;
-}
-
-function FitBounds({ points }: { points: [number, number, number][] }) {
+function FitBounds({ zones }: { zones: Zone[] }) {
   const map = useMap();
   useEffect(() => {
-    if (points.length === 0) return;
-    const b = L.latLngBounds(points.map((p) => [p[0], p[1]] as L.LatLngTuple));
-    map.fitBounds(b, { padding: [40, 40], maxZoom: 12 });
-  }, [points, map]);
+    if (zones.length === 0) return;
+    const b = L.latLngBounds(zones.map((z) => [z.lat, z.lng] as L.LatLngTuple));
+    map.fitBounds(b, { padding: [50, 50], maxZoom: 11 });
+  }, [zones, map]);
   return null;
 }
 
@@ -98,6 +74,7 @@ export default function ZonesHeatmapCard({
   const fr = language === 'fr';
   const locale = fr ? 'fr-CA' : 'en-CA';
   const dark = useIsDark();
+  const ink = dark ? '250,250,250' : '23,23,23';
 
   const q = useQuery({
     queryKey: ['zones-heat', range.from, range.to],
@@ -107,42 +84,41 @@ export default function ZonesHeatmapCard({
 
   const kc = (cents: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 
-  const { points, stats } = useMemo(() => {
-    // Only jobs that were actually realised, with valid coordinates.
+  const { zones, stats, maxRev } = useMemo(() => {
     const done = (q.data?.pins || []).filter(
       (p) => isDone(p.status) && Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && !(p.latitude === 0 && p.longitude === 0),
     );
-    // Density: every completed job weighs the same (overlap = hotter).
-    const points = done.map((p) => [p.latitude, p.longitude, 0.6] as [number, number, number]);
-
-    const totalRev = done.reduce((s, p) => s + (p.totalCents || 0), 0);
-    const byZone = new Map<string, { rev: number; jobs: number }>();
+    const agg = new Map<string, { rev: number; jobs: number; lat: number; lng: number }>();
     for (const p of done) {
       const name = cityFromAddress(p.address) || (fr ? 'Autres' : 'Other');
-      const e = byZone.get(name) || { rev: 0, jobs: 0 };
-      e.rev += p.totalCents || 0; e.jobs += 1;
-      byZone.set(name, e);
+      const e = agg.get(name) || { rev: 0, jobs: 0, lat: 0, lng: 0 };
+      e.rev += p.totalCents || 0; e.jobs += 1; e.lat += p.latitude; e.lng += p.longitude;
+      agg.set(name, e);
     }
-    const zones = Array.from(byZone.entries()).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.jobs - a.jobs || b.rev - a.rev);
-    return { points, stats: { totalRev, jobs: done.length, avg: done.length ? totalRev / done.length : 0, zoneCount: zones.length, topZones: zones.slice(0, 5) } };
+    const zones: Zone[] = Array.from(agg.entries()).map(([name, v]) => ({ name, rev: v.rev, jobs: v.jobs, lat: v.lat / v.jobs, lng: v.lng / v.jobs })).sort((a, b) => b.rev - a.rev);
+    const totalRev = zones.reduce((s, z) => s + z.rev, 0);
+    const totalJobs = zones.reduce((s, z) => s + z.jobs, 0);
+    const maxRev = Math.max(1, ...zones.map((z) => z.rev));
+    return { zones, maxRev, stats: { totalRev, jobs: totalJobs, avg: totalJobs ? totalRev / totalJobs : 0, zoneCount: zones.length, top: zones.slice(0, 5) } };
   }, [q.data, fr]);
 
-  const empty = !q.isLoading && stats.jobs === 0;
-  const zoneMax = Math.max(1, ...stats.topZones.map((z) => z.jobs));
+  const empty = !q.isLoading && zones.length === 0;
+  const bucket = (rev: number) => Math.min(4, Math.max(0, Math.ceil((rev / maxRev) * 5) - 1));
+  const legend = [4, 3, 2, 1, 0].map((i) => ({ i, lo: (maxRev * i) / 5, hi: (maxRev * (i + 1)) / 5 }));
 
   return (
     <div className="flex flex-col">
       <div className="flex items-end justify-between gap-3 px-6 pb-3 border-b border-border">
-        <div className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary leading-none">{fr ? 'Jobs réalisés par zone' : 'Completed jobs by zone'}</div>
+        <div className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary leading-none">{fr ? 'Revenu par ville' : 'Revenue by city'}</div>
         <PeriodSelector value={period} onChange={onPeriod} />
       </div>
 
       {/* stats strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 px-6 pt-4">
         {[
-          { v: String(stats.jobs), l: fr ? 'Jobs réalisés' : 'Completed jobs' },
-          { v: String(stats.zoneCount), l: fr ? 'Zones actives' : 'Active zones' },
           { v: kc(stats.totalRev), l: fr ? 'Revenu réalisé' : 'Revenue realized' },
+          { v: String(stats.jobs), l: fr ? 'Jobs réalisés' : 'Completed jobs' },
+          { v: String(stats.zoneCount), l: fr ? 'Villes actives' : 'Active cities' },
           { v: kc(stats.avg), l: fr ? 'Revenu moy. / job' : 'Avg revenue / job' },
         ].map((s, i) => (
           <div key={i}>
@@ -154,42 +130,69 @@ export default function ZonesHeatmapCard({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 px-6 pt-5 pb-2">
         {/* map */}
-        <div className="lg:col-span-2 relative isolate h-[380px] rounded-xl overflow-hidden border border-border">
-          <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="h-full w-full" zoomControl={false} attributionControl={false} style={{ background: dark ? '#0a0a0a' : '#f0f0f0' }}>
+        <div className="lg:col-span-2 relative isolate h-[400px] rounded-xl overflow-hidden border border-border">
+          <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="h-full w-full" scrollWheelZoom={false} attributionControl={false} style={{ background: dark ? '#0a0a0a' : '#f0f0f0' }}>
             <TileLayer url={dark ? TILE_DARK : TILE_LIGHT} attribution={TILE_ATTR} maxZoom={19} />
-            <HeatLayer points={points} dark={dark} />
-            <FitBounds points={points} />
+            <FitBounds zones={zones} />
+            {zones.map((z) => {
+              const b = bucket(z.rev);
+              const radius = 10 + (z.rev / maxRev) * 20;
+              return (
+                <CircleMarker
+                  key={z.name}
+                  center={[z.lat, z.lng]}
+                  radius={radius}
+                  pathOptions={{ color: `rgba(${ink},0.9)`, weight: 1.5, fillColor: `rgb(${ink})`, fillOpacity: OPACITIES[b] }}
+                >
+                  <Tooltip direction="top" offset={[0, -4]} opacity={1} className="zone-tip">
+                    <div style={{ textAlign: 'center', lineHeight: 1.35 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12.5 }}>{z.name}</div>
+                      <div style={{ fontSize: 12 }}>{kc(z.rev)} · {z.jobs} {fr ? 'jobs' : 'jobs'}</div>
+                    </div>
+                  </Tooltip>
+                </CircleMarker>
+              );
+            })}
           </MapContainer>
-          <div className="absolute right-3 bottom-3 z-[500] rounded-lg border border-border bg-surface-card/90 backdrop-blur px-3 py-2.5 shadow-sm">
-            <div className="text-[10px] uppercase tracking-wide text-text-tertiary font-bold mb-1.5">{fr ? 'Densité des jobs' : 'Job density'}</div>
-            <div className="h-2 w-28 rounded-full" style={{ background: 'linear-gradient(90deg, var(--color-surface-tertiary), var(--color-text-primary))' }} />
-            <div className="flex justify-between text-[9.5px] font-semibold text-text-tertiary mt-1"><span>{fr ? 'Faible' : 'Low'}</span><span>{fr ? 'Élevée' : 'High'}</span></div>
+
+          {/* framed color legend */}
+          <div className="absolute right-3 bottom-3 z-[500] rounded-lg border border-border bg-surface-card/95 backdrop-blur px-3 py-2.5 shadow-md">
+            <div className="text-[10px] uppercase tracking-wide text-text-tertiary font-bold mb-2">{fr ? 'Revenu / ville' : 'Revenue / city'}</div>
+            <div className="flex flex-col gap-1.5">
+              {legend.map(({ i, lo, hi }) => (
+                <div key={i} className="flex items-center gap-2 text-[10.5px] text-text-secondary font-semibold">
+                  <span className="w-3 h-3 rounded-sm border border-border" style={{ background: `rgba(${ink},${OPACITIES[i]})` }} />
+                  <span className="tabular-nums">{kc(lo)} – {kc(hi)}</span>
+                </div>
+              ))}
+            </div>
           </div>
+
           {empty && (
             <div className="absolute inset-0 z-[400] flex items-center justify-center bg-surface-card/70 backdrop-blur-sm">
               <div className="text-center px-6">
                 <div className="text-[13px] font-semibold text-text-secondary">{fr ? 'Aucun job réalisé géocodé sur la période' : 'No geocoded completed jobs for this period'}</div>
-                <div className="text-[11.5px] text-text-tertiary mt-1.5 max-w-[280px]">{fr ? 'Les jobs terminés avec une adresse géocodée apparaissent ici, plus foncé = plus de jobs.' : 'Completed jobs with a geocoded address appear here, darker = more jobs.'}</div>
+                <div className="text-[11.5px] text-text-tertiary mt-1.5 max-w-[280px]">{fr ? 'Les villes où tu as des jobs terminés apparaîtront ici, colorées selon le revenu.' : 'Cities with completed jobs appear here, shaded by revenue.'}</div>
               </div>
             </div>
           )}
         </div>
 
-        {/* top zones */}
+        {/* top cities ranking */}
         <div className="flex flex-col">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-text-tertiary mb-1">{fr ? 'Zones les plus actives' : 'Most active zones'}</div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-text-tertiary mb-1">{fr ? 'Villes les plus payantes' : 'Top paying cities'}</div>
           {empty ? (
             <div className="flex-1 flex items-center justify-center text-[12px] text-text-tertiary">{fr ? 'Aucune donnée' : 'No data'}</div>
           ) : (
             <div className="flex flex-col">
-              {stats.topZones.map((z, i) => (
+              {stats.top.map((z, i) => (
                 <div key={z.name} className="py-2.5 border-b border-border-light last:border-0">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-[13px] font-semibold text-text-primary truncate">{i + 1}. {z.name}</span>
-                    <span className="text-[13px] font-bold text-text-primary tabular-nums shrink-0">{z.jobs} {fr ? 'jobs' : 'jobs'}</span>
+                    <span className="text-[13px] font-bold text-text-primary tabular-nums shrink-0">{kc(z.rev)}</span>
                   </div>
-                  <div className="h-1.5 rounded-full bg-surface-tertiary overflow-hidden mt-2"><span className="block h-full rounded-full" style={{ width: `${Math.round((z.jobs / zoneMax) * 100)}%`, background: 'var(--color-text-primary)' }} /></div>
-                  <div className="text-[11px] text-text-tertiary font-semibold mt-1.5">{kc(z.rev)} · {kc(z.jobs ? z.rev / z.jobs : 0)} {fr ? 'moy.' : 'avg'}</div>
+                  <div className="h-1.5 rounded-full bg-surface-tertiary overflow-hidden mt-2"><span className="block h-full rounded-full" style={{ width: `${Math.round((z.rev / maxRev) * 100)}%`, background: 'var(--color-text-primary)' }} /></div>
+                  <div className="text-[11px] text-text-tertiary font-semibold mt-1.5">{z.jobs} {fr ? 'jobs' : 'jobs'} · {kc(z.jobs ? z.rev / z.jobs : 0)} {fr ? 'moy.' : 'avg'}</div>
                 </div>
               ))}
             </div>
