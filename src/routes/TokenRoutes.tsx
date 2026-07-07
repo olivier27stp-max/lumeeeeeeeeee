@@ -1,15 +1,17 @@
 import type { ReactElement } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import QuoteView from '../pages/QuoteView';
+import ContractView from '../pages/ContractView';
 import SatisfactionSurvey from '../pages/SatisfactionSurvey';
 import ClientPortal from '../pages/ClientPortal';
 import PublicPayment from '../pages/PublicPayment';
 import AcceptInvitation from '../pages/AcceptInvitation';
 
-type TokenKind = 'quote' | 'survey' | 'portal' | 'pay' | 'invite';
+type TokenKind = 'quote' | 'contract' | 'survey' | 'portal' | 'pay' | 'invite';
 
 const ELEMENTS: Record<TokenKind, { path: string; element: ReactElement }> = {
   quote: { path: '/quote/:token', element: <QuoteView /> },
+  contract: { path: '/contract/:token', element: <ContractView /> },
   survey: { path: '/survey/:token', element: <SatisfactionSurvey /> },
   portal: { path: '/portal/:token', element: <ClientPortal /> },
   pay: { path: '/pay/:token', element: <PublicPayment /> },
@@ -33,6 +35,7 @@ export function TokenRoute({ kind }: { kind: TokenKind }) {
 /** Returns the token kind for a pathname, or null if not a public token URL. */
 export function detectTokenKind(pathname: string): TokenKind | null {
   if (pathname.startsWith('/quote/')) return 'quote';
+  if (pathname.startsWith('/contract/')) return 'contract';
   if (pathname.startsWith('/survey/')) return 'survey';
   if (pathname.startsWith('/portal/')) return 'portal';
   if (pathname.startsWith('/pay/')) return 'pay';

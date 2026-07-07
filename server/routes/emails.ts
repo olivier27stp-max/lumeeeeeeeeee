@@ -38,7 +38,7 @@ function formatDate(dateStr: string | null | undefined) {
   return new Date(dateStr).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-interface CompanyInfo {
+export interface CompanyInfo {
   company_name?: string | null;
   company_email?: string | null;
   company_phone?: string | null;
@@ -47,7 +47,7 @@ interface CompanyInfo {
   tax_registration_lines?: string[];
 }
 
-async function getCompanySettings(orgId: string): Promise<CompanyInfo> {
+export async function getCompanySettings(orgId: string): Promise<CompanyInfo> {
   try {
     const serviceClient = getServiceClient();
     const { data } = await serviceClient
@@ -85,7 +85,7 @@ async function getCompanySettings(orgId: string): Promise<CompanyInfo> {
   }
 }
 
-function buildEmailLayout(company: CompanyInfo, bodyHtml: string) {
+export function buildEmailLayout(company: CompanyInfo, bodyHtml: string) {
   const companyName = company.company_name || 'LUME';
   const logoHtml = company.company_logo_url
     ? `<img src="${company.company_logo_url}" alt="${companyName}" style="max-height:48px;max-width:200px;" />`
@@ -142,7 +142,7 @@ ${(company.tax_registration_lines || []).length > 0 ? `<p style="margin:6px 0 0;
 // client sees "From: {Company}" and replies land straight in the business's email
 // — the "connect your email" experience with zero per-company SMTP/DNS setup.
 // (Each org's email lives in company_settings; no per-tenant config needed.)
-function senderFor(company: CompanyInfo): { from: string; replyTo?: string } {
+export function senderFor(company: CompanyInfo): { from: string; replyTo?: string } {
   const baseAddr = emailFrom.match(/<([^>]+)>/)?.[1] || process.env.SMTP_USER || 'noreply@lume.crm';
   const name = company.company_name || 'Lume';
   return {

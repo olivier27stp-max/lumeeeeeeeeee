@@ -8,6 +8,9 @@ import { listClients, createClient } from '../lib/clientsApi';
 import { listSalespeople, applyJobExtras } from '../lib/jobsApi';
 import { addVisit } from '../lib/scheduleApi';
 import { createServiceContract } from '../lib/serviceContractsApi';
+import { createJobAgreement, DEFAULT_AGREEMENT_TERMS } from '../lib/jobAgreementsApi';
+import FileUpload from './FileUpload';
+import { STORAGE_BUCKETS } from '../lib/storage';
 import { resolveClientIdForLead } from '../lib/leadsApi';
 import { listTeams } from '../lib/teamsApi';
 import TeamSuggestions from './TeamSuggestions';
@@ -303,6 +306,12 @@ export default function NewJobModal({
   const [serviceYear, setServiceYear] = useState(new Date().getFullYear());
   const [serviceMonthDates, setServiceMonthDates] = useState<Record<number, string>>({});
   const [createContract, setCreateContract] = useState(false);
+  // Written agreement (job contract) — optional, created after the job insert
+  const [createAgreement, setCreateAgreement] = useState(false);
+  const [agreementRequireSignature, setAgreementRequireSignature] = useState(true);
+  const [agreementTerms, setAgreementTerms] = useState('');
+  const [agreementLogoUrl, setAgreementLogoUrl] = useState<string | null>(null);
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
   const [requiresInvoicing, setRequiresInvoicing] = useState(true);
   const [billingSplit, setBillingSplit] = useState(false);
   const [description, setDescription] = useState<string | null>(null);
@@ -870,6 +879,22 @@ export default function NewJobModal({
     return null;
   }, [selectedTeamSuggestion, startTime, endTime, t]);
 
+  // Agreement section: prefill default T&C on first enable + resolve the
+  // company logo (Settings → Company details) used as the contract default.
+  useEffect(() => {
+    if (!createAgreement) return;
+    setAgreementTerms((prev) => prev || DEFAULT_AGREEMENT_TERMS[language === 'fr' ? 'fr' : 'en']);
+    if (companyLogoUrl === null) {
+      supabase
+        .from('company_settings')
+        .select('logo_url')
+        .limit(1)
+        .maybeSingle()
+        .then(({ data }) => setCompanyLogoUrl(data?.logo_url || ''))
+        .then(undefined, () => setCompanyLogoUrl(''));
+    }
+  }, [createAgreement, language, companyLogoUrl]);
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setInlineError(null);
@@ -1160,6 +1185,22 @@ export default function NewJobModal({
             console.error('[jobs] failed to create service contract', err);
             try { toast.error(language === 'fr' ? 'Le contrat n’a pas pu être créé.' : 'The contract could not be created.'); } catch {}
           }
+        }
+      }
+
+      // Written agreement (contract) — best-effort, like the service contract
+      if (createdJob?.id && createAgreement && !isEditMode) {
+        try {
+          await createJobAgreement({
+            job_id: createdJob.id,
+            client_id: resolvedClientId || null,
+            require_signature: agreementRequireSignature,
+            terms: agreementTerms.trim(),
+            logo_url: agreementLogoUrl || null,
+          });
+        } catch (err) {
+          console.error('[jobs] failed to create job agreement', err);
+          try { toast.error(language === 'fr' ? 'Le contrat n’a pas pu être créé.' : 'The agreement could not be created.'); } catch {}
         }
       }
 
@@ -1867,6 +1908,119 @@ export default function NewJobModal({
                   </p>
                 </div>
               </Box>
+
+              {/* ── Agreement (written contract) — new jobs only ── */}
+              {!isEditMode && (
+                <Box
+                  title={language === 'fr' ? 'Contrat' : 'Agreement'}
+                  subtitle={language === 'fr' ? 'Optionnel — contrat écrit lié à ce job' : 'Optional — written contract attached to this job'}
+                  right={(
+                    <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={createAgreement}
+                        onChange={(e) => setCreateAgreement(e.target.checked)}
+                        className="h-4 w-4 rounded accent-primary"
+                      />
+                      <span className="text-[13px] font-medium text-text-primary">
+                        {language === 'fr' ? 'Créer un contrat' : 'Create agreement'}
+                      </span>
+                    </label>
+                  )}
+                >
+                  {createAgreement && (
+                    <>
+                      <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle bg-surface-secondary/40 p-3">
+                        <input
+                          type="checkbox"
+                          checked={agreementRequireSignature}
+                          onChange={(e) => setAgreementRequireSignature(e.target.checked)}
+                          className="h-4 w-4 rounded mt-0.5 accent-primary"
+                        />
+                        <span>
+                          <span className="block text-[13px] font-semibold text-text-primary">
+                            {language === 'fr' ? 'Signature du client obligatoire' : 'Client signature required'}
+                          </span>
+                          <span className="block text-[12px] text-text-tertiary mt-0.5">
+                            {language === 'fr'
+                              ? 'Le client devra signer le contrat via un lien public (même pad de signature que les soumissions).'
+                              : 'The client will sign the contract via a public link (same signature pad as quotes).'}
+                          </span>
+                        </span>
+                      </label>
+
+                      <div>
+                        <span className="text-xs font-medium text-text-tertiary block mb-1.5">
+                          {language === 'fr' ? 'Logo sur le contrat' : 'Logo on the contract'}
+                        </span>
+                        <div className="flex items-center gap-3 rounded-lg border border-outline-subtle p-3">
+                          {(agreementLogoUrl || companyLogoUrl) ? (
+                            <img
+                              src={agreementLogoUrl || companyLogoUrl || ''}
+                              alt="Logo"
+                              className="h-11 w-11 rounded-lg object-contain border border-outline-subtle bg-surface-secondary shrink-0"
+                            />
+                          ) : (
+                            <div className="h-11 w-11 rounded-lg bg-surface-secondary border border-outline-subtle shrink-0" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-semibold text-text-primary">
+                              {agreementLogoUrl
+                                ? (language === 'fr' ? 'Logo personnalisé' : 'Custom logo')
+                                : (language === 'fr' ? 'Logo de l’entreprise' : 'Company logo')}
+                            </p>
+                            <p className="text-[12px] text-text-tertiary">
+                              {language === 'fr' ? 'Par défaut : Réglages → Détails de l’entreprise' : 'Default: Settings → Company details'}
+                            </p>
+                          </div>
+                          {agreementLogoUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setAgreementLogoUrl(null)}
+                              className="text-[12px] font-medium text-text-tertiary hover:text-danger shrink-0"
+                            >
+                              {language === 'fr' ? 'Retirer' : 'Remove'}
+                            </button>
+                          )}
+                        </div>
+                        <div className="mt-2">
+                          <FileUpload
+                            bucket={STORAGE_BUCKETS.COMPANY_LOGOS}
+                            path="agreements"
+                            accept="image/*"
+                            maxSizeMb={5}
+                            normalizeImageMaxDim={1024}
+                            onUpload={(url) => setAgreementLogoUrl(url)}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-xs font-medium text-text-tertiary block mb-1.5">
+                          {language === 'fr' ? 'Termes et conditions' : 'Terms and conditions'}
+                        </span>
+                        <textarea
+                          value={agreementTerms}
+                          onChange={(e) => setAgreementTerms(e.target.value)}
+                          rows={7}
+                          className="glass-input w-full !h-auto text-[12.5px] leading-relaxed resize-y"
+                        />
+                        <p className="text-[11px] text-text-tertiary mt-1">
+                          {language === 'fr'
+                            ? 'Pré-rempli avec les termes par défaut — modifiable pour ce contrat.'
+                            : 'Prefilled with the default terms — editable for this agreement.'}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-[12px] text-primary">
+                        {language === 'fr'
+                          ? 'Les services, prix et taxes du job ainsi que la date de création et les infos de l’entreprise sont inclus automatiquement dans le contrat.'
+                          : 'The job’s services, prices and taxes plus the creation date and company info are automatically included in the contract.'}
+                      </div>
+                    </>
+                  )}
+                </Box>
+              )}
 
               {/* ── Deposit & Payment Settings ── */}
               <Box title={t.modals.depositSettings}>

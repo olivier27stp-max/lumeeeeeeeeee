@@ -40,6 +40,10 @@ import ActivityTimeline from '../components/ActivityTimeline';
 import { useDropZone } from '../hooks/useDropZone';
 import { getRecurrenceRule, createRecurrenceRule, deactivateRecurrenceRule, type RecurrenceRule, type RecurrenceFrequency } from '../lib/recurringJobsApi';
 import { getServiceContractByJob, type ServiceContract } from '../lib/serviceContractsApi';
+import { getJobAgreementByJob, sendAgreementEmail, type JobAgreement } from '../lib/jobAgreementsApi';
+import AgreementPreviewModal from '../components/agreements/AgreementPreviewModal';
+import { buildAgreementDocData, getAgreementCompanyBranding } from '../lib/agreementDoc';
+import { downloadAgreementPdf } from '../lib/generateAgreementPdf';
 import SendSmsModal from '../components/communications/SendSmsModal';
 import SendEmailModal from '../components/communications/SendEmailModal';
 import CommunicationsTimeline from '../components/communications/CommunicationsTimeline';
@@ -122,6 +126,11 @@ export default function JobDetails() {
 
   // Service plan contract (12-month calendar snapshot, optional)
   const [contract, setContract] = useState<ServiceContract | null>(null);
+
+  // Written agreement (job contract, optional)
+  const [agreement, setAgreement] = useState<JobAgreement | null>(null);
+  const [showAgreementPreview, setShowAgreementPreview] = useState(false);
+  const [agreementSending, setAgreementSending] = useState(false);
 
   // Recurrence
   const [recurrence, setRecurrence] = useState<RecurrenceRule | null>(null);
@@ -312,6 +321,58 @@ export default function JobDetails() {
     if (!id) return;
     getServiceContractByJob(id).then(setContract).catch(() => {});
   }, [id]);
+
+  // Load written agreement (null when none / migration pending)
+  const reloadAgreement = useCallback(() => {
+    if (!id) return;
+    getJobAgreementByJob(id).then(setAgreement).catch(() => {});
+  }, [id]);
+
+  useEffect(() => {
+    reloadAgreement();
+  }, [reloadAgreement]);
+
+  // ── Agreement actions ──
+  const handleAgreementDownload = async () => {
+    if (!agreement || !job) return;
+    try {
+      const company = await getAgreementCompanyBranding();
+      const docData = buildAgreementDocData({
+        agreement,
+        job,
+        lineItems,
+        company,
+        clientName: job.client_name || null,
+        clientEmail: clientInfo?.email || null,
+        clientPhone: clientInfo?.phone || null,
+      });
+      downloadAgreementPdf(docData);
+    } catch (err: any) {
+      toast.error(err?.message || (language === 'fr' ? 'Échec du téléchargement.' : 'Download failed.'));
+    }
+  };
+
+  const handleAgreementSend = async () => {
+    if (!agreement) return;
+    setAgreementSending(true);
+    try {
+      await sendAgreementEmail(agreement.id);
+      toast.success(language === 'fr' ? 'Contrat envoyé par courriel.' : 'Agreement sent by email.');
+      reloadAgreement();
+    } catch (err: any) {
+      toast.error(err?.message || (language === 'fr' ? "Échec de l'envoi du contrat." : 'Failed to send the agreement.'));
+    } finally {
+      setAgreementSending(false);
+    }
+  };
+
+  const copyAgreementSignatureLink = () => {
+    if (!agreement) return;
+    const url = `${window.location.origin}/contract/${agreement.view_token}`;
+    navigator.clipboard.writeText(url)
+      .then(() => toast.success(language === 'fr' ? 'Lien de signature copié.' : 'Signature link copied.'))
+      .catch(() => toast.error(language === 'fr' ? 'Impossible de copier le lien.' : 'Could not copy the link.'));
+  };
 
   const reload = () => {
     if (!id) return;
@@ -859,6 +920,111 @@ export default function JobDetails() {
           </div>
         )}
 
+        {/* ═══ AGREEMENT (written contract) ═══ */}
+        {agreement && (
+          <div className="rounded-xl border border-outline bg-surface overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
+              <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
+                <div className="icon-tile icon-tile-sm icon-tile-blue">
+                  <FileText size={13} strokeWidth={2} />
+                </div>
+                {language === 'fr' ? 'Contrat' : 'Agreement'} · CTR-{job.job_number}
+              </h2>
+              <span className={cn(
+                'text-[11px] font-semibold px-2.5 py-0.5 rounded-full border',
+                agreement.status === 'signed'
+                  ? 'bg-success-light text-success border-success/30'
+                  : agreement.status === 'sent' && agreement.require_signature
+                    ? 'bg-warning-light text-warning border-warning/30'
+                    : agreement.status === 'sent'
+                      ? 'bg-primary/5 text-primary border-primary/20'
+                      : 'bg-surface-secondary text-text-secondary border-outline'
+              )}>
+                {agreement.status === 'signed'
+                  ? (language === 'fr' ? 'Signé' : 'Signed')
+                  : agreement.status === 'sent' && agreement.require_signature
+                    ? (language === 'fr' ? 'En attente de signature' : 'Awaiting signature')
+                    : agreement.status === 'sent'
+                      ? (language === 'fr' ? 'Envoyé' : 'Sent')
+                      : (language === 'fr' ? 'Brouillon' : 'Draft')}
+              </span>
+            </div>
+            <div className="p-5 space-y-4">
+              {agreement.status === 'signed' && agreement.signature_data && (
+                <div className="flex items-center gap-3 rounded-lg border border-success/30 bg-success-light px-3 py-2.5">
+                  <img src={agreement.signature_data} alt="Signature" className="h-10 max-w-[140px] object-contain shrink-0" />
+                  <div>
+                    <p className="text-[12.5px] font-semibold text-success">
+                      {(language === 'fr' ? 'Signé par ' : 'Signed by ') + (agreement.signer_name || '—')}
+                    </p>
+                    {agreement.signed_at && (
+                      <p className="text-[11.5px] text-text-tertiary">{formatDate(agreement.signed_at)}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-[0.05em]">
+                    {language === 'fr' ? 'Créé le' : 'Created'}
+                  </p>
+                  <p className="text-[13px] font-semibold text-text-primary mt-0.5">{formatDate(agreement.created_at)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-[0.05em]">
+                    {language === 'fr' ? 'Signature requise' : 'Signature required'}
+                  </p>
+                  <p className="text-[13px] font-semibold text-text-primary mt-0.5">
+                    {agreement.require_signature ? (language === 'fr' ? 'Oui' : 'Yes') : (language === 'fr' ? 'Non' : 'No')}
+                  </p>
+                </div>
+                {canSeePricing && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-[0.05em]">Total</p>
+                    <p className="text-[13px] font-semibold text-text-primary mt-0.5 tabular-nums">
+                      {formatCents(agreement.snapshot?.total_cents ?? displayTotalCents)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {agreement.terms && (
+                <p className="text-[12px] text-text-tertiary leading-relaxed rounded-lg border border-outline-subtle bg-surface-secondary/40 px-3 py-2.5 line-clamp-2">
+                  {agreement.terms}
+                </p>
+              )}
+
+              <div className="flex flex-wrap gap-2 print:hidden">
+                <button
+                  onClick={() => setShowAgreementPreview(true)}
+                  className="bg-primary text-primary-foreground rounded-lg px-3.5 py-1.5 text-[12px] font-semibold hover:opacity-90 transition-opacity"
+                >
+                  {language === 'fr' ? 'Aperçu' : 'Preview'}
+                </button>
+                <button onClick={handleAgreementDownload} className="glass-button !text-[12px] !px-3 !py-1.5 inline-flex items-center gap-1.5">
+                  <Download size={12} />
+                  {language === 'fr' ? 'Télécharger le PDF' : 'Download PDF'}
+                </button>
+                <button
+                  onClick={handleAgreementSend}
+                  disabled={agreementSending}
+                  className="glass-button !text-[12px] !px-3 !py-1.5 inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Mail size={12} />
+                  {language === 'fr' ? 'Envoyer par courriel' : 'Send by email'}
+                </button>
+                {agreement.require_signature && agreement.status !== 'signed' && (
+                  <button onClick={copyAgreementSignatureLink} className="glass-button !text-[12px] !px-3 !py-1.5 inline-flex items-center gap-1.5">
+                    <LinkIcon size={12} />
+                    {language === 'fr' ? 'Copier le lien de signature' : 'Copy signature link'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ═══ INVOICES — hidden for financially restricted roles ═══ */}
         {canSeeInvoices && <div className="rounded-xl border border-outline bg-surface overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
@@ -1145,6 +1311,20 @@ export default function JobDetails() {
           onClose={() => setShowAddVisit(false)}
           onAdded={() => void handleVisitAdded()}
           job={{ id: job.id, label: [job.title, job.client_name].filter(Boolean).join(' — ') || (language === 'fr' ? 'Job' : 'Job') }}
+        />
+      )}
+
+      {job && agreement && (
+        <AgreementPreviewModal
+          open={showAgreementPreview}
+          onClose={() => setShowAgreementPreview(false)}
+          agreement={agreement}
+          job={job}
+          lineItems={lineItems}
+          clientName={job.client_name || null}
+          clientEmail={clientInfo?.email || null}
+          clientPhone={clientInfo?.phone || null}
+          onSent={reloadAgreement}
         />
       )}
     </>
