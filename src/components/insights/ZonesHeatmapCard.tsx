@@ -1,9 +1,9 @@
 /**
- * Revenue heatmap + zone analytics — the real map the prototype could only mock.
- * Renders scheduled jobs for the selected period on a monochrome Leaflet basemap
- * (Carto light/dark) with a revenue-weighted heat layer, plus a stats strip and a
- * "top paying zones" ranking clustered automatically by city (from the address).
- * Reuses the app's Leaflet + leaflet.heat stack (leaflet CSS is in main.tsx).
+ * Completed-job density map + zone analytics — the real map the prototype could
+ * only mock. Heat weights every COMPLETED job equally, so the map shows where the
+ * work actually happens (density, no revenue-definition ambiguity). Revenue stays
+ * visible in the zone ranking so the money view isn't lost. Monochrome Leaflet
+ * basemap (Carto light/dark); reuses the app's leaflet + leaflet.heat stack.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
@@ -21,6 +21,12 @@ const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
 const GRAD_LIGHT = { 0.1: '#c4c4c4', 0.35: '#8a8a8a', 0.65: '#4a4a4a', 1.0: '#171717' };
 const GRAD_DARK = { 0.1: '#4a4a52', 0.35: '#7d7d86', 0.65: '#c0c0c6', 1.0: '#fafafa' };
+
+/** A job counts as "réalisé" once it's completed / invoiced / paid. */
+function isDone(status?: string | null): boolean {
+  const s = String(status || '').toLowerCase().trim();
+  return s === 'completed' || s === 'complete' || s === 'done' || s === 'terminé' || s === 'termine' || s === 'invoiced' || s === 'paid';
+}
 
 function useIsDark() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -102,39 +108,42 @@ export default function ZonesHeatmapCard({
   const kc = (cents: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 
   const { points, stats } = useMemo(() => {
-    const pins = (q.data?.pins || []).filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && !(p.latitude === 0 && p.longitude === 0));
-    const max = Math.max(1, ...pins.map((p) => p.totalCents || 0));
-    const points = pins.map((p) => [p.latitude, p.longitude, Math.max(0.35, (p.totalCents || 0) / max)] as [number, number, number]);
+    // Only jobs that were actually realised, with valid coordinates.
+    const done = (q.data?.pins || []).filter(
+      (p) => isDone(p.status) && Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && !(p.latitude === 0 && p.longitude === 0),
+    );
+    // Density: every completed job weighs the same (overlap = hotter).
+    const points = done.map((p) => [p.latitude, p.longitude, 0.6] as [number, number, number]);
 
-    const totalRev = pins.reduce((s, p) => s + (p.totalCents || 0), 0);
+    const totalRev = done.reduce((s, p) => s + (p.totalCents || 0), 0);
     const byZone = new Map<string, { rev: number; jobs: number }>();
-    for (const p of pins) {
+    for (const p of done) {
       const name = cityFromAddress(p.address) || (fr ? 'Autres' : 'Other');
       const e = byZone.get(name) || { rev: 0, jobs: 0 };
       e.rev += p.totalCents || 0; e.jobs += 1;
       byZone.set(name, e);
     }
-    const zones = Array.from(byZone.entries()).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.rev - a.rev);
-    return { points, stats: { totalRev, jobs: pins.length, avg: pins.length ? totalRev / pins.length : 0, zoneCount: zones.length, topZones: zones.slice(0, 5) } };
+    const zones = Array.from(byZone.entries()).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.jobs - a.jobs || b.rev - a.rev);
+    return { points, stats: { totalRev, jobs: done.length, avg: done.length ? totalRev / done.length : 0, zoneCount: zones.length, topZones: zones.slice(0, 5) } };
   }, [q.data, fr]);
 
   const empty = !q.isLoading && stats.jobs === 0;
-  const zoneMax = Math.max(1, ...stats.topZones.map((z) => z.rev));
+  const zoneMax = Math.max(1, ...stats.topZones.map((z) => z.jobs));
 
   return (
     <div className="flex flex-col">
       <div className="flex items-end justify-between gap-3 px-6 pb-3 border-b border-border">
-        <div className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary leading-none">{fr ? 'Carte thermique du revenu' : 'Revenue heatmap'}</div>
+        <div className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary leading-none">{fr ? 'Jobs réalisés par zone' : 'Completed jobs by zone'}</div>
         <PeriodSelector value={period} onChange={onPeriod} />
       </div>
 
       {/* stats strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 px-6 pt-4">
         {[
-          { v: kc(stats.totalRev), l: fr ? 'Revenu cartographié' : 'Mapped revenue' },
-          { v: String(stats.jobs), l: fr ? 'Jobs géocodés' : 'Geocoded jobs' },
-          { v: kc(stats.avg), l: fr ? 'Revenu moy. / job' : 'Avg revenue / job' },
+          { v: String(stats.jobs), l: fr ? 'Jobs réalisés' : 'Completed jobs' },
           { v: String(stats.zoneCount), l: fr ? 'Zones actives' : 'Active zones' },
+          { v: kc(stats.totalRev), l: fr ? 'Revenu réalisé' : 'Revenue realized' },
+          { v: kc(stats.avg), l: fr ? 'Revenu moy. / job' : 'Avg revenue / job' },
         ].map((s, i) => (
           <div key={i}>
             <div className="text-[22px] font-bold tracking-tight leading-none tabular-nums text-text-primary">{s.v}</div>
@@ -152,15 +161,15 @@ export default function ZonesHeatmapCard({
             <FitBounds points={points} />
           </MapContainer>
           <div className="absolute right-3 bottom-3 z-[500] rounded-lg border border-border bg-surface-card/90 backdrop-blur px-3 py-2.5 shadow-sm">
-            <div className="text-[10px] uppercase tracking-wide text-text-tertiary font-bold mb-1.5">{fr ? 'Revenu' : 'Revenue'}</div>
+            <div className="text-[10px] uppercase tracking-wide text-text-tertiary font-bold mb-1.5">{fr ? 'Densité des jobs' : 'Job density'}</div>
             <div className="h-2 w-28 rounded-full" style={{ background: 'linear-gradient(90deg, var(--color-surface-tertiary), var(--color-text-primary))' }} />
-            <div className="flex justify-between text-[9.5px] font-semibold text-text-tertiary mt-1"><span>{fr ? 'Faible' : 'Low'}</span><span>{fr ? 'Élevé' : 'High'}</span></div>
+            <div className="flex justify-between text-[9.5px] font-semibold text-text-tertiary mt-1"><span>{fr ? 'Faible' : 'Low'}</span><span>{fr ? 'Élevée' : 'High'}</span></div>
           </div>
           {empty && (
             <div className="absolute inset-0 z-[400] flex items-center justify-center bg-surface-card/70 backdrop-blur-sm">
               <div className="text-center px-6">
-                <div className="text-[13px] font-semibold text-text-secondary">{fr ? 'Aucun job géocodé sur la période' : 'No geocoded jobs for this period'}</div>
-                <div className="text-[11.5px] text-text-tertiary mt-1.5 max-w-[280px]">{fr ? 'Les jobs planifiés avec une adresse géocodée apparaîtront ici, colorés selon le revenu.' : 'Scheduled jobs with a geocoded address appear here, shaded by revenue.'}</div>
+                <div className="text-[13px] font-semibold text-text-secondary">{fr ? 'Aucun job réalisé géocodé sur la période' : 'No geocoded completed jobs for this period'}</div>
+                <div className="text-[11.5px] text-text-tertiary mt-1.5 max-w-[280px]">{fr ? 'Les jobs terminés avec une adresse géocodée apparaissent ici, plus foncé = plus de jobs.' : 'Completed jobs with a geocoded address appear here, darker = more jobs.'}</div>
               </div>
             </div>
           )}
@@ -168,7 +177,7 @@ export default function ZonesHeatmapCard({
 
         {/* top zones */}
         <div className="flex flex-col">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-text-tertiary mb-1">{fr ? 'Zones les plus payantes' : 'Top paying zones'}</div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-text-tertiary mb-1">{fr ? 'Zones les plus actives' : 'Most active zones'}</div>
           {empty ? (
             <div className="flex-1 flex items-center justify-center text-[12px] text-text-tertiary">{fr ? 'Aucune donnée' : 'No data'}</div>
           ) : (
@@ -177,10 +186,10 @@ export default function ZonesHeatmapCard({
                 <div key={z.name} className="py-2.5 border-b border-border-light last:border-0">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-[13px] font-semibold text-text-primary truncate">{i + 1}. {z.name}</span>
-                    <span className="text-[13px] font-bold text-text-primary tabular-nums shrink-0">{kc(z.rev)}</span>
+                    <span className="text-[13px] font-bold text-text-primary tabular-nums shrink-0">{z.jobs} {fr ? 'jobs' : 'jobs'}</span>
                   </div>
-                  <div className="h-1.5 rounded-full bg-surface-tertiary overflow-hidden mt-2"><span className="block h-full rounded-full" style={{ width: `${Math.round((z.rev / zoneMax) * 100)}%`, background: 'var(--color-text-primary)' }} /></div>
-                  <div className="text-[11px] text-text-tertiary font-semibold mt-1.5">{z.jobs} {z.jobs > 1 ? (fr ? 'jobs' : 'jobs') : 'job'} · {kc(z.jobs ? z.rev / z.jobs : 0)} {fr ? 'moy.' : 'avg'}</div>
+                  <div className="h-1.5 rounded-full bg-surface-tertiary overflow-hidden mt-2"><span className="block h-full rounded-full" style={{ width: `${Math.round((z.jobs / zoneMax) * 100)}%`, background: 'var(--color-text-primary)' }} /></div>
+                  <div className="text-[11px] text-text-tertiary font-semibold mt-1.5">{kc(z.rev)} · {kc(z.jobs ? z.rev / z.jobs : 0)} {fr ? 'moy.' : 'avg'}</div>
                 </div>
               ))}
             </div>
