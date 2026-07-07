@@ -22,6 +22,7 @@ import ServiceMixCard from '../components/insights/ServiceMixCard';
 import PaymentMixCard from '../components/insights/PaymentMixCard';
 import MiniTrendCard, { type MiniSeries } from '../components/insights/MiniTrendCard';
 import ZonesHeatmapCard from '../components/insights/ZonesHeatmapCard';
+import ProfitabilityCard from '../components/insights/ProfitabilityCard';
 
 /* ── period scaling for the prototype figures ── */
 const GF: Record<InsightsPeriod, number> = { '12m': 1, '2y': 2.4, '3y': 3.5, '12w': 0.26, ytd: 0.58 };
@@ -63,14 +64,6 @@ const TX: Record<InsightsPeriod, string> = { '12m': '53', '2y': '49', '3y': '47'
 const DC: Record<InsightsPeriod, string> = { '12m': '2,4', '2y': '2,8', '3y': '3,1', '12w': '2,0', ytd: '2,3' };
 const DA: Record<InsightsPeriod, string> = { '12m': '1,8', '2y': '2,1', '3y': '2,2', '12w': '1,5', ytd: '1,7' };
 const VD = { sent: 42400, conv: 22100 };
-const PL = [
-  { c: 'Constructions ABC', j: '1030', rev: 3200, mo: 920, dep: 410 },
-  { c: 'Toitures Rive-Sud', j: '1036', rev: 2245, mo: 640, dep: 320 },
-  { c: 'Marcel Lafontaine', j: '1042', rev: 1250, mo: 380, dep: 90 },
-  { c: 'Marie Lefebvre', j: '1039', rev: 980, mo: 210, dep: 40 },
-  { c: 'Josée Mondar', j: '1033', rev: 640, mo: 180, dep: 30 },
-];
-
 function mean(a: number[]) { return a.reduce((x, y) => x + y, 0) / a.length; }
 
 /* ── shared shell (boxless, underlined header) ── */
@@ -293,58 +286,8 @@ export default function Statistiques() {
       <ZonesHeatmapCard range={range} period={period} onPeriod={setPeriod} />
 
       {/* Rentabilité */}
-      <SectionHead title={fr ? 'Rentabilité' : 'Profitability'} badge={fr ? 'nécessite le suivi des coûts' : 'requires cost tracking'} />
-      <LinkCard to="/jobs">
-        <CardHead title={fr ? 'Rentabilité par job' : 'Profitability by job'} right={<PeriodSelector value={period} onChange={setPeriod} />} />
-        <div className="overflow-x-auto mt-3">
-          <table className="w-full text-[13px] border-collapse">
-            <thead>
-              <tr className="text-[10.5px] uppercase tracking-wide text-text-tertiary">
-                <th className="text-left font-bold px-6 py-3 bg-surface-secondary border-b border-border">Client</th>
-                <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">Job&nbsp;#</th>
-                <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? 'Montant' : 'Amount'}</th>
-                <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? "Main-d'œuvre" : 'Labour'}</th>
-                <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? 'Dépenses' : 'Expenses'}</th>
-                <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? 'Profit' : 'Profit'}</th>
-                <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? 'Marge' : 'Margin'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {PL.map((r, i) => {
-                const rev = Math.round(r.rev * f2), mo = Math.round(r.mo * f2), dep = Math.round(r.dep * f2), pf = rev - mo - dep, mg = rev > 0 ? Math.round((pf / rev) * 100) : 0;
-                return (
-                  <tr key={i} className="hover:bg-surface-secondary">
-                    <td className="px-6 py-3 font-semibold text-text-primary border-b border-border-light">{r.c}</td>
-                    <td className="px-6 py-3 text-right font-semibold text-text-secondary tabular-nums border-b border-border-light">{r.j}</td>
-                    <td className="px-6 py-3 text-right text-text-tertiary tabular-nums border-b border-border-light">{k(rev)}</td>
-                    <td className="px-6 py-3 text-right text-text-tertiary tabular-nums border-b border-border-light">{k(mo)}</td>
-                    <td className="px-6 py-3 text-right text-text-tertiary tabular-nums border-b border-border-light">{k(dep)}</td>
-                    <td className="px-6 py-3 text-right font-bold text-text-primary tabular-nums border-b border-border-light">{k(pf)}</td>
-                    <td className="px-6 py-3 text-right font-bold text-text-primary tabular-nums border-b border-border-light">
-                      <span className="inline-block w-11 h-[5px] rounded-full bg-surface-tertiary overflow-hidden align-middle mr-2"><span className="block h-full rounded-full" style={{ width: `${Math.max(0, mg)}%`, background: 'var(--color-text-primary)' }} /></span>{mg} %
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              {(() => {
-                const tr = PL.reduce((s, r) => s + Math.round(r.rev * f2), 0), tm = PL.reduce((s, r) => s + Math.round(r.mo * f2), 0), td = PL.reduce((s, r) => s + Math.round(r.dep * f2), 0), tp = tr - tm - td, tmg = tr > 0 ? Math.round((tp / tr) * 100) : 0;
-                return (
-                  <tr className="font-bold bg-surface-secondary">
-                    <td className="px-6 py-3.5 border-t border-border">Total</td><td className="border-t border-border" />
-                    <td className="px-6 py-3.5 text-right tabular-nums border-t border-border">{k(tr)}</td>
-                    <td className="px-6 py-3.5 text-right tabular-nums border-t border-border">{k(tm)}</td>
-                    <td className="px-6 py-3.5 text-right tabular-nums border-t border-border">{k(td)}</td>
-                    <td className="px-6 py-3.5 text-right tabular-nums border-t border-border">{k(tp)}</td>
-                    <td className="px-6 py-3.5 text-right tabular-nums border-t border-border">{tmg} %</td>
-                  </tr>
-                );
-              })()}
-            </tfoot>
-          </table>
-        </div>
-      </LinkCard>
+      <SectionHead title={fr ? 'Rentabilité' : 'Profitability'} />
+      <ProfitabilityCard range={range} period={period} onPeriod={setPeriod} />
 
       <div className="h-16" />
     </div>

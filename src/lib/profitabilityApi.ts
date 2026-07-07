@@ -145,3 +145,14 @@ export async function fetchJobPnL(params: { from: string; to: string }): Promise
     return EMPTY;
   }
 }
+
+/** Set the materials/subcontracting expense on a job (in cents). Org-scoped. */
+export async function updateJobExpenses(jobId: string, expensesCents: number): Promise<void> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { error } = await supabase
+    .from('jobs')
+    .update({ expenses_cents: Math.max(0, Math.round(expensesCents)) })
+    .eq('id', jobId)
+    .eq('org_id', orgId);
+  if (error) throw error;
+}
