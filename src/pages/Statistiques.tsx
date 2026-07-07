@@ -21,6 +21,7 @@ import RevenueTrendCard from '../components/insights/RevenueTrendCard';
 import ServiceMixCard from '../components/insights/ServiceMixCard';
 import PaymentMixCard from '../components/insights/PaymentMixCard';
 import MiniTrendCard, { type MiniSeries } from '../components/insights/MiniTrendCard';
+import ZonesHeatmapCard from '../components/insights/ZonesHeatmapCard';
 
 /* ── period scaling for the prototype figures ── */
 const GF: Record<InsightsPeriod, number> = { '12m': 1, '2y': 2.4, '3y': 3.5, '12w': 0.26, ytd: 0.58 };
@@ -288,12 +289,8 @@ export default function Statistiques() {
       </div>
 
       {/* Zones */}
-      <SectionHead title={fr ? 'Zones' : 'Zones'} badge={fr ? "Dans l'app" : 'In app'} />
-      <div className="flex flex-col items-center justify-center text-center h-[236px] gap-3 px-6 border border-dashed border-border rounded-xl">
-        <div className="w-11 h-11 rounded-xl bg-surface-secondary border border-border grid place-items-center text-text-tertiary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-6 h-6"><path d="M9 20l-5.5 2.5V6L9 3.5m0 16.5l6 2.5m-6-2.5V3.5m6 19l5.5-2.5V3.5L15 6m0 16.5V6m0 0L9 3.5" /></svg></div>
-        <div className="text-[13.5px] font-semibold text-text-secondary">{fr ? 'Vraie carte Google' : 'Real Google map'}</div>
-        <div className="text-[12px] text-text-tertiary max-w-[280px] leading-relaxed">{fr ? "Zones géocodées colorées en gris selon le revenu (foncé = plus payant), avec légende et survol — construite dans l'app." : 'Geocoded zones shaded by revenue (darker = higher), with legend and hover — built in the app.'}</div>
-      </div>
+      <SectionHead title={fr ? 'Zones' : 'Zones'} />
+      <ZonesHeatmapCard range={range} period={period} onPeriod={setPeriod} />
 
       {/* Rentabilité */}
       <SectionHead title={fr ? 'Rentabilité' : 'Profitability'} badge={fr ? 'nécessite le suivi des coûts' : 'requires cost tracking'} />
