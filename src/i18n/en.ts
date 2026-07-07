@@ -1327,6 +1327,7 @@ const en = {
     noPropertiesForClient: 'This client has no property yet. Add one below.',
     addPropertyInline: 'Add a property',
     propertyNamePlaceholder: 'Property name (e.g. Main office)',
+    defaultPropertyName: 'Primary address',
     // NewLeadModal
     newLead: 'New Quote',
     newJob: 'New Job',

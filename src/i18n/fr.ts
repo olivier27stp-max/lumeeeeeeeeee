@@ -1326,6 +1326,7 @@ const fr: TranslationKeys = {
     noPropertiesForClient: 'Ce client n’a pas encore de propriété. Ajoutez-en une ci-dessous.',
     addPropertyInline: 'Ajouter une propriété',
     propertyNamePlaceholder: 'Nom de la propriété (ex. Bureau principal)',
+    defaultPropertyName: 'Adresse principale',
     newLead: 'Nouveau devis',
     newJob: 'Nouveau job',
     createNewLeadOrJob: 'Créer un nouveau devis ou une demande de service',
