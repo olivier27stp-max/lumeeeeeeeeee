@@ -25,6 +25,8 @@ interface AddressAutocompleteProps {
   className?: string;
   placeholder?: string;
   restrictCountries?: string[];
+  /** Hide the missing-key / load-error hints (public-facing forms). */
+  hideStatusHint?: boolean;
 }
 
 // ── Error boundary (function wrapper) ──
@@ -107,7 +109,7 @@ function useGooglePlaces() {
 
 // ── Main component ──
 function AddressAutocompleteInner({
-  value, onChange, onSelect, duplicateWarning, className, placeholder, restrictCountries,
+  value, onChange, onSelect, duplicateWarning, className, placeholder, restrictCountries, hideStatusHint,
 }: AddressAutocompleteProps) {
   const { t } = useTranslation();
   const { isReady, isLoading, isError, hasKey } = useGooglePlaces();
@@ -160,7 +162,7 @@ function AddressAutocompleteInner({
   }, [isReady]);
 
   // Fallback label for missing key or error
-  const hint = !hasKey ? t.address.apiKeyMissing : isError ? t.address.loadError : null;
+  const hint = hideStatusHint ? null : !hasKey ? t.address.apiKeyMissing : isError ? t.address.loadError : null;
 
   return (
     <div>
@@ -206,9 +208,11 @@ export default function AddressAutocomplete(props: AddressAutocompleteProps) {
         className={cn('glass-input w-full', props.className)}
         placeholder={props.placeholder || t.address.placeholder}
       />
-      <p className="mt-1 flex items-center gap-1 text-[11px] text-danger">
-        <AlertCircle size={11} /> {t.address.loadError}
-      </p>
+      {!props.hideStatusHint && (
+        <p className="mt-1 flex items-center gap-1 text-[11px] text-danger">
+          <AlertCircle size={11} /> {t.address.loadError}
+        </p>
+      )}
     </div>
   );
   return (

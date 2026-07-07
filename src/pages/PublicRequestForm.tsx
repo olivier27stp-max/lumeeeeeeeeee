@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Loader2, CheckCircle2, AlertCircle, ImagePlus, X } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { fetchPublicForm, submitPublicForm, uploadPublicFormPhoto, type PublicForm, type PublicFormSubmission } from '../lib/publicFormApi';
+import AddressAutocomplete, { type StructuredAddress } from '../components/AddressAutocomplete';
 import type { FormField } from '../types';
 
 const MAX_PHOTO_BYTES = 15 * 1024 * 1024; // 15 MB — matches the server limit
@@ -207,7 +208,20 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
 
         {/* Address */}
         <Section title={t.billing.address}>
-          <input className="glass-input w-full" placeholder={tr.streetAddress} value={street} onChange={(e) => setStreet(e.target.value)} />
+          <AddressAutocomplete
+            value={street}
+            onChange={setStreet}
+            onSelect={(addr: StructuredAddress) => {
+              const streetLine = [addr.street_number, addr.street_name].filter(Boolean).join(' ');
+              setStreet(streetLine || addr.formatted_address);
+              setCity(addr.city);
+              setRegion(addr.province);
+              setPostal(addr.postal_code);
+              setCountry(addr.country);
+            }}
+            placeholder={tr.streetAddress}
+            hideStatusHint
+          />
           <div className="grid grid-cols-2 gap-3">
             <input className="glass-input w-full" placeholder={tr.unitApt} value={unit} onChange={(e) => setUnit(e.target.value)} />
             <input className="glass-input w-full" placeholder={tr.city} value={city} onChange={(e) => setCity(e.target.value)} />
