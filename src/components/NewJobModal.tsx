@@ -631,6 +631,22 @@ export default function NewJobModal({
     return () => { active = false; };
   }, [isOpen, clientId]);
 
+  // Best coordinates for the mini map: the client's D2D sales-map pin when one
+  // exists, else the selected property's geocoded position, else the client
+  // record's. Most clients never came from door-knocking, so without these
+  // fallbacks the mini map would stay empty for them.
+  const miniMapPin = useMemo<ClientMapPin | null>(() => {
+    if (clientPin) return clientPin;
+    const prop = properties.find((p) => p.id === propertyId);
+    if (prop?.latitude != null && prop?.longitude != null) {
+      return { lat: prop.latitude, lng: prop.longitude, status: 'other' };
+    }
+    if (selectedClient?.latitude != null && selectedClient?.longitude != null) {
+      return { lat: selectedClient.latitude, lng: selectedClient.longitude, status: 'other' };
+    }
+    return null;
+  }, [clientPin, properties, propertyId, selectedClient]);
+
   // Load the selected client's properties. A job must be assigned to one of
   // them; the address is then derived from the chosen property (see effect below).
   useEffect(() => {
@@ -784,8 +800,8 @@ export default function NewJobModal({
   // When the form was opened from /field-sales the pathname doesn't change,
   // so the guard is applied manually.
   const handleOpenClientOnMap = () => {
-    if (!clientPin) return;
-    navigate(`/field-sales?lat=${clientPin.lat}&lng=${clientPin.lng}`);
+    if (!miniMapPin) return;
+    navigate(`/field-sales?lat=${miniMapPin.lat}&lng=${miniMapPin.lng}`);
     if (openedPathRef.current === '/field-sales') {
       if (isDirty) setShowLeaveConfirm(true);
       else handleClose();
@@ -1950,7 +1966,7 @@ export default function NewJobModal({
                   )}
                 </Box>
                 <ClientPinMiniMap
-                  pin={clientPin}
+                  pin={miniMapPin}
                   hasClient={Boolean(clientId)}
                   onOpen={handleOpenClientOnMap}
                 />

@@ -41,6 +41,7 @@ export default function ClientPinMiniMap({ pin, hasClient, onOpen }: ClientPinMi
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRef = useRef<mapboxgl.Marker | null>(null);
+  const resizeObsRef = useRef<ResizeObserver | null>(null);
 
   const token = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
   const lat = pin?.lat;
@@ -51,6 +52,8 @@ export default function ClientPinMiniMap({ pin, hasClient, onOpen }: ClientPinMi
     if (lat == null || lng == null || !token) {
       markerRef.current?.remove();
       markerRef.current = null;
+      resizeObsRef.current?.disconnect();
+      resizeObsRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       return;
@@ -59,7 +62,7 @@ export default function ClientPinMiniMap({ pin, hasClient, onOpen }: ClientPinMi
 
     if (!mapRef.current) {
       mapboxgl.accessToken = token;
-      mapRef.current = new mapboxgl.Map({
+      const map = new mapboxgl.Map({
         container: containerRef.current,
         style: 'mapbox://styles/mapbox/satellite-streets-v12',
         center: [lng, lat],
@@ -67,6 +70,13 @@ export default function ClientPinMiniMap({ pin, hasClient, onOpen }: ClientPinMi
         interactive: false,
         attributionControl: false,
       });
+      // The form host animates in and the grid can resize after init — keep
+      // the canvas matched to the box or the map renders blank.
+      map.on('load', () => map.resize());
+      resizeObsRef.current?.disconnect();
+      resizeObsRef.current = new ResizeObserver(() => mapRef.current?.resize());
+      resizeObsRef.current.observe(containerRef.current);
+      mapRef.current = map;
     } else {
       mapRef.current.jumpTo({ center: [lng, lat] });
     }
@@ -80,6 +90,8 @@ export default function ClientPinMiniMap({ pin, hasClient, onOpen }: ClientPinMi
 
   useEffect(() => () => {
     markerRef.current?.remove();
+    resizeObsRef.current?.disconnect();
+    resizeObsRef.current = null;
     mapRef.current?.remove();
     mapRef.current = null;
   }, []);
@@ -116,7 +128,7 @@ export default function ClientPinMiniMap({ pin, hasClient, onOpen }: ClientPinMi
           <p className="text-[12px] text-text-tertiary max-w-[220px]">
             {!hasClient
               ? (fr ? 'Sélectionnez un client pour voir son pin sur la map de vente.' : 'Select a client to see their pin on the sales map.')
-              : (fr ? 'Aucun pin sur la map de vente pour ce client.' : 'This client has no pin on the sales map.')}
+              : (fr ? 'Aucune localisation trouvée pour ce client (pin de vente ou adresse géocodée).' : 'No location found for this client (sales pin or geocoded address).')}
           </p>
         </div>
       )}
