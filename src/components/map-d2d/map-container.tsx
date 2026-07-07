@@ -146,6 +146,10 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   // GPS permission refused/unavailable → discreet, dismissible banner.
   const [gpsDenied, setGpsDenied] = useState(false);
   const [gpsBannerDismissed, setGpsBannerDismissed] = useState(false);
+  const [gpsEnabling, setGpsEnabling] = useState(false);
+  // Permission hard-blocked at the browser level: getCurrentPosition fails
+  // instantly without re-prompting, so "Enable" must show unblock steps instead.
+  const [gpsBlocked, setGpsBlocked] = useState(false);
   const [, forceUpdate] = useState(0);
 
   // --- Filters ---
@@ -1294,22 +1298,44 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
               <path d="M12 2v4m0 12v4m-10-10h4m12 0h4" /><circle cx="12" cy="12" r="3" />
             </svg>
             <p className="flex-1 text-[12px] leading-snug text-white/80">
-              {fr
-                ? 'Votre localisation est désactivée — votre position n’apparaît pas sur la carte.'
-                : 'Your location is off — your position isn’t showing on the map.'}
+              {gpsBlocked
+                ? (fr
+                    ? 'Localisation bloquée par le navigateur. Cliquez l’icône à gauche de la barre d’adresse → Localisation → Autoriser, puis réessayez.'
+                    : 'Location is blocked by the browser. Click the icon left of the address bar → Location → Allow, then retry.')
+                : (fr
+                    ? 'Votre localisation est désactivée — votre position n’apparaît pas sur la carte.'
+                    : 'Your location is off — your position isn’t showing on the map.')}
             </p>
             <button
-              onClick={() => {
-                if (!navigator.geolocation) return;
-                navigator.geolocation.getCurrentPosition(
-                  (pos) => gpsRecenterRef.current?.(pos.coords.longitude, pos.coords.latitude),
-                  () => {},
-                  { enableHighAccuracy: true, timeout: 8000 },
-                );
+              disabled={gpsEnabling}
+              onClick={async () => {
+                if (!navigator.geolocation || gpsEnabling) return;
+                setGpsEnabling(true);
+                try {
+                  // A hard-blocked permission fails getCurrentPosition instantly
+                  // without prompting — detect it to show unblock steps instead.
+                  const status = await navigator.permissions
+                    ?.query?.({ name: 'geolocation' as PermissionName })
+                    .catch(() => null);
+                  if (status?.state === 'denied') { setGpsBlocked(true); return; }
+                  await new Promise<void>((resolve) => {
+                    navigator.geolocation.getCurrentPosition(
+                      (pos) => { setGpsBlocked(false); gpsRecenterRef.current?.(pos.coords.longitude, pos.coords.latitude); resolve(); },
+                      (err) => { if (err.code === err.PERMISSION_DENIED) setGpsBlocked(true); resolve(); },
+                      { enableHighAccuracy: true, timeout: 8000 },
+                    );
+                  });
+                } finally {
+                  setGpsEnabling(false);
+                }
               }}
-              className="shrink-0 rounded-lg bg-amber-400/15 px-2.5 py-1 text-[11px] font-medium text-amber-300 transition-colors hover:bg-amber-400/25"
+              className="shrink-0 rounded-lg bg-amber-400/15 px-2.5 py-1 text-[11px] font-medium text-amber-300 transition-colors hover:bg-amber-400/25 disabled:opacity-60"
             >
-              {fr ? 'Activer' : 'Enable'}
+              {gpsEnabling
+                ? (fr ? 'Localisation…' : 'Locating…')
+                : gpsBlocked
+                  ? (fr ? 'Réessayer' : 'Retry')
+                  : (fr ? 'Activer' : 'Enable')}
             </button>
             <button
               onClick={() => setGpsBannerDismissed(true)}
