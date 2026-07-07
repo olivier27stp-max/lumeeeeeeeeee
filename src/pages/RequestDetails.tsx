@@ -25,7 +25,6 @@ import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import { fetchFormSubmission, fetchRequestForm, updateFormSubmission, deleteFormSubmission } from '../lib/requestFormsApi';
-import { listTeams, TeamRecord } from '../lib/teamsApi';
 import { listSalespeople } from '../lib/jobsApi';
 import { useJobModalController } from '../contexts/JobModalController';
 import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
@@ -378,15 +377,12 @@ function AssessmentSection({
   const [endTime, setEndTime] = useState(end.time || '10:00');
   // Single-day visit by default; the checkbox reveals separate start/end dates.
   const [multiDay, setMultiDay] = useState(!!end.date && end.date !== start.date);
-  const [teamId, setTeamId] = useState(s.assessment_team_id || '');
   const [userId, setUserId] = useState(s.assessment_user_id || '');
   const [instructions, setInstructions] = useState(s.assessment_instructions || '');
-  const [teams, setTeams] = useState<TeamRecord[]>([]);
   const [members, setMembers] = useState<Array<{ id: string; label: string }>>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    listTeams().then(setTeams).catch(() => setTeams([]));
     listSalespeople().then(setMembers).catch(() => setMembers([]));
   }, []);
 
@@ -407,7 +403,6 @@ function AssessmentSection({
       const updated = await updateFormSubmission(s.id, {
         assessment_start_at: startIso,
         assessment_end_at: endIso,
-        assessment_team_id: teamId || null,
         assessment_user_id: userId || null,
         assessment_instructions: instructions.trim() || null,
       });
@@ -486,15 +481,6 @@ function AssessmentSection({
           {fr ? 'Visite sur plusieurs jours' : 'Multi-day visit'}
         </label>
 
-        <div>
-          <label className={labelCls}>{fr ? 'Équipe assignée' : 'Team assigned'}</label>
-          <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className={inputCls}>
-            <option value="">{fr ? '— Aucune équipe —' : '— No team —'}</option>
-            {teams.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
-        </div>
         <div>
           <label className={labelCls}>{fr ? 'Membre de l’équipe' : 'Team member'}</label>
           <select value={userId} onChange={(e) => setUserId(e.target.value)} className={inputCls}>
