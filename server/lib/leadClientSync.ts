@@ -15,9 +15,8 @@ function normalizePhoneDigits(phone?: string | null): string {
 
 /**
  * Find an active client in the org whose phone matches after normalization.
- * Mirrors the DB unique index uq_clients_org_phone_notnull on
- * (org_id, regexp_replace(phone, '[^0-9]+', '', 'g')) — an insert that would
- * collide with it must resolve to this client instead.
+ * Only used as a 23505 fallback while a legacy unique index still exists in
+ * an environment (see below) — dead path once 20260720000000 is applied.
  */
 async function findActiveClientByPhone(
   client: SupabaseClient,
@@ -38,11 +37,13 @@ async function findActiveClientByPhone(
 }
 
 /**
- * Ensure a client record exists for a lead.
- * - If a client with the same email already exists in the org, returns that client_id.
- * - Else if a client with the same (normalized) phone exists, returns that client_id
- *   — the DB enforces per-org phone uniqueness, so inserting would fail anyway.
- * - Otherwise, creates a new client with status='lead'.
+ * Create the client record for an inbound lead.
+ *
+ * Product decision (2026-07-07): every inbound submission creates its own
+ * client — two different people sharing a phone or email stay two distinct
+ * records. No proactive email/phone matching (migration 20260720000000
+ * removed the DB uniqueness that used to force the merge). Duplicate
+ * management is manual, via the Clients-page duplicate dialog.
  */
 export async function ensureClientForLead(
   client: SupabaseClient,
@@ -57,23 +58,7 @@ export async function ensureClientForLead(
     company?: string | null;
   }
 ): Promise<string> {
-  // A lead is a client with status='lead'. Reuse an existing client with the
-  // same email in the org, otherwise create one.
   const email = (params.email || '').trim();
-  if (email) {
-    const { data: existing } = await client
-      .from('clients')
-      .select('id')
-      .eq('org_id', params.orgId)
-      .ilike('email', email)
-      .is('deleted_at', null)
-      .limit(1)
-      .maybeSingle();
-    if (existing?.id) return String(existing.id);
-  }
-
-  const byPhone = await findActiveClientByPhone(client, params.orgId, params.phone);
-  if (byPhone) return byPhone;
 
   const { data, error } = await client
     .from('clients')
@@ -93,8 +78,10 @@ export async function ensureClientForLead(
     .single();
 
   if (error) {
-    // 23505 = unique violation — a concurrent request (double-submit) created
-    // the client between our lookups and the insert. Resolve to that row.
+    // 23505 = unique violation — only possible while a legacy unique index on
+    // email/phone still exists in this environment (migration 20260720000000
+    // not applied yet). Degrade to the old merge behavior instead of failing
+    // the submission.
     if ((error as any).code === '23505') {
       if (email) {
         const { data: byEmail } = await client
