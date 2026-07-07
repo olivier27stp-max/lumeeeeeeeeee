@@ -35,37 +35,38 @@ alter table public.plans add column if not exists stripe_intro_coupon_id_yearly_
 -- 2) BACKFILL — confirmed pricing (William, 2026-07-07). Review, then run in the
 --    Supabase SQL editor against production.
 -- ------------------------------------------------------------
--- Model: base monthly/yearly_price_* = FULL price. Promo is ANNUAL-ONLY — a
--- one-time discount on the first annual invoice (coupon duration:'once'), stored
--- as intro_price_yearly_cad. NO monthly promo. USD mirrors CAD (full price) with
--- no USD intro coupon (CAD-only launch). Yearly full = full_monthly * 0.85 * 12.
--- Amounts in cents. Currently base columns still hold the OLD promo price.
+-- Model (confirmed 2026-07-07): base monthly/yearly_price_* = FULL price. NO
+-- monthly promo. Annual has a first-year 15% one-time discount on the single
+-- annual invoice (coupon duration:'once'), stored as intro_price_yearly_cad =
+-- the discounted first-year total. USD mirrors CAD full price with no USD intro
+-- coupon (CAD-only launch). Yearly full = full_monthly * 0.85 * 12; first-year =
+-- round(yearly_full * 0.85). Amounts in cents. Base columns still hold OLD promo.
 -- ============================================================
 
--- Minimum (starter): full 150/mo; annual full 1530/yr; annual year-1 promo 1071/yr
+-- Minimum (starter): full 150/mo; annual full 1530/yr; annual year-1 = 1300 (-15%)
 update public.plans set
   intro_months            = 3,
-  intro_price_yearly_cad  = 107100,     -- year-1 annual promo (CAD)
+  intro_price_yearly_cad  = 130000,     -- year-1 annual price (-15% one-time)
   intro_price_yearly_usd  = null,       -- CAD-only launch
   intro_price_monthly_usd = null, intro_price_monthly_cad = null,  -- no monthly promo
   monthly_price_usd = 15000,  monthly_price_cad = 15000,           -- FULL 150
   yearly_price_usd  = 153000, yearly_price_cad = 153000            -- FULL 1530
 where slug = 'starter';
 
--- Scale (pro): full 340/mo; annual full 3468/yr; annual year-1 promo 2448/yr
+-- Scale (pro): full 340/mo; annual full 3468/yr; annual year-1 = 2948 (-15%)
 update public.plans set
   intro_months            = 3,
-  intro_price_yearly_cad  = 244800,
+  intro_price_yearly_cad  = 294800,
   intro_price_yearly_usd  = null,
   intro_price_monthly_usd = null, intro_price_monthly_cad = null,
   monthly_price_usd = 34000,  monthly_price_cad = 34000,           -- FULL 340
   yearly_price_usd  = 346800, yearly_price_cad = 346800            -- FULL 3468
 where slug = 'pro';
 
--- Autopilot: full 495/mo; annual full 5049/yr; annual year-1 promo 3672/yr
+-- Autopilot: full 495/mo; annual full 5049/yr; annual year-1 = 4292 (-15%)
 update public.plans set
   intro_months            = 3,
-  intro_price_yearly_cad  = 367200,
+  intro_price_yearly_cad  = 429200,
   intro_price_yearly_usd  = null,
   intro_price_monthly_usd = null, intro_price_monthly_cad = null,
   monthly_price_usd = 49500,  monthly_price_cad = 49500,           -- FULL 495
