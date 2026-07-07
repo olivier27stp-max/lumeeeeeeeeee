@@ -31,6 +31,14 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { getJobById, getJobLineItems, updateJob, type JobLineItem } from '../lib/jobsApi';
 import AddVisitModal from '../components/AddVisitModal';
 import { createInvoiceFromJob, getInvoiceRowUiStatus } from '../lib/invoicesApi';
+import {
+  listJobBillingMilestones,
+  saveJobBillingMilestones,
+  setJobBillingSplit,
+  createInvoiceForMilestone,
+  type JobBillingMilestone,
+} from '../lib/jobBillingApi';
+import { fetchReminderSettings, fetchReminderLog, type ReminderSettings, type ReminderLogEntry } from '../lib/remindersApi';
 import { formatCents, type TaxLine } from '../lib/jobCalc';
 import { Job } from '../types';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -74,7 +82,27 @@ interface InvoiceRow {
   subject: string | null;
   total_cents: number;
   balance_cents: number;
+  billing_milestone_id: string | null;
 }
+
+// Local editable row for the payment schedule (billing split)
+interface MilestoneRowUI {
+  id: string | null; // null until saved
+  key: string; // stable React key
+  label: string;
+  percent: number | null;
+  amount_cents: number;
+  due_date: string | null;
+}
+
+const toMilestoneRowUI = (m: JobBillingMilestone): MilestoneRowUI => ({
+  id: m.id,
+  key: m.id,
+  label: m.label,
+  percent: m.percent,
+  amount_cents: m.amount_cents,
+  due_date: m.due_date,
+});
 
 interface ClientInfo {
   phone: string | null;
@@ -118,6 +146,19 @@ export default function JobDetails() {
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [showProfitability, setShowProfitability] = useState(false);
   const [invoiceTab, setInvoiceTab] = useState<'billing' | 'reminders'>('billing');
+
+  // Billing split — payment schedule
+  const [milestones, setMilestones] = useState<MilestoneRowUI[]>([]);
+  const [scheduleDirty, setScheduleDirty] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [togglingSplit, setTogglingSplit] = useState(false);
+  const [creatingMilestoneId, setCreatingMilestoneId] = useState<string | null>(null);
+
+  // Payment reminders (org settings + log, loaded when the tab opens)
+  const [reminderSettings, setReminderSettings] = useState<ReminderSettings | null>(null);
+  const [reminderLog, setReminderLog] = useState<ReminderLogEntry[]>([]);
+  const [remindersLoading, setRemindersLoading] = useState(false);
+  const [remindersLoaded, setRemindersLoaded] = useState(false);
 
   // Modals
   const [showSmsModal, setShowSmsModal] = useState(false);
@@ -232,32 +273,92 @@ export default function JobDetails() {
   }, [id, loadVisits]);
 
   // ── Load invoices for this job ──
-  useEffect(() => {
+  const loadInvoices = useCallback(async () => {
     if (!id) return;
-    (async () => {
-      try {
-        const { data } = await supabase
+    try {
+      let { data, error: invErr } = await supabase
+        .from('invoices')
+        .select('id,invoice_number,status,due_date,subject,total_cents,balance_cents,billing_milestone_id')
+        .eq('job_id', id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true });
+      if (invErr) {
+        // billing_milestone_id may not exist yet (migration pending) — degrade gracefully
+        const fallback = await supabase
           .from('invoices')
           .select('id,invoice_number,status,due_date,subject,total_cents,balance_cents')
           .eq('job_id', id)
           .is('deleted_at', null)
           .order('created_at', { ascending: true });
-        setInvoices(
-          (data || []).map((r: any) => ({
-            id: r.id,
-            invoice_number: r.invoice_number || null,
-            status: r.status || 'draft',
-            due_date: r.due_date || null,
-            subject: r.subject || 'For Services Rendered',
-            total_cents: Number(r.total_cents || 0),
-            balance_cents: Number(r.balance_cents ?? r.total_cents ?? 0),
-          })),
-        );
-      } catch (err: any) {
-        console.warn('Failed to load invoices:', err?.message);
+        if (fallback.error) throw fallback.error;
+        data = fallback.data as any;
       }
-    })();
+      setInvoices(
+        (data || []).map((r: any) => ({
+          id: r.id,
+          invoice_number: r.invoice_number || null,
+          status: r.status || 'draft',
+          due_date: r.due_date || null,
+          subject: r.subject || 'For Services Rendered',
+          total_cents: Number(r.total_cents || 0),
+          balance_cents: Number(r.balance_cents ?? r.total_cents ?? 0),
+          billing_milestone_id: r.billing_milestone_id || null,
+        })),
+      );
+    } catch (err: any) {
+      console.warn('Failed to load invoices:', err?.message);
+    }
   }, [id]);
+
+  useEffect(() => {
+    void loadInvoices();
+  }, [loadInvoices]);
+
+  // ── Load payment schedule (billing split milestones) ──
+  const loadMilestones = useCallback(async () => {
+    if (!id) return;
+    try {
+      const rows = await listJobBillingMilestones(id);
+      setMilestones(rows.map(toMilestoneRowUI));
+      setScheduleDirty(false);
+    } catch (err: any) {
+      console.warn('Failed to load payment schedule:', err?.message);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void loadMilestones();
+  }, [loadMilestones]);
+
+  // Milestone id → its invoice (for locked rows / links)
+  const invoiceByMilestone = useMemo(() => {
+    const map = new Map<string, InvoiceRow>();
+    for (const inv of invoices) {
+      if (inv.billing_milestone_id) map.set(inv.billing_milestone_id, inv);
+    }
+    return map;
+  }, [invoices]);
+
+  // ── Load reminder settings + log when the reminders tab opens ──
+  useEffect(() => {
+    if (invoiceTab !== 'reminders' || remindersLoaded || remindersLoading) return;
+    setRemindersLoading(true);
+    Promise.all([fetchReminderSettings(), fetchReminderLog(200)])
+      .then(([settings, log]) => {
+        setReminderSettings(settings);
+        setReminderLog(log);
+        setRemindersLoaded(true);
+      })
+      .catch((err: any) => console.warn('Failed to load reminders:', err?.message))
+      .finally(() => setRemindersLoading(false));
+  }, [invoiceTab, remindersLoaded, remindersLoading]);
+
+  // Reminder log entries for this job's invoices only
+  const jobReminderLog = useMemo(() => {
+    if (invoices.length === 0) return [] as ReminderLogEntry[];
+    const ids = new Set(invoices.map((inv) => inv.id));
+    return reminderLog.filter((entry) => entry.invoice_id && ids.has(entry.invoice_id));
+  }, [invoices, reminderLog]);
 
   // ── Load client contact info ──
   useEffect(() => {
@@ -431,7 +532,8 @@ export default function JobDetails() {
       setMoreActionsOpen(false);
 
       // Auto-propose invoice creation if no invoice exists
-      if (invoices.length === 0) {
+      // (split jobs are billed through their payment schedule instead)
+      if (invoices.length === 0 && !job.billing_split) {
         const shouldCreate = window.confirm(
           t.jobDetails?.createInvoicePrompt
             || 'Job completed! Would you like to create an invoice now?'
@@ -449,6 +551,13 @@ export default function JobDetails() {
 
   const handleCreateInvoice = async () => {
     if (!job) return;
+    if (job.billing_split) {
+      // Split jobs are billed through the payment schedule, not a single full invoice
+      setInvoiceTab('billing');
+      setMoreActionsOpen(false);
+      toast.info(t.jobDetails?.splitUsesSchedule || 'This job uses a payment schedule — create invoices from the billing schedule.');
+      return;
+    }
     setIsCreatingInvoice(true);
     try {
       const result = await createInvoiceFromJob({ jobId: job.id, sendNow: false });
@@ -463,6 +572,142 @@ export default function JobDetails() {
       toast.error(err?.message || 'Failed to create invoice');
     } finally {
       setIsCreatingInvoice(false);
+    }
+  };
+
+  // ── Billing split (payment schedule) actions ──
+  const scheduledTotalCents = milestones.reduce((sum, m) => sum + m.amount_cents, 0);
+
+  const isoDatePlusDays = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+
+  const handleToggleSplit = async () => {
+    if (!job || togglingSplit) return;
+    const next = !job.billing_split;
+    setTogglingSplit(true);
+    try {
+      await setJobBillingSplit(job.id, next);
+      setJob((prev) => (prev ? { ...prev, billing_split: next } : prev));
+      if (next && milestones.length === 0) {
+        // Seed a 50/50 deposit + final payment schedule as a starting point
+        const deposit = Math.round(displayTotalCents / 2);
+        setMilestones([
+          {
+            id: null,
+            key: crypto.randomUUID(),
+            label: t.jobDetails?.deposit || 'Deposit',
+            percent: 50,
+            amount_cents: deposit,
+            due_date: isoDatePlusDays(0),
+          },
+          {
+            id: null,
+            key: crypto.randomUUID(),
+            label: t.jobDetails?.finalPayment || 'Final payment',
+            percent: 50,
+            amount_cents: displayTotalCents - deposit,
+            due_date: isoDatePlusDays(30),
+          },
+        ]);
+        setScheduleDirty(true);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update billing mode');
+    } finally {
+      setTogglingSplit(false);
+    }
+  };
+
+  const updateMilestone = (key: string, patch: Partial<MilestoneRowUI>) => {
+    setMilestones((prev) => prev.map((m) => (m.key === key ? { ...m, ...patch } : m)));
+    setScheduleDirty(true);
+  };
+
+  const handleMilestoneAmountChange = (key: string, dollars: number) => {
+    const cents = Math.max(0, Math.round(dollars * 100));
+    updateMilestone(key, {
+      amount_cents: cents,
+      percent: displayTotalCents > 0 ? Math.round((cents / displayTotalCents) * 10000) / 100 : null,
+    });
+  };
+
+  const handleMilestonePercentChange = (key: string, pct: number) => {
+    const clamped = Math.max(0, pct);
+    updateMilestone(key, {
+      percent: clamped,
+      amount_cents: Math.max(0, Math.round((displayTotalCents * clamped) / 100)),
+    });
+  };
+
+  const handleAddMilestone = () => {
+    const remaining = Math.max(0, displayTotalCents - scheduledTotalCents);
+    setMilestones((prev) => [
+      ...prev,
+      {
+        id: null,
+        key: crypto.randomUUID(),
+        label: '',
+        percent: displayTotalCents > 0 ? Math.round((remaining / displayTotalCents) * 10000) / 100 : null,
+        amount_cents: remaining,
+        due_date: null,
+      },
+    ]);
+    setScheduleDirty(true);
+  };
+
+  const handleRemoveMilestone = (key: string) => {
+    setMilestones((prev) => prev.filter((m) => m.key !== key));
+    setScheduleDirty(true);
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!job || savingSchedule) return;
+    setSavingSchedule(true);
+    try {
+      const saved = await saveJobBillingMilestones(
+        job.id,
+        milestones.map((m, idx) => ({
+          id: m.id,
+          position: idx,
+          label: m.label,
+          percent: m.percent,
+          amount_cents: m.amount_cents,
+          due_date: m.due_date,
+        })),
+      );
+      setMilestones(saved.map(toMilestoneRowUI));
+      setScheduleDirty(false);
+      toast.success(t.jobDetails?.scheduleSaved || 'Payment schedule saved.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to save payment schedule');
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  const handleCreateMilestoneInvoice = async (row: MilestoneRowUI) => {
+    if (!job || !row.id || creatingMilestoneId) return;
+    setCreatingMilestoneId(row.id);
+    try {
+      const result = await createInvoiceForMilestone({ jobId: job.id, milestoneId: row.id, sendNow: false });
+      const invoiceId = String(result.invoice_id || result.invoice?.id || '').trim();
+      queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
+      toast.success(
+        result.already_exists
+          ? (t.jobDetails?.milestoneInvoiceExists || 'An invoice already exists for this payment.')
+          : (t.jobDetails?.milestoneInvoiceCreated || 'Invoice created for this payment.'),
+        invoiceId
+          ? { action: { label: t.jobDetails?.viewInvoiceAction || 'View invoice', onClick: () => navigate(`/invoices/${invoiceId}`) } }
+          : undefined,
+      );
+      await loadInvoices();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to create invoice');
+    } finally {
+      setCreatingMilestoneId(null);
     }
   };
 
@@ -558,7 +803,8 @@ export default function JobDetails() {
                     const updated = await updateJob(job.id, { status: 'completed' });
                     setJob(updated);
                     // Auto-create invoice immediately — no confirmation needed
-                    if (invoices.length === 0) {
+                    // (split jobs are billed through their payment schedule instead)
+                    if (invoices.length === 0 && !job.billing_split) {
                       const result = await createInvoiceFromJob({ jobId: job.id, sendNow: false });
                       const invoiceId = String(result.invoice_id || result.invoice?.id || '').trim();
                       if (invoiceId) {
@@ -1083,12 +1329,122 @@ export default function JobDetails() {
           <div className="p-5">
             {invoiceTab === 'billing' && (
               <>
-                {job.billing_split !== undefined && (
-                  <div className="flex items-center gap-2 text-[13px] text-text-secondary mb-4">
-                    <span className={cn('w-4 h-4 rounded border inline-flex items-center justify-center', job.billing_split ? 'bg-primary border-primary text-white' : 'border-outline bg-surface-secondary')}>
-                      {job.billing_split && <span className="text-[9px]">✓</span>}
-                    </span>
-                    Split into multiple invoices with a payment schedule
+                <label className={cn('flex items-center gap-2 text-[13px] text-text-secondary mb-4 w-fit select-none print:hidden', togglingSplit ? 'opacity-50 cursor-wait' : 'cursor-pointer')}>
+                  <input type="checkbox" className="sr-only" checked={!!job.billing_split} disabled={togglingSplit} onChange={handleToggleSplit} />
+                  <span className={cn('w-4 h-4 rounded border inline-flex items-center justify-center transition-colors', job.billing_split ? 'bg-primary border-primary text-white' : 'border-outline bg-surface-secondary')}>
+                    {job.billing_split && <span className="text-[9px]">✓</span>}
+                  </span>
+                  {t.modals?.splitInvoices || 'Split into multiple invoices with a payment schedule'}
+                </label>
+
+                {job.billing_split && (
+                  <div className="mb-5 rounded-lg border border-outline-subtle bg-surface-secondary/40 p-4 space-y-3 print:hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[12px] font-semibold text-text-primary">{t.jobDetails?.paymentSchedule || 'Payment schedule'}</p>
+                        <p className="text-[11px] text-text-tertiary mt-0.5">{t.jobDetails?.paymentScheduleHint || 'Split the job total into scheduled payments, each billed with its own invoice.'}</p>
+                      </div>
+                      {canSeePricing && (
+                        <p className={cn('text-[11px] font-semibold tabular-nums', scheduledTotalCents === displayTotalCents ? 'text-text-tertiary' : 'text-amber-600')}>
+                          {t.jobDetails?.scheduledTotal || 'Scheduled'}: {formatCents(scheduledTotalCents)} / {formatCents(displayTotalCents)}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      {milestones.map((m, idx) => {
+                        const linkedInvoice = m.id ? invoiceByMilestone.get(m.id) : undefined;
+                        const locked = !!linkedInvoice;
+                        return (
+                          <div key={m.key} className="flex flex-wrap items-center gap-2">
+                            <input
+                              type="text"
+                              value={m.label}
+                              disabled={locked}
+                              onChange={(e) => updateMilestone(m.key, { label: e.target.value })}
+                              placeholder={`${t.jobDetails?.payment || 'Payment'} ${idx + 1}`}
+                              className="flex-1 min-w-[120px] rounded-lg border border-outline bg-surface px-2.5 py-1.5 text-[12px] text-text-primary disabled:opacity-60"
+                            />
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-text-tertiary">$</span>
+                              <input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                value={m.amount_cents === 0 ? '' : m.amount_cents / 100}
+                                disabled={locked}
+                                onChange={(e) => handleMilestoneAmountChange(m.key, Number(e.target.value) || 0)}
+                                className="w-28 rounded-lg border border-outline bg-surface pl-5 pr-2 py-1.5 text-[12px] text-text-primary tabular-nums disabled:opacity-60"
+                              />
+                            </div>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                value={m.percent ?? ''}
+                                disabled={locked}
+                                onChange={(e) => handleMilestonePercentChange(m.key, Number(e.target.value) || 0)}
+                                className="w-20 rounded-lg border border-outline bg-surface pl-2 pr-6 py-1.5 text-[12px] text-text-primary tabular-nums disabled:opacity-60"
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-text-tertiary">%</span>
+                            </div>
+                            <input
+                              type="date"
+                              value={m.due_date || ''}
+                              disabled={locked}
+                              onChange={(e) => updateMilestone(m.key, { due_date: e.target.value || null })}
+                              className="rounded-lg border border-outline bg-surface px-2.5 py-1.5 text-[12px] text-text-primary disabled:opacity-60"
+                            />
+                            {linkedInvoice ? (
+                              <button
+                                onClick={() => navigate(`/invoices/${linkedInvoice.id}`)}
+                                className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-text-primary hover:underline"
+                              >
+                                #{linkedInvoice.invoice_number || '—'}
+                                <StatusBadge status={getInvoiceRowUiStatus(linkedInvoice as any)} />
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleCreateMilestoneInvoice(m)}
+                                  disabled={scheduleDirty || !m.id || m.amount_cents <= 0 || creatingMilestoneId === m.id}
+                                  title={scheduleDirty ? (t.jobDetails?.scheduleUnsavedHint || 'Save the schedule before creating invoices.') : undefined}
+                                  className="glass-button !text-[12px] !px-2.5 !py-1 disabled:opacity-50"
+                                >
+                                  {creatingMilestoneId === m.id ? '...' : (t.jobDetails?.createMilestoneInvoice || 'Create invoice')}
+                                </button>
+                                <button
+                                  onClick={() => handleRemoveMilestone(m.key)}
+                                  className="p-1 text-text-tertiary hover:text-red-500 transition-colors"
+                                  aria-label="Remove payment"
+                                >
+                                  <X size={13} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button onClick={handleAddMilestone} className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1">
+                        <Plus size={12} /> {t.jobDetails?.addPayment || 'Add payment'}
+                      </button>
+                      {scheduleDirty && (
+                        <>
+                          <button
+                            onClick={handleSaveSchedule}
+                            disabled={savingSchedule}
+                            className="bg-primary text-primary-foreground rounded-lg px-3 py-1 text-[12px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+                          >
+                            {savingSchedule ? '...' : (t.jobDetails?.saveSchedule || 'Save schedule')}
+                          </button>
+                          <span className="text-[11px] text-text-tertiary">{t.jobDetails?.scheduleUnsavedHint || 'Save the schedule before creating invoices.'}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -1149,7 +1505,74 @@ export default function JobDetails() {
             )}
 
             {invoiceTab === 'reminders' && (
-              <p className="text-[13px] text-text-tertiary py-4 text-center">No reminders configured</p>
+              remindersLoading ? (
+                <div className="py-4 space-y-2">
+                  <div className="h-4 w-2/3 bg-surface-secondary rounded animate-pulse" />
+                  <div className="h-4 w-1/2 bg-surface-secondary rounded animate-pulse" />
+                </div>
+              ) : !reminderSettings ? (
+                <p className="text-[13px] text-text-tertiary py-4 text-center">No reminders configured</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-[13px] text-text-secondary">
+                    <span className={cn('w-2 h-2 rounded-full shrink-0', reminderSettings.enabled ? 'bg-emerald-500' : 'bg-outline')} />
+                    {reminderSettings.enabled
+                      ? (t.jobDetails?.remindersActive || 'Automatic payment reminders are enabled for overdue invoices.')
+                      : (t.jobDetails?.remindersDisabled || 'Automatic payment reminders are disabled for your organization.')}
+                  </div>
+
+                  {reminderSettings.enabled && (reminderSettings.schedule || []).length > 0 && (
+                    <ul className="space-y-1.5">
+                      {(reminderSettings.schedule || []).map((entry, i) => (
+                        <li key={i} className="text-[13px] text-text-secondary flex items-center gap-2">
+                          <span className="badge-neutral text-[11px]">
+                            {entry.channel === 'both' ? 'Email + SMS' : entry.channel === 'sms' ? 'SMS' : 'Email'}
+                          </span>
+                          {entry.days_after_due}{' '}
+                          {entry.days_after_due === 1
+                            ? (t.jobDetails?.reminderDayAfterDue || 'day after due date')
+                            : (t.jobDetails?.reminderDaysAfterDue || 'days after due date')}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <div>
+                    <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-[0.05em] mb-2">
+                      {t.jobDetails?.sentReminders || 'Reminders sent for this job'}
+                    </p>
+                    {jobReminderLog.length === 0 ? (
+                      <p className="text-[13px] text-text-tertiary">
+                        {t.jobDetails?.noRemindersSentYet || "No reminders sent yet for this job's invoices."}
+                      </p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {jobReminderLog.map((entry) => {
+                          const inv = invoices.find((row) => row.id === entry.invoice_id);
+                          return (
+                            <li key={entry.id} className="text-[13px] text-text-secondary flex flex-wrap items-center gap-2">
+                              <button
+                                onClick={() => entry.invoice_id && navigate(`/invoices/${entry.invoice_id}`)}
+                                className="font-semibold text-text-primary hover:underline"
+                              >
+                                #{inv?.invoice_number || '—'}
+                              </button>
+                              <span className="badge-neutral text-[11px]">
+                                {entry.channel === 'both' ? 'Email + SMS' : entry.channel === 'sms' ? 'SMS' : 'Email'}
+                              </span>
+                              <span>{entry.sent_at ? formatDate(entry.sent_at) : '—'}</span>
+                              {entry.sent_to && <span className="text-text-tertiary">{entry.sent_to}</span>}
+                              {entry.status && entry.status !== 'sent' && (
+                                <span className="text-[11px] text-red-500">{entry.status}</span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )
             )}
           </div>
         </div>}

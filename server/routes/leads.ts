@@ -376,6 +376,7 @@ router.post('/invoices/from-job', validate(invoiceFromJobSchema), async (req, re
 
     const requestedOrgId = parseOrgId(req.body?.orgId) || auth.orgId;
     const jobId = String(req.body?.jobId || '').trim();
+    const milestoneId = String(req.body?.milestoneId || '').trim() || null;
     const sendNow = Boolean(req.body?.sendNow);
 
     if (!jobId) {
@@ -390,11 +391,20 @@ router.post('/invoices/from-job', validate(invoiceFromJobSchema), async (req, re
       return res.status(403).json({ error: 'Only owner/admin can create an invoice from a job.' });
     }
 
-    const { data, error } = await auth.client.rpc('create_invoice_from_job', {
-      p_org_id: requestedOrgId,
-      p_job_id: jobId,
-      p_send_now: sendNow,
-    });
+    // With a milestoneId, the invoice covers a single payment-schedule
+    // milestone (billing split) instead of the whole job.
+    const { data, error } = milestoneId
+      ? await auth.client.rpc('create_invoice_from_milestone', {
+          p_org_id: requestedOrgId,
+          p_job_id: jobId,
+          p_milestone_id: milestoneId,
+          p_send_now: sendNow,
+        })
+      : await auth.client.rpc('create_invoice_from_job', {
+          p_org_id: requestedOrgId,
+          p_job_id: jobId,
+          p_send_now: sendNow,
+        });
     if (error) throw error;
 
     const payload = Array.isArray(data) ? data[0] : data;

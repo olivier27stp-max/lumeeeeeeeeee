@@ -91,6 +91,7 @@ export const assignJobToTeamSchema = z.object({
 export const invoiceFromJobSchema = z.object({
   jobId: z.string().trim().min(1, 'jobId is required.'),
   sendNow: z.boolean().optional().default(false),
+  milestoneId: z.string().trim().min(1).optional().nullable(),
   orgId: optionalOrgId,
 });
 
