@@ -648,6 +648,60 @@ export default function ClientDetails() {
               </div>
             </div>
           </div>
+
+          {/* Contact info — label/value rows under the name */}
+          <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-10 mt-3 pt-1 border-t border-outline-subtle">
+            <div className="grid grid-cols-[140px_1fr] items-center py-2.5 border-b border-outline-subtle text-[13px] md:col-start-1 md:row-start-1">
+              <span className="text-text-secondary">{t.clientDetails.mainPhone}</span>
+              {client.phone ? (
+                <span className="flex items-center gap-1.5 font-medium text-text-primary min-w-0">
+                  <a href={`tel:${client.phone}`} className="md:hidden hover:text-primary transition-colors">{displayPhone(client.phone)}</a>
+                  <span className="hidden md:inline">{displayPhone(client.phone)}</span>
+                  <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
+                    <Copy size={11} />
+                  </button>
+                </span>
+              ) : (
+                <span className="text-text-tertiary">—</span>
+              )}
+            </div>
+            <div className="grid grid-cols-[140px_1fr] items-center py-2.5 border-b border-outline-subtle md:border-b-0 text-[13px] md:col-start-1 md:row-start-2">
+              <span className="text-text-secondary">{t.clientDetails.mainEmail}</span>
+              {client.email ? (
+                <span className="flex items-center gap-1.5 font-medium text-text-primary min-w-0">
+                  <a href={`mailto:${client.email}`} className="truncate hover:text-primary transition-colors">{displayEmail(client.email)}</a>
+                  <button onClick={() => copyToClipboard(client.email!)} className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0" title="Copy">
+                    <Copy size={11} />
+                  </button>
+                </span>
+              ) : (
+                <span className="text-text-tertiary">—</span>
+              )}
+            </div>
+            <div className="grid grid-cols-[140px_1fr] items-center py-2.5 border-b border-outline-subtle text-[13px] md:col-start-2 md:row-start-1">
+              <span className="text-text-secondary">{t.clientDetails.leadSource}</span>
+              {leads[0]?.source ? (
+                <span className="font-medium text-text-primary">{leads[0].source}</span>
+              ) : (
+                <span className="text-text-tertiary">—</span>
+              )}
+            </div>
+            <div className="grid grid-cols-[140px_1fr] items-center py-2.5 text-[13px] md:col-start-2 md:row-start-2">
+              <span className="text-text-secondary">{t.clientDetails.tags}</span>
+              {tags.length > 0 ? (
+                <span className="flex flex-wrap gap-1.5">
+                  {tags.map((tag) => (
+                    <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-tertiary text-[11px] font-medium text-text-secondary border border-outline-subtle">
+                      <Tag size={9} className="text-text-tertiary" />
+                      {tag}
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                <span className="text-text-tertiary">—</span>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* ──── LEFT COLUMN ──── */}
@@ -659,48 +713,6 @@ export default function ClientDetails() {
           <div className="section-card">
             <div className="p-5">
               <BillingAddressSection client={client} fr={language === 'fr'} onUpdated={setClient} />
-            </div>
-          </div>
-
-          {/* Contacts Section */}
-          <div className="section-card">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
-              <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <User size={14} className="text-text-tertiary" />
-                Contacts
-              </h2>
-            </div>
-            <div className="p-5">
-              <div className="flex items-center gap-3 rounded-lg border border-outline bg-surface-secondary p-4">
-                <UnifiedAvatar id={client.id} name={`${client.first_name || ''} ${client.last_name || ''}`.trim()} size={36} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-[13px] font-semibold text-text-primary">{fullName}</p>
-                    <span className="inline-flex items-center rounded-full bg-primary/10 text-primary text-[11px] font-semibold px-2.5 py-0.5">{t.clientDetails.primary}</span>
-                  </div>
-                  <div className="flex items-center gap-4 mt-1.5">
-                    {client.phone ? (
-                      <span className="inline-flex items-center gap-1.5 text-[13px] text-text-secondary">
-                        <Phone size={12} className="text-text-tertiary" />
-                        <a href={`tel:${client.phone}`} className="md:hidden hover:text-primary transition-colors">{displayPhone(client.phone)}</a>
-                        <span className="hidden md:inline">{displayPhone(client.phone)}</span>
-                        <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
-                          <Copy size={11} />
-                        </button>
-                      </span>
-                    ) : null}
-                    {client.email ? (
-                      <span className="inline-flex items-center gap-1.5 text-[13px] text-text-secondary">
-                        <Mail size={12} className="text-text-tertiary" />
-                        <a href={`mailto:${client.email}`} className="hover:text-primary transition-colors">{displayEmail(client.email)}</a>
-                        <button onClick={() => copyToClipboard(client.email!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
-                          <Copy size={11} />
-                        </button>
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 

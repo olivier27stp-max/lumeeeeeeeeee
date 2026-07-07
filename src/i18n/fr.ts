@@ -2119,6 +2119,8 @@ const fr: TranslationKeys = {
     newProperty: 'Nouvelle propriété',
     contacts: 'Contacts',
     primary: 'Principal',
+    mainPhone: 'Téléphone principal',
+    mainEmail: 'Courriel principal',
     directions: 'Itinéraire',
     viewOnMap: 'Carte',
     notes: 'Notes',

@@ -2127,6 +2127,8 @@ const en = {
     newProperty: 'New Property',
     contacts: 'Contacts',
     primary: 'Primary',
+    mainPhone: 'Main phone',
+    mainEmail: 'Main email',
     directions: 'Directions',
     viewOnMap: 'Map',
     notes: 'Notes',
