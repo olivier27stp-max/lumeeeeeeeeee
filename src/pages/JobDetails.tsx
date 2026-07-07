@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRecentItems } from '../hooks/useRecentItems';
 import {
   ArrowLeft,
@@ -47,6 +47,8 @@ import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
 import SpecificNotes from '../components/SpecificNotes';
 import EntityHubHeader from '../components/EntityHubHeader';
+import ClientPinMiniMap, { type ClientMapPin } from '../components/map-d2d/ClientPinMiniMap';
+import { getPins } from '../lib/fieldSalesApi';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface ScheduleEvent {
@@ -74,6 +76,8 @@ interface ClientInfo {
   email: string | null;
   address: string | null;
   company: string | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 // ─── Component ───────────────────────────────────────────────────────
@@ -251,7 +255,7 @@ export default function JobDetails() {
       try {
         const { data } = await supabase
           .from('clients')
-          .select('phone,email,address,company')
+          .select('phone,email,address,company,latitude,longitude')
           .is('deleted_at', null)
           .eq('id', job.client_id)
           .maybeSingle();
@@ -261,6 +265,41 @@ export default function JobDetails() {
       }
     })();
   }, [job?.client_id]);
+
+  // ── D2D sales-map pin for the mini map next to Specific Notes ──
+  // All pins are fetched (same data as the full map) but only the one tied to
+  // this job or its client is shown.
+  const [d2dPin, setD2dPin] = useState<ClientMapPin | null>(null);
+  useEffect(() => {
+    let active = true;
+    setD2dPin(null);
+    if (!id) return;
+    getPins()
+      .then((pins) => {
+        if (!active) return;
+        const clientId = job?.client_id || null;
+        const match =
+          pins.find((p) => p.job_id === id) ||
+          (clientId ? pins.find((p) => p.client_id === clientId || p.lead_id === clientId) : null) ||
+          null;
+        setD2dPin(match ? { lat: match.lat, lng: match.lng, status: match.status } : null);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [id, job?.client_id]);
+
+  // Best coordinates for the mini map: the D2D pin when one exists, else the
+  // job's geocoded position, else the client record's.
+  const miniMapPin = useMemo<ClientMapPin | null>(() => {
+    if (d2dPin) return d2dPin;
+    if (job?.latitude != null && job?.longitude != null) {
+      return { lat: job.latitude, lng: job.longitude, status: 'other' };
+    }
+    if (clientInfo?.latitude != null && clientInfo?.longitude != null) {
+      return { lat: clientInfo.latitude, lng: clientInfo.longitude, status: 'other' };
+    }
+    return null;
+  }, [d2dPin, job?.latitude, job?.longitude, clientInfo?.latitude, clientInfo?.longitude]);
 
   // Load recurrence rule
   useEffect(() => {
@@ -937,8 +976,17 @@ export default function JobDetails() {
           </div>
         )}
 
-        {/* ═══ SPECIFIC NOTES ═══ */}
-        <SpecificNotes entityType="job" entityId={id!} mode="full" />
+        {/* ═══ SPECIFIC NOTES + CLIENT SALES-MAP PIN ═══ */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <SpecificNotes entityType="job" entityId={id!} mode="full" />
+          <ClientPinMiniMap
+            pin={miniMapPin}
+            hasClient={Boolean(job.client_id)}
+            onOpen={() => {
+              if (miniMapPin) navigate(`/field-sales?lat=${miniMapPin.lat}&lng=${miniMapPin.lng}`);
+            }}
+          />
+        </div>
 
         {/* ═══ RECURRENCE ═══ */}
         <div className="rounded-xl border border-outline bg-surface overflow-hidden">
