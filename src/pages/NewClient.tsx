@@ -314,18 +314,20 @@ export default function NewClient() {
                         className="flex-1 min-w-0 bg-transparent border-none outline-none py-[0.5625rem] text-[13px]"
                         placeholder={fr ? 'Numéro de téléphone' : 'Phone number'}
                       />
-                      <div className="relative flex items-center shrink-0 border-l border-border pl-2 my-1.5">
-                        <select
-                          value={row.label}
-                          onChange={(e) => patchPhone(row.id, { label: e.target.value as ClientPhone['label'] })}
-                          className="appearance-none bg-transparent border-none outline-none pr-4 text-[12px] font-medium text-text-tertiary cursor-pointer"
-                        >
-                          {PHONE_LABELS.map((label) => (
-                            <option key={label} value={label}>{phoneLabelText(label)}</option>
-                          ))}
-                        </select>
-                        <ChevronDown size={12} className="absolute right-0 pointer-events-none text-text-tertiary" />
-                      </div>
+                      {row.number.trim() && (
+                        <div className="relative flex items-center shrink-0 border-l border-border pl-2 my-1.5">
+                          <select
+                            value={row.label}
+                            onChange={(e) => patchPhone(row.id, { label: e.target.value as ClientPhone['label'] })}
+                            className="appearance-none bg-transparent border-none outline-none pr-4 text-[12px] font-medium text-text-tertiary cursor-pointer"
+                          >
+                            {PHONE_LABELS.map((label) => (
+                              <option key={label} value={label}>{phoneLabelText(label)}</option>
+                            ))}
+                          </select>
+                          <ChevronDown size={12} className="absolute right-0 pointer-events-none text-text-tertiary" />
+                        </div>
+                      )}
                     </div>
                     <button type="button" onClick={addPhone} className={squareButton} title={fr ? 'Ajouter un numéro' : 'Add another number'}>
                       <Plus size={15} />
