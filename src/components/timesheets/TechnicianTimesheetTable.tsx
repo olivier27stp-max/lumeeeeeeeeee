@@ -7,6 +7,7 @@ import { useCompany } from '../../contexts/CompanyContext';
 import { useTranslation } from '../../i18n';
 import { fetchTeamList } from '../../lib/invitationsApi';
 import UnifiedAvatar from '../ui/UnifiedAvatar';
+import { toast } from 'sonner';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 type View = 'day' | 'week';
@@ -111,6 +112,7 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
   const [entries, setEntries] = useState<RawEntry[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [jobs, setJobs] = useState<Record<string, string>>({});
+  const [jobOptions, setJobOptions] = useState<Array<{ id: string; label: string }>>([]);
   // All technicians in the org, so they show even with zero hours. For a
   // non-manager this is just themselves.
   const [technicians, setTechnicians] = useState<Array<{ id: string; name: string }>>([]);
@@ -186,6 +188,44 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
   }, [rangeStart, rangeEnd, isManager, userId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Job options for the assign-to-job picker (managers only).
+  useEffect(() => {
+    if (!isManager) { setJobOptions([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const orgId = await getCurrentOrgIdOrThrow();
+        const { data } = await supabase
+          .from('jobs')
+          .select('id, job_number, title, client_name')
+          .eq('org_id', orgId)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .limit(200);
+        if (cancelled) return;
+        setJobOptions((data || []).map((j: any) => ({
+          id: j.id,
+          label: `${j.job_number ? `#${j.job_number} ` : ''}${j.title || j.client_name || ''}`.trim() || `#${String(j.id).slice(0, 6)}`,
+        })));
+      } catch { if (!cancelled) setJobOptions([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [isManager]);
+
+  const assignJob = useCallback(async (entryId: string, jobId: string | null) => {
+    setEntries((prev) => prev.map((e) => (e.id === entryId ? { ...e, job_id: jobId } : e)));
+    try {
+      const orgId = await getCurrentOrgIdOrThrow();
+      const { error: upErr } = await supabase.from('time_entries').update({ job_id: jobId }).eq('id', entryId).eq('org_id', orgId);
+      if (upErr) throw upErr;
+      toast.success(fr ? 'Job assigné' : 'Job assigned');
+      void load();
+    } catch (err: any) {
+      toast.error(fr ? "Échec de l'assignation" : 'Failed to assign job');
+      void load();
+    }
+  }, [fr, load]);
 
   // Load the technician roster once (managers: all techs; others: just self).
   useEffect(() => {
@@ -452,7 +492,7 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
               </div>
               <span className="text-right text-[14px] font-semibold tabular-nums text-text-primary shrink-0">{fmtDuration(row.totalMinutes, timeFormat)}</span>
             </div>
-            {open && <DayExpanded row={row} timeFormat={timeFormat} jobLabel={jobLabel} fr={fr} tt={tt} />}
+            {open && <DayExpanded row={row} timeFormat={timeFormat} jobLabel={jobLabel} fr={fr} tt={tt} isManager={isManager} jobOptions={jobOptions} onAssignJob={assignJob} />}
           </div>
         );
       })}
@@ -527,13 +567,16 @@ function WeekExpanded({
 
 // ── Day expanded: per-punch breakdown ────────────────────────────────────────
 function DayExpanded({
-  row, timeFormat, jobLabel, fr, tt,
+  row, timeFormat, jobLabel, fr, tt, isManager, jobOptions, onAssignJob,
 }: {
   row: { entries: RawEntry[] };
   timeFormat: TimeFormat;
   jobLabel: (id: string | null) => string;
   fr: boolean;
   tt: any;
+  isManager: boolean;
+  jobOptions: Array<{ id: string; label: string }>;
+  onAssignJob: (entryId: string, jobId: string | null) => void;
 }) {
   // Only the punches that actually fall on the shown day are in row.entries
   // already (day view loads a single date). Sort by start time.
@@ -562,7 +605,20 @@ function DayExpanded({
             const { minutes, running } = entryMinutes(e);
             return (
               <tr key={e.id} className="border-b border-outline/30">
-                <td className="px-3 py-2 text-[13px] text-text-primary">{jobLabel(e.job_id)}</td>
+                <td className="px-3 py-2 text-[13px] text-text-primary">
+                  {isManager && !e.id.startsWith('demo-') ? (
+                    <select
+                      value={e.job_id || ''}
+                      onChange={(ev) => onAssignJob(e.id, ev.target.value || null)}
+                      onClick={(ev) => ev.stopPropagation()}
+                      className="max-w-[220px] bg-surface-card border border-outline rounded-md px-2 py-1 text-[12.5px] text-text-primary focus:outline-none focus:border-primary cursor-pointer"
+                    >
+                      <option value="">{fr ? 'Aucun job' : 'No job'}</option>
+                      {e.job_id && !jobOptions.some((o) => o.id === e.job_id) && <option value={e.job_id}>{jobLabel(e.job_id)}</option>}
+                      {jobOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                    </select>
+                  ) : jobLabel(e.job_id)}
+                </td>
                 <td className="px-3 py-2 text-[13px] text-text-secondary max-w-[280px] truncate">{e.notes ? e.notes : <span className="text-text-tertiary">—</span>}</td>
                 <td className="px-3 py-2 text-[13px] tabular-nums text-text-secondary">{fmtClock(e, 'in')}</td>
                 <td className="px-3 py-2 text-[13px] tabular-nums text-text-secondary">
