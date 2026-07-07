@@ -25,8 +25,6 @@ import { resolveTaxes, type TaxConfig } from '../lib/taxApi';
 import { useTranslation } from '../i18n';
 import SpecificNotes from './SpecificNotes';
 import SpecificNotesInline, { type SpecificNotesInlineHandle } from './SpecificNotesInline';
-import ClientPinMiniMap, { type ClientMapPin } from './map-d2d/ClientPinMiniMap';
-import { getPins } from '../lib/fieldSalesApi';
 import { toast } from 'sonner';
 
 interface LineItemForm {
@@ -613,40 +611,6 @@ export default function NewJobModal({
     [clients, clientId]
   );
 
-  // Sales-map (D2D) pin of the selected client, shown in the mini map next to
-  // the Notes box. All pins are fetched (same data as the full map) but only
-  // the client's own pin is displayed.
-  const [clientPin, setClientPin] = useState<ClientMapPin | null>(null);
-  useEffect(() => {
-    let active = true;
-    setClientPin(null);
-    if (!isOpen || !clientId) return;
-    getPins()
-      .then((pins) => {
-        if (!active) return;
-        const match = pins.find((p) => p.client_id === clientId || p.lead_id === clientId) || null;
-        setClientPin(match ? { lat: match.lat, lng: match.lng, status: match.status } : null);
-      })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [isOpen, clientId]);
-
-  // Best coordinates for the mini map: the client's D2D sales-map pin when one
-  // exists, else the selected property's geocoded position, else the client
-  // record's. Most clients never came from door-knocking, so without these
-  // fallbacks the mini map would stay empty for them.
-  const miniMapPin = useMemo<ClientMapPin | null>(() => {
-    if (clientPin) return clientPin;
-    const prop = properties.find((p) => p.id === propertyId);
-    if (prop?.latitude != null && prop?.longitude != null) {
-      return { lat: prop.latitude, lng: prop.longitude, status: 'other' };
-    }
-    if (selectedClient?.latitude != null && selectedClient?.longitude != null) {
-      return { lat: selectedClient.latitude, lng: selectedClient.longitude, status: 'other' };
-    }
-    return null;
-  }, [clientPin, properties, propertyId, selectedClient]);
-
   // Load the selected client's properties. A job must be assigned to one of
   // them; the address is then derived from the chosen property (see effect below).
   useEffect(() => {
@@ -793,19 +757,6 @@ export default function NewJobModal({
     resetForm();
     onClose();
     if (reason === 'cancel') onCancel?.();
-  };
-
-  // Mini-map click → open the sales map focused on the client's pin. The route
-  // change fires the navigation guard below (leave confirmation when dirty).
-  // When the form was opened from /field-sales the pathname doesn't change,
-  // so the guard is applied manually.
-  const handleOpenClientOnMap = () => {
-    if (!miniMapPin) return;
-    navigate(`/field-sales?lat=${miniMapPin.lat}&lng=${miniMapPin.lng}`);
-    if (openedPathRef.current === '/field-sales') {
-      if (isDirty) setShowLeaveConfirm(true);
-      else handleClose();
-    }
   };
 
   // Remember the route the form was opened on (capture only on open, not on
@@ -1953,24 +1904,17 @@ export default function NewJobModal({
                 </label>
               </Box>
 
-              {/* ── Notes + client sales-map pin ── */}
-              <div className="grid gap-4 md:grid-cols-2">
-                <Box
-                  title="Notes"
-                  subtitle={language === 'fr' ? 'Laissez des notes internes pour vous ou un membre de l’équipe.' : 'Leave internal notes for yourself or a team member.'}
-                >
-                  {isEditMode && initialValues?.id ? (
-                    <SpecificNotes entityType="job" entityId={initialValues.id} mode="full" />
-                  ) : (
-                    <SpecificNotesInline ref={specificNotesRef} tempEntityType="job" tall />
-                  )}
-                </Box>
-                <ClientPinMiniMap
-                  pin={miniMapPin}
-                  hasClient={Boolean(clientId)}
-                  onOpen={handleOpenClientOnMap}
-                />
-              </div>
+              {/* ── Notes ── */}
+              <Box
+                title="Notes"
+                subtitle={language === 'fr' ? 'Laissez des notes internes pour vous ou un membre de l’équipe.' : 'Leave internal notes for yourself or a team member.'}
+              >
+                {isEditMode && initialValues?.id ? (
+                  <SpecificNotes entityType="job" entityId={initialValues.id} mode="full" />
+                ) : (
+                  <SpecificNotesInline ref={specificNotesRef} tempEntityType="job" />
+                )}
+              </Box>
 
               {(inlineError || errorMessage) && (
                 <div className="rounded-xl border border-danger bg-danger-light text-danger px-4 py-3 text-sm">

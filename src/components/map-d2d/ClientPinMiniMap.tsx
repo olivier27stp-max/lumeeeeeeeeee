@@ -2,12 +2,14 @@
  * ClientPinMiniMap — small read-only preview of the D2D sales map showing ONLY
  * the pin of one client (every other pin stays hidden here, the data itself is
  * untouched). Clicking the box opens /field-sales centered on that pin.
+ *
+ * Rendered with the Mapbox Static Images API rather than a live GL map: a
+ * non-interactive preview doesn't need WebGL, and a static image can't hit the
+ * blank-canvas sizing issues GL maps have inside animated/grid containers.
  */
-import { useEffect, useRef } from 'react';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import { useEffect, useState } from 'react';
 import { MapPin, ExternalLink } from 'lucide-react';
-import { createLeadPinElement, type PinStatus } from './lead-pin';
+import { PIN_STATUS_CONFIG, type PinStatus } from './lead-pin';
 import { useTranslation } from '../../i18n';
 
 // Same FieldSales API status → pin status mapping as D2DMap.
@@ -38,65 +40,18 @@ interface ClientPinMiniMapProps {
 export default function ClientPinMiniMap({ pin, hasClient, onOpen }: ClientPinMiniMapProps) {
   const { language } = useTranslation();
   const fr = language === 'fr';
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
-  const markerRef = useRef<mapboxgl.Marker | null>(null);
-  const resizeObsRef = useRef<ResizeObserver | null>(null);
-
   const token = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
+  const [imgFailed, setImgFailed] = useState(false);
+
   const lat = pin?.lat;
   const lng = pin?.lng;
-  const status = pin?.status;
+  useEffect(() => { setImgFailed(false); }, [lat, lng]);
 
-  useEffect(() => {
-    if (lat == null || lng == null || !token) {
-      markerRef.current?.remove();
-      markerRef.current = null;
-      resizeObsRef.current?.disconnect();
-      resizeObsRef.current = null;
-      mapRef.current?.remove();
-      mapRef.current = null;
-      return;
-    }
-    if (!containerRef.current) return;
-
-    if (!mapRef.current) {
-      mapboxgl.accessToken = token;
-      const map = new mapboxgl.Map({
-        container: containerRef.current,
-        style: 'mapbox://styles/mapbox/satellite-streets-v12',
-        center: [lng, lat],
-        zoom: 16.5,
-        interactive: false,
-        attributionControl: false,
-      });
-      // The form host animates in and the grid can resize after init — keep
-      // the canvas matched to the box or the map renders blank.
-      map.on('load', () => map.resize());
-      resizeObsRef.current?.disconnect();
-      resizeObsRef.current = new ResizeObserver(() => mapRef.current?.resize());
-      resizeObsRef.current.observe(containerRef.current);
-      mapRef.current = map;
-    } else {
-      mapRef.current.jumpTo({ center: [lng, lat] });
-    }
-
-    markerRef.current?.remove();
-    const el = createLeadPinElement(STATUS_MAP[status || 'other'] || 'other');
-    markerRef.current = new mapboxgl.Marker({ element: el, anchor: 'center' })
-      .setLngLat([lng, lat])
-      .addTo(mapRef.current);
-  }, [lat, lng, status, token]);
-
-  useEffect(() => () => {
-    markerRef.current?.remove();
-    resizeObsRef.current?.disconnect();
-    resizeObsRef.current = null;
-    mapRef.current?.remove();
-    mapRef.current = null;
-  }, []);
-
-  const hasMap = pin != null && Boolean(token);
+  const hasMap = pin != null && Boolean(token) && !imgFailed;
+  const imgUrl = hasMap
+    ? `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${lng},${lat},16.5,0/640x320@2x?access_token=${token}&attribution=false&logo=false`
+    : null;
+  const cfg = PIN_STATUS_CONFIG[STATUS_MAP[pin?.status || 'other'] || 'other'];
 
   return (
     <section
@@ -108,9 +63,36 @@ export default function ClientPinMiniMap({ pin, hasClient, onOpen }: ClientPinMi
         hasMap ? 'cursor-pointer group' : '',
       ].join(' ')}
     >
-      {hasMap ? (
+      {hasMap && imgUrl ? (
         <>
-          <div ref={containerRef} className="absolute inset-0" />
+          <img
+            src={imgUrl}
+            alt={fr ? 'Localisation du client sur la map de vente' : 'Client location on the sales map'}
+            loading="lazy"
+            onError={() => setImgFailed(true)}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          {/* The pin sits at the image's center — overlay the same 28px marker
+              the live D2D map uses. */}
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none">
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: '50%',
+                background: `linear-gradient(135deg, ${cfg.gradientFrom}, ${cfg.gradientTo})`,
+                border: '2px solid rgba(255,255,255,0.92)',
+                boxShadow: `0 0 8px ${cfg.color}66, 0 2px 6px rgba(0,0,0,0.4)`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                lineHeight: 0,
+              }}
+              dangerouslySetInnerHTML={{
+                __html: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${cfg.iconPaths}</svg>`,
+              }}
+            />
+          </div>
           {/* Label chip */}
           <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 rounded-lg bg-black/55 backdrop-blur px-2.5 py-1.5 text-[11px] font-semibold text-white pointer-events-none">
             <MapPin size={12} />
