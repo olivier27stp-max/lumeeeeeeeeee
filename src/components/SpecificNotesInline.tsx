@@ -30,6 +30,8 @@ interface SpecificNotesInlineProps {
   /** Used to build the upload storage path before entity creation */
   tempEntityType: EntityType;
   tempEntityId?: string;
+  /** Taller text area, for hosts that give the notes box more vertical room */
+  tall?: boolean;
 }
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -60,7 +62,7 @@ function fileIcon(type: SpecificNoteFile['file_type']) {
 // ── Component ──
 
 const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesInlineProps>(
-  ({ tempEntityType, tempEntityId }, ref) => {
+  ({ tempEntityType, tempEntityId, tall = false }, ref) => {
     const [text, setText] = useState('');
     const [files, setFiles] = useState<SpecificNoteFile[]>([]);
     const [uploading, setUploading] = useState(false);
@@ -146,7 +148,7 @@ const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesI
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Add notes, details, context..."
-          className="glass-input w-full min-h-[60px] text-[13px] resize-none"
+          className={cn('glass-input w-full text-[13px] resize-none', tall ? 'min-h-[130px]' : 'min-h-[60px]')}
         />
 
         {/* Files */}

@@ -16,7 +16,7 @@ import {
 import { getActiveLiveLocations, type LiveLocation } from '../lib/trackingApi';
 import { softDeleteClient } from '../lib/clientsApi';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 // Map FieldSales API status → LeadPinData status
@@ -59,6 +59,14 @@ function apiPinToLeadPin(pin: FieldPinLight): LeadPinData {
 export default function D2DMap() {
   const { openJobModal } = useJobModalController();
   const navigate = useNavigate();
+
+  // Deep-link focus (?lat=..&lng=..) — e.g. the client mini map in the job
+  // form links here to open the map directly on that client's pin.
+  const [searchParams] = useSearchParams();
+  const focusLat = Number.parseFloat(searchParams.get('lat') ?? '');
+  const focusLng = Number.parseFloat(searchParams.get('lng') ?? '');
+  const focusCenter: [number, number] | null =
+    Number.isFinite(focusLat) && Number.isFinite(focusLng) ? [focusLng, focusLat] : null;
 
   // Pins loaded from API
   const [initialPins, setInitialPins] = useState<LeadPinData[]>([]);
@@ -252,6 +260,7 @@ export default function D2DMap() {
   return (
     <div className="h-[calc(100vh-3rem)] relative">
       <MapContainer
+        focusCenter={focusCenter}
         onPinClosedWon={handlePinClosedWon}
         onPinAppointment={handlePinAppointment}
         onOpenClient={handleOpenClient}

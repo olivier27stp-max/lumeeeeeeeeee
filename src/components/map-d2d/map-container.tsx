@@ -99,9 +99,11 @@ export interface MapContainerProps {
   liveReps?: Array<{ user_id: string; user_name: string | null; latitude: number; longitude: number; tracking_status: string; speed_mps: number | null; team_name: string | null; team_color: string | null }>;
   /** Imperative link-id updates by pin id (parent pushes after creating job/quote) */
   pinLinkUpdates?: Record<string, { job_id?: string | null; quote_id?: string | null; client_id?: string | null; lead_id?: string | null }>;
+  /** Deep-link focus [lng, lat] — the map opens centered on this point and GPS won't re-center away from it */
+  focusCenter?: [number, number] | null;
 }
 
-export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, initialPins, onPinCreated, onPinDeleted, onPinUpdated, liveReps: liveRepsProp, pinLinkUpdates }: MapContainerProps = {}) {
+export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, initialPins, onPinCreated, onPinDeleted, onPinUpdated, liveReps: liveRepsProp, pinLinkUpdates, focusCenter = null }: MapContainerProps = {}) {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const containerRef = useRef<HTMLDivElement>(null);
@@ -118,6 +120,8 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   onPinCreatedRef.current = onPinCreated;
   const onPinDeletedRef = useRef(onPinDeleted);
   onPinDeletedRef.current = onPinDeleted;
+  const focusCenterRef = useRef(focusCenter);
+  focusCenterRef.current = focusCenter;
   const onPinUpdatedRef = useRef(onPinUpdated);
   onPinUpdatedRef.current = onPinUpdated;
 
@@ -730,9 +734,11 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
       }
     } catch {}
 
-    // Open immediately — on the cached user position if we have one, else the
-    // regional fallback. The map never waits on the GPS lookup to render.
-    const map = initMap(cached ?? fallback, cached ? 17 : 14);
+    // Open immediately — on the deep-link focus point if one is set, else the
+    // cached user position, else the regional fallback. The map never waits on
+    // the GPS lookup to render.
+    const focus = focusCenterRef.current;
+    const map = initMap(focus ?? cached ?? fallback, focus ? 18 : cached ? 17 : 14);
     if (cached) {
       const c = cached;
       map.on('load', () => placeGpsDot(map, c[0], c[1]));
@@ -767,7 +773,16 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
           const { longitude: lng, latitude: lat } = pos.coords;
           // Smooth fly-in if we already opened near the user (cache); otherwise
           // jump straight to them so we don't animate across the whole region.
-          const apply = () => centerOnUser(lng, lat, !!cached);
+          // With an active deep-link focus, keep the camera on the focused pin
+          // and only drop/remember the GPS dot.
+          const apply = () => {
+            if (focusCenterRef.current) {
+              placeGpsDot(map, lng, lat);
+              try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng, lat })); } catch {}
+            } else {
+              centerOnUser(lng, lat, !!cached);
+            }
+          };
           if (map.loaded()) apply(); else map.on('load', apply);
           startWatch();
         },
@@ -792,6 +807,16 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
 
   // mapReady is used by other effects below
   const [mapReady, setMapReady] = useState(false);
+
+  // Follow deep-link focus changes once the map is up (covers the case where
+  // the URL's lat/lng change while the map page is already mounted).
+  const focusLng = focusCenter?.[0];
+  const focusLat = focusCenter?.[1];
+  useEffect(() => {
+    if (focusLng == null || focusLat == null) return;
+    if (!mapReady || !mapRef.current) return;
+    mapRef.current.flyTo({ center: [focusLng, focusLat], zoom: 18, duration: 900 });
+  }, [focusLng, focusLat, mapReady]);
 
   // Debounced street search via Mapbox geocoding
   useEffect(() => {
