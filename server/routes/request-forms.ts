@@ -604,15 +604,19 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
       type: 'request_created',
       title: actorLang === 'fr' ? `Nouvelle demande de ${fullName}` : `New request from ${fullName}`,
       body: contactLine || null,
+      // The prod table has a legacy `message text NOT NULL` column (absent
+      // from the migration files) — leaving it out fails with 23502.
+      message: contactLine || '',
       entity_type: 'request',
       entity_id: submission?.id || null,
     };
     let { error: notifError } = await admin.from('notifications').insert(notifRow);
-    // Unknown column = migration 20260706100000 not applied yet. PostgREST
-    // reports it as PGRST204 (schema cache) or 42703 (raw Postgres) — retry
-    // with the legacy minimal shape so the toast/bell still fire.
+    // Unknown column = env whose schema lacks `message` (built from migration
+    // files) or migration 20260706100000 not applied. PostgREST reports it as
+    // PGRST204 (schema cache) or 42703 (raw Postgres) — retry with the
+    // minimal shape so the toast/bell still fire.
     if (notifError && (notifError.code === 'PGRST204' || notifError.code === '42703')) {
-      const { entity_type: _et, entity_id: _ei, ...legacyRow } = notifRow;
+      const { entity_type: _et, entity_id: _ei, message: _msg, ...legacyRow } = notifRow;
       ({ error: notifError } = await admin.from('notifications').insert(legacyRow));
     }
     if (notifError) {
