@@ -58,13 +58,19 @@ function cityFromAddress(addr?: string | null): string | null {
 
 interface Zone { name: string; lat: number; lng: number; rev: number; jobs: number; }
 
-function FitBounds({ zones }: { zones: Zone[] }) {
+/** Frame the account's work zone: fit the cities, but never zoom out past the
+ * regional (Québec) level; centre on the work zone when there's nothing to fit. */
+function FitBounds({ zones, center }: { zones: Zone[]; center: L.LatLngTuple }) {
   const map = useMap();
   useEffect(() => {
-    if (zones.length === 0) return;
-    const b = L.latLngBounds(zones.map((z) => [z.lat, z.lng] as L.LatLngTuple));
-    map.fitBounds(b, { padding: [55, 55], maxZoom: 11 });
-  }, [zones, map]);
+    if (zones.length > 0) {
+      const b = L.latLngBounds(zones.map((z) => [z.lat, z.lng] as L.LatLngTuple));
+      map.fitBounds(b, { padding: [55, 55], maxZoom: 12 });
+      if (map.getZoom() < 8) map.setView(center, 8);
+    } else {
+      map.setView(center, 9);
+    }
+  }, [zones, center, map]);
   return null;
 }
 
@@ -99,10 +105,12 @@ export default function ZonesHeatmapCard({
 
   const kc = (cents: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 
-  const { zones, stats, maxRev } = useMemo(() => {
-    const done = (q.data?.pins || []).filter(
-      (p) => isDone(p.status) && Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && !(p.latitude === 0 && p.longitude === 0),
-    );
+  const { zones, stats, maxRev, center } = useMemo(() => {
+    const valid = (q.data?.pins || []).filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && !(p.latitude === 0 && p.longitude === 0));
+    const center: L.LatLngTuple = valid.length
+      ? [valid.reduce((s, p) => s + p.latitude, 0) / valid.length, valid.reduce((s, p) => s + p.longitude, 0) / valid.length]
+      : DEFAULT_CENTER;
+    const done = valid.filter((p) => isDone(p.status));
     const agg = new Map<string, { rev: number; jobs: number; lat: number; lng: number }>();
     for (const p of done) {
       const name = cityFromAddress(p.address) || (fr ? 'Autres' : 'Other');
@@ -114,7 +122,7 @@ export default function ZonesHeatmapCard({
     const totalRev = zones.reduce((s, z) => s + z.rev, 0);
     const totalJobs = zones.reduce((s, z) => s + z.jobs, 0);
     const maxRev = Math.max(1, ...zones.map((z) => z.rev));
-    return { zones, maxRev, stats: { totalRev, jobs: totalJobs, avg: totalJobs ? totalRev / totalJobs : 0, zoneCount: zones.length, top: zones.slice(0, 5) } };
+    return { zones, maxRev, center, stats: { totalRev, jobs: totalJobs, avg: totalJobs ? totalRev / totalJobs : 0, zoneCount: zones.length, top: zones.slice(0, 5) } };
   }, [q.data, fr]);
 
   const empty = !q.isLoading && zones.length === 0;
@@ -147,9 +155,9 @@ export default function ZonesHeatmapCard({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 px-6 pt-5 pb-2">
         {/* map */}
         <div className="lg:col-span-2 relative isolate h-[420px] rounded-xl overflow-hidden border border-border">
-          <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="h-full w-full" scrollWheelZoom={false} attributionControl={false} style={{ background: dark ? '#0a0a0a' : '#f0f0f0' }}>
+          <MapContainer center={center} zoom={DEFAULT_ZOOM} minZoom={6} className="h-full w-full" scrollWheelZoom={false} attributionControl={false} style={{ background: dark ? '#0a0a0a' : '#f0f0f0' }}>
             <TileLayer url={dark ? TILE_DARK : TILE_LIGHT} attribution={TILE_ATTR} maxZoom={19} />
-            <FitBounds zones={zones} />
+            <FitBounds zones={zones} center={center} />
             {zones.map((z) => {
               const b = bucket(z.rev);
               const radius = 10 + (z.rev / maxRev) * 22;
