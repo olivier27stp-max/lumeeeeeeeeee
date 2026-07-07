@@ -8,7 +8,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { ChevronDown, Plus, Trash2, UserPlus, X } from 'lucide-react';
+import { ChevronDown, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient, findClientsByEmail, type ClientPhone } from '../lib/clientsApi';
 import { DEFAULT_LEAD_SOURCES, createLeadSource, listLeadSources } from '../lib/leadSourcesApi';
@@ -232,13 +232,10 @@ export default function NewClient() {
       onChange={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
     >
       {/* ── Header ── */}
-      <div className="px-6 py-5 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-primary text-white flex items-center justify-center">
-            <UserPlus size={18} />
-          </div>
-          <h2 className="text-[16px] font-bold tracking-tight">{fr ? 'Nouveau client' : 'New Client'}</h2>
-        </div>
+      <div className="px-6 pt-6 pb-2 flex items-start justify-between">
+        <h2 className="text-[30px] font-extrabold tracking-tight text-text-primary leading-tight">
+          {fr ? 'Nouveau client' : 'New Client'}
+        </h2>
         <button
           type="button"
           onClick={() => navigate('/clients')}

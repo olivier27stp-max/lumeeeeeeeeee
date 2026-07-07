@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, BriefcaseBusiness, Calendar, ChevronDown, ChevronLeft, ChevronRight, Clock3, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, Clock3, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn, formatCurrency } from '../lib/utils';
 import { listClients, createClient } from '../lib/clientsApi';
@@ -1232,15 +1232,10 @@ export default function NewJobModal({
             onInput={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
             onChange={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
           >
-            <div className="px-6 py-5 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-primary text-white flex items-center justify-center">
-                  <BriefcaseBusiness size={18} />
-                </div>
-                <div>
-                  <h2 className="text-[16px] font-bold tracking-tight">{isEditMode ? t.modals.editJobHeading : t.modals.newJobHeading}</h2>
-                </div>
-              </div>
+            <div className="px-6 pt-6 pb-2 flex items-start justify-between">
+              <h2 className="text-[30px] font-extrabold tracking-tight text-text-primary leading-tight">
+                {isEditMode ? t.modals.editJobHeading : t.modals.newJobHeading}
+              </h2>
               <button onClick={() => handleClose()} className="p-2 rounded-xl border border-outline hover:bg-surface-secondary transition-colors">
                 <X size={18} />
               </button>

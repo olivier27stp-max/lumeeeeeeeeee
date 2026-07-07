@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { FileText, Plus, Trash2, X, Package, ChevronDown, User, Mail, Phone, MapPin, Download, Eye, EyeOff } from 'lucide-react';
+import { Plus, Trash2, X, Package, ChevronDown, User, Mail, Phone, MapPin, Download, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { listSalespeople } from '../../lib/jobsApi';
 import { listClients } from '../../lib/clientsApi';
@@ -581,15 +581,10 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
         >
           <LeaveFormConfirm open={guard.active} onConfirm={guard.confirmLeave} onCancel={guard.cancelLeave} />
           {/* ── Header ── */}
-          <div className="px-6 py-5 border-b border-outline flex items-center justify-between bg-surface-secondary">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <FileText size={18} className="text-primary" />
-              </div>
-              <div>
-                <h2 className="text-[16px] font-bold tracking-tight text-text-primary">{tq.newQuote}</h2>
-                {lead && <p className="text-[13px] text-text-tertiary">{tq.forName} {lead.first_name} {lead.last_name}</p>}
-              </div>
+          <div className="px-6 pt-6 pb-2 flex items-start justify-between">
+            <div>
+              <h2 className="text-[30px] font-extrabold tracking-tight text-text-primary leading-tight">{tq.newQuote}</h2>
+              {lead && <p className="text-[13px] text-text-tertiary">{tq.forName} {lead.first_name} {lead.last_name}</p>}
             </div>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setShowPreview(v => !v)}
