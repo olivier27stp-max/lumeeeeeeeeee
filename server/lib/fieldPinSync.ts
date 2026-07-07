@@ -107,12 +107,23 @@ export async function upsertLeadPinForClient(
 
         const { data: nearby } = await admin
           .from('field_house_profiles')
-          .select('id, lat, lng, client_id')
+          .select('id, lat, lng, client_id, lead_id, metadata')
           .eq('org_id', input.orgId)
           .is('deleted_at', null);
-        const duplicate = (nearby ?? []).find(
-          (h: any) => h.lat != null && h.lng != null && haversineMetres(lat!, lng!, h.lat, h.lng) <= 50,
-        );
+        // Merge into a nearby house only when identities are compatible: 50 m
+        // can span two neighbours, and absorbing a new client's request into
+        // another client's house leaves the new client with no visible pin.
+        const digits = (v: unknown) => String(v ?? '').replace(/\D/g, '');
+        const inPhone = digits(input.customerPhone);
+        const inEmail = String(input.customerEmail ?? '').trim().toLowerCase();
+        const duplicate = (nearby ?? []).find((h: any) => {
+          if (h.lat == null || h.lng == null || haversineMetres(lat!, lng!, h.lat, h.lng) > 50) return false;
+          if (h.client_id === input.clientId || h.lead_id === input.clientId) return true;
+          if (!h.client_id && !h.lead_id) return true;
+          const hPhone = digits(h.metadata?.customer_phone);
+          const hEmail = String(h.metadata?.customer_email ?? '').trim().toLowerCase();
+          return (!!inPhone && inPhone === hPhone) || (!!inEmail && inEmail === hEmail);
+        });
         if (duplicate) {
           houseId = duplicate.id;
           existingClientId = duplicate.client_id ?? null;
