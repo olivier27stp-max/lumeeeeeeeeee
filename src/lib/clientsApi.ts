@@ -1,12 +1,22 @@
 import { supabase } from './supabase';
 
+/** One phone number with its label (New Client form). */
+export interface ClientPhone {
+  number: string;
+  label: 'work' | 'mobile' | 'home' | 'fax' | 'other';
+}
+
 export interface ClientRecord {
   id: string;
   first_name: string;
   last_name: string;
   company: string | null;
   email: string | null;
+  email_label: string | null;
   phone: string | null;
+  phones: ClientPhone[] | null;
+  lead_source: string | null;
+  tax_ids: string[] | null;
   address: string | null;
   billing_same_as_service: boolean;
   billing_address: string | null;
@@ -122,7 +132,11 @@ export interface ClientPayload {
   last_name: string;
   company?: string;
   email?: string;
+  email_label?: string;
   phone?: string;
+  phones?: ClientPhone[];
+  lead_source?: string | null;
+  tax_ids?: string[] | null;
   address?: string;
   billing_same_as_service?: boolean;
   billing_address?: string | null;
@@ -198,8 +212,14 @@ export async function createClientWithDuplicateHandling(
       last_name: payload.last_name?.trim() || '',
       company: payload.company?.trim() || null,
       email: payload.email?.trim() || null,
+      email_label: payload.email_label || 'main',
       phone: payload.phone?.trim() || null,
+      phones: payload.phones ?? [],
+      lead_source: payload.lead_source?.trim() || null,
+      tax_ids: payload.tax_ids ?? null,
       address: payload.address?.trim() || null,
+      billing_same_as_service: payload.billing_same_as_service ?? true,
+      billing_address: payload.billing_address?.trim() || null,
       street_number: payload.street_number?.trim() || null,
       street_name: payload.street_name?.trim() || null,
       city: payload.city?.trim() || null,
@@ -231,7 +251,11 @@ export async function updateClient(id: string, payload: Partial<ClientPayload>):
   if (payload.last_name !== undefined) updatePayload.last_name = payload.last_name.trim();
   if (payload.company !== undefined) updatePayload.company = payload.company?.trim() || null;
   if (payload.email !== undefined) updatePayload.email = payload.email?.trim() || null;
+  if (payload.email_label !== undefined) updatePayload.email_label = payload.email_label || 'main';
   if (payload.phone !== undefined) updatePayload.phone = payload.phone?.trim() || null;
+  if (payload.phones !== undefined) updatePayload.phones = payload.phones ?? [];
+  if (payload.lead_source !== undefined) updatePayload.lead_source = payload.lead_source?.trim() || null;
+  if (payload.tax_ids !== undefined) updatePayload.tax_ids = payload.tax_ids;
   if (payload.address !== undefined) updatePayload.address = payload.address?.trim() || null;
   if (payload.billing_same_as_service !== undefined) updatePayload.billing_same_as_service = payload.billing_same_as_service;
   if (payload.billing_address !== undefined) updatePayload.billing_address = payload.billing_address?.trim() || null;

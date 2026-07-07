@@ -8,12 +8,9 @@ import BatchMessageModal from '../components/BatchMessageModal';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
-import { displayEmail } from '../lib/piiSanitizer';
 import {
   clientDisplayName,
   createClient,
-  createClientWithDuplicateHandling,
-  findClientsByEmail,
   getClientById,
   softDeleteClient,
   listClientJobs,
@@ -104,10 +101,6 @@ export default function Clients() {
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
-  const [duplicateCandidates, setDuplicateCandidates] = useState<any[]>([]);
-  const [pendingCreatePayload, setPendingCreatePayload] = useState<ClientFormState | null>(null);
   const [selected, setSelected] = useState<any | null>(null);
   const [selectedJobs, setSelectedJobs] = useState<any[]>([]);
   const [form, setForm] = useState<ClientFormState>(EMPTY_FORM);
@@ -122,8 +115,7 @@ export default function Clients() {
   useEscapeKey(() => {
     if (clientToDelete) { setClientToDelete(null); return; }
     if (selected) { setSelected(null); return; }
-    if (isCreateOpen) { setIsCreateOpen(false); return; }
-  }, !!(selected || isCreateOpen || clientToDelete));
+  }, !!(selected || clientToDelete));
 
   const toggleSelectAll = () => {
     if (selectedIds.size === items.length) {
@@ -176,10 +168,10 @@ export default function Clients() {
 
   // Listen for command palette create event
   useEffect(() => {
-    const handler = () => setIsCreateOpen(true);
+    const handler = () => navigate('/clients/new');
     window.addEventListener('crm:open-new-client', handler);
     return () => window.removeEventListener('crm:open-new-client', handler);
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     async function syncSelectedClientFromRoute() {
@@ -397,58 +389,6 @@ export default function Clients() {
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
-  const onCreate = async () => {
-    if (!form.first_name.trim() || !form.last_name.trim()) {
-      setSaveError(t.clients.firstLastRequired);
-      return;
-    }
-    setIsSaving(true);
-    setSaveError(null);
-    try {
-      const email = form.email.trim().toLowerCase();
-      if (email) {
-        const duplicates = await findClientsByEmail(email);
-        if (duplicates.length > 0) {
-          setPendingCreatePayload(form);
-          setDuplicateCandidates(duplicates);
-          setIsDuplicateModalOpen(true);
-          return;
-        }
-      }
-      await createClient(form);
-      setIsCreateOpen(false);
-      setForm(EMPTY_FORM);
-      await loadClients();
-      toast.success(t.clients.clientCreated, { action: { label: t.commandPalette.createJob, onClick: () => window.dispatchEvent(new CustomEvent('crm:open-new-job')) } });
-    } catch (err: any) {
-      setSaveError(err?.message || t.clients.failedCreate);
-      toast.error(err?.message || t.clients.failedCreate);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const onResolveDuplicate = async (mode: 'add' | 'replace') => {
-    if (!pendingCreatePayload) return;
-    setIsSaving(true);
-    setSaveError(null);
-    try {
-      await createClientWithDuplicateHandling(pendingCreatePayload, mode);
-      setIsDuplicateModalOpen(false);
-      setPendingCreatePayload(null);
-      setDuplicateCandidates([]);
-      setIsCreateOpen(false);
-      setForm(EMPTY_FORM);
-      await loadClients();
-      toast.success(mode === 'replace' ? t.clients.existingReplaced : t.clients.newClientAdded);
-    } catch (err: any) {
-      setSaveError(err?.message || t.clients.failedResolveDuplicate);
-      toast.error(err?.message || t.clients.failedResolveDuplicate);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const onSaveSelected = async () => {
     if (!selected) return;
     setIsSaving(true);
@@ -619,7 +559,7 @@ export default function Clients() {
       <div className="flex items-center justify-between">
         <h1 className="text-[28px] font-bold text-[var(--color-text-primary)] leading-tight">Clients{!loading && <span className="ml-2 text-[15px] font-normal text-[var(--color-text-tertiary)] tabular-nums">{total}</span>}</h1>
         <button
-          onClick={() => { setForm(EMPTY_FORM); setSaveError(null); setIsCreateOpen(true); }}
+          onClick={() => navigate('/clients/new')}
           className="inline-flex items-center gap-2 h-10 px-5 bg-[#d8d0c2] text-[#000] hover:bg-[#cabfad] rounded-lg text-[14px] font-medium active:scale-[0.98] transition-all"
         >
           {fr ? 'Nouveau client' : 'New Client'}
@@ -745,38 +685,6 @@ export default function Clients() {
         </div>
       </div>
 
-      {/* Create modal */}
-      <AnimatePresence>
-        {isCreateOpen && (
-          <motion.div className="modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <motion.div
-              className="modal-content max-w-xl"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-6 pt-6">
-                <h3 className="text-lg font-bold text-text-primary">{t.clients.newClient}</h3>
-                <button onClick={() => setIsCreateOpen(false)} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors">
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="px-6 py-5">
-                <ClientForm form={form} setForm={setForm} t={t} />
-                {saveError && <p className="text-[13px] text-danger mt-3">{saveError}</p>}
-              </div>
-              <div className="flex justify-end gap-3 px-6 pb-6">
-                <button onClick={() => setIsCreateOpen(false)} className="glass-button">{t.common.cancel}</button>
-                <button onClick={() => void onCreate()} disabled={isSaving} className="glass-button-primary">
-                  {isSaving ? t.common.saving : t.clients.createClient}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Detail drawer */}
       <AnimatePresence>
         {selected && (
@@ -894,52 +802,6 @@ export default function Clients() {
                     onClick={() => void onDelete(clientToDelete.id, selected?.id === clientToDelete.id)}
                   >
                     {isDeletingClient ? t.common.deleting : t.common.delete}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Duplicate email modal */}
-      <AnimatePresence>
-        {isDuplicateModalOpen && (
-          <motion.div
-            className="modal-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="modal-content max-w-lg"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-6">
-                <h3 className="text-[1.1rem] font-extrabold text-text-primary">{t.clients.emailExists}</h3>
-                <p className="text-[13px] text-text-secondary mt-2">
-                  {t.clients.foundClients.replace('{count}', String(duplicateCandidates.length))}
-                </p>
-                <div className="mt-4 max-h-40 space-y-2 overflow-auto rounded-2xl border border-outline-subtle p-3">
-                  {duplicateCandidates.map((client) => (
-                    <div key={client.id} className="rounded-xl bg-surface-secondary px-4 py-2.5">
-                      <p className="text-[13px] font-semibold text-text-primary">
-                        {client.first_name} {client.last_name}
-                      </p>
-                      <p className="text-xs text-text-muted">{displayEmail(client.email) === '—' ? t.common.noEmail : displayEmail(client.email)} — {formatDate(client.created_at)}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-6 flex justify-end gap-3">
-                  <button className="glass-button" onClick={() => setIsDuplicateModalOpen(false)} disabled={isSaving}>{t.common.cancel}</button>
-                  <button className="glass-button-secondary" onClick={() => void onResolveDuplicate('add')} disabled={isSaving}>
-                    {isSaving ? t.common.saving : t.common.addAnyway}
-                  </button>
-                  <button className="glass-button-primary" onClick={() => void onResolveDuplicate('replace')} disabled={isSaving}>
-                    {isSaving ? t.common.saving : t.common.replace}
                   </button>
                 </div>
               </div>

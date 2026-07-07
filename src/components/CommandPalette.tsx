@@ -103,7 +103,7 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
   const actionCommands = useMemo((): CommandItem[] => {
     const cmds: CommandItem[] = [
       { id: 'act-new-quote', label: t.commandPalette.createQuote, icon: Plus, action: () => { navigate('/quotes'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-quote')), 300); }, section: t.automations.actions, keywords: 'add new prospect quote devis estimate' },
-      { id: 'act-new-client', label: t.commandPalette.createClient, icon: Plus, action: () => { navigate('/clients'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-client')), 300); }, section: t.automations.actions, keywords: 'add new customer' },
+      { id: 'act-new-client', label: t.commandPalette.createClient, icon: Plus, action: () => { navigate('/clients/new'); }, section: t.automations.actions, keywords: 'add new customer' },
       { id: 'act-new-job', label: t.commandPalette.createJob, icon: Plus, action: () => { navigate('/jobs'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-job')), 300); }, section: t.automations.actions, keywords: 'add new travail' },
       ...(canSeeInvoices ? [{ id: 'act-new-invoice', label: t.commandPalette.createInvoice, icon: Plus, action: () => { navigate('/finances'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-invoice')), 300); }, section: t.automations.actions, keywords: 'add new bill' }] : []),
       // Smart filters

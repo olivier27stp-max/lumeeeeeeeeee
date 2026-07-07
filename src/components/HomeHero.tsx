@@ -39,8 +39,7 @@ export default function HomeHero({ appointmentsTotal, overdue }: HomeHeroProps) 
     setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-quote')), 300);
   };
   const openNewClient = () => {
-    navigate('/clients');
-    setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-client')), 300);
+    navigate('/clients/new');
   };
 
   const actions: { label: string; onClick: () => void; primary?: boolean }[] = [

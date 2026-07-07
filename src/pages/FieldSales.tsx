@@ -2119,7 +2119,7 @@ export default function FieldSales() {
                 { key: 'quote', label: fr ? 'Créer Devis' : 'Create Quote', icon: FileText, color: '#64748b',
                   action: () => { setShowQuoteModal(true); } },
                 { key: 'client', label: fr ? 'Créer Client' : 'Create Client', icon: UserPlus, color: '#3b82f6',
-                  action: () => { navigate('/clients'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-client')), 300); } },
+                  action: () => { navigate('/clients/new'); } },
                 { key: 'invoice', label: fr ? 'Créer Facture' : 'Create Invoice', icon: Receipt, color: '#f59e0b',
                   action: () => { setShowInvoiceModal(true); } },
               ].map((item) => {
@@ -2291,7 +2291,7 @@ export default function FieldSales() {
           }}
           onOpenQuote={() => setShowQuoteModal(true)}
           onOpenInvoice={() => setShowInvoiceModal(true)}
-          onOpenClient={() => { navigate('/clients'); setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-new-client')), 300); }}
+          onOpenClient={() => navigate('/clients/new')}
           onNavigate={(path) => navigate(path)}
         />
       )}

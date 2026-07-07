@@ -48,6 +48,7 @@ import { cn } from './lib/utils';
 import Dashboard from './pages/Dashboard';
 import CrmWorkspace from './pages/CrmWorkspace';
 import Clients from './pages/Clients';
+import NewClient from './pages/NewClient';
 import ClientDetails from './pages/ClientDetails';
 import Schedule from './pages/Schedule';
 import SettingsPage from './pages/Settings';
@@ -1196,6 +1197,7 @@ function AuthenticatedApp({
                     <Route path="/leads" element={<Navigate to="/quotes" replace />} />
                     <Route path="/pipeline" element={<Navigate to="/lume-agent" replace />} />
                     <Route path="/clients" element={<Gated permission="clients.read"><div className="px-8 py-6"><Clients /></div></Gated>} />
+                    <Route path="/clients/new" element={<Gated permission="clients.create"><NewClient /></Gated>} />
                     <Route path="/clients/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><ClientDetails /></div></Gated>} />
                     <Route path="/requests" element={<Gated permission="clients.read"><div className="px-8 py-6"><Requests /></div></Gated>} />
                     <Route path="/requests/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><RequestDetails /></div></Gated>} />
