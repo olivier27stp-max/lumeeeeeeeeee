@@ -595,7 +595,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
       const map = new mapboxgl.Map({
         container: containerRef.current!,
         style: 'mapbox://styles/mapbox/satellite-streets-v12',
-        center, zoom: startZoom, maxZoom: 22, minZoom: 2, antialias: true, attributionControl: false,
+        center, zoom: startZoom, maxZoom: 22, minZoom: 1, antialias: true, attributionControl: false,
       });
 
       map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
@@ -738,71 +738,92 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
       }
     } catch {}
 
-    // Open immediately — on the deep-link focus point if one is set, else the
-    // cached user position, else the regional fallback. The map never waits on
-    // the GPS lookup to render.
-    const focus = focusCenterRef.current;
-    const map = initMap(focus ?? cached ?? fallback, focus ? 18 : cached ? 17 : 14);
-    if (cached) {
-      const c = cached;
-      map.on('load', () => placeGpsDot(map, c[0], c[1]));
-    }
+    // When the user's location is off (permission hard-denied or no
+    // geolocation API), no blue dot is coming: ignore the cached position and
+    // open on a from-space globe view instead of a misleading zoomed-in
+    // region — the user dives onto their pins themselves. The permission
+    // lookup resolves in ~1ms, so the map still appears instantly.
+    let disposed = false;
+    (async () => {
+      let locationOff = !navigator.geolocation;
+      try {
+        const st = await navigator.permissions?.query?.({ name: 'geolocation' as PermissionName });
+        if (st?.state === 'denied') locationOff = true;
+      } catch {}
+      if (disposed || !containerRef.current) return;
 
-    // Drop/refresh the blue pin on the user's live position and remember it.
-    function centerOnUser(lng: number, lat: number, fly: boolean) {
-      placeGpsDot(map, lng, lat);
-      if (fly) map.flyTo({ center: [lng, lat], zoom: 17, duration: 800 });
-      else map.jumpTo({ center: [lng, lat], zoom: 17 });
-      try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng, lat })); } catch {}
-    }
-
-    // Live GPS updates — moves the single dot, never creates a second.
-    function startWatch() {
-      if (gpsWatchRef.current != null) return;
-      gpsWatchRef.current = navigator.geolocation.watchPosition(
-        (p) => { if (mapRef.current) { setGpsDenied(false); placeGpsDot(map, p.coords.longitude, p.coords.latitude); try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng: p.coords.longitude, lat: p.coords.latitude })); } catch {} } },
-        (err) => { if (err.code === err.PERMISSION_DENIED) setGpsDenied(true); },
-        { enableHighAccuracy: true }
+      // Open immediately — on the deep-link focus point if one is set, else the
+      // cached user position, else from space over the pins' region. The map
+      // never waits on the GPS lookup to render.
+      const focus = focusCenterRef.current;
+      const useCache = !locationOff && !!cached;
+      const map = initMap(
+        focus ?? (useCache ? cached! : fallback),
+        focus ? 18 : useCache ? 17 : locationOff ? 1.3 : 14,
       );
-    }
+      if (useCache) {
+        const c = cached!;
+        map.on('load', () => placeGpsDot(map, c[0], c[1]));
+      }
 
-    // Exposed to the "Enable" banner: re-center + (re)start tracking after the
-    // user turns their location back on.
-    gpsRecenterRef.current = (lng, lat) => { setGpsDenied(false); centerOnUser(lng, lat, true); startWatch(); };
+      // Drop/refresh the blue pin on the user's live position and remember it.
+      function centerOnUser(lng: number, lat: number, fly: boolean) {
+        placeGpsDot(map, lng, lat);
+        if (fly) map.flyTo({ center: [lng, lat], zoom: 17, duration: 800 });
+        else map.jumpTo({ center: [lng, lat], zoom: 17 });
+        try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng, lat })); } catch {}
+      }
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setGpsDenied(false);
-          const { longitude: lng, latitude: lat } = pos.coords;
-          // Smooth fly-in if we already opened near the user (cache); otherwise
-          // jump straight to them so we don't animate across the whole region.
-          // With an active deep-link focus, keep the camera on the focused pin
-          // and only drop/remember the GPS dot.
-          const apply = () => {
-            if (focusCenterRef.current) {
-              placeGpsDot(map, lng, lat);
-              try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng, lat })); } catch {}
-            } else {
-              centerOnUser(lng, lat, !!cached);
-            }
-          };
-          if (map.loaded()) apply(); else map.on('load', apply);
-          startWatch();
-        },
-        (err) => {
-          // Permission denied, position unavailable or timed out — surface the
-          // non-intrusive banner so the user knows their pin isn't live.
-          if (err.code === err.PERMISSION_DENIED || err.code === err.POSITION_UNAVAILABLE) setGpsDenied(true);
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
-      );
-    } else {
-      // Browser has no geolocation API at all.
-      setGpsDenied(true);
-    }
+      // Live GPS updates — moves the single dot, never creates a second.
+      function startWatch() {
+        if (gpsWatchRef.current != null) return;
+        gpsWatchRef.current = navigator.geolocation.watchPosition(
+          (p) => { if (mapRef.current) { setGpsDenied(false); placeGpsDot(map, p.coords.longitude, p.coords.latitude); try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng: p.coords.longitude, lat: p.coords.latitude })); } catch {} } },
+          (err) => { if (err.code === err.PERMISSION_DENIED) setGpsDenied(true); },
+          { enableHighAccuracy: true }
+        );
+      }
+
+      // Exposed to the "Enable" banner: re-center + (re)start tracking after the
+      // user turns their location back on.
+      gpsRecenterRef.current = (lng, lat) => { setGpsDenied(false); centerOnUser(lng, lat, true); startWatch(); };
+
+      if (locationOff) setGpsDenied(true);
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setGpsDenied(false);
+            const { longitude: lng, latitude: lat } = pos.coords;
+            // Smooth fly-in if we already opened near the user (cache) or from
+            // the space view; otherwise jump straight to them so we don't
+            // animate across the whole region. With an active deep-link focus,
+            // keep the camera on the focused pin and only drop/remember the dot.
+            const apply = () => {
+              if (focusCenterRef.current) {
+                placeGpsDot(map, lng, lat);
+                try { localStorage.setItem('d2d-last-gps', JSON.stringify({ lng, lat })); } catch {}
+              } else {
+                centerOnUser(lng, lat, useCache || locationOff);
+              }
+            };
+            if (map.loaded()) apply(); else map.on('load', apply);
+            startWatch();
+          },
+          (err) => {
+            // Permission denied, position unavailable or timed out — surface the
+            // non-intrusive banner so the user knows their pin isn't live.
+            if (err.code === err.PERMISSION_DENIED || err.code === err.POSITION_UNAVAILABLE) setGpsDenied(true);
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
+        );
+      } else {
+        // Browser has no geolocation API at all.
+        setGpsDenied(true);
+      }
+    })();
 
     return () => {
+      disposed = true;
       if (gpsWatchRef.current != null) { navigator.geolocation.clearWatch(gpsWatchRef.current); gpsWatchRef.current = null; }
       if (gpsMarkerRef.current) { gpsMarkerRef.current.remove(); gpsMarkerRef.current = null; }
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
