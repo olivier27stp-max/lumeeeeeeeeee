@@ -42,6 +42,7 @@ import { getRecurrenceRule, createRecurrenceRule, deactivateRecurrenceRule, type
 import { getServiceContractByJob, type ServiceContract } from '../lib/serviceContractsApi';
 import { getJobAgreementByJob, sendAgreementEmail, type JobAgreement } from '../lib/jobAgreementsApi';
 import AgreementPreviewModal from '../components/agreements/AgreementPreviewModal';
+import AgreementCreateModal from '../components/agreements/AgreementCreateModal';
 import { buildAgreementDocData, getAgreementCompanyBranding } from '../lib/agreementDoc';
 import { downloadAgreementPdf } from '../lib/generateAgreementPdf';
 import SendSmsModal from '../components/communications/SendSmsModal';
@@ -130,6 +131,7 @@ export default function JobDetails() {
   // Written agreement (job contract, optional)
   const [agreement, setAgreement] = useState<JobAgreement | null>(null);
   const [showAgreementPreview, setShowAgreementPreview] = useState(false);
+  const [showAgreementCreate, setShowAgreementCreate] = useState(false);
   const [agreementSending, setAgreementSending] = useState(false);
 
   // Recurrence
@@ -921,7 +923,7 @@ export default function JobDetails() {
         )}
 
         {/* ═══ AGREEMENT (written contract) ═══ */}
-        {agreement && (
+        {agreement ? (
           <div className="rounded-xl border border-outline bg-surface overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
@@ -1021,6 +1023,28 @@ export default function JobDetails() {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        ) : (
+          /* No agreement yet — offer to create one for this existing job */
+          <div className="rounded-xl border border-outline bg-surface overflow-hidden print:hidden">
+            <div className="flex items-center justify-between px-5 py-3.5">
+              <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
+                <div className="icon-tile icon-tile-sm icon-tile-blue">
+                  <FileText size={13} strokeWidth={2} />
+                </div>
+                {language === 'fr' ? 'Contrat' : 'Agreement'}
+                <span className="text-[12px] font-normal text-text-tertiary ml-1">
+                  {language === 'fr' ? 'Aucun contrat pour ce job' : 'No agreement for this job'}
+                </span>
+              </h2>
+              <button
+                onClick={() => setShowAgreementCreate(true)}
+                className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1"
+              >
+                <Plus size={12} />
+                {language === 'fr' ? 'Créer un contrat' : 'Create agreement'}
+              </button>
             </div>
           </div>
         )}
@@ -1311,6 +1335,16 @@ export default function JobDetails() {
           onClose={() => setShowAddVisit(false)}
           onAdded={() => void handleVisitAdded()}
           job={{ id: job.id, label: [job.title, job.client_name].filter(Boolean).join(' — ') || (language === 'fr' ? 'Job' : 'Job') }}
+        />
+      )}
+
+      {job && (
+        <AgreementCreateModal
+          open={showAgreementCreate}
+          onClose={() => setShowAgreementCreate(false)}
+          jobId={job.id}
+          clientId={job.client_id || null}
+          onCreated={setAgreement}
         />
       )}
 
