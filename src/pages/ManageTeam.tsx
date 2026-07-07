@@ -49,6 +49,7 @@ import MfaChallenge from '../components/auth/MfaChallenge';
 import { getCurrentOrgId } from '../lib/orgApi';
 import { useCompany } from '../contexts/CompanyContext';
 import { fetchSeatUsage, fetchCurrentBilling, setExtraSeats } from '../lib/billingApi';
+import { fetchHourlyRates, setHourlyRate } from '../lib/teamMembersApi';
 import SeatChargeConfirmModal from '../components/SeatChargeConfirmModal';
 
 // ── Constants ────────────────────────────────────────────────────
@@ -98,6 +99,7 @@ export default function ManageTeam() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [roleChangeMember, setRoleChangeMember] = useState<OrgMember | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [rates, setRates] = useState<Record<string, number>>({});
 
   const isFr = language === 'fr';
   const roleDescriptions = isFr ? ROLE_DESCRIPTIONS_FR : ROLE_DESCRIPTIONS_EN;
@@ -107,6 +109,7 @@ export default function ManageTeam() {
       const data = await fetchTeamList();
       setMembers(data.members);
       setInvitations(data.invitations);
+      fetchHourlyRates().then(setRates).catch(() => {});
     } catch (err: any) {
       console.error('Failed to load team:', err.message);
       toast.error(isFr ? 'Erreur lors du chargement de l\'équipe.' : 'Failed to load team.');
@@ -116,6 +119,19 @@ export default function ManageTeam() {
   };
 
   useEffect(() => { loadTeam(); }, []);
+
+  const handleSaveRate = async (member: OrgMember, cents: number) => {
+    const prev = rates[member.user_id] || 0;
+    if (cents === prev) return;
+    setRates((r) => ({ ...r, [member.user_id]: cents }));
+    try {
+      await setHourlyRate({ userId: member.user_id, email: member.email, fullName: member.full_name, cents });
+      toast.success(isFr ? 'Taux horaire enregistré' : 'Hourly rate saved');
+    } catch (err: any) {
+      setRates((r) => ({ ...r, [member.user_id]: prev }));
+      toast.error(isFr ? 'Échec de l\'enregistrement du taux' : 'Failed to save rate');
+    }
+  };
 
   const activeMembers = useMemo(() =>
     members
@@ -384,6 +400,8 @@ export default function ManageTeam() {
                 setOpenMenuId={setOpenMenuId}
                 onChangeRole={() => setRoleChangeMember(member)}
                 onRemove={() => handleRemoveMember(member.user_id)}
+                rate={rates[member.user_id] || 0}
+                onSaveRate={(c) => handleSaveRate(member, c)}
               />
             ))}
           </div>
@@ -468,6 +486,8 @@ export default function ManageTeam() {
                 setOpenMenuId={setOpenMenuId}
                 onChangeRole={() => setRoleChangeMember(member)}
                 onRemove={() => {}}
+                rate={rates[member.user_id] || 0}
+                onSaveRate={(c) => handleSaveRate(member, c)}
                 isSuspended
               />
             ))}
@@ -625,6 +645,8 @@ interface MemberRowProps {
   setOpenMenuId: (id: string | null) => void;
   onChangeRole: () => void;
   onRemove: () => void;
+  rate: number;
+  onSaveRate: (cents: number) => void;
   isSuspended?: boolean;
 }
 
@@ -635,10 +657,18 @@ const MemberRow: React.FC<MemberRowProps> = ({
   setOpenMenuId,
   onChangeRole,
   onRemove,
+  rate,
+  onSaveRate,
   isSuspended,
 }) => {
   const { t } = useTranslation();
   const isFr = language === 'fr';
+  const [rateVal, setRateVal] = useState(rate > 0 ? String(rate / 100) : '');
+  useEffect(() => { setRateVal(rate > 0 ? String(rate / 100) : ''); }, [rate]);
+  const commitRate = () => {
+    const dollars = parseFloat(rateVal.replace(/\s/g, '').replace(',', '.')) || 0;
+    onSaveRate(Math.round(dollars * 100));
+  };
   const cfg = ROLE_CONFIG[member.role] || ROLE_CONFIG.technician;
   const RoleIcon = cfg.icon;
   const initials = member.full_name
@@ -686,6 +716,23 @@ const MemberRow: React.FC<MemberRowProps> = ({
           <span className="text-text-tertiary">
             {t.manageTeam.joined}: {formatRelativeDate(member.created_at, language)}
           </span>
+        </div>
+      </div>
+
+      {/* Hourly rate (labour cost input for profitability) */}
+      <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <label className="text-[11px] font-semibold text-text-tertiary hidden sm:block">{isFr ? 'Taux/h' : 'Rate/h'}</label>
+        <div className="flex items-center gap-0.5 rounded-lg border border-outline-subtle bg-surface-secondary/40 px-2 py-1.5 focus-within:border-primary transition-colors">
+          <span className="text-[12px] text-text-tertiary">$</span>
+          <input
+            value={rateVal}
+            inputMode="decimal"
+            placeholder="0"
+            onChange={(e) => setRateVal(e.target.value)}
+            onBlur={commitRate}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+            className="w-14 bg-transparent text-right tabular-nums text-[13px] text-text-primary focus:outline-none"
+          />
         </div>
       </div>
 
