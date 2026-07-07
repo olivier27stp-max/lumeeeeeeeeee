@@ -28,4 +28,18 @@ create index if not exists idx_notifications_org_unread_entity
   on public.notifications (org_id, entity_type)
   where is_read = false;
 
+-- Safety: make sure notifications is in the realtime publication — without
+-- this the client never receives INSERT events (no toast, no live badge).
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    begin
+      alter publication supabase_realtime add table public.notifications;
+    exception when duplicate_object then
+      null;
+    end;
+  end if;
+end;
+$$;
+
 commit;

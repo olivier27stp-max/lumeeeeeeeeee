@@ -608,14 +608,15 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
       entity_id: submission?.id || null,
     };
     let { error: notifError } = await admin.from('notifications').insert(notifRow);
-    // 42703 = undefined column: migration 20260706100000 not applied yet —
-    // retry with the legacy minimal shape so the toast/bell still fire.
-    if (notifError?.code === '42703') {
+    // Unknown column = migration 20260706100000 not applied yet. PostgREST
+    // reports it as PGRST204 (schema cache) or 42703 (raw Postgres) — retry
+    // with the legacy minimal shape so the toast/bell still fire.
+    if (notifError && (notifError.code === 'PGRST204' || notifError.code === '42703')) {
       const { entity_type: _et, entity_id: _ei, ...legacyRow } = notifRow;
       ({ error: notifError } = await admin.from('notifications').insert(legacyRow));
     }
     if (notifError) {
-      console.error('[public/form] notification insert failed:', notifError.message);
+      console.error('[public/form] notification insert failed:', { code: notifError.code, message: notifError.message });
       // Non-fatal — the submission itself succeeded
     }
 
