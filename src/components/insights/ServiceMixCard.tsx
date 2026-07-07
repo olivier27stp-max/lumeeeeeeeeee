@@ -78,7 +78,7 @@ export default function ServiceMixCard({
                   cy="21"
                   r={R}
                   fill="none"
-                  stroke="var(--color-chart-primary)"
+                  stroke="var(--color-text-primary)"
                   strokeOpacity={active == null || active === i ? s.op : s.op * 0.3}
                   strokeWidth={5}
                   strokeLinecap="round"
@@ -94,7 +94,7 @@ export default function ServiceMixCard({
               {detail ? (
                 <>
                   <div className="flex items-center gap-1.5 text-[11px] font-semibold text-text-secondary mb-1.5 max-w-full">
-                    <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: 'var(--color-chart-primary)', opacity: detail.op }} />
+                    <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: 'var(--color-text-primary)', opacity: detail.op }} />
                     <span className="truncate">{detail.name}</span>
                   </div>
                   <div className="text-[23px] font-bold tracking-tight leading-none tabular-nums text-text-primary">{money(detail.value)}</div>
@@ -117,7 +117,7 @@ export default function ServiceMixCard({
                 onMouseEnter={() => setActive(i)}
                 onMouseLeave={() => setActive(null)}
               >
-                <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: 'var(--color-chart-primary)', opacity: s.op }} />
+                <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: 'var(--color-text-primary)', opacity: s.op }} />
                 <span className="text-[13px] font-semibold text-text-primary truncate">{s.name}</span>
                 <span className="ml-auto text-[13px] font-bold text-text-primary tabular-nums">{money(s.value)}</span>
                 <span className="text-[12px] text-text-tertiary font-semibold tabular-nums w-9 text-right">{Math.round(s.pct)}%</span>

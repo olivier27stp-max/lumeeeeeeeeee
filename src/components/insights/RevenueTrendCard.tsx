@@ -1,7 +1,7 @@
 /**
  * Revenue trend — area chart over the selected period, wired to the real
  * fetchInsightsRevenueSeries RPC. Hero total + delta, crosshair tooltip.
- * Monochrome shell, one indigo data hue (var(--color-chart-primary)).
+ * Monochrome shell, one indigo data hue (var(--color-text-primary)).
  */
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -109,12 +109,12 @@ export default function RevenueTrendCard({
                 ))}
                 <defs>
                   <linearGradient id="revfill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--color-chart-primary)" stopOpacity="0.14" />
-                    <stop offset="100%" stopColor="var(--color-chart-primary)" stopOpacity="0" />
+                    <stop offset="0%" stopColor="var(--color-text-primary)" stopOpacity="0.14" />
+                    <stop offset="100%" stopColor="var(--color-text-primary)" stopOpacity="0" />
                   </linearGradient>
                 </defs>
                 {model.area && <path d={model.area} fill="url(#revfill)" />}
-                <path d={model.line} fill="none" stroke="var(--color-chart-primary)" strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                <path d={model.line} fill="none" stroke="var(--color-text-primary)" strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
               </svg>
             </div>
 
@@ -123,7 +123,7 @@ export default function RevenueTrendCard({
                 <div className="absolute top-0 bottom-[22px] w-px bg-border" style={{ left: `${(model.co[hIdx].x / W) * 100}%` }} />
                 <div
                   className="absolute w-[9px] h-[9px] rounded-full -translate-x-1/2 -translate-y-1/2 border-2 border-surface-card"
-                  style={{ left: `${(model.co[hIdx].x / W) * 100}%`, top: `${(model.co[hIdx].y / H) * 100}%`, background: 'var(--color-chart-primary)' }}
+                  style={{ left: `${(model.co[hIdx].x / W) * 100}%`, top: `${(model.co[hIdx].y / H) * 100}%`, background: 'var(--color-text-primary)' }}
                 />
                 <div
                   className="absolute z-10 -translate-x-1/2 -translate-y-full -mt-3.5 rounded-xl border border-border bg-surface-card shadow-xl px-3 py-2.5 pointer-events-none whitespace-nowrap"
@@ -131,7 +131,7 @@ export default function RevenueTrendCard({
                 >
                   <div className="text-[9.5px] uppercase tracking-wide text-text-tertiary font-bold mb-1.5">{model.labels[hIdx]}</div>
                   <div className="flex items-center gap-2 text-[12px] text-text-secondary">
-                    <span className="w-3 h-[2.5px] rounded" style={{ background: 'var(--color-chart-primary)' }} />
+                    <span className="w-3 h-[2.5px] rounded" style={{ background: 'var(--color-text-primary)' }} />
                     {fr ? 'Revenu' : 'Revenue'}
                     <b className="ml-5 text-text-primary tabular-nums">{moneyFull(model.vals[hIdx])}</b>
                   </div>

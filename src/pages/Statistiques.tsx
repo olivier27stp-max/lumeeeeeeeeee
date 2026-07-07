@@ -125,10 +125,10 @@ function Leaderboard({
       {rows.map((r, i) => (
         <div key={i} className="grid grid-cols-[16px_34px_1fr_auto] items-center gap-3.5 py-3 border-b border-border-light last:border-0">
           <span className="text-[12px] font-bold text-text-tertiary text-center tabular-nums">{i + 1}</span>
-          <span className={cn('w-[34px] h-[34px] rounded-full grid place-items-center text-[12px] font-bold', i === 0 ? 'text-surface-card' : 'bg-surface-secondary border border-border text-text-secondary')} style={i === 0 ? { background: 'var(--color-chart-primary)' } : undefined}>{ini(r.name)}</span>
+          <span className={cn('w-[34px] h-[34px] rounded-full grid place-items-center text-[12px] font-bold', i === 0 ? 'text-surface-card' : 'bg-surface-secondary border border-border text-text-secondary')} style={i === 0 ? { background: 'var(--color-text-primary)' } : undefined}>{ini(r.name)}</span>
           <div className="min-w-0">
             <div className="text-[13.5px] font-semibold tracking-tight truncate text-text-primary">{r.name}</div>
-            <div className="h-1.5 rounded-full bg-surface-tertiary overflow-hidden mt-2"><span className="block h-full rounded-full" style={{ width: `${Math.round((r.weight / max) * 100)}%`, background: 'var(--color-chart-primary)' }} /></div>
+            <div className="h-1.5 rounded-full bg-surface-tertiary overflow-hidden mt-2"><span className="block h-full rounded-full" style={{ width: `${Math.round((r.weight / max) * 100)}%`, background: 'var(--color-text-primary)' }} /></div>
           </div>
           <div className="text-right">
             <div className="text-[15px] font-bold tracking-tight tabular-nums text-text-primary">{r.primary}</div>
@@ -254,7 +254,7 @@ export default function Statistiques() {
                 const convPct = i > 0 && funnelStages[i - 1].value > 0 ? Math.round((s.value / funnelStages[i - 1].value) * 100) : null;
                 return (
                   <div key={i} className="flex-1 flex flex-col items-center justify-end h-full gap-2.5">
-                    <div className="w-3/4 max-w-[96px] rounded-t-md flex items-start justify-center text-surface-card font-extrabold text-[15px] pt-2 tabular-nums" style={{ height: `${Math.max(8, (s.value / funnelMax) * 100)}%`, background: 'var(--color-chart-primary)' }}>{s.value}</div>
+                    <div className="w-3/4 max-w-[96px] rounded-t-md flex items-start justify-center text-surface-card font-extrabold text-[15px] pt-2 tabular-nums" style={{ height: `${Math.max(8, (s.value / funnelMax) * 100)}%`, background: 'var(--color-text-primary)' }}>{s.value}</div>
                     <span className="text-[11px] text-text-tertiary font-semibold text-center leading-snug">{s.label}{convPct != null && <><br /><b className="text-text-secondary">{convPct}%</b></>}</span>
                   </div>
                 );
