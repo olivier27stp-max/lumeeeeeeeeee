@@ -19,8 +19,8 @@ const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.p
 const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
 
-const GRAD_LIGHT = { 0.15: '#e5e5e5', 0.4: '#a3a3a3', 0.7: '#525252', 1.0: '#171717' };
-const GRAD_DARK = { 0.15: '#3f3f46', 0.4: '#71717a', 0.7: '#d4d4d8', 1.0: '#fafafa' };
+const GRAD_LIGHT = { 0.1: '#c4c4c4', 0.35: '#8a8a8a', 0.65: '#4a4a4a', 1.0: '#171717' };
+const GRAD_DARK = { 0.1: '#4a4a52', 0.35: '#7d7d86', 0.65: '#c0c0c6', 1.0: '#fafafa' };
 
 function useIsDark() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -47,7 +47,7 @@ function HeatLayer({ points, dark }: { points: [number, number, number][]; dark:
     if (layerRef.current) { map.removeLayer(layerRef.current); layerRef.current = null; }
     const heat = (L as unknown as { heatLayer?: (p: unknown, o: unknown) => L.Layer }).heatLayer;
     if (!loaded || points.length === 0 || !heat) return;
-    layerRef.current = heat(points, { radius: 34, blur: 24, maxZoom: 15, max: 1.0, gradient: dark ? GRAD_DARK : GRAD_LIGHT }).addTo(map);
+    layerRef.current = heat(points, { radius: 45, blur: 30, maxZoom: 15, max: 1.0, minOpacity: 0.35, gradient: dark ? GRAD_DARK : GRAD_LIGHT }).addTo(map);
     return () => { if (layerRef.current) { map.removeLayer(layerRef.current); layerRef.current = null; } };
   }, [map, points, loaded, dark]);
 
@@ -89,17 +89,22 @@ export default function ZonesHeatmapCard({
     const max = Math.max(1, ...pins.map((p) => p.totalCents || 0));
     return pins
       .filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && !(p.latitude === 0 && p.longitude === 0))
-      .map((p) => [p.latitude, p.longitude, Math.max(0.05, (p.totalCents || 0) / max)] as [number, number, number]);
+      .map((p) => [p.latitude, p.longitude, Math.max(0.35, (p.totalCents || 0) / max)] as [number, number, number]);
   }, [q.data]);
+
+  const count = points.length;
 
   return (
     <div className="flex flex-col">
       <div className="flex items-end justify-between gap-3 px-6 pb-3 border-b border-border">
-        <div className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary leading-none">{fr ? 'Carte thermique du revenu' : 'Revenue heatmap'}</div>
+        <div className="flex items-baseline gap-2">
+          <div className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary leading-none">{fr ? 'Carte thermique du revenu' : 'Revenue heatmap'}</div>
+          {!q.isLoading && <span className="text-[11.5px] font-semibold text-text-tertiary">· {count} {fr ? 'jobs géocodés' : 'geocoded jobs'}</span>}
+        </div>
         <PeriodSelector value={period} onChange={onPeriod} />
       </div>
 
-      <div className="relative mt-4 h-[420px] rounded-xl overflow-hidden border border-border">
+      <div className="relative isolate mt-4 h-[420px] rounded-xl overflow-hidden border border-border">
         <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="h-full w-full" zoomControl={false} attributionControl={false} style={{ background: dark ? '#0a0a0a' : '#f0f0f0' }}>
           <TileLayer url={dark ? TILE_DARK : TILE_LIGHT} attribution={TILE_ATTR} maxZoom={19} />
           <HeatLayer points={points} dark={dark} />
