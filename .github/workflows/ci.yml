@@ -41,6 +41,35 @@ jobs:
       - name: Build (vite)
         run: npm run build
 
+  # Cross-tenant RLS isolation — impersonates authenticated users + anon and
+  # asserts no relation leaks another org (reads, anon, child tables, writes).
+  # Catches the class of bug fixed 2026-07-08 (properties_active, team_members…).
+  # Set the RLS_TEST_DB_URL secret to a STAGING DB seeded with >=2 orgs to enable;
+  # skips (green) until then, fails the build on any leak once wired.
+  rls-isolation:
+    name: RLS cross-tenant isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: RLS isolation test
+        env:
+          DB_URL: ${{ secrets.RLS_TEST_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then
+            echo "::warning::RLS_TEST_DB_URL not set — skipping cross-tenant isolation test. Add a staging (>=2 orgs) DB connection string as the RLS_TEST_DB_URL repo secret to enable."
+            exit 0
+          fi
+          npm run test:rls
+
   # Non-blocking: surfaces vulnerable dependencies without failing the merge.
   # Promote to blocking later by removing continue-on-error.
   audit:
