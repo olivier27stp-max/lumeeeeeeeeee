@@ -1454,8 +1454,11 @@ async function handleCheckoutSessionCompleted(
     return;
   }
 
-  const userEmail = meta.email || '';
-  const fullName = meta.full_name || '';
+  // Email/name come from session metadata (app-driven checkout) OR from what
+  // Stripe collected at payment (reusable Payment Links, where the email/name
+  // aren't known when the link is created).
+  const userEmail = meta.email || session.customer_details?.email || '';
+  const fullName = meta.full_name || session.customer_details?.name || '';
   const companyName = meta.company_name || '';
   const planId = meta.plan_id || '';
   const planSlug = meta.plan_slug || '';
