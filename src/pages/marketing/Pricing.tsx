@@ -10,10 +10,10 @@ const PLANS = [
     users: 'Includes 3 users',
     extraUserPrice: '+$35/extra user/mo',
     offices: '1 office',
-    originalPrice: 150,
-    price: 105,
+    monthlyPrice: 150,
+    annualFullYr: 1530,
+    annualFirstYr: 1300,
     desc: 'Perfect for small teams getting started and staying organized.',
-    promoNote: 'For 3 months, then $150/mo',
     features: [
       'CRM dashboard',
       'Client management + client portal',
@@ -35,11 +35,11 @@ const PLANS = [
     extraUserPrice: '+$30/extra user/mo',
     offices: '2 offices',
     extraOfficePrice: '+$100/extra office',
-    originalPrice: 340,
-    price: 240,
+    monthlyPrice: 340,
+    annualFullYr: 3468,
+    annualFirstYr: 2948,
     badge: 'Most Popular',
     desc: 'Built for growing teams that want to automate and scale faster.',
-    promoNote: 'For 3 months, then $340/mo',
     features: [
       'Everything in Minimum',
       'Lume AI Agent (voice + unlimited)',
@@ -69,10 +69,10 @@ const PLANS = [
     extraUserPrice: '+$25/extra user/mo',
     offices: '5 offices',
     extraOfficePrice: '+$100/extra office',
-    originalPrice: 495,
-    price: 360,
+    monthlyPrice: 495,
+    annualFullYr: 5049,
+    annualFirstYr: 4292,
     desc: 'For high-performance teams that want full automation and control.',
-    promoNote: 'For 3 months, then $495/mo',
     features: [
       'Everything in Scale',
       'Multi-team management',
@@ -206,18 +206,20 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
 
                 {/* Price */}
                 <div className="mb-1">
-                  <span className="text-base text-text-secondary line-through mr-2">
-                    ${annual ? Math.round(plan.originalPrice * 0.85) : plan.originalPrice}
-                  </span>
+                  {annual && (
+                    <span className="text-base text-text-secondary line-through mr-2">
+                      ${Math.round(plan.annualFullYr / 12)}
+                    </span>
+                  )}
                   <span className="text-4xl font-bold tabular-nums text-text-primary">
-                    ${annual ? Math.round(plan.price * 0.85) : plan.price}
+                    ${annual ? Math.round(plan.annualFirstYr / 12) : plan.monthlyPrice}
                   </span>
                   <span className="text-sm font-normal text-text-secondary">/mo</span>
                 </div>
                 <p className="text-[11px] text-text-secondary mb-5">
                   {annual
-                    ? `Billed annually at $${Math.round(plan.price * 0.85 * 12)}/yr`
-                    : plan.promoNote}
+                    ? `$${plan.annualFirstYr.toLocaleString()} billed for year one, then $${plan.annualFullYr.toLocaleString()}/yr`
+                    : 'Billed monthly · cancel anytime'}
                 </p>
 
                 {/* Divider */}
