@@ -19,7 +19,8 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:apply": "tsx scripts/apply-sql.ts"
+    "db:apply": "tsx scripts/apply-sql.ts",
+    "test:rls": "tsx scripts/test-rls-isolation.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
