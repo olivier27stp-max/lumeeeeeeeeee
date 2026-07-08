@@ -25,7 +25,7 @@ const PLANS = [
       'Mobile access',
       'Basic reporting',
     ],
-    cta: 'Start Now',
+    cta: 'Book a demo',
     featured: false,
   },
   {
@@ -59,7 +59,7 @@ const PLANS = [
       'Marketplace integrations & webhooks',
       'Custom request forms',
     ],
-    cta: 'Start Now',
+    cta: 'Book a demo',
     featured: true,
   },
   {
@@ -82,7 +82,7 @@ const PLANS = [
       'Premium support',
       'Dedicated onboarding specialist',
     ],
-    cta: 'Start Now',
+    cta: 'Book a demo',
     featured: false,
   },
 ];
@@ -239,10 +239,10 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
                   ))}
                 </ul>
 
-                {/* CTA */}
+                {/* CTA — demo-only: no direct self-serve checkout from the landing */}
                 <div className="mt-8">
                   <button
-                    onClick={() => window.location.assign(`/checkout?plan=${plan.slug}&interval=${annual ? 'yearly' : 'monthly'}`)}
+                    onClick={() => setDemoOpen(true)}
                     className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
                       plan.featured
                         ? 'bg-[#1F5F4F] text-white hover:bg-[#174a3d]'
@@ -251,12 +251,6 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
                   >
                     {plan.cta}
                     <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                  </button>
-                  <button
-                    onClick={() => setDemoOpen(true)}
-                    className="mt-2 w-full text-[12px] text-text-tertiary hover:text-text-primary underline"
-                  >
-                    Or book a demo first
                   </button>
                 </div>
               </motion.div>
