@@ -220,7 +220,7 @@ export default function NewClient() {
 
   const fieldLabel = 'text-xs font-medium text-text-tertiary';
   const sectionTitle = 'text-[15px] font-bold tracking-tight text-text-primary';
-  const squareButton = 'h-9 w-9 shrink-0 rounded-lg border border-border bg-surface-card flex items-center justify-center text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors';
+  const inlineIconButton = 'shrink-0 p-1.5 my-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors';
   // Input bar hosting an inline label dropdown (phone / email rows).
   const inlineBar = 'glass-input w-full flex items-center gap-2';
   const inlineBarStyle: React.CSSProperties = { paddingTop: 0, paddingBottom: 0, paddingRight: '0.5rem' };
@@ -295,47 +295,41 @@ export default function NewClient() {
             </div>
             <div className="space-y-2">
               <label className={fieldLabel}>{fr ? 'Numéro de téléphone' : 'Phone number'}</label>
+              {/* Same bar as the email one below — the add/remove controls live
+                  inside the bar so both bars stay pixel-identical in width. */}
               <div className="space-y-2">
-                {phones.map((row) => (
-                  <div key={row.id} className="flex items-center gap-2">
-                    <div className={inlineBar} style={inlineBarStyle}>
-                      <input
-                        type="tel"
-                        value={row.number}
-                        onChange={(e) => patchPhone(row.id, { number: e.target.value })}
-                        className="flex-1 min-w-0 bg-transparent border-none outline-none py-[0.5625rem] text-[13px]"
-                        placeholder={fr ? 'Numéro de téléphone' : 'Phone number'}
-                      />
-                      {row.number.trim() && (
-                        <div className="relative flex items-center shrink-0 border-l border-border pl-2 my-1.5">
-                          <select
-                            value={row.label}
-                            onChange={(e) => patchPhone(row.id, { label: e.target.value as ClientPhone['label'] })}
-                            className="appearance-none bg-transparent border-none outline-none pr-4 text-[12px] font-medium text-text-tertiary cursor-pointer"
-                          >
-                            {PHONE_LABELS.map((label) => (
-                              <option key={label} value={label}>{phoneLabelText(label)}</option>
-                            ))}
-                          </select>
-                          <ChevronDown size={12} className="absolute right-0 pointer-events-none text-text-tertiary" />
-                        </div>
-                      )}
-                    </div>
+                {phones.map((row, index) => (
+                  <div key={row.id} className={inlineBar} style={inlineBarStyle}>
+                    <input
+                      type="tel"
+                      value={row.number}
+                      onChange={(e) => patchPhone(row.id, { number: e.target.value })}
+                      className="flex-1 min-w-0 bg-transparent border-none outline-none py-[0.5625rem] text-[13px]"
+                      placeholder={fr ? 'Numéro de téléphone' : 'Phone number'}
+                    />
                     {row.number.trim() && (
-                      <>
-                        <button type="button" onClick={addPhone} className={squareButton} title={fr ? 'Ajouter un numéro' : 'Add another number'}>
-                          <Plus size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removePhone(row.id)}
-                          disabled={phones.length === 1}
-                          className={`${squareButton} disabled:opacity-35 disabled:cursor-default disabled:hover:bg-surface-card`}
-                          title={fr ? 'Supprimer ce numéro' : 'Remove this number'}
+                      <div className="relative flex items-center shrink-0 border-l border-border pl-2 my-1.5">
+                        <select
+                          value={row.label}
+                          onChange={(e) => patchPhone(row.id, { label: e.target.value as ClientPhone['label'] })}
+                          className="appearance-none bg-transparent border-none outline-none pr-4 text-[12px] font-medium text-text-tertiary cursor-pointer"
                         >
-                          <Trash2 size={15} />
-                        </button>
-                      </>
+                          {PHONE_LABELS.map((label) => (
+                            <option key={label} value={label}>{phoneLabelText(label)}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={12} className="absolute right-0 pointer-events-none text-text-tertiary" />
+                      </div>
+                    )}
+                    {row.number.trim() && index === phones.length - 1 && (
+                      <button type="button" onClick={addPhone} className={inlineIconButton} title={fr ? 'Ajouter un numéro' : 'Add another number'}>
+                        <Plus size={14} />
+                      </button>
+                    )}
+                    {phones.length > 1 && (
+                      <button type="button" onClick={() => removePhone(row.id)} className={inlineIconButton} title={fr ? 'Supprimer ce numéro' : 'Remove this number'}>
+                        <Trash2 size={14} />
+                      </button>
                     )}
                   </div>
                 ))}
