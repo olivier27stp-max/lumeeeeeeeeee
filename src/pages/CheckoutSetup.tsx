@@ -345,10 +345,11 @@ const CSS = `
 .cs-opt{font-weight:600;color:var(--faint);text-transform:none;letter-spacing:0}
 .cs-req{color:var(--ink)}
 .cs-field{position:relative}
-.cs-root input,.cs-root select{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:11px;font-size:14.5px;background:#fdfdfd;color:var(--ink);font-family:inherit;-webkit-appearance:none;appearance:none}
+.cs-root input:not([type=checkbox]),.cs-root select{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:11px;font-size:14.5px;background:#fdfdfd;color:var(--ink);font-family:inherit;-webkit-appearance:none;appearance:none}
 .cs-root select{background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="%2378787f" stroke-width="2" stroke-linecap="round"><path d="M6 8l4 4 4-4"/></svg>');background-repeat:no-repeat;background-position:right 10px center}
-.cs-root input:focus,.cs-root select:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(17,17,20,.08);background:#fff}
+.cs-root input:not([type=checkbox]):focus,.cs-root select:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(17,17,20,.08);background:#fff}
 .cs-root input[readonly]{background:#f3f3f4;color:var(--muted)}
+.cs-addr input{padding-left:34px !important}
 .cs-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;padding:7px 9px;font-family:inherit;text-transform:uppercase;letter-spacing:.04em}
 .cs-hint{font-size:11.5px;color:var(--muted);margin-top:6px}
 .cs-logo-up{display:flex;align-items:center;gap:13px}
@@ -366,7 +367,7 @@ const CSS = `
 .cs-lp-body{padding:16px 18px}
 .cs-lp-body p{font-size:13px;color:var(--ink-2);margin:0 0 14px;line-height:1.55}
 .cs-toggle{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:600;color:var(--ink);text-transform:none;letter-spacing:0;cursor:pointer}
-.cs-toggle input{width:auto;margin:0}
+.cs-toggle input{width:18px;height:18px;accent-color:#111114;cursor:pointer;flex:none;margin:0}
 .cs-powered{display:flex;align-items:center;gap:6px;margin-top:14px;padding-top:13px;border-top:1px solid var(--line-2);font-size:11.5px;color:var(--faint)}
 .cs-powered svg{width:13px;height:13px}
 .cs-tax{margin-top:18px;padding-top:18px;border-top:1px solid var(--line-2)}
