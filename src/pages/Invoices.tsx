@@ -6,7 +6,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowUpDown, ChevronLeft, ChevronRight, Download,
+  ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Download,
   Plus, Search, MoreHorizontal, Send, CheckCircle2, Copy,
   Trash2, Eye, FileText, DollarSign, Clock, AlertCircle,
   X, Receipt,
@@ -67,11 +67,16 @@ function parsePage(raw: string | null) {
   const v = Number(raw || '1');
   return Number.isFinite(v) ? Math.max(1, Math.trunc(v)) : 1;
 }
-function parsePeriod(raw: string | null): InvoiceStatsPeriod {
-  const v = (raw || '').toLowerCase();
-  if (v === 'all_time' || v === 'this_year' || v === 'this_week') return v;
-  return 'this_month';
-}
+// ─── Period options for the status total boxes ─────────────────
+
+type StatBoxKey = 'paid' | 'awaiting' | 'past_due';
+
+const PERIOD_OPTIONS: Array<{ value: InvoiceStatsPeriod; fr: string; en: string }> = [
+  { value: 'all_time', fr: 'Tout le temps', en: 'All Time' },
+  { value: 'this_year', fr: 'Cette année', en: 'This Year' },
+  { value: 'this_month', fr: 'Ce mois-ci', en: 'This Month' },
+  { value: 'this_week', fr: 'Cette semaine', en: 'This Week' },
+];
 
 // ─── Invoice status labels (shared by the filter pill) ─────────
 
@@ -124,7 +129,6 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
   const status = parseStatus(searchParams.get('status'));
   const sort = parseSort(searchParams.get('sort'));
   const page = parsePage(searchParams.get('page'));
-  const period = parsePeriod(searchParams.get('period'));
   const q = (searchParams.get('q') || '').trim();
   const salesperson = (searchParams.get('sp') || 'All').trim() || 'All';
 
@@ -158,16 +162,25 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
   });
 
   // Rows for the status total boxes — period filtering happens client-side
-  // so switching the period is instant.
+  // so switching a box's period is instant. Each box has its own period.
   const statsQuery = useQuery({
     queryKey: ['invoiceStatusTotals'],
     queryFn: fetchInvoiceStatsRows,
     staleTime: 30_000,
   });
-  const statusTotals = useMemo(
-    () => computeInvoiceStatusTotals(statsQuery.data || [], period),
-    [statsQuery.data, period],
-  );
+  const [boxPeriods, setBoxPeriods] = useState<Record<StatBoxKey, InvoiceStatsPeriod>>({
+    paid: 'this_month',
+    awaiting: 'this_month',
+    past_due: 'this_month',
+  });
+  const statusTotals = useMemo(() => {
+    const statsRows = statsQuery.data || [];
+    return {
+      paid: computeInvoiceStatusTotals(statsRows, boxPeriods.paid).paid,
+      awaiting: computeInvoiceStatusTotals(statsRows, boxPeriods.awaiting).awaiting,
+      past_due: computeInvoiceStatusTotals(statsRows, boxPeriods.past_due).pastDue,
+    };
+  }, [statsQuery.data, boxPeriods]);
 
   const invoicesQuery = useQuery({
     queryKey: ['invoicesTable', status, sort, page, q, salesperson],
@@ -273,12 +286,6 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     updateParams((next) => {
       if (sp === 'All') next.delete('sp'); else next.set('sp', sp);
       next.delete('page');
-    });
-  }
-
-  function applyPeriod(p: InvoiceStatsPeriod) {
-    updateParams((next) => {
-      if (p === 'this_month') next.delete('period'); else next.set('period', p);
     });
   }
 
@@ -437,12 +444,13 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
   };
 
   // ─── Status total boxes (Paid / Awaiting Payment / Past Due) ──
+  // Header = the same status bubble (StatusBadge) as the table's Status column.
 
   const statBoxes = useMemo(() => [
-    { key: 'paid' as const, label: fr ? 'Payées' : 'Paid', dot: 'bg-success', filter: 'paid' as InvoiceStatusFilter, ...statusTotals.paid },
-    { key: 'awaiting' as const, label: fr ? 'En attente de paiement' : 'Awaiting Payment', dot: 'bg-warning', filter: 'sent_not_due' as InvoiceStatusFilter, ...statusTotals.awaiting },
-    { key: 'past_due' as const, label: fr ? 'En retard' : 'Past Due', dot: 'bg-danger', filter: 'past_due' as InvoiceStatusFilter, ...statusTotals.pastDue },
-  ], [statusTotals, fr]);
+    { key: 'paid' as const, badge: 'paid', filter: 'paid' as InvoiceStatusFilter, ...statusTotals.paid },
+    { key: 'awaiting' as const, badge: 'sent_not_due', filter: 'sent_not_due' as InvoiceStatusFilter, ...statusTotals.awaiting },
+    { key: 'past_due' as const, badge: 'past_due', filter: 'past_due' as InvoiceStatusFilter, ...statusTotals.past_due },
+  ], [statusTotals]);
 
   // ─── Sort icons ────────────────────────────────────────────
 
@@ -471,51 +479,49 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
         </button>
       </div>
 
-      {/* ── STATUS TOTAL BOXES + PERIOD FILTER ── */}
+      {/* ── STATUS TOTAL BOXES (badge + amount + per-box period) ── */}
       <div className="flex items-stretch gap-3 mt-4">
         {statBoxes.map(box => {
           const isActive = status === box.filter;
           return (
-            <button
+            <div
               key={box.key}
+              role="button"
+              tabIndex={0}
               onClick={() => applyStatus(isActive ? 'all' : box.filter)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applyStatus(isActive ? 'all' : box.filter); }
+              }}
               className={cn(
-                'flex-1 min-w-0 text-left rounded-xl border p-4 bg-surface-card transition-all',
+                'flex-1 min-w-0 rounded-xl border p-4 bg-surface-card cursor-pointer transition-all',
                 isActive
                   ? 'border-primary ring-1 ring-primary'
                   : 'border-outline hover:bg-surface-secondary/60'
               )}
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className={cn('w-2 h-2 rounded-full shrink-0', box.dot)} />
-                <span className="text-[13px] font-medium text-text-secondary truncate">{box.label}</span>
+              <div className="flex items-center justify-between gap-2">
+                <StatusBadge status={box.badge} />
                 {!statsQuery.isLoading && (
-                  <span className="ml-auto text-[12px] text-text-muted tabular-nums shrink-0">{box.count}</span>
+                  <span className="text-[12px] text-text-muted tabular-nums shrink-0">{box.count}</span>
                 )}
               </div>
               {statsQuery.isLoading ? (
-                <div className="mt-2.5 h-7 w-24 bg-surface-tertiary rounded animate-pulse" />
+                <div className="mt-4 h-7 w-24 bg-surface-tertiary rounded animate-pulse" />
               ) : (
-                <p className="mt-1.5 text-[22px] font-bold text-text-primary tabular-nums leading-tight">
+                <p className="mt-3 text-[24px] font-bold text-text-primary tabular-nums leading-tight">
                   {formatMoneyFromCents(box.cents)}
                 </p>
               )}
-            </button>
+              <div className="mt-2.5">
+                <PeriodSelect
+                  value={boxPeriods[box.key]}
+                  onChange={(p) => setBoxPeriods(prev => ({ ...prev, [box.key]: p }))}
+                  fr={fr}
+                />
+              </div>
+            </div>
           );
         })}
-        <div className="self-center shrink-0">
-          <FilterPill
-            label={fr ? 'Période' : 'Period'}
-            value={period}
-            onChange={(v) => applyPeriod(v as InvoiceStatsPeriod)}
-            options={[
-              { value: 'all_time', label: fr ? 'Tout le temps' : 'All Time' },
-              { value: 'this_year', label: fr ? 'Cette année' : 'This Year' },
-              { value: 'this_month', label: fr ? 'Ce mois-ci' : 'This Month' },
-              { value: 'this_week', label: fr ? 'Cette semaine' : 'This Week' },
-            ]}
-          />
-        </div>
       </div>
 
       {/* ── TOOLBAR (Jobs/Clients pattern) ── */}
@@ -867,6 +873,60 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
 }
 
 // ─── Sub-components ────────────────────────────────────────────
+
+/**
+ * Compact period dropdown living inside each status total box. Clicks are
+ * stopped so they don't toggle the box's status filter.
+ */
+function PeriodSelect({ value, onChange, fr }: {
+  value: InvoiceStatsPeriod; onChange: (p: InvoiceStatsPeriod) => void; fr: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const selected = PERIOD_OPTIONS.find(o => o.value === value) || PERIOD_OPTIONS[2];
+
+  return (
+    <div ref={ref} className="relative inline-block" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1 h-7 px-2 -ml-2 rounded-md text-[12px] font-medium text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
+      >
+        {fr ? selected.fr : selected.en}
+        <ChevronDown size={12} className={cn('transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 w-44 bg-surface-card border border-outline rounded-md shadow-lg z-50 py-1">
+          {PERIOD_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={cn(
+                'w-full text-left px-3 py-2 text-[13px] transition-colors',
+                value === opt.value
+                  ? 'bg-surface-tertiary font-medium text-text-primary'
+                  : 'text-text-secondary hover:bg-surface-secondary'
+              )}
+            >
+              {fr ? opt.fr : opt.en}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ActionMenuItem({ icon, label, onClick, danger }: {
   icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean;
