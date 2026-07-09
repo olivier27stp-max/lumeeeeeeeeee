@@ -4,6 +4,7 @@ import { Loader2, CheckCircle2, Mail, MessageSquare } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { confirmCheckout, type CheckoutStatus } from '../lib/billingApi';
 import { fetchChannels } from '../lib/communicationsApi';
+import CheckoutSetup from './CheckoutSetup';
 
 /**
  * CheckoutSuccess — Polls for webhook-confirmed subscription status.
@@ -16,6 +17,7 @@ export default function CheckoutSuccess() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [status, setStatus] = useState<'polling' | 'success' | 'error'>('polling');
+  const [setupData, setSetupData] = useState<CheckoutStatus | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [smsNumber, setSmsNumber] = useState<string | null>(null);
@@ -77,6 +79,13 @@ export default function CheckoutSuccess() {
           const { data: { session } } = await supabase.auth.getSession();
           const signedIn = !!session;
 
+          // Payment-link buyer with no session + no password yet → show the
+          // account setup form instead of bouncing to a dashboard they can't reach.
+          if (!signedIn && result.needsPassword) {
+            if (!cancelled) setSetupData(result);
+            return;
+          }
+
           // Clean up sessionStorage
           ['onb_step', 'onb_plan', 'onb_interval', 'onb_name', 'onb_email', 'onb_token', 'onb_uid']
             .forEach(k => sessionStorage.removeItem(k));
@@ -105,6 +114,13 @@ export default function CheckoutSuccess() {
           // (password is no longer persisted in sessionStorage for security).
           const { data: { session } } = await supabase.auth.getSession();
           const signedIn = !!session;
+
+          // Payment-link buyer with no session + no password yet → show the
+          // account setup form instead of bouncing to a dashboard they can't reach.
+          if (!signedIn && result.needsPassword) {
+            if (!cancelled) setSetupData(result);
+            return;
+          }
           ['onb_step', 'onb_plan', 'onb_interval', 'onb_name', 'onb_email', 'onb_token', 'onb_uid']
             .forEach(k => sessionStorage.removeItem(k));
 
@@ -131,6 +147,19 @@ export default function CheckoutSuccess() {
       clearTimeout(timer);
     };
   }, [params]);
+
+  if (setupData) {
+    return (
+      <CheckoutSetup
+        sessionId={params.get('session_id') || ''}
+        email={setupData.email || ''}
+        planName={setupData.planName}
+        amountCents={setupData.amountCents}
+        interval={setupData.interval}
+        currency={setupData.currency}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-white">

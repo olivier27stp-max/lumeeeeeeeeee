@@ -1481,15 +1481,22 @@ async function handleCheckoutSessionCompleted(
   // ── 3. Create or find user account ──
   let userId: string;
   const existingUser: any = await findUserByEmail(admin, userEmail);
+  // New account = payment-link buyer: created WITHOUT a password (they set it on
+  // the success page). Existing = came through in-app onboarding (already has a
+  // password + a live session).
+  const isNewUser = !existingUser;
 
   if (existingUser) {
     userId = existingUser.id;
-    // Confirm email if not already confirmed
-    if (!existingUser.email_confirmed_at) {
-      await (admin.auth.admin as any).updateUserById(userId, { email_confirm: true });
-    }
+    // Confirm email + mark the account as already having a password, so the
+    // post-payment setup page never re-prompts an onboarding buyer.
+    await (admin.auth.admin as any).updateUserById(userId, {
+      email_confirm: true,
+      user_metadata: { ...(existingUser.user_metadata || {}), password_set: true },
+    });
   } else {
-    // Create new user with confirmed email (they paid, so we trust the email)
+    // Create new user with confirmed email (they paid, so we trust the email).
+    // No password yet — password_set stays unset until they claim the account.
     const { data: newUser, error: createErr } = await admin.auth.admin.createUser({
       email: userEmail,
       email_confirm: true,
@@ -1676,6 +1683,27 @@ async function handleCheckoutSessionCompleted(
   } catch (emailErr: any) {
     // Receipt email failure must NEVER fail the subscription activation
     console.error('[webhook/checkout] Receipt email error (non-blocking):', emailErr.message);
+  }
+
+  // ── 12. Welcome email for payment-link buyers (no password yet) ──
+  // Gives them a durable link back to the setup page if they closed the tab.
+  if (isNewUser) {
+    try {
+      const { sendEmail } = await import('../lib/mailer');
+      const setupUrl = `${frontendUrl}/checkout/success?session_id=${encodeURIComponent(sessionId)}`;
+      await sendEmail({
+        to: userEmail,
+        subject: 'Bienvenue chez Lume — configure ton compte',
+        html: `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;color:#111114">
+  <h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em;margin:0 0 8px">Paiement confirmé 🎉</h1>
+  <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 22px">Ton abonnement <strong>${plan.name}</strong> est actif. Il te reste une étape&nbsp;: créer ton mot de passe et remplir les infos de ton entreprise pour commencer à travailler.</p>
+  <a href="${setupUrl}" style="display:inline-block;background:#111114;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 26px;border-radius:12px">Configurer mon compte →</a>
+  <p style="font-size:12px;color:#999;line-height:1.6;margin:24px 0 0">Si le bouton ne fonctionne pas, copie ce lien&nbsp;:<br><span style="color:#555">${setupUrl}</span></p>
+</div>`,
+      });
+    } catch (welcomeErr: any) {
+      console.error('[webhook/checkout] Welcome email error (non-blocking):', welcomeErr.message);
+    }
   }
 
   console.log(`[webhook/checkout] Subscription activated for ${userEmail} — plan: ${plan.name}, org: ${orgId}`);
