@@ -724,6 +724,11 @@ export async function recordLoginAttempt(params: {
 
 /** Extract real client IP from request, handling proxies */
 export function extractIP(req: Request): string {
+  // With `trust proxy` configured (server/index.ts sets it to 1 hop for
+  // Railway's edge), Express computes req.ip as the real client address and
+  // discards spoofed X-Forwarded-For prefixes — so it's the authoritative,
+  // un-spoofable source. Only fall back to raw XFF parsing if req.ip is absent.
+  if (req.ip) return req.ip;
   const forwarded = req.headers['x-forwarded-for'];
   if (typeof forwarded === 'string') {
     return forwarded.split(',')[0].trim();
@@ -731,7 +736,7 @@ export function extractIP(req: Request): string {
   if (Array.isArray(forwarded)) {
     return forwarded[0].trim();
   }
-  return req.ip || req.socket.remoteAddress || '0.0.0.0';
+  return req.socket.remoteAddress || '0.0.0.0';
 }
 
 /**

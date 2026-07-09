@@ -150,6 +150,25 @@ router.post('/dsr/consent', async (req, res) => {
   if (typeof granted !== 'boolean') return res.status(400).json({ error: 'granted must be boolean' });
 
   const svc = getServiceClient();
+
+  // Integrity guard: this endpoint is intentionally public (cookie banner), so
+  // without a check anyone could inject forged rows into ANY org's consent
+  // journal. When an org_id is supplied, require the subject to actually belong
+  // to it — you can only record consent for a real subject of that tenant.
+  if (org_id) {
+    if (!/^[0-9a-f-]{36}$/i.test(String(org_id))) return res.status(400).json({ error: 'Invalid org_id' });
+    let belongs = false;
+    if (subject_type === 'user') {
+      const { data: m } = await svc.from('memberships').select('user_id').eq('user_id', subject_id).eq('org_id', org_id).maybeSingle();
+      belongs = !!m;
+    } else {
+      // 'client' and 'lead' both live in the clients table
+      const { data: c } = await svc.from('clients').select('id').eq('id', subject_id).eq('org_id', org_id).maybeSingle();
+      belongs = !!c;
+    }
+    if (!belongs) return res.status(403).json({ error: 'Subject does not belong to this organization.' });
+  }
+
   const { data, error } = await svc.rpc('record_consent', {
     p_subject_type: subject_type,
     p_subject_id: subject_id,
