@@ -1531,7 +1531,9 @@ async function handleCheckoutSessionCompleted(
       return;
     }
     orgId = newOrg.id;
-    await admin.from('memberships').insert({ user_id: userId, org_id: orgId, role: 'owner' });
+    // status:'active' is REQUIRED — CompanyContext only surfaces active memberships,
+    // so omitting it left payment-link buyers with "Aucune compagnie".
+    await admin.from('memberships').insert({ user_id: userId, org_id: orgId, role: 'owner', status: 'active', full_name: fullName || null });
   }
 
   // ── 5. Cancel any existing active subscriptions for this org ──
