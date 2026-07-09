@@ -321,18 +321,22 @@ export default function NewClient() {
                         </div>
                       )}
                     </div>
-                    <button type="button" onClick={addPhone} className={squareButton} title={fr ? 'Ajouter un numéro' : 'Add another number'}>
-                      <Plus size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removePhone(row.id)}
-                      disabled={phones.length === 1}
-                      className={`${squareButton} disabled:opacity-35 disabled:cursor-default disabled:hover:bg-surface-card`}
-                      title={fr ? 'Supprimer ce numéro' : 'Remove this number'}
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    {row.number.trim() && (
+                      <>
+                        <button type="button" onClick={addPhone} className={squareButton} title={fr ? 'Ajouter un numéro' : 'Add another number'}>
+                          <Plus size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removePhone(row.id)}
+                          disabled={phones.length === 1}
+                          className={`${squareButton} disabled:opacity-35 disabled:cursor-default disabled:hover:bg-surface-card`}
+                          title={fr ? 'Supprimer ce numéro' : 'Remove this number'}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
