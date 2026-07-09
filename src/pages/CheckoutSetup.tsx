@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { setInitialPassword, setupTaxRegion } from '../lib/billingApi';
 import { uploadFile, STORAGE_BUCKETS } from '../lib/storage';
+import { createConnectedAccount, createOnboardingLink } from '../lib/connectApi';
+import AddressAutocomplete, { type StructuredAddress } from '../components/AddressAutocomplete';
 
 /**
  * CheckoutSetup — post-payment account claim for payment-link buyers.
@@ -144,8 +146,22 @@ export default function CheckoutSetup({
       console.error('[CheckoutSetup] profile/tax save (non-blocking):', e);
     }
 
-    // Off you go. If they chose to activate payments, land on Payments settings.
-    window.location.href = activatePayments ? '/settings?tab=payments' : '/';
+    // If they opted in, launch Lume Payments (Stripe Connect) right away — create
+    // the connected account and send them straight into the hosted bank-connection
+    // flow. On any hiccup, fall back to Payments settings where they can retry.
+    if (activatePayments) {
+      try {
+        const country = taxKey.startsWith('US-') ? 'US' : 'CA';
+        await createConnectedAccount(country);
+        const { url } = await createOnboardingLink();
+        window.location.href = url;
+        return;
+      } catch {
+        window.location.href = '/settings?tab=payments';
+        return;
+      }
+    }
+    window.location.href = '/';
   }
 
   return (
@@ -200,7 +216,22 @@ export default function CheckoutSetup({
               <div><label>Téléphone <span className="cs-req">*</span></label><div className="cs-field"><input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(514) 555-0199" /></div></div>
               <div><label>Courriel entreprise</label><div className="cs-field"><input value={companyEmail} onChange={(e) => setCompanyEmail(e.target.value)} placeholder="info@..." /></div></div>
             </div>
-            <div><label>Adresse</label><div className="cs-field"><input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="1234 rue Sainte-Catherine" /></div></div>
+            <div><label>Adresse</label>
+              <div className="cs-field cs-addr">
+                <AddressAutocomplete
+                  value={address}
+                  onChange={setAddress}
+                  onSelect={(a: StructuredAddress) => {
+                    const line = [a.street_number, a.street_name].filter(Boolean).join(' ');
+                    setAddress(line || a.formatted_address);
+                    if (a.city) setCity(a.city);
+                    if (a.postal_code) setPostal(a.postal_code);
+                  }}
+                  placeholder="1234 rue Sainte-Catherine"
+                  hideStatusHint
+                />
+              </div>
+            </div>
             <div className="cs-row2">
               <div><label>Ville</label><div className="cs-field"><input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Montréal" /></div></div>
               <div><label>Code postal</label><div className="cs-field"><input value={postal} onChange={(e) => setPostal(e.target.value)} placeholder="H2X 1K4" /></div></div>
