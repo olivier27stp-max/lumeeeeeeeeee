@@ -110,7 +110,19 @@ async function requireAdmin(req: express.Request, res: express.Response) {
 /** Check if user can edit a specific course (admin/owner OR creator) */
 async function canEditCourse(userId: string, orgId: string, courseId: string): Promise<boolean> {
   const admin = getServiceClient();
-  // Check if admin/owner
+
+  // The course MUST belong to this org — otherwise deny outright. This is the
+  // tenant-isolation gate: without it, an admin/owner of org A could edit a
+  // course/lesson/module belonging to org B just by supplying its UUID.
+  const { data: course } = await admin
+    .from('courses')
+    .select('created_by, org_id')
+    .eq('id', courseId)
+    .maybeSingle();
+
+  if (!course || course.org_id !== orgId) return false;
+
+  // Admin/owner of the owning org can edit
   const { data: member } = await admin
     .from('memberships')
     .select('role')
@@ -120,15 +132,8 @@ async function canEditCourse(userId: string, orgId: string, courseId: string): P
 
   if (member && (member.role === 'owner' || member.role === 'admin')) return true;
 
-  // Check if creator
-  const { data: course } = await admin
-    .from('courses')
-    .select('created_by')
-    .eq('id', courseId)
-    .eq('org_id', orgId)
-    .maybeSingle();
-
-  return course?.created_by === userId;
+  // Otherwise, only the creator can edit
+  return course.created_by === userId;
 }
 
 /** Check if user can edit — returns auth or sends 403 */
@@ -708,8 +713,10 @@ router.put('/courses/:courseId/modules/reorder', async (req, res) => {
     const admin = getServiceClient();
     const { order } = req.body as { order: string[] };
 
+    // Scope each update to the course we validated edit rights on, so a caller
+    // can't slip another course's/org's module ids into `order`.
     for (let i = 0; i < order.length; i++) {
-      await admin.from('course_modules').update({ sort_order: i }).eq('id', order[i]);
+      await admin.from('course_modules').update({ sort_order: i }).eq('id', order[i]).eq('course_id', req.params.courseId);
     }
     return res.json({ ok: true });
   } catch (err: any) {
@@ -889,8 +896,10 @@ router.put('/courses/modules/:moduleId/lessons/reorder', async (req, res) => {
     if (!allowed) return res.status(403).json({ error: 'You do not have permission to edit this course.' });
 
     const { order } = req.body as { order: string[] };
+    // Scope each update to this module (whose course we validated), so a caller
+    // can't slip another module's/org's lesson ids into `order`.
     for (let i = 0; i < order.length; i++) {
-      await admin.from('course_lessons').update({ sort_order: i }).eq('id', order[i]);
+      await admin.from('course_lessons').update({ sort_order: i }).eq('id', order[i]).eq('module_id', req.params.moduleId);
     }
     return res.json({ ok: true });
   } catch (err: any) {
@@ -908,6 +917,10 @@ router.post('/courses/:id/assign', async (req, res) => {
     const auth = await requireAdmin(req, res);
     if (!auth) return;
     const admin = getServiceClient();
+
+    // The course being assigned must belong to the caller's org.
+    const { data: course } = await admin.from('courses').select('org_id').eq('id', req.params.id).maybeSingle();
+    if (!course || course.org_id !== auth.orgId) return res.status(403).json({ error: 'Forbidden.' });
 
     const { user_ids, team_ids } = req.body as { user_ids?: string[]; team_ids?: string[] };
     const rows: any[] = [];
@@ -935,6 +948,12 @@ router.delete('/courses/assignments/:id', async (req, res) => {
     const auth = await requireAdmin(req, res);
     if (!auth) return;
     const admin = getServiceClient();
+
+    // The assignment's course must belong to the caller's org before we delete it.
+    const { data: assignment } = await admin.from('course_assignments').select('course_id').eq('id', req.params.id).maybeSingle();
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found.' });
+    const { data: course } = await admin.from('courses').select('org_id').eq('id', assignment.course_id).maybeSingle();
+    if (!course || course.org_id !== auth.orgId) return res.status(403).json({ error: 'Forbidden.' });
 
     const { error } = await admin.from('course_assignments').delete().eq('id', req.params.id);
     if (error) throw error;
