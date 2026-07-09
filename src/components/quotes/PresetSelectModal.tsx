@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { motion } from 'motion/react';
 import {
-  FileText, Loader2, Package, X, ChevronRight, Plus, Image as ImageIcon,
+  FileText, Loader2, X, Plus, Check, Image as ImageIcon, Package,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { listQuotePresets } from '../../lib/quotePresetsApi';
@@ -16,156 +16,167 @@ interface PresetSelectModalProps {
   onClose: () => void;
 }
 
-function PresetPreviewPanel({ preset }: { preset: QuotePreset }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 4 }}
-      className="border-t border-outline bg-surface-secondary/30 p-4 space-y-3"
-    >
-      {/* Cover image */}
-      {preset.cover_image && (
-        <div className="rounded-lg overflow-hidden h-24 bg-surface-tertiary">
-          <img src={preset.cover_image} alt="" className="w-full h-full object-cover" />
-        </div>
-      )}
+/**
+ * Palette de 15 dégradés doux (sage / beige / tons terreux) assignés aux
+ * presets sans image de couverture. Au-delà de 15 presets, on recycle les
+ * mêmes couleurs (index % 15).
+ */
+const PRESET_GRADIENTS: Array<[string, string]> = [
+  ['#b8c4b0', '#d8d0c2'], // sauge → sable
+  ['#aeb9c4', '#d0d6dc'], // bleu-gris → brume
+  ['#cfc2a5', '#e4dcc9'], // blé → crème
+  ['#c4a99b', '#ddcdc2'], // argile → lin
+  ['#a8b8a2', '#ccd6c8'], // mousse → céladon
+  ['#b3b0c4', '#d5d3dd'], // lavande ardoise → lilas pâle
+  ['#a9bfbc', '#cfdcda'], // eucalyptus → écume
+  ['#c4b0b4', '#ddd0d3'], // vieux rose → poudre
+  ['#b5b89f', '#d6d7c5'], // olive → tilleul
+  ['#a4b1c2', '#c9d2dd'], // denim délavé → ciel gris
+  ['#c0b3a4', '#ded5ca'], // taupe chaud → grège
+  ['#adc0b3', '#d1ddd5'], // menthe grise → jade pâle
+  ['#bcaab8', '#d9ced7'], // mauve → rose cendré
+  ['#b8b8b4', '#d8d8d4'], // pierre → galet
+  ['#c9b8a0', '#e2d6c4'], // caramel doux → avoine
+];
 
-      {/* Description / Intro */}
-      {preset.intro_text && (
-        <p className="text-[11px] text-text-secondary leading-relaxed line-clamp-3">{preset.intro_text}</p>
-      )}
-
-      {/* Service lines preview */}
-      {preset.services.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary">Services</p>
-          {preset.services.slice(0, 4).map((s) => (
-            <div key={s.id} className="flex items-center justify-between text-[11px]">
-              <span className={cn('text-text-secondary truncate flex-1', s.is_optional && 'italic opacity-60')}>
-                {s.name}{s.is_optional ? ' (opt.)' : ''}
-              </span>
-              <span className="text-text-tertiary ml-2 shrink-0">x{s.quantity}</span>
-            </div>
-          ))}
-          {preset.services.length > 4 && (
-            <p className="text-[10px] text-text-tertiary">+{preset.services.length - 4} more</p>
-          )}
-        </div>
-      )}
-
-      {/* Notes */}
-      {preset.notes && (
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary">Notes</p>
-          <p className="text-[11px] text-text-secondary line-clamp-2 mt-0.5">{preset.notes}</p>
-        </div>
-      )}
-    </motion.div>
-  );
+function presetGradient(index: number): string {
+  const [from, to] = PRESET_GRADIENTS[index % PRESET_GRADIENTS.length];
+  return `linear-gradient(120deg, ${from}, ${to})`;
 }
+
+const BLANK_ID = '__blank__';
 
 export default function PresetSelectModal({
   isOpen, isFr, onSelectPreset, onStartFromScratch, onCreatePreset, onClose,
 }: PresetSelectModalProps) {
   const [presets, setPresets] = useState<QuotePreset[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string>(BLANK_ID);
 
   useEffect(() => {
     if (!isOpen) return;
     setLoading(true);
     listQuotePresets(true)
-      .then(setPresets)
+      .then((list) => {
+        setPresets(list);
+        setSelectedId(list.length > 0 ? list[0].id : BLANK_ID);
+      })
       .catch(() => setPresets([]))
       .finally(() => setLoading(false));
   }, [isOpen]);
 
+  const selectedIndex = useMemo(
+    () => presets.findIndex((p) => p.id === selectedId),
+    [presets, selectedId],
+  );
+  const selected = selectedIndex >= 0 ? presets[selectedIndex] : null;
+
   if (!isOpen) return null;
 
+  const handleConfirm = () => {
+    if (selected) onSelectPreset(selected);
+    else onStartFromScratch();
+  };
+
+  const outline = 'border-[#e8e8e8] dark:border-white/10';
+  const hoverFill = 'hover:bg-[#f5f5f5] dark:hover:bg-[#1c1c1f]';
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-6"
+      onClick={onClose}
+    >
       <motion.div
         initial={{ opacity: 0, y: 12, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 12, scale: 0.98 }}
         onClick={(e) => e.stopPropagation()}
-        className="modal-content max-w-lg max-h-[85vh] overflow-y-auto"
+        className={cn(
+          'w-full max-w-[780px] max-h-[86vh] flex flex-col overflow-hidden rounded-[20px] border bg-white dark:bg-[#0e0e11] shadow-[0_24px_64px_rgba(0,0,0,0.25)]',
+          outline,
+        )}
       >
         {/* Header */}
-        <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+        <div className={cn('px-6 pt-[22px] pb-[18px] flex items-start justify-between border-b', outline)}>
           <div>
-            <h2 className="text-[16px] font-bold text-text-primary">
+            <h2 className="text-[17px] font-extrabold tracking-[-0.2px] text-black dark:text-white">
               {isFr ? 'Nouveau devis' : 'New Quote'}
             </h2>
-            <p className="text-[12px] text-text-tertiary mt-0.5">
-              {isFr ? 'Choisissez un preset ou créez de zéro.' : 'Choose a preset or start from scratch.'}
+            <p className="text-[12.5px] mt-[3px] text-black dark:text-white">
+              {isFr ? "Choisissez un preset ou partez d'une page blanche." : 'Choose a preset or start from a blank page.'}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary">
-            <X size={16} />
+          <button
+            onClick={onClose}
+            className={cn('w-[30px] h-[30px] rounded-lg flex items-center justify-center text-black dark:text-white', hoverFill)}
+          >
+            <X size={15} />
           </button>
         </div>
 
-        <div className="px-5 pb-5 space-y-3">
-          {/* Create from scratch */}
-          <button onClick={onStartFromScratch}
-            className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-dashed border-outline hover:border-primary/40 hover:bg-primary/5 transition-all text-left group">
-            <div className="w-10 h-10 rounded-xl bg-surface-secondary group-hover:bg-primary/10 flex items-center justify-center transition-colors shrink-0">
-              <FileText size={18} className="text-text-tertiary group-hover:text-primary transition-colors" />
-            </div>
-            <div className="flex-1">
-              <p className="text-[14px] font-semibold text-text-primary">
-                {isFr ? 'Devis vierge' : 'Blank Quote'}
-              </p>
-              <p className="text-[11px] text-text-tertiary">
-                {isFr ? 'Commencer de zéro' : 'Start with a clean slate'}
-              </p>
-            </div>
-            <ChevronRight size={14} className="text-text-tertiary group-hover:text-primary transition-colors" />
-          </button>
+        <div className="flex flex-1 min-h-0">
+          {/* Colonne gauche — choix */}
+          <div className={cn('w-[316px] shrink-0 border-r overflow-y-auto p-3.5 pt-4 flex flex-col gap-1.5', outline)}>
+            <button
+              onClick={() => setSelectedId(BLANK_ID)}
+              className={cn(
+                'w-full flex items-center gap-3 p-2.5 rounded-xl border-[1.5px] text-left transition-colors',
+                selectedId === BLANK_ID
+                  ? 'border-black dark:border-white bg-[#f5f5f5] dark:bg-[#1c1c1f]'
+                  : cn('border-transparent', hoverFill),
+              )}
+            >
+              <div className={cn('w-10 h-10 rounded-[10px] border flex items-center justify-center shrink-0', outline)}>
+                <FileText size={16} className="text-black dark:text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13.5px] font-bold leading-tight text-black dark:text-white">
+                  {isFr ? 'Devis vierge' : 'Blank Quote'}
+                </p>
+                <p className="text-[11.5px] mt-0.5 text-black dark:text-white">
+                  {isFr ? 'Partir de zéro' : 'Start from scratch'}
+                </p>
+              </div>
+              <Check size={14} className={cn('shrink-0 text-black dark:text-white', selectedId === BLANK_ID ? 'opacity-100' : 'opacity-0')} />
+            </button>
 
-          {/* Presets */}
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 size={20} className="animate-spin text-text-tertiary" />
-            </div>
-          ) : presets.length === 0 ? (
-            <div className="text-center py-6 text-[12px] text-text-tertiary">
-              {isFr ? 'Aucun preset disponible.' : 'No presets available.'}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary px-1 mb-1.5">
-                {isFr ? 'Presets disponibles' : 'Available Presets'}
+            {loading ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 size={20} className="animate-spin text-black dark:text-white" />
+              </div>
+            ) : presets.length === 0 ? (
+              <p className="text-center py-8 text-[12px] text-black dark:text-white">
+                {isFr ? 'Aucun preset disponible.' : 'No presets available.'}
               </p>
-              {presets.map((preset) => {
-                const serviceCount = preset.services.length;
-
-                return (
-                  <div key={preset.id} className="rounded-xl border border-outline overflow-hidden">
+            ) : (
+              <>
+                <p className="text-[10px] font-extrabold uppercase tracking-[1.4px] px-2 pt-3 pb-1 text-black dark:text-white">
+                  Presets
+                </p>
+                {presets.map((preset, i) => {
+                  const isSelected = selectedId === preset.id;
+                  return (
                     <button
-                      onClick={() => onSelectPreset(preset)}
-                      onMouseEnter={() => setHoveredId(preset.id)}
-                      onMouseLeave={() => setHoveredId(null)}
-                      className="w-full flex items-center gap-3 p-3 hover:bg-primary/5 transition-all text-left group"
+                      key={preset.id}
+                      onClick={() => setSelectedId(preset.id)}
+                      className={cn(
+                        'w-full flex items-center gap-3 p-2.5 rounded-xl border-[1.5px] text-left transition-colors',
+                        isSelected
+                          ? 'border-black dark:border-white bg-[#f5f5f5] dark:bg-[#1c1c1f]'
+                          : cn('border-transparent', hoverFill),
+                      )}
                     >
-                      {/* Cover image or icon */}
                       {preset.cover_image ? (
-                        <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0">
-                          <img src={preset.cover_image} alt="" className="w-full h-full object-cover" />
-                        </div>
+                        <img src={preset.cover_image} alt="" className="w-10 h-10 rounded-[10px] object-cover shrink-0" />
                       ) : (
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                          <Package size={16} className="text-primary" />
-                        </div>
+                        <div className="w-10 h-10 rounded-[10px] shrink-0" style={{ background: presetGradient(i) }} />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-semibold text-text-primary truncate">{preset.name}</p>
-                        <div className="flex items-center gap-3 mt-0.5 text-[11px] text-text-tertiary">
+                        <p className="text-[13.5px] font-bold leading-tight truncate text-black dark:text-white">{preset.name}</p>
+                        <p className="text-[11.5px] mt-0.5 flex items-center gap-2 text-black dark:text-white">
                           <span className="flex items-center gap-1">
                             <Package size={10} />
-                            {serviceCount} {serviceCount !== 1 ? 'services' : 'service'}
+                            {preset.services.length} service{preset.services.length !== 1 ? 's' : ''}
                           </span>
                           {preset.images.length > 0 && (
                             <span className="flex items-center gap-1">
@@ -173,27 +184,95 @@ export default function PresetSelectModal({
                               {preset.images.length}
                             </span>
                           )}
-                        </div>
+                        </p>
                       </div>
-                      <ChevronRight size={14} className="text-text-tertiary group-hover:text-primary transition-colors shrink-0" />
+                      <Check size={14} className={cn('shrink-0 text-black dark:text-white', isSelected ? 'opacity-100' : 'opacity-0')} />
                     </button>
-                    <AnimatePresence>
-                      {hoveredId === preset.id && <PresetPreviewPanel preset={preset} />}
-                    </AnimatePresence>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Create new preset */}
-          <div className="pt-2 border-t border-outline/50">
-            <button onClick={onCreatePreset}
-              className="w-full flex items-center justify-center gap-2 py-2.5 text-[12px] font-medium text-primary hover:text-primary-hover transition-colors">
-              <Plus size={14} />
-              {isFr ? 'Créer un nouveau preset' : 'Create New Preset'}
-            </button>
+                  );
+                })}
+              </>
+            )}
           </div>
+
+          {/* Colonne droite — aperçu */}
+          <div className="flex-1 overflow-y-auto bg-[#fafafa] dark:bg-[#131316] px-[22px] py-5">
+            {selected ? (
+              <>
+                {selected.cover_image ? (
+                  <div className="h-[110px] rounded-xl mb-4 overflow-hidden">
+                    <img src={selected.cover_image} alt="" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="h-[110px] rounded-xl mb-4" style={{ background: presetGradient(selectedIndex) }} />
+                )}
+                <p className="text-[16px] font-extrabold tracking-[-0.2px] text-black dark:text-white">{selected.name}</p>
+                {selected.intro_text && (
+                  <p className="text-[12.5px] leading-[1.55] mt-1.5 text-black dark:text-white">{selected.intro_text}</p>
+                )}
+                {selected.services.length > 0 && (
+                  <>
+                    <p className="text-[10px] font-extrabold uppercase tracking-[1.4px] mt-[18px] mb-2 text-black dark:text-white">Services</p>
+                    {selected.services.map((s, i) => (
+                      <div
+                        key={s.id}
+                        className={cn(
+                          'flex items-center justify-between py-2 text-[12.5px] text-black dark:text-white border-b',
+                          outline,
+                          i === selected.services.length - 1 && 'border-b-0',
+                        )}
+                      >
+                        <span className={cn('truncate flex-1', s.is_optional ? 'italic font-normal' : 'font-semibold')}>
+                          {s.name}{s.is_optional ? ' (opt.)' : ''}
+                        </span>
+                        <span className="ml-3 shrink-0 tabular-nums">x{s.quantity}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {selected.notes && (
+                  <>
+                    <p className="text-[10px] font-extrabold uppercase tracking-[1.4px] mt-[18px] mb-2 text-black dark:text-white">Notes</p>
+                    <p className="text-[12px] leading-[1.5] text-black dark:text-white">{selected.notes}</p>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <div className={cn('h-[110px] rounded-xl mb-4 border-[1.5px] border-dashed flex items-center justify-center', outline)}>
+                  <span className="text-[12px] font-medium text-black dark:text-white">
+                    {isFr ? 'Aucun contenu pré-rempli' : 'No pre-filled content'}
+                  </span>
+                </div>
+                <p className="text-[16px] font-extrabold tracking-[-0.2px] text-black dark:text-white">
+                  {isFr ? 'Devis vierge' : 'Blank Quote'}
+                </p>
+                <p className="text-[12.5px] leading-[1.55] mt-1.5 text-black dark:text-white">
+                  {isFr
+                    ? 'Commencez avec un devis vide — ajoutez vos services, images et conditions manuellement.'
+                    : 'Start with an empty quote — add your services, images and terms manually.'}
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className={cn('px-5 py-3.5 flex items-center justify-between border-t', outline)}>
+          <button
+            onClick={onCreatePreset}
+            className={cn('h-[38px] px-3.5 rounded-[10px] border inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-black dark:text-white', outline, hoverFill)}
+          >
+            <Plus size={14} />
+            {isFr ? 'Créer un nouveau preset' : 'Create New Preset'}
+          </button>
+          <button
+            onClick={handleConfirm}
+            className="h-[38px] px-[22px] rounded-[10px] text-[13px] font-bold bg-black text-white dark:bg-white dark:text-black active:scale-[0.98] transition-transform"
+          >
+            {selected
+              ? (isFr ? 'Utiliser ce preset' : 'Use this preset')
+              : (isFr ? 'Créer le devis' : 'Create quote')}
+          </button>
         </div>
       </motion.div>
     </div>
