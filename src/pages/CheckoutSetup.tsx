@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { setInitialPassword, setupTaxRegion } from '../lib/billingApi';
 import { uploadFile, STORAGE_BUCKETS } from '../lib/storage';
-import { createConnectedAccount, createOnboardingLink } from '../lib/connectApi';
 import AddressAutocomplete, { type StructuredAddress } from '../components/AddressAutocomplete';
 
 /**
@@ -146,22 +145,10 @@ export default function CheckoutSetup({
       console.error('[CheckoutSetup] profile/tax save (non-blocking):', e);
     }
 
-    // If they opted in, launch Lume Payments (Stripe Connect) right away — create
-    // the connected account and send them straight into the hosted bank-connection
-    // flow. On any hiccup, fall back to Payments settings where they can retry.
-    if (activatePayments) {
-      try {
-        const country = taxKey.startsWith('US-') ? 'US' : 'CA';
-        await createConnectedAccount(country);
-        const { url } = await createOnboardingLink();
-        window.location.href = url;
-        return;
-      } catch {
-        window.location.href = '/settings?tab=payments';
-        return;
-      }
-    }
-    window.location.href = '/';
+    // Lume Payments (Stripe Connect) is set up inside the app — that flow already
+    // handles the required mobile (SMS) verification + hosted bank onboarding.
+    // Route them straight there if they opted in; otherwise into the dashboard.
+    window.location.href = activatePayments ? '/settings?tab=payments' : '/';
   }
 
   return (
@@ -265,7 +252,7 @@ export default function CheckoutSetup({
               <p>Envoie des factures payables en ligne — carte de crédit, Apple Pay — et reçois l'argent directement dans ton compte bancaire. Activation sécurisée en ~3 minutes.</p>
               <label className="cs-toggle">
                 <input type="checkbox" checked={activatePayments} onChange={(e) => setActivatePayments(e.target.checked)} />
-                <span>Activer Lume Payments après cette étape</span>
+                <span>Configurer Lume Payments juste après (connexion bancaire)</span>
               </label>
               <div className="cs-powered">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="10" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
