@@ -248,7 +248,7 @@ export default function NewClient() {
       {/* ── Form — flat on the page, no section cards ── */}
       <form id="new-client-form" onSubmit={handleSubmit} className="flex-1 px-6 py-8">
         <div className="max-w-2xl mx-auto space-y-8 pb-4">
-          {/* Name */}
+          {/* Client info + communication — single block */}
           <section className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -293,11 +293,6 @@ export default function NewClient() {
                 )}
               </AnimatePresence>
             </div>
-          </section>
-
-          {/* Communication */}
-          <section className="space-y-4 border-t border-border pt-6">
-            <h3 className={sectionTitle}>Communication</h3>
             <div className="space-y-2">
               <label className={fieldLabel}>{fr ? 'Numéro de téléphone' : 'Phone number'}</label>
               <div className="space-y-2">
