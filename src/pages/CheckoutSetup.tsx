@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { setInitialPassword, setupTaxRegion } from '../lib/billingApi';
+import { setInitialPassword, setupTaxRegion, completeSetup } from '../lib/billingApi';
 import { uploadFile, STORAGE_BUCKETS } from '../lib/storage';
 import AddressAutocomplete, { type StructuredAddress } from '../components/AddressAutocomplete';
 
@@ -122,33 +122,20 @@ export default function CheckoutSetup({
       }
       const country = taxKey.startsWith('US-') ? 'US' : 'CA';
       const province = taxKey.startsWith('US-') ? taxKey.slice(3) : (taxKey === 'CA-TERR' ? '' : taxKey);
-      const payload: Record<string, unknown> = {
-        org_id: orgId,
-        company_name: companyName.trim(),
-        phone: phone.trim(),
-        email: companyEmail.trim() || email,
-        address: address.trim(),
-        city: city.trim(),
-        province,
-        postal_code: postal.trim(),
-        country,
-      };
-      if (logoUrl) payload.logo_url = logoUrl;
-      const { data: existing } = await supabase.from('company_settings').select('id').eq('org_id', orgId).maybeSingle();
-      if (existing?.id) {
-        await supabase.from('company_settings').update(payload).eq('org_id', orgId);
-      } else {
-        await supabase.from('company_settings').insert(payload);
-      }
+      await completeSetup({
+        company_name: companyName.trim(), phone: phone.trim(), email: companyEmail.trim() || email,
+        address: address.trim(), city: city.trim(), province, postal_code: postal.trim(), country,
+        logo_url: logoUrl || undefined,
+      });
       try { await setupTaxRegion(taxKey); } catch { /* taxes editable in Settings */ }
     } catch (e) {
       console.error('[CheckoutSetup] profile/tax save (non-blocking):', e);
     }
 
-    // Lume Payments (Stripe Connect) is set up inside the app — that flow already
-    // handles the required mobile (SMS) verification + hosted bank onboarding.
-    // Route them straight there if they opted in; otherwise into the dashboard.
-    window.location.href = activatePayments ? '/settings?tab=payments' : '/';
+    // Lume Payments (Stripe Connect) is set up inside the app. Route them straight
+    // to the Payments panel (the real page, not the settings menu) if they opted
+    // in; otherwise into the dashboard.
+    window.location.href = activatePayments ? '/settings/payments' : '/';
   }
 
   return (

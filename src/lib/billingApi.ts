@@ -329,6 +329,23 @@ export async function setInitialPassword(sessionId: string, password: string): P
   return data;
 }
 
+/** Save the post-payment company profile via the server (service-role write,
+ *  RLS-proof) + make the workspace name follow the company name. Authenticated. */
+export async function completeSetup(data: {
+  company_name: string; phone: string; email: string; address: string;
+  city: string; province: string; postal_code: string; country: string; logo_url?: string;
+}): Promise<void> {
+  const res = await fetch(`${API_BASE}/billing/complete-setup`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || 'Setup save failed');
+  }
+}
+
 /**
  * Apply a tax preset (province / state key, e.g. 'QC', 'US-CA') as the org's
  * default tax group. Authenticated — call after signing in. Best-effort.
