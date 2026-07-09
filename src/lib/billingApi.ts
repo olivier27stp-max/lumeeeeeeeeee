@@ -288,8 +288,16 @@ export interface CheckoutStatus {
   status: 'pending' | 'processing' | 'confirmed';
   email?: string;
   userId?: string;
+  orgId?: string;
   subscriptionId?: string;
   message?: string;
+  /** Plan display info (present when confirmed) */
+  planName?: string;
+  interval?: 'monthly' | 'yearly';
+  currency?: string;
+  amountCents?: number;
+  /** True when the account was created by the webhook and still needs a password (payment-link buyers). */
+  needsPassword?: boolean;
 }
 
 export async function confirmCheckout(sessionId: string): Promise<CheckoutStatus> {
@@ -304,6 +312,38 @@ export async function confirmCheckout(sessionId: string): Promise<CheckoutStatus
   }
   if (!res.ok) throw new Error(data.error || 'Checkout confirmation failed');
   return data;
+}
+
+/**
+ * Claim a payment-link account: set its initial password, proven by the paid
+ * Stripe session_id. PUBLIC (the buyer has no session yet). Returns the org id.
+ */
+export async function setInitialPassword(sessionId: string, password: string): Promise<{ ok: boolean; email: string; orgId: string }> {
+  const res = await fetch(`${API_BASE}/billing/set-initial-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not set password');
+  return data;
+}
+
+/**
+ * Apply a tax preset (province / state key, e.g. 'QC', 'US-CA') as the org's
+ * default tax group. Authenticated — call after signing in. Best-effort.
+ */
+export async function setupTaxRegion(presetKey: string): Promise<void> {
+  if (!presetKey || presetKey === 'LATER') return;
+  const res = await fetch(`${API_BASE}/taxes/setup`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ preset_key: presetKey, make_default: true }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Tax setup failed');
+  }
 }
 
 // ── Receipt management ──────────────────────────────────────────

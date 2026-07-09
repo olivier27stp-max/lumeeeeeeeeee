@@ -53,6 +53,44 @@ const PRESETS: Record<string, { name: string; region: string; country: string; t
   NONE: { name: 'No Tax', region: 'NONE', country: '', taxes: [] },
 };
 
+// Canada — remaining provinces/territories (GST / PST / RST / HST).
+const CA_MORE: Array<[string, string, Array<[string, number]>]> = [
+  ['AB', 'Alberta (GST)', [['GST', 5]]],
+  ['MB', 'Manitoba (GST + RST)', [['GST', 5], ['RST', 7]]],
+  ['SK', 'Saskatchewan (GST + PST)', [['GST', 5], ['PST', 6]]],
+  ['NS', 'Nova Scotia (HST)', [['HST', 14]]],
+  ['NB', 'New Brunswick (HST)', [['HST', 15]]],
+  ['NL', 'Newfoundland & Labrador (HST)', [['HST', 15]]],
+  ['PE', 'Prince Edward Island (HST)', [['HST', 15]]],
+  ['CA-TERR', 'Territories (GST)', [['GST', 5]]],
+];
+for (const [key, name, parts] of CA_MORE) {
+  if (PRESETS[key]) continue;
+  PRESETS[key] = { name, region: key, country: 'CA', taxes: parts.map(([n, r], i) => ({ name: n, rate: r, is_compound: false, sort_order: i })) };
+}
+
+// USA — statewide base sales tax for every state (0 = no state sales tax).
+// Local (county/city) taxes may add on top; the pro adjusts in Tax Settings.
+const US_STATES: Array<[string, string, number]> = [
+  ['AL', 'Alabama', 4], ['AK', 'Alaska', 0], ['AZ', 'Arizona', 5.6], ['AR', 'Arkansas', 6.5],
+  ['CO', 'Colorado', 2.9], ['CT', 'Connecticut', 6.35], ['DE', 'Delaware', 0], ['GA', 'Georgia', 4],
+  ['HI', 'Hawaii', 4], ['ID', 'Idaho', 6], ['IL', 'Illinois', 6.25], ['IN', 'Indiana', 7], ['IA', 'Iowa', 6],
+  ['KS', 'Kansas', 6.5], ['KY', 'Kentucky', 6], ['LA', 'Louisiana', 4.45], ['ME', 'Maine', 5.5],
+  ['MD', 'Maryland', 6], ['MA', 'Massachusetts', 6.25], ['MI', 'Michigan', 6], ['MN', 'Minnesota', 6.875],
+  ['MS', 'Mississippi', 7], ['MO', 'Missouri', 4.225], ['MT', 'Montana', 0], ['NE', 'Nebraska', 5.5],
+  ['NV', 'Nevada', 6.85], ['NH', 'New Hampshire', 0], ['NJ', 'New Jersey', 6.625], ['NM', 'New Mexico', 4.875],
+  ['NY', 'New York', 4], ['NC', 'North Carolina', 4.75], ['ND', 'North Dakota', 5], ['OH', 'Ohio', 5.75],
+  ['OK', 'Oklahoma', 4.5], ['OR', 'Oregon', 0], ['PA', 'Pennsylvania', 6], ['RI', 'Rhode Island', 7],
+  ['SC', 'South Carolina', 6], ['SD', 'South Dakota', 4.2], ['TN', 'Tennessee', 7], ['UT', 'Utah', 6.1],
+  ['VT', 'Vermont', 6], ['VA', 'Virginia', 5.3], ['WA', 'Washington', 6.5], ['WV', 'West Virginia', 6],
+  ['WI', 'Wisconsin', 5], ['WY', 'Wyoming', 4], ['DC', 'Washington D.C.', 6],
+];
+for (const [abbr, name, rate] of US_STATES) {
+  const key = `US-${abbr}`;
+  if (PRESETS[key]) continue; // keep the hand-tuned CA/TX/FL above
+  PRESETS[key] = { name, region: key, country: 'US', taxes: rate > 0 ? [{ name: 'Sales Tax', rate, is_compound: false, sort_order: 0 }] : [] };
+}
+
 // ── GET /taxes — list all tax configs for org ──
 router.get('/taxes', async (req, res) => {
   try {

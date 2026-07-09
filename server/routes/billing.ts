@@ -1659,12 +1659,33 @@ router.post('/billing/confirm-checkout', async (req, res) => {
       .maybeSingle();
 
     if (processed) {
-      // Webhook has processed — subscription is active
+      // Webhook has processed — subscription is active. Include plan display info
+      // (from the session the buyer actually paid) so the setup page can show the
+      // real plan + amount, and whether the account still needs a password.
+      const interval = (meta.interval || 'monthly') as 'monthly' | 'yearly';
+      const currency = (meta.currency || 'CAD').toUpperCase();
+      let planName = '';
+      if (meta.plan_id) {
+        const { data: plan } = await admin.from('plans').select('name').eq('id', meta.plan_id).maybeSingle();
+        planName = plan?.name || '';
+      }
+      let needsPassword = false;
+      try {
+        const { data: udata } = await admin.auth.admin.getUserById(processed.user_id);
+        needsPassword = !(udata?.user?.user_metadata as any)?.password_set;
+      } catch { /* non-fatal */ }
+
       return res.json({
         status: 'confirmed',
         email: userEmail,
         userId: processed.user_id,
+        orgId: processed.org_id,
         subscriptionId: processed.subscription_id,
+        planName,
+        interval,
+        currency,
+        amountCents: session.amount_total || 0,
+        needsPassword,
       });
     }
 
@@ -1676,6 +1697,63 @@ router.post('/billing/confirm-checkout', async (req, res) => {
     });
   } catch (err: any) {
     console.error('[billing/confirm-checkout]', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /billing/set-initial-password — claim a webhook-created account ──
+// Payment-link buyers get an account created by the webhook WITHOUT a password.
+// This lets them set one, gated by proof of a paid Stripe checkout (the
+// unguessable session_id) + the account not having been claimed yet. PUBLIC by
+// design (the buyer has no session yet) — the session_id is the capability.
+router.post('/billing/set-initial-password', async (req, res) => {
+  try {
+    if (!stripe) return res.status(500).json({ error: 'Stripe not configured.' });
+    const { session_id, password } = req.body as { session_id?: string; password?: string };
+    if (!session_id) return res.status(400).json({ error: 'session_id is required.' });
+    if (!password || String(password).length < 10) {
+      return res.status(400).json({ error: 'Password must be at least 10 characters.' });
+    }
+
+    // 1. The checkout must be really paid.
+    const session = await stripe.checkout.sessions.retrieve(session_id);
+    if (session.payment_status !== 'paid') {
+      return res.status(402).json({ error: 'Payment not confirmed for this session.' });
+    }
+
+    const admin = getServiceClient();
+
+    // 2. The webhook must have already provisioned the account for THIS session.
+    const { data: processed } = await admin
+      .from('processed_checkout_sessions')
+      .select('user_id, org_id')
+      .eq('stripe_checkout_session_id', session_id)
+      .maybeSingle();
+    if (!processed) {
+      // Webhook still in flight — tell the client to retry shortly.
+      return res.status(409).json({ status: 'processing', error: 'Account is still being set up. Try again in a moment.' });
+    }
+
+    // 3. One-time claim: refuse if a password was already set for this account.
+    const { data: udata } = await admin.auth.admin.getUserById(processed.user_id);
+    const meta = (udata?.user?.user_metadata || {}) as Record<string, any>;
+    if (meta.password_set) {
+      return res.status(409).json({ error: 'This account already has a password. Please sign in or reset it.' });
+    }
+
+    // 4. Set the password + mark the account claimed.
+    const { error: upErr } = await admin.auth.admin.updateUserById(processed.user_id, {
+      password: String(password),
+      user_metadata: { ...meta, password_set: true },
+    });
+    if (upErr) {
+      console.error('[billing/set-initial-password] updateUser failed:', upErr.message);
+      return res.status(500).json({ error: 'Could not set the password.' });
+    }
+
+    return res.json({ ok: true, email: udata?.user?.email || session.metadata?.email || '', orgId: processed.org_id });
+  } catch (err: any) {
+    console.error('[billing/set-initial-password]', err.message);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
