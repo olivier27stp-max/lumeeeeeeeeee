@@ -15,6 +15,29 @@ const router = Router();
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
+/**
+ * Resolve the target team_member, then enforce (a) same-org and (b) the caller
+ * is admin/owner — explicitly, via auth.user.id. The underlying RPCs also check
+ * has_org_admin_role(auth.uid()), but auth.uid() is NULL under the service-role
+ * client, so that internal check can't be relied on for authorization. Doing it
+ * here makes these routes secure independently of the RPC internals.
+ * Returns the member (org_id + user_id) or null after having sent the response.
+ */
+async function guardMemberAdmin(
+  svc: ReturnType<typeof getServiceClient>,
+  auth: { user: { id: string }; orgId: string },
+  res: import('express').Response,
+  memberId: string,
+): Promise<{ orgId: string; userId: string } | null> {
+  const { data: member } = await svc
+    .from('team_members').select('user_id, org_id').eq('id', memberId).maybeSingle();
+  if (!member) { res.status(404).json({ error: 'Member not found' }); return null; }
+  if (member.org_id !== auth.orgId) { res.status(403).json({ error: 'Cross-org operation not allowed' }); return null; }
+  const { data: isAdmin } = await svc.rpc('has_org_admin_role', { p_user: auth.user.id, p_org: auth.orgId });
+  if (!isAdmin) { res.status(403).json({ error: 'Admin/Owner role required' }); return null; }
+  return { orgId: member.org_id, userId: member.user_id };
+}
+
 // ────────────────────────────────────────────────────────────────────
 // POST /api/team/:memberId/request-delete
 // Body: { reassign_to: uuid, confirm: "DELETE" }
@@ -30,6 +53,7 @@ router.post('/team/:memberId/request-delete', async (req, res) => {
   if (confirm !== 'DELETE') return res.status(400).json({ error: 'confirm must equal "DELETE"' });
 
   const svc = getServiceClient();
+  if (!await guardMemberAdmin(svc, auth, res, memberId)) return;
   const { error } = await svc.rpc('request_hard_delete_member', {
     p_member_id: memberId,
     p_reassign_to: reassign_to,
@@ -50,6 +74,7 @@ router.post('/team/:memberId/cancel-delete', async (req, res) => {
   if (!UUID_RE.test(memberId)) return res.status(400).json({ error: 'Invalid member id' });
 
   const svc = getServiceClient();
+  if (!await guardMemberAdmin(svc, auth, res, memberId)) return;
   const { error } = await svc.rpc('cancel_hard_delete_member', { p_member_id: memberId });
   if (error) return res.status(403).json({ error: error.message });
   return res.status(200).json({ ok: true });
@@ -69,6 +94,7 @@ router.post('/team/:memberId/mfa-required', async (req, res) => {
   if (typeof required !== 'boolean') return res.status(400).json({ error: 'required must be boolean' });
 
   const svc = getServiceClient();
+  if (!await guardMemberAdmin(svc, auth, res, memberId)) return;
   const { error } = await svc.rpc('set_member_mfa_required', {
     p_member_id: memberId,
     p_required: required,
@@ -140,6 +166,13 @@ router.get('/team/:userId/audit', async (req, res) => {
   const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 200));
 
   const svc = getServiceClient();
+  // Target user must be a member of the caller's org, and the caller must be
+  // admin/owner (explicit — the RPC's auth.uid() check is NULL under service role).
+  const { data: sharedMembership } = await svc
+    .from('memberships').select('user_id').eq('user_id', userId).eq('org_id', auth.orgId).maybeSingle();
+  if (!sharedMembership) return res.status(403).json({ error: 'User is not a member of your organization' });
+  const { data: isAdmin } = await svc.rpc('has_org_admin_role', { p_user: auth.user.id, p_org: auth.orgId });
+  if (!isAdmin) return res.status(403).json({ error: 'Admin/Owner role required' });
   const { data, error } = await svc.rpc('list_member_audit_events', {
     p_user_id: userId,
     p_limit: limit,

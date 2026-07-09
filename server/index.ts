@@ -93,6 +93,13 @@ import { initSentry, attachSentryErrorHandler, captureException } from './lib/se
 
 const app = express();
 
+// Trust exactly one reverse proxy (Railway's edge). This makes req.ip the real
+// client IP derived from the RIGHT end of X-Forwarded-For, so a client can no
+// longer spoof its rate-limit / IP-block key by prepending a fake XFF entry.
+// NOTE: assumes a single proxy hop (Railway's default). If IP-based limits ever
+// mis-bucket in prod, adjust this hop count.
+app.set('trust proxy', 1);
+
 // Do not advertise Express — small reconnaissance signal removed.
 app.disable('x-powered-by');
 

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 
 const router = Router();
@@ -248,6 +248,9 @@ router.post('/taxes/setup', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
+    if (!await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId)) {
+      return res.status(403).json({ error: 'Admin or owner role required.' });
+    }
 
     const { preset_key, make_default } = req.body;
     const preset = PRESETS[preset_key];
@@ -307,6 +310,9 @@ router.post('/taxes/config', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
+    if (!await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId)) {
+      return res.status(403).json({ error: 'Admin or owner role required.' });
+    }
 
     const { name, rate, type, region, country, is_compound } = req.body;
     if (!name) return res.status(400).json({ error: 'Tax name is required.' });
@@ -351,6 +357,9 @@ router.put('/taxes/config/:id', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
+    if (!await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId)) {
+      return res.status(403).json({ error: 'Admin or owner role required.' });
+    }
 
     const { name, rate, is_active, registration_number } = req.body;
     const update: Record<string, any> = { updated_at: new Date().toISOString() };
@@ -376,6 +385,9 @@ router.delete('/taxes/group/:id', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
+    if (!await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId)) {
+      return res.status(403).json({ error: 'Admin or owner role required.' });
+    }
 
     // Verify the group belongs to the caller's org BEFORE deleting its items —
     // otherwise a foreign group id would wipe another tenant's tax associations.
@@ -402,6 +414,9 @@ router.patch('/taxes/group/:id/default', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
+    if (!await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId)) {
+      return res.status(403).json({ error: 'Admin or owner role required.' });
+    }
 
     await admin.from('tax_groups').update({ is_default: false })
       .eq('org_id', auth.orgId).eq('is_default', true);
