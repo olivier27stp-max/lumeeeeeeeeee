@@ -1758,6 +1758,48 @@ router.post('/billing/set-initial-password', async (req, res) => {
   }
 });
 
+// ─── POST /billing/complete-setup — save company profile from the setup page ──
+// Writes with the service client so it never trips a client-side RLS policy
+// (the reason the post-payment company info could silently fail to save).
+router.post('/billing/complete-setup', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const b = req.body as Record<string, string | undefined>;
+
+    const payload: Record<string, unknown> = {
+      org_id: auth.orgId,
+      company_name: (b.company_name || '').trim(),
+      phone: (b.phone || '').trim(),
+      email: (b.email || '').trim(),
+      address: (b.address || '').trim(),
+      city: (b.city || '').trim(),
+      province: (b.province || '').trim(),
+      postal_code: (b.postal_code || '').trim(),
+      country: (b.country || '').trim(),
+    };
+    if (b.logo_url) payload.logo_url = b.logo_url;
+
+    const { data: existing } = await admin.from('company_settings').select('id').eq('org_id', auth.orgId).maybeSingle();
+    if (existing?.id) {
+      await admin.from('company_settings').update(payload).eq('org_id', auth.orgId);
+    } else {
+      await admin.from('company_settings').insert(payload);
+    }
+
+    // Make the workspace/office name follow the company name (was "Bureau sans nom").
+    if (payload.company_name) {
+      await admin.from('orgs').update({ name: payload.company_name as string }).eq('id', auth.orgId);
+    }
+
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[billing/complete-setup]', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ─── GET /billing/email-verified — Check if current user's email is verified ──
 
 router.get('/billing/email-verified', async (req, res) => {

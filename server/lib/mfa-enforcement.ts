@@ -27,8 +27,12 @@ import { isSmsConfigured, getVerifiedPhone, isDeviceTrusted } from './mfa-sms';
  */
 const MFA_REQUIRED_PREFIXES = [
   '/api/payments/keys',
-  '/api/connect/create-account',
   '/api/billing/cancel',
+  // NOTE: '/api/connect/create-account' intentionally NOT gated. There is no
+  // SMS-enrollment UI yet, so gating it locked owners out of Lume Payments with
+  // no way forward. Connecting a bank already goes through Stripe Connect's own
+  // identity verification (KYC), so the step-up here was redundant. Re-add once
+  // an SMS enrollment/challenge modal exists.
 ];
 
 export function mfaEnforcementMiddleware() {
