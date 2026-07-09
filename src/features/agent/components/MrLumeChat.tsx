@@ -4,7 +4,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowUp, Loader2, Sparkles, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { ArrowUp, Loader2, AudioLines, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from '../../../i18n';
 import {
   sendAgentMessage,
@@ -32,8 +32,10 @@ export default function MrLumeChat() {
   const [loading, setLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
   const idRef = useRef(1);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   const nextId = () => idRef.current++;
 
@@ -80,6 +82,37 @@ export default function MrLumeChat() {
     } finally {
       setLoading(false);
     }
+  }
+
+  /* Voice input — tap the wave logo, speak, transcript is sent on end of speech. */
+  function toggleVoice() {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      setError(fr ? "La reconnaissance vocale n'est pas supportée par ce navigateur." : 'Voice recognition is not supported in this browser.');
+      return;
+    }
+    const rec = new SR();
+    rec.lang = fr ? 'fr-CA' : 'en-US';
+    rec.interimResults = true;
+    rec.onresult = (e: any) => {
+      const text = Array.from(e.results as ArrayLike<any>)
+        .map((r) => r[0].transcript)
+        .join('');
+      setInput(text);
+      if (e.results[e.results.length - 1].isFinal) {
+        rec.stop();
+        send(text);
+      }
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recognitionRef.current = rec;
+    setListening(true);
+    rec.start();
   }
 
   async function confirmAction(item: ChatItem) {
@@ -129,9 +162,16 @@ export default function MrLumeChat() {
             animate={{ opacity: 1, y: 0 }}
             className="flex flex-col items-center justify-center text-center mt-[12vh] gap-4"
           >
-            <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
-              <Sparkles size={22} />
-            </div>
+            <button
+              onClick={toggleVoice}
+              aria-label={fr ? 'Parler à Lume' : 'Talk to Lume'}
+              title={fr ? 'Parler à Lume' : 'Talk to Lume'}
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${
+                listening ? 'bg-primary text-white animate-pulse' : 'bg-primary/10 text-primary hover:bg-primary/20'
+              }`}
+            >
+              <AudioLines size={22} strokeWidth={2.75} />
+            </button>
             <div>
               <h2 className="text-[18px] font-semibold text-text-primary">Lume Agent</h2>
               <p className="text-[13px] text-text-tertiary mt-1 max-w-[420px]">
