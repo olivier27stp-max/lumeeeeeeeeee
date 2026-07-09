@@ -20,11 +20,14 @@ import CreateInvoiceModal from '../components/CreateInvoiceModal';
 import { listSalespeople } from '../lib/jobsApi';
 // InvoiceTemplatesTab removed — no more invoice template system
 import {
+  computeInvoiceStatusTotals,
+  fetchInvoiceStatsRows,
   fetchInvoicesKpis30d,
   formatMoneyFromCents,
   getInvoiceRowUiStatus,
   type InvoiceRangeFilter,
   type InvoiceSortKey,
+  type InvoiceStatsPeriod,
   type InvoiceStatusFilter,
   type InvoiceRow,
   listInvoices,
@@ -63,6 +66,11 @@ function parseSort(raw: string | null): InvoiceSortKey {
 function parsePage(raw: string | null) {
   const v = Number(raw || '1');
   return Number.isFinite(v) ? Math.max(1, Math.trunc(v)) : 1;
+}
+function parsePeriod(raw: string | null): InvoiceStatsPeriod {
+  const v = (raw || '').toLowerCase();
+  if (v === 'all_time' || v === 'this_year' || v === 'this_week') return v;
+  return 'this_month';
 }
 
 // ─── Invoice status labels (shared by the filter pill) ─────────
@@ -116,6 +124,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
   const status = parseStatus(searchParams.get('status'));
   const sort = parseSort(searchParams.get('sort'));
   const page = parsePage(searchParams.get('page'));
+  const period = parsePeriod(searchParams.get('period'));
   const q = (searchParams.get('q') || '').trim();
   const salesperson = (searchParams.get('sp') || 'All').trim() || 'All';
 
@@ -147,6 +156,18 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     queryKey: ['invoicesKpis30d'],
     queryFn: fetchInvoicesKpis30d,
   });
+
+  // Rows for the status total boxes — period filtering happens client-side
+  // so switching the period is instant.
+  const statsQuery = useQuery({
+    queryKey: ['invoiceStatusTotals'],
+    queryFn: fetchInvoiceStatsRows,
+    staleTime: 30_000,
+  });
+  const statusTotals = useMemo(
+    () => computeInvoiceStatusTotals(statsQuery.data || [], period),
+    [statsQuery.data, period],
+  );
 
   const invoicesQuery = useQuery({
     queryKey: ['invoicesTable', status, sort, page, q, salesperson],
@@ -255,6 +276,12 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     });
   }
 
+  function applyPeriod(p: InvoiceStatsPeriod) {
+    updateParams((next) => {
+      if (p === 'this_month') next.delete('period'); else next.set('period', p);
+    });
+  }
+
   function applySort(column: 'client' | 'invoice_number' | 'due_date' | 'status' | 'total' | 'balance') {
     const prefix = `${column}_`;
     const isSame = sort.startsWith(prefix);
@@ -291,6 +318,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
     queryClient.invalidateQueries({ queryKey: ['invoicesKpis30d'] });
     queryClient.invalidateQueries({ queryKey: ['invoices-paid-count'] });
+    queryClient.invalidateQueries({ queryKey: ['invoiceStatusTotals'] });
   }
 
   // ─── Actions ───────────────────────────────────────────────
@@ -408,14 +436,13 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     setActionMenuId(null);
   };
 
-  // ─── KPI stat chips ────────────────────────────────────────
+  // ─── Status total boxes (Paid / Awaiting Payment / Past Due) ──
 
-  const kpiChips = useMemo(() => [
-    { key: 'past_due' as const, label: fr ? 'En retard' : 'Overdue', value: kpis?.past_due_count || 0, amount: kpis?.past_due_total_cents || 0, color: 'bg-danger', filter: 'past_due' as InvoiceStatusFilter },
-    { key: 'sent_not_due' as const, label: fr ? 'En attente' : 'Awaiting', value: kpis?.sent_not_due_count || 0, amount: kpis?.sent_not_due_total_cents || 0, color: 'bg-warning', filter: 'sent_not_due' as InvoiceStatusFilter },
-    { key: 'draft' as const, label: fr ? 'Brouillons' : 'Drafts', value: kpis?.draft_count || 0, amount: kpis?.draft_total_cents || 0, color: 'bg-text-tertiary', filter: 'draft' as InvoiceStatusFilter },
-    { key: 'paid' as const, label: fr ? 'Payées' : 'Paid', value: paidCountQuery.data || 0, amount: 0, color: 'bg-success', filter: 'paid' as InvoiceStatusFilter },
-  ], [kpis, paidCountQuery.data, fr]);
+  const statBoxes = useMemo(() => [
+    { key: 'paid' as const, label: fr ? 'Payées' : 'Paid', dot: 'bg-success', filter: 'paid' as InvoiceStatusFilter, ...statusTotals.paid },
+    { key: 'awaiting' as const, label: fr ? 'En attente de paiement' : 'Awaiting Payment', dot: 'bg-warning', filter: 'sent_not_due' as InvoiceStatusFilter, ...statusTotals.awaiting },
+    { key: 'past_due' as const, label: fr ? 'En retard' : 'Past Due', dot: 'bg-danger', filter: 'past_due' as InvoiceStatusFilter, ...statusTotals.pastDue },
+  ], [statusTotals, fr]);
 
   // ─── Sort icons ────────────────────────────────────────────
 
@@ -444,34 +471,51 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
         </button>
       </div>
 
-      {/* ── KPI STAT CHIPS ── */}
-      <div className="flex items-center gap-1.5 mt-4 flex-wrap">
-        {kpiChips.map(chip => {
-          const isActive = status === chip.filter;
+      {/* ── STATUS TOTAL BOXES + PERIOD FILTER ── */}
+      <div className="flex items-stretch gap-3 mt-4">
+        {statBoxes.map(box => {
+          const isActive = status === box.filter;
           return (
             <button
-              key={chip.key}
-              onClick={() => applyStatus(isActive ? 'all' : chip.filter)}
+              key={box.key}
+              onClick={() => applyStatus(isActive ? 'all' : box.filter)}
               className={cn(
-                'inline-flex items-center gap-2 h-8 px-3.5 rounded-full text-xs font-medium transition-all whitespace-nowrap',
+                'flex-1 min-w-0 text-left rounded-xl border p-4 bg-surface-card transition-all',
                 isActive
-                  ? 'bg-primary text-white shadow-sm'
-                  : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary'
+                  ? 'border-primary ring-1 ring-primary'
+                  : 'border-outline hover:bg-surface-secondary/60'
               )}
             >
-              <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', chip.color, isActive && 'bg-surface/60')} />
-              {chip.label}
-              <span className={cn('font-bold tabular-nums', isActive ? 'text-white' : 'text-text-primary')}>
-                {chip.value}
-              </span>
-              {chip.amount > 0 && (
-                <span className={cn('text-[10px] tabular-nums', isActive ? 'text-white/70' : 'text-text-muted')}>
-                  {formatMoneyFromCents(chip.amount)}
-                </span>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={cn('w-2 h-2 rounded-full shrink-0', box.dot)} />
+                <span className="text-[13px] font-medium text-text-secondary truncate">{box.label}</span>
+                {!statsQuery.isLoading && (
+                  <span className="ml-auto text-[12px] text-text-muted tabular-nums shrink-0">{box.count}</span>
+                )}
+              </div>
+              {statsQuery.isLoading ? (
+                <div className="mt-2.5 h-7 w-24 bg-surface-tertiary rounded animate-pulse" />
+              ) : (
+                <p className="mt-1.5 text-[22px] font-bold text-text-primary tabular-nums leading-tight">
+                  {formatMoneyFromCents(box.cents)}
+                </p>
               )}
             </button>
           );
         })}
+        <div className="self-center shrink-0">
+          <FilterPill
+            label={fr ? 'Période' : 'Period'}
+            value={period}
+            onChange={(v) => applyPeriod(v as InvoiceStatsPeriod)}
+            options={[
+              { value: 'all_time', label: fr ? 'Tout le temps' : 'All Time' },
+              { value: 'this_year', label: fr ? 'Cette année' : 'This Year' },
+              { value: 'this_month', label: fr ? 'Ce mois-ci' : 'This Month' },
+              { value: 'this_week', label: fr ? 'Cette semaine' : 'This Week' },
+            ]}
+          />
+        </div>
       </div>
 
       {/* ── TOOLBAR (Jobs/Clients pattern) ── */}

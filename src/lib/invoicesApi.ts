@@ -1,4 +1,4 @@
-import { startOfMonth, subDays } from 'date-fns';
+import { format, startOfMonth, startOfWeek, startOfYear, subDays } from 'date-fns';
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 import { emitInvoicePaidManually } from './automationEventsApi';
@@ -203,6 +203,94 @@ export async function fetchInvoicesKpis30d(): Promise<InvoiceKpis30d> {
     avg_invoice_30d_cents: Number(row?.avg_invoice_30d_cents || 0),
     avg_payment_time_days_30d: row?.avg_payment_time_days_30d == null ? null : Number(row.avg_payment_time_days_30d),
   };
+}
+
+// ── Status totals (Paid / Awaiting Payment / Past Due) per period ──
+
+export type InvoiceStatsPeriod = 'all_time' | 'this_year' | 'this_month' | 'this_week';
+
+export interface InvoiceStatsRow {
+  status: string;
+  total_cents: number;
+  balance_cents: number;
+  due_date: string | null;
+  issued_at: string | null;
+  created_at: string;
+  paid_at: string | null;
+}
+
+export interface InvoiceStatusTotals {
+  paid: { count: number; cents: number };
+  awaiting: { count: number; cents: number };
+  pastDue: { count: number; cents: number };
+}
+
+/**
+ * Fetch the minimal invoice rows needed for the status total boxes.
+ * Paginated because PostgREST caps responses at 1000 rows; period filtering
+ * happens client-side (computeInvoiceStatusTotals) so switching the period
+ * is instant and needs no refetch.
+ */
+export async function fetchInvoiceStatsRows(): Promise<InvoiceStatsRow[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const PAGE = 1000;
+  const rows: InvoiceStatsRow[] = [];
+  for (let page = 0; page < 20; page++) {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('status,total_cents,balance_cents,due_date,issued_at,created_at,paid_at')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .in('status', ['sent', 'partial', 'paid'])
+      .order('created_at', { ascending: false })
+      .range(page * PAGE, page * PAGE + PAGE - 1);
+    if (error) throw error;
+    const batch = (data || []) as InvoiceStatsRow[];
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return rows;
+}
+
+export function invoiceStatsPeriodStart(period: InvoiceStatsPeriod): string | null {
+  const now = new Date();
+  if (period === 'this_week') return format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  if (period === 'this_month') return format(startOfMonth(now), 'yyyy-MM-dd');
+  if (period === 'this_year') return format(startOfYear(now), 'yyyy-MM-dd');
+  return null;
+}
+
+export function computeInvoiceStatusTotals(rows: InvoiceStatsRow[], period: InvoiceStatsPeriod): InvoiceStatusTotals {
+  const fromYMD = invoiceStatsPeriodStart(period);
+  const todayYMD = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' });
+  const toYMD = (ts: string | null) =>
+    ts ? new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' }) : null;
+
+  const totals: InvoiceStatusTotals = {
+    paid: { count: 0, cents: 0 },
+    awaiting: { count: 0, cents: 0 },
+    pastDue: { count: 0, cents: 0 },
+  };
+
+  for (const row of rows) {
+    if (row.status === 'paid') {
+      // Paid box counts money collected in the period → date of payment.
+      const ymd = toYMD(row.paid_at) || toYMD(row.created_at);
+      if (fromYMD && (!ymd || ymd < fromYMD)) continue;
+      totals.paid.count += 1;
+      totals.paid.cents += Number(row.total_cents || 0);
+      continue;
+    }
+    // sent/partial with a balance — awaiting payment or past due (same rule
+    // as getInvoiceRowUiStatus); dated by issue date, amounts = open balance.
+    if (Number(row.balance_cents || 0) <= 0) continue;
+    const ymd = toYMD(row.issued_at) || toYMD(row.created_at);
+    if (fromYMD && (!ymd || ymd < fromYMD)) continue;
+    const bucket = row.due_date && String(row.due_date).slice(0, 10) < todayYMD ? totals.pastDue : totals.awaiting;
+    bucket.count += 1;
+    bucket.cents += Number(row.balance_cents || 0);
+  }
+  return totals;
 }
 
 export async function listInvoices(query: InvoicesListQuery): Promise<InvoicesListResult> {
