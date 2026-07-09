@@ -264,6 +264,13 @@ const publicPayLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP —
 const portalLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — client portal (tighter to prevent token brute-force)
 const quoteLimiterStrict = rateLimit({ windowMs: 60_000, max: 15 }); // per IP — quote track-view
 const automationLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `auto:${userKey(req)}` });
+// Per-user limiters for cost-bearing / compliance-sensitive endpoints. Keyed on
+// the JWT `sub` (userKey), so they're immune to X-Forwarded-For spoofing. These
+// also act as the in-memory fallback for dsr/incidents when Redis is absent.
+const agentLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `agent:${userKey(req)}` });
+const workflowActionLimiter = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `wfaction:${userKey(req)}` });
+const dsrLimiterMem = rateLimit({ windowMs: 60_000, max: 20, keyFn: (req) => `dsr:${userKey(req)}` });
+const incidentsLimiterMem = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `inc:${userKey(req)}` });
 
 // ── Apply rate limiters to specific paths ──
 // When Redis is available, the redisRateLimit middleware below handles limiting
@@ -277,6 +284,9 @@ if (!useRedis) {
   app.use('/api/portal', portalLimiter);
   app.use('/api/quotes', quoteLimiterStrict);
   app.use('/api/automations/events', automationLimiter);
+  app.use('/api/agent', agentLimiter);
+  app.use('/api/dsr', dsrLimiterMem);
+  app.use('/api/incidents', incidentsLimiterMem);
 }
 // Always applied (no Redis equivalent registered below)
 app.use('/api/leads/create', leadCreateLimiter);
@@ -302,6 +312,8 @@ app.use('/api/dsr', redisRateLimit({ preset: 'strict', keyFn: (req) => `dsr:${us
 // Incidents — strict (failed-login needs to fit brute-force detection window)
 app.use('/api/incidents/failed-login', redisRateLimit({ preset: 'auth' }));
 app.use('/api/incidents', redisRateLimit({ preset: 'standard', keyFn: (req) => `inc:${userKey(req)}` }));
+// AI agent (Gemini tool-loop) — cap per-user cost abuse
+app.use('/api/agent', redisRateLimit({ preset: 'standard', keyFn: (req) => `agent:${userKey(req)}` }));
 // ── MFA enforcement for admin/owner on sensitive endpoints ──
 // SMS 2FA enrollment/challenge routes must stay reachable (they authenticate
 // the user themselves) — mount before the MFA/RBAC gates so a step-up flow
@@ -426,7 +438,7 @@ app.use(express.static(distPath, {
 }));
 
 // ── Workflow action bridge — routes visual workflow actions to the real engine ──
-app.post('/api/workflows/execute-action', async (req, res) => {
+app.post('/api/workflows/execute-action', workflowActionLimiter, async (req, res) => {
   try {
     const { requireAuthedClient, getServiceClient } = await import('./lib/supabase.js');
     const auth = await requireAuthedClient(req, res);
