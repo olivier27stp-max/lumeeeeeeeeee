@@ -205,6 +205,7 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
         .from('email_templates')
         .select('subject, body')
         .eq('id', emailTemplateId)
+        .eq('org_id', orgId) // tenant guard — don't render another org's template
         .maybeSingle();
       if (tpl) {
         const templateVars: Record<string, string> = {

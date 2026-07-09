@@ -422,6 +422,7 @@ router.post('/quotes/send-sms', async (req, res) => {
       .from('quotes')
       .select('*, lead:clients!quotes_lead_id_fkey(first_name, last_name, phone), client:clients!quotes_client_id_fkey(first_name, last_name, phone)')
       .eq('id', quoteId)
+      .eq('org_id', auth.orgId) // tenant guard — never send another org's quote from their Twilio number
       .single();
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
 
