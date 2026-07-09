@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import type { TeamRole, Scope, PermissionsMap } from '../lib/permissions';
@@ -58,6 +58,8 @@ export const CompanyContext = createContext<CompanyContextValue | null>(null);
 
 export function CompanyProvider({ children, userId }: { children: React.ReactNode; userId: string | null }) {
   const queryClient = useQueryClient();
+  // Guards a one-time JWT refresh per user when the token's org claim is stale.
+  const claimSyncedForUser = useRef<string | null>(null);
   const [companies, setCompanies] = useState<CompanyMembership[]>([]);
   const [activeOrgId, setActiveOrgId] = useState<string | null>(() => {
     // Restore last active org from localStorage — validate UUID format
@@ -166,6 +168,23 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
         });
 
       setCompanies(mapped);
+
+      // Keep the JWT org claim in sync with reality. If the token's org_ids
+      // claim is stale (user was added to / removed from an org since the token
+      // was issued), refresh the session ONCE so RLS's claim fast-path matches
+      // actual memberships immediately instead of waiting for token expiry.
+      // Correctness never depends on this (current_org_ids() falls back to the
+      // memberships table); this just removes the propagation lag.
+      if (userId && claimSyncedForUser.current !== userId) {
+        claimSyncedForUser.current = userId; // mark attempted first — avoids refresh loops
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const claimOrgs: string[] = ((session?.user?.app_metadata as { org_ids?: string[] })?.org_ids) ?? [];
+          const dbOrgs = mapped.map((m) => m.orgId);
+          const stale = dbOrgs.length !== claimOrgs.length || dbOrgs.some((o) => !claimOrgs.includes(o));
+          if (stale) await supabase.auth.refreshSession();
+        } catch { /* non-fatal */ }
+      }
 
       // 4. Auto-select company if needed
       if (mapped.length === 1) {
