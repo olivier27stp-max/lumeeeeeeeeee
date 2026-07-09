@@ -107,7 +107,7 @@ router.get('/taxes/resolve', async (req, res) => {
 
     // Try to detect region from client's province
     if (clientId) {
-      const { data: client } = await admin.from('clients').select('province').eq('id', clientId).maybeSingle();
+      const { data: client } = await admin.from('clients').select('province').eq('id', clientId).eq('org_id', auth.orgId).maybeSingle();
       if (client?.province) {
         region = client.province.toUpperCase().trim();
         region = PROVINCE_MAP[region] || region;
@@ -115,7 +115,7 @@ router.get('/taxes/resolve', async (req, res) => {
     }
     // Fallback: try lead's address (a lead is a client now)
     if (!region && leadId) {
-      const { data: lead } = await admin.from('clients').select('address').eq('id', leadId).maybeSingle();
+      const { data: lead } = await admin.from('clients').select('address').eq('id', leadId).eq('org_id', auth.orgId).maybeSingle();
       if (lead?.address) {
         const addr = lead.address.toUpperCase();
         for (const [name, code] of Object.entries(PROVINCE_MAP)) {
@@ -376,6 +376,12 @@ router.delete('/taxes/group/:id', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
+
+    // Verify the group belongs to the caller's org BEFORE deleting its items —
+    // otherwise a foreign group id would wipe another tenant's tax associations.
+    const { data: group } = await admin.from('tax_groups')
+      .select('id').eq('id', req.params.id).eq('org_id', auth.orgId).maybeSingle();
+    if (!group) return res.status(404).json({ error: 'Tax group not found.' });
 
     // Delete group items first (cascade), then group
     await admin.from('tax_group_items').delete().eq('tax_group_id', req.params.id);

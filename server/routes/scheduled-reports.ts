@@ -99,6 +99,12 @@ router.post('/scheduled-reports/:id/send-now', async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
+    // Verify the report belongs to the caller's org before triggering a send —
+    // sendScheduledReport() looks it up by id only, with no org scope.
+    const admin = getServiceClient();
+    const { data: report } = await admin.from('scheduled_reports')
+      .select('id').eq('id', req.params.id).eq('org_id', auth.orgId).maybeSingle();
+    if (!report) return res.status(404).json({ error: 'Report not found.' });
     await sendScheduledReport(req.params.id);
     return res.json({ ok: true });
   } catch (err: any) {

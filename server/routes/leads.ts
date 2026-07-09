@@ -660,7 +660,14 @@ router.post('/leads/resolve-client', async (req, res) => {
     const leadId = String(req.body?.leadId || '').trim();
     if (!leadId) return res.status(400).json({ error: 'leadId is required.' });
 
-    const clientId = await resolveClientIdForLead(getServiceClient(), leadId);
+    // Verify the lead/client belongs to the caller's org before resolving —
+    // resolveClientIdForLead() looks it up by id with no org scope.
+    const svc = getServiceClient();
+    const { data: leadRow } = await svc.from('clients')
+      .select('id').eq('id', leadId).eq('org_id', auth.orgId).maybeSingle();
+    if (!leadRow) return res.status(404).json({ error: 'Lead not found.' });
+
+    const clientId = await resolveClientIdForLead(svc, leadId);
     return res.json({ ok: true, clientId });
   } catch (error: any) {
     return sendSafeError(res, error, 'Unable to resolve client.', '[leads/resolve-client]');

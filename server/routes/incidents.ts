@@ -14,6 +14,7 @@
 
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { platformOwnerId } from '../lib/config';
 
 const router = Router();
 const UUID_RE = /^[0-9a-f-]{36}$/i;
@@ -176,12 +177,15 @@ router.get('/incidents/anomalies', async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
 
-  const svc = getServiceClient();
-  const { data: isAdmin } = await svc.rpc('has_org_admin_role', {
-    p_user: auth.user.id, p_org: auth.orgId,
-  });
-  if (!isAdmin) return res.status(403).json({ error: 'Admin role required' });
+  // Login anomalies are platform-global telemetry: detect_login_anomalies
+  // aggregates failed_login_attempts across ALL tenants (that table has no
+  // org_id). An org admin must NOT see other tenants' failed-login emails/IPs,
+  // so this is restricted to the platform owner.
+  if (!platformOwnerId || auth.user.id !== platformOwnerId) {
+    return res.status(403).json({ error: 'Forbidden.' });
+  }
 
+  const svc = getServiceClient();
   const minutes = Math.min(1440, Math.max(1, Number(req.query.minutes) || 15));
   const { data, error } = await svc.rpc('detect_login_anomalies', { p_minutes: minutes });
   if (error) return res.status(500).json({ error: error.message });
