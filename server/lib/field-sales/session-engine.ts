@@ -167,8 +167,20 @@ export async function recordGpsPoint(
   userId: string,
   lat: number,
   lng: number,
-  accuracy: number | null = null
+  accuracy: number | null = null,
+  orgId?: string
 ) {
+  // Tenant guard: only record against a session that belongs to the caller's org.
+  if (orgId) {
+    const { data: session } = await supabase
+      .from('fs_field_sessions')
+      .select('id')
+      .eq('id', sessionId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (!session) throw new Error('Session not found');
+  }
+
   const { data, error } = await supabase
     .from('fs_gps_points')
     .insert({
@@ -188,8 +200,20 @@ export async function recordGpsPoint(
 
 export async function getGpsTrail(
   supabase: SupabaseClient,
-  sessionId: string
+  sessionId: string,
+  orgId?: string
 ) {
+  // Tenant guard: only return a trail for a session in the caller's org.
+  if (orgId) {
+    const { data: session } = await supabase
+      .from('fs_field_sessions')
+      .select('id')
+      .eq('id', sessionId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (!session) return [];
+  }
+
   const { data, error } = await supabase
     .from('fs_gps_points')
     .select('lat, lng, recorded_at')

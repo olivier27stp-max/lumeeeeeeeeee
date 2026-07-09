@@ -101,7 +101,7 @@ router.post('/field-sessions/:id/gps', async (req, res) => {
 
   try {
     const sc = getServiceClient();
-    const point = await recordGpsPoint(sc, req.params.id, auth.user.id, lat, lng, accuracy ?? null);
+    const point = await recordGpsPoint(sc, req.params.id, auth.user.id, lat, lng, accuracy ?? null, auth.orgId);
     res.json(point);
   } catch (err: any) {
     return sendSafeError(res, err, 'Field session operation failed.', '[field-sessions]');
@@ -115,7 +115,7 @@ router.get('/field-sessions/:id/trail', async (req, res) => {
 
   try {
     const sc = getServiceClient();
-    const trail = await getGpsTrail(sc, req.params.id);
+    const trail = await getGpsTrail(sc, req.params.id, auth.orgId);
     res.json(trail);
   } catch (err: any) {
     return sendSafeError(res, err, 'Field session operation failed.', '[field-sessions]');

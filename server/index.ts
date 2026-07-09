@@ -89,7 +89,7 @@ import { redisRateLimit, useRedis } from './lib/rate-limiter';
 import { rbacMiddleware } from './lib/route-permissions';
 import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
 import { auditRequestMiddleware } from './lib/audit-middleware';
-import { initSentry, attachSentryErrorHandler } from './lib/sentry';
+import { initSentry, attachSentryErrorHandler, captureException } from './lib/sentry';
 
 const app = express();
 
@@ -541,6 +541,21 @@ if (encKeyRaw) {
 
 // ── Sentry error handler must be BEFORE any other error middleware ──
 attachSentryErrorHandler(app);
+
+// ── Process-level crash safety net ──────────────────────────────────
+// Without these, an unhandled promise rejection or async throw outside an
+// Express handler dies silently — no log, no capture. We log loudly and
+// forward to Sentry (a no-op until SENTRY_DSN is set). We deliberately do NOT
+// exit: a single-instance deploy should stay up rather than risk a crash loop;
+// the goal here is visibility, not termination.
+process.on('unhandledRejection', (reason: unknown) => {
+  console.error('[fatal] unhandledRejection:', reason);
+  captureException(reason instanceof Error ? reason : new Error(String(reason)), { kind: 'unhandledRejection' });
+});
+process.on('uncaughtException', (err: Error) => {
+  console.error('[fatal] uncaughtException:', err);
+  captureException(err, { kind: 'uncaughtException' });
+});
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`API listening on 0.0.0.0:${port}`);
