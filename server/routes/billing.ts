@@ -1665,9 +1665,11 @@ router.post('/billing/confirm-checkout', async (req, res) => {
       const interval = (meta.interval || 'monthly') as 'monthly' | 'yearly';
       const currency = (meta.currency || 'CAD').toUpperCase();
       let planName = '';
+      let includesSms = false;
       if (meta.plan_id) {
-        const { data: plan } = await admin.from('plans').select('name').eq('id', meta.plan_id).maybeSingle();
+        const { data: plan } = await admin.from('plans').select('name, includes_sms').eq('id', meta.plan_id).maybeSingle();
         planName = plan?.name || '';
+        includesSms = !!plan?.includes_sms;
       }
       let needsPassword = false;
       try {

@@ -298,6 +298,8 @@ export interface CheckoutStatus {
   amountCents?: number;
   /** True when the account was created by the webhook and still needs a password (payment-link buyers). */
   needsPassword?: boolean;
+  /** True only for plans that include a dedicated SMS number (Scale/Autopilot). */
+  includesSms?: boolean;
 }
 
 export async function confirmCheckout(sessionId: string): Promise<CheckoutStatus> {

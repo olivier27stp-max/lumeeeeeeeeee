@@ -91,7 +91,7 @@ export default function CheckoutSuccess() {
             .forEach(k => sessionStorage.removeItem(k));
 
           // Poll for SMS channel (pro/enterprise plans) before redirecting
-          if (signedIn && !cancelled) {
+          if (signedIn && !cancelled && result.includesSms) {
             await pollForSmsNumber();
           }
 
@@ -124,7 +124,7 @@ export default function CheckoutSuccess() {
           ['onb_step', 'onb_plan', 'onb_interval', 'onb_name', 'onb_email', 'onb_token', 'onb_uid']
             .forEach(k => sessionStorage.removeItem(k));
 
-          if (signedIn && !cancelled) {
+          if (signedIn && !cancelled && result.includesSms) {
             await pollForSmsNumber();
           }
 
