@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { Eye, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../../i18n';
 import { supabase } from '../../lib/supabase';
@@ -11,6 +11,7 @@ import {
   DEFAULT_AGREEMENT_TERMS,
   type JobAgreement,
 } from '../../lib/jobAgreementsApi';
+import AgreementDraftPreviewModal, { type AgreementDraftPreviewData } from './AgreementDraftPreviewModal';
 
 interface AgreementCreateModalProps {
   open: boolean;
@@ -20,6 +21,8 @@ interface AgreementCreateModalProps {
   quoteId?: string;
   clientId: string | null;
   onCreated: (agreement: JobAgreement) => void;
+  /** Items/client/taxes of the parent job or quote — enables the client-view preview before creating. */
+  preview?: AgreementDraftPreviewData;
 }
 
 /**
@@ -27,7 +30,7 @@ interface AgreementCreateModalProps {
  * fields as the "Contrat" box of the New Job form (signature required,
  * company logo default with override, prefilled editable T&C).
  */
-export default function AgreementCreateModal({ open, onClose, jobId, quoteId, clientId, onCreated }: AgreementCreateModalProps) {
+export default function AgreementCreateModal({ open, onClose, jobId, quoteId, clientId, onCreated, preview }: AgreementCreateModalProps) {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const [requireSignature, setRequireSignature] = useState(true);
@@ -35,6 +38,7 @@ export default function AgreementCreateModal({ open, onClose, jobId, quoteId, cl
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -195,6 +199,15 @@ export default function AgreementCreateModal({ open, onClose, jobId, quoteId, cl
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-outline-subtle flex justify-end gap-2">
+          {preview && (
+            <button
+              onClick={() => setPreviewOpen(true)}
+              className="glass-button !py-2.5 !px-4 text-[13px] inline-flex items-center gap-2 mr-auto"
+            >
+              <Eye size={14} />
+              {fr ? 'Prévisualiser (vue client)' : 'Preview (client view)'}
+            </button>
+          )}
           <button onClick={onClose} className="glass-button !py-2.5 !px-4 text-[13px]">
             {fr ? 'Annuler' : 'Cancel'}
           </button>
@@ -208,6 +221,18 @@ export default function AgreementCreateModal({ open, onClose, jobId, quoteId, cl
           </button>
         </div>
       </div>
+
+      {/* Sibling of the card so its backdrop clicks don't bubble into onClose above */}
+      {preview && (
+        <AgreementDraftPreviewModal
+          open={previewOpen}
+          onClose={() => setPreviewOpen(false)}
+          requireSignature={requireSignature}
+          terms={terms}
+          logoUrl={logoUrl || companyLogoUrl}
+          data={preview}
+        />
+      )}
     </div>
   );
 }

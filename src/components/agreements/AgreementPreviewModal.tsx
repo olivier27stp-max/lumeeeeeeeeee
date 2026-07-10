@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, Link as LinkIcon, Loader2, Mail, X } from 'lucide-react';
+import { Download, ExternalLink, Link as LinkIcon, Loader2, Mail, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../../i18n';
 import type { Job } from '../../types';
@@ -109,6 +109,13 @@ export default function AgreementPreviewModal({
 
         {/* Footer actions */}
         <div className="px-6 py-4 border-t border-outline-subtle flex flex-wrap gap-2">
+          <button
+            onClick={() => window.open(`/contract/${agreement.view_token}`, '_blank')}
+            className="glass-button !py-2.5 !px-4 inline-flex items-center gap-2 text-[13px]"
+          >
+            <ExternalLink size={14} />
+            {fr ? 'Ouvrir la vue client' : 'Open client view'}
+          </button>
           <button
             onClick={() => docData && downloadAgreementPdf(docData)}
             disabled={!docData}
