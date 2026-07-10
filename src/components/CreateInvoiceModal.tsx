@@ -24,6 +24,8 @@ import { listPredefinedServices, type PredefinedService } from '../lib/servicesA
 import { peekNextNumbers } from '../lib/numbersApi';
 import { listPropertiesByClient, type PropertyRecord } from '../lib/propertiesApi';
 import { cn } from '../lib/utils';
+import { useNavigationGuard } from '../contexts/NavigationGuard';
+import LeaveFormConfirm from './ui/LeaveFormConfirm';
 
 interface CreateInvoiceModalProps {
   isOpen: boolean;
@@ -93,9 +95,14 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
   const [lines, setLines] = useState<InvoiceLineForm[]>([buildEmptyLine()]);
   const [inlineError, setInlineError] = useState<string | null>(null);
 
+  // Has the user entered anything? Drives the leave-without-saving guard.
+  const [dirty, setDirty] = useState(false);
+  const guard = useNavigationGuard(isOpen && dirty);
+
   // Reset on open
   useEffect(() => {
     if (!isOpen) return;
+    setDirty(false);
     setStep('choose-mode');
     setMode('job');
     setSelectedClient(null);
@@ -193,6 +200,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
     setSelectedJob(job);
     setSelectedClient({ id: job.client_id, name: job.client_name || '', email: null });
     setSubject(job.title || defaultSubject);
+    setDirty(true);
 
     try {
       const items = await getJobLineItems(job.id);
@@ -227,6 +235,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
     setSelectedJob(null);
     setLines([buildEmptyLine()]);
     setSubject(defaultSubject);
+    setDirty(true);
     setStep('draft');
   }
 
@@ -364,6 +373,8 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
       ]);
 
       toast.success(fr ? `Brouillon créé (${created.invoice_number})` : `Draft created (${created.invoice_number})`);
+      setDirty(false);
+      guard.release();
       onCreated?.(created.id);
       onClose();
     } catch (error: any) {
@@ -396,6 +407,8 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             className="glass flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border shadow-2xl"
+            onInput={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
+            onChange={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
           >
             {/* ── Header ── */}
             <header className="flex items-center justify-between border-b border-border px-5 py-4">
@@ -695,6 +708,9 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
               </>
             )}
           </motion.div>
+
+          {/* Leave-without-saving confirmation (shown when navigating away with unsaved data) */}
+          <LeaveFormConfirm open={guard.active} onConfirm={guard.confirmLeave} onCancel={guard.cancelLeave} />
         </div>
       ) : null}
     </AnimatePresence>

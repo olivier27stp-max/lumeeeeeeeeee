@@ -28,6 +28,8 @@ import { fetchFormSubmission, fetchRequestForm, updateFormSubmission, deleteForm
 import { listSalespeople } from '../lib/jobsApi';
 import { useJobModalController } from '../contexts/JobModalController';
 import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
+import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
+import { useNavigationGuard } from '../contexts/NavigationGuard';
 import type { FormSubmission, RequestForm, FormField } from '../types';
 
 /** Reserved custom_responses key where the public form stores uploaded photo URLs. */
@@ -382,6 +384,17 @@ function AssessmentSection({
   const [members, setMembers] = useState<Array<{ id: string; label: string }>>([]);
   const [saving, setSaving] = useState(false);
 
+  // Leave-without-saving guard — dirty is flipped only by genuine user input
+  // (see the section root's onInput/onChange).
+  const [dirty, setDirty] = useState(false);
+  const guard = useNavigationGuard(dirty);
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+
   useEffect(() => {
     listSalespeople().then(setMembers).catch(() => setMembers([]));
   }, []);
@@ -406,6 +419,8 @@ function AssessmentSection({
         assessment_user_id: userId || null,
         assessment_instructions: instructions.trim() || null,
       });
+      setDirty(false);
+      guard.release();
       onSaved(updated);
       toast.success(fr ? 'Évaluation planifiée' : 'Assessment scheduled');
     } catch (err: any) {
@@ -418,7 +433,11 @@ function AssessmentSection({
   const scheduled = !!s.assessment_start_at;
 
   return (
-    <div className="section-card p-6">
+    <div
+      className="section-card relative p-6"
+      onInput={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
+      onChange={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
+    >
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <CalendarClock size={16} className="text-text-secondary" />
@@ -518,6 +537,9 @@ function AssessmentSection({
             : (fr ? 'Planifier l’évaluation' : 'Schedule assessment')}
         </button>
       </div>
+
+      {/* Leave-without-saving confirmation (unsaved assessment) */}
+      <LeaveFormConfirm open={guard.active} onConfirm={guard.confirmLeave} onCancel={guard.cancelLeave} />
     </div>
   );
 }

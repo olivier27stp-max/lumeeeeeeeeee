@@ -10,6 +10,7 @@ import {
   DollarSign,
   Download,
   Edit3,
+  Eye,
   FileText,
   Link as LinkIcon,
   Mail,
@@ -59,6 +60,8 @@ import CommunicationsTimeline from '../components/communications/CommunicationsT
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
 import SpecificNotes from '../components/SpecificNotes';
+import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
+import { useNavigationGuard } from '../contexts/NavigationGuard';
 import EntityHubHeader from '../components/EntityHubHeader';
 import ClientPinMiniMap, { type ClientMapPin } from '../components/map-d2d/ClientPinMiniMap';
 import { getPins } from '../lib/fieldSalesApi';
@@ -153,6 +156,15 @@ export default function JobDetails() {
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [togglingSplit, setTogglingSplit] = useState(false);
   const [creatingMilestoneId, setCreatingMilestoneId] = useState<string | null>(null);
+
+  // Leave-without-saving guard while the payment schedule holds unsaved edits.
+  const guard = useNavigationGuard(scheduleDirty);
+  useEffect(() => {
+    if (!scheduleDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [scheduleDirty]);
 
   // Payment reminders (org settings + log, loaded when the tab opens)
   const [reminderSettings, setReminderSettings] = useState<ReminderSettings | null>(null);
@@ -1170,7 +1182,11 @@ export default function JobDetails() {
 
         {/* ═══ AGREEMENT (written contract) ═══ */}
         {agreement ? (
-          <div className="rounded-xl border border-outline bg-surface overflow-hidden">
+          <div
+            className="rounded-xl border border-outline bg-surface overflow-hidden cursor-pointer transition-colors hover:border-primary/40"
+            onClick={() => window.open(`/contract/${agreement.view_token}`, '_blank')}
+            title={language === 'fr' ? 'Voir le contrat tel que le client le voit' : 'View the contract as the client sees it'}
+          >
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <div className="icon-tile icon-tile-sm icon-tile-blue">
@@ -1243,10 +1259,17 @@ export default function JobDetails() {
                 </p>
               )}
 
-              <div className="flex flex-wrap gap-2 print:hidden">
+              <div className="flex flex-wrap gap-2 print:hidden" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => window.open(`/contract/${agreement.view_token}`, '_blank')}
+                  className="bg-primary text-primary-foreground rounded-lg px-3.5 py-1.5 text-[12px] font-semibold hover:opacity-90 transition-opacity inline-flex items-center gap-1.5"
+                >
+                  <Eye size={12} />
+                  {language === 'fr' ? 'Voir le contrat' : 'View contract'}
+                </button>
                 <button
                   onClick={() => setShowAgreementPreview(true)}
-                  className="bg-primary text-primary-foreground rounded-lg px-3.5 py-1.5 text-[12px] font-semibold hover:opacity-90 transition-opacity"
+                  className="glass-button !text-[12px] !px-3 !py-1.5"
                 >
                   {language === 'fr' ? 'Aperçu' : 'Preview'}
                 </button>
@@ -1712,6 +1735,9 @@ export default function JobDetails() {
 
         {/* ═══ ACTIVITY ═══ */}
         <ActivityTimeline entityType="job" entityId={id!} />
+
+        {/* Leave-without-saving confirmation (unsaved payment schedule) */}
+        <LeaveFormConfirm open={guard.active} onConfirm={guard.confirmLeave} onCancel={guard.cancelLeave} />
       </div>
 
       {/* ── SMS Modal ── */}
@@ -1768,6 +1794,18 @@ export default function JobDetails() {
           jobId={job.id}
           clientId={job.client_id || null}
           onCreated={setAgreement}
+          preview={{
+            numberLabel: `CTR-${job.job_number}`,
+            clientName: job.client_name || null,
+            clientEmail: clientInfo?.email || null,
+            clientPhone: clientInfo?.phone || null,
+            propertyAddress: job.property_address || null,
+            items: lineItems
+              .filter((it) => it.included)
+              .map((it) => ({ name: it.name, qty: it.qty, unit_price_cents: it.unit_price_cents, total_cents: it.total_cents })),
+            taxLines: enabledTaxes.map((tx) => ({ label: tx.label, rate: tx.rate })),
+            subtotalCents: displaySubtotalCents,
+          }}
         />
       )}
 

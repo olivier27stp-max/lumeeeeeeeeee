@@ -26,6 +26,8 @@ import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { resolveTaxes, calculateTaxes, type TaxConfig } from '../lib/taxApi';
+import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
+import { useNavigationGuard } from '../contexts/NavigationGuard';
 
 // ── Line item form ──
 interface LineForm {
@@ -82,23 +84,18 @@ export default function InvoiceEdit() {
   const [resolvedTaxes, setResolvedTaxes] = useState<TaxConfig[]>([]);
   const [discountDollars, setDiscountDollars] = useState(0);
   const [lines, setLines] = useState<LineForm[]>([emptyLine()]);
+  // Dirty tracking — flipped only by genuine user input (see the editor root's
+  // onInput/onChange); programmatic hydration never marks the form dirty.
   const [dirty, setDirty] = useState(false);
+  const guard = useNavigationGuard(dirty);
 
-  // Warn on unsaved changes — mark dirty on any form field change
+  // Browser-level warning (refresh / close tab) while the form holds data.
   useEffect(() => {
     if (!dirty) return;
     const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [dirty]);
-
-  // Track changes to mark form as dirty — skip initial hydration
-  const hydrated = React.useRef(false);
-  useEffect(() => {
-    if (!draftId) return;
-    if (!hydrated.current) { hydrated.current = true; return; }
-    setDirty(true);
-  }, [subject, dueDate, notes, internalNotes, discountDollars, taxDollars, lines]);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
@@ -237,8 +234,10 @@ export default function InvoiceEdit() {
   const updateLine = (id: string, patch: Partial<LineForm>) =>
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
 
-  const removeLine = (id: string) =>
+  const removeLine = (id: string) => {
     setLines((prev) => (prev.length <= 1 ? prev : prev.filter((l) => l.id !== id)));
+    setDirty(true);
+  };
 
   // ── Save ──
   async function handleSave() {
@@ -319,6 +318,7 @@ export default function InvoiceEdit() {
       queryClient.invalidateQueries({ queryKey: ['invoiceEdit', id] });
 
       setDirty(false);
+      guard.release();
       toast.success(t.invoiceEdit.invoiceSaved);
 
       if (isNew && id) {
@@ -352,6 +352,7 @@ export default function InvoiceEdit() {
       queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
       queryClient.invalidateQueries({ queryKey: ['invoicesKpis30d'] });
       toast.success(t.invoiceDetails.invoiceSent);
+      guard.release();
       navigate(`/invoices/${draftId}`);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to send');
@@ -468,7 +469,11 @@ export default function InvoiceEdit() {
 
   // ── Main editor ──
   return (
-    <div className="flex h-[calc(100vh-64px)] flex-col">
+    <div
+      className="relative flex h-[calc(100vh-64px)] flex-col"
+      onInput={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
+      onChange={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
+    >
       {/* Top bar */}
       <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
         <div className="flex items-center gap-3">
@@ -551,7 +556,7 @@ export default function InvoiceEdit() {
                 </h3>
                 <button
                   type="button"
-                  onClick={() => setLines((prev) => [...prev, emptyLine()])}
+                  onClick={() => { setLines((prev) => [...prev, emptyLine()]); setDirty(true); }}
                   className="glass-button inline-flex items-center gap-1.5 !px-2.5 !py-1.5 !text-xs"
                 >
                   <Plus size={12} />
@@ -710,6 +715,8 @@ export default function InvoiceEdit() {
           </div>
         )}
       </div>
+
+      <LeaveFormConfirm open={guard.active} onConfirm={guard.confirmLeave} onCancel={guard.cancelLeave} />
     </div>
   );
 }

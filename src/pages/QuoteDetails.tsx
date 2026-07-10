@@ -35,6 +35,8 @@ import ServicePicker from '../components/ServicePicker';
 import type { PredefinedService } from '../lib/servicesApi';
 import { getJobAgreementByQuote, sendAgreementEmail, type JobAgreement } from '../lib/jobAgreementsApi';
 import AgreementCreateModal from '../components/agreements/AgreementCreateModal';
+import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
+import { useNavigationGuard } from '../contexts/NavigationGuard';
 
 const MONTHS_SHORT_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
 const MONTHS_SHORT_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -69,6 +71,17 @@ export default function QuoteDetails() {
   // Per-line catalog picker: id of the line whose product/service is being chosen
   const [lineEditId, setLineEditId] = useState<string | null>(null);
 
+  // Leave-without-saving guard — dirty only when the user actually modified
+  // something inside an open inline-edit session (see the root's onInput/onChange).
+  const [editDirty, setEditDirty] = useState(false);
+  const guard = useNavigationGuard(editing !== null && editDirty);
+  useEffect(() => {
+    if (editing === null || !editDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [editing, editDirty]);
+
   // ── Contrat (agreement) lié au devis — même feature que les jobs ──
   const [agreement, setAgreement] = useState<JobAgreement | null>(null);
   const [agreementSending, setAgreementSending] = useState(false);
@@ -88,6 +101,7 @@ export default function QuoteDetails() {
       description: service.description || '',
       unit_price: String(service.default_price_cents / 100),
     } : i));
+    setEditDirty(true);
     setLineEditId(null);
   };
 
@@ -137,6 +151,7 @@ export default function QuoteDetails() {
   // ── Edit helpers ──
   function startEdit(mode: EditMode) {
     setEditing(mode);
+    setEditDirty(false);
     if (mode === 'title') setEditTitle(quote.title || '');
     if (mode === 'notes') setEditNotes(quote.notes || '');
     if (mode === 'disclaimer') setEditDisclaimer(disclaimerSection?.content || quote.contract_disclaimer || '');
@@ -196,6 +211,7 @@ export default function QuoteDetails() {
       }
       toast.success(t.quoteDetails.saved);
       setEditing(null);
+      setEditDirty(false);
       await loadQuote();
     } catch (e: any) {
       toast.error(e?.message || 'Save failed');
@@ -204,7 +220,7 @@ export default function QuoteDetails() {
     }
   }
 
-  const cancelEdit = () => setEditing(null);
+  const cancelEdit = () => { setEditing(null); setEditDirty(false); };
 
 
   const inputCls = 'w-full px-3 py-2 bg-surface border border-outline rounded-lg text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all';
@@ -217,7 +233,11 @@ export default function QuoteDetails() {
   );
 
   return (
-    <div className="-mx-6 -mt-5">
+    <div
+      className="relative -mx-6 -mt-5"
+      onInput={(e) => { if (e.nativeEvent.isTrusted && editing !== null) setEditDirty(true); }}
+      onChange={(e) => { if (e.nativeEvent.isTrusted && editing !== null) setEditDirty(true); }}
+    >
       <div className="h-1.5 bg-gradient-to-r from-primary to-primary/70" />
 
       {/* ── Header ── */}
@@ -388,7 +408,11 @@ export default function QuoteDetails() {
           )}
 
           {/* Contrat (agreement) — même feature que les jobs */}
-          <div className="section-card p-5">
+          <div
+            className={cn('section-card p-5', agreement && 'cursor-pointer transition-colors hover:border-primary/40')}
+            onClick={agreement ? () => window.open(`/contract/${agreement.view_token}`, '_blank') : undefined}
+            title={agreement ? (language === 'fr' ? 'Voir le contrat tel que le client le voit' : 'View the contract as the client sees it') : undefined}
+          >
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-[14px] font-semibold text-text-primary flex items-center gap-2">
                 <FileSignature size={15} className="text-text-tertiary" />
@@ -433,7 +457,7 @@ export default function QuoteDetails() {
                     {agreement.terms}
                   </p>
                 )}
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => window.open(`/contract/${agreement.view_token}`, '_blank')}
                     className="glass-button inline-flex items-center gap-1.5 text-[12px]"
@@ -493,6 +517,17 @@ export default function QuoteDetails() {
             quoteId={quote.id}
             clientId={quote.client_id || quote.lead_id}
             onCreated={(a) => setAgreement(a)}
+            preview={{
+              numberLabel: `CTR-${quote.quote_number}`,
+              clientName: entityName !== 'Unknown' ? entityName : null,
+              clientEmail: entityEmail,
+              clientPhone: entityPhone,
+              propertyAddress: entityAddress,
+              items: line_items
+                .filter((i) => i.item_type === 'service' && !i.is_optional)
+                .map((i) => ({ name: i.name, qty: i.quantity, unit_price_cents: i.unit_price_cents, total_cents: i.total_cents })),
+              taxLines: quote.tax_rate > 0 ? [{ label: quote.tax_rate_label || 'Tax', rate: quote.tax_rate }] : [],
+            }}
           />
 
           {/* Introduction */}
@@ -540,13 +575,13 @@ export default function QuoteDetails() {
                       {formatQuoteMoney(Math.round((parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0) * 100))}
                     </div>
                     <div className="col-span-1 flex justify-center pt-1.5">
-                      <button onClick={() => { if (editLineItems.length <= 1) { toast.error(language === 'fr' ? 'Au moins un item requis' : 'At least one item required'); return; } setEditLineItems(p => p.filter((_, i) => i !== idx)); }}
+                      <button onClick={() => { if (editLineItems.length <= 1) { toast.error(language === 'fr' ? 'Au moins un item requis' : 'At least one item required'); return; } setEditLineItems(p => p.filter((_, i) => i !== idx)); setEditDirty(true); }}
                         disabled={editLineItems.length <= 1}
                         className={cn("p-1 hover:text-danger", editLineItems.length <= 1 ? "text-text-muted cursor-not-allowed" : "text-text-tertiary")}><Trash2 size={13} /></button>
                     </div>
                   </div>
                 ))}
-                <button onClick={() => setEditLineItems(p => [...p, { id: crypto.randomUUID(), name: '', description: '', quantity: '1', unit_price: '0', is_optional: false }])}
+                <button onClick={() => { setEditLineItems(p => [...p, { id: crypto.randomUUID(), name: '', description: '', quantity: '1', unit_price: '0', is_optional: false }]); setEditDirty(true); }}
                   className="glass-button text-xs flex items-center gap-1.5 px-3 py-1.5">
                   <Plus size={12} /> {language === 'fr' ? 'Ajouter une ligne' : 'Add Line Item'}
                 </button>
@@ -697,6 +732,8 @@ export default function QuoteDetails() {
         </div>
       )}
 
+      {/* Leave-without-saving confirmation (unsaved inline edit) */}
+      <LeaveFormConfirm open={guard.active} onConfirm={guard.confirmLeave} onCancel={guard.cancelLeave} />
     </div>
   );
 }
