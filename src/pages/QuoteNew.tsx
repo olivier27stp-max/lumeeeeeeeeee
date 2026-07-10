@@ -13,6 +13,7 @@ import {
   type QuoteLineItemInput, type QuoteSectionInput, type QuoteServicePlan,
 } from '../lib/quotesApi';
 import { getCompanySettings } from '../lib/invoicesApi';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { peekNextNumbers } from '../lib/numbersApi';
 import { supabase } from '../lib/supabase';
 import { createLeadScoped } from '../lib/leadsApi';
@@ -20,6 +21,7 @@ import AddressAutocomplete, { type StructuredAddress } from '../components/Addre
 import { listPropertiesByClient, type PropertyRecord } from '../lib/propertiesApi';
 import ServicePicker from '../components/ServicePicker';
 import QuoteRenderer from '../components/quote/QuoteRenderer';
+import AgreementDraftPreviewModal, { type AgreementDraftPreviewData } from '../components/agreements/AgreementDraftPreviewModal';
 import type { QuoteRenderData } from '../components/quote/types';
 import type { PredefinedService } from '../lib/servicesApi';
 import type { QuotePreset } from '../types';
@@ -159,6 +161,9 @@ export default function QuoteNew() {
   const [serviceYear, setServiceYear] = useState(new Date().getFullYear());
   const [serviceMonthDates, setServiceMonthDates] = useState<Record<number, string>>({});
 
+  // ── Logo sur le devis : null = logo d'entreprise par défaut (comme l'agreement) ──
+  const [quoteLogoUrl, setQuoteLogoUrl] = useState<string | null>(null);
+
   // ── Photos en haut du devis ──
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -199,6 +204,7 @@ export default function QuoteNew() {
   const [agreementRequireSignature, setAgreementRequireSignature] = useState(true);
   const [agreementTerms, setAgreementTerms] = useState('');
   const [agreementLogoUrl, setAgreementLogoUrl] = useState<string | null>(null);
+  const [agreementPreviewOpen, setAgreementPreviewOpen] = useState(false);
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
 
   // ── Divers ──
@@ -302,16 +308,18 @@ export default function QuoteNew() {
     }).catch(() => setTaxConfigured(false));
   }, [clientId, contactMode]);
 
-  // ── Contrat : termes par défaut + logo d'entreprise ──
+  // ── Contrat : termes par défaut + logo d'entreprise (scopé à l'org active) ──
   useEffect(() => {
     if (!createAgreement) return;
     setAgreementTerms((prev) => prev || DEFAULT_AGREEMENT_TERMS[fr ? 'fr' : 'en']);
     if (companyLogoUrl === null) {
-      supabase
-        .from('company_settings')
-        .select('logo_url')
-        .limit(1)
-        .maybeSingle()
+      getCurrentOrgIdOrThrow()
+        .then((orgId) => supabase
+          .from('company_settings')
+          .select('logo_url')
+          .eq('org_id', orgId)
+          .limit(1)
+          .maybeSingle())
         .then(({ data }) => setCompanyLogoUrl(data?.logo_url || ''))
         .then(undefined, () => setCompanyLogoUrl(''));
     }
@@ -345,6 +353,44 @@ export default function QuoteNew() {
   [subtotalCents, discountCents, taxEnabled, taxRate, taxBreakdown]);
 
   const totalCents = subtotalCents - discountCents + taxCents;
+
+  // Draft contract preview — same document the client will see on /contract/:token
+  const agreementPreviewData: AgreementDraftPreviewData = useMemo(() => {
+    let name: string | null = null, email: string | null = null, phone: string | null = null, address: string | null = null;
+    if (contactMode === 'new') {
+      name = `${leadFirstName} ${leadLastName}`.trim() || leadCompany || null;
+      email = leadEmail || null;
+      phone = leadPhone || null;
+      address = leadAddress || leadAddressSearch || null;
+    } else if (clientDetail) {
+      name = `${clientDetail.first_name || ''} ${clientDetail.last_name || ''}`.trim() || clientDetail.company || null;
+      email = clientDetail.email;
+      phone = clientDetail.phone;
+      address = clientDetail.address;
+    }
+    return {
+      numberLabel: `CTR-${quoteNumber.trim() || nextQuoteNumber || '—'}`,
+      clientName: name,
+      clientEmail: email,
+      clientPhone: phone,
+      propertyAddress: address,
+      items: lineItems
+        .filter((it) => it.item_type === 'service' && !it.is_optional && it.name.trim())
+        .map((it) => {
+          const qty = parseFloat(it.qtyInput) || 0;
+          const unit = Math.round((parseFloat(it.unitPriceInput) || 0) * 100);
+          return { name: it.name, qty, unit_price_cents: unit, total_cents: Math.max(0, Math.round(qty * unit)) };
+        }),
+      taxLines: taxBreakdown.length > 0
+        ? taxBreakdown.map((tx) => ({ label: tx.name, rate: tx.rate }))
+        : (taxEnabled && taxRate > 0 ? [{ label: taxLabel || 'Tax', rate: taxRate }] : []),
+      subtotalCents: subtotalCents - discountCents,
+    };
+  }, [
+    contactMode, leadFirstName, leadLastName, leadCompany, leadEmail, leadPhone, leadAddress,
+    leadAddressSearch, clientDetail, quoteNumber, nextQuoteNumber, lineItems, taxBreakdown,
+    taxEnabled, taxRate, taxLabel, subtotalCents, discountCents,
+  ]);
 
   const depositCents = useMemo(() => {
     if (!depositRequired) return 0;
@@ -418,7 +464,7 @@ export default function QuoteNew() {
       company_email: companySettings?.company_email || null,
       company_phone: companySettings?.company_phone || null,
       company_address: companySettings?.company_address || null,
-      company_logo_url: companySettings?.company_logo_url || null,
+      company_logo_url: quoteLogoUrl || companySettings?.company_logo_url || null,
       introduction: introEnabled ? (introContent || null) : null,
       contract_disclaimer: disclaimerEnabled ? (contractDisclaimer || null) : null,
       images: photos,
@@ -431,7 +477,7 @@ export default function QuoteNew() {
     leadAddress, leadAddressSearch, clientDetail, quoteNumber, title, validDays, notes,
     subtotalCents, discountCents, taxCents, taxEnabled, taxRate, taxLabel, totalCents,
     depositRequired, depositCents, introEnabled, introContent, disclaimerEnabled,
-    contractDisclaimer, photos, servicePlanPayload, lineItems, companySettings, fr, tq,
+    contractDisclaimer, photos, servicePlanPayload, lineItems, companySettings, quoteLogoUrl, fr, tq,
   ]);
 
   // ── Handlers lignes ──
@@ -657,6 +703,7 @@ export default function QuoteNew() {
         source_template_name: preset?.name || null,
         quote_type: quoteType,
         service_plan: servicePlanPayload,
+        logo_url: quoteLogoUrl,
         line_items: filteredItems,
         sections,
       });
@@ -892,6 +939,51 @@ export default function QuoteNew() {
                 </select></div>
               <div><label className={FIELD}>{tq.validForDays}</label>
                 <input type="number" min={1} value={validDays} onChange={e => setValidDays(Number(e.target.value) || 30)} className={INPUT} /></div>
+            </div>
+
+            {/* Logo sur le devis — logo d'entreprise par défaut, comme l'agreement */}
+            <div className="mt-3">
+              <span className={FIELD}>{fr ? 'Logo sur le devis' : 'Logo on the quote'}</span>
+              <div className={cn('flex items-center gap-3 rounded-xl border p-3', OUTLINE)}>
+                {(quoteLogoUrl || companySettings?.company_logo_url) ? (
+                  <img
+                    src={quoteLogoUrl || companySettings?.company_logo_url || ''}
+                    alt="Logo"
+                    className={cn('h-11 w-11 rounded-lg object-contain border bg-[#fafafa] dark:bg-[#1c1c1f] shrink-0', OUTLINE)}
+                  />
+                ) : (
+                  <div className={cn('h-11 w-11 rounded-lg bg-[#f5f5f5] dark:bg-[#1c1c1f] border shrink-0', OUTLINE)} />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-black dark:text-white">
+                    {quoteLogoUrl
+                      ? (fr ? 'Logo personnalisé' : 'Custom logo')
+                      : (fr ? "Logo de l'entreprise" : 'Company logo')}
+                  </p>
+                  <p className={cn(HINT, 'mt-0')}>
+                    {fr ? 'Par défaut : Réglages → Détails de l’entreprise' : 'Default: Settings → Company details'}
+                  </p>
+                </div>
+                {quoteLogoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => { setQuoteLogoUrl(null); setDirty(true); }}
+                    className="text-[12px] font-semibold text-black dark:text-white underline underline-offset-[3px] shrink-0"
+                  >
+                    {fr ? 'Retirer' : 'Remove'}
+                  </button>
+                )}
+              </div>
+              <div className="mt-2">
+                <FileUpload
+                  bucket={STORAGE_BUCKETS.COMPANY_LOGOS}
+                  path="quotes"
+                  accept="image/*"
+                  maxSizeMb={5}
+                  normalizeImageMaxDim={1024}
+                  onUpload={(url) => { setQuoteLogoUrl(url); setDirty(true); }}
+                />
+              </div>
             </div>
           </div>
 
@@ -1212,6 +1304,20 @@ export default function QuoteNew() {
                     ? "Les services, prix, taxes, la date de création et les informations de l'entreprise sont ajoutés automatiquement au contrat."
                     : 'Services, prices, taxes, creation date and company info are added to the agreement automatically.'}
                 </div>
+
+                <button type="button" onClick={() => setAgreementPreviewOpen(true)} className={GHOST}>
+                  <Eye size={13} />
+                  {fr ? 'Prévisualiser le contrat (vue client)' : 'Preview contract (client view)'}
+                </button>
+
+                <AgreementDraftPreviewModal
+                  open={agreementPreviewOpen}
+                  onClose={() => setAgreementPreviewOpen(false)}
+                  requireSignature={agreementRequireSignature}
+                  terms={agreementTerms}
+                  logoUrl={agreementLogoUrl || companyLogoUrl}
+                  data={agreementPreviewData}
+                />
               </div>
             )}
           </div>

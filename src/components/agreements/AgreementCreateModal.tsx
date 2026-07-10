@@ -3,6 +3,7 @@ import { Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../../i18n';
 import { supabase } from '../../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import FileUpload from '../FileUpload';
 import { STORAGE_BUCKETS } from '../../lib/storage';
 import {
@@ -39,11 +40,13 @@ export default function AgreementCreateModal({ open, onClose, jobId, quoteId, cl
     if (!open) return;
     setTerms((prev) => prev || DEFAULT_AGREEMENT_TERMS[fr ? 'fr' : 'en']);
     if (companyLogoUrl === null) {
-      supabase
-        .from('company_settings')
-        .select('logo_url')
-        .limit(1)
-        .maybeSingle()
+      getCurrentOrgIdOrThrow()
+        .then((orgId) => supabase
+          .from('company_settings')
+          .select('logo_url')
+          .eq('org_id', orgId)
+          .limit(1)
+          .maybeSingle())
         .then(({ data }) => setCompanyLogoUrl(data?.logo_url || ''))
         .then(undefined, () => setCompanyLogoUrl(''));
     }

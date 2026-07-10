@@ -24,6 +24,8 @@ export interface Quote {
   title: string;
   quote_type: 'one_off' | 'service_plan';
   service_plan: QuoteServicePlan | null;
+  /** Logo affiché sur le devis — null = logo d'entreprise par défaut. */
+  logo_url: string | null;
   lead_id: string | null;
   client_id: string | null;
   job_id: string | null;
@@ -245,6 +247,7 @@ export async function createQuote(payload: {
   source_template_name?: string | null;
   quote_type?: 'one_off' | 'service_plan';
   service_plan?: QuoteServicePlan | null;
+  logo_url?: string | null;
   line_items: QuoteLineItemInput[];
   sections?: QuoteSectionInput[];
 }): Promise<QuoteDetail> {
@@ -302,6 +305,16 @@ export async function createQuote(payload: {
       .eq('id', quoteId)
       .eq('org_id', orgId);
     if (planErr) console.warn('[createQuote] service plan skipped (migration pending?):', planErr.message);
+  }
+
+  // 2c. Logo personnalisé du devis — même logique best-effort.
+  if (payload.logo_url) {
+    const { error: logoErr } = await supabase
+      .from('quotes')
+      .update({ logo_url: payload.logo_url })
+      .eq('id', quoteId)
+      .eq('org_id', orgId);
+    if (logoErr) console.warn('[createQuote] quote logo skipped (migration pending?):', logoErr.message);
   }
 
   // 3. Insert line items

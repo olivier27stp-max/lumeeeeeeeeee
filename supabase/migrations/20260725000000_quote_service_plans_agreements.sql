@@ -24,6 +24,11 @@ end $$;
 alter table public.quotes
   add column if not exists service_plan jsonb;
 
+-- Logo affiché sur le devis : null = logo d'entreprise (company_settings),
+-- sinon override personnalisé — même comportement que les agreements.
+alter table public.quotes
+  add column if not exists logo_url text;
+
 -- ── Agreements: attach to a quote OR a job ──
 alter table public.job_agreements
   add column if not exists quote_id uuid references public.quotes(id) on delete cascade;

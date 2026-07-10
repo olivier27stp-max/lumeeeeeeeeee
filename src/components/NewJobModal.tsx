@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, Clock3, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn, formatCurrency } from '../lib/utils';
 import { listClients, createClient } from '../lib/clientsApi';
@@ -9,6 +9,7 @@ import { listSalespeople, applyJobExtras } from '../lib/jobsApi';
 import { addVisit } from '../lib/scheduleApi';
 import { createServiceContract } from '../lib/serviceContractsApi';
 import { createJobAgreement, DEFAULT_AGREEMENT_TERMS } from '../lib/jobAgreementsApi';
+import AgreementDraftPreviewModal, { type AgreementDraftPreviewData } from './agreements/AgreementDraftPreviewModal';
 import FileUpload from './FileUpload';
 import { STORAGE_BUCKETS } from '../lib/storage';
 import { resolveClientIdForLead } from '../lib/leadsApi';
@@ -311,6 +312,7 @@ export default function NewJobModal({
   const [agreementRequireSignature, setAgreementRequireSignature] = useState(true);
   const [agreementTerms, setAgreementTerms] = useState('');
   const [agreementLogoUrl, setAgreementLogoUrl] = useState<string | null>(null);
+  const [agreementPreviewOpen, setAgreementPreviewOpen] = useState(false);
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
   const [requiresInvoicing, setRequiresInvoicing] = useState(true);
   const [billingSplit, setBillingSplit] = useState(false);
@@ -704,6 +706,34 @@ export default function NewJobModal({
 
   const grandTotalCents = effectiveSubtotalCents + taxTotalCents;
 
+  // Draft contract preview — same document the client will see on /contract/:token
+  const agreementPreviewData: AgreementDraftPreviewData = useMemo(() => ({
+    numberLabel: `CTR-${jobNumber.trim() || nextJobNumber || '—'}`,
+    clientName: isCreatingNewClient
+      ? ([newClientFirst, newClientLast].filter(Boolean).join(' ').trim() || newClientCompany || null)
+      : (selectedClient?.label || null),
+    clientEmail: isCreatingNewClient ? (newClientEmail || null) : null,
+    clientPhone: isCreatingNewClient ? (newClientPhone || null) : (selectedClient?.phone || null),
+    propertyAddress:
+      [addressLine1, addressLine2, addressCity, addressProvince, addressPostalCode].filter(Boolean).join(', ')
+        || prefilledAddress
+        || selectedClient?.address
+        || null,
+    items: lineItems
+      .filter((it) => it.included && it.name.trim())
+      .map((it) => {
+        const qty = Number.parseFloat(it.qtyInput || '0') || 0;
+        const unit = Math.round((Number.parseFloat(it.unitPriceInput || '0') || 0) * 100);
+        return { name: it.name, qty, unit_price_cents: unit, total_cents: Math.max(0, Math.round(qty * unit)) };
+      }),
+    taxLines: taxLines.filter((tx) => tx.enabled && tx.rate > 0).map((tx) => ({ label: tx.label, rate: tx.rate })),
+    subtotalCents: effectiveSubtotalCents,
+  }), [
+    jobNumber, nextJobNumber, isCreatingNewClient, newClientFirst, newClientLast, newClientCompany,
+    newClientEmail, newClientPhone, selectedClient, addressLine1, addressLine2, addressCity,
+    addressProvince, addressPostalCode, prefilledAddress, lineItems, taxLines, effectiveSubtotalCents,
+  ]);
+
   const resetForm = () => {
     setDirty(false);
     setTitle('');
@@ -885,12 +915,15 @@ export default function NewJobModal({
     if (!createAgreement) return;
     setAgreementTerms((prev) => prev || DEFAULT_AGREEMENT_TERMS[language === 'fr' ? 'fr' : 'en']);
     if (companyLogoUrl === null) {
-      supabase
-        .from('company_settings')
-        .select('logo_url')
-        .limit(1)
-        .maybeSingle()
-        .then(({ data }) => setCompanyLogoUrl(data?.logo_url || ''))
+      import('../lib/orgApi').then(({ getCurrentOrgIdOrThrow }) =>
+        getCurrentOrgIdOrThrow()
+          .then((orgId) => supabase
+            .from('company_settings')
+            .select('logo_url')
+            .eq('org_id', orgId)
+            .limit(1)
+            .maybeSingle())
+          .then(({ data }) => setCompanyLogoUrl(data?.logo_url || '')))
         .then(undefined, () => setCompanyLogoUrl(''));
     }
   }, [createAgreement, language, companyLogoUrl]);
@@ -2012,6 +2045,24 @@ export default function NewJobModal({
                           ? 'Les services, prix et taxes du job ainsi que la date de création et les infos de l’entreprise sont inclus automatiquement dans le contrat.'
                           : 'The job’s services, prices and taxes plus the creation date and company info are automatically included in the contract.'}
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setAgreementPreviewOpen(true)}
+                        className="glass-button !text-[12.5px] !px-3.5 !py-2 inline-flex items-center gap-1.5"
+                      >
+                        <Eye size={13} />
+                        {language === 'fr' ? 'Prévisualiser le contrat (vue client)' : 'Preview contract (client view)'}
+                      </button>
+
+                      <AgreementDraftPreviewModal
+                        open={agreementPreviewOpen}
+                        onClose={() => setAgreementPreviewOpen(false)}
+                        requireSignature={agreementRequireSignature}
+                        terms={agreementTerms}
+                        logoUrl={agreementLogoUrl || companyLogoUrl}
+                        data={agreementPreviewData}
+                      />
                     </>
                   )}
                 </Box>

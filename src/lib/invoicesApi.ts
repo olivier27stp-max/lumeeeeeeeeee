@@ -864,9 +864,13 @@ export async function getInvoiceSendEvents(invoiceId: string) {
 // ── Company settings for invoice rendering ──
 
 export async function getCompanySettings() {
+  // Scopé à l'org active : sans ce filtre, un utilisateur membre de plusieurs
+  // orgs peut recevoir la rangée d'une autre org (logo/nom manquants).
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('company_settings')
     .select('company_name, email, phone, street1, city, province, postal_code, logo_url')
+    .eq('org_id', orgId)
     .limit(1)
     .maybeSingle();
   if (error) throw error;

@@ -16,12 +16,15 @@ export interface AgreementCompanyBranding {
   taxLines: string[];
 }
 
-/** Company branding of the CURRENT org (RLS-scoped) for the contract header. */
+/** Company branding of the CURRENT org (org-scoped — RLS can expose several orgs). */
 export async function getAgreementCompanyBranding(): Promise<AgreementCompanyBranding> {
+  const { getCurrentOrgIdOrThrow } = await import('./orgApi');
+  const orgId = await getCurrentOrgIdOrThrow();
   const [{ data }, taxLines] = await Promise.all([
     supabase
       .from('company_settings')
       .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code')
+      .eq('org_id', orgId)
       .limit(1)
       .maybeSingle(),
     getTaxRegistrationLines(),
