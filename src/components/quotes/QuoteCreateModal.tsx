@@ -157,18 +157,19 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
       })
       .catch(() => {});
 
+    // Title always starts empty — the user picks it (the save fallback still
+    // names an untitled quote "Quote for {contact}").
+    setTitle('');
     if (lead) {
-      setTitle(`Quote for ${lead.first_name || ''} ${lead.last_name || ''}`.trim());
       setClientId(lead.client_id || '');
       // Fetch job line items for this lead
       fetchLeadJobLineItems(lead.id).then(setJobLineItems).catch(() => {});
     } else {
-      setTitle(''); setClientId('');
+      setClientId('');
     }
 
     // ── Pre-fill from preset (content only, no pricing) ──
     if (preset) {
-      if (!lead) setTitle(preset.name || '');
       if (preset.notes) setNotes(preset.notes);
       if (preset.intro_text) { setIntroEnabled(true); setIntroContent(preset.intro_text); }
       if (preset.services && preset.services.length > 0) {

@@ -237,9 +237,9 @@ export default function QuoteNew() {
     listSalespeople().then(setSalespeople).catch(() => setSalespeople([]));
     getCompanySettings().then(setCompanySettings).catch(() => {});
 
-    // Pré-remplissage depuis le preset choisi dans le popup (contenu, pas de prix)
+    // Pré-remplissage depuis le preset choisi dans le popup (contenu, pas de prix).
+    // Le titre reste vide — l'utilisateur le choisit lui-même.
     if (preset) {
-      setTitle(preset.name || '');
       if (preset.notes) setNotes(preset.notes);
       if (preset.intro_text) { setIntroEnabled(true); setIntroContent(preset.intro_text); }
       if (preset.services && preset.services.length > 0) {

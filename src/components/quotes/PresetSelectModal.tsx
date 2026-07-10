@@ -59,7 +59,8 @@ export default function PresetSelectModal({
     listQuotePresets(true)
       .then((list) => {
         setPresets(list);
-        setSelectedId(list.length > 0 ? list[0].id : BLANK_ID);
+        // « Devis vierge » sélectionné par défaut — aucun preset pré-choisi.
+        setSelectedId(BLANK_ID);
       })
       .catch(() => setPresets([]))
       .finally(() => setLoading(false));
