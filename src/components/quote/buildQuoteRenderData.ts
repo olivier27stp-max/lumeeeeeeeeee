@@ -83,8 +83,8 @@ export function buildQuoteRenderData(
     company_email: company?.company_email || null,
     company_phone: company?.company_phone || null,
     company_address: company?.company_address || null,
-    // Logo du devis (override) sinon logo d'entreprise par défaut.
-    company_logo_url: q.logo_url || company?.company_logo_url || null,
+    // Toujours le logo d'entreprise (Réglages → Détails de l'entreprise).
+    company_logo_url: company?.company_logo_url || null,
 
     introduction: intro?.content || null,
     contract_disclaimer: disclaimer?.content || null,

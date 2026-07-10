@@ -161,9 +161,6 @@ export default function QuoteNew() {
   const [serviceYear, setServiceYear] = useState(new Date().getFullYear());
   const [serviceMonthDates, setServiceMonthDates] = useState<Record<number, string>>({});
 
-  // ── Logo sur le devis : null = logo d'entreprise par défaut (comme l'agreement) ──
-  const [quoteLogoUrl, setQuoteLogoUrl] = useState<string | null>(null);
-
   // ── Photos en haut du devis ──
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -464,7 +461,7 @@ export default function QuoteNew() {
       company_email: companySettings?.company_email || null,
       company_phone: companySettings?.company_phone || null,
       company_address: companySettings?.company_address || null,
-      company_logo_url: quoteLogoUrl || companySettings?.company_logo_url || null,
+      company_logo_url: companySettings?.company_logo_url || null,
       introduction: introEnabled ? (introContent || null) : null,
       contract_disclaimer: disclaimerEnabled ? (contractDisclaimer || null) : null,
       images: photos,
@@ -477,7 +474,7 @@ export default function QuoteNew() {
     leadAddress, leadAddressSearch, clientDetail, quoteNumber, title, validDays, notes,
     subtotalCents, discountCents, taxCents, taxEnabled, taxRate, taxLabel, totalCents,
     depositRequired, depositCents, introEnabled, introContent, disclaimerEnabled,
-    contractDisclaimer, photos, servicePlanPayload, lineItems, companySettings, quoteLogoUrl, fr, tq,
+    contractDisclaimer, photos, servicePlanPayload, lineItems, companySettings, fr, tq,
   ]);
 
   // ── Handlers lignes ──
@@ -703,7 +700,6 @@ export default function QuoteNew() {
         source_template_name: preset?.name || null,
         quote_type: quoteType,
         service_plan: servicePlanPayload,
-        logo_url: quoteLogoUrl,
         line_items: filteredItems,
         sections,
       });
@@ -941,50 +937,6 @@ export default function QuoteNew() {
                 <input type="number" min={1} value={validDays} onChange={e => setValidDays(Number(e.target.value) || 30)} className={INPUT} /></div>
             </div>
 
-            {/* Logo sur le devis — logo d'entreprise par défaut, comme l'agreement */}
-            <div className="mt-3">
-              <span className={FIELD}>{fr ? 'Logo sur le devis' : 'Logo on the quote'}</span>
-              <div className={cn('flex items-center gap-3 rounded-xl border p-3', OUTLINE)}>
-                {(quoteLogoUrl || companySettings?.company_logo_url) ? (
-                  <img
-                    src={quoteLogoUrl || companySettings?.company_logo_url || ''}
-                    alt="Logo"
-                    className={cn('h-11 w-11 rounded-lg object-contain border bg-[#fafafa] dark:bg-[#1c1c1f] shrink-0', OUTLINE)}
-                  />
-                ) : (
-                  <div className={cn('h-11 w-11 rounded-lg bg-[#f5f5f5] dark:bg-[#1c1c1f] border shrink-0', OUTLINE)} />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-semibold text-black dark:text-white">
-                    {quoteLogoUrl
-                      ? (fr ? 'Logo personnalisé' : 'Custom logo')
-                      : (fr ? "Logo de l'entreprise" : 'Company logo')}
-                  </p>
-                  <p className={cn(HINT, 'mt-0')}>
-                    {fr ? 'Par défaut : Réglages → Détails de l’entreprise' : 'Default: Settings → Company details'}
-                  </p>
-                </div>
-                {quoteLogoUrl && (
-                  <button
-                    type="button"
-                    onClick={() => { setQuoteLogoUrl(null); setDirty(true); }}
-                    className="text-[12px] font-semibold text-black dark:text-white underline underline-offset-[3px] shrink-0"
-                  >
-                    {fr ? 'Retirer' : 'Remove'}
-                  </button>
-                )}
-              </div>
-              <div className="mt-2">
-                <FileUpload
-                  bucket={STORAGE_BUCKETS.COMPANY_LOGOS}
-                  path="quotes"
-                  accept="image/*"
-                  maxSizeMb={5}
-                  normalizeImageMaxDim={1024}
-                  onUpload={(url) => { setQuoteLogoUrl(url); setDirty(true); }}
-                />
-              </div>
-            </div>
           </div>
 
           {/* Plan de service — calendrier (même modèle que le formulaire de job) */}

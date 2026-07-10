@@ -744,21 +744,19 @@ router.get('/quotes/public/:token', async (req, res) => {
       lead = l;
     }
 
-    // Type + service plan + logo du devis — best-effort: colonnes absentes
-    // tant que la migration quote_service_plans n'est pas appliquée.
+    // Type + service plan — best-effort: colonnes absentes tant que la
+    // migration quote_service_plans n'est pas appliquée.
     let quoteType: string = 'one_off';
     let servicePlan: any = null;
-    let quoteLogo: string | null = null;
     try {
       const { data: planRow } = await admin
         .from('quotes')
-        .select('quote_type, service_plan, logo_url')
+        .select('quote_type, service_plan')
         .eq('id', quote.id)
         .maybeSingle();
       if (planRow) {
         quoteType = planRow.quote_type || 'one_off';
         servicePlan = planRow.service_plan || null;
-        quoteLogo = planRow.logo_url || null;
       }
     } catch { /* migration pending */ }
 
@@ -837,8 +835,8 @@ router.get('/quotes/public/:token', async (req, res) => {
       agreement,
       company: {
         company_name: companyData?.company_name || 'Business',
-        // Logo du devis (override) sinon logo d'entreprise par défaut.
-        logo_url: quoteLogo || companyData?.logo_url || null,
+        // Toujours le logo d'entreprise (Réglages → Détails de l'entreprise).
+        logo_url: companyData?.logo_url || null,
         phone: companyData?.phone || null, email: companyData?.email || null, website: companyData?.website || null,
         street1: companyData?.street1 || null, city: companyData?.city || null,
         province: companyData?.province || null, postal_code: companyData?.postal_code || null,
