@@ -556,6 +556,12 @@ router.post('/quotes/convert-to-job', async (req, res) => {
       return res.status(400).json({ error: 'Only approved quotes can be converted to a job.' });
     }
 
+    // Un devis « plan de service » devient un job récurrent (colonnes absentes
+    // tant que la migration quote_service_plans n'est pas appliquée → one_off).
+    const isServicePlan = quote.quote_type === 'service_plan'
+      && quote.service_plan && Array.isArray(quote.service_plan.visits)
+      && quote.service_plan.visits.length > 0;
+
     // Create job via RPC
     const { data: rpcResult, error: rpcError } = await auth.client.rpc('rpc_create_job_with_optional_schedule', {
       p_lead_id: quote.lead_id || null,
@@ -563,7 +569,7 @@ router.post('/quotes/convert-to-job', async (req, res) => {
       p_team_id: null,
       p_title: quote.title || `Job from Quote #${quote.quote_number}`,
       p_job_number: null,
-      p_job_type: null,
+      p_job_type: isServicePlan ? 'recurring' : null,
       p_status: 'draft',
       p_address: null,
       p_notes: quote.notes || null,
@@ -573,6 +579,25 @@ router.post('/quotes/convert-to-job', async (req, res) => {
     });
     if (rpcError) throw rpcError;
     const jobId = String((rpcResult as any)?.job_id || '');
+
+    // Contrat de service du plan : mêmes visites que sur la soumission —
+    // rien à ressaisir. Non-bloquant.
+    if (isServicePlan && jobId) {
+      try {
+        await admin.from('service_contracts').insert({
+          org_id: auth.orgId,
+          job_id: jobId,
+          client_id: quote.client_id || quote.lead_id || null,
+          title: quote.title || `Service plan — Quote #${quote.quote_number}`,
+          year: Number(quote.service_plan.year) || new Date().getFullYear(),
+          visits: quote.service_plan.visits,
+          status: 'active',
+          created_by: auth.user.id,
+        });
+      } catch (contractErr: any) {
+        console.error('[quotes/convert-to-job] service contract skipped:', contractErr?.message);
+      }
+    }
 
     // Copy quote line items to job line items
     const { data: quoteItems } = await admin
@@ -719,6 +744,58 @@ router.get('/quotes/public/:token', async (req, res) => {
       lead = l;
     }
 
+    // Type + service plan — best-effort: colonnes absentes tant que la
+    // migration quote_service_plans n'est pas appliquée.
+    let quoteType: string = 'one_off';
+    let servicePlan: any = null;
+    try {
+      const { data: planRow } = await admin
+        .from('quotes')
+        .select('quote_type, service_plan')
+        .eq('id', quote.id)
+        .maybeSingle();
+      if (planRow) {
+        quoteType = planRow.quote_type || 'one_off';
+        servicePlan = planRow.service_plan || null;
+      }
+    } catch { /* migration pending */ }
+
+    // Photos en haut du devis (section 'images' → JSON array d'URLs)
+    let images: string[] = [];
+    try {
+      const { data: imgSection } = await admin
+        .from('quote_sections')
+        .select('content')
+        .eq('quote_id', quote.id)
+        .eq('section_type', 'images')
+        .eq('enabled', true)
+        .maybeSingle();
+      if (imgSection?.content) {
+        const parsed = JSON.parse(imgSection.content);
+        if (Array.isArray(parsed)) images = parsed.filter((u: any) => typeof u === 'string');
+      }
+    } catch { /* pas de section images */ }
+
+    // Contrat écrit lié au devis (même feature que les jobs)
+    let agreement: { view_token: string; require_signature: boolean; status: string } | null = null;
+    try {
+      const { data: ag } = await admin
+        .from('job_agreements')
+        .select('view_token, require_signature, status')
+        .eq('quote_id', quote.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (ag?.view_token) {
+        agreement = {
+          view_token: ag.view_token,
+          require_signature: ag.require_signature !== false,
+          status: ag.status || 'draft',
+        };
+      }
+    } catch { /* migration pending */ }
+
     // Signature (if approved)
     let signature = null;
     if (['approved', 'converted'].includes(quote.status)) {
@@ -752,7 +829,10 @@ router.get('/quotes/public/:token', async (req, res) => {
         deposit_status: quote.deposit_status || null, require_payment_method: quote.require_payment_method || false,
         approved_at: quote.approved_at, declined_at: quote.declined_at,
         org_id: quote.org_id, view_token: quote.view_token,
+        quote_type: quoteType, service_plan: servicePlan,
       },
+      images,
+      agreement,
       company: {
         company_name: companyData?.company_name || 'Business', logo_url: companyData?.logo_url || null,
         phone: companyData?.phone || null, email: companyData?.email || null, website: companyData?.website || null,

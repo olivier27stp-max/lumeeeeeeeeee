@@ -14,17 +14,19 @@ import {
 interface AgreementCreateModalProps {
   open: boolean;
   onClose: () => void;
-  jobId: string;
+  /** Exactly one of jobId / quoteId — the agreement feature is shared by jobs and quotes. */
+  jobId?: string;
+  quoteId?: string;
   clientId: string | null;
   onCreated: (agreement: JobAgreement) => void;
 }
 
 /**
- * Create a written agreement for an EXISTING job from the job hub — same
+ * Create a written agreement for an EXISTING job or quote from its hub — same
  * fields as the "Contrat" box of the New Job form (signature required,
  * company logo default with override, prefilled editable T&C).
  */
-export default function AgreementCreateModal({ open, onClose, jobId, clientId, onCreated }: AgreementCreateModalProps) {
+export default function AgreementCreateModal({ open, onClose, jobId, quoteId, clientId, onCreated }: AgreementCreateModalProps) {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const [requireSignature, setRequireSignature] = useState(true);
@@ -53,7 +55,8 @@ export default function AgreementCreateModal({ open, onClose, jobId, clientId, o
     setSaving(true);
     try {
       const created = await createJobAgreement({
-        job_id: jobId,
+        job_id: jobId || null,
+        quote_id: quoteId || null,
         client_id: clientId,
         require_signature: requireSignature,
         terms: terms.trim(),

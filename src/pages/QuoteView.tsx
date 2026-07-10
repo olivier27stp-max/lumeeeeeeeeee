@@ -47,7 +47,11 @@ interface QuoteData {
     declined_at: string | null;
     org_id: string;
     view_token: string;
+    quote_type?: 'one_off' | 'service_plan';
+    service_plan?: { year: number; visits: Array<{ month: number; date: string }> } | null;
   };
+  images?: string[];
+  agreement?: { view_token: string; require_signature: boolean; status: string } | null;
   company: CompanyBranding;
   client: { first_name: string; last_name: string; company: string | null; email: string | null; phone: string | null } | null;
   lead: { first_name: string; last_name: string; company: string | null; email: string | null; phone: string | null } | null;
@@ -418,6 +422,14 @@ export default function QuoteView() {
   }
 
   const { quote, company, client, lead, items, signature } = data;
+  const images = data.images || [];
+  const agreement = data.agreement || null;
+  const servicePlan = quote.quote_type === 'service_plan' && quote.service_plan?.visits?.length
+    ? quote.service_plan
+    : null;
+  const planByMonth: Record<number, string> = {};
+  if (servicePlan) for (const v of servicePlan.visits) planByMonth[v.month] = v.date;
+  const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const cur = quote.currency;
   const contact = client || lead;
   const isExpired = quote.valid_until && new Date(quote.valid_until) < new Date();
@@ -519,6 +531,19 @@ export default function QuoteView() {
             </div>
           </div>
 
+          {/* ── PHOTOS (top of the quote) ── */}
+          {images.length > 0 && (
+            <div className="px-8 pb-6">
+              <div className={`grid gap-2 ${images.length === 1 ? 'grid-cols-1' : images.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                {images.slice(0, 6).map((url) => (
+                  <div key={url} className="overflow-hidden rounded-lg border border-[#e5e5e5]" style={{ aspectRatio: '16 / 10' }}>
+                    <img src={url} alt="" className="h-full w-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ── Divider ── */}
           <div className="border-t border-[#eee]" />
 
@@ -585,6 +610,33 @@ export default function QuoteView() {
           {quote.title && (
             <div className="px-8 pb-4">
               <p className="text-[14px] font-medium text-[#333]">{quote.title}</p>
+            </div>
+          )}
+
+          {/* ── SERVICE PLAN SCHEDULE ── */}
+          {servicePlan && (
+            <div className="px-8 pb-5">
+              <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">
+                Service Plan — {servicePlan.year} · {servicePlan.visits.length} visit{servicePlan.visits.length > 1 ? 's' : ''}
+              </p>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {MONTH_LABELS.map((label, i) => {
+                  const month = i + 1;
+                  const date = planByMonth[month];
+                  return (
+                    <div
+                      key={month}
+                      className={`rounded-lg px-2.5 py-2 border ${date ? 'border-[#111] bg-[#fafafa]' : 'border-[#eee]'}`}
+                    >
+                      <p className={`text-[9px] font-semibold uppercase tracking-wider ${date ? 'text-[#111]' : 'text-[#ccc]'}`}>{label}</p>
+                      <p className={`text-[11px] mt-0.5 font-medium tabular-nums ${date ? 'text-[#111]' : 'text-[#e5e5e5]'}`}>
+                        {date ? fmtDate(date) : '—'}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-[11px] text-[#aaa]">Pricing below covers all planned visits of the service plan.</p>
             </div>
           )}
 
@@ -702,6 +754,32 @@ export default function QuoteView() {
               )}
             </div>
           </div>
+
+          {/* ── WRITTEN AGREEMENT (same feature as job agreements) ── */}
+          {agreement && (
+            <div className="px-8 pb-6">
+              <div className="rounded-lg border border-[#111] px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-[13px] font-semibold text-[#111]">Written Agreement</p>
+                  <p className="text-[12px] text-[#666] mt-0.5">
+                    {agreement.status === 'signed'
+                      ? 'Signed — view the attached contract'
+                      : agreement.require_signature
+                        ? 'Signature required — review and sign the attached contract'
+                        : 'Review the contract attached to this quote'}
+                  </p>
+                </div>
+                <a
+                  href={`/contract/${agreement.view_token}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 rounded-lg bg-[#111] px-4 py-2.5 text-[13px] font-semibold text-white text-center hover:bg-[#222] transition-colors"
+                >
+                  {agreement.status !== 'signed' && agreement.require_signature ? 'View & Sign Contract' : 'View Contract'}
+                </a>
+              </div>
+            </div>
+          )}
 
           {/* ── NOTES ── */}
           {quote.notes && (

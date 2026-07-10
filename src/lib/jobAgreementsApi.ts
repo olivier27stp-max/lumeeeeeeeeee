@@ -37,7 +37,9 @@ export interface AgreementSnapshot {
 export interface JobAgreement {
   id: string;
   org_id: string;
-  job_id: string;
+  /** Exactly one of job_id / quote_id is set — the same agreement feature is shared by jobs and quotes. */
+  job_id: string | null;
+  quote_id: string | null;
   client_id: string | null;
   require_signature: boolean;
   terms: string;
@@ -77,7 +79,8 @@ function mapAgreement(raw: any): JobAgreement {
   return {
     id: raw.id,
     org_id: raw.org_id,
-    job_id: raw.job_id,
+    job_id: raw.job_id ?? null,
+    quote_id: raw.quote_id ?? null,
     client_id: raw.client_id ?? null,
     require_signature: raw.require_signature !== false,
     terms: raw.terms || '',
@@ -99,18 +102,21 @@ function mapAgreement(raw: any): JobAgreement {
  * silently no-ops (returns null) so job creation never breaks.
  */
 export async function createJobAgreement(payload: {
-  job_id: string;
+  job_id?: string | null;
+  quote_id?: string | null;
   client_id?: string | null;
   require_signature: boolean;
   terms: string;
   logo_url?: string | null;
 }): Promise<JobAgreement | null> {
+  if (!payload.job_id && !payload.quote_id) throw new Error('Agreement needs a job or a quote.');
   const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('job_agreements')
     .insert({
       org_id: orgId,
-      job_id: payload.job_id,
+      job_id: payload.job_id || null,
+      quote_id: payload.quote_id || null,
       client_id: payload.client_id || null,
       require_signature: payload.require_signature,
       terms: payload.terms,
@@ -127,6 +133,25 @@ export async function createJobAgreement(payload: {
     throw error;
   }
   return mapAgreement(data);
+}
+
+/** Latest agreement for a quote, or null (also null if migration pending). */
+export async function getJobAgreementByQuote(quoteId: string): Promise<JobAgreement | null> {
+  if (!quoteId) return null;
+  const { data, error } = await supabase
+    .from('job_agreements')
+    .select('*')
+    .eq('quote_id', quoteId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    // 42703 = undefined_column (quote_id migration pending)
+    if (isMissingTableError(error) || (error as any).code === '42703') return null;
+    throw error;
+  }
+  return data ? mapAgreement(data) : null;
 }
 
 /** Latest agreement for a job, or null (also null if migration pending). */

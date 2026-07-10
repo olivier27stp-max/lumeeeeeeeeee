@@ -41,6 +41,15 @@ export interface QuoteRenderData {
   introduction: string | null;
   contract_disclaimer: string | null;
 
+  // Photos displayed at the top of the quote (under the company header)
+  images?: string[];
+
+  // Service plan (quote_type = 'service_plan') — 12-month schedule shown to the client
+  service_plan?: { year: number; visits: Array<{ month: number; date: string }> } | null;
+
+  // Written agreement attached to the quote (public /contract/:token page)
+  agreement?: { view_token: string; require_signature: boolean; status: string } | null;
+
   // Items
   items: QuoteRenderItem[];
   optional_items: QuoteRenderItem[];

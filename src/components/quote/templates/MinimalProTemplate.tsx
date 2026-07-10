@@ -25,9 +25,15 @@ const STATUS_MAP: Record<string, { label: string; bg: string; fg: string }> = {
   converted:         { label: 'Converted',        bg: '#f0fdf4', fg: '#15803d' },
 };
 
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 export default function MinimalProTemplate({ data }: { data: QuoteRenderData }) {
   const fmt = (c: number) => formatMoneyFromCents(c, data.currency);
   const st = STATUS_MAP[data.status] || STATUS_MAP.draft;
+  const images = data.images || [];
+  const plan = data.service_plan && data.service_plan.visits?.length > 0 ? data.service_plan : null;
+  const planByMonth: Record<number, string> = {};
+  if (plan) for (const v of plan.visits) planByMonth[v.month] = v.date;
 
   return (
     <div className="bg-white text-[#111]" style={{ fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI","Inter",sans-serif', fontSize: '13px', lineHeight: 1.55 }}>
@@ -42,6 +48,17 @@ export default function MinimalProTemplate({ data }: { data: QuoteRenderData }) 
           </div>
           <p className="text-[28px] font-semibold tracking-tight text-[#111]">Quote</p>
         </div>
+
+        {/* ── Photos (top of the quote) ── */}
+        {images.length > 0 && (
+          <div className={`mt-6 grid gap-2 ${images.length === 1 ? 'grid-cols-1' : images.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+            {images.slice(0, 6).map((url) => (
+              <div key={url} className="overflow-hidden rounded-lg border border-[#e5e7eb]" style={{ aspectRatio: '16 / 10' }}>
+                <img src={url} alt="" className="h-full w-full object-cover" />
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ── Meta ── */}
         <div className="mt-8 flex justify-between">
@@ -83,6 +100,33 @@ export default function MinimalProTemplate({ data }: { data: QuoteRenderData }) 
           <p className="text-[13px] font-medium text-[#6b7280]">{data.title || 'Quote Total'}</p>
           <p className="text-[24px] font-semibold tracking-tight">{fmt(data.total_cents)}</p>
         </div>
+
+        {/* ── Service plan schedule (quote_type = 'service_plan') ── */}
+        {plan && (
+          <div className="mt-6">
+            <p className="text-[10px] font-medium uppercase tracking-widest text-[#9ca3af] mb-2">
+              Service Plan — {plan.year} · {plan.visits.length} visit{plan.visits.length > 1 ? 's' : ''}
+            </p>
+            <div className="grid grid-cols-4 gap-2">
+              {MONTH_LABELS.map((label, i) => {
+                const month = i + 1;
+                const date = planByMonth[month];
+                return (
+                  <div
+                    key={month}
+                    className={`rounded-lg px-2.5 py-2 border ${date ? 'border-[#111] bg-[#fafafa]' : 'border-[#e5e7eb]'}`}
+                  >
+                    <p className={`text-[9px] font-semibold uppercase tracking-wider ${date ? 'text-[#111]' : 'text-[#d1d5db]'}`}>{label}</p>
+                    <p className={`text-[11px] mt-0.5 font-medium tabular-nums ${date ? 'text-[#111]' : 'text-[#e5e7eb]'}`}>
+                      {date ? fmtDate(date) : '—'}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-[10.5px] text-[#9ca3af]">Pricing below covers all planned visits of the service plan.</p>
+          </div>
+        )}
 
         {/* ── Introduction ── */}
         {data.introduction && (
@@ -147,6 +191,30 @@ export default function MinimalProTemplate({ data }: { data: QuoteRenderData }) 
               <p className="text-[11px] text-[#6b7280] mt-0.5">Due upon acceptance to confirm this quote</p>
             </div>
             <p className="text-[20px] font-bold">{fmt(data.deposit_cents)}</p>
+          </div>
+        )}
+
+        {/* ── Written agreement attached to this quote ── */}
+        {data.agreement && (
+          <div className="mt-6 rounded-lg border border-[#111] px-5 py-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[13px] font-semibold">Written Agreement</p>
+              <p className="text-[11px] text-[#6b7280] mt-0.5">
+                {data.agreement.status === 'signed'
+                  ? 'Signed — view the attached contract'
+                  : data.agreement.require_signature
+                    ? 'Signature required — review and sign the attached contract'
+                    : 'Review the attached contract'}
+              </p>
+            </div>
+            <a
+              href={`/contract/${data.agreement.view_token}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 rounded-md bg-[#111] px-4 py-2 text-[12px] font-semibold text-white"
+            >
+              {data.agreement.status !== 'signed' && data.agreement.require_signature ? 'View & sign' : 'View contract'}
+            </a>
           </div>
         )}
 

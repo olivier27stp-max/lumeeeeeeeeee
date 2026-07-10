@@ -21,7 +21,6 @@ import { listSalespeople } from '../lib/jobsApi';
 import { clientDisplayName } from '../lib/clientsApi';
 import { formatDate, cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
-import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
 import PresetSelectModal from '../components/quotes/PresetSelectModal';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import type { QuotePreset } from '../types';
@@ -127,18 +126,15 @@ export default function Quotes() {
   const [debounced, setDebounced] = useState('');
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<QuoteSort>('recent');
-  const [createOpen, setCreateOpen] = useState(false);
   const [presetSelectOpen, setPresetSelectOpen] = useState(false);
-  const [selectedPreset, setSelectedPreset] = useState<QuotePreset | null>(null);
   const location = useLocation();
 
-  // Handle navigation with createWithPreset state
+  // Handle navigation with createWithPreset state → full-page creation form
   useEffect(() => {
     const state = location.state as { createWithPreset?: QuotePreset } | null;
     if (state?.createWithPreset) {
-      setSelectedPreset(state.createWithPreset);
-      setCreateOpen(true);
       window.history.replaceState({}, document.title);
+      nav('/quotes/new', { state: { preset: state.createWithPreset } });
     }
   }, [location.state]);
 
@@ -149,15 +145,14 @@ export default function Quotes() {
   }, []);
 
   const handleNewQuote = () => setPresetSelectOpen(true);
+  // Popup de presets → page complète /quotes/new (le preset voyage en state)
   const handleSelectPreset = (preset: QuotePreset) => {
-    setSelectedPreset(preset);
     setPresetSelectOpen(false);
-    setCreateOpen(true);
+    nav('/quotes/new', { state: { preset } });
   };
   const handleStartFromScratch = () => {
-    setSelectedPreset(null);
     setPresetSelectOpen(false);
-    setCreateOpen(true);
+    nav('/quotes/new');
   };
 
   React.useEffect(() => {
@@ -451,19 +446,6 @@ export default function Quotes() {
         onStartFromScratch={handleStartFromScratch}
         onCreatePreset={() => { setPresetSelectOpen(false); nav('/quotes/presets'); }}
         onClose={() => setPresetSelectOpen(false)}
-      />
-      <QuoteCreateModal
-        isOpen={createOpen}
-        onClose={() => { setCreateOpen(false); setSelectedPreset(null); }}
-        createLeadInline
-        preset={selectedPreset}
-        onCreated={(detail) => {
-          setCreateOpen(false);
-          setSelectedPreset(null);
-          qc.invalidateQueries({ queryKey: ['quotes-list'] });
-          qc.invalidateQueries({ queryKey: ['quote-kpis'] });
-          nav(`/quotes/${detail.quote.id}`);
-        }}
       />
     </>
   );

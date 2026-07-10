@@ -42,6 +42,17 @@ export function buildQuoteRenderData(
   const intro = detail.sections.find(s => s.section_type === 'introduction' && s.enabled);
   const disclaimer = detail.sections.find(s => s.section_type === 'contract_disclaimer' && s.enabled);
 
+  // Photos at the top of the quote — stored as an 'images' section whose
+  // content is a JSON array of URLs.
+  const imagesSection = detail.sections.find(s => s.section_type === 'images' && s.enabled);
+  let images: string[] = [];
+  if (imagesSection?.content) {
+    try {
+      const parsed = JSON.parse(imagesSection.content);
+      if (Array.isArray(parsed)) images = parsed.filter((u) => typeof u === 'string');
+    } catch { /* legacy/free-text content — ignore */ }
+  }
+
   return {
     quote_number: q.quote_number,
     title: q.title,
@@ -76,6 +87,9 @@ export function buildQuoteRenderData(
 
     introduction: intro?.content || null,
     contract_disclaimer: disclaimer?.content || null,
+
+    images,
+    service_plan: q.quote_type === 'service_plan' ? (q.service_plan || null) : null,
 
     items: serviceItems.map(mapItem),
     optional_items: optionalItems.map(mapItem),

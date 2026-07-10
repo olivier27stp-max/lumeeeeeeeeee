@@ -95,6 +95,7 @@ import SettingsMessaging from './pages/SettingsMessaging';
 import RequestFormSettings from './pages/RequestFormSettings';
 import QuotePresets from './pages/QuotePresets';
 const QuoteMeasure = React.lazy(() => import('./pages/QuoteMeasure'));
+const QuoteNew = React.lazy(() => import('./pages/QuoteNew'));
 import TaxSettings from './pages/TaxSettings';
 import OAuthCallback from './pages/OAuthCallback';
 import DispatchMap from './pages/DispatchMap';
@@ -1207,6 +1208,7 @@ function AuthenticatedApp({
                     <Route path="/availability" element={<Navigate to="/timesheets?view=disponibilites" replace />} />
                     <Route path="/search" element={<Gated permission="settings.read"><PageWrapper><SearchResultsPage /></PageWrapper></Gated>} />
                     <Route path="/quotes" element={<Gated permission="quotes.read"><div className="px-8 py-6"><Quotes /></div></Gated>} />
+                    <Route path="/quotes/new" element={<Gated permission="quotes.read"><React.Suspense fallback={null}><QuoteNew /></React.Suspense></Gated>} />
                     <Route path="/quotes/measure" element={<Gated permission="quotes.read"><React.Suspense fallback={null}><QuoteMeasure /></React.Suspense></Gated>} />
                     <Route path="/quotes/presets" element={<Gated permission="settings.read"><PageWrapper><QuotePresets /></PageWrapper></Gated>} />
                     <Route path="/quotes/templates" element={<Gated permission="settings.read"><PageWrapper><QuotePresets /></PageWrapper></Gated>} />

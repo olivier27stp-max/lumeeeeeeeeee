@@ -5,11 +5,25 @@ import { syncEntityPin } from './fieldSalesApi';
 
 // ── Types ──
 
+/** One visit of a service-plan quote: a month (1..12) and the exact date inside it. */
+export interface QuoteServicePlanVisit {
+  month: number;
+  date: string; // YYYY-MM-DD
+}
+
+/** Stored in quotes.service_plan (jsonb) when quote_type = 'service_plan'. */
+export interface QuoteServicePlan {
+  year: number;
+  visits: QuoteServicePlanVisit[];
+}
+
 export interface Quote {
   id: string;
   org_id: string;
   quote_number: string;
   title: string;
+  quote_type: 'one_off' | 'service_plan';
+  service_plan: QuoteServicePlan | null;
   lead_id: string | null;
   client_id: string | null;
   job_id: string | null;
@@ -229,6 +243,8 @@ export async function createQuote(payload: {
   discount_value?: number;
   source_template_id?: string | null;
   source_template_name?: string | null;
+  quote_type?: 'one_off' | 'service_plan';
+  service_plan?: QuoteServicePlan | null;
   line_items: QuoteLineItemInput[];
   sections?: QuoteSectionInput[];
 }): Promise<QuoteDetail> {
@@ -274,6 +290,18 @@ export async function createQuote(payload: {
       const { error: updErr } = await supabase.from('quotes').update(updatePayload).eq('id', quoteId).eq('org_id', orgId);
       if (updErr) console.error('[createQuote] settings update failed:', updErr.message);
     }
+  }
+
+  // 2b. Type + plan de service — update séparé et best-effort : si la
+  // migration quote_service_plans n'est pas appliquée, on ne casse pas le
+  // reste de la création.
+  if (payload.quote_type === 'service_plan' && payload.service_plan) {
+    const { error: planErr } = await supabase
+      .from('quotes')
+      .update({ quote_type: 'service_plan', service_plan: payload.service_plan })
+      .eq('id', quoteId)
+      .eq('org_id', orgId);
+    if (planErr) console.warn('[createQuote] service plan skipped (migration pending?):', planErr.message);
   }
 
   // 3. Insert line items

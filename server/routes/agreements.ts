@@ -53,11 +53,85 @@ interface ComposedAgreementDoc {
 }
 
 /**
+ * Compose the contract's money section from the live quote (non-optional
+ * service line items + the quote's stored totals). Same shape as the job
+ * composition so the /contract/:token page and the PDF render identically.
+ */
+async function composeLiveDocFromQuote(admin: any, agreement: any): Promise<ComposedAgreementDoc> {
+  const { data: quote } = await admin
+    .from('quotes')
+    .select('id, quote_number, subtotal_cents, tax_rate, tax_rate_label, tax_cents, total_cents, client_id, lead_id, property_id')
+    .eq('id', agreement.quote_id)
+    .maybeSingle();
+
+  const { data: rawItems } = await admin
+    .from('quote_line_items')
+    .select('name, quantity, unit_price_cents, total_cents, is_optional, item_type')
+    .eq('quote_id', agreement.quote_id)
+    .order('sort_order', { ascending: true });
+
+  const items = (rawItems || [])
+    .filter((it: any) => it.item_type === 'service' && it.is_optional !== true)
+    .map((it: any) => ({
+      name: it.name || '',
+      qty: Number(it.quantity || 1),
+      unit_price_cents: Number(it.unit_price_cents || 0),
+      total_cents: Number(it.total_cents || 0),
+    }));
+
+  const computedSubtotal = items.reduce((sum: number, it: any) => sum + it.total_cents, 0);
+  const subtotalCents = Number(quote?.subtotal_cents || 0) || computedSubtotal;
+  const taxLines = Number(quote?.tax_cents || 0) > 0
+    ? [{
+        label: String(quote?.tax_rate_label || 'Tax'),
+        rate: Number(quote?.tax_rate || 0),
+        amount_cents: Number(quote?.tax_cents || 0),
+      }]
+    : [];
+  const totalCents = Number(quote?.total_cents || 0)
+    || subtotalCents + taxLines.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
+
+  let clientName: string | null = null;
+  let propertyAddress: string | null = null;
+  const clientId = agreement.client_id || quote?.client_id || quote?.lead_id;
+  if (clientId) {
+    const { data: c } = await admin
+      .from('clients')
+      .select('first_name, last_name, address')
+      .eq('id', clientId)
+      .maybeSingle();
+    if (c) {
+      clientName = `${c.first_name || ''} ${c.last_name || ''}`.trim() || null;
+      propertyAddress = c.address || null;
+    }
+  }
+  if (quote?.property_id) {
+    const { data: prop } = await admin
+      .from('properties')
+      .select('address')
+      .eq('id', quote.property_id)
+      .maybeSingle();
+    if (prop?.address) propertyAddress = prop.address;
+  }
+
+  return {
+    items,
+    subtotal_cents: subtotalCents,
+    tax_lines: taxLines,
+    total_cents: totalCents,
+    client_name: clientName,
+    property_address: propertyAddress,
+  };
+}
+
+/**
  * Compose the contract's money section from the live job (included line
  * items + jobs.tax_lines) — the exact logic the client uses. When the
- * agreement is signed its frozen `snapshot` takes precedence.
+ * agreement is signed its frozen `snapshot` takes precedence. Quote-linked
+ * agreements compose from the quote instead.
  */
 async function composeLiveDoc(admin: any, agreement: any): Promise<ComposedAgreementDoc> {
+  if (agreement.quote_id && !agreement.job_id) return composeLiveDocFromQuote(admin, agreement);
   const { data: job } = await admin
     .from('jobs')
     .select('id, job_number, subtotal, tax_lines, property_address, client_id')
@@ -129,11 +203,26 @@ router.get('/agreements/public/:token', async (req, res) => {
       .maybeSingle();
     if (aErr || !agreement) return res.status(404).json({ error: 'Agreement not found.' });
 
-    const { data: job } = await admin
-      .from('jobs')
-      .select('job_number, client_id')
-      .eq('id', agreement.job_id)
-      .maybeSingle();
+    // Numéro du contrat + client de repli — depuis le job OU le devis lié.
+    let refNumber: string | null = null;
+    let entityClientId: string | null = agreement.client_id || null;
+    if (agreement.job_id) {
+      const { data: job } = await admin
+        .from('jobs')
+        .select('job_number, client_id')
+        .eq('id', agreement.job_id)
+        .maybeSingle();
+      refNumber = job?.job_number ? String(job.job_number) : null;
+      entityClientId = entityClientId || job?.client_id || null;
+    } else if (agreement.quote_id) {
+      const { data: quote } = await admin
+        .from('quotes')
+        .select('quote_number, client_id, lead_id')
+        .eq('id', agreement.quote_id)
+        .maybeSingle();
+      refNumber = quote?.quote_number ? String(quote.quote_number) : null;
+      entityClientId = entityClientId || quote?.client_id || quote?.lead_id || null;
+    }
 
     // Company branding (of the agreement's org — multi-tenant safe)
     const { data: companyData } = await admin
@@ -156,7 +245,7 @@ router.get('/agreements/public/:token', async (req, res) => {
 
     // Client contact (for the doc header)
     let client: { name: string | null; email: string | null; phone: string | null } = { name: null, email: null, phone: null };
-    const clientId = agreement.client_id || job?.client_id;
+    const clientId = entityClientId;
     if (clientId) {
       const { data: c } = await admin
         .from('clients')
@@ -188,7 +277,7 @@ router.get('/agreements/public/:token', async (req, res) => {
         signature_data: agreement.signature_data || null,
         signed_at: agreement.signed_at || null,
       },
-      number: `CTR-${job?.job_number || agreement.id.slice(0, 6)}`,
+      number: `CTR-${refNumber || agreement.id.slice(0, 6)}`,
       logo_url: agreement.logo_url || companyData?.logo_url || null,
       company: {
         name: companyData?.company_name || 'Business',
@@ -254,20 +343,33 @@ router.post('/agreements/public/sign', async (req, res) => {
       .eq('id', agreement.id);
     if (upErr) throw upErr;
 
-    // Notify the org
-    const { data: job } = await admin
-      .from('jobs')
-      .select('job_number')
-      .eq('id', agreement.job_id)
-      .maybeSingle();
+    // Notify the org — the agreement may belong to a job or a quote.
+    let refNumber = '';
+    let refLabel = 'job';
+    if (agreement.job_id) {
+      const { data: job } = await admin
+        .from('jobs')
+        .select('job_number')
+        .eq('id', agreement.job_id)
+        .maybeSingle();
+      refNumber = job?.job_number ? String(job.job_number) : '';
+    } else if (agreement.quote_id) {
+      refLabel = 'quote';
+      const { data: quote } = await admin
+        .from('quotes')
+        .select('quote_number')
+        .eq('id', agreement.quote_id)
+        .maybeSingle();
+      refNumber = quote?.quote_number ? String(quote.quote_number) : '';
+    }
     try {
       await admin.from('notifications').insert({
         org_id: agreement.org_id,
         type: 'agreement_signed',
-        title: `${signer_name} signed the contract for job #${job?.job_number || ''}`.trim(),
-        body: `Contract CTR-${job?.job_number || ''} has been signed by ${signer_name}.`,
+        title: `${signer_name} signed the contract for ${refLabel} #${refNumber}`.trim(),
+        body: `Contract CTR-${refNumber} has been signed by ${signer_name}.`,
         icon: 'check-circle',
-        reference_id: agreement.job_id,
+        reference_id: agreement.job_id || agreement.quote_id,
       });
     } catch { /* non-critical */ }
 
@@ -300,7 +402,7 @@ router.post('/emails/send-agreement', async (req, res) => {
 
     const { data: agreement, error: aErr } = await client
       .from('job_agreements')
-      .select('id, org_id, job_id, client_id, status, require_signature, view_token, sent_at')
+      .select('id, org_id, job_id, quote_id, client_id, status, require_signature, view_token, sent_at')
       .eq('id', agreementId)
       .eq('org_id', orgId)
       .is('deleted_at', null)
@@ -308,14 +410,32 @@ router.post('/emails/send-agreement', async (req, res) => {
     if (aErr || !agreement) return res.status(404).json({ error: 'Agreement not found.' });
 
     const admin = getServiceClient();
-    const { data: job } = await admin
-      .from('jobs')
-      .select('job_number, title, client_id')
-      .eq('id', agreement.job_id)
-      .maybeSingle();
+    // Le contrat peut être lié à un job ou à un devis.
+    let refNumber = '';
+    let refTitle: string | null = null;
+    let entityClientId: string | null = agreement.client_id || null;
+    if (agreement.job_id) {
+      const { data: job } = await admin
+        .from('jobs')
+        .select('job_number, title, client_id')
+        .eq('id', agreement.job_id)
+        .maybeSingle();
+      refNumber = job?.job_number ? String(job.job_number) : '';
+      refTitle = job?.title || null;
+      entityClientId = entityClientId || job?.client_id || null;
+    } else if (agreement.quote_id) {
+      const { data: quote } = await admin
+        .from('quotes')
+        .select('quote_number, title, client_id, lead_id')
+        .eq('id', agreement.quote_id)
+        .maybeSingle();
+      refNumber = quote?.quote_number ? String(quote.quote_number) : '';
+      refTitle = quote?.title || null;
+      entityClientId = entityClientId || quote?.client_id || quote?.lead_id || null;
+    }
 
-    const clientId = agreement.client_id || job?.client_id;
-    if (!clientId) return res.status(400).json({ error: 'No client on this job.' });
+    const clientId = entityClientId;
+    if (!clientId) return res.status(400).json({ error: 'No client on this agreement.' });
     const { data: clientData } = await admin
       .from('clients')
       .select('first_name, last_name, email')
@@ -330,7 +450,7 @@ router.post('/emails/send-agreement', async (req, res) => {
     const company = await getCompanySettings(orgId);
     const baseUrl = resolvePublicBaseUrl(req);
     const viewUrl = `${baseUrl}/contract/${agreement.view_token}`;
-    const number = `CTR-${job?.job_number || ''}`.replace(/-$/, '');
+    const number = `CTR-${refNumber}`.replace(/-$/, '');
     const requireSig = agreement.require_signature !== false;
 
     const bodyHtml = `
@@ -341,7 +461,7 @@ router.post('/emails/send-agreement', async (req, res) => {
     ? 'Voici votre contrat. Vous pouvez le consulter et le signer en ligne ci-dessous.'
     : 'Voici votre contrat. Vous pouvez le consulter ci-dessous.'}
 </p>
-${job?.title ? `<p style="margin:0 0 16px;color:#6b7280;font-size:13px;">${String(job.title).replace(/</g, '&lt;')}</p>` : ''}
+${refTitle ? `<p style="margin:0 0 16px;color:#6b7280;font-size:13px;">${String(refTitle).replace(/</g, '&lt;')}</p>` : ''}
 <div style="text-align:center;margin-bottom:16px;">
   <a href="${viewUrl}" style="display:inline-block;padding:12px 32px;background-color:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">
     ${requireSig ? 'Voir et signer le contrat' : 'Voir le contrat'}
