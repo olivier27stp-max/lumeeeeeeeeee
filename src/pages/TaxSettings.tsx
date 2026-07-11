@@ -3,6 +3,7 @@ import { Plus, Trash2, Star, Check, Loader2, Pencil, X, MapPin, Info, DollarSign
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { supabase } from '../lib/supabase';
 import { useTranslation } from '../i18n';
 import BackToSettings from '../components/ui/BackToSettings';
 import {
@@ -10,8 +11,8 @@ import {
   type TaxConfig, type TaxGroup, type TaxGroupItem, type TaxPreset,
 } from '../lib/taxApi';
 
-function formatMoney(cents: number, locale: string = 'en-CA') {
-  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD' }).format(cents / 100);
+function formatMoney(cents: number, locale: string = 'en-CA', currency: string = 'CAD') {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(cents / 100);
 }
 
 export default function TaxSettings() {
@@ -35,6 +36,8 @@ export default function TaxSettings() {
   const [editName, setEditName] = useState('');
   const [editingRegNumId, setEditingRegNumId] = useState<string | null>(null);
   const [editRegNum, setEditRegNum] = useState('');
+  // Org display currency (Company Settings > Regional) — was hardcoded CAD.
+  const [currency, setCurrency] = useState('CAD');
 
   const load = useCallback(async () => {
     try {
@@ -43,6 +46,12 @@ export default function TaxSettings() {
       setGroups(data.groups);
       setGroupItems(data.group_items);
       setPresets(data.presets);
+      supabase
+        .from('company_settings')
+        .select('currency')
+        .limit(1)
+        .maybeSingle()
+        .then(({ data: cs }) => { if (cs?.currency) setCurrency(cs.currency); });
     } catch (err: any) {
       toast.error(err.message || 'Failed to load taxes');
     } finally { setLoading(false); }
@@ -348,17 +357,17 @@ export default function TaxSettings() {
               <div className="bg-surface-secondary/50 rounded-lg p-4 space-y-1.5 text-[12px]">
                 <div className="flex justify-between">
                   <span className="text-text-secondary">{fr ? 'Sous-total' : 'Subtotal'}</span>
-                  <span className="tabular-nums font-medium text-text-primary">{formatMoney(previewSubtotal, locale)}</span>
+                  <span className="tabular-nums font-medium text-text-primary">{formatMoney(previewSubtotal, locale, currency)}</span>
                 </div>
                 {previewTaxes.map((t, i) => (
                   <div key={i} className="flex justify-between">
                     <span className="text-text-tertiary">{t.name}</span>
-                    <span className="tabular-nums text-text-secondary">{formatMoney(t.amount, locale)}</span>
+                    <span className="tabular-nums text-text-secondary">{formatMoney(t.amount, locale, currency)}</span>
                   </div>
                 ))}
                 <div className="flex justify-between pt-1.5 mt-1 border-t border-outline/50 font-semibold text-[13px]">
                   <span className="text-text-primary">{fr ? 'Total' : 'Total'}</span>
-                  <span className="tabular-nums text-text-primary">{formatMoney(previewTotal, locale)}</span>
+                  <span className="tabular-nums text-text-primary">{formatMoney(previewTotal, locale, currency)}</span>
                 </div>
               </div>
             </div>

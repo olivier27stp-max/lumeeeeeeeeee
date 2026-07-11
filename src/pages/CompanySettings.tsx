@@ -42,6 +42,8 @@ interface CompanyDetails {
   country: string;
   logo_url: string;
   revenue_goal_cents: number;
+  invoice_prefix: string;
+  currency: string;
   google_review_url: string;
   review_enabled: boolean;
   review_widget_settings: {
@@ -65,6 +67,8 @@ const EMPTY_COMPANY: CompanyDetails = {
   country: '',
   logo_url: '',
   revenue_goal_cents: 0,
+  invoice_prefix: 'INV-',
+  currency: 'CAD',
   google_review_url: '',
   review_enabled: false,
   review_widget_settings: { theme: 'light', filter: 'all', layout: 'cards', max_display: 6 },
@@ -78,6 +82,10 @@ export default function CompanySettings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // Invoice numbering: the NEXT sequence number (read/written via admin-gated
+  // RPCs — the invoice_sequences table itself is not client-writable).
+  const [nextInvoiceNum, setNextInvoiceNum] = useState<number | null>(null);
+  const [initialNextNum, setInitialNextNum] = useState<number | null>(null);
 
   useEffect(() => {
     if (!dirty) return;
@@ -120,10 +128,20 @@ export default function CompanySettings() {
             country: data.country || '',
             logo_url: data.logo_url || '',
             revenue_goal_cents: Number(data.revenue_goal_cents) || 0,
+            invoice_prefix: data.invoice_prefix || 'INV-',
+            currency: data.currency || 'CAD',
             google_review_url: data.google_review_url || '',
             review_enabled: data.review_enabled ?? false,
             review_widget_settings: data.review_widget_settings || EMPTY_COMPANY.review_widget_settings,
           });
+        }
+
+        // Current position of the invoice sequence (tolerant: RPC may not be
+        // deployed yet — the card just hides the number field then).
+        const { data: nextNum } = await supabase.rpc('get_invoice_next_number', { p_org: orgId });
+        if (typeof nextNum === 'number') {
+          setNextInvoiceNum(nextNum);
+          setInitialNextNum(nextNum);
         }
       } catch (e: any) {
         // Warn instead of failing silently: saving on top of a failed load
@@ -161,6 +179,8 @@ export default function CompanySettings() {
         country: form.country.trim(),
         logo_url: form.logo_url.trim(),
         revenue_goal_cents: Math.max(0, Math.round(form.revenue_goal_cents || 0)),
+        invoice_prefix: form.invoice_prefix.trim() || 'INV-',
+        currency: form.currency || 'CAD',
         google_review_url: form.google_review_url.trim(),
         review_enabled: form.review_enabled,
         review_widget_settings: form.review_widget_settings,
@@ -189,6 +209,29 @@ export default function CompanySettings() {
           .single();
         if (error) throw error;
         if (data) setForm((prev) => ({ ...prev, id: data.id, org_id: data.org_id }));
+      }
+
+      // Keep the org's name in sync — the old "Workspace" tab (removed) was a
+      // second place to name the company; this page is now the single source.
+      {
+        const orgId = form.org_id || await getCurrentOrgIdOrThrow();
+        if (payload.company_name) {
+          const { error: orgErr } = await supabase
+            .from('orgs')
+            .update({ name: payload.company_name })
+            .eq('id', orgId);
+          if (orgErr) console.warn('[CompanySettings] org name sync failed:', orgErr.message);
+        }
+
+        // Invoice sequence repositioning (admin-gated RPC), only when changed.
+        if (nextInvoiceNum !== null && initialNextNum !== null && nextInvoiceNum !== initialNextNum) {
+          const { error: numErr } = await supabase.rpc('set_invoice_next_number', {
+            p_org: orgId,
+            p_next: nextInvoiceNum,
+          });
+          if (numErr) throw numErr;
+          setInitialNextNum(nextInvoiceNum);
+        }
       }
 
       setSaved(true);
@@ -519,6 +562,80 @@ export default function CompanySettings() {
               </p>
             </div>
           )}
+        </div>
+
+        {/* ── Invoice numbering ── */}
+        <div className="section-card p-5 space-y-4">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
+            {language === 'fr' ? 'Numérotation des factures' : 'Invoice numbering'}
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+                {language === 'fr' ? 'Préfixe' : 'Prefix'}
+              </label>
+              <input
+                type="text"
+                value={form.invoice_prefix}
+                onChange={(e) => update('invoice_prefix', e.target.value)}
+                className="glass-input w-full mt-1"
+                placeholder="INV-"
+                maxLength={12}
+              />
+            </div>
+            {nextInvoiceNum !== null && (
+              <div>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+                  {language === 'fr' ? 'Prochain numéro' : 'Next number'}
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={99999999}
+                  value={nextInvoiceNum}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    setNextInvoiceNum(Number.isFinite(v) ? v : 1);
+                    setSaved(false);
+                    setDirty(true);
+                  }}
+                  className="glass-input w-full mt-1"
+                />
+              </div>
+            )}
+          </div>
+          <p className="text-[12px] text-text-tertiary">
+            {language === 'fr'
+              ? `Prochaine facture : ${(form.invoice_prefix.trim() || 'INV-')}${String(nextInvoiceNum ?? 1).padStart(6, '0')} — pratique pour continuer la séquence de votre ancien système.`
+              : `Next invoice: ${(form.invoice_prefix.trim() || 'INV-')}${String(nextInvoiceNum ?? 1).padStart(6, '0')} — handy to continue the sequence from your previous system.`}
+          </p>
+        </div>
+
+        {/* ── Regional ── */}
+        <div className="section-card p-5 space-y-4">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
+            {language === 'fr' ? 'Régional' : 'Regional'}
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+                {language === 'fr' ? 'Devise' : 'Currency'}
+              </label>
+              <select
+                value={form.currency}
+                onChange={(e) => update('currency', e.target.value)}
+                className="glass-input w-full mt-1"
+              >
+                <option value="CAD">CAD — {language === 'fr' ? 'Dollar canadien' : 'Canadian dollar'}</option>
+                <option value="USD">USD — {language === 'fr' ? 'Dollar américain' : 'US dollar'}</option>
+              </select>
+            </div>
+          </div>
+          <p className="text-[12px] text-text-tertiary">
+            {language === 'fr'
+              ? 'Devise utilisée pour l\'affichage des montants (aperçu des taxes, etc.).'
+              : 'Currency used to display amounts (tax preview, etc.).'}
+          </p>
         </div>
 
         {/* The "Reviews Widget" settings card was removed: review_widget_settings
