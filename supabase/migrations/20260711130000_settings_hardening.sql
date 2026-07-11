@@ -46,13 +46,16 @@ $$;
 --  points at this function; CREATE OR REPLACE is enough.)
 
 -- ── 2. orgs: rename/update restricted to owner/admin ──
--- (owner_id fallback kept: during onboarding the org can be updated before the
---  owner membership row exists.)
+-- Fallback = created_by (the org creator, for onboarding updates before the
+-- owner membership row exists). NB: the 20260601 migration file declares
+-- `owner_id`, but the LIVE orgs table (hand-managed, predates it) has
+-- `created_by` — the app's auto-provision inserts created_by. Ran on prod
+-- 2026-07-11 with created_by (owner_id errored 42703).
 drop policy if exists "orgs_update" on public.orgs;
 create policy "orgs_update" on public.orgs
   for update to authenticated
-  using (owner_id = auth.uid() or public.has_org_admin_role(auth.uid(), id))
-  with check (owner_id = auth.uid() or public.has_org_admin_role(auth.uid(), id));
+  using (created_by = auth.uid() or public.has_org_admin_role(auth.uid(), id))
+  with check (created_by = auth.uid() or public.has_org_admin_role(auth.uid(), id));
 
 -- ── 3. team_members: writes restricted to owner/admin ──
 drop policy if exists team_members_update_org on public.team_members;
