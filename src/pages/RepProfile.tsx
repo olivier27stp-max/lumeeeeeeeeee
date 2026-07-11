@@ -12,7 +12,6 @@ import {
   MessageSquare,
   Phone,
   Mail,
-  Settings,
   MapPin,
   Briefcase,
   Hash,
@@ -421,7 +420,7 @@ export default function D2DRepProfile() {
             </Link>
             <ActionBtn icon={Phone} href={p.phone ? `tel:${p.phone}` : undefined} className="md:hidden" />
             <ActionBtn icon={Mail} href={p.email ? `mailto:${p.email}` : undefined} />
-            <ActionBtn icon={Settings} />
+            {/* (dead Settings button removed — it had no handler) */}
           </div>
         </div>
       </div>

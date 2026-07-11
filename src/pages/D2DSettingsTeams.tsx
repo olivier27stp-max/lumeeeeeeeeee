@@ -4,7 +4,9 @@ import { Avatar } from '../components/d2d/avatar';
 import { Plus, X, Users, ChevronDown, Loader2 } from 'lucide-react';
 import BackToSettings from '../components/ui/BackToSettings';
 import { useTranslation } from '../i18n';
+import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
+import { getCurrentOrgId } from '../lib/orgApi';
 import {
   listTeams as apiListTeams,
   createTeam as apiCreateTeam,
@@ -71,24 +73,16 @@ export default function D2DSettingsTeams() {
   // ------------------------------------------
   const fetchReps = useCallback(async () => {
     try {
-      // Get current user to resolve org
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return false;
-
-      const { data: membership } = await supabase
-        .from('memberships')
-        .select('org_id')
-        .eq('user_id', user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (!membership?.org_id) return false;
+      // ACTIVE office — resolving via `memberships … limit(1)` picked an
+      // arbitrary org, so multi-office admins managed the wrong office's reps.
+      const orgId = await getCurrentOrgId();
+      if (!orgId) return false;
 
       // Get all memberships for this org with their team assignment
       const { data: members, error } = await supabase
         .from('memberships')
         .select('id, user_id, role, team_id, status')
-        .eq('org_id', membership.org_id)
+        .eq('org_id', orgId)
         .eq('status', 'active');
 
       if (error) throw error;
@@ -154,12 +148,11 @@ export default function D2DSettingsTeams() {
       const record = await apiCreateTeam({ name: newTeamName.trim() });
       setTeams((prev) => [...prev, { id: record.id, name: record.name }]);
       setNewTeamName('');
-    } catch (err) {
+    } catch (err: any) {
+      // Surface the failure — the old "add locally" fallback showed a fake
+      // team that vanished on reload.
       console.error('[D2DSettingsTeams] Failed to create team:', err);
-      // Fallback: add locally
-      const team: Team = { id: `t-${Date.now()}`, name: newTeamName.trim() };
-      setTeams((prev) => [...prev, team]);
-      setNewTeamName('');
+      toast.error(err?.message || (fr ? 'Échec de la création de l\'équipe.' : 'Failed to create team.'));
     } finally {
       setSaving(false);
     }
@@ -172,14 +165,14 @@ export default function D2DSettingsTeams() {
     if (saving) return;
     setSaving(true);
     try {
-      await apiSoftDeleteTeam(teamId);
+      await apiSoftDeleteTeam(teamId); // also unassigns members/jobs/events in DB
       setTeams((prev) => prev.filter((t) => t.id !== teamId));
       setReps((prev) => prev.map((r) => (r.teamId === teamId ? { ...r, teamId: null } : r)));
-    } catch (err) {
+    } catch (err: any) {
+      // Surface the failure — the old fallback removed the team from the UI
+      // while it silently survived in the DB.
       console.error('[D2DSettingsTeams] Failed to delete team:', err);
-      // Fallback: remove locally
-      setTeams((prev) => prev.filter((t) => t.id !== teamId));
-      setReps((prev) => prev.map((r) => (r.teamId === teamId ? { ...r, teamId: null } : r)));
+      toast.error(err?.message || (fr ? 'Échec de la suppression de l\'équipe.' : 'Failed to delete team.'));
     } finally {
       setSaving(false);
     }
@@ -194,10 +187,10 @@ export default function D2DSettingsTeams() {
     try {
       const record = await apiUpdateTeam(teamId, { name: editingTeamName.trim() });
       setTeams((prev) => prev.map((t) => (t.id === teamId ? { ...t, name: record.name } : t)));
-    } catch (err) {
+    } catch (err: any) {
+      // Surface the failure — the old fallback renamed only the UI.
       console.error('[D2DSettingsTeams] Failed to rename team:', err);
-      // Fallback: rename locally
-      setTeams((prev) => prev.map((t) => (t.id === teamId ? { ...t, name: editingTeamName.trim() } : t)));
+      toast.error(err?.message || (fr ? 'Échec du renommage.' : 'Failed to rename team.'));
     } finally {
       setEditingTeamId(null);
       setEditingTeamName('');
@@ -211,17 +204,20 @@ export default function D2DSettingsTeams() {
   async function handleAssignRep(repId: string, teamId: string | null) {
     if (saving) return;
 
-    // Optimistic update
+    // Optimistic update, reverted on failure.
+    const prevTeamId = reps.find((r) => r.id === repId)?.teamId ?? null;
     setReps((prev) => prev.map((r) => (r.id === repId ? { ...r, teamId } : r)));
 
-    try {
-      await supabase
-        .from('memberships')
-        .update({ team_id: teamId, updated_at: new Date().toISOString() })
-        .eq('id', repId);
-    } catch (err) {
-      console.error('[D2DSettingsTeams] Failed to assign rep:', err);
-      // Keep optimistic update — assignment is stored locally as fallback
+    // supabase-js does not throw — the old try/catch never caught anything and
+    // an RLS-rejected write kept a fake "assigned" state in the UI forever.
+    const { error } = await supabase
+      .from('memberships')
+      .update({ team_id: teamId, updated_at: new Date().toISOString() })
+      .eq('id', repId);
+    if (error) {
+      console.error('[D2DSettingsTeams] Failed to assign rep:', error);
+      setReps((prev) => prev.map((r) => (r.id === repId ? { ...r, teamId: prevTeamId } : r)));
+      toast.error(error.message || (fr ? 'Échec de l\'assignation.' : 'Failed to assign rep.'));
     }
   }
 
