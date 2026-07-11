@@ -263,6 +263,9 @@ export default function InvoiceEdit() {
         subject: subject.trim() || null,
         dueDate: dueDate || null,
         taxCents,
+        discountCents,
+        notes: notes.trim() || null,
+        internalNotes: internalNotes.trim() || null,
         items: (() => {
           const filtered = lines
             .map((l, origIdx) => ({ ...l, origIdx }))

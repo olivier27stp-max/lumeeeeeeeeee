@@ -54,11 +54,11 @@ export async function fetchRecentTransactions(limit = 8): Promise<RecentTransact
 
   // Fetch client names separately to avoid PostgREST JOIN ambiguity
   const clientIds = [...new Set((invoices || []).map((i: any) => i.client_id).filter(Boolean))];
-  const clientMap: Record<string, { first_name: string; last_name: string; company_name: string }> = {};
+  const clientMap: Record<string, { first_name: string; last_name: string; company: string }> = {};
   if (clientIds.length > 0) {
     const { data: clients } = await supabase
       .from('clients')
-      .select('id, first_name, last_name, company_name')
+      .select('id, first_name, last_name, company')
       .in('id', clientIds);
     for (const c of clients || []) {
       clientMap[(c as any).id] = c as any;
@@ -68,15 +68,15 @@ export async function fetchRecentTransactions(limit = 8): Promise<RecentTransact
   return (invoices || []).map((inv: any, idx: number) => {
     const c = clientMap[inv.client_id];
     const name = c
-      ? `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.company_name || 'Client'
+      ? `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.company || 'Client'
       : `Invoice #${inv.invoice_number}`;
-    const isPaid = inv.status === 'paid';
 
     return {
       id: inv.id,
       label: name,
       date: inv.paid_at || inv.issued_at || new Date().toISOString(),
-      type: isPaid ? ('income' as const) : ('expense' as const),
+      // Invoices are income (paid or pending) — never an expense.
+      type: 'income' as const,
       amount_cents: inv.total_cents || 0,
       initials: initialsFrom(name),
       color: AVATAR_COLORS[idx % AVATAR_COLORS.length],

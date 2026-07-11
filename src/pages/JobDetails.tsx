@@ -941,7 +941,7 @@ export default function JobDetails() {
                 <JobDetailRow label="Ends on" value={job.end_at ? formatDate(job.end_at) : (job.scheduled_at ? formatDate(job.scheduled_at) : '—')} />
                 <JobDetailRow label="Billing frequency" value={(job as any).requires_invoicing === false ? 'No invoicing' : 'Upon job completion'} />
                 <JobDetailRow label="Deposit" value={(job as any).deposit_required ? `${(job as any).deposit_type === 'percentage' ? `${(job as any).deposit_value}%` : `$${(job as any).deposit_value}`}` : 'None'} />
-                <JobDetailRow label="Salesperson" value={(job as any).salesperson_id || '—'} isLast />
+                <JobDetailRow label="Salesperson" value={(job as any).salesperson_name || (job as any).salesperson?.full_name || '—'} isLast />
               </div>
             </div>
           </div>

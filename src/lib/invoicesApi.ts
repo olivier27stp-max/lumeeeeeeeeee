@@ -454,6 +454,9 @@ export async function saveInvoiceDraft(payload: {
   subject?: string | null;
   dueDate?: string | null;
   taxCents?: number;
+  discountCents?: number;
+  notes?: string | null;
+  internalNotes?: string | null;
   items: InvoiceItemInput[];
 }) {
   const sanitizedItems = payload.items
@@ -469,6 +472,9 @@ export async function saveInvoiceDraft(payload: {
     p_subject: payload.subject || null,
     p_due_date: payload.dueDate || null,
     p_tax_cents: Math.max(0, Math.round(payload.taxCents || 0)),
+    p_discount_cents: Math.max(0, Math.round(payload.discountCents || 0)),
+    p_notes: payload.notes ?? null,
+    p_internal_notes: payload.internalNotes ?? null,
     p_items: sanitizedItems,
   });
   if (error) throw error;
