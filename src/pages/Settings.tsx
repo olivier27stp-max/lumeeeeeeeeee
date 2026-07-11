@@ -24,6 +24,7 @@ import {
   Sparkles,
   Calendar as CalendarIcon,
   LifeBuoy,
+  Bell,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -40,7 +41,7 @@ import SeatsBanner from '../components/SeatsBanner';
 import OfficesManager from '../components/OfficesManager';
 import SupportPanel from '../components/SupportPanel';
 import PayrollSettingsPanel from '../components/payroll/PayrollSettingsPanel';
-import { fetchPlans, fetchCurrentBilling, cancelSubscription, changePlan, openCustomerPortal, cancelScheduledChange, type Plan, type Subscription } from '../lib/billingApi';
+import { fetchPlans, fetchCurrentBilling, changePlan, openCustomerPortal, cancelScheduledChange, type Plan, type Subscription } from '../lib/billingApi';
 import { toast } from 'sonner';
 import { usePlatformOwner } from '../hooks/usePlatformOwner';
 
@@ -136,6 +137,14 @@ function WorkspaceTab() {
     if (!error) {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } else {
+      // Surfaces real failures (e.g. slug already taken — unique constraint —
+      // or not being an org admin). This used to fail silently.
+      toast.error(
+        error.code === '23505'
+          ? (language === 'fr' ? 'Ce slug est déjà utilisé par une autre entreprise.' : 'This slug is already taken by another workspace.')
+          : error.message,
+      );
     }
   };
 
@@ -204,10 +213,12 @@ function MfaSection() {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
   const [status, setStatus] = React.useState<SmsStatus | null>(null);
+  const [statusFailed, setStatusFailed] = React.useState(false);
   const [showStepUp, setShowStepUp] = React.useState(false);
 
   const load = React.useCallback(async () => {
-    try { setStatus(await getSmsStatus()); } catch { setStatus(null); }
+    setStatusFailed(false);
+    try { setStatus(await getSmsStatus()); } catch { setStatus(null); setStatusFailed(true); }
   }, []);
   React.useEffect(() => { load(); }, [load]);
 
@@ -244,7 +255,10 @@ function MfaSection() {
             </p>
           </div>
         </div>
-        {status === null ? (
+        {status === null && statusFailed ? (
+          // Fetch failed — show a dash instead of spinning forever.
+          <span className="text-[10px] text-text-tertiary">—</span>
+        ) : status === null ? (
           <Loader2 size={14} className="animate-spin text-text-tertiary" />
         ) : smsOff ? (
           <span className="text-[10px] text-text-tertiary">{fr ? 'SMS non configuré' : 'SMS not configured'}</span>
@@ -278,7 +292,6 @@ function BillingTab({ navigate, isFr, t }: { navigate: (path: string) => void; i
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [canceling, setCanceling] = useState(false);
 
   const refresh = async () => {
     setError(null);
@@ -347,16 +360,8 @@ function BillingTab({ navigate, isFr, t }: { navigate: (path: string) => void; i
     return 'bg-white/10 text-white/60';
   };
 
-  const handleCancel = async () => {
-    if (!confirm(isFr ? 'Annuler votre abonnement à la fin de la période ?' : 'Cancel subscription at end of period?')) return;
-    setCanceling(true);
-    try {
-      await cancelSubscription();
-      const fresh = await fetchCurrentBilling().catch(() => ({ subscription: null, billing_profile: null }));
-      setSubscription(fresh.subscription);
-    } catch { /* silent */ }
-    finally { setCanceling(false); }
-  };
+  // (Subscription cancellation goes through the Stripe customer portal button —
+  //  a previous in-app cancel handler was dead code and was removed.)
 
   // Cancel a scheduled plan change (release Stripe Subscription Schedule)
   const [cancelingScheduled, setCancelingScheduled] = useState(false);
@@ -1157,6 +1162,8 @@ export default function Settings() {
       setSaved(true);
       setProfile((prev) => prev ? { ...prev, full_name: fullName.trim() } : prev);
       setTimeout(() => setSaved(false), 2000);
+    } else {
+      toast.error(error.message); // was silently swallowed
     }
   }
 
@@ -1180,6 +1187,7 @@ export default function Settings() {
         { id: 'taxes',        label: 'Taxes',                     icon: Receipt, link: '/settings/taxes' },
         { id: 'payments',     label: t.commandPalette.payments,   icon: Wallet, link: '/settings/payments' },
         { id: 'messaging',    label: isFr ? 'Messagerie SMS' : 'SMS Messaging', icon: MessageSquare, link: '/settings/messaging' },
+        { id: 'reminders',    label: isFr ? 'Rappels de paiement' : 'Payment reminders', icon: Bell, link: '/settings/reminders' },
         { id: 'request-form', label: (t.settings as any).requestForm || (t.requestForm.requestForm), icon: FileText, link: '/settings/request-form' },
         { id: 'automations',  label: t.settings.automations,      icon: Zap, link: '/automations' },
         { id: 'location',     label: t.settings.locationServices, icon: MapPin },
@@ -1192,7 +1200,8 @@ export default function Settings() {
         { id: 'manage-team', label: isFr ? 'Membres' : 'Members',                icon: Users, link: '/settings/team' },
         { id: 'payroll',     label: t.settings.payroll,                          icon: CalendarIcon },
         { id: 'roles',       label: isFr ? 'Rôles & Permissions' : 'Roles & Permissions', icon: Shield, link: '/settings/roles' },
-        { id: 'd2d-config',  label: isFr ? 'Config Vente' : 'Sales Config',      icon: MapPin, link: '/d2d-settings/general' },
+        // Points at /teams: the /general page was an unwired mock (now a redirect).
+        { id: 'd2d-config',  label: isFr ? 'Config Vente' : 'Sales Config',      icon: MapPin, link: '/d2d-settings/teams' },
         { id: 'referrals' as SettingsTab, label: t.referFriend.referAFriend,     icon: Gift, link: '/settings/referrals' },
       ],
     },
@@ -1279,7 +1288,8 @@ export default function Settings() {
                     </div>
                     <div>
                       <h3 className="text-[13px] font-bold text-text-primary">{t.settings.profilePicture}</h3>
-                      <p className="text-xs text-text-tertiary">{t.settings.updateAvatar}</p>
+                      {/* "Update your avatar" copy removed — there is no upload control
+                          on this tab, so the promise was a dead end. */}
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

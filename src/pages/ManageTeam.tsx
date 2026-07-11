@@ -803,7 +803,7 @@ function InviteForm({
   onCancel,
 }: {
   language: string;
-  onSend: (email: string, role: MemberRole, options?: { scope?: InviteScope; team_id?: string | null; org_id?: string }) => void;
+  onSend: (email: string, role: MemberRole, options?: { scope?: InviteScope; team_id?: string | null; org_id?: string }) => void | Promise<void>;
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
@@ -846,18 +846,23 @@ function InviteForm({
     })();
   }, [officeId]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       toast.error(t.manageTeam.validEmailIsRequired);
       return;
     }
     setSending(true);
-    onSend(email.trim(), role, {
-      scope,
-      team_id: scope === 'team' ? teamId : null,
-      org_id: officeId || undefined,
-    });
-    // Parent closes modal on success; setSending cleared on unmount
+    try {
+      await onSend(email.trim(), role, {
+        scope,
+        team_id: scope === 'team' ? teamId : null,
+        org_id: officeId || undefined,
+      });
+    } finally {
+      // Re-enable the button on every non-success path (seat prompt, MFA
+      // prompt, server error). It used to stay stuck on "sending" forever.
+      setSending(false);
+    }
   };
 
   const showTeamPicker = scope === 'team' && role !== 'admin';

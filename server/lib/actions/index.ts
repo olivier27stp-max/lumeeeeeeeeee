@@ -309,6 +309,18 @@ export async function executeRequestReview(
     return { success: false, error: 'No Google Review URL configured for this company. Set it in Company Settings.' };
   }
 
+  // 1b. Honor the Company Settings "review requests" toggle (it used to be
+  // saved but never checked — the setting was write-only).
+  const { data: cs } = await ctx.supabase
+    .from('company_settings')
+    .select('review_enabled')
+    .eq('org_id', ctx.orgId)
+    .limit(1)
+    .maybeSingle();
+  if (cs && cs.review_enabled === false) {
+    return { success: false, error: 'Review requests are disabled in Company Settings.' };
+  }
+
   // 2. Determine client_id and job_id from entity
   let clientId: string | null = null;
   let jobId: string | null = null;

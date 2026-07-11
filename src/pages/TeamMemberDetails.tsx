@@ -29,6 +29,7 @@ import { cn } from '../lib/utils';
 import { PageHeader, Modal } from '../components/ui';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
+import { updateMemberRole, removeMember } from '../lib/invitationsApi';
 import {
   type TeamRole,
   type PermissionsMap,
@@ -47,6 +48,7 @@ import {
 // ── Types ────────────────────────────────────────────────────────────
 interface MemberData {
   id: string;
+  user_id: string | null;
   first_name: string;
   last_name: string;
   email: string;
@@ -103,8 +105,8 @@ export default function TeamMemberDetails() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState<MemberData | null>(null);
+  const [initialRole, setInitialRole] = useState<TeamRole | null>(null);
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
-  const [showOwnerTransfer, setShowOwnerTransfer] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
   // Fetch member data
@@ -133,6 +135,7 @@ export default function TeamMemberDetails() {
 
         setForm({
           id: data.id,
+          user_id: data.user_id || null,
           first_name: data.first_name || '',
           last_name: data.last_name || '',
           email: data.email || '',
@@ -152,6 +155,7 @@ export default function TeamMemberDetails() {
           communication_preferences: (data.communication_preferences as CommunicationPreferences) || DEFAULT_COMMUNICATION_PREFS,
           created_at: data.created_at,
         });
+        setInitialRole(((data.role as TeamRole) || 'technician'));
         if (data.avatar_url) setAvatarPreview(data.avatar_url);
       } else {
         toast.error(t.teamMember.memberNotFound);
@@ -197,18 +201,6 @@ export default function TeamMemberDetails() {
     setSaved(false);
   };
 
-  const togglePermission = (key: string) => {
-    if (form.role === 'owner') return; // Owner always has all
-    setForm((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        permissions: { ...prev.permissions, [key]: !prev.permissions[key as keyof PermissionsMap] },
-      };
-    });
-    setSaved(false);
-  };
-
   const updateCommPref = (key: keyof CommunicationPreferences) => {
     setForm((prev) => {
       if (!prev) return prev;
@@ -221,9 +213,8 @@ export default function TeamMemberDetails() {
   };
 
   const handleRoleChange = (newRole: TeamRole) => {
-    const newPerms = getDefaultPermissions(newRole);
+    // Local selection only — applied on save via the server RBAC route.
     update('role', newRole);
-    setForm((prev) => prev ? { ...prev, permissions: newPerms } : prev);
     setSaved(false);
   };
 
@@ -233,8 +224,8 @@ export default function TeamMemberDetails() {
     if (!file) return;
     const url = URL.createObjectURL(file);
     setAvatarPreview(url);
-    // For production: upload to Supabase Storage and store the public URL
-    // For now, store as local preview
+    // Session-local preview only — a blob: URL must never be persisted (it is
+    // dead after this session). The save payload skips blob: values.
     update('avatar_url', url);
   };
 
@@ -256,8 +247,34 @@ export default function TeamMemberDetails() {
     const newStatus = form.status === 'active' ? 'inactive' : 'active';
     try {
       const orgId = await getCurrentOrgIdOrThrow();
-      await supabase.from('team_members').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', form.id).eq('org_id', orgId);
-    } catch { /* demo fallback */ }
+
+      // Actually block/restore login. team_members.status alone is cosmetic —
+      // auth reads memberships. Deactivate goes through the server route
+      // (suspends the membership + signs the user out everywhere).
+      if (form.user_id) {
+        if (newStatus === 'inactive') {
+          await removeMember(form.user_id);
+        } else {
+          const { error } = await supabase
+            .from('memberships')
+            .update({ status: 'active' })
+            .eq('user_id', form.user_id)
+            .eq('org_id', orgId);
+          if (error) throw error;
+        }
+      }
+
+      const { error: tmError } = await supabase
+        .from('team_members')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', form.id)
+        .eq('org_id', orgId);
+      if (tmError) throw tmError;
+    } catch (err: any) {
+      toast.error(err?.message || (isFr ? 'Échec du changement de statut.' : 'Failed to change status.'));
+      setShowDeactivateConfirm(false);
+      return;
+    }
     update('status', newStatus);
     setShowDeactivateConfirm(false);
     toast.success(
@@ -275,6 +292,20 @@ export default function TeamMemberDetails() {
       const costValue = form.labour_cost_hourly;
       const sanitizedCost = (costValue !== null && !isNaN(costValue)) ? Number(costValue) : null;
 
+      // Role changes go through the RBAC server route (it updates memberships —
+      // the table auth/permissions actually read; team_members.role alone had
+      // no access-control effect). Server enforces admin/owner + demotion rules.
+      if (initialRole !== null && form.role !== initialRole) {
+        if (!form.user_id) {
+          toast.error(isFr
+            ? 'Ce membre n\'a pas encore de compte — le rôle ne peut pas être changé ici.'
+            : 'This member has no account yet — the role cannot be changed here.');
+          return;
+        }
+        await updateMemberRole(form.user_id, form.role as any);
+        setInitialRole(form.role);
+      }
+
       const payload = {
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
@@ -282,7 +313,8 @@ export default function TeamMemberDetails() {
         phone: form.phone.trim(),
         role: form.role,
         status: form.status,
-        avatar_url: form.avatar_url,
+        // Never persist a session-local blob: preview URL.
+        avatar_url: form.avatar_url?.startsWith('blob:') ? null : form.avatar_url,
         street1: form.street1.trim(),
         street2: form.street2.trim(),
         city: form.city.trim(),
@@ -290,8 +322,11 @@ export default function TeamMemberDetails() {
         postal_code: form.postal_code.trim(),
         country: form.country.trim(),
         labour_cost_hourly: sanitizedCost,
+        // Keep the P&L column in sync: profitability reads hourly_rate_cents,
+        // not labour_cost_hourly — editing here used to have no effect on job
+        // costing despite the copy claiming it did.
+        hourly_rate_cents: sanitizedCost !== null ? Math.round(sanitizedCost * 100) : null,
         working_hours: form.working_hours,
-        permissions: form.permissions,
         communication_preferences: form.communication_preferences,
         updated_at: new Date().toISOString(),
       };
@@ -481,92 +516,52 @@ export default function TeamMemberDetails() {
         </div>
 
 
-        {/* ─── Section 4: Permissions ──────────────────────── */}
+        {/* ─── Section 4: Role ─────────────────────────────── */}
+        {/* The old per-user permission matrix and "transfer ownership" button
+            were removed: they wrote to team_members, which the RBAC resolver
+            never reads — controls that appeared to work but had zero access
+            effect. Role changes now flow through the server RBAC route on
+            save; fine-grained permissions are managed per-role in
+            Settings > Roles & Permissions. */}
         <div className="section-card p-5 space-y-5">
           <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
             <Shield size={12} />
             {t.teamMember.permissions}
           </h3>
 
-          {/* Role selector */}
-          <div>
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider mb-2 block">{t.manageTeam.role}</label>
-            <div className="flex gap-2">
-              {(['owner', 'admin', 'technician'] as TeamRole[]).map((r) => {
-                const cfg = ROLE_CONFIG[r];
-                const Icon = cfg.icon;
-                const isSelected = form.role === r;
-                return (
-                  <button
-                    key={r}
-                    onClick={() => handleRoleChange(r)}
-                    className={cn(
-                      'flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all text-[13px] font-semibold',
-                      isSelected ? 'border-primary bg-primary/5 text-text-primary' : 'border-outline-subtle text-text-secondary hover:border-outline'
-                    )}
-                  >
-                    <Icon size={14} className={cfg.color} />
-                    {isFr ? cfg.label_fr : cfg.label_en}
-                    {isSelected && <Check size={12} className="text-primary ml-1" />}
-                  </button>
-                );
-              })}
-            </div>
-            {form.role === 'owner' && (
-              <p className="text-[11px] text-warning mt-2">
-                {t.teamMember.accountOwnerHasFullAccessToEverythingPer}
-              </p>
-            )}
-          </div>
-
-          {/* Permission matrix */}
-          <div className="space-y-4">
-            {PERMISSION_GROUPS.map((group) => (
-              <div key={group.key} className="space-y-1.5">
-                <h4 className="text-[12px] font-bold text-text-primary">
-                  {isFr ? group.label_fr : group.label_en}
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-                  {group.permissions.map((perm) => {
-                    const isOn = form.role === 'owner' ? true : (form.permissions[perm.key] === true);
-                    const isOwnerLocked = form.role === 'owner';
-                    return (
-                      <button
-                        key={perm.key}
-                        onClick={() => !isOwnerLocked && togglePermission(perm.key)}
-                        disabled={isOwnerLocked}
-                        className={cn(
-                          'flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-left',
-                          isOwnerLocked ? 'cursor-default' : 'hover:bg-surface-secondary',
-                        )}
-                      >
-                        <div className={cn(
-                          'w-4 h-4 rounded border flex items-center justify-center transition-all shrink-0',
-                          isOn ? 'bg-primary border-primary' : 'border-outline bg-surface'
-                        )}>
-                          {isOn && <Check size={10} className="text-white" strokeWidth={3} />}
-                        </div>
-                        <span className={cn('text-[12px]', isOn ? 'text-text-primary font-medium' : 'text-text-tertiary')}>
-                          {isFr ? perm.label_fr : perm.label_en}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+          {form.role === 'owner' ? (
+            <p className="text-[12px] text-text-tertiary">
+              {t.teamMember.accountOwnerHasFullAccessToEverythingPer}
+            </p>
+          ) : (
+            <div>
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider mb-2 block">{t.manageTeam.role}</label>
+              <div className="flex gap-2 flex-wrap">
+                {(['admin', 'sales_rep', 'technician'] as TeamRole[]).map((r) => {
+                  const cfg = ROLE_CONFIG[r];
+                  const Icon = cfg.icon;
+                  const isSelected = form.role === r;
+                  return (
+                    <button
+                      key={r}
+                      onClick={() => handleRoleChange(r)}
+                      className={cn(
+                        'flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all text-[13px] font-semibold',
+                        isSelected ? 'border-primary bg-primary/5 text-text-primary' : 'border-outline-subtle text-text-secondary hover:border-outline'
+                      )}
+                    >
+                      <Icon size={14} className={cfg.color} />
+                      {isFr ? cfg.label_fr : cfg.label_en}
+                      {isSelected && <Check size={12} className="text-primary ml-1" />}
+                    </button>
+                  );
+                })}
               </div>
-            ))}
-          </div>
-
-          {/* Transfer ownership */}
-          {form.role !== 'owner' && (
-            <div className="pt-3 border-t border-border">
-              <button
-                onClick={() => setShowOwnerTransfer(true)}
-                className="text-[12px] text-warning hover:text-text-primary font-semibold inline-flex items-center gap-1.5 transition-colors"
-              >
-                <Crown size={13} />
-                {t.teamMember.makeThisUserTheAccountOwner}
-              </button>
+              <p className="text-[11px] text-text-tertiary mt-2">
+                {isFr
+                  ? 'Les permissions détaillées se gèrent par rôle dans Réglages → Rôles & Permissions.'
+                  : 'Fine-grained permissions are managed per role in Settings → Roles & Permissions.'}
+              </p>
             </div>
           )}
         </div>
@@ -655,39 +650,10 @@ export default function TeamMemberDetails() {
         </div>
       </Modal>
 
-      {/* ─── Owner Transfer Modal ───────────────────────────── */}
-      <Modal
-        open={showOwnerTransfer}
-        onClose={() => setShowOwnerTransfer(false)}
-        title={t.teamMember.transferOwnership}
-        size="sm"
-      >
-        <div className="space-y-4">
-          <div className="p-3 bg-warning-light border border-warning/20 rounded-xl">
-            <p className="text-[13px] text-warning font-medium">
-              {isFr
-                ? `⚠️ Cette action transférera la propriété du compte à ${fullName}. Votre rôle sera changé à Administrateur.`
-                : `⚠️ This will transfer account ownership to ${fullName}. Your role will be changed to Admin.`}
-            </p>
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <button className="glass-button" onClick={() => setShowOwnerTransfer(false)}>
-              {t.advancedNotes.cancel}
-            </button>
-            <button
-              onClick={() => {
-                handleRoleChange('owner');
-                setShowOwnerTransfer(false);
-                toast.success(t.teamMember.fullnameIsNowTheAccountOwner);
-              }}
-              className="px-4 py-2 rounded-xl text-[13px] font-semibold bg-warning text-white border border-warning hover:bg-warning/90 transition-colors"
-            >
-              <Crown size={13} className="inline mr-1 -mt-px" />
-              {t.teamMember.confirmTransfer}
-            </button>
-          </div>
-        </div>
-      </Modal>
+      {/* (The "transfer ownership" modal was removed — it only wrote
+          team_members.role, so it CLAIMED to transfer ownership while the real
+          owner, in memberships, stayed unchanged. A real transfer needs a
+          dedicated server route.) */}
     </div>
   );
 }

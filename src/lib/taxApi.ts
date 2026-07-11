@@ -134,6 +134,13 @@ export async function updateTaxConfig(id: string, data: { name?: string; rate?: 
   return body.config;
 }
 
+export async function deleteTaxConfig(id: string): Promise<void> {
+  const h = await headers();
+  const res = await fetch(`${API}/taxes/config/${id}`, { method: 'DELETE', headers: h });
+  const body = await jsonOrEmpty(res);
+  if (!res.ok) throw new Error(body?.error || 'Failed');
+}
+
 export async function deleteTaxGroup(id: string): Promise<void> {
   const h = await headers();
   const res = await fetch(`${API}/taxes/group/${id}`, { method: 'DELETE', headers: h });

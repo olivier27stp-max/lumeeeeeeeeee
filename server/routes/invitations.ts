@@ -31,6 +31,29 @@ async function randomSleep() {
 }
 
 /**
+ * Permissions for a new membership: explicit per-invite overrides win; else the
+ * org's customized role preset (role_templates, written by /roles/update-preset).
+ * Previously the template was ignored, so members invited after an org
+ * customized a role silently got the static default preset instead.
+ */
+async function resolveInvitePermissions(
+  admin: ReturnType<typeof getServiceClient>,
+  orgId: string,
+  role: string,
+  custom: Record<string, boolean> | null | undefined,
+): Promise<Record<string, boolean>> {
+  if (custom && Object.keys(custom).length > 0) return custom;
+  const { data } = await admin
+    .from('role_templates')
+    .select('permissions')
+    .eq('org_id', orgId)
+    .eq('slug', role)
+    .eq('is_active', true)
+    .maybeSingle();
+  return (data?.permissions as Record<string, boolean>) || {};
+}
+
+/**
  * Look up an invitation by either token_hash (new path) or plaintext token
  * (legacy backfill window). Returns the row only if a constant-time compare
  * against the stored hash succeeds.
@@ -450,7 +473,7 @@ router.post('/invitations/accept', invitationLimiter, validate(acceptInviteSchem
           scope: invitation.scope || 'self',
           team_id: invitation.team_id || null,
           department_id: invitation.department_id || null,
-          permissions: invitation.custom_permissions || {},
+          permissions: await resolveInvitePermissions(admin, invitation.org_id, invitation.role, invitation.custom_permissions),
           status: 'active',
         });
 
@@ -498,7 +521,7 @@ router.post('/invitations/accept', invitationLimiter, validate(acceptInviteSchem
         scope: invitation.scope || 'self',
         team_id: invitation.team_id || null,
         department_id: invitation.department_id || null,
-        permissions: invitation.custom_permissions || {},
+        permissions: await resolveInvitePermissions(admin, invitation.org_id, invitation.role, invitation.custom_permissions),
         full_name,
         status: 'active',
       });
