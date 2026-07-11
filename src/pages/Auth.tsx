@@ -49,7 +49,9 @@ export default function Auth({ onBack }: AuthProps) {
         setMfaFactorId(verifiedFactors[0].id);
         return;
       }
-      // No MFA — login completes normally via Supabase session
+      // No MFA — send them into the app. Without this the URL stays on /auth,
+      // which doesn't exist in the authenticated route tree → NotFound (404).
+      navigate('/', { replace: true });
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
     } finally {
