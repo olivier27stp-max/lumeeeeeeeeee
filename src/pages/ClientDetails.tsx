@@ -27,9 +27,12 @@ import {
   CheckCircle2,
   ExternalLink,
   Contact,
+  Download,
+  ShieldX,
 } from 'lucide-react';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { clientDisplayName, getClientById, updateClient, listClientJobs, softDeleteClient } from '../lib/clientsApi';
+import { exportClientData, eraseClient } from '../lib/consentApi';
 import type { ClientRecord } from '../lib/clientsApi';
 import { BillingAddressSection } from '../components/BillingAddressSection';
 import PropertiesSection from '../components/PropertiesSection';
@@ -376,6 +379,43 @@ export default function ClientDetails() {
     setShowActionMenu(false);
   };
 
+  // ── Loi 25 / privacy: let an admin service a data request for this client ──
+  const handleExportData = async () => {
+    setShowActionMenu(false);
+    if (!client) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const blob = await exportClientData(client.id, session?.access_token || '');
+      if (!blob) throw new Error('export failed');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `client-${client.id}.json`; a.click();
+      URL.revokeObjectURL(url);
+      toast.success(language === 'fr' ? 'Données exportées.' : 'Data exported.');
+    } catch {
+      toast.error(language === 'fr' ? "Échec de l'export." : 'Export failed.');
+    }
+  };
+
+  const handleEraseData = async () => {
+    setShowActionMenu(false);
+    if (!client) return;
+    const displayName = [client.first_name, client.last_name].filter(Boolean).join(' ') || client.company || 'this client';
+    const msg = language === 'fr'
+      ? `Supprimer les données personnelles de ${displayName} ? Cette action anonymise le client de façon permanente (les factures sont conservées pour la loi fiscale). Irréversible.`
+      : `Erase ${displayName}'s personal data? This permanently anonymizes the client (invoices are kept for tax law). Irreversible.`;
+    if (typeof window !== 'undefined' && !window.confirm(msg)) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const ok = await eraseClient(client.id, session?.access_token || '');
+      if (!ok) throw new Error('erase failed');
+      toast.success(language === 'fr' ? 'Données personnelles supprimées.' : 'Personal data erased.');
+      navigate('/clients');
+    } catch {
+      toast.error(language === 'fr' ? "Échec de la suppression." : 'Erase failed.');
+    }
+  };
+
   const handleAddTag = async () => {
     const trimmed = newTag.trim();
     if (!trimmed || !client) return;
@@ -642,6 +682,19 @@ export default function ClientDetails() {
                           <ExternalLink size={13} /> {t.clientDetails.copyPortalLink}
                         </button>
                       )}
+                      <div className="my-1 border-t border-outline-subtle" />
+                      <button
+                        onClick={handleExportData}
+                        className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
+                      >
+                        <Download size={13} /> {language === 'fr' ? 'Exporter les données' : 'Export data'}
+                      </button>
+                      <button
+                        onClick={handleEraseData}
+                        className="w-full px-3 py-2 text-[13px] text-danger hover:bg-danger-light flex items-center gap-2 text-left transition-colors"
+                      >
+                        <ShieldX size={13} /> {language === 'fr' ? 'Supprimer les données (Loi 25)' : 'Erase data (privacy)'}
+                      </button>
                     </div>
                   </>
                 )}

@@ -1201,6 +1201,8 @@ function AuthenticatedApp({
                     <Route path="/pipeline" element={<Navigate to="/lume-agent" replace />} />
                     <Route path="/clients" element={<Gated permission="clients.read"><div className="px-8 py-6"><Clients /></div></Gated>} />
                     <Route path="/clients/new" element={<Gated permission="clients.create"><NewClient /></Gated>} />
+                    {/* Edit reuses the Clients list page, which opens its edit drawer from the :id route param */}
+                    <Route path="/clients/:id/edit" element={<Gated permission="clients.update"><div className="px-8 py-6"><Clients /></div></Gated>} />
                     <Route path="/clients/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><ClientDetails /></div></Gated>} />
                     <Route path="/requests" element={<Gated permission="clients.read"><div className="px-8 py-6"><Requests /></div></Gated>} />
                     <Route path="/requests/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><RequestDetails /></div></Gated>} />
