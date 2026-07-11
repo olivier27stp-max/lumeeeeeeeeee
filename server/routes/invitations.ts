@@ -244,6 +244,36 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
       return res.status(409).json({ error: 'An invitation is already pending for this email.' });
     }
 
+    // ── Seat-limit enforcement ──────────────────────────────────────────
+    // Block the invite if the office is already at capacity: the plan's
+    // included seats + any purchased extra seats. Counts active members +
+    // pending invitations so a burst of invites can't overshoot the plan.
+    {
+      const { data: seatSub } = await admin
+        .from('subscriptions')
+        .select('plan_id, extra_seats')
+        .eq('org_id', targetOrgId)
+        .in('status', ['active', 'trialing'])
+        .maybeSingle();
+      const { data: seatPlan } = seatSub?.plan_id
+        ? await admin.from('plans').select('seats_included').eq('id', seatSub.plan_id).maybeSingle()
+        : { data: null };
+      const capacity = (seatPlan?.seats_included ?? 1) + (seatSub?.extra_seats ?? 0);
+
+      const [{ count: memberCount }, { count: pendingCount }] = await Promise.all([
+        admin.from('memberships').select('id', { count: 'exact', head: true }).eq('org_id', targetOrgId).eq('status', 'active'),
+        admin.from('invitations').select('id', { count: 'exact', head: true }).eq('org_id', targetOrgId).eq('status', 'pending'),
+      ]);
+      const used = (memberCount ?? 0) + (pendingCount ?? 0);
+      if (used >= capacity) {
+        return res.status(403).json({
+          error: `Seat limit reached (${capacity} used). Upgrade your plan or add seats to invite more people.`,
+          code: 'seat_limit_reached',
+          capacity,
+        });
+      }
+    }
+
     // Generate secure token — store ONLY the SHA-256 hash. Plaintext is sent
     // in the email link and never persisted server-side.
     const token = crypto.randomBytes(32).toString('hex');
