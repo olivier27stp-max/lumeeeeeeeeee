@@ -775,7 +775,7 @@ function AuthenticatedApp({
       label: language === 'fr' ? 'Outils' : 'Tools',
       items: [
         { id: 'messages', label: t.nav.messages, icon: MessageSquare, path: '/messages', tileColor: 'blue', requiredPermission: 'messages.read', requiredPlanFlag: 'includes_sms' },
-        { id: 'timesheets', label: t.nav.timesheets, icon: Timer, path: '/timesheets', tileColor: 'blue', requiredPermission: 'timesheets.read' },
+        { id: 'timesheets', label: t.nav.timesheets, icon: Timer, path: '/timesheets', tileColor: 'blue', requiredPermission: 'timesheets.read', requiredPlanFlag: 'includes_timesheets' },
         { id: 'courses', label: t.courses?.title || 'Courses', icon: GraduationCap, path: '/courses', tileColor: 'blue', requiredPlanFlag: 'includes_courses' },
       ],
     },
@@ -1224,7 +1224,7 @@ function AuthenticatedApp({
                     <Route path="/insights" element={<Gated permission="reports.read"><PageWrapper><Statistiques /></PageWrapper></Gated>} />
                     <Route path="/payments" element={<PaymentsRedirect />} />
                     <Route path="/payments/settings" element={<Navigate to="/settings?tab=payments" replace />} />
-                    <Route path="/timesheets" element={<Gated permission="timesheets.read"><PageWrapper><Timesheets /></PageWrapper></Gated>} />
+                    <Route path="/timesheets" element={<Gated permission="timesheets.read"><PlanFeatureGate flag="includes_timesheets"><PageWrapper><Timesheets /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/settings" element={<Gated permission="settings.read"><PageWrapper><SettingsPage /></PageWrapper></Gated>} />
                     <Route path="/account/privacy" element={<PageWrapper><PrivacyCenter /></PageWrapper>} />
                     <Route path="/privacy" element={<Privacy />} />

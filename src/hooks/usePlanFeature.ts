@@ -8,7 +8,8 @@ export type PlanFeatureFlag =
   | 'includes_courses'
   | 'includes_api'
   | 'includes_automations'
-  | 'includes_marketplace';
+  | 'includes_marketplace'
+  | 'includes_timesheets';
 
 interface UsePlanFeatureReturn {
   /** True when the user's current plan grants this feature */
