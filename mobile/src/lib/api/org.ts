@@ -1,6 +1,7 @@
 // Team + company-settings reads/writes (admin/owner). Direct Supabase under RLS.
 
 import { supabase } from '../supabase';
+import { changeMemberRole } from './server';
 
 export interface Member {
   user_id: string;
@@ -79,13 +80,11 @@ export async function getMember(userId: string, orgId: string): Promise<Member |
   return (await withProfiles(orgId, [data]))[0];
 }
 
-export async function updateMemberRole(userId: string, orgId: string, role: string): Promise<void> {
-  const { error } = await supabase
-    .from('memberships')
-    .update({ role })
-    .eq('user_id', userId)
-    .eq('org_id', orgId);
-  if (error) throw new Error(error.message);
+export async function updateMemberRole(userId: string, _orgId: string, role: string): Promise<void> {
+  // Routed through the RBAC-guarded server endpoint (server enforces owner/admin,
+  // owner-protection and demotion rules) rather than a direct memberships write.
+  // The org is derived server-side from the caller's auth, so _orgId is unused.
+  await changeMemberRole(userId, role);
 }
 
 export interface CompanySettings {
