@@ -110,4 +110,14 @@ export async function softDeleteTeam(teamId: string): Promise<void> {
     .is('deleted_at', null);
 
   if (eventsError) throw eventsError;
+
+  // Also unassign members — this used to happen only in local UI state, so
+  // reps stayed attached to the deleted team in the DB.
+  const { error: membersError } = await supabase
+    .from('memberships')
+    .update({ team_id: null, updated_at: nowIso })
+    .eq('team_id', teamId)
+    .eq('org_id', orgId);
+
+  if (membersError) throw membersError;
 }
