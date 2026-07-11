@@ -899,7 +899,8 @@ function AuthenticatedApp({
             </div>
           )}
 
-          {/* Dev role switcher — quick role swap from the sidebar header (temporary) */}
+          {/* Dev tools (role + plan switch) — founder / platform-owner only, hidden from real customer accounts */}
+          {isPlatformOwner && (
           <div className="px-2.5 pb-2">
             <DevRoleSwitcher expanded={sidebarExpanded} />
             {/* Temporary plan switcher — sits right under the role switcher */}
@@ -916,6 +917,7 @@ function AuthenticatedApp({
               {sidebarExpanded && <span className="truncate text-left flex-1">Switch Plan</span>}
             </button>
           </div>
+          )}
 
           {/* Navigation */}
           <nav className="flex-1 px-2.5 py-2 overflow-y-auto space-y-0.5">
