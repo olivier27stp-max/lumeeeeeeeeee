@@ -312,6 +312,17 @@ export async function fetchPlans(): Promise<PlanRow[]> {
   return serverGet<PlanRow[]>('/billing/plans');
 }
 
+// ─── Team role change (RBAC-guarded server route) ───────────────────────────
+/**
+ * Change a member's role via POST /api/invitations/update-role — the same
+ * chokepoint the web uses — instead of a direct `memberships` write. The server
+ * enforces admin/owner, protects the owner, and applies demotion rules; the DB
+ * trigger is only the last-resort backstop.
+ */
+export async function changeMemberRole(memberId: string, role: string): Promise<void> {
+  await serverPost('/invitations/update-role', { memberId, role });
+}
+
 /**
  * The org's current plan, resolved from its subscription. Returns null when
  * there is no active subscription. Mirrors the web's resolution: prefer the
