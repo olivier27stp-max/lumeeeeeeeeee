@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   User,
-  Building2,
   Shield,
-  Moon,
   CreditCard,
   Check,
   Loader2,
@@ -47,10 +45,9 @@ import { usePlatformOwner } from '../hooks/usePlatformOwner';
 
 // ─── All settings tabs (unified) ─────────────────────────────────
 type SettingsTab =
-  | 'account' | 'billing' | 'workspace' | 'language'
+  | 'account' | 'billing' | 'language'
   | 'company' | 'products' | 'payments' | 'reminders' | 'messaging' | 'taxes' | 'automations' | 'request-form'
-  | 'checklists' | 'booking' | 'webhooks' | 'support'
-  | 'team' | 'manage-team' | 'location'
+  | 'support' | 'manage-team' | 'location'
   | 'archives' | 'referrals' | 'payroll'
   | 'roles' | 'd2d-config';
 
@@ -66,144 +63,10 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// ─── Placeholder panel for unbuilt sections ──────────────────────
-function PlaceholderPanel({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="glass-card rounded-2xl p-10 text-center">
-      <SettingsIcon size={32} className="text-text-tertiary mx-auto mb-4 opacity-25" />
-      <h3 className="text-xl font-bold text-text-primary">{title}</h3>
-      <p className="text-[13px] text-text-tertiary mt-2 max-w-sm mx-auto leading-relaxed">{description}</p>
-      <span className="badge-neutral text-[10px] mt-4 inline-block">Coming soon</span>
-    </div>
-  );
-}
-
-// ─── Workspace Tab (editable name + slug) ───────────────────────
-function WorkspaceTab() {
-  const { t, language } = useTranslation();
-  const [wsName, setWsName] = useState('');
-  const [wsSlug, setWsSlug] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [orgId, setOrgId] = useState<string | null>(null);
-
-  useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-
-      const { data: mem } = await supabase
-        .from('memberships')
-        .select('org_id')
-        .eq('user_id', user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (mem?.org_id) {
-        setOrgId(mem.org_id);
-        const { data: org } = await supabase
-          .from('orgs')
-          .select('name, slug')
-          .eq('id', mem.org_id)
-          .single();
-        if (org) {
-          setWsName(org.name || '');
-          setWsSlug(org.slug || '');
-        }
-      }
-      setLoading(false);
-    }
-    load();
-  }, []);
-
-  const slugify = (s: string) =>
-    s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-
-  const handleNameChange = (val: string) => {
-    setWsName(val);
-    setWsSlug(slugify(val));
-    setSaved(false);
-  };
-
-  const handleSave = async () => {
-    if (!orgId || !wsName.trim()) return;
-    setSaving(true);
-    const { error } = await supabase
-      .from('orgs')
-      .update({ name: wsName.trim(), slug: wsSlug || slugify(wsName) })
-      .eq('id', orgId);
-    setSaving(false);
-    if (!error) {
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } else {
-      // Surfaces real failures (e.g. slug already taken — unique constraint —
-      // or not being an org admin). This used to fail silently.
-      toast.error(
-        error.code === '23505'
-          ? (language === 'fr' ? 'Ce slug est déjà utilisé par une autre entreprise.' : 'This slug is already taken by another workspace.')
-          : error.message,
-      );
-    }
-  };
-
-  if (loading) return <div className="flex justify-center py-12"><Loader2 size={18} className="animate-spin text-text-tertiary" /></div>;
-
-  return (
-    <div className="space-y-6">
-      <div className="glass-card rounded-2xl p-6 space-y-5">
-        <p className="text-xs font-medium text-text-tertiary">{t.settings.general}</p>
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs font-medium text-text-tertiary">{t.settings.workspaceName}</label>
-            <input
-              type="text"
-              value={wsName}
-              onChange={(e) => handleNameChange(e.target.value)}
-              className="glass-input w-full mt-1.5"
-              placeholder="My Company"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-text-tertiary">{t.settings.workspaceUrl}</label>
-            <div className="flex items-center gap-2.5 mt-1.5">
-              <span className="text-xs text-text-tertiary shrink-0">lume.crm/</span>
-              <input
-                type="text"
-                value={wsSlug}
-                onChange={(e) => { setWsSlug(slugify(e.target.value)); setSaved(false); }}
-                className="glass-input flex-1"
-                placeholder="my-company"
-              />
-            </div>
-          </div>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving || !wsName.trim()}
-          className={cn('glass-button-primary inline-flex items-center gap-2', saved && '!bg-success !text-white !border-success')}
-        >
-          {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <Check size={13} /> : null}
-          {saving ? (t.billing.saving) : saved ? (t.companySettings.saved) : (t.customFields.save)}
-        </button>
-      </div>
-      <div className="glass-card rounded-2xl p-6 space-y-5">
-        <p className="text-xs font-medium text-text-tertiary">{t.settings.appearance}</p>
-        <div className="flex items-center justify-between p-4 bg-surface-secondary rounded-xl hover:bg-surface-secondary/80 transition-colors">
-          <div className="flex items-center gap-3.5">
-            <Moon size={18} className="text-text-tertiary" />
-            <div>
-              <p className="text-[13px] font-semibold text-text-primary">{t.settings.darkMode}</p>
-              <p className="text-xs text-text-tertiary">{t.settings.darkModeDesc}</p>
-            </div>
-          </div>
-          <span className="badge-neutral text-[10px]">{t.common.comingSoon}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
+// (PlaceholderPanel and the Workspace tab were removed: the placeholder was
+//  unused, and workspace duplicated the company name + carried a lume.crm/slug
+//  field wired to nothing and a months-old "dark mode coming soon" row. The org
+//  name is now edited in Company Settings.)
 
 // ─── Main Component ──────────────────────────────────────────────
 // ── SMS 2FA Section Component ──
@@ -457,9 +320,15 @@ function BillingTab({ navigate, isFr, t }: { navigate: (path: string) => void; i
                 )}
                 {subscription.interval === 'monthly' && currentPlan && (
                   <p className="text-[11px] text-emerald-300 font-medium">
-                    {isFr
-                      ? `Économisez 15% en passant à l'annuel ($${Math.round(currentPlan.monthly_price_usd / 100 * 0.85)}/mois)`
-                      : `Save 15% by switching to annual ($${Math.round(currentPlan.monthly_price_usd / 100 * 0.85)}/mo)`}
+                    {(() => {
+                      // Real yearly price from the plans table (hardcoded ×0.85 before).
+                      const yrMo = currentPlan.yearly_price_usd
+                        ? Math.round(currentPlan.yearly_price_usd / 1200)
+                        : Math.round(currentPlan.monthly_price_usd / 100 * 0.85);
+                      return isFr
+                        ? `Économisez en passant à l'annuel ($${yrMo}/mois)`
+                        : `Save by switching to annual ($${yrMo}/mo)`;
+                    })()}
                   </p>
                 )}
                 {subscription.cancel_at_period_end && (
@@ -886,13 +755,16 @@ function DowngradeModal({
   // Offices lost
   const officesLost = (fromPlan.included_offices ?? 0) - (toPlan.included_offices ?? 0);
 
-  // Prices
-  const fromPrice = interval === 'yearly' ? Math.round(fromPlan.monthly_price_usd * 0.85 / 100) : fromPlan.monthly_price_usd / 100;
-  const toPrice = interval === 'yearly' ? Math.round(toPlan.monthly_price_usd * 0.85 / 100) : toPlan.monthly_price_usd / 100;
+  // Prices — real yearly price from the plans table when available (the old
+  // hardcoded ×0.85 drifted from the actual pricing model).
+  const yearlyMo = (p: Plan) =>
+    p.yearly_price_usd ? Math.round(p.yearly_price_usd / 1200) : Math.round(p.monthly_price_usd * 0.85 / 100);
+  const fromPrice = interval === 'yearly' ? yearlyMo(fromPlan) : fromPlan.monthly_price_usd / 100;
+  const toPrice = interval === 'yearly' ? yearlyMo(toPlan) : toPlan.monthly_price_usd / 100;
   const monthlySavings = fromPrice - toPrice;
 
   // Yearly retention offer (only if currently monthly)
-  const yearlyDiscount = Math.round(fromPlan.monthly_price_usd / 100 * 0.85);
+  const yearlyDiscount = yearlyMo(fromPlan);
   const yearlyAnnualSavings = (fromPlan.monthly_price_usd / 100 - yearlyDiscount) * 12;
 
   // Effective date (end of current period)
@@ -1168,41 +1040,55 @@ export default function Settings() {
   }
 
   // ─── Navigation structure (3 sections, simplified) ───────────
+  // 5 logical groups (was 3 catch-alls): Mon compte / Entreprise /
+  // Communication & ventes / Équipe / Plus. The old "Espace de travail" tab is
+  // gone — the org name is edited in Company Settings (single source), the
+  // lume.crm/slug field was wired to nothing, and the dark-mode row was a
+  // months-old "coming soon".
   const navSections: NavGroup[] = [
     {
-      heading: t.settings.general,
+      heading: isFr ? 'Mon compte' : 'My account',
       items: [
-        { id: 'account',   label: t.settings.account,   icon: User },
-        { id: 'workspace', label: t.settings.workspace,  icon: Building2 },
-        { id: 'company',   label: t.settings.companySettings, icon: Building, link: '/settings/company' },
+        { id: 'account',   label: isFr ? 'Profil & sécurité' : 'Profile & security', icon: User },
         { id: 'language',  label: t.settings.language,   icon: Globe },
-        { id: 'billing',   label: t.settings.billing,   icon: CreditCard },
-        { id: 'support',   label: isFr ? 'Support' : 'Support', icon: LifeBuoy },
       ],
     },
     {
-      heading: isFr ? 'Activité' : 'Activity',
+      heading: isFr ? 'Entreprise' : 'Business',
       items: [
-        { id: 'products',     label: t.settings.productsServices, icon: Package, link: '/settings/products' },
-        { id: 'taxes',        label: 'Taxes',                     icon: Receipt, link: '/settings/taxes' },
-        { id: 'payments',     label: t.commandPalette.payments,   icon: Wallet, link: '/settings/payments' },
+        { id: 'company',   label: t.settings.companySettings, icon: Building, link: '/settings/company' },
+        { id: 'billing',   label: isFr ? 'Forfait & facturation' : 'Plan & billing', icon: CreditCard },
+        { id: 'taxes',     label: 'Taxes',                     icon: Receipt, link: '/settings/taxes' },
+        { id: 'products',  label: t.settings.productsServices, icon: Package, link: '/settings/products' },
+        { id: 'payments',  label: 'Lume Payments',             icon: Wallet, link: '/settings/payments' },
+      ],
+    },
+    {
+      heading: isFr ? 'Communication & ventes' : 'Communication & sales',
+      items: [
         { id: 'messaging',    label: isFr ? 'Messagerie SMS' : 'SMS Messaging', icon: MessageSquare, link: '/settings/messaging' },
         { id: 'reminders',    label: isFr ? 'Rappels de paiement' : 'Payment reminders', icon: Bell, link: '/settings/reminders' },
         { id: 'request-form', label: (t.settings as any).requestForm || (t.requestForm.requestForm), icon: FileText, link: '/settings/request-form' },
         { id: 'automations',  label: t.settings.automations,      icon: Zap, link: '/automations' },
-        { id: 'location',     label: t.settings.locationServices, icon: MapPin },
-        { id: 'archives',     label: (t.settings as any).archives || 'Archives', icon: Archive },
+        // Points at /teams: the /general page was an unwired mock (now a redirect).
+        { id: 'd2d-config',   label: isFr ? 'Config Vente (D2D)' : 'Sales Config (D2D)', icon: MapPin, link: '/d2d-settings/teams' },
       ],
     },
     {
       heading: t.settings.team,
       items: [
         { id: 'manage-team', label: isFr ? 'Membres' : 'Members',                icon: Users, link: '/settings/team' },
-        { id: 'payroll',     label: t.settings.payroll,                          icon: CalendarIcon },
         { id: 'roles',       label: isFr ? 'Rôles & Permissions' : 'Roles & Permissions', icon: Shield, link: '/settings/roles' },
-        // Points at /teams: the /general page was an unwired mock (now a redirect).
-        { id: 'd2d-config',  label: isFr ? 'Config Vente' : 'Sales Config',      icon: MapPin, link: '/d2d-settings/teams' },
-        { id: 'referrals' as SettingsTab, label: t.referFriend.referAFriend,     icon: Gift, link: '/settings/referrals' },
+        { id: 'payroll',     label: t.settings.payroll,                          icon: CalendarIcon },
+        { id: 'location',    label: isFr ? 'Localisation GPS' : 'GPS tracking',  icon: MapPin },
+      ],
+    },
+    {
+      heading: isFr ? 'Plus' : 'More',
+      items: [
+        { id: 'archives',  label: (t.settings as any).archives || 'Archives', icon: Archive },
+        { id: 'referrals' as SettingsTab, label: t.referFriend.referAFriend,  icon: Gift, link: '/settings/referrals' },
+        { id: 'support',   label: 'Support', icon: LifeBuoy },
       ],
     },
     // Platform section — owner-only, shown at the very bottom
@@ -1321,9 +1207,6 @@ export default function Settings() {
             )}
 
             {/* ═══ WORKSPACE ═══ */}
-            {activeTab === 'workspace' && (
-              <WorkspaceTab />
-            )}
 
             {/* ═══ LANGUAGE ═══ */}
             {activeTab === 'language' && (

@@ -148,6 +148,28 @@ export default function PayrollSettingsPanel() {
           <p className="text-[11px] text-text-tertiary mt-1">{tp.payDayOffsetHint}</p>
         </div>
 
+        {/* Timezone — payroll_settings.timezone was saved & used by the server
+            pay-period calculation, but had no input control. */}
+        <div>
+          <label className="text-xs font-medium text-text-tertiary">{fr ? 'Fuseau horaire' : 'Timezone'}</label>
+          <select
+            disabled={!isAdmin}
+            value={form.timezone}
+            onChange={(e) => setForm({ ...form, timezone: e.target.value })}
+            className="glass-input w-full mt-1.5 disabled:opacity-60"
+          >
+            <option value="America/Toronto">{fr ? 'Est (Toronto / Montréal)' : 'Eastern (Toronto / Montréal)'}</option>
+            <option value="America/Halifax">{fr ? 'Atlantique (Halifax)' : 'Atlantic (Halifax)'}</option>
+            <option value="America/St_Johns">{fr ? 'Terre-Neuve (St. John’s)' : 'Newfoundland (St. John’s)'}</option>
+            <option value="America/Winnipeg">{fr ? 'Centre (Winnipeg)' : 'Central (Winnipeg)'}</option>
+            <option value="America/Edmonton">{fr ? 'Rocheuses (Edmonton / Calgary)' : 'Mountain (Edmonton / Calgary)'}</option>
+            <option value="America/Vancouver">{fr ? 'Pacifique (Vancouver)' : 'Pacific (Vancouver)'}</option>
+          </select>
+          <p className="text-[11px] text-text-tertiary mt-1">
+            {fr ? 'Utilisé pour délimiter les périodes de paie.' : 'Used to bound pay periods.'}
+          </p>
+        </div>
+
         {error && <p className="text-[12px] text-danger">{error}</p>}
 
         {isAdmin && (
