@@ -260,9 +260,12 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
         : { data: null };
       const capacity = (seatPlan?.seats_included ?? 1) + (seatSub?.extra_seats ?? 0);
 
+      // NOTE: count with '*' — the memberships table has NO `id` column, so
+      // select('id') returned a null count and the owner was never counted,
+      // silently disabling the whole seat limit.
       const [{ count: memberCount }, { count: pendingCount }] = await Promise.all([
-        admin.from('memberships').select('id', { count: 'exact', head: true }).eq('org_id', targetOrgId).eq('status', 'active'),
-        admin.from('invitations').select('id', { count: 'exact', head: true }).eq('org_id', targetOrgId).eq('status', 'pending'),
+        admin.from('memberships').select('*', { count: 'exact', head: true }).eq('org_id', targetOrgId).eq('status', 'active'),
+        admin.from('invitations').select('*', { count: 'exact', head: true }).eq('org_id', targetOrgId).eq('status', 'pending'),
       ]);
       const used = (memberCount ?? 0) + (pendingCount ?? 0);
       if (used >= capacity) {
