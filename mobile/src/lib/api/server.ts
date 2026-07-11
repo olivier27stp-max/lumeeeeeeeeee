@@ -288,3 +288,45 @@ export async function getConnectOnboardingLink(
   const path = refresh ? '/connect/refresh-onboarding-link' : '/connect/create-onboarding-link';
   return serverPost<{ url: string; expires_at: number }>(path, { orgId });
 }
+
+// ─── Subscription plan + entitlements (feature gating) ──────────────────────
+// The org's plan carries boolean feature flags (includes_d2d, includes_courses,
+// includes_sms, …). Mobile must respect them like the web does, otherwise a
+// lower-tier org reaches premium features (D2D, formations, SMS) for free.
+// Same endpoints the web `usePlanFeature` uses: GET /api/billing/plans (public)
+// and GET /api/billing/current (the org's subscription → its plan).
+
+export interface PlanRow {
+  id: string;
+  slug: string;
+  name: string;
+  includes_sms?: boolean;
+  includes_ai?: boolean;
+  includes_d2d?: boolean;
+  includes_courses?: boolean;
+  includes_api?: boolean;
+}
+
+/** All active plans with their feature flags. */
+export async function fetchPlans(): Promise<PlanRow[]> {
+  return serverGet<PlanRow[]>('/billing/plans');
+}
+
+/**
+ * The org's current plan, resolved from its subscription. Returns null when
+ * there is no active subscription. Mirrors the web's resolution: prefer the
+ * embedded `plans`, else look it up by `plan_id`.
+ */
+export async function fetchCurrentPlan(): Promise<PlanRow | null> {
+  const billing = await serverGet<{
+    subscription: (Record<string, unknown> & { plans?: PlanRow; plan_id?: string }) | null;
+  }>('/billing/current');
+  const sub = billing?.subscription ?? null;
+  if (!sub) return null;
+  if (sub.plans) return sub.plans;
+  if (sub.plan_id) {
+    const plans = await fetchPlans().catch(() => []);
+    return plans.find((p) => p.id === sub.plan_id) ?? null;
+  }
+  return null;
+}

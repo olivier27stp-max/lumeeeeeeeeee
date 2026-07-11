@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 
@@ -8,10 +8,12 @@ import UnifiedAvatar from '@/components/ui/UnifiedAvatar';
 import { ConversationRow, listConversations } from '@/lib/api/messaging';
 import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
+import { usePlanFeature } from '@/lib/usePlanFeature';
 
 export default function Messages() {
   const { t } = useTranslation();
   const { orgId } = usePermissions();
+  const hasSms = usePlanFeature('includes_sms').hasFeature;
   const [q, setQ] = useState('');
 
   const timeAgo = (iso: string | null): string => {
@@ -39,6 +41,9 @@ export default function Messages() {
       )}&clientId=${encodeURIComponent(c.client_id ?? '')}`,
     );
   };
+
+  // SMS messaging is a paid feature (parity with the web `includes_sms` gate).
+  if (!hasSms) return <Redirect href="/(app)/(tabs)/profile" />;
 
   return (
     <View className="flex-1 bg-surface-alt">

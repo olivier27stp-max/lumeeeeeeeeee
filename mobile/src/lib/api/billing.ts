@@ -406,14 +406,22 @@ export async function markInvoiceSent(invoiceId: string): Promise<void> {
 
   const { data: existing } = await supabase
     .from('invoices')
-    .select('due_date')
+    .select('issued_at, due_date, status')
     .eq('id', invoiceId)
     .single();
 
-  const patch: { sent_at: string; due_date?: string } = { sent_at: now.toISOString() };
+  // The web marks an invoice sent via `issued_at` + status 'sent' — there is no
+  // `sent_at` column (writing it was a silent no-op, so the web never saw the
+  // send). Preserve an existing issued_at so the original send date stands, and
+  // only bump draft → sent (never downgrade a partial/paid invoice).
+  const patch: { issued_at: string; due_date?: string; status?: string } = {
+    issued_at: existing?.issued_at ?? now.toISOString(),
+  };
   if (!existing?.due_date) patch.due_date = dueDate;
+  if (existing?.status === 'draft') patch.status = 'sent';
 
-  await supabase.from('invoices').update(patch).eq('id', invoiceId);
+  const { error } = await supabase.from('invoices').update(patch).eq('id', invoiceId);
+  if (error) throw new Error(error.message);
 }
 
 /** Void (cancel) an invoice: status → 'void', no balance due. Org members can
