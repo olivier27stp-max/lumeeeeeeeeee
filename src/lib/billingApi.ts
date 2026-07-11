@@ -46,6 +46,7 @@ export interface Plan {
   includes_api?: boolean;
   includes_automations?: boolean;
   includes_marketplace?: boolean;
+  includes_timesheets?: boolean;
 }
 
 export interface BillingProfile {
@@ -120,11 +121,12 @@ export async function fetchPlans(): Promise<Plan[]> {
   const data = await res.json();
   return (data.plans as Plan[]).map((p) => ({
     ...p,
-    // Automations + Marketplace are Scale+ features (per each plan's feature
-    // list). Until the plans table has dedicated columns, derive them from the
-    // tier — everything except Minimum (starter).
+    // Derived plan flags (no dedicated DB column yet):
+    // - Automations: Scale+ (everything except Minimum/starter).
+    // - Marketplace / integrations / webhooks: Autopilot only.
     includes_automations: p.includes_automations ?? (p.slug !== 'starter'),
-    includes_marketplace: p.includes_marketplace ?? (p.slug !== 'starter'),
+    includes_marketplace: p.includes_marketplace ?? (p.slug === 'autopilot'),
+    includes_timesheets: p.includes_timesheets ?? (p.slug !== 'starter'),
   }));
 }
 

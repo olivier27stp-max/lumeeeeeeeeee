@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Check, Sparkles, X, MessageSquare, Bot, MapPin, GraduationCap, Code, Lock, Zap, Store } from 'lucide-react';
+import { Check, Sparkles, X, MessageSquare, Bot, MapPin, GraduationCap, Code, Lock, Zap, Store, Timer } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import type { Plan } from '../lib/billingApi';
 import type { PlanFeatureFlag } from '../hooks/usePlanFeature';
@@ -167,6 +167,26 @@ const FEATURE_META: Record<PlanFeatureFlag, {
       'Formulaires de demande personnalisés',
     ],
     gradient: 'from-emerald-600 via-teal-600 to-cyan-700',
+  },
+  includes_timesheets: {
+    icon: Timer,
+    titleEn: 'Employee timesheets',
+    titleFr: "Feuilles de temps",
+    taglineEn: 'Track your team\'s hours & performance',
+    taglineFr: "Suivez les heures et la performance de ton équipe",
+    benefitsEn: [
+      'Clock in / out per employee',
+      'Hours per job & per client',
+      'Labour cost on jobs',
+      'Team performance tracking',
+    ],
+    benefitsFr: [
+      'Pointer l\'arrivée / départ par employé',
+      'Heures par job et par client',
+      'Coût de main-d\'œuvre sur les jobs',
+      'Suivi de performance de l\'équipe',
+    ],
+    gradient: 'from-sky-600 via-blue-600 to-indigo-700',
   },
 };
 
