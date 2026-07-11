@@ -803,8 +803,8 @@ function AuthenticatedApp({
   const moreNavItems: NavItem[] = ([
     { id: 'insights', label: language === 'fr' ? 'Statistiques' : 'Statistics', icon: TrendingUp, path: '/insights', tileColor: 'blue' as const, requiredPermission: 'financial.view_analytics' as PermissionKey },
     { id: 'tasks', label: language === 'fr' ? 'Tâches' : 'Tasks', icon: ClipboardList, path: '/tasks', tileColor: 'blue' as const, requiredPermission: 'leads.read' as PermissionKey },
-    { id: 'automations', label: t.workflows?.title || 'Automations', icon: Zap, path: '/automations', tileColor: 'blue' as const, requiredPermission: 'automations.read' as PermissionKey },
-    { id: 'marketplace', label: 'Marketplace', icon: Store, path: '/settings/marketplace', tileColor: 'blue' as const, requiredPermission: 'integrations.read' as PermissionKey },
+    { id: 'automations', label: t.workflows?.title || 'Automations', icon: Zap, path: '/automations', tileColor: 'blue' as const, requiredPermission: 'automations.read' as PermissionKey, requiredPlanFlag: 'includes_automations' },
+    { id: 'marketplace', label: 'Marketplace', icon: Store, path: '/settings/marketplace', tileColor: 'blue' as const, requiredPermission: 'integrations.read' as PermissionKey, requiredPlanFlag: 'includes_marketplace' },
   ] as NavItem[]).filter(canSee);
 
   // Auto-expand "More" if the user is on a "more" page
@@ -1233,7 +1233,7 @@ function AuthenticatedApp({
                     <Route path="/settings/payments" element={<Gated permission="settings.read"><PageWrapper><PaymentSettings /></PageWrapper></Gated>} />
                     <Route path="/settings/messaging" element={<Gated permission="settings.read"><PageWrapper><SettingsMessaging /></PageWrapper></Gated>} />
                     <Route path="/settings/products" element={<Gated permission="settings.update"><PageWrapper><ProductsServices /></PageWrapper></Gated>} />
-                    <Route path="/automations" element={<Gated permission="automations.read"><PageWrapper><Automations /></PageWrapper></Gated>} />
+                    <Route path="/automations" element={<Gated permission="automations.read"><PlanFeatureGate flag="includes_automations"><PageWrapper><Automations /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/tasks" element={<Gated permission="settings.read"><PageWrapper><TasksPage /></PageWrapper></Gated>} />
                     <Route path="/courses" element={<Gated permission="settings.read"><PlanFeatureGate flag="includes_courses"><div className="px-8 py-6"><Courses /></div></PlanFeatureGate></Gated>} />
                     <Route path="/training" element={<Navigate to="/courses" replace />} />
@@ -1263,7 +1263,7 @@ function AuthenticatedApp({
                     <Route path="/d2d-onboarding" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DOnboarding /></ModuleGate></PlanFeatureGate></Gated>} />
                     <Route path="/settings/team/:memberId/profile" element={<Gated permission="team.read"><RepProfile /></Gated>} />
                     <Route path="/reps/:id" element={<Gated permission="team.read"><RepProfile /></Gated>} />
-                    <Route path="/settings/marketplace" element={<Gated permission="integrations.read"><PageWrapper><AppMarketplace /></PageWrapper></Gated>} />
+                    <Route path="/settings/marketplace" element={<Gated permission="integrations.read"><PlanFeatureGate flag="includes_marketplace"><PageWrapper><AppMarketplace /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/settings/request-form" element={<Gated permission="settings.update"><PageWrapper><RequestFormSettings /></PageWrapper></Gated>} />
                     {/* NOTE: /quotes/presets and /quotes/templates moved before /quotes/:id to prevent route conflict */}
                     <Route path="/settings/taxes" element={<Gated permission="settings.update"><PageWrapper><TaxSettings /></PageWrapper></Gated>} />

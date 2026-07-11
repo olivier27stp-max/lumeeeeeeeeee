@@ -44,6 +44,8 @@ export interface Plan {
   includes_d2d?: boolean;
   includes_courses?: boolean;
   includes_api?: boolean;
+  includes_automations?: boolean;
+  includes_marketplace?: boolean;
 }
 
 export interface BillingProfile {
@@ -116,7 +118,14 @@ export async function fetchPlans(): Promise<Plan[]> {
   const res = await fetch(`${API_BASE}/billing/plans`);
   if (!res.ok) throw new Error('Failed to load plans.');
   const data = await res.json();
-  return data.plans;
+  return (data.plans as Plan[]).map((p) => ({
+    ...p,
+    // Automations + Marketplace are Scale+ features (per each plan's feature
+    // list). Until the plans table has dedicated columns, derive them from the
+    // tier — everything except Minimum (starter).
+    includes_automations: p.includes_automations ?? (p.slug !== 'starter'),
+    includes_marketplace: p.includes_marketplace ?? (p.slug !== 'starter'),
+  }));
 }
 
 export async function fetchCurrentBilling(): Promise<{
