@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Check, Sparkles, X, MessageSquare, Bot, MapPin, GraduationCap, Code, Lock } from 'lucide-react';
+import { Check, Sparkles, X, MessageSquare, Bot, MapPin, GraduationCap, Code, Lock, Zap, Store } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import type { Plan } from '../lib/billingApi';
 import type { PlanFeatureFlag } from '../hooks/usePlanFeature';
@@ -127,6 +127,46 @@ const FEATURE_META: Record<PlanFeatureFlag, {
       'Limites de taux plus élevées',
     ],
     gradient: 'from-slate-700 via-zinc-700 to-neutral-800',
+  },
+  includes_automations: {
+    icon: Zap,
+    titleEn: 'Automations',
+    titleFr: 'Automatisations',
+    taglineEn: 'Put your busywork on autopilot',
+    taglineFr: 'Mettez vos tâches répétitives en pilote automatique',
+    benefitsEn: [
+      'Automated quote & invoice follow-ups',
+      'Trigger actions on any CRM event',
+      'Reminders & status updates on their own',
+      'Save hours every week',
+    ],
+    benefitsFr: [
+      'Suivis automatiques de devis et factures',
+      'Déclenchez des actions sur tout événement du CRM',
+      'Rappels et mises à jour de statut automatiques',
+      'Économisez des heures chaque semaine',
+    ],
+    gradient: 'from-amber-500 via-orange-600 to-red-600',
+  },
+  includes_marketplace: {
+    icon: Store,
+    titleEn: 'Marketplace & integrations',
+    titleFr: 'Marketplace et intégrations',
+    taglineEn: 'Connect Lume to the tools you already use',
+    taglineFr: 'Connectez Lume aux outils que vous utilisez déjà',
+    benefitsEn: [
+      'Marketplace integrations & webhooks',
+      'QuickBooks, Mailchimp & more',
+      'Sync data across your stack',
+      'Custom request forms',
+    ],
+    benefitsFr: [
+      'Intégrations Marketplace et webhooks',
+      'QuickBooks, Mailchimp et plus',
+      'Synchronisez vos données entre vos outils',
+      'Formulaires de demande personnalisés',
+    ],
+    gradient: 'from-emerald-600 via-teal-600 to-cyan-700',
   },
 };
 

@@ -6,7 +6,9 @@ export type PlanFeatureFlag =
   | 'includes_ai'
   | 'includes_d2d'
   | 'includes_courses'
-  | 'includes_api';
+  | 'includes_api'
+  | 'includes_automations'
+  | 'includes_marketplace';
 
 interface UsePlanFeatureReturn {
   /** True when the user's current plan grants this feature */
