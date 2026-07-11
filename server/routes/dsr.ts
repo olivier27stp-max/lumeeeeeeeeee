@@ -96,8 +96,11 @@ router.post('/dsr/erase/lead/:id', async (req, res) => {
     return res.status(400).json({ error: 'Confirmation required: body.confirm must equal "ERASE"' });
   }
 
+  // Leads were folded into `clients` (status='lead') — the old anonymize_lead
+  // RPC targets the dropped `leads` table and throws. A lead id IS a client id,
+  // so route erasure through the working anonymize_client.
   const svc = getServiceClient();
-  const { error } = await svc.rpc('anonymize_lead', { p_lead_id: leadId });
+  const { error } = await svc.rpc('anonymize_client', { p_client_id: leadId });
   if (error) return sendSafeError(res, error, 'Anonymization failed.', '[dsr/erase/lead]');
 
   return res.status(200).json({ ok: true, anonymized: leadId });
