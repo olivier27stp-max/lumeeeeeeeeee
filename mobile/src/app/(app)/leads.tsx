@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Redirect } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Text, View } from 'react-native';
@@ -24,7 +25,7 @@ const STAGE_LABEL_KEY: Record<string, string> = {
 export default function Leads() {
   const qc = useQueryClient();
   const { session } = useAuth();
-  const { orgId, role } = usePermissions();
+  const { orgId, role, can } = usePermissions();
   const { t } = useTranslation();
 
   const d2d = t.mobileD2D as Record<string, string>;
@@ -83,6 +84,10 @@ export default function Leads() {
     ...s,
     leads: (leads ?? []).filter((l) => (l.status || 'new') === s.key),
   })).filter((g) => g.leads.length > 0);
+
+  // Same gate as the web (`permission="leads.read"`): technicians can't view the
+  // pipeline. RLS scopes rows to the caller, but the screen is deep-linkable.
+  if (!can('leads.read')) return <Redirect href="/(app)/(tabs)/profile" />;
 
   return (
     <View className="flex-1 bg-surface-alt">

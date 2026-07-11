@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -11,6 +12,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
+import { usePlanFeature } from '@/lib/usePlanFeature';
 
 // Maps a commission status to its t.mobileD2D key (label resolved in render).
 const STATUS_LABEL_KEY: Record<CommissionStatus, string> = {
@@ -31,7 +33,8 @@ const money = (n: number) =>
 
 export default function Commissions() {
   const { session } = useAuth();
-  const { orgId, role } = usePermissions();
+  const { orgId, role, can } = usePermissions();
+  const hasD2D = usePlanFeature('includes_d2d').hasFeature;
   const { t } = useTranslation();
   const d2d = t.mobileD2D as Record<string, string>;
   const userId = session?.user.id ?? '';
@@ -45,6 +48,11 @@ export default function Commissions() {
   });
 
   const summary = summarize(entries ?? []);
+
+  // Same gates as the web: `commissions.read` permission (technicians can't view
+  // commissions) AND the D2D plan flag (commissions are part of the D2D suite).
+  // RLS limits rows to the caller, but the screen is deep-linkable.
+  if (!can('commissions.read') || !hasD2D) return <Redirect href="/(app)/(tabs)/profile" />;
 
   return (
     <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt" contentContainerStyle={{ padding: 16, gap: 14 }}>

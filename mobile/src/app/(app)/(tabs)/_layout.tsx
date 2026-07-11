@@ -5,6 +5,7 @@ import { ColorValue } from 'react-native';
 
 import { isFieldSalesEnabled } from '@/lib/api/fieldSales';
 import { usePermissions } from '@/lib/usePermissions';
+import { usePlanFeature } from '@/lib/usePlanFeature';
 import { useViewMode } from '@/lib/view-mode';
 
 // Monochrome SF Symbols — they take the tab tint (black active / grey inactive).
@@ -26,7 +27,16 @@ export default function TabsLayout() {
     queryFn: () => isFieldSalesEnabled(orgId ?? ''),
     enabled: !!orgId && can('door_to_door.access'),
   });
-  const showD2D = can('door_to_door.access') && d2dEnabled === true;
+
+  // Plan gating (parity with the web): D2D is an Autopilot feature, training
+  // courses are Scale+. Without the plan flag the tab is hidden, same as web.
+  const hasD2D = usePlanFeature('includes_d2d').hasFeature;
+  const hasCourses = usePlanFeature('includes_courses').hasFeature;
+
+  const showD2D = can('door_to_door.access') && d2dEnabled === true && hasD2D;
+  // The Map tab: tech mode needs the D2D module + permission + plan; sales mode
+  // is the D2D persona, so it just needs the plan.
+  const showMap = sales ? hasD2D : showD2D;
 
   // Sales mode bottom tabs (Enzy-style): Classement · Map · Profil · More.
   return (
@@ -84,7 +94,7 @@ export default function TabsLayout() {
         name="formations"
         options={{
           title: 'Learn',
-          href: !sales ? undefined : null,
+          href: !sales && hasCourses ? undefined : null,
           tabBarIcon: ({ color }) => <TabIcon name="graduationcap" color={color} />,
         }}
       />
@@ -94,7 +104,7 @@ export default function TabsLayout() {
         name="d2d"
         options={{
           title: 'Map',
-          href: sales ? undefined : showD2D ? undefined : null,
+          href: showMap ? undefined : null,
           tabBarIcon: ({ color }) => <TabIcon name="map" color={color} />,
         }}
       />
