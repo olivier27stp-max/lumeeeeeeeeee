@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { sendExpoPushToOrg } from './pushNotifications';
+
 interface TwilioConfig {
   client: any;
   phoneNumber: string;
@@ -25,7 +27,15 @@ export async function createNotification(
   });
   if (error) {
     console.error('[notifications] insert failed:', error.message);
+    return;
   }
+
+  // Also deliver as a device push (never throws; no-op if the org has no tokens).
+  await sendExpoPushToOrg(supabase, orgId, {
+    title,
+    body,
+    data: { type, referenceId: referenceId ?? null },
+  });
 }
 
 /**
