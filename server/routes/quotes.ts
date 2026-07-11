@@ -1532,14 +1532,21 @@ router.post('/quotes/convert-to-invoice', async (req, res) => {
     }
 
     // Recompute invoice totals from the actually-copied items so excluded
-    // optional items don't inflate the amount due.
-    const taxRate = Number(quote.tax_cents || 0) / Math.max(1, Number(quote.subtotal_cents || 1));
-    const effectiveSubtotal = copiedSubtotalCents || quote.subtotal_cents;
-    const effectiveTax = Math.round(effectiveSubtotal * taxRate);
-    const effectiveTotal = effectiveSubtotal + effectiveTax;
+    // optional items don't inflate the amount due — AND carry the quote's
+    // discount over (otherwise a discounted, client-approved quote would be
+    // invoiced at full price). Scale the quote's discount + tax to the copied
+    // subtotal so the invoice reproduces the quote the client accepted; with no
+    // optional items excluded the factor is 1 and the totals match exactly.
+    const qSubtotal = Number(quote.subtotal_cents || 0);
+    const effectiveSubtotal = copiedSubtotalCents || qSubtotal;
+    const factor = qSubtotal > 0 ? effectiveSubtotal / qSubtotal : 1;
+    const effectiveDiscount = Math.min(effectiveSubtotal, Math.round(Number(quote.discount_cents || 0) * factor));
+    const effectiveTax = Math.round(Number(quote.tax_cents || 0) * factor);
+    const effectiveTotal = Math.max(0, effectiveSubtotal - effectiveDiscount + effectiveTax);
 
     await admin.from('invoices').update({
       subtotal_cents: effectiveSubtotal,
+      discount_cents: effectiveDiscount,
       tax_cents: effectiveTax,
       total_cents: effectiveTotal,
       balance_cents: effectiveTotal,
