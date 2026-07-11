@@ -417,6 +417,29 @@ router.put('/taxes/config/:id', async (req, res) => {
   }
 });
 
+// ── DELETE /taxes/config/:id — remove a tax rate ──
+// FKs make this safe: tax_group_items cascade, applied-tax rows SET NULL, and
+// invoices/quotes store their computed tax amounts in their own columns.
+router.delete('/taxes/config/:id', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    if (!await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId)) {
+      return res.status(403).json({ error: 'Admin or owner role required.' });
+    }
+
+    const { error } = await admin.from('tax_configs').delete()
+      .eq('id', req.params.id).eq('org_id', auth.orgId);
+
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[taxes] delete config failed:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ── DELETE /taxes/group/:id — delete a tax group ──
 router.delete('/taxes/group/:id', async (req, res) => {
   try {

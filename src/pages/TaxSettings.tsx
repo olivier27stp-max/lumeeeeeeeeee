@@ -6,7 +6,7 @@ import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import BackToSettings from '../components/ui/BackToSettings';
 import {
-  listTaxes, setupTaxPreset, updateTaxConfig, deleteTaxGroup, setDefaultTaxGroup, createTaxConfig, updateTaxRegistrationNumber,
+  listTaxes, setupTaxPreset, updateTaxConfig, deleteTaxConfig, deleteTaxGroup, setDefaultTaxGroup, createTaxConfig, updateTaxRegistrationNumber,
   type TaxConfig, type TaxGroup, type TaxGroupItem, type TaxPreset,
 } from '../lib/taxApi';
 
@@ -123,8 +123,9 @@ export default function TaxSettings() {
   const handleDeleteTax = async (config: TaxConfig) => {
     if (!confirm(`Remove tax "${config.name}"?`)) return;
     try {
-      await updateTaxConfig(config.id, { is_active: false });
-      // Actually we should delete it — but for now just deactivate
+      // Real delete (was a deactivate stub — the "removed" tax reappeared
+      // struck-through on the next load).
+      await deleteTaxConfig(config.id);
       setConfigs(prev => prev.filter(c => c.id !== config.id));
       toast.success(`${config.name} removed`);
       await load();

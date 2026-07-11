@@ -14,6 +14,8 @@ import {
   getDeviceMappings, saveDeviceMapping, removeDeviceMapping,
   syncProviderLocations,
 } from '../lib/locationApi';
+import { supabase } from '../lib/supabase';
+import { getCurrentOrgId } from '../lib/orgApi';
 
 // ─── Provider card ──────────────────────────────────────────────
 const PROVIDERS: { id: GpsProvider; name: string; color: string; icon: typeof Radio; setupOnly?: boolean }[] = [
@@ -38,6 +40,9 @@ export default function LocationServices() {
   const [mappings, setMappings] = useState<DeviceMapping[]>([]);
   const [devices, setDevices] = useState<ExternalDevice[]>([]);
   const [loadingDevices, setLoadingDevices] = useState(false);
+  const [orgMembers, setOrgMembers] = useState<{ user_id: string; full_name: string }[]>([]);
+  const [deviceUser, setDeviceUser] = useState<Record<string, string>>({});
+  const [mapError, setMapError] = useState<string | null>(null);
 
   const loadProviders = useCallback(async () => {
     try {
@@ -124,8 +129,9 @@ export default function LocationServices() {
   const openMappings = async (provider: GpsProviderConfig) => {
     setMappingProvider(provider);
     setLoadingDevices(true);
+    setMapError(null);
     try {
-      const [maps, devs] = await Promise.all([
+      const [maps, devs, members] = await Promise.all([
         getDeviceMappings(provider.id),
         provider.provider === 'traccar'
           ? traccarFetchDevices(provider.config as any)
@@ -140,9 +146,24 @@ export default function LocationServices() {
                 }))
               )
             ),
+        // Team members to link devices to (the whole point of the mapping).
+        (async () => {
+          const orgId = await getCurrentOrgId();
+          if (!orgId) return [] as { user_id: string; full_name: string }[];
+          const { data } = await supabase
+            .from('memberships')
+            .select('user_id, full_name')
+            .eq('org_id', orgId)
+            .eq('status', 'active');
+          return (data ?? []).map((m: any) => ({
+            user_id: String(m.user_id),
+            full_name: m.full_name || String(m.user_id).slice(0, 8),
+          }));
+        })(),
       ]);
       setMappings(maps);
       setDevices(devs);
+      setOrgMembers(members);
     } catch (e) {
       console.error('Failed to load devices', e);
     } finally {
@@ -151,13 +172,18 @@ export default function LocationServices() {
   };
 
   const handleMapDevice = async (externalId: string, externalName: string, userId: string) => {
-    if (!mappingProvider) return;
+    if (!mappingProvider || !userId) return;
+    setMapError(null);
     try {
-      await saveDeviceMapping(mappingProvider.id, userId, externalId, externalName);
+      // NB: argument order matters — (providerId, externalId, externalName, userId).
+      // It used to be called transposed with an empty userId, so linking always
+      // failed (user_id is a NOT NULL uuid) and only logged to the console.
+      await saveDeviceMapping(mappingProvider.id, externalId, externalName, userId);
       const updated = await getDeviceMappings(mappingProvider.id);
       setMappings(updated);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to map device', e);
+      setMapError(e?.message || 'Failed to link the device.');
     }
   };
 
@@ -488,18 +514,37 @@ export default function LocationServices() {
                             Unlink
                           </button>
                         ) : (
-                          <button
-                            onClick={() => handleMapDevice(dev.id, dev.name, '')}
-                            className="text-[11px] text-primary hover:bg-primary/10 px-2 py-1 rounded-lg flex items-center gap-1 transition-colors"
-                          >
-                            <Link2 size={11} />
-                            Link
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={deviceUser[dev.id] || ''}
+                              onChange={(e) => setDeviceUser((prev) => ({ ...prev, [dev.id]: e.target.value }))}
+                              className="text-[11px] border border-outline rounded-lg px-2 py-1 bg-surface text-text-primary max-w-[160px]"
+                            >
+                              <option value="">Team member…</option>
+                              {orgMembers.map((m) => (
+                                <option key={m.user_id} value={m.user_id}>{m.full_name}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => handleMapDevice(dev.id, dev.name, deviceUser[dev.id] || '')}
+                              disabled={!deviceUser[dev.id]}
+                              className="text-[11px] text-primary hover:bg-primary/10 px-2 py-1 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <Link2 size={11} />
+                              Link
+                            </button>
+                          </div>
                         )}
                       </div>
                     );
                   })}
                 </div>
+              )}
+
+              {mapError && (
+                <p className="text-[12px] text-danger mt-3 flex items-center gap-1.5">
+                  <AlertCircle size={12} /> {mapError}
+                </p>
               )}
 
               <div className="flex justify-end mt-4">

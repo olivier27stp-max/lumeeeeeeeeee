@@ -125,8 +125,10 @@ export default function CompanySettings() {
             review_widget_settings: data.review_widget_settings || EMPTY_COMPANY.review_widget_settings,
           });
         }
-      } catch {
-        // Table might not exist yet — use defaults
+      } catch (e: any) {
+        // Warn instead of failing silently: saving on top of a failed load
+        // used to create a duplicate settings row.
+        toast.error(e?.message || 'Failed to load company settings.');
       }
       setLoading(false);
     }
@@ -173,19 +175,16 @@ export default function CompanySettings() {
           .eq('id', form.id);
         if (error) throw error;
       } else {
-        // Resolve org_id from memberships
-        const { data: membership } = await supabase
-          .from('memberships')
-          .select('org_id')
-          .eq('user_id', user.id)
-          .limit(1)
-          .maybeSingle();
-        if (!membership?.org_id) throw new Error('No organization found. Please contact your administrator.');
+        // Use the ACTIVE org — resolving via `memberships … limit(1)` picked an
+        // arbitrary org for multi-org users, so settings could be created in
+        // the wrong company.
+        const orgId = await getCurrentOrgIdOrThrow();
 
-        // Insert new record with org_id
+        // Upsert on org_id so a transient load failure can't create a second
+        // company_settings row for the same org (readers use `.limit(1)`).
         const { data, error } = await supabase
           .from('company_settings')
-          .insert({ ...payload, org_id: membership.org_id, created_by: user.id })
+          .upsert({ ...payload, org_id: orgId, created_by: user.id }, { onConflict: 'org_id' })
           .select()
           .single();
         if (error) throw error;
@@ -522,72 +521,10 @@ export default function CompanySettings() {
           )}
         </div>
 
-        {/* Review Widget Settings */}
-        <div className="section-card p-5 space-y-4">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
-            {language === 'fr' ? 'Widget d\'avis' : 'Reviews Widget'}
-          </h3>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {t.companySettings.theme}
-              </label>
-              <select
-                value={form.review_widget_settings.theme}
-                onChange={(e) => update('review_widget_settings', { ...form.review_widget_settings, theme: e.target.value as 'light' | 'dark' })}
-                className="glass-input w-full mt-1"
-              >
-                <option value="light">{t.companySettings.light}</option>
-                <option value="dark">{t.companySettings.dark}</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {t.companySettings.layout}
-              </label>
-              <select
-                value={form.review_widget_settings.layout}
-                onChange={(e) => update('review_widget_settings', { ...form.review_widget_settings, layout: e.target.value as 'cards' | 'carousel' })}
-                className="glass-input w-full mt-1"
-              >
-                <option value="cards">Cards</option>
-                <option value="carousel">Carousel</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {t.companySettings.filter}
-              </label>
-              <select
-                value={form.review_widget_settings.filter}
-                onChange={(e) => update('review_widget_settings', { ...form.review_widget_settings, filter: e.target.value })}
-                className="glass-input w-full mt-1"
-              >
-                <option value="all">{t.automations.all}</option>
-                <option value="latest">{t.companySettings.latest}</option>
-                <option value="highest">{t.companySettings.highest}</option>
-                <option value="4_stars_above">4+ {t.companySettings.stars}</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-                {t.companySettings.maxDisplayed}
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={20}
-                value={form.review_widget_settings.max_display}
-                onChange={(e) => update('review_widget_settings', { ...form.review_widget_settings, max_display: Number(e.target.value) || 6 })}
-                className="glass-input w-full mt-1"
-              />
-            </div>
-          </div>
-        </div>
+        {/* The "Reviews Widget" settings card was removed: review_widget_settings
+            has no consumer anywhere (no widget page, no embed) — the card sold a
+            feature that doesn't exist. The column is kept so stored values
+            survive if a widget ships later. */}
 
         <PermissionGate permission="settings.update">
           <LocationTrackingSettingCard language={language === 'fr' ? 'fr' : 'en'} />

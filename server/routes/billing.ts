@@ -77,7 +77,10 @@ router.get('/billing/current', async (req, res) => {
         .from('subscriptions')
         .select('*')
         .eq('org_id', auth.orgId)
-        .in('status', ['active', 'trialing'])
+        // past_due included: the Settings billing tab has dedicated past-due UI
+        // (fix-payment via the portal). Excluding it made a past_due org look
+        // like "no subscription" and pushed them to buy a SECOND plan.
+        .in('status', ['active', 'trialing', 'past_due'])
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),

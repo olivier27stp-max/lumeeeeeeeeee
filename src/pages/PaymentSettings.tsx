@@ -1,6 +1,4 @@
 import React from 'react';
-import { RefreshCw } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import PermissionGate from '../components/PermissionGate';
@@ -11,7 +9,10 @@ export default function PaymentSettings() {
   const { t, language } = useTranslation();
 
   return (
-    <PermissionGate permission="payments.create">
+    // settings.read: matches the /settings/payments route gate — the page used
+    // to demand payments.create and showed "Access Restricted" to users the
+    // route itself let in. (Connect activation stays admin-gated server-side.)
+    <PermissionGate permission="settings.read">
       <div className="space-y-6">
         <div className="flex items-center gap-3">
           <BackToSettings />
@@ -69,7 +70,7 @@ export default function PaymentSettings() {
               </div>
               <p className="text-[12px] text-text-tertiary pl-8">
                 {language === 'fr'
-                  ? 'Les paiements sont deposes directement dans votre compte bancaire.'
+                  ? 'Les paiements sont déposés directement dans votre compte bancaire.'
                   : 'Payments are deposited directly into your bank account.'}
               </p>
             </div>
@@ -89,7 +90,7 @@ export default function PaymentSettings() {
           </div>
           <p className="text-[12px] text-text-tertiary">
             {language === 'fr'
-              ? 'Aucun frais mensuel. Aucun frais cache. Payez seulement quand vous etes paye.'
+              ? 'Aucun frais mensuel. Aucun frais caché. Payez seulement quand vous êtes payé.'
               : 'No monthly fees. No hidden charges. Only pay when you get paid.'}
           </p>
         </section>

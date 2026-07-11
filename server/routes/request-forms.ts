@@ -6,6 +6,7 @@ import { validate, upsertRequestFormSchema, publicFormSubmissionSchema, updateFo
 import { ensureClientForLead } from '../lib/leadClientSync';
 import { upsertLeadPinForClient } from '../lib/fieldPinSync';
 import { eventBus } from '../lib/eventBus';
+import { sendEmail } from '../lib/mailer';
 
 const router = Router();
 
@@ -374,7 +375,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     step = 'form-lookup';
     const { data: form, error: formError } = await admin
       .from('request_forms')
-      .select('id, org_id, enabled, created_by, custom_fields')
+      .select('id, org_id, enabled, created_by, custom_fields, notify_email, notify_in_app')
       .eq('api_key', apiKey)
       .is('deleted_at', null)
       .maybeSingle();
@@ -610,18 +611,51 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
       entity_type: 'request',
       entity_id: submission?.id || null,
     };
-    let { error: notifError } = await admin.from('notifications').insert(notifRow);
-    // Unknown column = env whose schema lacks `message` (built from migration
-    // files) or migration 20260706100000 not applied. PostgREST reports it as
-    // PGRST204 (schema cache) or 42703 (raw Postgres) — retry with the
-    // minimal shape so the toast/bell still fire.
-    if (notifError && (notifError.code === 'PGRST204' || notifError.code === '42703')) {
-      const { entity_type: _et, entity_id: _ei, message: _msg, ...legacyRow } = notifRow;
-      ({ error: notifError } = await admin.from('notifications').insert(legacyRow));
+    // Honor the form's "In-app notification" toggle (it used to insert
+    // unconditionally, making the saved setting write-only).
+    if (form.notify_in_app !== false) {
+      let { error: notifError } = await admin.from('notifications').insert(notifRow);
+      // Unknown column = env whose schema lacks `message` (built from migration
+      // files) or migration 20260706100000 not applied. PostgREST reports it as
+      // PGRST204 (schema cache) or 42703 (raw Postgres) — retry with the
+      // minimal shape so the toast/bell still fire.
+      if (notifError && (notifError.code === 'PGRST204' || notifError.code === '42703')) {
+        const { entity_type: _et, entity_id: _ei, message: _msg, ...legacyRow } = notifRow;
+        ({ error: notifError } = await admin.from('notifications').insert(legacyRow));
+      }
+      if (notifError) {
+        console.error('[public/form] notification insert failed:', { code: notifError.code, message: notifError.message });
+        // Non-fatal — the submission itself succeeded
+      }
     }
-    if (notifError) {
-      console.error('[public/form] notification insert failed:', { code: notifError.code, message: notifError.message });
-      // Non-fatal — the submission itself succeeded
+
+    // 4c. Email notification — honors the form's notify_email toggle (it was
+    // saved but nothing ever sent an email). Sent to the resolved actor (form
+    // creator, else org owner). Fire-and-forget: an email failure never fails
+    // the submission.
+    if (form.notify_email !== false && actorId) {
+      try {
+        const { data: actorUser } = await admin.auth.admin.getUserById(actorId);
+        const actorEmail = actorUser?.user?.email;
+        if (actorEmail) {
+          const subj = actorLang === 'fr'
+            ? `Nouvelle demande de ${fullName}`
+            : `New request from ${fullName}`;
+          const intro = actorLang === 'fr'
+            ? 'Vous avez reçu une nouvelle demande via votre formulaire public.'
+            : 'You received a new request through your public request form.';
+          const view = actorLang === 'fr' ? 'Voir dans Lume' : 'View in Lume';
+          const appUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+          await sendEmail({
+            to: actorEmail,
+            subject: subj,
+            html: `<p>${intro}</p><p><strong>${fullName}</strong><br/>${contactLine || ''}</p>` +
+              (appUrl ? `<p><a href="${appUrl}/requests">${view}</a></p>` : ''),
+          });
+        }
+      } catch (e: any) {
+        console.error('[public/form] email notification failed:', e?.message);
+      }
     }
 
     // 5. Emit event for automations
