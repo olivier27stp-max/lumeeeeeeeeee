@@ -47,6 +47,8 @@ export interface Plan {
   includes_automations?: boolean;
   includes_marketplace?: boolean;
   includes_timesheets?: boolean;
+  includes_request_forms?: boolean;
+  includes_advanced_roles?: boolean;
 }
 
 export interface BillingProfile {
@@ -127,6 +129,8 @@ export async function fetchPlans(): Promise<Plan[]> {
     includes_automations: p.includes_automations ?? (p.slug !== 'starter'),
     includes_marketplace: p.includes_marketplace ?? (p.slug === 'autopilot'),
     includes_timesheets: p.includes_timesheets ?? (p.slug !== 'starter'),
+    includes_request_forms: p.includes_request_forms ?? (p.slug !== 'starter'),
+    includes_advanced_roles: p.includes_advanced_roles ?? (p.slug === 'autopilot'),
   }));
 }
 

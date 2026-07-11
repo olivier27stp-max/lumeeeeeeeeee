@@ -1264,10 +1264,10 @@ function AuthenticatedApp({
                     <Route path="/settings/team/:memberId/profile" element={<Gated permission="team.read"><RepProfile /></Gated>} />
                     <Route path="/reps/:id" element={<Gated permission="team.read"><RepProfile /></Gated>} />
                     <Route path="/settings/marketplace" element={<Gated permission="integrations.read"><PlanFeatureGate flag="includes_marketplace"><PageWrapper><AppMarketplace /></PageWrapper></PlanFeatureGate></Gated>} />
-                    <Route path="/settings/request-form" element={<Gated permission="settings.update"><PageWrapper><RequestFormSettings /></PageWrapper></Gated>} />
+                    <Route path="/settings/request-form" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_request_forms"><PageWrapper><RequestFormSettings /></PageWrapper></PlanFeatureGate></Gated>} />
                     {/* NOTE: /quotes/presets and /quotes/templates moved before /quotes/:id to prevent route conflict */}
                     <Route path="/settings/taxes" element={<Gated permission="settings.update"><PageWrapper><TaxSettings /></PageWrapper></Gated>} />
-                    <Route path="/settings/roles" element={<Gated permission="users.update_role"><PageWrapper><SettingsRoles /></PageWrapper></Gated>} />
+                    <Route path="/settings/roles" element={<Gated permission="users.update_role"><PlanFeatureGate flag="includes_advanced_roles"><PageWrapper><SettingsRoles /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/settings/users" element={<Navigate to="/settings/team" replace />} />
                     <Route path="/apps/callback" element={<Gated permission="integrations.update"><OAuthCallback /></Gated>} />
                     {/* BillingCheckout removed — upgrade goes through /checkout */}

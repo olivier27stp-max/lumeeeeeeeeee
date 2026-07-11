@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Check, Sparkles, X, MessageSquare, Bot, MapPin, GraduationCap, Code, Lock, Zap, Store, Timer } from 'lucide-react';
+import { Check, Sparkles, X, MessageSquare, Bot, MapPin, GraduationCap, Code, Lock, Zap, Store, Timer, FileText, Shield } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import type { Plan } from '../lib/billingApi';
 import type { PlanFeatureFlag } from '../hooks/usePlanFeature';
@@ -187,6 +187,46 @@ const FEATURE_META: Record<PlanFeatureFlag, {
       'Suivi de performance de l\'équipe',
     ],
     gradient: 'from-sky-600 via-blue-600 to-indigo-700',
+  },
+  includes_request_forms: {
+    icon: FileText,
+    titleEn: 'Custom request forms',
+    titleFr: 'Formulaires de demande personnalisés',
+    taglineEn: 'Capture leads with branded online forms',
+    taglineFr: 'Capte des leads avec des formulaires en ligne à ta marque',
+    benefitsEn: [
+      'Branded, shareable request forms',
+      'Leads flow straight into your pipeline',
+      'Custom fields for your business',
+      'Embed on your website',
+    ],
+    benefitsFr: [
+      'Formulaires de demande à ta marque, partageables',
+      'Les leads tombent direct dans ton pipeline',
+      'Champs personnalisés pour ta business',
+      'Intègre-les sur ton site web',
+    ],
+    gradient: 'from-violet-600 via-purple-600 to-fuchsia-700',
+  },
+  includes_advanced_roles: {
+    icon: Shield,
+    titleEn: 'Advanced roles & multi-team',
+    titleFr: 'Rôles avancés & multi-équipes',
+    taglineEn: 'Fine-grained control for bigger teams',
+    taglineFr: 'Un contrôle précis pour les plus grosses équipes',
+    benefitsEn: [
+      'Custom roles & granular permissions',
+      'Multiple teams & offices',
+      'Scope what each member can see & do',
+      'Manager hierarchies',
+    ],
+    benefitsFr: [
+      'Rôles personnalisés & permissions granulaires',
+      'Plusieurs équipes & bureaux',
+      'Contrôle ce que chaque membre voit et fait',
+      'Hiérarchies de gestionnaires',
+    ],
+    gradient: 'from-rose-600 via-red-600 to-orange-700',
   },
 };
 
