@@ -8,6 +8,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   DollarSign,
   Download,
@@ -84,6 +85,7 @@ interface ScheduleEvent {
   end_time: string | null;
   status: string | null;
   team_id: string | null;
+  notes: string | null;
 }
 
 interface InvoiceRow {
@@ -151,6 +153,9 @@ export default function JobDetails() {
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
   const [showAddVisit, setShowAddVisit] = useState(false);
+  // Visit mini-popup ("visit hub"): opened by clicking a visit row.
+  const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null);
+  const [visitMoreOpen, setVisitMoreOpen] = useState(false);
   // Inline visit editing (reschedule + team) + per-visit removal
   const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
   const [editVisitDate, setEditVisitDate] = useState('');
@@ -186,6 +191,20 @@ export default function JobDetails() {
     () => (jobAssignedUserId ? salespeople.find((p) => p.id === jobAssignedUserId)?.label || null : null),
     [jobAssignedUserId, salespeople]
   );
+
+  // Who's on a visit: the visit's own team first, else the job's individual
+  // assignee (technician), else the job's team, else unassigned.
+  const getVisitAssignment = (visit: ScheduleEvent): { team: TeamRecord | undefined; label: string } => {
+    const visitTeam = visit.team_id ? teamById.get(visit.team_id) : undefined;
+    const jobTeam = !visit.team_id && job?.team_id ? teamById.get(job.team_id) : undefined;
+    const team = visitTeam || (jobAssigneeLabel ? undefined : jobTeam);
+    const label = visitTeam?.name
+      || (visit.team_id ? (language === 'fr' ? 'Équipe assignée' : 'Team assigned') : null)
+      || (jobAssigneeLabel ? `${language === 'fr' ? 'Technicien' : 'Technician'} · ${jobAssigneeLabel}` : null)
+      || jobTeam?.name
+      || (language === 'fr' ? 'Pas encore assignée' : 'Not assigned yet');
+    return { team, label };
+  };
 
   // Action states
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
@@ -306,7 +325,7 @@ export default function JobDetails() {
     try {
       const { data } = await supabase
         .from('schedule_events')
-        .select('id,start_at,end_at,start_time,end_time,status,team_id')
+        .select('id,start_at,end_at,start_time,end_time,status,team_id,notes')
         .eq('job_id', id)
         .is('deleted_at', null)
         .order('start_at', { ascending: true });
@@ -420,6 +439,7 @@ export default function JobDetails() {
       await unscheduleJob({ jobId: id, eventId: visitId });
       toast.success(language === 'fr' ? 'Visite retirée.' : 'Visit removed.');
       if (editingVisitId === visitId) setEditingVisitId(null);
+      if (selectedVisitId === visitId) setSelectedVisitId(null);
       await handleVisitAdded();
     } catch (err: any) {
       toast.error(err?.message || (language === 'fr' ? 'Impossible de retirer la visite.' : 'Could not remove the visit.'));
@@ -1266,103 +1286,40 @@ export default function JobDetails() {
                   const timeRange = visit.start_at
                     ? `${new Date(visit.start_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}${visit.end_at ? ` — ${new Date(visit.end_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}` : ''}`
                     : null;
-                  if (editingVisitId === visit.id) {
-                    return (
-                      <div key={visit.id} className="rounded-lg border border-primary/40 bg-surface-secondary p-3.5 space-y-3 print:hidden">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                          <div>
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Date</label>
-                            <input type="date" value={editVisitDate} onChange={(e) => setEditVisitDate(e.target.value)} className="glass-input mt-1 w-full" />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{language === 'fr' ? 'Début' : 'Start'}</label>
-                            <input type="time" value={editVisitStart} onChange={(e) => setEditVisitStart(e.target.value)} className="glass-input mt-1 w-full" />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{language === 'fr' ? 'Fin' : 'End'}</label>
-                            <input type="time" value={editVisitEnd} onChange={(e) => setEditVisitEnd(e.target.value)} className="glass-input mt-1 w-full" />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{language === 'fr' ? 'Équipe' : 'Team'}</label>
-                            <select value={editVisitTeamId} onChange={(e) => setEditVisitTeamId(e.target.value)} className="glass-input mt-1 w-full">
-                              <option value="">{language === 'fr' ? 'Non assignée' : 'Unassigned'}</option>
-                              {teams
-                                .filter((tm) => tm.is_active !== false || tm.id === editVisitTeamId)
-                                .map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
-                            </select>
-                          </div>
-                        </div>
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => setEditingVisitId(null)}
-                            disabled={visitActionBusy}
-                            className="glass-button !text-[12px] !px-3 !py-1.5"
-                          >
-                            {language === 'fr' ? 'Annuler' : 'Cancel'}
-                          </button>
-                          <button
-                            onClick={() => void handleSaveVisit()}
-                            disabled={visitActionBusy}
-                            className="rounded-lg bg-text-primary px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
-                          >
-                            {visitActionBusy
-                              ? (language === 'fr' ? 'Enregistrement…' : 'Saving…')
-                              : (language === 'fr' ? 'Enregistrer' : 'Save')}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  }
-                  // Assignment shown per visit: the visit's own team first,
-                  // else the job's individual assignee (technician), else the
-                  // job's team, else unassigned.
-                  const visitTeam = visit.team_id ? teamById.get(visit.team_id) : undefined;
-                  const jobTeam = !visit.team_id && job.team_id ? teamById.get(job.team_id) : undefined;
-                  const assignedTeam = visitTeam || (jobAssigneeLabel ? undefined : jobTeam);
-                  const assignLabel = visitTeam?.name
-                    || (visit.team_id ? (language === 'fr' ? 'Équipe assignée' : 'Team assigned') : null)
-                    || (jobAssigneeLabel ? `${language === 'fr' ? 'Technicien' : 'Technician'} · ${jobAssigneeLabel}` : null)
-                    || jobTeam?.name
-                    || (language === 'fr' ? 'Pas encore assignée' : 'Not assigned yet');
+                  const { team: assignedTeam, label: assignLabel } = getVisitAssignment(visit);
                   const visitStatus = (visit.status || '').toLowerCase();
                   const isCompleted = visitStatus === 'completed';
                   const isCancelled = visitStatus === 'cancelled';
                   return (
-                    <div key={visit.id} className="rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        {/* Real checkbox: checking a visit marks it completed —
-                            this is what moves a "Late" job out of Late. */}
-                        <button
-                          type="button"
-                          onClick={() => void handleToggleVisitCompleted(visit)}
-                          disabled={visitActionBusy || isCancelled}
-                          className={cn(
-                            'w-4 h-4 rounded border inline-flex items-center justify-center shrink-0 transition-colors',
-                            isCompleted
-                              ? 'border-success bg-success text-white'
-                              : isCancelled
-                                ? 'border-danger bg-danger/20 cursor-default'
-                                : 'border-outline bg-surface hover:border-success'
-                          )}
-                          title={isCancelled
-                            ? (language === 'fr' ? 'Visite annulée' : 'Visit cancelled')
-                            : isCompleted
-                              ? (language === 'fr' ? 'Remettre la visite à faire' : 'Set visit back to scheduled')
-                              : (language === 'fr' ? 'Marquer la visite comme complétée' : 'Mark visit as completed')}
-                        >
-                          {isCompleted && <Check size={11} strokeWidth={3.5} />}
-                        </button>
-                        <div className="min-w-0">
+                    // The whole row opens the visit mini-popup (details + actions).
+                    <button
+                      key={visit.id}
+                      type="button"
+                      onClick={() => { setEditingVisitId(null); setVisitMoreOpen(false); setSelectedVisitId(visit.id); }}
+                      className="w-full text-left rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between gap-3 transition-colors hover:border-primary/40 cursor-pointer"
+                    >
+                      <div className="min-w-0">
+                        <span className="flex items-center gap-2 min-w-0">
                           <span className={cn(
-                            'block text-[13px] font-semibold truncate',
+                            'text-[13px] font-semibold truncate',
                             isCompleted ? 'text-text-tertiary line-through' : 'text-text-primary'
                           )}>
                             {visit.start_at ? formatDate(visit.start_at) : 'Unscheduled'}
                           </span>
-                          {timeRange && (
-                            <span className="block text-[12px] text-text-tertiary tabular-nums">{timeRange}</span>
+                          {isCompleted && (
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-success bg-success/10 border border-success/30 rounded-full px-2 py-0.5 shrink-0">
+                              {language === 'fr' ? 'Complétée' : 'Completed'}
+                            </span>
                           )}
-                        </div>
+                          {isCancelled && (
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-danger bg-danger/10 border border-danger/30 rounded-full px-2 py-0.5 shrink-0">
+                              {language === 'fr' ? 'Annulée' : 'Cancelled'}
+                            </span>
+                          )}
+                        </span>
+                        {timeRange && (
+                          <span className="block text-[12px] text-text-tertiary tabular-nums">{timeRange}</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-[12px] text-text-tertiary hidden sm:flex items-center gap-1.5">
@@ -1374,24 +1331,9 @@ export default function JobDetails() {
                           )}
                           {assignLabel}
                         </span>
-                        <button
-                          onClick={() => startEditVisit(visit)}
-                          disabled={visitActionBusy || !visit.start_at}
-                          className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors disabled:opacity-40 print:hidden"
-                          title={language === 'fr' ? 'Modifier la visite (date, heure, équipe)' : 'Edit visit (date, time, team)'}
-                        >
-                          <Edit3 size={13} />
-                        </button>
-                        <button
-                          onClick={() => void handleDeleteVisit(visit.id)}
-                          disabled={visitActionBusy}
-                          className="p-1.5 rounded-md text-text-tertiary hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-40 print:hidden"
-                          title={language === 'fr' ? 'Retirer cette visite' : 'Remove this visit'}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        <ChevronRight size={14} className="text-text-tertiary print:hidden" />
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -2177,6 +2119,224 @@ export default function JobDetails() {
           job={{ id: job.id, label: [job.title, job.client_name].filter(Boolean).join(' — ') || (language === 'fr' ? 'Job' : 'Job') }}
         />
       )}
+
+      {/* ═══ VISIT MINI-POPUP ("visit hub") — opened by clicking a visit row ═══ */}
+      {job && (() => {
+        const visit = visits.find((v) => v.id === selectedVisitId);
+        if (!visit) return null;
+        const fr = language === 'fr';
+        const tloc = fr ? 'fr-CA' : 'en-CA';
+        const visitStatus = (visit.status || '').toLowerCase();
+        const isCompleted = visitStatus === 'completed';
+        const isCancelled = visitStatus === 'cancelled';
+        const isPast = visit.start_at ? new Date(visit.start_at).getTime() < Date.now() : false;
+        const isEditing = editingVisitId === visit.id;
+        const { team: assignedTeam, label: assignLabel } = getVisitAssignment(visit);
+        const timeRange = visit.start_at
+          ? `${new Date(visit.start_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}${visit.end_at ? ` — ${new Date(visit.end_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}` : ''}`
+          : (fr ? 'Toute la journée' : 'Anytime');
+        const detailsSentence = isCancelled
+          ? (fr ? 'Cette visite a été annulée — elle ne compte plus dans le statut du job.' : 'This visit was cancelled — it no longer counts toward the job status.')
+          : isCompleted
+            ? (fr ? 'Visite complétée — elle ne rend plus le job « En retard ».' : 'Visit completed — it no longer makes the job "Late".')
+            : isPast
+              ? (fr ? 'Cette visite est passée mais n’est pas marquée complétée — le job apparaît « En retard ».' : 'This visit is past but not marked complete — the job shows as "Late".')
+              : (fr ? 'Visite à venir — elle apparaît au calendrier.' : 'Upcoming visit — it shows on the calendar.');
+        const closePopup = () => { setSelectedVisitId(null); setEditingVisitId(null); setVisitMoreOpen(false); };
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4" onClick={closePopup}>
+            <div
+              className="w-full max-w-md rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-outline-subtle">
+                <h2 className="text-[15px] font-bold text-text-primary flex items-center gap-2">
+                  <Calendar size={15} className="text-text-secondary" />
+                  {fr ? 'Détails de la visite' : 'Visit details'}
+                </h2>
+                <button onClick={closePopup} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary"><X size={16} /></button>
+              </div>
+
+              <div className="px-5 py-4 space-y-4">
+                {/* Context line — which job/client this visit belongs to */}
+                <p className="text-[13px] text-text-secondary">
+                  {fr ? 'Visite pour le job' : 'Visit for job'} <span className="font-semibold text-text-primary">#{job.job_number}</span>
+                  {job.client_name ? <> — <span className="font-semibold text-text-primary">{job.client_name}</span></> : null}
+                </p>
+
+                {isEditing ? (
+                  <>
+                    {/* Edit mode: date + time window + team */}
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Date</label>
+                        <input type="date" value={editVisitDate} onChange={(e) => setEditVisitDate(e.target.value)} className="glass-input mt-1 w-full" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Début' : 'Start'}</label>
+                          <input type="time" value={editVisitStart} onChange={(e) => setEditVisitStart(e.target.value)} className="glass-input mt-1 w-full" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Fin' : 'End'}</label>
+                          <input type="time" value={editVisitEnd} onChange={(e) => setEditVisitEnd(e.target.value)} className="glass-input mt-1 w-full" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Équipe' : 'Team'}</label>
+                        <select value={editVisitTeamId} onChange={(e) => setEditVisitTeamId(e.target.value)} className="glass-input mt-1 w-full">
+                          <option value="">{fr ? 'Non assignée' : 'Unassigned'}</option>
+                          {teams
+                            .filter((tm) => tm.is_active !== false || tm.id === editVisitTeamId)
+                            .map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => setEditingVisitId(null)}
+                        disabled={visitActionBusy}
+                        className="glass-button !text-[13px] !px-3 !py-1.5"
+                      >
+                        {fr ? 'Annuler' : 'Cancel'}
+                      </button>
+                      <button
+                        onClick={() => void handleSaveVisit()}
+                        disabled={visitActionBusy}
+                        className="rounded-lg bg-text-primary px-3.5 py-1.5 text-[13px] font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+                      >
+                        {visitActionBusy ? (fr ? 'Enregistrement…' : 'Saving…') : (fr ? 'Enregistrer' : 'Save')}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Date + time + visit status */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className={cn('text-[17px] font-bold tracking-tight', isCompleted ? 'text-text-tertiary line-through' : 'text-text-primary')}>
+                          {visit.start_at ? formatDate(visit.start_at) : (fr ? 'Non planifiée' : 'Unscheduled')}
+                        </p>
+                        <p className="text-[13px] text-text-tertiary tabular-nums mt-0.5">{timeRange}</p>
+                      </div>
+                      {isCompleted && (
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-success bg-success/10 border border-success/30 rounded-full px-2 py-0.5 shrink-0">
+                          {fr ? 'Complétée' : 'Completed'}
+                        </span>
+                      )}
+                      {isCancelled && (
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-danger bg-danger/10 border border-danger/30 rounded-full px-2 py-0.5 shrink-0">
+                          {fr ? 'Annulée' : 'Cancelled'}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Primary action + More Actions */}
+                    <div className="flex items-center gap-2">
+                      {!isCancelled && (
+                        <button
+                          onClick={() => void handleToggleVisitCompleted(visit)}
+                          disabled={visitActionBusy}
+                          className={cn(
+                            'inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[13px] font-semibold shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50',
+                            isCompleted
+                              ? 'border border-outline bg-surface-secondary text-text-primary'
+                              : 'bg-text-primary text-white'
+                          )}
+                        >
+                          <Check size={13} strokeWidth={3} />
+                          {isCompleted
+                            ? (fr ? 'Remettre à faire' : 'Mark incomplete')
+                            : (fr ? 'Marquer complétée' : 'Mark complete')}
+                        </button>
+                      )}
+                      <div className="relative">
+                        <button
+                          onClick={() => setVisitMoreOpen((o) => !o)}
+                          disabled={visitActionBusy}
+                          className="glass-button !text-[13px] !px-3 !py-1.5 inline-flex items-center gap-1"
+                        >
+                          {fr ? 'Plus d’actions' : 'More actions'}
+                          <ChevronDown size={13} />
+                        </button>
+                        {visitMoreOpen && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setVisitMoreOpen(false)} />
+                            <div className="absolute z-20 top-full left-0 mt-1 w-52 rounded-xl border border-border bg-surface shadow-lg overflow-hidden">
+                              <button
+                                onClick={() => { setVisitMoreOpen(false); startEditVisit(visit); }}
+                                disabled={!visit.start_at}
+                                className="w-full text-left px-3.5 py-2.5 text-[13px] text-text-primary hover:bg-surface-secondary flex items-center gap-2 disabled:opacity-40"
+                              >
+                                <Edit3 size={13} className="text-text-tertiary" />
+                                {fr ? 'Modifier la visite' : 'Edit visit'}
+                              </button>
+                              <button
+                                onClick={() => { setVisitMoreOpen(false); void handleDeleteVisit(visit.id); }}
+                                className="w-full text-left px-3.5 py-2.5 text-[13px] text-danger hover:bg-danger/10 flex items-center gap-2"
+                              >
+                                <Trash2 size={13} />
+                                {fr ? 'Retirer la visite' : 'Remove visit'}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Info card: job / title / client / assignment / details */}
+                    <div className="rounded-xl border border-outline-subtle divide-y divide-outline-subtle">
+                      <div className="flex items-center justify-between px-3.5 py-2.5 gap-3">
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-text-muted shrink-0">Job</span>
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="text-[13px] font-semibold text-text-primary"># {job.job_number}</span>
+                          <StatusBadge status={job.status} />
+                        </span>
+                      </div>
+                      {job.title && (
+                        <div className="flex items-center justify-between px-3.5 py-2.5 gap-3">
+                          <span className="text-[11px] font-bold uppercase tracking-widest text-text-muted shrink-0">{fr ? 'Titre' : 'Title'}</span>
+                          <span className="text-[13px] text-text-primary truncate">{job.title}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between px-3.5 py-2.5 gap-3">
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-text-muted shrink-0">Client</span>
+                        {job.client_id ? (
+                          <button
+                            onClick={() => { closePopup(); navigate(`/clients/${job.client_id}`); }}
+                            className="text-[13px] font-semibold text-primary hover:underline truncate"
+                          >
+                            {job.client_name || (fr ? 'Voir le client' : 'View client')}
+                          </button>
+                        ) : (
+                          <span className="text-[13px] text-text-primary truncate">{job.client_name || '—'}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between px-3.5 py-2.5 gap-3">
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-text-muted shrink-0">{fr ? 'Assignée à' : 'Assigned to'}</span>
+                        <span className="text-[13px] text-text-primary flex items-center gap-1.5 truncate">
+                          {assignedTeam && (
+                            <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: assignedTeam.color_hex || '#3B82F6' }} />
+                          )}
+                          {assignLabel}
+                        </span>
+                      </div>
+                      <div className="px-3.5 py-2.5">
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-text-muted block mb-1">{fr ? 'Détails' : 'Details'}</span>
+                        <p className="text-[12.5px] text-text-secondary leading-relaxed">{detailsSentence}</p>
+                        {visit.notes && (
+                          <p className="text-[12.5px] text-text-tertiary leading-relaxed mt-1.5 whitespace-pre-wrap">{visit.notes}</p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Creating an agreement is impossible when the job has a quote — the quote is the approved contract. */}
       {job && !sourceQuote && (
