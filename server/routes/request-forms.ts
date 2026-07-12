@@ -446,6 +446,9 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     if (photoUrls.length) submissionResponses.__photos = photoUrls;
 
     const fullNotes = noteLines.length > 0 ? noteLines.join('\n') : null;
+    // Client hub Notes only carries the visitor's free-text note — custom
+    // field selections/address/photos stay on the deal + request detail.
+    const clientNotes = body.notes ? String(body.notes) : null;
     const fullName = `${body.first_name} ${body.last_name}`.trim();
 
     // ── REUSE existing lead creation logic ──
@@ -464,17 +467,20 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
 
     // 2. A lead IS a client with status='lead' — stamp lead fields onto the client.
     step = 'lead-stamp';
+    const leadStamp: Record<string, unknown> = {
+      status: 'lead',
+      lead_status: 'new_prospect',
+      title: body.company || null,
+      company: body.company || null,
+      value: 0,
+      updated_at: new Date().toISOString(),
+    };
+    // Only touch client notes when the visitor actually wrote one — never
+    // wipe existing hub notes with null.
+    if (clientNotes) leadStamp.notes = clientNotes;
     const { error: leadErr } = await admin
       .from('clients')
-      .update({
-        status: 'lead',
-        lead_status: 'new_prospect',
-        title: body.company || null,
-        company: body.company || null,
-        notes: fullNotes,
-        value: 0,
-        updated_at: new Date().toISOString(),
-      })
+      .update(leadStamp)
       .eq('id', clientId);
     if (leadErr) throw leadErr;
     const leadIdStr = String(clientId);
