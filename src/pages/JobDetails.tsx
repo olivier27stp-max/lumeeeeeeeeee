@@ -30,9 +30,10 @@ import { toast } from 'sonner';
 import { cn, formatDate } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
-import { getJobById, getJobLineItems, updateJob, type JobLineItem } from '../lib/jobsApi';
+import { getJobById, getJobLineItems, listSalespeople, updateJob, type JobLineItem } from '../lib/jobsApi';
 import AddVisitModal from '../components/AddVisitModal';
 import { rescheduleEvent, unscheduleJob } from '../lib/scheduleApi';
+import { listTeams, type TeamRecord } from '../lib/teamsApi';
 import { createInvoiceFromJob, getInvoiceRowUiStatus } from '../lib/invoicesApi';
 import {
   listJobBillingMilestones,
@@ -146,12 +147,41 @@ export default function JobDetails() {
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
   const [showAddVisit, setShowAddVisit] = useState(false);
-  // Inline visit editing (reschedule) + per-visit removal
+  // Inline visit editing (reschedule + team) + per-visit removal
   const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
   const [editVisitDate, setEditVisitDate] = useState('');
   const [editVisitStart, setEditVisitStart] = useState('');
   const [editVisitEnd, setEditVisitEnd] = useState('');
+  const [editVisitTeamId, setEditVisitTeamId] = useState('');
   const [visitActionBusy, setVisitActionBusy] = useState(false);
+  // Assignment context: teams (visit.team_id → name/color) and the job's
+  // individual assignee ("technician" — jobs.assigned_user_id), shown as the
+  // fallback when a visit has no team of its own.
+  const [teams, setTeams] = useState<TeamRecord[]>([]);
+  const [salespeople, setSalespeople] = useState<Array<{ id: string; label: string }>>([]);
+  const [jobAssignedUserId, setJobAssignedUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    listTeams().then(setTeams).catch(() => setTeams([]));
+    listSalespeople().then(setSalespeople).catch(() => setSalespeople([]));
+  }, []);
+
+  // assigned_user_id lives on the jobs row but isn't part of the mapped Job type.
+  useEffect(() => {
+    if (!id) return;
+    supabase
+      .from('jobs')
+      .select('assigned_user_id')
+      .eq('id', id)
+      .maybeSingle()
+      .then(({ data }) => setJobAssignedUserId((data as any)?.assigned_user_id || null));
+  }, [id]);
+
+  const teamById = useMemo(() => new Map(teams.map((tm) => [tm.id, tm])), [teams]);
+  const jobAssigneeLabel = useMemo(
+    () => (jobAssignedUserId ? salespeople.find((p) => p.id === jobAssignedUserId)?.label || null : null),
+    [jobAssignedUserId, salespeople]
+  );
 
   // Action states
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
@@ -304,6 +334,7 @@ export default function JobDetails() {
     setEditVisitDate(`${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`);
     setEditVisitStart(`${pad(start.getHours())}:${pad(start.getMinutes())}`);
     setEditVisitEnd(end ? `${pad(end.getHours())}:${pad(end.getMinutes())}` : '');
+    setEditVisitTeamId(visit.team_id || '');
   };
 
   const handleSaveVisit = async () => {
@@ -320,12 +351,27 @@ export default function JobDetails() {
     }
     setVisitActionBusy(true);
     try {
-      await rescheduleEvent({ eventId: editingVisitId, startAt: start.toISOString(), endAt: end.toISOString() });
-      toast.success(language === 'fr' ? 'Visite déplacée.' : 'Visit rescheduled.');
+      // rpc_reschedule_event keeps the current team when p_team_id is null
+      // (coalesce), so unassigning needs an explicit clear first.
+      const original = visits.find((v) => v.id === editingVisitId);
+      if (original?.team_id && !editVisitTeamId) {
+        const { error: clearErr } = await supabase
+          .from('schedule_events')
+          .update({ team_id: null, updated_at: new Date().toISOString() })
+          .eq('id', editingVisitId);
+        if (clearErr) throw clearErr;
+      }
+      await rescheduleEvent({
+        eventId: editingVisitId,
+        startAt: start.toISOString(),
+        endAt: end.toISOString(),
+        teamId: editVisitTeamId || null,
+      });
+      toast.success(language === 'fr' ? 'Visite mise à jour.' : 'Visit updated.');
       setEditingVisitId(null);
       await handleVisitAdded();
     } catch (err: any) {
-      toast.error(err?.message || (language === 'fr' ? 'Impossible de déplacer la visite.' : 'Could not reschedule the visit.'));
+      toast.error(err?.message || (language === 'fr' ? 'Impossible de mettre à jour la visite.' : 'Could not update the visit.'));
     } finally {
       setVisitActionBusy(false);
     }
@@ -1184,7 +1230,7 @@ export default function JobDetails() {
                   if (editingVisitId === visit.id) {
                     return (
                       <div key={visit.id} className="rounded-lg border border-primary/40 bg-surface-secondary p-3.5 space-y-3 print:hidden">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                           <div>
                             <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Date</label>
                             <input type="date" value={editVisitDate} onChange={(e) => setEditVisitDate(e.target.value)} className="glass-input mt-1 w-full" />
@@ -1196,6 +1242,15 @@ export default function JobDetails() {
                           <div>
                             <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{language === 'fr' ? 'Fin' : 'End'}</label>
                             <input type="time" value={editVisitEnd} onChange={(e) => setEditVisitEnd(e.target.value)} className="glass-input mt-1 w-full" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{language === 'fr' ? 'Équipe' : 'Team'}</label>
+                            <select value={editVisitTeamId} onChange={(e) => setEditVisitTeamId(e.target.value)} className="glass-input mt-1 w-full">
+                              <option value="">{language === 'fr' ? 'Non assignée' : 'Unassigned'}</option>
+                              {teams
+                                .filter((tm) => tm.is_active !== false || tm.id === editVisitTeamId)
+                                .map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
+                            </select>
                           </div>
                         </div>
                         <div className="flex justify-end gap-2">
@@ -1219,6 +1274,17 @@ export default function JobDetails() {
                       </div>
                     );
                   }
+                  // Assignment shown per visit: the visit's own team first,
+                  // else the job's individual assignee (technician), else the
+                  // job's team, else unassigned.
+                  const visitTeam = visit.team_id ? teamById.get(visit.team_id) : undefined;
+                  const jobTeam = !visit.team_id && job.team_id ? teamById.get(job.team_id) : undefined;
+                  const assignedTeam = visitTeam || (jobAssigneeLabel ? undefined : jobTeam);
+                  const assignLabel = visitTeam?.name
+                    || (visit.team_id ? (language === 'fr' ? 'Équipe assignée' : 'Team assigned') : null)
+                    || (jobAssigneeLabel ? `${language === 'fr' ? 'Technicien' : 'Technician'} · ${jobAssigneeLabel}` : null)
+                    || jobTeam?.name
+                    || (language === 'fr' ? 'Pas encore assignée' : 'Not assigned yet');
                   return (
                     <div key={visit.id} className="rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
@@ -1242,16 +1308,20 @@ export default function JobDetails() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[12px] text-text-tertiary hidden sm:block">
-                          {visit.team_id
-                            ? (language === 'fr' ? 'Équipe assignée' : 'Team assigned')
-                            : (language === 'fr' ? 'Pas encore assignée' : 'Not assigned yet')}
+                        <span className="text-[12px] text-text-tertiary hidden sm:flex items-center gap-1.5">
+                          {assignedTeam && (
+                            <span
+                              className="w-2 h-2 rounded-full inline-block shrink-0"
+                              style={{ backgroundColor: assignedTeam.color_hex || '#3B82F6' }}
+                            />
+                          )}
+                          {assignLabel}
                         </span>
                         <button
                           onClick={() => startEditVisit(visit)}
                           disabled={visitActionBusy || !visit.start_at}
                           className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors disabled:opacity-40 print:hidden"
-                          title={language === 'fr' ? 'Modifier la date / l’heure' : 'Edit date / time'}
+                          title={language === 'fr' ? 'Modifier la visite (date, heure, équipe)' : 'Edit visit (date, time, team)'}
                         >
                           <Edit3 size={13} />
                         </button>
