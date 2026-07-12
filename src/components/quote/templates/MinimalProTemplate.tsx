@@ -43,7 +43,7 @@ export default function MinimalProTemplate({ data }: { data: QuoteRenderData }) 
         <div className="flex items-start justify-between">
           <div>
             {data.company_logo_url
-              ? <img src={data.company_logo_url} alt={data.company_name} className="h-9 max-w-[160px] object-contain" />
+              ? <img src={data.company_logo_url} alt={data.company_name} className="h-14 max-w-[260px] object-contain" />
               : <p className="text-[20px] font-semibold tracking-tight">{data.company_name}</p>}
           </div>
           <p className="text-[28px] font-semibold tracking-tight text-[#111]">Quote</p>

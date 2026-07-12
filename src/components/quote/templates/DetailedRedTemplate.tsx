@@ -58,7 +58,7 @@ export default function DetailedRedTemplate({ data }: { data: QuoteRenderData })
       <div className="px-10 pt-6 pb-5 flex items-start justify-between">
         <div>
           {data.company_logo_url ? (
-            <img src={data.company_logo_url} alt={data.company_name} className="h-10 max-w-[180px] object-contain" />
+            <img src={data.company_logo_url} alt={data.company_name} className="h-16 max-w-[280px] object-contain" />
           ) : (
             <p className="text-[18px] font-bold text-[#111] tracking-tight">{data.company_name}</p>
           )}
@@ -69,9 +69,9 @@ export default function DetailedRedTemplate({ data }: { data: QuoteRenderData })
           </div>
         </div>
         {/* Logo circle / Branding mark */}
-        <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: TEXT_SEC }}>
+        <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ backgroundColor: TEXT_SEC }}>
           {data.company_logo_url ? (
-            <img src={data.company_logo_url} alt="" className="w-12 h-12 object-contain rounded-full" />
+            <img src={data.company_logo_url} alt="" className="w-16 h-16 object-contain rounded-full" />
           ) : (
             <span className="text-white text-[11px] font-bold uppercase tracking-wider">LOGO</span>
           )}

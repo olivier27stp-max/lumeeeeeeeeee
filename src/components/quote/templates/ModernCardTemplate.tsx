@@ -44,7 +44,7 @@ export default function ModernCardTemplate({ data }: { data: QuoteRenderData }) 
           <div className="flex items-start justify-between">
             <div>
               {data.company_logo_url
-                ? <img src={data.company_logo_url} alt={data.company_name} className="h-9 max-w-[160px] object-contain" />
+                ? <img src={data.company_logo_url} alt={data.company_name} className="h-14 max-w-[260px] object-contain" />
                 : <p className="text-[18px] font-bold tracking-tight">{data.company_name}</p>}
               <p className="text-[11px] text-[#9ca3af] mt-1">{[data.company_address, data.company_phone, data.company_email].filter(Boolean).join(' \u00b7 ')}</p>
             </div>

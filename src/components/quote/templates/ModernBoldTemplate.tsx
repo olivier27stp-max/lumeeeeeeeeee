@@ -75,7 +75,7 @@ export default function ModernBoldTemplate({ data }: { data: QuoteRenderData }) 
               <p className="text-[36px] font-extrabold tracking-tight" style={{ color: ORANGE }}>QUOTE</p>
               <div className="mt-1">
                 {data.company_logo_url ? (
-                  <img src={data.company_logo_url} alt={data.company_name} className="h-8 max-w-[160px] object-contain" />
+                  <img src={data.company_logo_url} alt={data.company_name} className="h-12 max-w-[220px] object-contain" />
                 ) : (
                   <p className="text-[14px] font-bold text-[#111]">{data.company_name}</p>
                 )}
