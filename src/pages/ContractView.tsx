@@ -28,6 +28,8 @@ interface PublicAgreementData {
   doc: {
     items: Array<{ name: string; qty: number; unit_price_cents: number; total_cents: number }>;
     subtotal_cents: number;
+    discount_cents?: number;
+    discount_percent?: number | null;
     tax_lines: Array<{ label: string; rate: number; amount_cents: number }>;
     total_cents: number;
     client_name: string | null;
@@ -209,6 +211,9 @@ export default function ContractView() {
     propertyAddress: data.doc.property_address,
     items: data.doc.items,
     subtotalCents: data.doc.subtotal_cents,
+    discount: data.doc.discount_cents
+      ? { amount_cents: data.doc.discount_cents, percent: data.doc.discount_percent ?? null }
+      : null,
     taxLines: data.doc.tax_lines,
     totalCents: data.doc.total_cents,
     signature: data.agreement.signature_data && data.agreement.signer_name

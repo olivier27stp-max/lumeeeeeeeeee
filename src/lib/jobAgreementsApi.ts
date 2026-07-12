@@ -28,6 +28,9 @@ export interface AgreementSnapshotTaxLine {
 export interface AgreementSnapshot {
   items: AgreementSnapshotItem[];
   subtotal_cents: number;
+  /** Quote discount (absent/0 for jobs) — frozen so the signed document's lines keep adding up. */
+  discount_cents?: number;
+  discount_percent?: number | null;
   tax_lines: AgreementSnapshotTaxLine[];
   total_cents: number;
   client_name?: string | null;

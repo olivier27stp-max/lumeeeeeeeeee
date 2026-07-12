@@ -22,6 +22,7 @@ import { listPropertiesByClient, type PropertyRecord } from '../lib/propertiesAp
 import ServicePicker from '../components/ServicePicker';
 import QuoteRenderer from '../components/quote/QuoteRenderer';
 import AgreementDraftPreviewModal, { type AgreementDraftPreviewData } from '../components/agreements/AgreementDraftPreviewModal';
+import AgreementServicesSummary from '../components/agreements/AgreementServicesSummary';
 import type { QuoteRenderData } from '../components/quote/types';
 import type { PredefinedService } from '../lib/servicesApi';
 import type { QuotePreset } from '../types';
@@ -381,14 +382,17 @@ export default function QuoteNew() {
           return { name: it.name, qty, unit_price_cents: unit, total_cents: Math.max(0, Math.round(qty * unit)) };
         }),
       taxLines: taxBreakdown.length > 0
-        ? taxBreakdown.map((tx) => ({ label: tx.name, rate: tx.rate }))
-        : (taxEnabled && taxRate > 0 ? [{ label: taxLabel || 'Tax', rate: taxRate }] : []),
-      subtotalCents: subtotalCents - discountCents,
+        ? taxBreakdown.map((tx) => ({ label: tx.name, rate: tx.rate, amount_cents: tx.amount_cents }))
+        : (taxEnabled && taxRate > 0 ? [{ label: taxLabel || 'Tax', rate: taxRate, amount_cents: taxCents }] : []),
+      // Full subtotal + explicit discount — the contract shows the same lines as the quote page.
+      subtotalCents,
+      discountCents,
+      discountPercent: discountType === 'percentage' ? (parseFloat(discountValue) || 0) : null,
     };
   }, [
     contactMode, leadFirstName, leadLastName, leadCompany, leadEmail, leadPhone, leadAddress,
     leadAddressSearch, clientDetail, quoteNumber, nextQuoteNumber, lineItems, taxBreakdown,
-    taxEnabled, taxRate, taxLabel, subtotalCents, discountCents,
+    taxEnabled, taxRate, taxLabel, taxCents, subtotalCents, discountCents, discountType, discountValue,
   ]);
 
   const depositCents = useMemo(() => {
@@ -1293,11 +1297,24 @@ export default function QuoteNew() {
                   </p>
                 </div>
 
-                <div className={cn('rounded-[10px] border bg-[#f5f5f5] dark:bg-[#1c1c1f] px-3 py-2.5 text-[11.5px] leading-relaxed text-black dark:text-white', OUTLINE)}>
+                {/* Live recap — always mirrors the items/prices entered on this page */}
+                <AgreementServicesSummary
+                  title={fr ? 'Services et prix du devis — inclus au contrat' : 'Quote services and prices — included on the contract'}
+                  data={{
+                    items: agreementPreviewData.items,
+                    subtotalCents,
+                    discount: discountCents > 0
+                      ? { amountCents: discountCents, percent: discountType === 'percentage' ? (parseFloat(discountValue) || 0) : null }
+                      : null,
+                    taxLines: agreementPreviewData.taxLines.map((tx) => ({ label: tx.label, rate: tx.rate, amount_cents: tx.amount_cents ?? 0 })),
+                    totalCents,
+                  }}
+                />
+                <p className={HINT}>
                   {fr
-                    ? "Les services, prix, taxes, la date de création et les informations de l'entreprise sont ajoutés automatiquement au contrat."
-                    : 'Services, prices, taxes, creation date and company info are added to the agreement automatically.'}
-                </div>
+                    ? "Mis à jour en direct avec les items de cette page. La date de création et les informations de l'entreprise sont aussi ajoutées automatiquement."
+                    : 'Updates live with the items on this page. Creation date and company info are added automatically too.'}
+                </p>
 
                 <button type="button" onClick={() => setAgreementPreviewOpen(true)} className={GHOST}>
                   <Eye size={13} />

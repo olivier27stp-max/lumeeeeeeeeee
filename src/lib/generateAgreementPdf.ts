@@ -153,6 +153,12 @@ export function downloadAgreementPdf(data: AgreementDocData): void {
 
   const totalsRows: [string, string][] = [
     [L('Subtotal', 'Sous-total'), formatCents(data.subtotalCents)],
+    ...(data.discount && data.discount.amount_cents > 0
+      ? [[
+          `${L('Discount', 'Rabais')}${data.discount.percent ? ` (${data.discount.percent}%)` : ''}`,
+          `-${formatCents(data.discount.amount_cents)}`,
+        ] as [string, string]]
+      : []),
     ...data.taxLines.map((tx): [string, string] => [`${tx.label} (${tx.rate}%)`, formatCents(tx.amount_cents)]),
   ];
 

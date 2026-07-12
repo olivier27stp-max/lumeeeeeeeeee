@@ -30,6 +30,8 @@ export interface AgreementDocData {
   propertyAddress: string | null;
   items: Array<{ name: string; qty: number; unit_price_cents: number; total_cents: number }>;
   subtotalCents: number;
+  /** Quote discount (jobs have none) — shown between subtotal and taxes so the lines add up to the total. */
+  discount?: { amount_cents: number; percent?: number | null } | null;
   taxLines: Array<{ label: string; rate: number; amount_cents: number }>;
   totalCents: number;
   signature: { signerName: string; signatureData: string; signedAt: string | null } | null;
@@ -159,6 +161,14 @@ export default function AgreementDocument({ data, language }: { data: AgreementD
             <span className="text-[#888]">{fr ? 'Sous-total' : 'Subtotal'}</span>
             <span className="text-[#333] font-medium">{formatCents(data.subtotalCents)}</span>
           </div>
+          {data.discount && data.discount.amount_cents > 0 && (
+            <div className="flex justify-between">
+              <span className="text-[#888]">
+                {(fr ? 'Rabais' : 'Discount') + (data.discount.percent ? ` (${data.discount.percent}%)` : '')}
+              </span>
+              <span className="text-[#333] font-medium">-{formatCents(data.discount.amount_cents)}</span>
+            </div>
+          )}
           {data.taxLines.map((tax, i) => (
             <div key={i} className="flex justify-between">
               <span className="text-[#888]">{tax.label} ({tax.rate}%)</span>

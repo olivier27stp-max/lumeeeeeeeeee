@@ -61,6 +61,7 @@ export function buildAgreementDocData(params: {
 
   let items: AgreementDocData['items'];
   let subtotalCents: number;
+  let discount: AgreementDocData['discount'] = null;
   let taxLines: AgreementDocData['taxLines'];
   let totalCents: number;
   let propertyAddress: string | null;
@@ -70,6 +71,9 @@ export function buildAgreementDocData(params: {
     const snap = agreement.snapshot;
     items = snap.items || [];
     subtotalCents = snap.subtotal_cents || 0;
+    discount = snap.discount_cents
+      ? { amount_cents: snap.discount_cents, percent: snap.discount_percent ?? null }
+      : null;
     taxLines = snap.tax_lines || [];
     totalCents = snap.total_cents || 0;
     propertyAddress = snap.property_address ?? (job.property_address || null);
@@ -110,6 +114,7 @@ export function buildAgreementDocData(params: {
     propertyAddress,
     items,
     subtotalCents,
+    discount,
     taxLines,
     totalCents,
     signature: agreement.signature_data && agreement.signer_name

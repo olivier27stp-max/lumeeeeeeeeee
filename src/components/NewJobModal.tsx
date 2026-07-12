@@ -20,6 +20,7 @@ import { Job } from '../types';
 import ServicePicker from './ServicePicker';
 import FormPageHost from './ui/FormPageHost';
 import LeaveFormConfirm from './ui/LeaveFormConfirm';
+import AgreementServicesSummary from './agreements/AgreementServicesSummary';
 import type { PredefinedService } from '../lib/servicesApi';
 import { supabase } from '../lib/supabase';
 import AddressAutocomplete, { type StructuredAddress } from './AddressAutocomplete';
@@ -2040,11 +2041,23 @@ export default function NewJobModal({
                         </p>
                       </div>
 
-                      <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-[12px] text-primary">
+                      {/* Live recap — always mirrors the items/prices entered on this page */}
+                      <AgreementServicesSummary
+                        title={language === 'fr' ? 'Services et prix du job — inclus au contrat' : 'Job services and prices — included on the contract'}
+                        data={{
+                          items: agreementPreviewData.items,
+                          subtotalCents: effectiveSubtotalCents,
+                          taxLines: taxLines
+                            .filter((tx) => tx.enabled && tx.rate > 0)
+                            .map((tx) => ({ label: tx.label, rate: tx.rate, amount_cents: Math.round(effectiveSubtotalCents * (tx.rate / 100)) })),
+                          totalCents: grandTotalCents,
+                        }}
+                      />
+                      <p className="text-[11px] text-text-tertiary">
                         {language === 'fr'
-                          ? 'Les services, prix et taxes du job ainsi que la date de création et les infos de l’entreprise sont inclus automatiquement dans le contrat.'
-                          : 'The job’s services, prices and taxes plus the creation date and company info are automatically included in the contract.'}
-                      </div>
+                          ? 'Mis à jour en direct avec les items de cette page. La date de création et les infos de l’entreprise sont aussi ajoutées automatiquement.'
+                          : 'Updates live with the items on this page. Creation date and company info are added automatically too.'}
+                      </p>
 
                       <button
                         type="button"

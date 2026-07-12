@@ -17,9 +17,13 @@ export interface AgreementDraftPreviewData {
   clientPhone: string | null;
   propertyAddress: string | null;
   items: Array<{ name: string; qty: number; unit_price_cents: number; total_cents: number }>;
-  taxLines: Array<{ label: string; rate: number }>;
+  /** amount_cents: precomputed tax amount (compound taxes, stored quote totals); recomputed from the rate when absent. */
+  taxLines: Array<{ label: string; rate: number; amount_cents?: number }>;
   /** Manual subtotal override (job form "total" input); defaults to the items sum. */
   subtotalCents?: number;
+  /** Quote discount — taxes are computed on the discounted base, like the quote page. */
+  discountCents?: number;
+  discountPercent?: number | null;
 }
 
 interface AgreementDraftPreviewModalProps {
@@ -59,9 +63,11 @@ export default function AgreementDraftPreviewModal({
   const docData: AgreementDocData | null = useMemo(() => {
     if (!company) return null;
     const subtotalCents = data.subtotalCents ?? data.items.reduce((sum, it) => sum + it.total_cents, 0);
+    const discountCents = Math.max(0, data.discountCents ?? 0);
+    const taxBaseCents = Math.max(0, subtotalCents - discountCents);
     const taxLines = data.taxLines
       .filter((tx) => tx.rate > 0)
-      .map((tx) => ({ label: tx.label, rate: tx.rate, amount_cents: Math.round(subtotalCents * (tx.rate / 100)) }));
+      .map((tx) => ({ label: tx.label, rate: tx.rate, amount_cents: tx.amount_cents ?? Math.round(taxBaseCents * (tx.rate / 100)) }));
     return {
       agreementNumber: data.numberLabel,
       createdAt: new Date().toISOString(),
@@ -82,8 +88,9 @@ export default function AgreementDraftPreviewModal({
       propertyAddress: data.propertyAddress,
       items: data.items,
       subtotalCents,
+      discount: discountCents > 0 ? { amount_cents: discountCents, percent: data.discountPercent ?? null } : null,
       taxLines,
-      totalCents: subtotalCents + taxLines.reduce((sum, tx) => sum + tx.amount_cents, 0),
+      totalCents: taxBaseCents + taxLines.reduce((sum, tx) => sum + tx.amount_cents, 0),
       signature: null,
     };
   }, [company, data, requireSignature, terms, logoUrl]);

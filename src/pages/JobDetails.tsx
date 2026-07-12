@@ -52,6 +52,7 @@ import { getServiceContractByJob, type ServiceContract } from '../lib/serviceCon
 import { getJobAgreementByJob, sendAgreementEmail, type JobAgreement } from '../lib/jobAgreementsApi';
 import AgreementPreviewModal from '../components/agreements/AgreementPreviewModal';
 import AgreementCreateModal from '../components/agreements/AgreementCreateModal';
+import AgreementServicesSummary from '../components/agreements/AgreementServicesSummary';
 import { buildAgreementDocData, getAgreementCompanyBranding } from '../lib/agreementDoc';
 import { downloadAgreementPdf } from '../lib/generateAgreementPdf';
 import SendSmsModal from '../components/communications/SendSmsModal';
@@ -63,6 +64,7 @@ import SpecificNotes from '../components/SpecificNotes';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import EntityHubHeader from '../components/EntityHubHeader';
+import EntityNumberEditor from '../components/EntityNumberEditor';
 import ClientPinMiniMap, { type ClientMapPin } from '../components/map-d2d/ClientPinMiniMap';
 import { getPins } from '../lib/fieldSalesApi';
 
@@ -779,6 +781,14 @@ export default function JobDetails() {
           status={job.status}
           statusExtra={isToday ? <span className="badge-neutral text-[11px]">Today</span> : null}
           title={job.title || job.client_name || 'Job'}
+          number={
+            <EntityNumberEditor
+              entity="job"
+              entityId={job.id}
+              value={job.job_number}
+              onSaved={(n) => setJob((prev) => (prev ? { ...prev, job_number: n } : prev))}
+            />
+          }
           client={{ id: job.client_id, name: job.client_name || 'Unassigned' }}
           address={job.property_address}
           phone={clientInfo?.phone}
@@ -1252,6 +1262,37 @@ export default function JobDetails() {
                   </div>
                 )}
               </div>
+
+              {/* Services + prices the contract covers — frozen snapshot once signed, live job items otherwise */}
+              {canSeePricing && (
+                <AgreementServicesSummary
+                  title={agreement.snapshot
+                    ? (language === 'fr' ? 'Services et prix (figés à la signature)' : 'Services and prices (frozen at signature)')
+                    : (language === 'fr' ? 'Services et prix du job' : 'Job services and prices')}
+                  data={agreement.snapshot
+                    ? {
+                        items: agreement.snapshot.items || [],
+                        subtotalCents: agreement.snapshot.subtotal_cents || 0,
+                        discount: agreement.snapshot.discount_cents
+                          ? { amountCents: agreement.snapshot.discount_cents, percent: agreement.snapshot.discount_percent ?? null }
+                          : null,
+                        taxLines: agreement.snapshot.tax_lines || [],
+                        totalCents: agreement.snapshot.total_cents || 0,
+                      }
+                    : {
+                        items: lineItems
+                          .filter((it) => it.included)
+                          .map((it) => ({ name: it.name, qty: it.qty, unit_price_cents: it.unit_price_cents, total_cents: it.total_cents })),
+                        subtotalCents: displaySubtotalCents,
+                        taxLines: enabledTaxes.map((tx) => ({
+                          label: tx.label,
+                          rate: tx.rate,
+                          amount_cents: Math.round(displaySubtotalCents * (tx.rate / 100)),
+                        })),
+                        totalCents: displayTotalCents,
+                      }}
+                />
+              )}
 
               {agreement.terms && (
                 <p className="text-[12px] text-text-tertiary leading-relaxed rounded-lg border border-outline-subtle bg-surface-secondary/40 px-3 py-2.5 line-clamp-2">

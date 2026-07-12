@@ -46,6 +46,9 @@ function validateSignatureMagic(dataUrl: string): string | null {
 interface ComposedAgreementDoc {
   items: Array<{ name: string; qty: number; unit_price_cents: number; total_cents: number }>;
   subtotal_cents: number;
+  /** Quote discount (0/absent for jobs) — kept so subtotal + taxes − discount = total on the document. */
+  discount_cents?: number;
+  discount_percent?: number | null;
   tax_lines: Array<{ label: string; rate: number; amount_cents: number }>;
   total_cents: number;
   client_name: string | null;
@@ -60,7 +63,7 @@ interface ComposedAgreementDoc {
 async function composeLiveDocFromQuote(admin: any, agreement: any): Promise<ComposedAgreementDoc> {
   const { data: quote } = await admin
     .from('quotes')
-    .select('id, quote_number, subtotal_cents, tax_rate, tax_rate_label, tax_cents, total_cents, client_id, lead_id, property_id')
+    .select('id, quote_number, subtotal_cents, discount_type, discount_value, discount_cents, tax_rate, tax_rate_label, tax_cents, total_cents, client_id, lead_id, property_id')
     .eq('id', agreement.quote_id)
     .maybeSingle();
 
@@ -81,6 +84,8 @@ async function composeLiveDocFromQuote(admin: any, agreement: any): Promise<Comp
 
   const computedSubtotal = items.reduce((sum: number, it: any) => sum + it.total_cents, 0);
   const subtotalCents = Number(quote?.subtotal_cents || 0) || computedSubtotal;
+  const discountCents = Number(quote?.discount_cents || 0);
+  const discountPercent = quote?.discount_type === 'percentage' ? Number(quote?.discount_value || 0) : null;
   const taxLines = Number(quote?.tax_cents || 0) > 0
     ? [{
         label: String(quote?.tax_rate_label || 'Tax'),
@@ -89,7 +94,7 @@ async function composeLiveDocFromQuote(admin: any, agreement: any): Promise<Comp
       }]
     : [];
   const totalCents = Number(quote?.total_cents || 0)
-    || subtotalCents + taxLines.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
+    || subtotalCents - discountCents + taxLines.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
 
   let clientName: string | null = null;
   let propertyAddress: string | null = null;
@@ -117,6 +122,8 @@ async function composeLiveDocFromQuote(admin: any, agreement: any): Promise<Comp
   return {
     items,
     subtotal_cents: subtotalCents,
+    discount_cents: discountCents,
+    discount_percent: discountPercent,
     tax_lines: taxLines,
     total_cents: totalCents,
     client_name: clientName,

@@ -22,6 +22,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { clientDisplayName } from '../lib/clientsApi';
 import EntityHubHeader from '../components/EntityHubHeader';
+import EntityNumberEditor from '../components/EntityNumberEditor';
 import { downloadQuotePdf } from '../lib/generateQuotePdf';
 import { getCompanySettings } from '../lib/invoicesApi';
 import QuoteRenderer from '../components/quote/QuoteRenderer';
@@ -35,6 +36,7 @@ import ServicePicker from '../components/ServicePicker';
 import type { PredefinedService } from '../lib/servicesApi';
 import { getJobAgreementByQuote, sendAgreementEmail, type JobAgreement } from '../lib/jobAgreementsApi';
 import AgreementCreateModal from '../components/agreements/AgreementCreateModal';
+import AgreementServicesSummary from '../components/agreements/AgreementServicesSummary';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 
@@ -258,6 +260,14 @@ export default function QuoteDetails() {
               <button onClick={() => startEdit('title')} className="p-1 text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-text-primary transition-all"><Pencil size={15} /></button>
             </span>
           )}
+          number={
+            <EntityNumberEditor
+              entity="quote"
+              entityId={quote.id}
+              value={quote.quote_number}
+              onSaved={() => void loadQuote()}
+            />
+          }
           client={entity ? { id: (entity as any).id, name: entityName } : null}
           address={entityAddress}
           phone={entityPhone}
@@ -452,6 +462,36 @@ export default function QuoteDetails() {
                     </p>
                   </div>
                 )}
+                {/* Services + prices the contract covers — frozen snapshot once signed, live quote items otherwise */}
+                <AgreementServicesSummary
+                  title={agreement.snapshot
+                    ? (language === 'fr' ? 'Services et prix (figés à la signature)' : 'Services and prices (frozen at signature)')
+                    : (language === 'fr' ? 'Services et prix du devis' : 'Quote services and prices')}
+                  data={agreement.snapshot
+                    ? {
+                        items: agreement.snapshot.items || [],
+                        subtotalCents: agreement.snapshot.subtotal_cents || 0,
+                        discount: agreement.snapshot.discount_cents
+                          ? { amountCents: agreement.snapshot.discount_cents, percent: agreement.snapshot.discount_percent ?? null }
+                          : null,
+                        taxLines: agreement.snapshot.tax_lines || [],
+                        totalCents: agreement.snapshot.total_cents || 0,
+                      }
+                    : {
+                        items: line_items
+                          .filter((i) => i.item_type === 'service' && !i.is_optional)
+                          .map((i) => ({ name: i.name, qty: i.quantity, unit_price_cents: i.unit_price_cents, total_cents: i.total_cents })),
+                        subtotalCents: quote.subtotal_cents || 0,
+                        discount: (quote.discount_cents || 0) > 0
+                          ? { amountCents: quote.discount_cents, percent: quote.discount_type === 'percentage' ? Number(quote.discount_value) || null : null }
+                          : null,
+                        taxLines: (quote.tax_cents || 0) > 0
+                          ? [{ label: quote.tax_rate_label || 'Tax', rate: quote.tax_rate, amount_cents: quote.tax_cents }]
+                          : [],
+                        totalCents: quote.total_cents || 0,
+                      }}
+                />
+
                 {agreement.terms && (
                   <p className="text-[12px] text-text-secondary bg-surface-secondary rounded-lg px-3 py-2.5 line-clamp-2 whitespace-pre-wrap">
                     {agreement.terms}
@@ -526,7 +566,12 @@ export default function QuoteDetails() {
               items: line_items
                 .filter((i) => i.item_type === 'service' && !i.is_optional)
                 .map((i) => ({ name: i.name, qty: i.quantity, unit_price_cents: i.unit_price_cents, total_cents: i.total_cents })),
-              taxLines: quote.tax_rate > 0 ? [{ label: quote.tax_rate_label || 'Tax', rate: quote.tax_rate }] : [],
+              subtotalCents: quote.subtotal_cents || 0,
+              discountCents: quote.discount_cents || 0,
+              discountPercent: quote.discount_type === 'percentage' ? Number(quote.discount_value) || null : null,
+              taxLines: (quote.tax_cents || 0) > 0
+                ? [{ label: quote.tax_rate_label || 'Tax', rate: quote.tax_rate, amount_cents: quote.tax_cents }]
+                : (quote.tax_rate > 0 ? [{ label: quote.tax_rate_label || 'Tax', rate: quote.tax_rate }] : []),
             }}
           />
 
