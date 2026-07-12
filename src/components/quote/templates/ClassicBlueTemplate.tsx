@@ -50,7 +50,7 @@ export default function ClassicBlueTemplate({ data }: { data: QuoteRenderData })
       <div style={{ backgroundColor: NAVY }} className="px-10 py-6 flex items-start justify-between">
         <div className="text-white">
           {data.company_logo_url ? (
-            <img src={data.company_logo_url} alt={data.company_name} className="h-16 max-w-[280px] object-contain brightness-0 invert" />
+            <img src={data.company_logo_url} alt={data.company_name} className="h-24 max-w-[360px] object-contain brightness-0 invert" />
           ) : (
             <p className="text-[20px] font-bold tracking-tight">{data.company_name}</p>
           )}

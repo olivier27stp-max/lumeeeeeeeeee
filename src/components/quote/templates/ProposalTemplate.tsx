@@ -58,7 +58,7 @@ export default function ProposalTemplate({ data }: { data: QuoteRenderData }) {
           {/* Company */}
           <div className="flex items-start justify-between">
             {data.company_logo_url ? (
-              <img src={data.company_logo_url} alt={data.company_name} className="h-12 max-w-[220px] object-contain brightness-0 invert" />
+              <img src={data.company_logo_url} alt={data.company_name} className="h-16 max-w-[280px] object-contain brightness-0 invert" />
             ) : (
               <p className="text-[16px] font-semibold text-white/90 tracking-wide">{data.company_name}</p>
             )}

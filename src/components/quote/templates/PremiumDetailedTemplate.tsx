@@ -40,7 +40,7 @@ export default function PremiumDetailedTemplate({ data }: { data: QuoteRenderDat
         <div className="flex items-start justify-between">
           <div>
             {data.company_logo_url
-              ? <img src={data.company_logo_url} alt={data.company_name} className="h-16 max-w-[280px] object-contain brightness-0 invert" />
+              ? <img src={data.company_logo_url} alt={data.company_name} className="h-24 max-w-[360px] object-contain brightness-0 invert" />
               : <p className="text-[22px] font-bold text-white tracking-tight" style={{ fontFamily: '-apple-system,sans-serif' }}>{data.company_name}</p>}
             <div className="mt-2 text-[11px] text-white/60 space-y-0.5" style={{ fontFamily: '-apple-system,sans-serif' }}>
               {data.company_address && <p>{data.company_address}</p>}
