@@ -40,6 +40,7 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { getInvoiceRowUiStatus } from '../lib/invoicesApi';
 import { StatusBadge, Skeleton } from '../components/ui';
+import EntityNumberEditor from '../components/EntityNumberEditor';
 import { useTranslation } from '../i18n';
 import ActivityTimeline from '../components/ActivityTimeline';
 import { displayEmail, displayPhone, displayAddress } from '../lib/piiSanitizer';
@@ -593,6 +594,13 @@ export default function ClientDetails() {
               <div>
                 <div className="flex items-center gap-2.5">
                   <h1 className="text-[20px] font-bold text-text-primary leading-tight">{fullName}</h1>
+                  <EntityNumberEditor
+                    entity="client"
+                    entityId={client.id}
+                    value={client.client_number}
+                    className="text-[15px] font-bold text-text-tertiary"
+                    onSaved={(n) => setClient((prev) => (prev ? { ...prev, client_number: n } : prev))}
+                  />
                   <StatusBadge status={client.status} />
                 </div>
                 {secondaryName && <p className="text-[13px] text-text-secondary mt-0.5">{secondaryName}</p>}

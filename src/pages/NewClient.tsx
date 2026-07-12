@@ -11,6 +11,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ChevronDown, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient, findClientsByEmail, type ClientPhone } from '../lib/clientsApi';
+import { isEntityNumberTaken, peekNextNumbers } from '../lib/numbersApi';
 import { DEFAULT_LEAD_SOURCES, createLeadSource, listLeadSources } from '../lib/leadSourcesApi';
 import { resolveTaxes, type TaxConfig } from '../lib/taxApi';
 import AddressAutocomplete, { type StructuredAddress } from '../components/AddressAutocomplete';
@@ -63,6 +64,22 @@ export default function NewClient() {
   const [billingSearch, setBillingSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [inlineError, setInlineError] = useState<string | null>(null);
+
+  // Numéro de client — pré-rempli avec le prochain numéro de l'org,
+  // modifiable, validé au save (numérique, ≤ prochain, pas de doublon).
+  const [clientNumber, setClientNumber] = useState('');
+  const [clientNumberTouched, setClientNumberTouched] = useState(false);
+  const [nextClientNumber, setNextClientNumber] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    peekNextNumbers().then((next) => {
+      if (!active || !next?.client) return;
+      setNextClientNumber(next.client);
+      setClientNumber((prev) => prev || next.client!);
+    });
+    return () => { active = false; };
+  }, []);
 
   // Dirty tracking — flipped only by genuine user input (see the root's
   // onInput/onChange); programmatic prefills never mark the form dirty.
@@ -177,6 +194,41 @@ export default function NewClient() {
       setInlineError(t.clients.firstLastRequired);
       return;
     }
+
+    // Numéro de client : le défaut auto non modifié est envoyé vide, le
+    // trigger serveur l'attribue atomiquement (aucune course entre deux
+    // formulaires ouverts en même temps). Un numéro saisi est validé ici.
+    const trimmedClientNumber = clientNumber.trim();
+    const isUntouchedAutoDefault = !clientNumberTouched
+      && !!nextClientNumber && trimmedClientNumber === nextClientNumber;
+    const clientNumberToSend = isUntouchedAutoDefault ? '' : trimmedClientNumber;
+    if (clientNumberToSend) {
+      if (!/^\d+$/.test(clientNumberToSend)) {
+        const msg = fr ? 'Le numéro de client doit être un nombre.' : 'Client number must be a number.';
+        setInlineError(msg);
+        toast.error(msg);
+        return;
+      }
+      if (nextClientNumber && parseInt(clientNumberToSend, 10) > parseInt(nextClientNumber, 10)) {
+        const msg = fr
+          ? `Le numéro de client ${clientNumberToSend} n'existe pas encore — le prochain numéro disponible est ${nextClientNumber}.`
+          : `Client number ${clientNumberToSend} doesn't exist yet — the next available number is ${nextClientNumber}.`;
+        setInlineError(msg);
+        toast.error(msg);
+        return;
+      }
+      // Warning doublon : le numéro est déjà pris dans l'org (la validation
+      // serveur de la RPC re-vérifie au save).
+      if (await isEntityNumberTaken('client', clientNumberToSend)) {
+        const msg = fr
+          ? `Le numéro de client « ${clientNumberToSend} » est déjà utilisé.`
+          : `Client number "${clientNumberToSend}" is already in use.`;
+        setInlineError(msg);
+        toast.error(msg);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const cleanPhones: ClientPhone[] = phones
@@ -206,6 +258,7 @@ export default function NewClient() {
         billing_same_as_service: billingSame,
         billing_address: billingSame ? null : (billingSearch.trim() || null),
         tax_ids: taxTouched ? Array.from(selectedTaxIds) : null,
+        client_number: clientNumberToSend || undefined,
       });
       guard.release();
       toast.success(t.clients.clientCreated);
@@ -258,6 +311,22 @@ export default function NewClient() {
               <div className="space-y-2">
                 <label className={fieldLabel}>{fr ? 'Nom de famille' : 'Last name'} <span className="text-danger">*</span></label>
                 <input value={lastName} onChange={(e) => setLastName(e.target.value)} className="glass-input w-full" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className={fieldLabel}>{fr ? 'Numéro de client' : 'Client number'}</label>
+                <input
+                  value={clientNumber}
+                  onChange={(e) => {
+                    setClientNumber(e.target.value.replace(/\D/g, ''));
+                    setClientNumberTouched(true);
+                  }}
+                  className="glass-input w-full"
+                  inputMode="numeric"
+                  placeholder="Auto"
+                  disabled={!nextClientNumber}
+                />
               </div>
             </div>
             <div className="space-y-2">

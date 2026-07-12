@@ -15,6 +15,8 @@ interface EntityHubHeaderProps {
   statusExtra?: React.ReactNode;
   /** Entity title — very large and bold. A ReactNode is allowed for inline editing. */
   title: React.ReactNode;
+  /** Entity number (#) rendered next to the title — pass an EntityNumberEditor for inline editing. */
+  number?: React.ReactNode;
   /** Client (or company when displayed as primary) — clicking opens the client hub. */
   client?: { id?: string | null; name: string } | null;
   /** Address — clicking opens Google Maps. */
@@ -38,6 +40,7 @@ export default function EntityHubHeader({
   status,
   statusExtra,
   title,
+  number,
   client,
   address,
   phone,
@@ -60,9 +63,10 @@ export default function EntityHubHeader({
             {statusExtra}
           </div>
 
-          {/* Title */}
+          {/* Title + number */}
           <h1 className="mt-4 text-[30px] font-extrabold text-text-primary leading-tight break-words">
             {title}
+            {number != null && <span className="ml-2.5">{number}</span>}
           </h1>
 
           {/* Client / company — opens the client hub */}

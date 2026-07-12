@@ -17,6 +17,7 @@ import {
 import InvoicePaymentModal from '../components/InvoicePaymentModal';
 import { downloadInvoicePdf } from '../lib/generateInvoicePdf';
 import EntityHubHeader from '../components/EntityHubHeader';
+import EntityNumberEditor from '../components/EntityNumberEditor';
 import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
 import ActivityTimeline from '../components/ActivityTimeline';
@@ -170,7 +171,16 @@ export default function InvoiceDetails() {
       <EntityHubHeader
         icon={<Receipt size={18} strokeWidth={2} />}
         status={uiStatus}
-        title={invoice.invoice_number}
+        title={
+          <EntityNumberEditor
+            entity="invoice"
+            entityId={invoice.id}
+            value={invoice.invoice_number}
+            display={invoice.invoice_number}
+            className="text-[30px] font-extrabold text-text-primary"
+            onSaved={() => void queryClient.invalidateQueries({ queryKey: ['invoiceDetails', invoiceId] })}
+          />
+        }
         client={client
           ? { id: client.id, name: toClientDisplayName(client) }
           : (invoice.client_name ? { id: invoice.client_id, name: invoice.client_name } : null)}

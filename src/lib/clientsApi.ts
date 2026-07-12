@@ -8,6 +8,8 @@ export interface ClientPhone {
 
 export interface ClientRecord {
   id: string;
+  /** Numéro séquentiel par org (trigger DB) — absent tant que la migration n'est pas appliquée. */
+  client_number?: string | null;
   first_name: string;
   last_name: string;
   company: string | null;
@@ -151,6 +153,8 @@ export interface ClientPayload {
   place_id?: string;
   status?: string;
   display_as_company?: boolean;
+  /** Numéro voulu (validé côté serveur); vide/absent = attribution auto par le trigger. */
+  client_number?: string;
 }
 
 // Use the centralized version from orgApi instead of duplicating
@@ -231,6 +235,7 @@ export async function createClientWithDuplicateHandling(
       place_id: payload.place_id?.trim() || null,
       status: payload.status || 'active',
       display_as_company: payload.display_as_company ?? false,
+      client_number: payload.client_number?.trim() || null,
     },
     p_merge_duplicates: true,
   });
