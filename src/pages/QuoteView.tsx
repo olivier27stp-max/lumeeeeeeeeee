@@ -51,7 +51,6 @@ interface QuoteData {
     service_plan?: { year: number; visits: Array<{ month: number; date: string }> } | null;
   };
   images?: string[];
-  agreement?: { view_token: string; require_signature: boolean; status: string } | null;
   company: CompanyBranding;
   client: { first_name: string; last_name: string; company: string | null; email: string | null; phone: string | null } | null;
   lead: { first_name: string; last_name: string; company: string | null; email: string | null; phone: string | null } | null;
@@ -423,7 +422,6 @@ export default function QuoteView() {
 
   const { quote, company, client, lead, items, signature } = data;
   const images = data.images || [];
-  const agreement = data.agreement || null;
   const servicePlan = quote.quote_type === 'service_plan' && quote.service_plan?.visits?.length
     ? quote.service_plan
     : null;
@@ -754,32 +752,6 @@ export default function QuoteView() {
               )}
             </div>
           </div>
-
-          {/* ── WRITTEN AGREEMENT (same feature as job agreements) ── */}
-          {agreement && (
-            <div className="px-8 pb-6">
-              <div className="rounded-lg border border-[#111] px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <p className="text-[13px] font-semibold text-[#111]">Written Agreement</p>
-                  <p className="text-[12px] text-[#666] mt-0.5">
-                    {agreement.status === 'signed'
-                      ? 'Signed — view the attached contract'
-                      : agreement.require_signature
-                        ? 'Signature required — review and sign the attached contract'
-                        : 'Review the contract attached to this quote'}
-                  </p>
-                </div>
-                <a
-                  href={`/contract/${agreement.view_token}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 rounded-lg bg-[#111] px-4 py-2.5 text-[13px] font-semibold text-white text-center hover:bg-[#222] transition-colors"
-                >
-                  {agreement.status !== 'signed' && agreement.require_signature ? 'View & Sign Contract' : 'View Contract'}
-                </a>
-              </div>
-            </div>
-          )}
 
           {/* ── NOTES ── */}
           {quote.notes && (

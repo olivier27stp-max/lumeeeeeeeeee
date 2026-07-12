@@ -47,7 +47,7 @@ export async function fetchPaymentMix(params: { from: string; to: string }): Pro
     const res = await listPayments({ status: 'all', method: 'all', date: 'custom', q: '', page: 1, pageSize: 1000, fromDate: params.from, toDate: params.to });
     const map = new Map<string, number>();
     for (const r of res.rows) {
-      const label = paymentMethodLabel(r.payment_method) || (r.payment_method || 'Autre');
+      const label = paymentMethodLabel(r.method) || (r.method || 'Autre');
       map.set(label, (map.get(label) || 0) + (r.amount_cents || 0));
     }
     const sorted = Array.from(map.entries()).map(([name, value]) => ({ name, value })).filter((s) => s.value > 0).sort((a, b) => b.value - a.value);

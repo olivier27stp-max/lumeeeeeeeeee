@@ -13,6 +13,7 @@ import {
   Users, X as XIcon, PanelRightOpen, PanelRightClose,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../i18n';
 import CalendarMapModal from '../components/CalendarMapModal';
 import AddVisitModal from '../components/AddVisitModal';
@@ -20,7 +21,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarControllerProvider, CalendarUiView, useCalendarController } from '../contexts/CalendarController';
 import { useJobModalController } from '../contexts/JobModalController';
 import { getCurrentOrgId } from '../lib/orgApi';
-import { getJobModalDraftById } from '../lib/jobsApi';
 import {
   DEFAULT_TIMEZONE, ScheduleEventRecord, UnscheduledJobRecord,
   assignJobToTeam, invalidateScheduleCache, listScheduleEventsRange,
@@ -551,8 +551,8 @@ function ScheduleContent() {
 
   const { selectedDate, view, selectedTeamIds, hasTeamsParam, setDate, setView, setSelectedTeamIds, toggleTeam, goToday, goPrev, goNext } = useCalendarController();
   const { openJobModal } = useJobModalController();
+  const navigate = useNavigate();
 
-  const [isOpeningJob, setIsOpeningJob] = useState(false);
   const [unassignedMode, setUnassignedMode] = useState(false);
   const [assignModalJob, setAssignModalJob] = useState<UnscheduledJobRecord | ScheduleEventRecord | null>(null);
   const [activeFilter, setActiveFilter] = useState<QF>('all');
@@ -740,10 +740,8 @@ function ScheduleContent() {
   const openAddVisit = (start: Date, end?: Date) => {
     setAddVisitSlot({ start, end: end || addHours(start, 2) });
   };
-  const openExisting = async (jobId: string) => {
-    if (isOpeningJob) return; setIsOpeningJob(true);
-    try { const d = await getJobModalDraftById(jobId); if (!d) { toast.error(t.schedule.jobNotFound); return; } openJobModal({ initialValues: d, jobId: d.id, sourceContext: { type: 'jobs' }, onCreated: refresh }); }
-    catch { toast.error(t.schedule.couldNotOpenJob); } finally { setIsOpeningJob(false); }
+  const openExisting = (jobId: string) => {
+    navigate(`/jobs/${jobId}`);
   };
   const handleExtDrop = async (jobId: string, s: Date, e: Date) => {
     if (selectedTeamIds.length === 1) {
@@ -990,13 +988,13 @@ function ScheduleContent() {
         <div className="min-w-0 flex-1 overflow-hidden bg-surface">
           {evQ.isLoading ? <div className="h-full animate-pulse bg-surface-secondary/50" /> :
            view === 'month' ? (
-            <MonthView date={selectedDate} events={filtered} tcMap={tcMap} onDayClick={(d) => { setDate(d); setView('day'); }} onEventClick={(id) => void openExisting(id)} />
+            <MonthView date={selectedDate} events={filtered} tcMap={tcMap} onDayClick={(d) => { setDate(d); setView('day'); }} onEventClick={openExisting} />
           ) : view === 'week' ? (
-            <TimeGrid columns={weekColumns} events={filtered} tcMap={tcMap} onSlotClick={(s) => openAddVisit(s)} onEventClick={(id) => void openExisting(id)} {...timeGridDndProps} />
+            <TimeGrid columns={weekColumns} events={filtered} tcMap={tcMap} onSlotClick={(s) => openAddVisit(s)} onEventClick={openExisting} {...timeGridDndProps} />
           ) : view === 'day' ? (
-            <TimeGrid columns={dayColumns} events={filtered} tcMap={tcMap} onSlotClick={(s) => openAddVisit(s)} onEventClick={(id) => void openExisting(id)} {...timeGridDndProps} />
+            <TimeGrid columns={dayColumns} events={filtered} tcMap={tcMap} onSlotClick={(s) => openAddVisit(s)} onEventClick={openExisting} {...timeGridDndProps} />
           ) : view === 'agenda' ? (
-            <div className="h-full overflow-y-auto"><AgendaView events={filtered} overlaps={overlaps} tcMap={tcMap} teams={teams} onEventClick={(id) => void openExisting(id)} onSlotClick={(s, e) => openAddVisit(s, e)} /></div>
+            <div className="h-full overflow-y-auto"><AgendaView events={filtered} overlaps={overlaps} tcMap={tcMap} teams={teams} onEventClick={openExisting} onSlotClick={(s, e) => openAddVisit(s, e)} /></div>
           ) : null}
         </div>
 
@@ -1069,7 +1067,7 @@ function ScheduleContent() {
       {assignModalJob && <AssignModal job={assignModalJob} teams={teams} events={events} tcMap={tcMap} onAssign={(tid) => assignMut.mutate({ jobId: 'id' in assignModalJob ? assignModalJob.id : '', teamId: tid })} onClose={() => setAssignModalJob(null)} loading={assignMut.isPending} t={t} />}
 
       {/* MAP MODAL — jobs of the selected period with completion pins */}
-      {mapOpen && <CalendarMapModal start={range.start} end={range.end} periodLabel={label} onClose={() => setMapOpen(false)} onOpenJob={(id) => void openExisting(id)} />}
+      {mapOpen && <CalendarMapModal start={range.start} end={range.end} periodLabel={label} onClose={() => setMapOpen(false)} onOpenJob={openExisting} />}
 
       {/* ADD VISIT — clicking an empty slot adds a visit to an existing job */}
       <AddVisitModal

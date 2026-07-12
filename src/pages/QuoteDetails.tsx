@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MoreHorizontal, Mail, MessageSquare, Briefcase, Copy,
-  Eye, Printer, FileSignature, Trash2, Clock, CheckCircle2,
+  Eye, Printer, Trash2, Clock, CheckCircle2,
   Pencil, FileText,
   Plus, Check, X, Save, Ruler, Package, Archive,
 } from 'lucide-react';
@@ -34,9 +34,6 @@ import { frCA as dfFr, enCA as dfEn } from 'date-fns/locale';
 import { useTranslation } from '../i18n';
 import ServicePicker from '../components/ServicePicker';
 import type { PredefinedService } from '../lib/servicesApi';
-import { getJobAgreementByQuote, sendAgreementEmail, type JobAgreement } from '../lib/jobAgreementsApi';
-import AgreementCreateModal from '../components/agreements/AgreementCreateModal';
-import AgreementServicesSummary from '../components/agreements/AgreementServicesSummary';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 
@@ -83,15 +80,6 @@ export default function QuoteDetails() {
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [editing, editDirty]);
-
-  // ── Contrat (agreement) lié au devis — même feature que les jobs ──
-  const [agreement, setAgreement] = useState<JobAgreement | null>(null);
-  const [agreementSending, setAgreementSending] = useState(false);
-  const [agreementModalOpen, setAgreementModalOpen] = useState(false);
-  useEffect(() => {
-    if (!id) return;
-    getJobAgreementByQuote(id).then(setAgreement).catch(() => setAgreement(null));
-  }, [id]);
 
   // Fill a single line with the chosen catalog product/service (name, description, default price)
   const handleServiceForLine = (service: PredefinedService) => {
@@ -416,164 +404,6 @@ export default function QuoteDetails() {
               </div>
             </div>
           )}
-
-          {/* Contrat (agreement) — même feature que les jobs */}
-          <div
-            className={cn('section-card p-5', agreement && 'cursor-pointer transition-colors hover:border-primary/40')}
-            onClick={agreement ? () => window.open(`/contract/${agreement.view_token}`, '_blank') : undefined}
-            title={agreement ? (language === 'fr' ? 'Voir le contrat tel que le client le voit' : 'View the contract as the client sees it') : undefined}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-[14px] font-semibold text-text-primary flex items-center gap-2">
-                <FileSignature size={15} className="text-text-tertiary" />
-                {language === 'fr' ? 'Contrat' : 'Agreement'}
-                <span className="text-[12px] font-normal text-text-tertiary">CTR-{quote.quote_number}</span>
-              </h4>
-              {agreement && (
-                <span className={cn(
-                  'text-[11px] font-semibold px-2.5 py-1 rounded-full border',
-                  agreement.status === 'signed'
-                    ? 'bg-success-light text-success border-success/30'
-                    : agreement.status === 'sent' && agreement.require_signature
-                      ? 'bg-warning-light text-warning border-warning/30'
-                      : agreement.status === 'sent'
-                        ? 'bg-primary/5 text-primary border-primary/20'
-                        : 'bg-surface-secondary text-text-secondary border-outline',
-                )}>
-                  {agreement.status === 'signed'
-                    ? (language === 'fr' ? 'Signé' : 'Signed')
-                    : agreement.status === 'sent'
-                      ? (agreement.require_signature
-                          ? (language === 'fr' ? 'En attente de signature' : 'Awaiting signature')
-                          : (language === 'fr' ? 'Envoyé' : 'Sent'))
-                      : (language === 'fr' ? 'Brouillon' : 'Draft')}
-                </span>
-              )}
-            </div>
-
-            {agreement ? (
-              <div className="space-y-3">
-                {agreement.status === 'signed' && agreement.signature_data && (
-                  <div className="rounded-lg border border-success/30 bg-success-light px-4 py-3">
-                    <img src={agreement.signature_data} alt="Signature" className="max-w-[140px] max-h-10 object-contain" />
-                    <p className="text-[12px] text-success font-medium mt-1.5">
-                      {language === 'fr' ? 'Signé par' : 'Signed by'} {agreement.signer_name}
-                      {agreement.signed_at && ` — ${format(new Date(agreement.signed_at), 'PP', { locale: language === 'fr' ? dfFr : dfEn })}`}
-                    </p>
-                  </div>
-                )}
-                {/* Services + prices the contract covers — frozen snapshot once signed, live quote items otherwise */}
-                <AgreementServicesSummary
-                  title={agreement.snapshot
-                    ? (language === 'fr' ? 'Services et prix (figés à la signature)' : 'Services and prices (frozen at signature)')
-                    : (language === 'fr' ? 'Services et prix du devis' : 'Quote services and prices')}
-                  data={agreement.snapshot
-                    ? {
-                        items: agreement.snapshot.items || [],
-                        subtotalCents: agreement.snapshot.subtotal_cents || 0,
-                        discount: agreement.snapshot.discount_cents
-                          ? { amountCents: agreement.snapshot.discount_cents, percent: agreement.snapshot.discount_percent ?? null }
-                          : null,
-                        taxLines: agreement.snapshot.tax_lines || [],
-                        totalCents: agreement.snapshot.total_cents || 0,
-                      }
-                    : {
-                        items: line_items
-                          .filter((i) => i.item_type === 'service' && !i.is_optional)
-                          .map((i) => ({ name: i.name, qty: i.quantity, unit_price_cents: i.unit_price_cents, total_cents: i.total_cents })),
-                        subtotalCents: quote.subtotal_cents || 0,
-                        discount: (quote.discount_cents || 0) > 0
-                          ? { amountCents: quote.discount_cents, percent: quote.discount_type === 'percentage' ? Number(quote.discount_value) || null : null }
-                          : null,
-                        taxLines: (quote.tax_cents || 0) > 0
-                          ? [{ label: quote.tax_rate_label || 'Tax', rate: quote.tax_rate, amount_cents: quote.tax_cents }]
-                          : [],
-                        totalCents: quote.total_cents || 0,
-                      }}
-                />
-
-                {agreement.terms && (
-                  <p className="text-[12px] text-text-secondary bg-surface-secondary rounded-lg px-3 py-2.5 line-clamp-2 whitespace-pre-wrap">
-                    {agreement.terms}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={() => window.open(`/contract/${agreement.view_token}`, '_blank')}
-                    className="glass-button inline-flex items-center gap-1.5 text-[12px]"
-                  >
-                    <Eye size={13} /> {language === 'fr' ? 'Voir le contrat' : 'View contract'}
-                  </button>
-                  {agreement.require_signature && agreement.status !== 'signed' && (
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/contract/${agreement.view_token}`);
-                        toast.success(language === 'fr' ? 'Lien de signature copié.' : 'Signature link copied.');
-                      }}
-                      className="glass-button inline-flex items-center gap-1.5 text-[12px]"
-                    >
-                      <Copy size={13} /> {language === 'fr' ? 'Copier le lien de signature' : 'Copy signature link'}
-                    </button>
-                  )}
-                  <button
-                    disabled={agreementSending}
-                    onClick={async () => {
-                      setAgreementSending(true);
-                      try {
-                        await sendAgreementEmail(agreement.id);
-                        toast.success(language === 'fr' ? 'Contrat envoyé par courriel.' : 'Agreement emailed.');
-                        if (id) getJobAgreementByQuote(id).then(setAgreement).catch(() => {});
-                      } catch (e: any) {
-                        toast.error(e?.message || (language === 'fr' ? "L'envoi a échoué." : 'Send failed.'));
-                      } finally {
-                        setAgreementSending(false);
-                      }
-                    }}
-                    className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
-                  >
-                    <Mail size={13} /> {agreementSending
-                      ? (language === 'fr' ? 'Envoi…' : 'Sending…')
-                      : (language === 'fr' ? 'Envoyer par courriel' : 'Send by email')}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-lg border border-dashed border-outline px-4 py-4 flex items-center justify-between gap-3">
-                <p className="text-[12.5px] text-text-tertiary">
-                  {language === 'fr' ? 'Aucun contrat pour ce devis.' : 'No agreement for this quote.'}
-                </p>
-                <button
-                  onClick={() => setAgreementModalOpen(true)}
-                  className="glass-button-primary inline-flex items-center gap-1.5 text-[12px] shrink-0"
-                >
-                  <Plus size={13} /> {language === 'fr' ? 'Créer un contrat' : 'Create agreement'}
-                </button>
-              </div>
-            )}
-          </div>
-          <AgreementCreateModal
-            open={agreementModalOpen}
-            onClose={() => setAgreementModalOpen(false)}
-            quoteId={quote.id}
-            clientId={quote.client_id || quote.lead_id}
-            onCreated={(a) => setAgreement(a)}
-            preview={{
-              numberLabel: `CTR-${quote.quote_number}`,
-              clientName: entityName !== 'Unknown' ? entityName : null,
-              clientEmail: entityEmail,
-              clientPhone: entityPhone,
-              propertyAddress: entityAddress,
-              items: line_items
-                .filter((i) => i.item_type === 'service' && !i.is_optional)
-                .map((i) => ({ name: i.name, qty: i.quantity, unit_price_cents: i.unit_price_cents, total_cents: i.total_cents })),
-              subtotalCents: quote.subtotal_cents || 0,
-              discountCents: quote.discount_cents || 0,
-              discountPercent: quote.discount_type === 'percentage' ? Number(quote.discount_value) || null : null,
-              taxLines: (quote.tax_cents || 0) > 0
-                ? [{ label: quote.tax_rate_label || 'Tax', rate: quote.tax_rate, amount_cents: quote.tax_cents }]
-                : (quote.tax_rate > 0 ? [{ label: quote.tax_rate_label || 'Tax', rate: quote.tax_rate }] : []),
-            }}
-          />
 
           {/* Introduction */}
           <div className="section-card p-5">

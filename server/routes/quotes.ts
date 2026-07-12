@@ -776,26 +776,6 @@ router.get('/quotes/public/:token', async (req, res) => {
       }
     } catch { /* pas de section images */ }
 
-    // Contrat écrit lié au devis (même feature que les jobs)
-    let agreement: { view_token: string; require_signature: boolean; status: string } | null = null;
-    try {
-      const { data: ag } = await admin
-        .from('job_agreements')
-        .select('view_token, require_signature, status')
-        .eq('quote_id', quote.id)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (ag?.view_token) {
-        agreement = {
-          view_token: ag.view_token,
-          require_signature: ag.require_signature !== false,
-          status: ag.status || 'draft',
-        };
-      }
-    } catch { /* migration pending */ }
-
     // Signature (if approved)
     let signature = null;
     if (['approved', 'converted'].includes(quote.status)) {
@@ -832,7 +812,6 @@ router.get('/quotes/public/:token', async (req, res) => {
         quote_type: quoteType, service_plan: servicePlan,
       },
       images,
-      agreement,
       company: {
         company_name: companyData?.company_name || 'Business',
         // Toujours le logo d'entreprise (Réglages → Détails de l'entreprise).

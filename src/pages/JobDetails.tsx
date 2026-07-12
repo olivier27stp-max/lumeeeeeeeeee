@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRecentItems } from '../hooks/useRecentItems';
 import {
+  AlertTriangle,
   ArrowLeft,
   Briefcase,
   Calendar,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -32,7 +34,7 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { getJobById, getJobLineItems, listSalespeople, updateJob, type JobLineItem } from '../lib/jobsApi';
 import AddVisitModal from '../components/AddVisitModal';
-import { rescheduleEvent, unscheduleJob } from '../lib/scheduleApi';
+import { invalidateScheduleCache, rescheduleEvent, unscheduleJob } from '../lib/scheduleApi';
 import { listTeams, type TeamRecord } from '../lib/teamsApi';
 import { createInvoiceFromJob, getInvoiceRowUiStatus } from '../lib/invoicesApi';
 import {
@@ -53,6 +55,8 @@ import { useDropZone } from '../hooks/useDropZone';
 import { getRecurrenceRule, createRecurrenceRule, deactivateRecurrenceRule, type RecurrenceRule, type RecurrenceFrequency } from '../lib/recurringJobsApi';
 import { getServiceContractByJob, type ServiceContract } from '../lib/serviceContractsApi';
 import { getJobAgreementByJob, sendAgreementEmail, type JobAgreement } from '../lib/jobAgreementsApi';
+import { getQuoteForJob, getQuoteStatusLabel, type Quote } from '../lib/quotesApi';
+import { resolveApprovedDocument } from '../lib/approvedDocument';
 import AgreementPreviewModal from '../components/agreements/AgreementPreviewModal';
 import AgreementCreateModal from '../components/agreements/AgreementCreateModal';
 import AgreementServicesSummary from '../components/agreements/AgreementServicesSummary';
@@ -227,6 +231,10 @@ export default function JobDetails() {
   const [showAgreementCreate, setShowAgreementCreate] = useState(false);
   const [agreementSending, setAgreementSending] = useState(false);
 
+  // Source quote (the job was converted from it) — the signed quote IS the
+  // job's approved contract: no agreement allowed, no second signature.
+  const [sourceQuote, setSourceQuote] = useState<Quote | null>(null);
+
   // Recurrence
   const [recurrence, setRecurrence] = useState<RecurrenceRule | null>(null);
   const [showRecurrenceSetup, setShowRecurrenceSetup] = useState(false);
@@ -369,6 +377,30 @@ export default function JobDetails() {
       });
       toast.success(language === 'fr' ? 'Visite mise à jour.' : 'Visit updated.');
       setEditingVisitId(null);
+      await handleVisitAdded();
+    } catch (err: any) {
+      toast.error(err?.message || (language === 'fr' ? 'Impossible de mettre à jour la visite.' : 'Could not update the visit.'));
+    } finally {
+      setVisitActionBusy(false);
+    }
+  };
+
+  // Check off a visit (→ completed) or bring it back (→ scheduled). This is
+  // what clears a "Late" job: derived_status counts past NON-completed visits.
+  const handleToggleVisitCompleted = async (visit: ScheduleEvent) => {
+    if (visitActionBusy) return;
+    const wasCompleted = (visit.status || '').toLowerCase() === 'completed';
+    setVisitActionBusy(true);
+    try {
+      const { error: updErr } = await supabase
+        .from('schedule_events')
+        .update({ status: wasCompleted ? 'scheduled' : 'completed', updated_at: new Date().toISOString() })
+        .eq('id', visit.id);
+      if (updErr) throw updErr;
+      invalidateScheduleCache();
+      toast.success(wasCompleted
+        ? (language === 'fr' ? 'Visite remise à faire.' : 'Visit set back to scheduled.')
+        : (language === 'fr' ? 'Visite complétée.' : 'Visit completed.'));
       await handleVisitAdded();
     } catch (err: any) {
       toast.error(err?.message || (language === 'fr' ? 'Impossible de mettre à jour la visite.' : 'Could not update the visit.'));
@@ -558,6 +590,16 @@ export default function JobDetails() {
   useEffect(() => {
     reloadAgreement();
   }, [reloadAgreement]);
+
+  // Load the source quote — when present it is the job's approved document.
+  useEffect(() => {
+    if (!id) return;
+    getQuoteForJob(id).then(setSourceQuote).catch(() => {});
+  }, [id]);
+
+  // Single source of truth: the job's contractual document is the quote OR
+  // the agreement, never both (same rule as the DB trigger).
+  const approvedDoc = resolveApprovedDocument(sourceQuote, agreement);
 
   // ── Agreement actions ──
   const handleAgreementDownload = async () => {
@@ -1212,12 +1254,9 @@ export default function JobDetails() {
           <div className="p-5">
             {visits.length === 0 && job.scheduled_at ? (
               <div className="rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="w-4 h-4 rounded border border-outline bg-surface-secondary inline-block shrink-0" />
-                  <span className="text-[13px] font-semibold text-text-primary">
-                    {formatDate(job.scheduled_at)}
-                  </span>
-                </div>
+                <span className="text-[13px] font-semibold text-text-primary">
+                  {formatDate(job.scheduled_at)}
+                </span>
                 <span className="text-[12px] text-text-tertiary">Not assigned yet</span>
               </div>
             ) : visits.length > 0 ? (
@@ -1285,21 +1324,39 @@ export default function JobDetails() {
                     || (jobAssigneeLabel ? `${language === 'fr' ? 'Technicien' : 'Technician'} · ${jobAssigneeLabel}` : null)
                     || jobTeam?.name
                     || (language === 'fr' ? 'Pas encore assignée' : 'Not assigned yet');
+                  const visitStatus = (visit.status || '').toLowerCase();
+                  const isCompleted = visitStatus === 'completed';
+                  const isCancelled = visitStatus === 'cancelled';
                   return (
                     <div key={visit.id} className="rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <span
+                        {/* Real checkbox: checking a visit marks it completed —
+                            this is what moves a "Late" job out of Late. */}
+                        <button
+                          type="button"
+                          onClick={() => void handleToggleVisitCompleted(visit)}
+                          disabled={visitActionBusy || isCancelled}
                           className={cn(
-                            'w-4 h-4 rounded border inline-block shrink-0',
-                            (visit.status || '').toLowerCase() === 'completed'
-                              ? 'border-success bg-success/20'
-                              : (visit.status || '').toLowerCase() === 'cancelled'
-                                ? 'border-danger bg-danger/20'
-                                : 'border-outline bg-surface-secondary'
+                            'w-4 h-4 rounded border inline-flex items-center justify-center shrink-0 transition-colors',
+                            isCompleted
+                              ? 'border-success bg-success text-white'
+                              : isCancelled
+                                ? 'border-danger bg-danger/20 cursor-default'
+                                : 'border-outline bg-surface hover:border-success'
                           )}
-                        />
+                          title={isCancelled
+                            ? (language === 'fr' ? 'Visite annulée' : 'Visit cancelled')
+                            : isCompleted
+                              ? (language === 'fr' ? 'Remettre la visite à faire' : 'Set visit back to scheduled')
+                              : (language === 'fr' ? 'Marquer la visite comme complétée' : 'Mark visit as completed')}
+                        >
+                          {isCompleted && <Check size={11} strokeWidth={3.5} />}
+                        </button>
                         <div className="min-w-0">
-                          <span className="block text-[13px] font-semibold text-text-primary truncate">
+                          <span className={cn(
+                            'block text-[13px] font-semibold truncate',
+                            isCompleted ? 'text-text-tertiary line-through' : 'text-text-primary'
+                          )}>
                             {visit.start_at ? formatDate(visit.start_at) : 'Unscheduled'}
                           </span>
                           {timeRange && (
@@ -1392,8 +1449,81 @@ export default function JobDetails() {
           </div>
         )}
 
-        {/* ═══ AGREEMENT (written contract) ═══ */}
-        {agreement ? (
+        {/* ═══ CLIENT APPROVAL — the job's contractual document is its quote
+             OR a written agreement, never both. A signed quote replaces the
+             agreement: no second signature is ever requested. ═══ */}
+        {approvedDoc?.type === 'QUOTE' && sourceQuote ? (
+          <div
+            className="rounded-xl border border-outline bg-surface overflow-hidden cursor-pointer transition-colors hover:border-primary/40"
+            onClick={() => navigate(`/quotes/${sourceQuote.id}`)}
+            title={language === 'fr' ? 'Ouvrir la soumission' : 'Open the quote'}
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
+              <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
+                <div className="icon-tile icon-tile-sm icon-tile-blue">
+                  <FileText size={13} strokeWidth={2} />
+                </div>
+                {language === 'fr' ? 'Soumission approuvée' : 'Approved Quote'} · #{sourceQuote.quote_number}
+              </h2>
+              <span className={cn(
+                'text-[11px] font-semibold px-2.5 py-0.5 rounded-full border',
+                sourceQuote.approved_at
+                  ? 'bg-success-light text-success border-success/30'
+                  : 'bg-primary/5 text-primary border-primary/20'
+              )}>
+                {sourceQuote.approved_at
+                  ? (language === 'fr' ? 'Signée' : 'Signed')
+                  : getQuoteStatusLabel(sourceQuote.status, language)}
+              </span>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-[0.05em]">
+                    {sourceQuote.approved_at
+                      ? (language === 'fr' ? 'Signée le' : 'Signed on')
+                      : (language === 'fr' ? 'Convertie le' : 'Converted on')}
+                  </p>
+                  <p className="text-[13px] font-semibold text-text-primary mt-0.5">
+                    {formatDate(sourceQuote.approved_at || sourceQuote.converted_at || sourceQuote.created_at)}
+                  </p>
+                </div>
+                {canSeePricing && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-[0.05em]">
+                      {language === 'fr' ? 'Total approuvé' : 'Approved total'}
+                    </p>
+                    <p className="text-[13px] font-semibold text-text-primary mt-0.5 tabular-nums">
+                      {formatCents(sourceQuote.total_cents || 0)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-[12px] text-text-tertiary leading-relaxed rounded-lg border border-outline-subtle bg-surface-secondary/40 px-3 py-2.5">
+                {language === 'fr'
+                  ? 'Cette soumission constitue le document approuvé de cette job. Aucun contrat séparé ni deuxième signature n’est requis.'
+                  : 'This quote serves as the approved document for this job. No separate agreement or second signature is required.'}
+              </p>
+
+              <div className="flex flex-wrap gap-2 print:hidden" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => navigate(`/quotes/${sourceQuote.id}`)}
+                  className="bg-primary text-primary-foreground rounded-lg px-3.5 py-1.5 text-[12px] font-semibold hover:opacity-90 transition-opacity inline-flex items-center gap-1.5"
+                >
+                  <Eye size={12} />
+                  {language === 'fr' ? 'Voir la soumission' : 'View quote'}
+                </button>
+                <button
+                  onClick={() => window.open(`/quote/${sourceQuote.view_token}`, '_blank')}
+                  className="glass-button !text-[12px] !px-3 !py-1.5"
+                >
+                  {language === 'fr' ? 'Vue client' : 'Client view'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : agreement ? (
           <div
             className="rounded-xl border border-outline bg-surface overflow-hidden cursor-pointer transition-colors hover:border-primary/40"
             onClick={() => window.open(`/contract/${agreement.view_token}`, '_blank')}
@@ -1538,24 +1668,42 @@ export default function JobDetails() {
             </div>
           </div>
         ) : (
-          /* No agreement yet — offer to create one for this existing job */
-          <div className="rounded-xl border border-outline bg-surface overflow-hidden print:hidden">
-            <div className="flex items-center justify-between px-5 py-3.5">
+          /* No quote and no agreement — the job saves fine, but warn that the
+             client has no approved document to review or sign. */
+          <div className="rounded-xl border border-warning/40 bg-surface overflow-hidden print:hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <div className="icon-tile icon-tile-sm icon-tile-blue">
                   <FileText size={13} strokeWidth={2} />
                 </div>
-                {language === 'fr' ? 'Contrat' : 'Agreement'}
-                <span className="text-[12px] font-normal text-text-tertiary ml-1">
-                  {language === 'fr' ? 'Aucun contrat pour ce job' : 'No agreement for this job'}
-                </span>
+                {language === 'fr' ? 'Approbation du client' : 'Client Approval'}
               </h2>
+              <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full border bg-warning-light text-warning border-warning/30">
+                {language === 'fr' ? 'Aucun document approuvé' : 'No approved document'}
+              </span>
+            </div>
+            <div className="p-5">
+              <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning-light px-3 py-2.5">
+                <AlertTriangle size={15} className="text-warning shrink-0 mt-0.5" />
+                <div className="text-[12.5px] text-text-secondary leading-relaxed">
+                  <p className="font-semibold text-text-primary">
+                    {language === 'fr'
+                      ? 'Aucun document approuvé n’est associé à cette job.'
+                      : 'No approved document is associated with this job.'}
+                  </p>
+                  <p className="mt-1">
+                    {language === 'fr'
+                      ? 'Le client ne pourra pas consulter le prix, les services et les conditions tant qu’un contrat n’aura pas été créé.'
+                      : 'The client will not be able to review the price, services and terms unless an agreement is created.'}
+                  </p>
+                </div>
+              </div>
               <button
                 onClick={() => setShowAgreementCreate(true)}
-                className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1"
+                className="mt-3 bg-primary text-primary-foreground rounded-lg px-3.5 py-1.5 text-[12px] font-semibold hover:opacity-90 transition-opacity inline-flex items-center gap-1.5"
               >
                 <Plus size={12} />
-                {language === 'fr' ? 'Créer un contrat' : 'Create agreement'}
+                {language === 'fr' ? 'Créer un contrat' : 'Create Agreement'}
               </button>
             </div>
           </div>
@@ -2030,7 +2178,8 @@ export default function JobDetails() {
         />
       )}
 
-      {job && (
+      {/* Creating an agreement is impossible when the job has a quote — the quote is the approved contract. */}
+      {job && !sourceQuote && (
         <AgreementCreateModal
           open={showAgreementCreate}
           onClose={() => setShowAgreementCreate(false)}

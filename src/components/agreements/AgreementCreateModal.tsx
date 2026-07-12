@@ -16,21 +16,20 @@ import AgreementDraftPreviewModal, { type AgreementDraftPreviewData } from './Ag
 interface AgreementCreateModalProps {
   open: boolean;
   onClose: () => void;
-  /** Exactly one of jobId / quoteId — the agreement feature is shared by jobs and quotes. */
-  jobId?: string;
-  quoteId?: string;
+  jobId: string;
   clientId: string | null;
   onCreated: (agreement: JobAgreement) => void;
-  /** Items/client/taxes of the parent job or quote — enables the client-view preview before creating. */
+  /** Items/client/taxes of the parent job — enables the client-view preview before creating. */
   preview?: AgreementDraftPreviewData;
 }
 
 /**
- * Create a written agreement for an EXISTING job or quote from its hub — same
- * fields as the "Contrat" box of the New Job form (signature required,
- * company logo default with override, prefilled editable T&C).
+ * Create a written agreement for an EXISTING job from its hub — same fields
+ * as the "Contrat" box of the New Job form (signature required, company logo
+ * default with override, prefilled editable T&C). Jobs only: a job converted
+ * from a quote keeps the signed quote as its approved contract instead.
  */
-export default function AgreementCreateModal({ open, onClose, jobId, quoteId, clientId, onCreated, preview }: AgreementCreateModalProps) {
+export default function AgreementCreateModal({ open, onClose, jobId, clientId, onCreated, preview }: AgreementCreateModalProps) {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const [requireSignature, setRequireSignature] = useState(true);
@@ -62,13 +61,12 @@ export default function AgreementCreateModal({ open, onClose, jobId, quoteId, cl
     setSaving(true);
     try {
       const created = await createJobAgreement({
-        job_id: jobId || null,
-        quote_id: quoteId || null,
+        job_id: jobId,
         client_id: clientId,
         require_signature: requireSignature,
         terms: terms.trim(),
         logo_url: logoUrl || null,
-      });
+      }, fr ? 'fr' : 'en');
       if (!created) {
         toast.error(fr
           ? 'La table des contrats n’existe pas encore — applique la migration SQL dans Supabase.'

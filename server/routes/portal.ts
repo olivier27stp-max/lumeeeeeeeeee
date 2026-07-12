@@ -99,6 +99,23 @@ router.get('/portal/:token', async (req, res) => {
       .order('scheduled_at', { ascending: false, nullsFirst: false })
       .limit(20);
 
+    // Written agreements (job contracts) — jobs created without a quote. The
+    // client can always view their contract, and sign it while pending.
+    // (Jobs converted from a quote have no agreement: the quote above IS the
+    // approved contract.)
+    let agreements: any[] = [];
+    try {
+      const { data } = await serviceClient
+        .from('job_agreements')
+        .select('id, job_id, status, require_signature, view_token, signed_at, created_at')
+        .eq('client_id', client.id)
+        .not('job_id', 'is', null)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      agreements = data || [];
+    } catch { /* migration pending */ }
+
     return res.json({
       client: {
         id: client.id,
@@ -138,6 +155,14 @@ router.get('/portal/:token', async (req, res) => {
         title: j.title || '',
         status: j.status || 'pending',
         scheduled_at: j.scheduled_at,
+      })),
+      contracts: agreements.map((a: any) => ({
+        id: a.id,
+        job_id: a.job_id,
+        status: a.status || 'draft',
+        require_signature: a.require_signature !== false,
+        signed_at: a.signed_at,
+        view_token: a.view_token,
       })),
     });
   } catch (error: any) {

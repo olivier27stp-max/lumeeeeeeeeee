@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
+import { AGREEMENT_BLOCKED_BY_QUOTE_MESSAGE } from './approvedDocument';
 
 /**
  * A job agreement is the written contract attached to a job: company
@@ -8,6 +9,11 @@ import { getCurrentOrgIdOrThrow } from './orgApi';
  * /contract/:view_token page. Composed live from the job until signed, then
  * frozen server-side into `snapshot`. See migration
  * `20260721000000_job_agreements.sql`.
+ *
+ * Agreements attach to JOBS ONLY. A job converted from a quote keeps the
+ * signed quote as its approved contract and can never receive an agreement
+ * (enforced here, in the UI and by the DB trigger of
+ * `20260733000000_agreements_job_only.sql`).
  */
 
 export type AgreementStatus = 'draft' | 'sent' | 'signed';
@@ -40,9 +46,8 @@ export interface AgreementSnapshot {
 export interface JobAgreement {
   id: string;
   org_id: string;
-  /** Exactly one of job_id / quote_id is set — the same agreement feature is shared by jobs and quotes. */
+  /** Null only on legacy quote-linked rows kept as read-only history. */
   job_id: string | null;
-  quote_id: string | null;
   client_id: string | null;
   require_signature: boolean;
   terms: string;
@@ -83,7 +88,6 @@ function mapAgreement(raw: any): JobAgreement {
     id: raw.id,
     org_id: raw.org_id,
     job_id: raw.job_id ?? null,
-    quote_id: raw.quote_id ?? null,
     client_id: raw.client_id ?? null,
     require_signature: raw.require_signature !== false,
     terms: raw.terms || '',
@@ -103,23 +107,34 @@ function mapAgreement(raw: any): JobAgreement {
 /**
  * Best-effort creation: if the migration hasn't been applied yet the insert
  * silently no-ops (returns null) so job creation never breaks.
+ *
+ * Refused when the job already has an associated quote — the quote is the
+ * approved contract (also enforced by the DB trigger for direct API calls).
  */
 export async function createJobAgreement(payload: {
-  job_id?: string | null;
-  quote_id?: string | null;
+  job_id: string;
   client_id?: string | null;
   require_signature: boolean;
   terms: string;
   logo_url?: string | null;
-}): Promise<JobAgreement | null> {
-  if (!payload.job_id && !payload.quote_id) throw new Error('Agreement needs a job or a quote.');
+}, language: 'en' | 'fr' = 'en'): Promise<JobAgreement | null> {
+  if (!payload.job_id) throw new Error('Agreement needs a job.');
   const orgId = await getCurrentOrgIdOrThrow();
+
+  const { data: linkedQuote } = await supabase
+    .from('quotes')
+    .select('id')
+    .eq('job_id', payload.job_id)
+    .is('deleted_at', null)
+    .limit(1)
+    .maybeSingle();
+  if (linkedQuote) throw new Error(AGREEMENT_BLOCKED_BY_QUOTE_MESSAGE[language]);
+
   const { data, error } = await supabase
     .from('job_agreements')
     .insert({
       org_id: orgId,
-      job_id: payload.job_id || null,
-      quote_id: payload.quote_id || null,
+      job_id: payload.job_id,
       client_id: payload.client_id || null,
       require_signature: payload.require_signature,
       terms: payload.terms,
@@ -136,25 +151,6 @@ export async function createJobAgreement(payload: {
     throw error;
   }
   return mapAgreement(data);
-}
-
-/** Latest agreement for a quote, or null (also null if migration pending). */
-export async function getJobAgreementByQuote(quoteId: string): Promise<JobAgreement | null> {
-  if (!quoteId) return null;
-  const { data, error } = await supabase
-    .from('job_agreements')
-    .select('*')
-    .eq('quote_id', quoteId)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) {
-    // 42703 = undefined_column (quote_id migration pending)
-    if (isMissingTableError(error) || (error as any).code === '42703') return null;
-    throw error;
-  }
-  return data ? mapAgreement(data) : null;
 }
 
 /** Latest agreement for a job, or null (also null if migration pending). */

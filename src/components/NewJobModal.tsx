@@ -1389,10 +1389,10 @@ export default function NewJobModal({
             require_signature: agreementRequireSignature,
             terms: agreementTerms.trim(),
             logo_url: agreementLogoUrl || null,
-          });
-        } catch (err) {
+          }, language === 'fr' ? 'fr' : 'en');
+        } catch (err: any) {
           console.error('[jobs] failed to create job agreement', err);
-          try { toast.error(language === 'fr' ? 'Le contrat n’a pas pu être créé.' : 'The agreement could not be created.'); } catch {}
+          try { toast.error(err?.message || (language === 'fr' ? 'Le contrat n’a pas pu être créé.' : 'The agreement could not be created.')); } catch {}
         }
       }
 

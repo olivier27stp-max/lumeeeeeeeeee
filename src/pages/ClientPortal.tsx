@@ -36,6 +36,15 @@ interface PortalData {
     status: string;
     scheduled_at: string | null;
   }>;
+  /** Written agreements of jobs created without a quote — viewable, and signable while pending. */
+  contracts?: Array<{
+    id: string;
+    job_id: string | null;
+    status: string;
+    require_signature: boolean;
+    signed_at: string | null;
+    view_token: string | null;
+  }>;
 }
 
 function formatMoney(cents: number): string {
@@ -280,7 +289,8 @@ export default function ClientPortal() {
                       {q.status.replace('_', ' ')}
                     </span>
                     <span className="text-sm font-bold text-gray-900 tabular-nums">{formatMoney(q.total_cents)}</span>
-                    {q.view_token && ['awaiting_response', 'changes_requested'].includes(q.status) && (
+                    {/* Approved/converted quotes stay viewable — the signed quote is the job's contract. */}
+                    {q.view_token && ['awaiting_response', 'changes_requested', 'approved', 'converted'].includes(q.status) && (
                       <a
                         href={`/quote/${q.view_token}`}
                         className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
@@ -291,6 +301,53 @@ export default function ClientPortal() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Contracts (written agreements of jobs created without a quote) */}
+        {data.contracts && data.contracts.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900">Contracts</h2>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {data.contracts.map((c) => {
+                const job = data.jobs.find((j) => j.id === c.job_id) || null;
+                const pendingSignature = c.status !== 'signed' && c.require_signature;
+                return (
+                  <div key={c.id} className="flex items-center justify-between px-5 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <FileText size={16} className="text-gray-400" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{job?.title || 'Contract'}</p>
+                        <p className="text-xs text-gray-400">
+                          {c.status === 'signed'
+                            ? `Signed${c.signed_at ? ` on ${formatDate(c.signed_at)}` : ''}`
+                            : pendingSignature
+                              ? 'Signature required'
+                              : 'Awaiting review'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                        c.status === 'signed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                      }`}>
+                        {c.status === 'signed' ? 'Signed' : pendingSignature ? 'Pending signature' : 'Sent'}
+                      </span>
+                      {c.view_token && (
+                        <a
+                          href={`/contract/${c.view_token}`}
+                          className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                        >
+                          {pendingSignature ? 'View & sign' : 'View'} <ExternalLink size={11} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

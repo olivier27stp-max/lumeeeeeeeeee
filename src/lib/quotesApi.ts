@@ -403,6 +403,27 @@ export async function getQuoteById(quoteId: string): Promise<QuoteDetail | null>
   };
 }
 
+/**
+ * The quote a job was converted from (quotes.job_id is set at conversion).
+ * That quote is the job's approved contract — when present, the job can
+ * never receive a written agreement and no second signature is requested.
+ */
+export async function getQuoteForJob(jobId: string): Promise<Quote | null> {
+  if (!jobId) return null;
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase
+    .from('quotes')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('job_id', jobId)
+    .is('deleted_at', null)
+    .order('converted_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as Quote) || null;
+}
+
 export async function listQuotesForLead(leadId: string): Promise<Quote[]> {
   const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase

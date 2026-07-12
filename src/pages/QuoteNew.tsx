@@ -13,7 +13,6 @@ import {
   type QuoteLineItemInput, type QuoteSectionInput, type QuoteServicePlan,
 } from '../lib/quotesApi';
 import { getCompanySettings } from '../lib/invoicesApi';
-import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { peekNextNumbers } from '../lib/numbersApi';
 import { supabase } from '../lib/supabase';
 import { createLeadScoped } from '../lib/leadsApi';
@@ -21,8 +20,6 @@ import AddressAutocomplete, { type StructuredAddress } from '../components/Addre
 import { listPropertiesByClient, type PropertyRecord } from '../lib/propertiesApi';
 import ServicePicker from '../components/ServicePicker';
 import QuoteRenderer from '../components/quote/QuoteRenderer';
-import AgreementDraftPreviewModal, { type AgreementDraftPreviewData } from '../components/agreements/AgreementDraftPreviewModal';
-import AgreementServicesSummary from '../components/agreements/AgreementServicesSummary';
 import type { QuoteRenderData } from '../components/quote/types';
 import type { PredefinedService } from '../lib/servicesApi';
 import type { QuotePreset } from '../types';
@@ -31,9 +28,7 @@ import { useTranslation } from '../i18n';
 import SpecificNotesInline, { type SpecificNotesInlineHandle } from '../components/SpecificNotesInline';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
-import FileUpload from '../components/FileUpload';
 import { STORAGE_BUCKETS, uploadFile } from '../lib/storage';
-import { createJobAgreement, DEFAULT_AGREEMENT_TERMS } from '../lib/jobAgreementsApi';
 
 /* ── Design (maquette approuvée) : texte noir pur / blanc pur uniquement ── */
 const OUTLINE = 'border-[#e8e8e8] dark:border-white/10';
@@ -199,14 +194,6 @@ export default function QuoteNew() {
   const [depositValue, setDepositValue] = useState('');
   const [requirePaymentMethod, setRequirePaymentMethod] = useState(false);
 
-  // ── Contrat (agreement) — identique aux jobs ──
-  const [createAgreement, setCreateAgreement] = useState(false);
-  const [agreementRequireSignature, setAgreementRequireSignature] = useState(true);
-  const [agreementTerms, setAgreementTerms] = useState('');
-  const [agreementLogoUrl, setAgreementLogoUrl] = useState<string | null>(null);
-  const [agreementPreviewOpen, setAgreementPreviewOpen] = useState(false);
-  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
-
   // ── Divers ──
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -308,23 +295,6 @@ export default function QuoteNew() {
     }).catch(() => setTaxConfigured(false));
   }, [clientId, contactMode]);
 
-  // ── Contrat : termes par défaut + logo d'entreprise (scopé à l'org active) ──
-  useEffect(() => {
-    if (!createAgreement) return;
-    setAgreementTerms((prev) => prev || DEFAULT_AGREEMENT_TERMS[fr ? 'fr' : 'en']);
-    if (companyLogoUrl === null) {
-      getCurrentOrgIdOrThrow()
-        .then((orgId) => supabase
-          .from('company_settings')
-          .select('logo_url')
-          .eq('org_id', orgId)
-          .limit(1)
-          .maybeSingle())
-        .then(({ data }) => setCompanyLogoUrl(data?.logo_url || ''))
-        .then(undefined, () => setCompanyLogoUrl(''));
-    }
-  }, [createAgreement, fr, companyLogoUrl]);
-
   // ── Calculs ──
   const subtotalCents = useMemo(() =>
     lineItems.reduce((s, i) => {
@@ -353,49 +323,6 @@ export default function QuoteNew() {
   [subtotalCents, discountCents, taxEnabled, taxRate, taxBreakdown]);
 
   const totalCents = subtotalCents - discountCents + taxCents;
-
-  // Draft contract preview — same document the client will see on /contract/:token
-  const agreementPreviewData: AgreementDraftPreviewData = useMemo(() => {
-    let name: string | null = null, email: string | null = null, phone: string | null = null, address: string | null = null;
-    if (contactMode === 'new') {
-      name = `${leadFirstName} ${leadLastName}`.trim() || leadCompany || null;
-      email = leadEmail || null;
-      phone = leadPhone || null;
-      address = leadAddress || leadAddressSearch || null;
-    } else if (clientDetail) {
-      name = `${clientDetail.first_name || ''} ${clientDetail.last_name || ''}`.trim() || clientDetail.company || null;
-      email = clientDetail.email;
-      phone = clientDetail.phone;
-      address = clientDetail.address;
-    }
-    return {
-      numberLabel: `CTR-${quoteNumber.trim() || nextQuoteNumber || '—'}`,
-      clientName: name,
-      clientEmail: email,
-      clientPhone: phone,
-      propertyAddress: address,
-      // Unnamed service lines with a price still count in the quote totals —
-      // keep them on the contract too (generic "Service" label).
-      items: lineItems
-        .filter((it) => it.item_type === 'service' && !it.is_optional && (it.name.trim() || (parseFloat(it.unitPriceInput) || 0) > 0))
-        .map((it) => {
-          const qty = parseFloat(it.qtyInput) || 0;
-          const unit = Math.round((parseFloat(it.unitPriceInput) || 0) * 100);
-          return { name: it.name.trim() || 'Service', qty, unit_price_cents: unit, total_cents: Math.max(0, Math.round(qty * unit)) };
-        }),
-      taxLines: taxBreakdown.length > 0
-        ? taxBreakdown.map((tx) => ({ label: tx.name, rate: tx.rate, amount_cents: tx.amount_cents }))
-        : (taxEnabled && taxRate > 0 ? [{ label: taxLabel || 'Tax', rate: taxRate, amount_cents: taxCents }] : []),
-      // Full subtotal + explicit discount — the contract shows the same lines as the quote page.
-      subtotalCents,
-      discountCents,
-      discountPercent: discountType === 'percentage' ? (parseFloat(discountValue) || 0) : null,
-    };
-  }, [
-    contactMode, leadFirstName, leadLastName, leadCompany, leadEmail, leadPhone, leadAddress,
-    leadAddressSearch, clientDetail, quoteNumber, nextQuoteNumber, lineItems, taxBreakdown,
-    taxEnabled, taxRate, taxLabel, taxCents, subtotalCents, discountCents, discountType, discountValue,
-  ]);
 
   const depositCents = useMemo(() => {
     if (!depositRequired) return 0;
@@ -713,21 +640,6 @@ export default function QuoteNew() {
         line_items: filteredItems,
         sections,
       });
-
-      // Contrat écrit lié au devis — même feature que les jobs, best-effort.
-      if (createAgreement) {
-        try {
-          await createJobAgreement({
-            quote_id: detail.quote.id,
-            client_id: quoteClientId || leadId,
-            require_signature: agreementRequireSignature,
-            terms: agreementTerms,
-            logo_url: agreementLogoUrl,
-          });
-        } catch (agErr: any) {
-          console.error('[QuoteNew] agreement creation failed:', agErr?.message);
-        }
-      }
 
       if (specificNotesRef.current?.hasContent()) {
         await specificNotesRef.current.saveNote('quote', detail.quote.id);
@@ -1202,139 +1114,6 @@ export default function QuoteNew() {
                 <Plus size={13} strokeWidth={2.5} /> {tq.addLineItem}
               </button>
             </div>
-          </div>
-
-          {/* Contrat (agreement) — identique aux jobs */}
-          <div className={CARD}>
-            <div className={cn(CARD_LABEL, 'mb-1')}>{fr ? 'Contrat (agreement)' : 'Agreement'}</div>
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <p className="text-[12.5px] font-semibold text-black dark:text-white">
-                  {fr ? 'Créer un contrat' : 'Create agreement'}
-                </p>
-                <p className={cn(HINT, 'mt-0.5')}>
-                  {fr
-                    ? 'Optionnel — contrat écrit lié à ce devis, identique aux contrats de jobs.'
-                    : 'Optional — written contract attached to this quote, same as job agreements.'}
-                </p>
-              </div>
-              <Switch on={createAgreement} onChange={(v) => { setCreateAgreement(v); setDirty(true); }} />
-            </div>
-
-            {createAgreement && (
-              <div className={cn('border-t pt-3.5 mt-1.5 space-y-3.5', OUTLINE)}>
-                <label className="flex items-start gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={agreementRequireSignature}
-                    onChange={e => setAgreementRequireSignature(e.target.checked)}
-                    className="h-[15px] w-[15px] mt-0.5 rounded accent-black dark:accent-white"
-                  />
-                  <span>
-                    <span className="text-[12.5px] font-semibold text-black dark:text-white block">
-                      {fr ? 'Signature du client obligatoire' : 'Client signature required'}
-                    </span>
-                    <span className={cn(HINT, 'mt-0.5 block')}>
-                      {fr
-                        ? 'Le client signe via un lien public (/contract/…) — même pad de signature que les jobs.'
-                        : 'The client signs via a public link (/contract/…) — same signature pad as jobs.'}
-                    </span>
-                  </span>
-                </label>
-
-                <div>
-                  <span className={FIELD}>{fr ? 'Logo sur le contrat' : 'Logo on the contract'}</span>
-                  <div className={cn('flex items-center gap-3 rounded-xl border p-3', OUTLINE)}>
-                    {(agreementLogoUrl || companyLogoUrl) ? (
-                      <img
-                        src={agreementLogoUrl || companyLogoUrl || ''}
-                        alt="Logo"
-                        className={cn('h-11 w-11 rounded-lg object-contain border bg-[#fafafa] dark:bg-[#1c1c1f] shrink-0', OUTLINE)}
-                      />
-                    ) : (
-                      <div className={cn('h-11 w-11 rounded-lg bg-[#f5f5f5] dark:bg-[#1c1c1f] border shrink-0', OUTLINE)} />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-semibold text-black dark:text-white">
-                        {agreementLogoUrl
-                          ? (fr ? 'Logo personnalisé' : 'Custom logo')
-                          : (fr ? "Logo de l'entreprise" : 'Company logo')}
-                      </p>
-                      <p className={cn(HINT, 'mt-0')}>
-                        {fr ? 'Par défaut : Réglages → Détails de l’entreprise' : 'Default: Settings → Company details'}
-                      </p>
-                    </div>
-                    {agreementLogoUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setAgreementLogoUrl(null)}
-                        className="text-[12px] font-semibold text-black dark:text-white underline underline-offset-[3px] shrink-0"
-                      >
-                        {fr ? 'Retirer' : 'Remove'}
-                      </button>
-                    )}
-                  </div>
-                  <div className="mt-2">
-                    <FileUpload
-                      bucket={STORAGE_BUCKETS.COMPANY_LOGOS}
-                      path="agreements"
-                      accept="image/*"
-                      maxSizeMb={5}
-                      normalizeImageMaxDim={1024}
-                      onUpload={(url) => setAgreementLogoUrl(url)}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className={FIELD}>{fr ? 'Termes et conditions' : 'Terms and conditions'}</label>
-                  <textarea
-                    value={agreementTerms}
-                    onChange={e => setAgreementTerms(e.target.value)}
-                    rows={7}
-                    className={cn(TEXTAREA, 'text-[12.5px]')}
-                  />
-                  <p className={HINT}>
-                    {fr
-                      ? 'Pré-rempli avec les termes par défaut — modifiable pour ce contrat.'
-                      : 'Prefilled with the default terms — editable for this agreement.'}
-                  </p>
-                </div>
-
-                {/* Live recap — always mirrors the items/prices entered on this page */}
-                <AgreementServicesSummary
-                  title={fr ? 'Services et prix du devis — inclus au contrat' : 'Quote services and prices — included on the contract'}
-                  data={{
-                    items: agreementPreviewData.items,
-                    subtotalCents,
-                    discount: discountCents > 0
-                      ? { amountCents: discountCents, percent: discountType === 'percentage' ? (parseFloat(discountValue) || 0) : null }
-                      : null,
-                    taxLines: agreementPreviewData.taxLines.map((tx) => ({ label: tx.label, rate: tx.rate, amount_cents: tx.amount_cents ?? 0 })),
-                    totalCents,
-                  }}
-                />
-                <p className={HINT}>
-                  {fr
-                    ? "Mis à jour en direct avec les items de cette page. La date de création et les informations de l'entreprise sont aussi ajoutées automatiquement."
-                    : 'Updates live with the items on this page. Creation date and company info are added automatically too.'}
-                </p>
-
-                <button type="button" onClick={() => setAgreementPreviewOpen(true)} className={GHOST}>
-                  <Eye size={13} />
-                  {fr ? 'Prévisualiser le contrat (vue client)' : 'Preview contract (client view)'}
-                </button>
-
-                <AgreementDraftPreviewModal
-                  open={agreementPreviewOpen}
-                  onClose={() => setAgreementPreviewOpen(false)}
-                  requireSignature={agreementRequireSignature}
-                  terms={agreementTerms}
-                  logoUrl={agreementLogoUrl || companyLogoUrl}
-                  data={agreementPreviewData}
-                />
-              </div>
-            )}
           </div>
 
           {/* Contrat / avis */}
