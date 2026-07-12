@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { cn, formatCurrency } from '../lib/utils';
 import { listClients, createClient } from '../lib/clientsApi';
 import { listSalespeople, applyJobExtras } from '../lib/jobsApi';
-import { addVisit } from '../lib/scheduleApi';
+import { addVisit, listJobVisits, rescheduleEvent, unscheduleJob } from '../lib/scheduleApi';
 import { createServiceContract } from '../lib/serviceContractsApi';
 import { createJobAgreement, DEFAULT_AGREEMENT_TERMS } from '../lib/jobAgreementsApi';
 import AgreementDraftPreviewModal, { type AgreementDraftPreviewData } from './agreements/AgreementDraftPreviewModal';
@@ -39,6 +39,29 @@ interface LineItemForm {
   unitPriceInput: string;
   included: boolean;
   source_service_id?: string | null;
+}
+
+// One visit row in the form. Jobs have no date of their own — the calendar
+// shows visits (schedule_events), and a job can hold several of them (a job
+// without visits is a draft). `eventId` is set when the row mirrors an
+// existing schedule_event (edit mode).
+interface VisitDraft {
+  key: string;
+  eventId: string | null;
+  date: string;      // YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string;   // HH:mm
+}
+
+function newVisitDraft(seed?: Partial<VisitDraft>): VisitDraft {
+  return {
+    key: crypto.randomUUID(),
+    eventId: null,
+    date: new Date().toISOString().slice(0, 10),
+    startTime: '09:00',
+    endTime: '10:00',
+    ...seed,
+  };
 }
 
 export interface JobDraftLineItem {
@@ -299,9 +322,20 @@ export default function NewJobModal({
   const [assignedUserId, setAssignedUserId] = useState('');
   // "Ask for a review" setup
   const [askForReview, setAskForReview] = useState(false);
+  // startDate/startTime/endTime are DERIVED from the first visit (see the sync
+  // effect below) and only feed TeamSuggestions/conflict checks + the service
+  // plan's own time inputs. The source of truth for scheduling is `visitDrafts`.
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('10:00');
+  // Visits (schedule_events) of the job — a job can hold several, or none (draft).
+  const [visitDrafts, setVisitDrafts] = useState<VisitDraft[]>([newVisitDraft()]);
+  const [removedVisitIds, setRemovedVisitIds] = useState<string[]>([]);
+  // Edit mode: false until the job's real visits are loaded; while false the
+  // submit falls back to the legacy single-date path and adding rows is blocked,
+  // so we can never duplicate or drop a visit we haven't seen.
+  const [visitsLoaded, setVisitsLoaded] = useState(true);
+  const originalVisitsRef = useRef<Map<string, { date: string; startTime: string; endTime: string }>>(new Map());
   // Service plan (job_type = recurring, creation only): the year being planned,
   // the planned months mapped to their exact visit date (month 1-12 -> YYYY-MM-DD),
   // and whether a contract should be created alongside the job.
@@ -414,6 +448,39 @@ export default function NewJobModal({
     if (serviceVisitDates[0]) setStartDate(serviceVisitDates[0]);
   }, [isServicePlan, serviceVisitDates]);
 
+  // ── Visits (one_off / edit) ──
+  const sortedVisitDrafts = useMemo(
+    () => [...visitDrafts].sort((a, b) =>
+      `${a.date}T${a.startTime || '09:00'}`.localeCompare(`${b.date}T${b.startTime || '09:00'}`)),
+    [visitDrafts]
+  );
+  // Feed TeamSuggestions / conflict checks with the first (earliest) visit.
+  useEffect(() => {
+    if (isServicePlan) return;
+    const first = sortedVisitDrafts[0];
+    setStartDate(first?.date || '');
+    setStartTime(first?.startTime || '');
+    setEndTime(first?.endTime || '');
+  }, [isServicePlan, sortedVisitDrafts]);
+  const updateVisitDraft = (key: string, patch: Partial<VisitDraft>) => {
+    setVisitDrafts((prev) => prev.map((v) => (v.key === key ? { ...v, ...patch } : v)));
+  };
+  const addVisitDraft = () => {
+    setDirty(true);
+    setVisitDrafts((prev) => {
+      const last = prev[prev.length - 1];
+      return [...prev, newVisitDraft(last ? { date: last.date, startTime: last.startTime, endTime: last.endTime } : undefined)];
+    });
+  };
+  const removeVisitDraft = (key: string) => {
+    setDirty(true);
+    setVisitDrafts((prev) => {
+      const row = prev.find((v) => v.key === key);
+      if (row?.eventId) setRemovedVisitIds((ids) => (ids.includes(row.eventId!) ? ids : [...ids, row.eventId!]));
+      return prev.filter((v) => v.key !== key);
+    });
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     setInlineError(null);
@@ -465,27 +532,53 @@ export default function NewJobModal({
     setServiceYear(new Date().getFullYear());
     setServiceMonthDates({});
     setCreateContract(false);
+    setRemovedVisitIds([]);
+    originalVisitsRef.current = new Map();
     if (isEditMode) {
       const editStartDate = formatLocalDateInput(initialValues?.scheduled_at || null);
       const editStartTime = formatLocalTimeInput(initialValues?.scheduled_at || null);
       const editEndTime = formatLocalTimeInput(initialValues?.end_at || null);
-      setStartDate(editStartDate);
-      setStartTime(editStartTime);
-      setEndTime(editEndTime);
+      // Seed one row from the job's mirrored date until the real visits load.
+      setVisitDrafts(editStartDate
+        ? [newVisitDraft({ date: editStartDate, startTime: editStartTime || '09:00', endTime: editEndTime || '10:00' })]
+        : []);
       setStatus(initialValues?.status || (editStartDate ? 'Scheduled' : 'Draft'));
+      setVisitsLoaded(false);
+      if (initialValues?.id) {
+        listJobVisits(initialValues.id)
+          .then((events) => {
+            if (events.length > 0) {
+              const rows = events.map((ev) => ({
+                key: ev.id,
+                eventId: ev.id,
+                date: formatLocalDateInput(ev.start_at),
+                startTime: formatLocalTimeInput(ev.start_at) || '09:00',
+                endTime: formatLocalTimeInput(ev.end_at) || '10:00',
+              }));
+              setVisitDrafts(rows);
+              originalVisitsRef.current = new Map(rows.map((r) => [r.eventId as string, {
+                date: r.date, startTime: r.startTime, endTime: r.endTime,
+              }]));
+            }
+            setVisitsLoaded(true);
+          })
+          .catch((err) => console.error('[jobs] failed to load job visits', err));
+      }
     } else if (source?.type === 'pipeline') {
-      setStartDate('');
-      setStartTime('');
-      setEndTime('');
+      setVisitDrafts([]);
       setStatus('Draft');
+      setVisitsLoaded(true);
     } else {
       const presetStartDate = formatLocalDateInput(initialValues?.scheduled_at || null);
       const presetStartTime = formatLocalTimeInput(initialValues?.scheduled_at || null);
       const presetEndTime = formatLocalTimeInput(initialValues?.end_at || null);
-      setStartDate(presetStartDate || new Date().toISOString().slice(0, 10));
-      setStartTime(presetStartTime || '09:00');
-      setEndTime(presetEndTime || '10:00');
+      setVisitDrafts([newVisitDraft({
+        date: presetStartDate || new Date().toISOString().slice(0, 10),
+        startTime: presetStartTime || '09:00',
+        endTime: presetEndTime || '10:00',
+      })]);
       setStatus(initialValues?.status || (presetStartDate ? 'Scheduled' : 'Draft'));
+      setVisitsLoaded(true);
     }
     setRequiresInvoicing(initialValues?.requires_invoicing ?? true);
     setBillingSplit(initialValues?.billing_split ?? false);
@@ -758,6 +851,10 @@ export default function NewJobModal({
     setJobNumber('');
     setSalespersonId('');
     setJobType('one_off');
+    setVisitDrafts([newVisitDraft()]);
+    setRemovedVisitIds([]);
+    setVisitsLoaded(true);
+    originalVisitsRef.current = new Map();
     setStartDate(new Date().toISOString().slice(0, 10));
     setStartTime('09:00');
     setEndTime('10:00');
@@ -1062,21 +1159,33 @@ export default function NewJobModal({
     }
     const visitStartTime = startTime || '09:00';
     const visitEndTime = endTime || '10:00';
+    // Visits: each row needs a date and a coherent time window. A job without
+    // visits is allowed — it stays a draft (no calendar entry).
+    if (!isServicePlan) {
+      for (const v of sortedVisitDrafts) {
+        if (!v.date) {
+          const msg = language === 'fr' ? 'Chaque visite doit avoir une date.' : 'Every visit needs a date.';
+          setInlineError(msg);
+          try { toast.error(msg); } catch {}
+          return;
+        }
+        const vStart = buildDateTime(v.date, v.startTime || '09:00');
+        const vEnd = buildDateTime(v.date, v.endTime || '10:00');
+        if (!vStart || !vEnd || new Date(vEnd) <= new Date(vStart)) {
+          setInlineError(t.modals.endTimeAfterStart);
+          return;
+        }
+      }
+    }
+    // The job's own scheduled_at/end_at mirror its FIRST visit (the server
+    // recomputes them from the visit set afterwards anyway).
+    const firstVisit = !isServicePlan ? (sortedVisitDrafts[0] || null) : null;
     const scheduledAt = isServicePlan
       ? buildDateTime(serviceVisitDates[0], visitStartTime)
-      : (startDate && startTime ? buildDateTime(startDate, startTime) : null);
+      : (firstVisit ? buildDateTime(firstVisit.date, firstVisit.startTime || '09:00') : null);
     const endAt = isServicePlan
       ? buildDateTime(serviceVisitDates[0], visitEndTime)
-      : (startDate && endTime ? buildDateTime(startDate, endTime) : null);
-    // Allow draft jobs without dates — only validate if partially filled
-    if (endAt && !scheduledAt) {
-      setInlineError(t.modals.startTimeRequired);
-      return;
-    }
-    if (scheduledAt && endAt && new Date(endAt) <= new Date(scheduledAt)) {
-      setInlineError(t.modals.endTimeAfterStart);
-      return;
-    }
+      : (firstVisit ? buildDateTime(firstVisit.date, firstVisit.endTime || '10:00') : null);
 
     // If user picked a non-draft status but didn't pick a date, confirm the
     // silent demotion to Draft (otherwise job wouldn't appear on calendar).
@@ -1151,6 +1260,33 @@ export default function NewJobModal({
 
     setInternalSaving(true);
     try {
+      // Edit mode: sync the visit set (remove / move / add) BEFORE saving the
+      // job. With >= 2 active visits, rpc_schedule_job is a no-op on the events,
+      // so the job-level save can never clobber what we just synced.
+      if (isEditMode && initialValues?.id && !isServicePlan && visitsLoaded) {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Montreal';
+        for (const eventId of removedVisitIds) {
+          await unscheduleJob({ jobId: initialValues.id, eventId });
+        }
+        for (const v of sortedVisitDrafts) {
+          const vStart = buildDateTime(v.date, v.startTime || '09:00');
+          const vEnd = buildDateTime(v.date, v.endTime || '10:00');
+          if (!vStart || !vEnd) continue;
+          if (v.eventId) {
+            const orig = originalVisitsRef.current.get(v.eventId);
+            const changed = !orig
+              || orig.date !== v.date
+              || orig.startTime !== (v.startTime || '09:00')
+              || orig.endTime !== (v.endTime || '10:00');
+            if (changed) {
+              await rescheduleEvent({ eventId: v.eventId, startAt: vStart, endAt: vEnd, timezone });
+            }
+          } else {
+            await addVisit({ jobId: initialValues.id, startAt: vStart, endAt: vEnd, teamId: teamIdPayload, timezone });
+          }
+        }
+      }
+
       const createdJob = await onSave({
         id: initialValues?.id,
         title: title.trim(),
@@ -1194,6 +1330,23 @@ export default function NewJobModal({
           askForReview,
           assignedUserId: assignedUserPayload,
         });
+      }
+
+      // Multiple visits (one_off creation): the first visit is created with the
+      // job itself (scheduled_at above); every additional row becomes its own
+      // schedule_event on the job.
+      if (createdJob?.id && !isEditMode && !isServicePlan && sortedVisitDrafts.length > 1) {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Montreal';
+        for (const v of sortedVisitDrafts.slice(1)) {
+          const vStart = buildDateTime(v.date, v.startTime || '09:00');
+          const vEnd = buildDateTime(v.date, v.endTime || '10:00');
+          if (!vStart || !vEnd) continue;
+          try {
+            await addVisit({ jobId: createdJob.id, startAt: vStart, endAt: vEnd, teamId: teamIdPayload, timezone });
+          } catch (err) {
+            console.error('[jobs] failed to add extra visit', v.date, err);
+          }
+        }
       }
 
       // Service plan: create one visit per additional planned month (the first
@@ -1695,7 +1848,10 @@ export default function NewJobModal({
               </Box>
               ) : (
               <Box
-                title={t.modals.schedule}
+                title={language === 'fr' ? 'Visites' : 'Visits'}
+                subtitle={language === 'fr'
+                  ? 'Le job n’a pas de date : ce sont ses visites qui apparaissent au calendrier. Sans visite, le job reste en brouillon.'
+                  : 'A job has no date of its own: its visits are what show on the calendar. Without a visit, the job stays a draft.'}
                 right={(
                   <a
                     href="/calendar"
@@ -1708,44 +1864,86 @@ export default function NewJobModal({
                   </a>
                 )}
               >
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-text-tertiary">{t.modals.startDate}</label>
-                      <div className="relative">
-                        <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                        <input
-                          type="date"
-                          value={startDate}
-                          onChange={(event) => setStartDate(event.target.value)}
-                          className="glass-input w-full pl-10"
-                        />
-                      </div>
+                  {sortedVisitDrafts.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-outline-subtle bg-surface-secondary/30 p-6 text-center">
+                      <Calendar size={24} className="text-text-tertiary mx-auto mb-2 opacity-40" />
+                      <p className="text-sm text-text-secondary">
+                        {language === 'fr' ? 'Aucune visite planifiée' : 'No visits scheduled'}
+                      </p>
+                      <p className="text-xs text-text-tertiary mt-1">
+                        {language === 'fr'
+                          ? 'Ajoutez une visite pour placer ce job au calendrier.'
+                          : 'Add a visit to place this job on the calendar.'}
+                      </p>
                     </div>
+                  ) : (
                     <div className="space-y-2">
-                      <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
-                      <div className="relative">
-                        <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                        <input
-                          type="time"
-                          value={startTime}
-                          onChange={(event) => setStartTime(event.target.value)}
-                          className="glass-input w-full pl-10"
-                        />
-                      </div>
+                      {sortedVisitDrafts.map((visit, idx) => (
+                        <div
+                          key={visit.key}
+                          className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3"
+                        >
+                          <div className="md:col-span-5 space-y-1">
+                            <label className="text-xs font-medium text-text-tertiary">
+                              {(language === 'fr' ? 'Visite' : 'Visit')} {idx + 1} — {t.modals.startDate}
+                            </label>
+                            <div className="relative">
+                              <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                              <input
+                                type="date"
+                                value={visit.date}
+                                onChange={(event) => updateVisitDraft(visit.key, { date: event.target.value })}
+                                className="glass-input w-full pl-10"
+                              />
+                            </div>
+                          </div>
+                          <div className="md:col-span-3 space-y-1">
+                            <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
+                            <div className="relative">
+                              <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                              <input
+                                type="time"
+                                value={visit.startTime}
+                                onChange={(event) => updateVisitDraft(visit.key, { startTime: event.target.value })}
+                                className="glass-input w-full pl-10"
+                              />
+                            </div>
+                          </div>
+                          <div className="md:col-span-3 space-y-1">
+                            <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
+                            <div className="relative">
+                              <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                              <input
+                                type="time"
+                                value={visit.endTime}
+                                onChange={(event) => updateVisitDraft(visit.key, { endTime: event.target.value })}
+                                className="glass-input w-full pl-10"
+                              />
+                            </div>
+                          </div>
+                          <div className="md:col-span-1 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => removeVisitDraft(visit.key)}
+                              className="p-1.5 rounded-md text-text-tertiary hover:text-danger hover:bg-danger/10 transition-colors"
+                              title={language === 'fr' ? 'Retirer cette visite' : 'Remove this visit'}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
-                      <div className="relative">
-                        <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                        <input
-                          type="time"
-                          value={endTime}
-                          onChange={(event) => setEndTime(event.target.value)}
-                          className="glass-input w-full pl-10"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={addVisitDraft}
+                    disabled={isEditMode && !visitsLoaded}
+                    className="glass-button !py-2 !px-4 inline-flex items-center gap-2 text-sm disabled:opacity-50"
+                  >
+                    <Plus size={14} />
+                    {language === 'fr' ? 'Ajouter une visite' : 'Add a visit'}
+                  </button>
               </Box>
               )}
 

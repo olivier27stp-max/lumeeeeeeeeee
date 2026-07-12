@@ -267,6 +267,18 @@ export async function rescheduleEvent(payload: {
   };
 }
 
+/** All active visits (schedule_events) of a job, earliest first. */
+export async function listJobVisits(jobId: string): Promise<ScheduleEventRecord[]> {
+  const { data, error } = await supabase
+    .from('schedule_events')
+    .select('id,job_id,team_id,start_at,end_at,timezone,status,notes,deleted_at')
+    .eq('job_id', jobId)
+    .is('deleted_at', null)
+    .order('start_at', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(mapScheduleRow);
+}
+
 /**
  * Add an ADDITIONAL visit to a job. Unlike scheduleUnscheduledJob (which upserts
  * the job's first visit), this always inserts a new schedule_event so a single

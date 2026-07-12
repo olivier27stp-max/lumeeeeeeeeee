@@ -19,6 +19,7 @@ import {
   Plus,
   Printer,
   Send,
+  Trash2,
   X,
   Copy,
 } from 'lucide-react';
@@ -31,6 +32,7 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { getJobById, getJobLineItems, updateJob, type JobLineItem } from '../lib/jobsApi';
 import AddVisitModal from '../components/AddVisitModal';
+import { rescheduleEvent, unscheduleJob } from '../lib/scheduleApi';
 import { createInvoiceFromJob, getInvoiceRowUiStatus } from '../lib/invoicesApi';
 import {
   listJobBillingMilestones,
@@ -144,6 +146,12 @@ export default function JobDetails() {
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
   const [showAddVisit, setShowAddVisit] = useState(false);
+  // Inline visit editing (reschedule) + per-visit removal
+  const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
+  const [editVisitDate, setEditVisitDate] = useState('');
+  const [editVisitStart, setEditVisitStart] = useState('');
+  const [editVisitEnd, setEditVisitEnd] = useState('');
+  const [visitActionBusy, setVisitActionBusy] = useState(false);
 
   // Action states
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
@@ -285,6 +293,62 @@ export default function JobDetails() {
       } catch { /* non-blocking */ }
     }
   }, [id, loadVisits]);
+
+  // ── Visit actions: inline reschedule + removal ──
+  const startEditVisit = (visit: ScheduleEvent) => {
+    if (!visit.start_at) return;
+    const start = new Date(visit.start_at);
+    const end = visit.end_at ? new Date(visit.end_at) : null;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    setEditingVisitId(visit.id);
+    setEditVisitDate(`${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`);
+    setEditVisitStart(`${pad(start.getHours())}:${pad(start.getMinutes())}`);
+    setEditVisitEnd(end ? `${pad(end.getHours())}:${pad(end.getMinutes())}` : '');
+  };
+
+  const handleSaveVisit = async () => {
+    if (!editingVisitId || visitActionBusy) return;
+    if (!editVisitDate || !editVisitStart || !editVisitEnd) {
+      toast.error(language === 'fr' ? 'Date et heures requises.' : 'Date and times are required.');
+      return;
+    }
+    const start = new Date(`${editVisitDate}T${editVisitStart}`);
+    const end = new Date(`${editVisitDate}T${editVisitEnd}`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      toast.error(language === 'fr' ? "L'heure de fin doit être après le début." : 'End time must be after the start.');
+      return;
+    }
+    setVisitActionBusy(true);
+    try {
+      await rescheduleEvent({ eventId: editingVisitId, startAt: start.toISOString(), endAt: end.toISOString() });
+      toast.success(language === 'fr' ? 'Visite déplacée.' : 'Visit rescheduled.');
+      setEditingVisitId(null);
+      await handleVisitAdded();
+    } catch (err: any) {
+      toast.error(err?.message || (language === 'fr' ? 'Impossible de déplacer la visite.' : 'Could not reschedule the visit.'));
+    } finally {
+      setVisitActionBusy(false);
+    }
+  };
+
+  const handleDeleteVisit = async (visitId: string) => {
+    if (!id || visitActionBusy) return;
+    const msg = language === 'fr'
+      ? 'Retirer cette visite du calendrier ? Le job est conservé.'
+      : 'Remove this visit from the calendar? The job itself is kept.';
+    if (typeof window !== 'undefined' && !window.confirm(msg)) return;
+    setVisitActionBusy(true);
+    try {
+      await unscheduleJob({ jobId: id, eventId: visitId });
+      toast.success(language === 'fr' ? 'Visite retirée.' : 'Visit removed.');
+      if (editingVisitId === visitId) setEditingVisitId(null);
+      await handleVisitAdded();
+    } catch (err: any) {
+      toast.error(err?.message || (language === 'fr' ? 'Impossible de retirer la visite.' : 'Could not remove the visit.'));
+    } finally {
+      setVisitActionBusy(false);
+    }
+  };
 
   // ── Load invoices for this job ──
   const loadInvoices = useCallback(async () => {
@@ -1100,20 +1164,6 @@ export default function JobDetails() {
             </button>
           </div>
           <div className="p-5">
-            {/* Time range */}
-            {job.scheduled_at && (
-              <p className="text-[12px] font-semibold text-text-secondary mb-3">
-                {(() => {
-                  const start = new Date(job.scheduled_at);
-                  const end = job.end_at ? new Date(job.end_at) : null;
-                  const sameDay = end && start.toDateString() === end.toDateString();
-                  if (!end || sameDay) return 'All day / Any time';
-                  const tloc = language === 'fr' ? 'fr-CA' : 'en-CA';
-                  return `${start.toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })} — ${end.toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}`;
-                })()}
-              </p>
-            )}
-
             {visits.length === 0 && job.scheduled_at ? (
               <div className="rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -1126,22 +1176,104 @@ export default function JobDetails() {
               </div>
             ) : visits.length > 0 ? (
               <div className="space-y-2">
-                {visits.map((visit) => (
-                  <div key={visit.id} className="rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="w-4 h-4 rounded border border-outline bg-surface-secondary inline-block shrink-0" />
-                      <span className="text-[13px] font-semibold text-text-primary">
-                        {visit.start_at ? formatDate(visit.start_at) : 'Unscheduled'}
-                      </span>
+                {visits.map((visit) => {
+                  const tloc = language === 'fr' ? 'fr-CA' : 'en-CA';
+                  const timeRange = visit.start_at
+                    ? `${new Date(visit.start_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}${visit.end_at ? ` — ${new Date(visit.end_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}` : ''}`
+                    : null;
+                  if (editingVisitId === visit.id) {
+                    return (
+                      <div key={visit.id} className="rounded-lg border border-primary/40 bg-surface-secondary p-3.5 space-y-3 print:hidden">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Date</label>
+                            <input type="date" value={editVisitDate} onChange={(e) => setEditVisitDate(e.target.value)} className="glass-input mt-1 w-full" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{language === 'fr' ? 'Début' : 'Start'}</label>
+                            <input type="time" value={editVisitStart} onChange={(e) => setEditVisitStart(e.target.value)} className="glass-input mt-1 w-full" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{language === 'fr' ? 'Fin' : 'End'}</label>
+                            <input type="time" value={editVisitEnd} onChange={(e) => setEditVisitEnd(e.target.value)} className="glass-input mt-1 w-full" />
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setEditingVisitId(null)}
+                            disabled={visitActionBusy}
+                            className="glass-button !text-[12px] !px-3 !py-1.5"
+                          >
+                            {language === 'fr' ? 'Annuler' : 'Cancel'}
+                          </button>
+                          <button
+                            onClick={() => void handleSaveVisit()}
+                            disabled={visitActionBusy}
+                            className="rounded-lg bg-text-primary px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+                          >
+                            {visitActionBusy
+                              ? (language === 'fr' ? 'Enregistrement…' : 'Saving…')
+                              : (language === 'fr' ? 'Enregistrer' : 'Save')}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={visit.id} className="rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className={cn(
+                            'w-4 h-4 rounded border inline-block shrink-0',
+                            (visit.status || '').toLowerCase() === 'completed'
+                              ? 'border-success bg-success/20'
+                              : (visit.status || '').toLowerCase() === 'cancelled'
+                                ? 'border-danger bg-danger/20'
+                                : 'border-outline bg-surface-secondary'
+                          )}
+                        />
+                        <div className="min-w-0">
+                          <span className="block text-[13px] font-semibold text-text-primary truncate">
+                            {visit.start_at ? formatDate(visit.start_at) : 'Unscheduled'}
+                          </span>
+                          {timeRange && (
+                            <span className="block text-[12px] text-text-tertiary tabular-nums">{timeRange}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[12px] text-text-tertiary hidden sm:block">
+                          {visit.team_id
+                            ? (language === 'fr' ? 'Équipe assignée' : 'Team assigned')
+                            : (language === 'fr' ? 'Pas encore assignée' : 'Not assigned yet')}
+                        </span>
+                        <button
+                          onClick={() => startEditVisit(visit)}
+                          disabled={visitActionBusy || !visit.start_at}
+                          className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors disabled:opacity-40 print:hidden"
+                          title={language === 'fr' ? 'Modifier la date / l’heure' : 'Edit date / time'}
+                        >
+                          <Edit3 size={13} />
+                        </button>
+                        <button
+                          onClick={() => void handleDeleteVisit(visit.id)}
+                          disabled={visitActionBusy}
+                          className="p-1.5 rounded-md text-text-tertiary hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-40 print:hidden"
+                          title={language === 'fr' ? 'Retirer cette visite' : 'Remove this visit'}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
-                    <span className="text-[12px] text-text-tertiary">
-                      {visit.team_id ? 'Team assigned' : 'Not assigned yet'}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
-              <p className="text-[13px] text-text-tertiary py-4 text-center">No visits scheduled</p>
+              <p className="text-[13px] text-text-tertiary py-4 text-center">
+                {language === 'fr'
+                  ? 'Aucune visite planifiée — ajoutez une visite pour placer ce job au calendrier.'
+                  : 'No visits scheduled — add a visit to place this job on the calendar.'}
+              </p>
             )}
           </div>
         </div>
