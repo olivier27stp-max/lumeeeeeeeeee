@@ -232,6 +232,7 @@ export default function ClientDetails() {
   // Tabs & dropdown
   const [activeTab, setActiveTab] = useState<OverviewTab>('active');
   const [showActionMenu, setShowActionMenu] = useState(false);
+  const [showActiveWorkMenu, setShowActiveWorkMenu] = useState(false);
 
   // Real quotes (from quotes table, not invoices)
   const [realQuotes, setRealQuotes] = useState<Quote[]>([]);
@@ -806,6 +807,51 @@ export default function ClientDetails() {
               {/* Active Work Tab */}
               {activeTab === 'active' && (
                 <div className="space-y-2.5">
+                  <div className="flex justify-end mb-2">
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowActiveWorkMenu(!showActiveWorkMenu)}
+                        className="inline-flex items-center justify-center w-8 h-8 bg-surface border border-outline rounded-md text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors"
+                        title={language === 'fr' ? 'Créer' : 'Create'}
+                      >
+                        <Plus size={15} />
+                      </button>
+                      {showActiveWorkMenu && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowActiveWorkMenu(false)} />
+                          <div className="absolute right-0 top-full mt-1 z-50 w-44 bg-surface border border-outline rounded-md shadow-lg py-1">
+                            <button
+                              onClick={() => { setShowActiveWorkMenu(false); setIsQuoteCreateOpen(true); }}
+                              className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
+                            >
+                              <FileText size={13} /> {t.clientDetails.newQuote}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowActiveWorkMenu(false);
+                                openJobModal({
+                                  initialValues: {
+                                    client_id: client.id,
+                                    property_address: fullAddress || null,
+                                  },
+                                  onCreated: () => { if (id) loadAllData(id); },
+                                });
+                              }}
+                              className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
+                            >
+                              <Briefcase size={13} /> {t.clientDetails.newJob}
+                            </button>
+                            <button
+                              onClick={() => navigate(`/invoices/new?clientId=${client.id}`)}
+                              className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
+                            >
+                              <DollarSign size={13} /> {t.invoices.newInvoice}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                   {activeJobs.length === 0 ? (
                     <p className="text-[13px] text-text-tertiary py-4 text-center">{t.clientDetails.noActiveWork}</p>
                   ) : activeJobs.map(renderJobRow)}
