@@ -2167,25 +2167,26 @@ export default function JobDetails() {
 
                 {isEditing ? (
                   <>
-                    {/* Edit mode: date + time window + team */}
+                    {/* Edit mode: date + time window + team.
+                        Labels and input text: black bold (white in dark mode). */}
                     <div className="space-y-3">
                       <div>
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Date</label>
-                        <input type="date" value={editVisitDate} onChange={(e) => setEditVisitDate(e.target.value)} className="glass-input mt-1 w-full" />
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">Date</label>
+                        <input type="date" value={editVisitDate} onChange={(e) => setEditVisitDate(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Début' : 'Start'}</label>
-                          <input type="time" value={editVisitStart} onChange={(e) => setEditVisitStart(e.target.value)} className="glass-input mt-1 w-full" />
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Début' : 'Start'}</label>
+                          <input type="time" value={editVisitStart} onChange={(e) => setEditVisitStart(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Fin' : 'End'}</label>
-                          <input type="time" value={editVisitEnd} onChange={(e) => setEditVisitEnd(e.target.value)} className="glass-input mt-1 w-full" />
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Fin' : 'End'}</label>
+                          <input type="time" value={editVisitEnd} onChange={(e) => setEditVisitEnd(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
                         </div>
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Équipe' : 'Team'}</label>
-                        <select value={editVisitTeamId} onChange={(e) => setEditVisitTeamId(e.target.value)} className="glass-input mt-1 w-full">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Équipe' : 'Team'}</label>
+                        <select value={editVisitTeamId} onChange={(e) => setEditVisitTeamId(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white">
                           <option value="">{fr ? 'Non assignée' : 'Unassigned'}</option>
                           {teams
                             .filter((tm) => tm.is_active !== false || tm.id === editVisitTeamId)
