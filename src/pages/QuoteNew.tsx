@@ -374,12 +374,14 @@ export default function QuoteNew() {
       clientEmail: email,
       clientPhone: phone,
       propertyAddress: address,
+      // Unnamed service lines with a price still count in the quote totals —
+      // keep them on the contract too (generic "Service" label).
       items: lineItems
-        .filter((it) => it.item_type === 'service' && !it.is_optional && it.name.trim())
+        .filter((it) => it.item_type === 'service' && !it.is_optional && (it.name.trim() || (parseFloat(it.unitPriceInput) || 0) > 0))
         .map((it) => {
           const qty = parseFloat(it.qtyInput) || 0;
           const unit = Math.round((parseFloat(it.unitPriceInput) || 0) * 100);
-          return { name: it.name, qty, unit_price_cents: unit, total_cents: Math.max(0, Math.round(qty * unit)) };
+          return { name: it.name.trim() || 'Service', qty, unit_price_cents: unit, total_cents: Math.max(0, Math.round(qty * unit)) };
         }),
       taxLines: taxBreakdown.length > 0
         ? taxBreakdown.map((tx) => ({ label: tx.name, rate: tx.rate, amount_cents: tx.amount_cents }))
@@ -613,11 +615,13 @@ export default function QuoteNew() {
       : (clients.find(c => c.id === clientId)?.label || '');
     const finalTitle = title.trim() || `${tq.quoteForPrefix} ${contactLabel}`.trim() || tq.newQuote;
 
+    // Priced-but-unnamed service lines count in the quote totals — persist them
+    // too (generic "Service" label) so the document and contract match the page.
     const filteredItems: QuoteLineItemInput[] = lineItems
-      .filter(i => i.name.trim() || i.item_type !== 'service')
+      .filter(i => i.name.trim() || i.item_type !== 'service' || (parseFloat(i.unitPriceInput) || 0) > 0)
       .map((i, idx) => ({
         source_service_id: i.source_service_id,
-        name: i.name.trim(),
+        name: i.name.trim() || (i.item_type === 'service' ? 'Service' : ''),
         description: i.description || null,
         quantity: Math.max(0.01, parseFloat(i.qtyInput) || 1),
         unit_price_cents: Math.max(0, Math.round((parseFloat(i.unitPriceInput) || 0) * 100)),

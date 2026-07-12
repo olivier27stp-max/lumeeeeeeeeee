@@ -720,12 +720,14 @@ export default function NewJobModal({
         || prefilledAddress
         || selectedClient?.address
         || null,
+    // Unnamed lines with a price still count in the page totals — keep them on
+    // the contract too (generic "Service" label) instead of silently dropping them.
     items: lineItems
-      .filter((it) => it.included && it.name.trim())
+      .filter((it) => it.included && (it.name.trim() || (Number.parseFloat(it.unitPriceInput || '0') || 0) > 0))
       .map((it) => {
         const qty = Number.parseFloat(it.qtyInput || '0') || 0;
         const unit = Math.round((Number.parseFloat(it.unitPriceInput || '0') || 0) * 100);
-        return { name: it.name, qty, unit_price_cents: unit, total_cents: Math.max(0, Math.round(qty * unit)) };
+        return { name: it.name.trim() || 'Service', qty, unit_price_cents: unit, total_cents: Math.max(0, Math.round(qty * unit)) };
       }),
     taxLines: taxLines.filter((tx) => tx.enabled && tx.rate > 0).map((tx) => ({ label: tx.label, rate: tx.rate })),
     subtotalCents: effectiveSubtotalCents,
@@ -1135,10 +1137,13 @@ export default function NewJobModal({
       }
     }
 
+    // Keep priced-but-unnamed lines (service not in the catalog): they count in
+    // the page totals, so they must reach job_line_items — and the contract —
+    // too, under a generic "Service" label.
     const filteredItems = lineItems
-      .filter((item) => item.name.trim())
+      .filter((item) => item.name.trim() || (Number.parseFloat(item.unitPriceInput || '0') || 0) > 0)
       .map((item) => ({
-        name: item.name.trim(),
+        name: item.name.trim() || 'Service',
         qty: Math.max(1, Number.parseFloat(item.qtyInput || '0') || 1),
         unit_price_cents: Math.max(0, Math.round((Number.parseFloat(item.unitPriceInput || '0') || 0) * 100)),
         included: item.included,
