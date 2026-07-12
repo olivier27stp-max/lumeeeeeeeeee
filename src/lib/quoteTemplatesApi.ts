@@ -124,13 +124,3 @@ export async function setTemplateActive(id: string, isActive: boolean): Promise<
   const { template } = await res.json();
   return template;
 }
-
-export async function seedQuoteTemplates(): Promise<{ seeded: boolean; templates?: QuoteTemplate[] }> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API_BASE}/quote-templates/seed`, {
-    method: 'POST',
-    headers,
-  });
-  if (!res.ok) throw new Error((await res.json()).error || 'Failed to seed templates');
-  return res.json();
-}
