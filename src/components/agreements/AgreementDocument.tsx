@@ -61,7 +61,7 @@ export default function AgreementDocument({ data, language }: { data: AgreementD
             <img
               src={logoUrl}
               alt={data.company.name}
-              className="h-24 max-w-[360px] object-contain mb-3"
+              className="h-32 max-w-[440px] object-contain mb-3"
               onError={(e) => { (e.target as HTMLImageElement).src = LUME_LOGO_URL; }}
             />
             <h2 className="text-[14px] font-semibold text-[#111]">{data.company.name}</h2>

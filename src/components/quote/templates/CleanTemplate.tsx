@@ -68,7 +68,7 @@ export default function CleanTemplate({ data }: { data: QuoteRenderData }) {
         <div className="flex items-start justify-between">
           <div>
             {data.company_logo_url ? (
-              <img src={data.company_logo_url} alt={data.company_name} className="h-24 max-w-[360px] object-contain" />
+              <img src={data.company_logo_url} alt={data.company_name} className="h-32 max-w-[440px] object-contain" />
             ) : (
               <p className="text-[18px] font-semibold tracking-tight text-[#0a0a0a]">{data.company_name}</p>
             )}

@@ -43,7 +43,7 @@ export default function MinimalProTemplate({ data }: { data: QuoteRenderData }) 
         <div className="flex items-start justify-between">
           <div>
             {data.company_logo_url
-              ? <img src={data.company_logo_url} alt={data.company_name} className="h-20 max-w-[320px] object-contain" />
+              ? <img src={data.company_logo_url} alt={data.company_name} className="h-28 max-w-[400px] object-contain" />
               : <p className="text-[20px] font-semibold tracking-tight">{data.company_name}</p>}
           </div>
           <p className="text-[28px] font-semibold tracking-tight text-[#111]">Quote</p>
@@ -191,30 +191,6 @@ export default function MinimalProTemplate({ data }: { data: QuoteRenderData }) 
               <p className="text-[11px] text-[#6b7280] mt-0.5">Due upon acceptance to confirm this quote</p>
             </div>
             <p className="text-[20px] font-bold">{fmt(data.deposit_cents)}</p>
-          </div>
-        )}
-
-        {/* ── Written agreement attached to this quote ── */}
-        {data.agreement && (
-          <div className="mt-6 rounded-lg border border-[#111] px-5 py-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[13px] font-semibold">Written Agreement</p>
-              <p className="text-[11px] text-[#6b7280] mt-0.5">
-                {data.agreement.status === 'signed'
-                  ? 'Signed — view the attached contract'
-                  : data.agreement.require_signature
-                    ? 'Signature required — review and sign the attached contract'
-                    : 'Review the attached contract'}
-              </p>
-            </div>
-            <a
-              href={`/contract/${data.agreement.view_token}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 rounded-md bg-[#111] px-4 py-2 text-[12px] font-semibold text-white"
-            >
-              {data.agreement.status !== 'signed' && data.agreement.require_signature ? 'View & sign' : 'View contract'}
-            </a>
           </div>
         )}
 
