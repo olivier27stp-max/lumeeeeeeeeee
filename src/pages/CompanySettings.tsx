@@ -247,6 +247,44 @@ export default function CompanySettings() {
     }
   };
 
+  // Persist the logo immediately on upload/remove — leaving it to the page's
+  // global "Save" button meant an uploaded logo was silently lost when the
+  // user navigated away without saving (recurring trap: logo_url stayed empty
+  // while every quote/agreement/invoice preview showed no logo).
+  const persistLogo = async (url: string) => {
+    try {
+      if (form.id) {
+        const { error } = await supabase
+          .from('company_settings')
+          .update({ logo_url: url, updated_at: new Date().toISOString() })
+          .eq('id', form.id);
+        if (error) throw error;
+      } else {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+        const orgId = await getCurrentOrgIdOrThrow();
+        const { data, error } = await supabase
+          .from('company_settings')
+          .upsert({ org_id: orgId, logo_url: url, created_by: user.id, updated_at: new Date().toISOString() }, { onConflict: 'org_id' })
+          .select()
+          .single();
+        if (error) throw error;
+        if (data) setForm((prev) => ({ ...prev, id: data.id, org_id: data.org_id }));
+      }
+      setForm((prev) => ({ ...prev, logo_url: url }));
+      toast.success(url
+        ? (language === 'fr' ? 'Logo enregistré.' : 'Logo saved.')
+        : (language === 'fr' ? 'Logo retiré.' : 'Logo removed.'));
+    } catch (err: any) {
+      // Fall back to the manual flow: keep the value in the form so the
+      // global "Save" button can persist it.
+      update('logo_url', url);
+      toast.error(err?.message || (language === 'fr'
+        ? 'Le logo n’a pas pu être enregistré automatiquement — clique « Enregistrer ».'
+        : 'Could not auto-save the logo — click "Save".'));
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -295,10 +333,7 @@ export default function CompanySettings() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      update('logo_url', '');
-                      setSaved(false);
-                    }}
+                    onClick={() => { void persistLogo(''); }}
                     className="glass-button inline-flex items-center gap-1.5 text-[11px] !text-danger !border-danger/30 hover:!bg-danger/10"
                   >
                     <Trash2 size={11} />
@@ -314,9 +349,7 @@ export default function CompanySettings() {
               accept="image/*"
               maxSizeMb={5}
               normalizeImageMaxDim={1024}
-              onUpload={(url) => {
-                update('logo_url', url);
-              }}
+              onUpload={(url) => { void persistLogo(url); }}
             />
           )}
         </div>
