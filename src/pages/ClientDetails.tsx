@@ -803,19 +803,17 @@ export default function ClientDetails() {
                   </button>
                 ))}
               </div>
-              {activeTab === 'active' && (
-                <button
-                  onClick={(e) => {
-                    if (activeWorkMenuPos) { setActiveWorkMenuPos(null); return; }
-                    const r = e.currentTarget.getBoundingClientRect();
-                    setActiveWorkMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
-                  }}
-                  className="shrink-0 mb-1.5 inline-flex items-center justify-center w-7 h-7 bg-surface border border-outline rounded-md text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors"
-                  title={language === 'fr' ? 'Créer' : 'Create'}
-                >
-                  <Plus size={14} />
-                </button>
-              )}
+              <button
+                onClick={(e) => {
+                  if (activeWorkMenuPos) { setActiveWorkMenuPos(null); return; }
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setActiveWorkMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+                }}
+                className="shrink-0 mb-1.5 inline-flex items-center justify-center w-7 h-7 bg-surface border border-outline rounded-md text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors"
+                title={language === 'fr' ? 'Créer' : 'Create'}
+              >
+                <Plus size={14} />
+              </button>
               {activeWorkMenuPos && client && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setActiveWorkMenuPos(null)} />

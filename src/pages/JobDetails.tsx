@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRecentItems } from '../hooks/useRecentItems';
 import {
-  AlertTriangle,
   ArrowLeft,
   Briefcase,
   Calendar,
@@ -1610,9 +1609,9 @@ export default function JobDetails() {
             </div>
           </div>
         ) : (
-          /* No quote and no agreement — the job saves fine, but warn that the
-             client has no approved document to review or sign. */
-          <div className="rounded-xl border border-warning/40 bg-surface overflow-hidden print:hidden">
+          /* No quote and no agreement — the job saves fine; note quietly that
+             the client has no approved document to review or sign. */
+          <div className="rounded-xl border border-outline bg-surface overflow-hidden print:hidden">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <div className="icon-tile icon-tile-sm icon-tile-blue">
@@ -1620,33 +1619,32 @@ export default function JobDetails() {
                 </div>
                 {language === 'fr' ? 'Approbation du client' : 'Client Approval'}
               </h2>
-              <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full border bg-warning-light text-warning border-warning/30">
+              <span className="text-[11px] font-medium text-text-tertiary">
                 {language === 'fr' ? 'Aucun document approuvé' : 'No approved document'}
               </span>
             </div>
             <div className="p-5">
-              <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning-light px-3 py-2.5">
-                <AlertTriangle size={15} className="text-warning shrink-0 mt-0.5" />
-                <div className="text-[12.5px] text-text-secondary leading-relaxed">
-                  <p className="font-semibold text-text-primary">
+              <div className="rounded-lg border border-dashed border-outline px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-[13px] font-medium text-text-secondary">
                     {language === 'fr'
                       ? 'Aucun document approuvé n’est associé à cette job.'
                       : 'No approved document is associated with this job.'}
                   </p>
-                  <p className="mt-1">
+                  <p className="text-[12px] text-text-tertiary mt-0.5">
                     {language === 'fr'
                       ? 'Le client ne pourra pas consulter le prix, les services et les conditions tant qu’un contrat n’aura pas été créé.'
                       : 'The client will not be able to review the price, services and terms unless an agreement is created.'}
                   </p>
                 </div>
+                <button
+                  onClick={() => setShowAgreementCreate(true)}
+                  className="glass-button-primary inline-flex items-center gap-1.5 text-[12px] shrink-0"
+                >
+                  <Plus size={13} />
+                  {language === 'fr' ? 'Créer un contrat' : 'Create Agreement'}
+                </button>
               </div>
-              <button
-                onClick={() => setShowAgreementCreate(true)}
-                className="mt-3 bg-primary text-primary-foreground rounded-lg px-3.5 py-1.5 text-[12px] font-semibold hover:opacity-90 transition-opacity inline-flex items-center gap-1.5"
-              >
-                <Plus size={12} />
-                {language === 'fr' ? 'Créer un contrat' : 'Create Agreement'}
-              </button>
             </div>
           </div>
         )}
