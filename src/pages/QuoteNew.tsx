@@ -135,6 +135,8 @@ export default function QuoteNew() {
   const [contactMode, setContactMode] = useState<'new' | 'existing'>('existing');
   const [clients, setClients] = useState<Array<{ id: string; label: string }>>([]);
   const [clientId, setClientId] = useState('');
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientListOpen, setClientListOpen] = useState(false);
   const [clientDetail, setClientDetail] = useState<ClientDetail | null>(null);
   const [leadFirstName, setLeadFirstName] = useState('');
   const [leadLastName, setLeadLastName] = useState('');
@@ -739,6 +741,14 @@ export default function QuoteNew() {
     ? (`${clientDetail.first_name || ''} ${clientDetail.last_name || ''}`.trim() || clientDetail.company || '')
     : '';
 
+  // Recherche client : ne pas filtrer quand le champ affiche le libellé du client
+  // déjà sélectionné, pour que rouvrir la liste montre tous les clients.
+  const selectedClientLabel = clientId ? (clients.find(c => c.id === clientId)?.label || '') : '';
+  const clientQuery = clientSearch.trim().toLowerCase();
+  const filteredClients = (!clientQuery || clientSearch === selectedClientLabel)
+    ? clients
+    : clients.filter(c => c.label.toLowerCase().includes(clientQuery));
+
   const sectionToggles = [
     { key: 'intro', label: tq.introduction, enabled: introEnabled, toggle: setIntroEnabled },
     { key: 'disclaimer', label: tq.contractDisclaimer, enabled: disclaimerEnabled, toggle: setDisclaimerEnabled },
@@ -837,10 +847,42 @@ export default function QuoteNew() {
             ) : (
               <div>
                 <label className={FIELD}>{tq.clientLabel}</label>
-                <select value={clientId} onChange={e => setClientId(e.target.value)} className={INPUT}>
-                  <option value="">{tq.selectClientOpt}</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                </select>
+                <div className="relative">
+                  <input
+                    value={clientSearch || (clientId ? (clients.find(c => c.id === clientId)?.label || '') : '')}
+                    onChange={e => { setClientSearch(e.target.value); setClientListOpen(true); if (!e.target.value) setClientId(''); }}
+                    onFocus={() => setClientListOpen(true)}
+                    className={INPUT}
+                    placeholder={tq.selectClientOpt}
+                    autoComplete="off"
+                  />
+                  {clientListOpen && (
+                    <div className={cn('absolute z-50 top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-[10px] border bg-white dark:bg-[#0e0e11] shadow-lg', OUTLINE)}>
+                      {filteredClients.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => { setClientId(c.id); setClientSearch(c.label); setClientListOpen(false); }}
+                          className={cn(
+                            'w-full text-left px-3 py-2 text-[13px] text-black dark:text-white hover:bg-[#f5f5f5] dark:hover:bg-[#1c1c1f] transition-colors flex items-center justify-between gap-2',
+                            c.id === clientId && 'font-bold bg-[#f5f5f5] dark:bg-[#1c1c1f]',
+                          )}
+                        >
+                          <span className="truncate">{c.label}</span>
+                          {c.id === clientId && <Check size={13} className="shrink-0" />}
+                        </button>
+                      ))}
+                      {filteredClients.length === 0 && (
+                        <p className="px-3 py-2 text-[13px] text-black dark:text-white opacity-60">
+                          {fr ? 'Aucun client trouvé.' : 'No clients found.'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {clientListOpen && (
+                  <div className="fixed inset-0 z-40" onClick={() => { setClientListOpen(false); setClientSearch(''); }} />
+                )}
                 <p className={HINT}>
                   {fr ? 'Inclut les leads — un lead est un client avec le statut « lead ».' : 'Includes leads — a lead is a client with the "lead" status.'}
                 </p>
