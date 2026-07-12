@@ -1,28 +1,25 @@
 /**
  * invoice-numbering.ts — per-org concurrent-safe invoice numbering.
  *
- * Uses the DB RPC claim_next_invoice_number(uuid) (added in the 20260624000001
- * migration). Falls back to a timestamp suffix if the RPC is not yet deployed
- * so older environments keep working.
+ * Numbers are digits only (« 42 ») and always the smallest free number of the
+ * org — assignment lives in the DB function invoice_next_number(uuid)
+ * (20260732 migration). Falls back to a numeric timestamp if the RPC is not
+ * yet deployed so older environments keep working.
  */
 import { getServiceClient } from './supabase';
 
-const PAD = 6;
-const PREFIX = 'INV-';
-
 export async function claimNextInvoiceNumber(orgId: string): Promise<string> {
   const admin = getServiceClient();
-  const { data, error } = await admin.rpc('claim_next_invoice_number', { p_org: orgId });
+  const { data, error } = await admin.rpc('invoice_next_number', { p_org: orgId });
   if (!error && data != null) {
-    return `${PREFIX}${String(data).padStart(PAD, '0')}`;
+    return String(data);
   }
 
-  // Fallback — legacy deploys without the sequence table/RPC.
+  // Fallback — legacy deploys without the numbering function.
   console.warn('[invoice-numbering] RPC unavailable, using timestamp fallback:', error?.message);
-  const ts = Date.now().toString(36).toUpperCase();
-  return `${PREFIX}${ts}`;
+  return String(Date.now());
 }
 
 export function formatInvoiceNumber(seq: number): string {
-  return `${PREFIX}${String(seq).padStart(PAD, '0')}`;
+  return String(seq);
 }

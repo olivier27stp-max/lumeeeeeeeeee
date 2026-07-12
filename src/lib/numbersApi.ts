@@ -5,7 +5,7 @@ export interface NextNumbers {
   job: string | null;
   /** Prochain numéro de soumission, ex. « 8 » */
   quote: string | null;
-  /** Prochain numéro de facture formaté, ex. « INV-000042 » */
+  /** Prochain numéro de facture, ex. « 42 » (chiffres seulement) */
   invoice: string | null;
   /** Partie numérique du prochain numéro de facture, ex. 42 */
   invoiceSeq: number | null;
@@ -53,8 +53,9 @@ const ENTITY_TABLES: Record<NumberedEntity, { table: string; column: string; sof
 /**
  * Vérifie si un numéro est déjà pris dans l'org courante (warning doublon).
  * `digits` = partie numérique saisie. La RLS limite la requête à l'org.
- * Les factures sont comparées sur leur suffixe numérique (prefix configurable
- * via company_settings.invoice_prefix). En cas d'échec de la vérification,
+ * Les numéros sont stockés en chiffres seulement (« 42 »); les factures
+ * matchent aussi le format hérité « INV-000042 » au cas où une ancienne
+ * ligne n'a pas pu être normalisée. En cas d'échec de la vérification,
  * retourne false : la validation serveur (rpc_update_entity_number / RPCs de
  * création) tranche au save.
  */
@@ -67,7 +68,7 @@ export async function isEntityNumberTaken(
     const { table, column, softDeleteFilter } = ENTITY_TABLES[entity];
     let query = supabase.from(table).select('id').limit(1);
     if (entity === 'invoice') {
-      query = query.like(column, `%${digits.padStart(6, '0')}`);
+      query = query.or(`${column}.eq.${digits},${column}.like.%${digits.padStart(6, '0')}`);
     } else {
       query = query.eq(column, digits);
     }
@@ -83,8 +84,8 @@ export async function isEntityNumberTaken(
 /**
  * Change le numéro d'une entité depuis sa page hub. Validation serveur
  * (numérique, ≤ prochain disponible, pas de doublon) + avance du compteur de
- * l'org, le tout atomique. Retourne le numéro stocké (formaté pour les
- * factures). Lève l'erreur serveur telle quelle en cas de refus.
+ * l'org, le tout atomique. Retourne le numéro stocké (chiffres seulement).
+ * Lève l'erreur serveur telle quelle en cas de refus.
  */
 export async function updateEntityNumber(
   entity: NumberedEntity,
@@ -99,5 +100,5 @@ export async function updateEntityNumber(
   if (error) throw error;
   if (typeof data === 'string' && data) return data;
   // Filet : la RPC retourne toujours la valeur stockée; on reconstruit au cas où.
-  return entity === 'invoice' ? `INV-${digits.padStart(6, '0')}` : digits;
+  return digits;
 }

@@ -299,14 +299,14 @@ async function handleRecurringInvoices(supabase: SupabaseClient) {
         .select('description, qty, unit_price_cents, line_total_cents')
         .eq('invoice_id', inv.id);
 
-      // Per-org concurrent-safe sequence; falls back to timestamp suffix if RPC unavailable.
+      // Plus petit numéro libre de l'org, chiffres seulement (invoice_next_number);
+      // fallback numérique si la fonction n'est pas disponible.
       let newInvoiceNumber: string;
-      const { data: nextNum, error: numErr } = await supabase.rpc('claim_next_invoice_number', { p_org: inv.org_id });
+      const { data: nextNum, error: numErr } = await supabase.rpc('invoice_next_number', { p_org: inv.org_id });
       if (!numErr && nextNum != null) {
-        newInvoiceNumber = `INV-${String(nextNum).padStart(6, '0')}`;
+        newInvoiceNumber = String(nextNum);
       } else {
-        const suffix = Date.now().toString(36).toUpperCase();
-        newInvoiceNumber = `${inv.invoice_number}-R${suffix}`;
+        newInvoiceNumber = String(Date.now());
       }
 
       // Clone the invoice as a draft

@@ -327,7 +327,8 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
           : `Number ${wanted} doesn't exist yet — the next available number is ${nextInvoice.label}.`);
         return;
       }
-      const formatted = `INV-${String(wanted).padStart(6, '0')}`;
+      // Numéros stockés en chiffres seulement (« 7 », plus de INV-000007).
+      const formatted = String(wanted);
       try {
         // La contrainte unique (org_id, invoice_number) inclut les factures
         // supprimées : on vérifie donc sans filtrer deleted_at.
