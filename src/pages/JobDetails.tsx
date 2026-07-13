@@ -9,7 +9,6 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  DollarSign,
   Download,
   Edit3,
   Eye,
@@ -21,6 +20,7 @@ import {
   MoreHorizontal,
   Plus,
   Printer,
+  ReceiptText,
   Send,
   Trash2,
   X,
@@ -1671,7 +1671,7 @@ export default function JobDetails() {
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
             <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
               <div className="icon-tile icon-tile-sm icon-tile-blue">
-                <DollarSign size={13} strokeWidth={2} />
+                <ReceiptText size={13} strokeWidth={2} />
               </div>
               Invoices
             </h2>

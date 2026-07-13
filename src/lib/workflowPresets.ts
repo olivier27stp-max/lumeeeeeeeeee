@@ -34,7 +34,7 @@ export interface WorkflowPreset {
 export const PRESET_CATEGORIES = [
   { id: 'lead', label: 'Quotes', icon: 'FileText' },
   { id: 'estimate', label: 'Estimates', icon: 'FileText' },
-  { id: 'invoice', label: 'Invoices', icon: 'Receipt' },
+  { id: 'invoice', label: 'Invoices', icon: 'ReceiptText' },
   { id: 'job', label: 'Jobs', icon: 'Briefcase' },
   { id: 'review', label: 'Reviews', icon: 'Star' },
   { id: 'field', label: 'Field Ops', icon: 'MapPin' },

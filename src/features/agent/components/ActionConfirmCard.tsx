@@ -2,7 +2,7 @@
    The action is executed only when the user clicks Confirm. */
 
 import React from 'react';
-import { Check, X, FileText, Receipt, Briefcase, MessageSquare, Loader2 } from 'lucide-react';
+import { Check, X, FileText, ReceiptText, Briefcase, MessageSquare, Loader2 } from 'lucide-react';
 import type { ProposedAction } from '../lib/agentApi';
 
 const money = (cents: number, fr: boolean) => {
@@ -14,7 +14,7 @@ const money = (cents: number, fr: boolean) => {
 
 const ICONS: Record<ProposedAction['type'], React.ReactNode> = {
   create_quote: <FileText size={15} />,
-  create_invoice: <Receipt size={15} />,
+  create_invoice: <ReceiptText size={15} />,
   create_job: <Briefcase size={15} />,
   send_sms: <MessageSquare size={15} />,
 };

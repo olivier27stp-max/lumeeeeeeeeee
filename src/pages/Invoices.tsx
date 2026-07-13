@@ -8,8 +8,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Download,
   Plus, Search, MoreHorizontal, Send, CheckCircle2, Copy,
-  Trash2, Eye, FileText, DollarSign, Clock, AlertCircle,
-  X, Receipt,
+  Trash2, Eye, FileText, Clock, AlertCircle,
+  X,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';

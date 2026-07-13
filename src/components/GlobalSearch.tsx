@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   Briefcase, CalendarDays, ClipboardList, Command, Contact, CreditCard, FileText,
-  Plus, Receipt, Search, Users, UsersRound, Zap,
+  Plus, ReceiptText, Search, Users, UsersRound, Zap,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -54,7 +54,7 @@ const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
   client: Users,
   job: Briefcase,
   lead: Contact,
-  invoice: Receipt,
+  invoice: ReceiptText,
   quote: FileText,
   request: ClipboardList,
   team: UsersRound,
@@ -90,7 +90,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   { id: 'qa-new-quote', label: 'Create New Quote', labelFr: 'Nouveau devis', icon: Plus, destination: '/quotes?action=new', keywords: 'create add new quote estimate devis nouveau' },
   { id: 'qa-new-invoice', label: 'Create New Invoice', labelFr: 'Nouvelle facture', icon: Plus, destination: '/invoices?action=new', keywords: 'create add new invoice bill facture nouveau' },
   { id: 'qa-calendar', label: 'Go to Calendar', labelFr: 'Calendrier', icon: CalendarDays, destination: '/calendar', keywords: 'calendar schedule horaire' },
-  { id: 'qa-invoices', label: 'Go to Invoices', labelFr: 'Factures', icon: Receipt, destination: '/invoices', keywords: 'invoices billing factures' },
+  { id: 'qa-invoices', label: 'Go to Invoices', labelFr: 'Factures', icon: ReceiptText, destination: '/invoices', keywords: 'invoices billing factures' },
   { id: 'qa-quotes', label: 'Go to Quotes', labelFr: 'Devis', icon: FileText, destination: '/quotes', keywords: 'quotes estimates devis' },
 ];
 

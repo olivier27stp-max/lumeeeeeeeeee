@@ -7,7 +7,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Plus, Edit2, RefreshCw, ArrowRight, Archive, Trash2,
   Send, Check, X, Calendar, Briefcase, CheckCircle,
-  FileText, DollarSign, AlertCircle, Bell, Mail,
+  FileText, ReceiptText, AlertCircle, Bell, Mail,
   MessageCircle, Star,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -30,7 +30,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   briefcase: <Briefcase size={14} />,
   'check-circle': <CheckCircle size={14} />,
   'file-text': <FileText size={14} />,
-  'dollar-sign': <DollarSign size={14} />,
+  'receipt-text': <ReceiptText size={14} />,
   'alert-circle': <AlertCircle size={14} />,
   bell: <Bell size={14} />,
   mail: <Mail size={14} />,

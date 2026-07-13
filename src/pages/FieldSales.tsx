@@ -9,7 +9,7 @@ import {
   Clock, Phone as PhoneIcon, FileText, Mic, Plus, Filter, Search, Users,
   TrendingUp, Target, BarChart3, ChevronDown, Navigation, Layers,
   AlertCircle, ArrowRight, User, Calendar, Hash, Thermometer,
-  Briefcase, Receipt, UserPlus, Sparkles, Zap, Mail, StickyNote,
+  Briefcase, ReceiptText, UserPlus, Sparkles, Zap, Mail, StickyNote,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
@@ -1094,7 +1094,7 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
             { key: 'quote', label: language === 'fr' ? 'Créer un devis' : 'Create Quote', icon: FileText, color: '#64748b' },
             { key: 'job', label: language === 'fr' ? 'Créer un job' : 'Create Job', icon: Briefcase, color: '#22c55e' },
             { key: 'client', label: language === 'fr' ? 'Créer un client' : 'Create Client', icon: UserPlus, color: '#3b82f6' },
-            { key: 'invoice', label: language === 'fr' ? 'Facture' : 'Invoice', icon: Receipt, color: '#f59e0b' },
+            { key: 'invoice', label: language === 'fr' ? 'Facture' : 'Invoice', icon: ReceiptText, color: '#f59e0b' },
           ].map((item) => {
             const Icon = item.icon;
             return (
@@ -2120,7 +2120,7 @@ export default function FieldSales() {
                   action: () => { setShowQuoteModal(true); } },
                 { key: 'client', label: fr ? 'Créer Client' : 'Create Client', icon: UserPlus, color: '#3b82f6',
                   action: () => { navigate('/clients/new'); } },
-                { key: 'invoice', label: fr ? 'Créer Facture' : 'Create Invoice', icon: Receipt, color: '#f59e0b',
+                { key: 'invoice', label: fr ? 'Créer Facture' : 'Create Invoice', icon: ReceiptText, color: '#f59e0b',
                   action: () => { setShowInvoiceModal(true); } },
               ].map((item) => {
                 const Icon = item.icon;

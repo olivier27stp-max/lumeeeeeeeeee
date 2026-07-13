@@ -35,7 +35,7 @@ export const EVENT_TYPE_LABELS: Record<string, { en: string; fr: string; icon: s
   job_completed: { en: 'Job completed', fr: 'Travail terminé', icon: 'check-circle' },
   invoice_created: { en: 'Invoice created', fr: 'Facture créée', icon: 'file-text' },
   invoice_sent: { en: 'Invoice sent', fr: 'Facture envoyée', icon: 'send' },
-  invoice_paid: { en: 'Invoice paid', fr: 'Facture payée', icon: 'dollar-sign' },
+  invoice_paid: { en: 'Invoice paid', fr: 'Facture payée', icon: 'receipt-text' },
   invoice_overdue: { en: 'Invoice overdue', fr: 'Facture en retard', icon: 'alert-circle' },
   invoice_reminded: { en: 'Invoice reminder sent', fr: 'Rappel de facture envoyé', icon: 'bell' },
   follow_up_sent: { en: 'Follow-up sent', fr: 'Relance envoyée', icon: 'mail' },

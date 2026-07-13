@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Briefcase, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Contact, FileText,
-  Receipt, Search as SearchIcon, Users, UsersRound,
+  ReceiptText, Search as SearchIcon, Users, UsersRound,
 } from 'lucide-react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -16,7 +16,7 @@ import { useTranslation } from '../i18n';
 const PAGE_SIZE = 20;
 
 const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
-  client: Users, job: Briefcase, lead: Contact, invoice: Receipt,
+  client: Users, job: Briefcase, lead: Contact, invoice: ReceiptText,
   quote: FileText, request: ClipboardList, team: UsersRound, event: CalendarDays,
 };
 

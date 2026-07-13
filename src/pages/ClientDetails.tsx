@@ -12,6 +12,7 @@ import {
   FileText,
   Briefcase,
   DollarSign,
+  ReceiptText,
   Plus,
   ChevronDown,
   Edit2,
@@ -846,7 +847,7 @@ export default function ClientDetails() {
                       onClick={() => navigate(`/invoices/new?clientId=${client.id}`)}
                       className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
                     >
-                      <DollarSign size={13} /> {t.invoices.newInvoice}
+                      <ReceiptText size={13} /> {t.invoices.newInvoice}
                     </button>
                   </div>
                 </>

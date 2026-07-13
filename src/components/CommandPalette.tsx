@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, Plus, Users, Contact, Briefcase, FileText, ClipboardList,
   Calendar, Settings, MessageSquare, ArrowRight,
-  CreditCard, TrendingUp, Zap, Receipt, UsersRound, CalendarDays,
+  CreditCard, TrendingUp, Zap, ReceiptText, UsersRound, CalendarDays,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
@@ -36,7 +36,7 @@ interface CommandPaletteProps {
 }
 
 const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
-  client: Users, job: Briefcase, lead: Contact, invoice: Receipt,
+  client: Users, job: Briefcase, lead: Contact, invoice: ReceiptText,
   quote: FileText, request: ClipboardList, team: UsersRound, event: CalendarDays,
 };
 

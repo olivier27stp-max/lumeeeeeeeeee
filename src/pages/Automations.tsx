@@ -17,7 +17,7 @@ import {
   ToggleLeft, ToggleRight, Loader2, Send, UserPlus, AlertTriangle,
   Heart, Star, Sun, UserX, CreditCard, Banknote, Search,
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
-  Users, Briefcase, Receipt, ThumbsUp, ArrowLeft,
+  Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -94,7 +94,7 @@ const CATEGORY_META: Record<CategoryKey, {
     descFr: 'Confirmations et rappels de rendez-vous',
   },
   Invoices: {
-    icon: Receipt,
+    icon: ReceiptText,
     labelEn: 'Invoices',
     labelFr: 'Factures',
     descEn: 'Invoice reminders and escalations',

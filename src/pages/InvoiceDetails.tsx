@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   ArrowLeft, Eye, EyeOff, Copy, Link2, Check, Download, RefreshCw, Send,
-  Pencil, Ban, CopyPlus, CheckCircle2, MoreHorizontal, Receipt,
+  Pencil, Ban, CopyPlus, CheckCircle2, MoreHorizontal, ReceiptText,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -169,7 +169,7 @@ export default function InvoiceDetails() {
       </button>
 
       <EntityHubHeader
-        icon={<Receipt size={18} strokeWidth={2} />}
+        icon={<ReceiptText size={18} strokeWidth={2} />}
         status={uiStatus}
         title={
           <EntityNumberEditor

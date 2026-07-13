@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Download, Loader2, ChevronDown, ChevronRight, FileSpreadsheet, Users, Receipt, Wallet, Package } from 'lucide-react';
+import { Download, Loader2, ChevronDown, ChevronRight, FileSpreadsheet, Users, ReceiptText, Wallet, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
 import BackToSettings from '../components/ui/BackToSettings';
@@ -15,7 +15,7 @@ interface CardConfig {
 
 const CARDS: CardConfig[] = [
   { kind: 'customers', icon: Users, withRange: false },
-  { kind: 'invoices', icon: Receipt, withRange: true },
+  { kind: 'invoices', icon: ReceiptText, withRange: true },
   { kind: 'payments', icon: Wallet, withRange: true },
   { kind: 'items', icon: Package, withRange: false },
 ];
