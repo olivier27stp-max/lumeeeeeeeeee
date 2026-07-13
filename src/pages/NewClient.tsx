@@ -280,7 +280,7 @@ export default function NewClient() {
 
   return (
     <div
-      className="item-form relative min-h-full bg-surface flex flex-col text-text-primary"
+      className="item-form new-client-form relative min-h-full bg-surface flex flex-col text-text-primary"
       onInput={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
       onChange={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
     >
