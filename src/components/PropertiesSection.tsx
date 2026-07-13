@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { MapPin, Plus, Navigation, ExternalLink, Edit2, Trash2, Check, X } from 'lucide-react';
 import { useTranslation } from '../i18n';
@@ -41,7 +41,7 @@ interface EditorState {
 
 const EMPTY_EDITOR: EditorState = { name: '', search: '', addr: null };
 
-export default function PropertiesSection({ clientId }: { clientId: string }) {
+export default function PropertiesSection({ clientId, highlightId }: { clientId: string; highlightId?: string | null }) {
   const { t } = useTranslation();
   const cd = t.clientDetails as any;
   const [properties, setProperties] = useState<PropertyRecord[]>([]);
@@ -50,6 +50,23 @@ export default function PropertiesSection({ clientId }: { clientId: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState>(EMPTY_EDITOR);
   const [saving, setSaving] = useState(false);
+  // Search deep-link (?property=<id>): scroll to the card and flash it once loaded
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const highlightRef = useRef<HTMLDivElement | null>(null);
+  const highlightDoneRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    if (highlightDoneRef.current === highlightId) return;
+    if (!properties.some((p) => p.id === highlightId)) return;
+    highlightDoneRef.current = highlightId;
+    setFlashId(highlightId);
+    requestAnimationFrame(() => {
+      highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    const timer = setTimeout(() => setFlashId(null), 2500);
+    return () => clearTimeout(timer);
+  }, [highlightId, loading, properties]);
 
   const reload = useCallback(async () => {
     if (!clientId) return;
@@ -180,7 +197,12 @@ export default function PropertiesSection({ clientId }: { clientId: string }) {
               ) : (
                 <div
                   key={p.id}
-                  className="flex items-start gap-3 rounded-lg border border-outline bg-surface-secondary p-3.5"
+                  ref={p.id === highlightId ? highlightRef : undefined}
+                  className={`flex items-start gap-3 rounded-lg border p-3.5 transition-all duration-500 ${
+                    p.id === flashId
+                      ? 'border-primary ring-2 ring-primary/30 bg-primary/5'
+                      : 'border-outline bg-surface-secondary'
+                  }`}
                 >
                   <span className="mt-0.5 text-text-secondary">
                     <MapPin size={15} />

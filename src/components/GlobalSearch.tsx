@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
-  Briefcase, CalendarDays, ClipboardList, Command, Contact, CreditCard, FileText,
-  Plus, ReceiptText, Search, Users, UsersRound, Zap,
+  Briefcase, CalendarDays, ClipboardList, Command, Contact, CreditCard, FileSignature, FileText,
+  MapPin, Plus, ReceiptText, Search, Users, UsersRound, Zap,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -52,7 +52,9 @@ const MAX_SUGGESTIONS = 12;
 
 const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
   client: Users,
+  property: MapPin,
   job: Briefcase,
+  agreement: FileSignature,
   lead: Contact,
   invoice: ReceiptText,
   quote: FileText,
@@ -63,7 +65,9 @@ const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
 
 const ENTITY_COLORS: Record<SearchEntityType, string> = {
   client: 'text-text-secondary bg-surface-secondary',
+  property: 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-500/10',
   job: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10',
+  agreement: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10',
   lead: 'text-text-secondary bg-surface-secondary',
   invoice: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10',
   quote: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10',
@@ -138,11 +142,11 @@ function formatShortDate(dateStr: string | null | undefined) {
 
 // ── Entity groups order ──
 
-const ENTITY_DISPLAY_ORDER: EntityGroupKey[] = ['clients', 'jobs', 'quotes', 'requests', 'invoices', 'leads', 'teams', 'events'];
+const ENTITY_DISPLAY_ORDER: EntityGroupKey[] = ['clients', 'properties', 'jobs', 'quotes', 'agreements', 'requests', 'invoices', 'leads', 'teams', 'events'];
 
 const ENTITY_KEY_TO_TYPE: Record<EntityGroupKey, SearchEntityType> = {
-  clients: 'client', jobs: 'job', leads: 'lead', invoices: 'invoice',
-  quotes: 'quote', requests: 'request', teams: 'team', events: 'event',
+  clients: 'client', properties: 'property', jobs: 'job', agreements: 'agreement', leads: 'lead',
+  invoices: 'invoice', quotes: 'quote', requests: 'request', teams: 'team', events: 'event',
 };
 
 // ── Component ──
@@ -167,7 +171,7 @@ export default function GlobalSearch() {
   const [activeIndex, setActiveIndex] = useState(-1);
   const [entitySuggestions, setEntitySuggestions] = useState<SearchEntityItem[]>([]);
   const [groupedSuggestions, setGroupedSuggestions] = useState<Record<EntityGroupKey, SearchEntityItem[]>>({
-    clients: [], jobs: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [],
+    clients: [], properties: [], jobs: [], agreements: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [],
   });
 
   const normalizedQuery = useMemo(() => normalizeSearchQuery(query), [query]);
@@ -189,7 +193,7 @@ export default function GlobalSearch() {
     async function loadSuggestions() {
       if (debouncedQuery.length < MIN_QUERY_LENGTH) {
         setEntitySuggestions([]);
-        setGroupedSuggestions({ clients: [], jobs: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
+        setGroupedSuggestions({ clients: [], properties: [], jobs: [], agreements: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
         setLoading(false);
         return;
       }
@@ -199,12 +203,12 @@ export default function GlobalSearch() {
         const payload = await fetchSearchSuggestions(debouncedQuery, MAX_SUGGESTIONS);
         if (!cancelled) {
           setEntitySuggestions(payload.items || []);
-          setGroupedSuggestions(payload.grouped || { clients: [], jobs: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
+          setGroupedSuggestions(payload.grouped || { clients: [], properties: [], jobs: [], agreements: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
         }
       } catch {
         if (!cancelled) {
           setEntitySuggestions([]);
-          setGroupedSuggestions({ clients: [], jobs: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
+          setGroupedSuggestions({ clients: [], properties: [], jobs: [], agreements: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -289,7 +293,7 @@ export default function GlobalSearch() {
         entityType: entity.type,
         label: entity.title,
         subtitle: entity.subtitle,
-        destination: getSearchItemHref(entity.type, entity.id),
+        destination: getSearchItemHref(entity.type, entity.id, { clientId: entity.clientId, refId: entity.refId }),
         status: entity.status,
         // Strip amounts for financially restricted users
         amountCents: financiallyRestricted ? null : entity.amountCents,
@@ -335,7 +339,7 @@ export default function GlobalSearch() {
     setQuery('');
     setDebouncedQuery('');
     setEntitySuggestions([]);
-    setGroupedSuggestions({ clients: [], jobs: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
+    setGroupedSuggestions({ clients: [], properties: [], jobs: [], agreements: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
     closeDropdown();
   }
 

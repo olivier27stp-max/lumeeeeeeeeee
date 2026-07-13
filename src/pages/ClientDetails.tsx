@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useRecentItems } from '../hooks/useRecentItems';
 import { toast } from 'sonner';
 import {
@@ -188,6 +188,9 @@ export default function ClientDetails() {
   const { t, language } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  // Deep-link from global search: /clients/:id?property=<propertyId>
+  const highlightPropertyId = searchParams.get('property');
 
   const { updateLabel: updateRecentLabel } = useRecentItems();
   const [client, setClient] = useState<ClientRecord | null>(null);
@@ -771,7 +774,7 @@ export default function ClientDetails() {
         {/* ──── LEFT COLUMN ──── */}
         <div className="space-y-6 min-w-0">
           {/* Properties Section — service locations (name + address) */}
-          <PropertiesSection clientId={client.id} />
+          <PropertiesSection clientId={client.id} highlightId={highlightPropertyId} />
 
           {/* Billing address: same as service address (default) or distinct */}
           <div className="section-card">

@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, Plus, Users, Contact, Briefcase, FileText, ClipboardList,
-  Calendar, Settings, MessageSquare, ArrowRight,
+  Calendar, Settings, MessageSquare, ArrowRight, FileSignature, MapPin,
   CreditCard, TrendingUp, Zap, ReceiptText, UsersRound, CalendarDays,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -36,13 +36,15 @@ interface CommandPaletteProps {
 }
 
 const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
-  client: Users, job: Briefcase, lead: Contact, invoice: ReceiptText,
-  quote: FileText, request: ClipboardList, team: UsersRound, event: CalendarDays,
+  client: Users, property: MapPin, job: Briefcase, agreement: FileSignature, lead: Contact,
+  invoice: ReceiptText, quote: FileText, request: ClipboardList, team: UsersRound, event: CalendarDays,
 };
 
 const ENTITY_SECTION_LABELS: Record<SearchEntityType, { en: string; fr: string }> = {
   client: { en: 'Clients', fr: 'Clients' },
+  property: { en: 'Properties', fr: 'Propriétés' },
   job: { en: 'Jobs', fr: 'Jobs' },
+  agreement: { en: 'Agreements', fr: 'Contrats' },
   lead: { en: 'Leads', fr: 'Prospects' },
   invoice: { en: 'Invoices', fr: 'Factures' },
   quote: { en: 'Quotes', fr: 'Devis' },
@@ -136,7 +138,7 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
             label: item.title,
             sublabel: item.subtitle || item.clientName || undefined,
             icon: ENTITY_ICONS[item.type] || Search,
-            action: () => navigate(getSearchItemHref(item.type, item.id)),
+            action: () => navigate(getSearchItemHref(item.type, item.id, { clientId: item.clientId, refId: item.refId })),
             section: fr ? sectionLabel.fr : sectionLabel.en,
           });
         }

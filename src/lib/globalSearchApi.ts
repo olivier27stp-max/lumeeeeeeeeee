@@ -1,9 +1,9 @@
 import { supabase } from './supabase';
 
-export type SearchEntityType = 'client' | 'job' | 'lead' | 'invoice' | 'quote' | 'request' | 'team' | 'event';
-export type SearchTab = 'all' | 'clients' | 'jobs' | 'leads' | 'invoices' | 'quotes' | 'requests' | 'teams' | 'events';
+export type SearchEntityType = 'client' | 'property' | 'job' | 'agreement' | 'lead' | 'invoice' | 'quote' | 'request' | 'team' | 'event';
+export type SearchTab = 'all' | 'clients' | 'properties' | 'jobs' | 'agreements' | 'leads' | 'invoices' | 'quotes' | 'requests' | 'teams' | 'events';
 
-export const ALL_ENTITY_GROUP_KEYS = ['clients', 'jobs', 'leads', 'invoices', 'quotes', 'requests', 'teams', 'events'] as const;
+export const ALL_ENTITY_GROUP_KEYS = ['clients', 'properties', 'jobs', 'agreements', 'leads', 'invoices', 'quotes', 'requests', 'teams', 'events'] as const;
 export type EntityGroupKey = typeof ALL_ENTITY_GROUP_KEYS[number];
 
 export interface SearchEntityItem {
@@ -17,6 +17,8 @@ export interface SearchEntityItem {
   date: string | null;
   clientId: string | null;
   clientName: string | null;
+  // property → owner client id, agreement → job id
+  refId?: string | null;
   createdAt: string;
   rank: number;
 }
@@ -72,7 +74,7 @@ export async function fetchSearchSuggestions(query: string, limit = 8) {
   const safeQuery = query.trim();
   if (!safeQuery) {
     const emptyGrouped: Record<EntityGroupKey, SearchEntityItem[]> = {
-      clients: [], jobs: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [],
+      clients: [], properties: [], jobs: [], agreements: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [],
     };
     return {
       query: '',
@@ -95,7 +97,9 @@ interface FetchSearchResultsOptions {
   pageSize?: number;
   page?: number;
   clientsPage?: number;
+  propertiesPage?: number;
   jobsPage?: number;
+  agreementsPage?: number;
   leadsPage?: number;
   invoicesPage?: number;
   quotesPage?: number;

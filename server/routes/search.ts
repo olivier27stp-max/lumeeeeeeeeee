@@ -19,12 +19,14 @@ import {
 
 const router = Router();
 
-const ALL_ENTITY_KEYS = ['clients', 'jobs', 'leads', 'invoices', 'quotes', 'requests', 'teams', 'events'] as const;
+const ALL_ENTITY_KEYS = ['clients', 'properties', 'jobs', 'agreements', 'leads', 'invoices', 'quotes', 'requests', 'teams', 'events'] as const;
 type EntityGroupKey = typeof ALL_ENTITY_KEYS[number];
 
 const ENTITY_KEY_TO_TYPE: Record<EntityGroupKey, SearchEntityType> = {
   clients: 'client',
+  properties: 'property',
   jobs: 'job',
+  agreements: 'agreement',
   leads: 'lead',
   invoices: 'invoice',
   quotes: 'quote',
@@ -49,8 +51,8 @@ async function expandClientRelationships(
 
   const expanded: MappedItem[] = [];
 
-  // Fetch related jobs, quotes, invoices, requests in parallel
-  const [jobsRes, quotesRes, invoicesRes, requestsRes] = await Promise.all([
+  // Fetch related jobs, quotes, invoices, requests, properties, agreements in parallel
+  const [jobsRes, quotesRes, invoicesRes, requestsRes, propertiesRes, agreementsRes] = await Promise.all([
     client
       .from('jobs')
       .select('id, title, job_number, client_id, client_name, status, total_cents, currency, scheduled_at, property_address, created_at')
@@ -82,12 +84,31 @@ async function expandClientRelationships(
       .in('client_id', clientIds)
       .order('created_at', { ascending: false })
       .limit(limitPerType),
+    client
+      .from('properties')
+      .select('id, name, address, street_number, street_name, city, is_primary, client_id, created_at')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .in('client_id', clientIds)
+      .order('created_at', { ascending: false })
+      .limit(limitPerType),
+    client
+      .from('job_agreements')
+      .select('id, job_id, client_id, status, signer_name, signed_at, sent_at, created_at')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .not('job_id', 'is', null)
+      .in('client_id', clientIds)
+      .order('created_at', { ascending: false })
+      .limit(limitPerType),
   ]);
 
   const jobs = jobsRes.data;
   const quotes = quotesRes.data;
   const invoices = invoicesRes.data;
   const requests = requestsRes.data;
+  const properties = propertiesRes.data;
+  const agreements = agreementsRes.data;
 
   for (const j of jobs || []) {
     if (existingIds.has(j.id)) continue;
@@ -103,6 +124,7 @@ async function expandClientRelationships(
       date: j.scheduled_at || null,
       clientId: j.client_id || null,
       clientName: j.client_name || null,
+      refId: null,
       createdAt: j.created_at,
       rank: 0.5,
     });
@@ -123,6 +145,7 @@ async function expandClientRelationships(
       date: q.valid_until || null,
       clientId: q.client_id || null,
       clientName: null,
+      refId: null,
       createdAt: q.created_at,
       rank: 0.5,
     });
@@ -142,6 +165,7 @@ async function expandClientRelationships(
       date: inv.due_date || null,
       clientId: inv.client_id || null,
       clientName: null,
+      refId: null,
       createdAt: inv.created_at,
       rank: 0.5,
     });
@@ -161,7 +185,48 @@ async function expandClientRelationships(
       date: r.created_at || null,
       clientId: r.client_id || null,
       clientName: [r.first_name, r.last_name].filter(Boolean).join(' ') || null,
+      refId: null,
       createdAt: r.created_at,
+      rank: 0.5,
+    });
+  }
+
+  for (const p of properties || []) {
+    if (existingIds.has(p.id)) continue;
+    existingIds.add(p.id);
+    expanded.push({
+      type: 'property' as SearchEntityType,
+      id: p.id,
+      title: p.name || p.address || 'Property',
+      subtitle: p.address || [p.street_number, p.street_name].filter(Boolean).join(' ') || p.city || 'Property',
+      status: p.is_primary ? 'primary' : null,
+      amountCents: null,
+      currency: null,
+      date: null,
+      clientId: p.client_id || null,
+      clientName: null,
+      refId: p.client_id || null,
+      createdAt: p.created_at,
+      rank: 0.5,
+    });
+  }
+
+  for (const a of agreements || []) {
+    if (existingIds.has(a.id)) continue;
+    existingIds.add(a.id);
+    expanded.push({
+      type: 'agreement' as SearchEntityType,
+      id: a.id,
+      title: a.signer_name || 'Agreement',
+      subtitle: a.status || 'Agreement',
+      status: a.status || null,
+      amountCents: null,
+      currency: null,
+      date: a.signed_at || a.sent_at || a.created_at || null,
+      clientId: a.client_id || null,
+      clientName: null,
+      refId: a.job_id || null,
+      createdAt: a.created_at,
       rank: 0.5,
     });
   }
@@ -183,7 +248,7 @@ async function handleSuggestions(req: import('express').Request, res: import('ex
   const limit = clampInt(req.query.limit, 8, 1, 12);
 
   const emptyGrouped: Record<EntityGroupKey, ReturnType<typeof mapSearchRows>> = {
-    clients: [], jobs: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [],
+    clients: [], properties: [], jobs: [], agreements: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [],
   };
 
   if (!q) {
@@ -271,7 +336,7 @@ router.get('/search/results', async (req, res) => {
   const tab = parseTab(req.query.tab);
   const pageSize = clampInt(req.query.pageSize, 20, 1, 20);
 
-  const emptyCounts = { clients: 0, jobs: 0, leads: 0, invoices: 0, quotes: 0, requests: 0, teams: 0, events: 0, all: 0 };
+  const emptyCounts = { clients: 0, properties: 0, jobs: 0, agreements: 0, leads: 0, invoices: 0, quotes: 0, requests: 0, teams: 0, events: 0, all: 0 };
 
   if (!q) {
     const emptyGroups: Record<EntityGroupKey, ReturnType<typeof emptyPage>> = {} as any;
