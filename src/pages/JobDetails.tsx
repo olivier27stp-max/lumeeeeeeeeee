@@ -1065,26 +1065,42 @@ export default function JobDetails() {
 
         {/* ═══ FLOW PROGRESS — shows where job is in the lifecycle ═══ */}
         <div className="flex items-center gap-0 px-1 pb-4">
-          {['Scheduled', 'In Progress', 'Completed', 'Invoiced', 'Paid'].map((step, i) => {
-            const currentIdx = job.status === 'scheduled' ? 0 : job.status === 'in_progress' ? 1 : job.status === 'completed' ? (invoices.length > 0 ? 3 : 2) : job.status === 'cancelled' ? -1 : 0;
-            const isPaidIdx = invoices.some((inv: any) => inv.status === 'paid') ? 4 : -1;
-            const activeIdx = isPaidIdx === 4 ? 4 : currentIdx;
-            const done = i <= activeIdx;
-            return (
-              <React.Fragment key={step}>
-                {i > 0 && <div className={cn('flex-1 h-px', done ? 'bg-primary' : 'bg-outline')} />}
-                <div className="flex flex-col items-center gap-1">
-                  <div className={cn('w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border',
-                    done ? 'bg-primary text-white border-text-primary' : 'bg-surface text-text-tertiary border-outline')}>
-                    {done ? '\u2713' : i + 1}
+          {(() => {
+            // Each step lights only when truly reached: draft/cancelled jobs light
+            // nothing, Invoiced counts non-void invoices, Paid requires every
+            // non-void invoice paid (a billing split stays unpaid until the last
+            // milestone clears).
+            const billable = invoices.filter((inv) => inv.status !== 'void');
+            const steps = [
+              { label: 'Scheduled', done: job.status === 'scheduled' || job.status === 'in_progress' || job.status === 'completed' },
+              { label: 'Completed', done: job.status === 'completed' },
+              { label: 'Invoiced', done: billable.length > 0 },
+              { label: 'Paid', done: billable.length > 0 && billable.every((inv) => inv.status === 'paid') },
+            ];
+            return steps.map((step, i) => {
+              const onClick =
+                step.label === 'Completed' && (job.status === 'scheduled' || job.status === 'in_progress')
+                  ? () => { void handleCloseJob(); }
+                  : step.label === 'Invoiced' && billable.length > 0
+                    ? () => navigate(`/invoices/${billable[0].id}`)
+                    : undefined;
+              const prevDone = i > 0 && steps[i - 1].done;
+              return (
+                <React.Fragment key={step.label}>
+                  {i > 0 && <div className={cn('flex-1 h-px', step.done && prevDone ? 'bg-primary' : 'bg-outline')} />}
+                  <div className="flex flex-col items-center gap-1">
+                    <div className={cn('w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border',
+                      step.done ? 'bg-primary text-white border-text-primary' : 'bg-surface text-text-tertiary border-outline')}>
+                      {step.done ? '\u2713' : i + 1}
+                    </div>
+                    <span className={cn('text-[9px] font-medium whitespace-nowrap', step.done ? 'text-text-primary' : 'text-text-tertiary',
+                      onClick && 'cursor-pointer hover:underline')}
+                      onClick={onClick}>{step.label}</span>
                   </div>
-                  <span className={cn('text-[9px] font-medium whitespace-nowrap', done ? 'text-text-primary' : 'text-text-tertiary',
-                    step === 'Invoiced' && invoices.length > 0 && 'cursor-pointer hover:underline')}
-                    onClick={() => { if (step === 'Invoiced' && invoices[0]) navigate(`/invoices/${(invoices[0] as any).id}`); }}>{step}</span>
-                </div>
-              </React.Fragment>
-            );
-          })}
+                </React.Fragment>
+              );
+            });
+          })()}
         </div>
 
         {/* ═══ SUMMARY CARD — green accent top ═══ */}
@@ -1625,7 +1641,7 @@ export default function JobDetails() {
               </span>
             </div>
             <div className="p-5">
-              <div className="rounded-lg border border-dashed border-warning/50 px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="rounded-lg border-2 border-warning px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <p className="text-[13px] font-medium text-text-secondary">
                     {language === 'fr'
