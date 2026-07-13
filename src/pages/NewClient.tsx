@@ -285,14 +285,14 @@ export default function NewClient() {
       onChange={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
     >
       {/* ── Header ── */}
-      <div className="px-6 pt-6 pb-2 flex items-start justify-between">
-        <h2 className="text-[30px] font-extrabold tracking-tight text-text-primary leading-tight">
+      <div className="relative px-6 pt-6 pb-2">
+        <h2 className="text-[30px] font-extrabold tracking-tight text-text-primary leading-tight text-center">
           {fr ? 'Nouveau client' : 'New Client'}
         </h2>
         <button
           type="button"
           onClick={() => navigate('/clients')}
-          className="p-2 rounded-xl border border-outline hover:bg-surface-secondary transition-colors"
+          className="absolute right-6 top-6 p-2 rounded-xl border border-outline hover:bg-surface-secondary transition-colors"
         >
           <X size={18} />
         </button>
