@@ -1,9 +1,9 @@
 /**
  * NewClient — full-page client creation form (/clients/new).
  *
- * Same chrome as the New Job form (header + footer bars, glass inputs) but the
- * fields sit directly on the page — no section cards. Unsaved input is
- * protected by the navigation guard (in-app) and beforeunload (browser).
+ * Same chrome as the New Job form (header + footer bars, glass inputs): gray
+ * page, one big white box holding every field, gray typing bars. Unsaved input
+ * is protected by the navigation guard (in-app) and beforeunload (browser).
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -300,7 +300,7 @@ export default function NewClient() {
 
       {/* ── Form — flat on the page, no section cards ── */}
       <form id="new-client-form" onSubmit={handleSubmit} className="flex-1 px-6 py-8">
-        <div className="max-w-2xl mx-auto space-y-8 pb-4">
+        <div className="max-w-2xl mx-auto rounded-xl border border-border bg-surface-card p-6 space-y-8">
           {/* Client info + communication — single block */}
           <section className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -534,9 +534,10 @@ body.dark .item-form .glass-input {
 :root:not(.dark) body:not(.dark) .new-client-form ::placeholder {
   color: #a3a3a3;
 }
-/* Typing bars (inputs, selects, address search): pure white fill. */
+/* Typing bars (inputs, selects, address search): light gray fill on the
+   white box — same bar gray as the New Quote form. */
 :root:not(.dark) body:not(.dark) .new-client-form .glass-input {
-  background-color: #ffffff;
+  background-color: #fafafa;
 }
 
 /* New Job: title text is pure black in light mode (unchanged in dark). */
