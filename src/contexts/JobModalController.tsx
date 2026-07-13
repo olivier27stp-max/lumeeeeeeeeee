@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -42,6 +42,9 @@ export function JobModalControllerProvider({ children }: { children: React.React
   const [saveError, setSaveError] = useState<string | null>(null);
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
   const [isInvoicePreviewOpen, setIsInvoicePreviewOpen] = useState(false);
+  // Whether the last save was a creation (vs an edit) — the job hub only
+  // offers the "send booking confirmation" prompt for freshly created jobs.
+  const lastSaveWasCreateRef = useRef(false);
 
   const closeJobModal = useCallback(() => {
     setIsOpen(false);
@@ -98,6 +101,7 @@ export function JobModalControllerProvider({ children }: { children: React.React
       if (!created?.id) {
         throw new Error('Job save failed: missing persisted id.');
       }
+      lastSaveWasCreateRef.current = !payload.id;
       void geocodeJob(created.id).catch(() => undefined);
       // Clear internal schedule cache + invalidate React Query cache
       invalidateScheduleCache();
@@ -124,8 +128,9 @@ export function JobModalControllerProvider({ children }: { children: React.React
       if (onCreatedCallback) {
         await onCreatedCallback(job);
       }
-      // Always redirect to job details after save so user sees the full summary
-      navigate(`/jobs/${job.id}`);
+      // Always redirect to job details after save so user sees the full summary.
+      // On creation, the hub offers to text/email a booking confirmation.
+      navigate(`/jobs/${job.id}`, lastSaveWasCreateRef.current ? { state: { justCreated: true } } : undefined);
     },
     [closeJobModal, navigate, onCreatedCallback]
   );

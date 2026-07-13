@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn, formatDate } from '../lib/utils';
 import { supabase } from '../lib/supabase';
@@ -240,6 +240,18 @@ export default function JobDetails() {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailMode, setEmailMode] = useState<'confirmation' | 'followup' | 'generic'>('confirmation');
   const [commRefreshKey, setCommRefreshKey] = useState(0);
+
+  // "Send booking confirmation" picker (texto / courriel). Auto-opened when
+  // landing here right after creating the job; reopenable from the More menu.
+  const location = useLocation();
+  const [confirmPrompt, setConfirmPrompt] = useState<null | 'created' | 'manual'>(null);
+  useEffect(() => {
+    if ((location.state as any)?.justCreated) {
+      setConfirmPrompt('created');
+      // Clear the flag so a refresh or back-navigation doesn't re-open it.
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, location.pathname, navigate]);
 
   // Service plan contract (12-month calendar snapshot, optional)
   const [contract, setContract] = useState<ServiceContract | null>(null);
@@ -1036,6 +1048,7 @@ export default function JobDetails() {
                   <div className="fixed inset-0 z-40" onClick={() => setMoreActionsOpen(false)} />
                   <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border border-outline bg-surface shadow-lg py-1">
                     <DropdownItem icon={<CheckCircle2 size={13} />} label={isClosing ? 'Closing...' : 'Close Job'} onClick={handleCloseJob} disabled={isClosing} />
+                    <DropdownItem icon={<MessageSquare size={13} />} label={language === 'fr' ? 'Envoyer une confirmation' : 'Send Confirmation'} onClick={() => { setConfirmPrompt('manual'); setMoreActionsOpen(false); }} />
                     <DropdownItem icon={<Send size={13} />} label="Send Follow-up" onClick={() => { setEmailMode('followup'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
                     <DropdownItem icon={<Mail size={13} />} label="Send Email" onClick={() => { setEmailMode('generic'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
                     <div className="border-t border-border my-1" />
@@ -2087,6 +2100,61 @@ export default function JobDetails() {
         {/* Leave-without-saving confirmation (unsaved payment schedule) */}
         <LeaveFormConfirm open={guard.active} onConfirm={guard.confirmLeave} onCancel={guard.cancelLeave} />
       </div>
+
+      {/* ── Booking-confirmation picker (texto / courriel) ── */}
+      <AnimatePresence>
+        {confirmPrompt && job && (
+          <ModalOverlay onClose={() => setConfirmPrompt(null)}>
+            <div className="p-6">
+              <div className="flex flex-col items-center text-center mb-5">
+                {confirmPrompt === 'created' && (
+                  <span className="w-11 h-11 rounded-full bg-success-light text-success flex items-center justify-center mb-3">
+                    <CheckCircle2 size={22} />
+                  </span>
+                )}
+                <h3 className="text-[17px] font-bold text-text-primary">
+                  {confirmPrompt === 'created'
+                    ? (language === 'fr' ? 'Job créé !' : 'Job created!')
+                    : (language === 'fr' ? 'Envoyer une confirmation' : 'Send Confirmation')}
+                </h3>
+                <p className="text-[13px] text-text-secondary mt-1">
+                  {language === 'fr'
+                    ? `Envoyer une confirmation de rendez-vous${job.client_name ? ` à ${job.client_name}` : ' au client'} ?`
+                    : `Send a booking confirmation${job.client_name ? ` to ${job.client_name}` : ' to the client'}?`}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => { setConfirmPrompt(null); setShowSmsModal(true); }}
+                  className="rounded-xl border border-outline hover:border-primary hover:bg-primary-lighter transition-colors p-4 flex flex-col items-center gap-2 min-w-0"
+                >
+                  <MessageSquare size={20} className="text-primary" />
+                  <span className="text-[13px] font-semibold text-text-primary">{language === 'fr' ? 'Par texto' : 'By text'}</span>
+                  <span className="text-[11px] text-text-tertiary truncate max-w-full">
+                    {clientInfo?.phone || (language === 'fr' ? 'Aucun numéro au dossier' : 'No phone on file')}
+                  </span>
+                </button>
+                <button
+                  onClick={() => { setConfirmPrompt(null); setEmailMode('confirmation'); setShowEmailModal(true); }}
+                  className="rounded-xl border border-outline hover:border-primary hover:bg-primary-lighter transition-colors p-4 flex flex-col items-center gap-2 min-w-0"
+                >
+                  <Mail size={20} className="text-primary" />
+                  <span className="text-[13px] font-semibold text-text-primary">{language === 'fr' ? 'Par courriel' : 'By email'}</span>
+                  <span className="text-[11px] text-text-tertiary truncate max-w-full">
+                    {clientInfo?.email || (language === 'fr' ? 'Aucun courriel au dossier' : 'No email on file')}
+                  </span>
+                </button>
+              </div>
+              <button
+                onClick={() => setConfirmPrompt(null)}
+                className="w-full mt-3 py-2 text-[12px] text-text-tertiary hover:text-text-primary transition-colors"
+              >
+                {language === 'fr' ? 'Pas maintenant' : 'Not now'}
+              </button>
+            </div>
+          </ModalOverlay>
+        )}
+      </AnimatePresence>
 
       {/* ── SMS Modal ── */}
       <AnimatePresence>
