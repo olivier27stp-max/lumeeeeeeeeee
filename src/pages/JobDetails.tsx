@@ -13,6 +13,7 @@ import {
   Download,
   Edit3,
   Eye,
+  FileSignature,
   FileText,
   Link as LinkIcon,
   Mail,
@@ -1624,7 +1625,7 @@ export default function JobDetails() {
               </span>
             </div>
             <div className="p-5">
-              <div className="rounded-lg border border-dashed border-outline px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="rounded-lg border border-dashed border-warning/50 px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <p className="text-[13px] font-medium text-text-secondary">
                     {language === 'fr'
@@ -1641,7 +1642,7 @@ export default function JobDetails() {
                   onClick={() => setShowAgreementCreate(true)}
                   className="glass-button-primary inline-flex items-center gap-1.5 text-[12px] shrink-0"
                 >
-                  <Plus size={13} />
+                  <FileSignature size={13} />
                   {language === 'fr' ? 'Créer un contrat' : 'Create Agreement'}
                 </button>
               </div>
