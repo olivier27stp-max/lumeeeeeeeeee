@@ -1083,13 +1083,13 @@ export default function NewJobModal({
       return;
     }
 
-    if (!teamSelection) {
+    if (assignMode === 'team' && !teamSelection) {
       setInlineError(t.modals.teamRequired);
       return;
     }
 
     // Block scheduling on unavailable/busy team
-    if (selectedTeamSuggestion && teamSelection !== UNASSIGNED_TEAM_VALUE) {
+    if (assignMode === 'team' && selectedTeamSuggestion && teamSelection !== UNASSIGNED_TEAM_VALUE) {
       const { status } = selectedTeamSuggestion;
       if (status === 'unavailable') {
         setInlineError(t.teamSuggestions.teamUnavailableDay);
