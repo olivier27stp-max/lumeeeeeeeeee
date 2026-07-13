@@ -161,23 +161,30 @@ export default function SendSmsModal({
               </span>
             </div>
 
-            {/* Client approval link (converted quote or agreement) */}
-            {approvalLink && (
-              <label className="flex items-start gap-2 cursor-pointer select-none mt-3">
+            {/* Client approval link (converted quote or agreement). Prop absent
+                = caller doesn't support it; null = this job has no document. */}
+            {approvalLink !== undefined && (
+              <label className={`flex items-start gap-2 select-none mt-3 ${approvalLink ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}>
                 <input
                   type="checkbox"
                   checked={includeApproval}
                   onChange={(e) => setIncludeApproval(e.target.checked)}
                   className="w-3.5 h-3.5 mt-0.5 rounded border-outline text-primary accent-primary"
-                  disabled={sent}
+                  disabled={sent || !approvalLink}
                 />
                 <span className="min-w-0">
                   <span className="text-[12px] text-text-secondary block">
                     {language === 'fr'
-                      ? `Inclure le lien d’approbation client (${approvalDocLabel})`
-                      : `Include the client approval link (${approvalDocLabel})`}
+                      ? `Inclure le lien d’approbation client${approvalLink ? ` (${approvalDocLabel})` : ''}`
+                      : `Include the client approval link${approvalLink ? ` (${approvalDocLabel})` : ''}`}
                   </span>
-                  <span className="text-[11px] text-text-tertiary block truncate">{approvalLink.url}</span>
+                  <span className="text-[11px] text-text-tertiary block truncate">
+                    {approvalLink
+                      ? approvalLink.url
+                      : (language === 'fr'
+                          ? 'Aucun contrat ni soumission liés à ce job'
+                          : 'No agreement or quote linked to this job')}
+                  </span>
                 </span>
               </label>
             )}
