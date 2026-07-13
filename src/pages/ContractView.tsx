@@ -94,10 +94,13 @@ export default function ContractView() {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    if ('touches' in e) {
-      return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
-    }
-    return { x: (e as React.MouseEvent).clientX - rect.left, y: (e as React.MouseEvent).clientY - rect.top };
+    // The canvas draws in its internal 500×150 space but is displayed at CSS
+    // size (w-full) — without this scaling, strokes land up-left of the
+    // finger on phones.
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const point = 'touches' in e ? e.touches[0] : (e as React.MouseEvent);
+    return { x: (point.clientX - rect.left) * scaleX, y: (point.clientY - rect.top) * scaleY };
   }
 
   function startDraw(e: React.MouseEvent | React.TouchEvent) {
