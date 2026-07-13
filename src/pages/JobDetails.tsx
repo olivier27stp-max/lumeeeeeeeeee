@@ -266,6 +266,18 @@ export default function JobDetails() {
   // job's approved contract: no agreement allowed, no second signature.
   const [sourceQuote, setSourceQuote] = useState<Quote | null>(null);
 
+  // Public client-approval link offered in the SMS/email confirmation modals.
+  // Same precedence as resolveApprovedDocument: the converted quote wins.
+  const approvalLink = useMemo(() => {
+    if (sourceQuote?.view_token) {
+      return { kind: 'quote' as const, url: `${window.location.origin}/quote/${sourceQuote.view_token}` };
+    }
+    if (agreement?.view_token) {
+      return { kind: 'agreement' as const, url: `${window.location.origin}/contract/${agreement.view_token}` };
+    }
+    return null;
+  }, [sourceQuote?.view_token, agreement?.view_token]);
+
   // Recurrence
   const [recurrence, setRecurrence] = useState<RecurrenceRule | null>(null);
   const [showRecurrenceSetup, setShowRecurrenceSetup] = useState(false);
@@ -2169,6 +2181,7 @@ export default function JobDetails() {
               companyName={clientInfo?.company || undefined}
               propertyAddress={job.property_address || undefined}
               scheduledDate={job.scheduled_at ? formatDate(job.scheduled_at) : undefined}
+              approvalLink={approvalLink}
               onClose={() => setShowSmsModal(false)}
               onSent={() => setCommRefreshKey((k) => k + 1)}
             />
@@ -2187,6 +2200,7 @@ export default function JobDetails() {
               clientId={job.client_id}
               jobId={job.id}
               clientName={job.client_name || undefined}
+              approvalLink={approvalLink}
               onClose={() => setShowEmailModal(false)}
               onSent={() => setCommRefreshKey((k) => k + 1)}
             />

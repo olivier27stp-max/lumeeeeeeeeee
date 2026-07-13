@@ -3,6 +3,13 @@ import { CheckCircle2, MessageSquare, Send, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import { sendSms } from '../../lib/communicationsApi';
+import { useTranslation } from '../../i18n';
+
+/** Public client-approval document of the job (converted quote or agreement). */
+export interface ApprovalLink {
+  url: string;
+  kind: 'agreement' | 'quote';
+}
 
 interface SendSmsModalProps {
   /** Pre-filled phone number */
@@ -21,6 +28,8 @@ interface SendSmsModalProps {
   propertyAddress?: string | null;
   /** Scheduled date (formatted) */
   scheduledDate?: string | null;
+  /** When set, offers a checkbox to append the client-approval link */
+  approvalLink?: ApprovalLink | null;
   /** Close handler */
   onClose: () => void;
   /** Callback after successful send */
@@ -36,13 +45,26 @@ export default function SendSmsModal({
   companyName,
   propertyAddress,
   scheduledDate,
+  approvalLink,
   onClose,
   onSent,
 }: SendSmsModalProps) {
+  const { language } = useTranslation();
   const [to, setTo] = useState(phone || '');
   const [body, setBody] = useState(defaultBody);
+  const [includeApproval, setIncludeApproval] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+
+  // Client-approval link (converted quote or agreement) appended on demand.
+  const approvalDocLabel = approvalLink?.kind === 'quote'
+    ? (language === 'fr' ? 'soumission' : 'quote')
+    : (language === 'fr' ? 'contrat' : 'agreement');
+  const approvalText = approvalLink
+    ? (language === 'fr'
+        ? `Consultez et approuvez votre ${approvalDocLabel} ici : ${approvalLink.url}`
+        : `View and approve your ${approvalDocLabel} here: ${approvalLink.url}`)
+    : '';
 
   // Close on Escape
   useEffect(() => {
@@ -63,9 +85,12 @@ export default function SendSmsModal({
     }
     setSending(true);
     try {
+      const finalBody = includeApproval && approvalLink
+        ? `${body.trim()}\n\n${approvalText}`
+        : body.trim();
       await sendSms({
         to: to.trim(),
-        body: body.trim(),
+        body: finalBody,
         client_id: clientId || null,
         job_id: jobId || null,
       });
@@ -135,6 +160,27 @@ export default function SendSmsModal({
                 {body.length} / 1,600
               </span>
             </div>
+
+            {/* Client approval link (converted quote or agreement) */}
+            {approvalLink && (
+              <label className="flex items-start gap-2 cursor-pointer select-none mt-3">
+                <input
+                  type="checkbox"
+                  checked={includeApproval}
+                  onChange={(e) => setIncludeApproval(e.target.checked)}
+                  className="w-3.5 h-3.5 mt-0.5 rounded border-outline text-primary accent-primary"
+                  disabled={sent}
+                />
+                <span className="min-w-0">
+                  <span className="text-[12px] text-text-secondary block">
+                    {language === 'fr'
+                      ? `Inclure le lien d’approbation client (${approvalDocLabel})`
+                      : `Include the client approval link (${approvalDocLabel})`}
+                  </span>
+                  <span className="text-[11px] text-text-tertiary block truncate">{approvalLink.url}</span>
+                </span>
+              </label>
+            )}
           </div>
 
           {/* Right: Preview card */}
@@ -150,7 +196,7 @@ export default function SendSmsModal({
               )}
 
               {/* Injected job details */}
-              {(propertyAddress || scheduledDate) && previewLines.length > 0 && (
+              {(propertyAddress || scheduledDate || (includeApproval && approvalLink)) && previewLines.length > 0 && (
                 <div className="pt-2 mt-2 border-t border-outline-subtle space-y-1">
                   {propertyAddress && (
                     <p className="text-[12px] text-text-secondary flex items-start gap-1.5">
@@ -162,6 +208,12 @@ export default function SendSmsModal({
                     <p className="text-[12px] text-text-secondary flex items-start gap-1.5">
                       <span className="text-text-tertiary mt-px shrink-0">📅</span>
                       {scheduledDate}
+                    </p>
+                  )}
+                  {includeApproval && approvalLink && (
+                    <p className="text-[12px] text-text-secondary flex items-start gap-1.5 min-w-0">
+                      <span className="text-text-tertiary mt-px shrink-0">✍️</span>
+                      <span className="min-w-0 break-all">{approvalText}</span>
                     </p>
                   )}
                 </div>

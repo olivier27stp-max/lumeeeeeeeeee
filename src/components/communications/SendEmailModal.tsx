@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronUp, Mail, Paperclip, Send, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { sendEmail } from '../../lib/communicationsApi';
+import { useTranslation } from '../../i18n';
+import type { ApprovalLink } from './SendSmsModal';
 
 interface SendEmailModalProps {
   /** Pre-filled recipient email */
@@ -18,6 +20,8 @@ interface SendEmailModalProps {
   jobId?: string | null;
   /** Client display name */
   clientName?: string;
+  /** When set, offers a checkbox to append the client-approval link */
+  approvalLink?: ApprovalLink | null;
   /** Close handler */
   onClose: () => void;
   /** Callback after successful send */
@@ -32,15 +36,28 @@ export default function SendEmailModal({
   clientId,
   jobId,
   clientName,
+  approvalLink,
   onClose,
   onSent,
 }: SendEmailModalProps) {
+  const { language } = useTranslation();
   const [to, setTo] = useState(email || '');
   const [subject, setSubject] = useState(defaultSubject);
   const [body, setBody] = useState(defaultBody);
   const [sendCopy, setSendCopy] = useState(false);
+  const [includeApproval, setIncludeApproval] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+
+  // Client-approval link (converted quote or agreement) appended on demand.
+  const approvalDocLabel = approvalLink?.kind === 'quote'
+    ? (language === 'fr' ? 'soumission' : 'quote')
+    : (language === 'fr' ? 'contrat' : 'agreement');
+  const approvalText = approvalLink
+    ? (language === 'fr'
+        ? `Consultez et approuvez votre ${approvalDocLabel} ici : ${approvalLink.url}`
+        : `View and approve your ${approvalDocLabel} here: ${approvalLink.url}`)
+    : '';
 
   // Attachment sections (UI-ready, not wired to backend yet)
   const [jobAttOpen, setJobAttOpen] = useState(false);
@@ -69,10 +86,13 @@ export default function SendEmailModal({
     }
     setSending(true);
     try {
+      const finalBody = includeApproval && approvalLink
+        ? `${body.trim()}\n\n${approvalText}`
+        : body.trim();
       await sendEmail({
         to: to.trim(),
         subject: subject.trim(),
-        body: body.trim(),
+        body: finalBody,
         client_id: clientId || null,
         job_id: jobId || null,
         reply_to: replyTo,
@@ -184,6 +204,27 @@ export default function SendEmailModal({
                 placeholder="Write your message..."
               />
             </div>
+
+            {/* Client approval link (converted quote or agreement) */}
+            {approvalLink && (
+              <label className="flex items-start gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeApproval}
+                  onChange={(e) => setIncludeApproval(e.target.checked)}
+                  className="w-3.5 h-3.5 mt-0.5 rounded border-outline text-primary accent-primary"
+                  disabled={sent}
+                />
+                <span className="min-w-0">
+                  <span className="text-[12px] text-text-secondary block">
+                    {language === 'fr'
+                      ? `Inclure le lien d’approbation client (${approvalDocLabel})`
+                      : `Include the client approval link (${approvalDocLabel})`}
+                  </span>
+                  <span className="text-[11px] text-text-tertiary block truncate">{approvalLink.url}</span>
+                </span>
+              </label>
+            )}
 
             {/* Send me a copy */}
             <label className="flex items-center gap-2 cursor-pointer select-none">
