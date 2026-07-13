@@ -24,11 +24,29 @@ interface RepData {
   rank: number;
   name: string;
   userId: string;
-  avatar: string;
+  avatar: string | null;
   closes: number;
   revenue: number;
   trend: number;
   streak: number;
+}
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? '';
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+  return (first + last).toUpperCase();
+}
+
+function RepAvatar({ rep, className, textClassName }: { rep: RepData; className?: string; textClassName?: string }) {
+  if (rep.avatar) {
+    return <img src={rep.avatar} alt={rep.name} className={cn('rounded-full object-cover', className)} />;
+  }
+  return (
+    <div className={cn('flex shrink-0 items-center justify-center rounded-full bg-black', className)}>
+      <span className={cn('font-bold text-white', textClassName)}>{getInitials(rep.name)}</span>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +105,7 @@ function apiToRepData(entries: LeaderboardEntry[]): RepData[] {
     rank: e.rank,
     name: e.full_name,
     userId: e.user_id,
-    avatar: e.avatar_url ?? getRepAvatar(e.full_name) ?? `https://i.pravatar.cc/80?u=${e.user_id}`,
+    avatar: e.avatar_url ?? getRepAvatar(e.full_name),
     closes: e.closes,
     revenue: e.revenue,
     trend: e.trend,
@@ -401,10 +419,10 @@ export default function D2DLeaderboard() {
 
                   {/* Avatar + name */}
                   <div className="relative mt-5 flex flex-col items-center">
-                    <img
-                      src={rep.avatar}
-                      alt={rep.name}
-                      className="h-[72px] w-[72px] rounded-full object-cover shadow-lg ring-2 ring-white/20"
+                    <RepAvatar
+                      rep={rep}
+                      className="h-[72px] w-[72px] shadow-lg ring-2 ring-white/20"
+                      textClassName="text-2xl"
                     />
                     <p className="mt-3 text-base font-semibold text-white">{rep.name}</p>
                   </div>
@@ -426,13 +444,13 @@ export default function D2DLeaderboard() {
           {/* Rest of leaderboard */}
           <Card>
             <CardContent className="p-0">
-              {leaderboardData.map((rep, i) => (
+              {allReps.map((rep, i) => (
                 <button
                   key={rep.rank}
                   onClick={() => openRepDrawer(rep)}
                   className={cn(
                     'flex w-full items-center gap-4 px-5 py-3 text-left transition-colors hover:bg-surface-elevated',
-                    i < leaderboardData.length - 1 && 'border-b border-border-subtle',
+                    i < allReps.length - 1 && 'border-b border-border-subtle',
                   )}
                 >
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-elevated text-xs font-semibold text-text-muted">
@@ -444,7 +462,7 @@ export default function D2DLeaderboard() {
                     className="flex flex-1 items-center gap-3 min-w-0 group"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <img src={rep.avatar} alt={rep.name} className="h-7 w-7 rounded-full object-cover" />
+                    <RepAvatar rep={rep} className="h-7 w-7" textClassName="text-[11px]" />
                     <p className="text-sm font-semibold text-text-primary group-hover:text-text-secondary transition-colors">{rep.name}</p>
                   </Link>
 
@@ -484,7 +502,7 @@ export default function D2DLeaderboard() {
           <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-white border-l border-border-subtle shadow-xl animate-in slide-in-from-right duration-200">
             <div className="flex items-center justify-between border-b border-border-subtle px-5 py-4">
               <div className="flex items-center gap-3">
-                <img src={selectedRep.avatar} alt={selectedRep.name} className="h-11 w-11 rounded-full object-cover" />
+                <RepAvatar rep={selectedRep} className="h-11 w-11" textClassName="text-sm" />
                 <div>
                   <h3 className="text-sm font-semibold text-text-primary">{selectedRep.name}</h3>
                   {selectedRep.streak > 0 && (
