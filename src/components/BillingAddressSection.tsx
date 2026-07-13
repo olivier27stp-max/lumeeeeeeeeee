@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { updateClient } from '../lib/clientsApi';
 import type { ClientRecord } from '../lib/clientsApi';
+import AddressAutocomplete from './AddressAutocomplete';
 
 /**
  * "Billing address same as service address" toggle for a client.
@@ -23,11 +24,15 @@ export function BillingAddressSection({
   const [sameAsService, setSameAsService] = React.useState(client.billing_same_as_service ?? true);
   const [addr, setAddr] = React.useState(client.billing_address || '');
   const [saving, setSaving] = React.useState(false);
+  const addrRef = React.useRef(addr);
+  addrRef.current = addr;
+  const lastSavedRef = React.useRef(client.billing_address || '');
 
   // Re-sync when the client is refetched/updated elsewhere.
   React.useEffect(() => {
     setSameAsService(client.billing_same_as_service ?? true);
     setAddr(client.billing_address || '');
+    lastSavedRef.current = client.billing_address || '';
   }, [client.id, client.billing_same_as_service, client.billing_address]);
 
   const persist = async (patch: { billing_same_as_service?: boolean; billing_address?: string | null }) => {
@@ -50,8 +55,9 @@ export function BillingAddressSection({
   };
 
   const saveAddr = () => {
-    const trimmed = addr.trim();
-    if (trimmed === (client.billing_address || '')) return; // unchanged
+    const trimmed = addrRef.current.trim();
+    if (trimmed === lastSavedRef.current) return; // unchanged
+    lastSavedRef.current = trimmed;
     persist({ billing_address: trimmed || null });
   };
 
@@ -92,14 +98,20 @@ export function BillingAddressSection({
           <label className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">
             {fr ? 'Adresse de facturation' : 'Billing address'}
           </label>
-          <textarea
-            value={addr}
-            onChange={(e) => setAddr(e.target.value)}
-            onBlur={saveAddr}
-            rows={2}
-            placeholder={fr ? '123 rue Principale, Ville, QC, H0H 0H0' : '123 Main St, City, QC, H0H 0H0'}
-            className="w-full mt-1 px-3 py-2 text-[13px] rounded-lg border border-outline bg-surface text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
+          {/* Blur save is delayed: clicking a Google suggestion blurs the input
+              first, then place_changed fires with the formatted address. */}
+          <div className="mt-1" onBlur={() => window.setTimeout(saveAddr, 250)}>
+            <AddressAutocomplete
+              value={addr}
+              onChange={setAddr}
+              onSelect={(a) => {
+                setAddr(a.formatted_address);
+                addrRef.current = a.formatted_address;
+                saveAddr();
+              }}
+              placeholder={fr ? '123 rue Principale, Ville, QC, H0H 0H0' : '123 Main St, City, QC, H0H 0H0'}
+            />
+          </div>
           <p className="text-[11px] text-text-tertiary mt-1">
             {fr ? 'Cette adresse apparaîtra sur les factures.' : 'This address will appear on invoices.'}
           </p>
