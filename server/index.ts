@@ -29,6 +29,7 @@ import agreementsRouter from './routes/agreements';
 import notificationsRouter from './routes/notifications';
 import emailsRouter from './routes/emails';
 import integrationsRouter from './routes/integrations';
+import emailAccountsRouter from './routes/email-accounts';
 import surveysRouter from './routes/surveys';
 import emailTemplatesRouter from './routes/email-templates';
 import communicationsRouter from './routes/communications';
@@ -311,6 +312,7 @@ app.use('/api/pay', rateLimit({
 // Redis-backed persistent rate limiters (when Upstash is configured)
 app.use('/api/messages/send', redisRateLimit({ preset: 'strict', keyFn: (req) => `sms:${userKey(req)}` }));
 app.use('/api/emails', redisRateLimit({ preset: 'strict', keyFn: (req) => `email:${userKey(req)}` }));
+app.use('/api/email/', redisRateLimit({ preset: 'standard', keyFn: (req) => `emailbox:${userKey(req)}` }));
 app.use('/api/payments', redisRateLimit({ preset: 'standard', keyFn: (req) => `pay:${userKey(req)}` }));
 app.use('/api/pay', redisRateLimit({ preset: 'public' }));
 app.use('/api/portal', redisRateLimit({ preset: 'auth' }));
@@ -345,6 +347,7 @@ app.use('/api', notificationsRouter);
 app.use('/api', messagesRouter);
 app.use('/api', emailsRouter);
 app.use('/api', integrationsRouter);
+app.use('/api', emailAccountsRouter);
 app.use('/api', emailTemplatesRouter);
 app.use('/api', communicationsRouter);
 app.use('/api', automationTestRouter);
