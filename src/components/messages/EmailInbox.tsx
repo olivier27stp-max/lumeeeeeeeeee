@@ -19,17 +19,33 @@ import {
   type EmailProviderSlug,
 } from '../../lib/emailInboxApi';
 
-// Small inline brand glyphs (no external assets).
+// Official brand logos, inlined as SVG (no external assets → no CSP/network issue).
 function ProviderGlyph({ provider }: { provider: EmailProviderSlug }) {
   if (provider === 'gmail') {
     return (
-      <span className="w-9 h-9 rounded-lg grid place-items-center text-white text-[13px] font-bold shrink-0"
-        style={{ background: 'linear-gradient(135deg,#ea4335,#c5221f)' }}>G</span>
+      <span className="w-9 h-9 rounded-lg grid place-items-center bg-white border border-border shrink-0">
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-label="Gmail">
+          <path fill="#4285F4" d="M22 5.5v13a1.5 1.5 0 0 1-1.5 1.5H18V9.75l-6 4.5-6-4.5V20H3.5A1.5 1.5 0 0 1 2 18.5v-13z" />
+          <path fill="#34A853" d="M2 18.5v-8.75l4 3V20H3.5A1.5 1.5 0 0 1 2 18.5" />
+          <path fill="#FBBC04" d="M2 5.5A1.5 1.5 0 0 1 3.5 4H6v5.75l-4-3z" />
+          <path fill="#EA4335" d="M6 4h12l-6 4.5z" />
+          <path fill="#C5221F" d="M18 4h2.5A1.5 1.5 0 0 1 22 5.5v1.25l-4 3z" />
+        </svg>
+      </span>
     );
   }
   return (
-    <span className="w-9 h-9 rounded-lg grid place-items-center text-white text-[15px] font-bold shrink-0"
-      style={{ background: 'linear-gradient(135deg,#0078d4,#005a9e)' }}>⊞</span>
+    <span className="w-9 h-9 rounded-lg grid place-items-center bg-white border border-border shrink-0">
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-label="Outlook">
+        <path fill="#0A2767" d="M23 12.2 13.6 7v10z" />
+        <path fill="#0364B8" d="M13.6 7 23 12.2V6.4a1 1 0 0 0-1-1h-8.4z" />
+        <path fill="#28A8EA" d="M13.6 7H5.2a1 1 0 0 0-1 1v9.4h9.4z" />
+        <path fill="#0078D4" d="M4.2 8v9.4h9.4V7H5.2a1 1 0 0 0-1 1" opacity=".5" />
+        <path fill="#14447D" d="M13.6 17H4.2v.6a1 1 0 0 0 1 1H22a1 1 0 0 0 1-1v-.4l-9.4-5.2z" opacity=".9" />
+        <rect x="1" y="6" width="10" height="12" rx="1.4" fill="#0078D4" />
+        <text x="6" y="15" font-size="8" font-family="Arial, sans-serif" font-weight="700" fill="#fff" text-anchor="middle">O</text>
+      </svg>
+    </span>
   );
 }
 
