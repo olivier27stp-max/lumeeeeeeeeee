@@ -13,7 +13,7 @@ const refundSchema = z.object({
   amountCents: z.number().int().positive().max(100_000_000).optional(),
   reason: z.string().trim().max(500).optional(),
 });
-import { stripeWebhookSecret, stripeWebhookClient, supabaseServiceRoleKey, paypalWebhookId, paypalEnv } from '../lib/config';
+import { stripeWebhookSecret, stripeConnectWebhookSecret, stripeWebhookClient, supabaseServiceRoleKey, paypalWebhookId, paypalEnv } from '../lib/config';
 import {
   validate,
   paymentKeysSchema,
@@ -67,7 +67,13 @@ const router = Router();
 // Handles both direct Stripe events AND Stripe Connect events
 export const stripeWebhookHandler: import('express').RequestHandler = async (req, res) => {
   try {
-    if (!stripeWebhookClient || !stripeWebhookSecret) {
+    // Accept both the platform-account webhook secret and the Connect webhook
+    // secret. The same handler is mounted at /api/webhooks/stripe (direct
+    // account events) and /api/webhooks/stripe-connect (Connect events). Which
+    // secret signed the request depends on which endpoint Stripe is calling, so
+    // we try every configured secret and accept the first that verifies.
+    const webhookSecrets = [stripeWebhookSecret, stripeConnectWebhookSecret].filter(Boolean);
+    if (!stripeWebhookClient || webhookSecrets.length === 0) {
       res.status(503).json({ error: 'Stripe webhook is not configured.' });
       return;
     }
@@ -87,10 +93,18 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
     }
 
     const rawBody = req.body instanceof Buffer ? req.body : Buffer.from('');
-    let event: Stripe.Event;
-    try {
-      event = stripeWebhookClient.webhooks.constructEvent(rawBody, signature, stripeWebhookSecret);
-    } catch (sigErr: any) {
+    let event: Stripe.Event | null = null;
+    let lastSigErr: any = null;
+    for (const secret of webhookSecrets) {
+      try {
+        event = stripeWebhookClient.webhooks.constructEvent(rawBody, signature, secret);
+        break;
+      } catch (sigErr: any) {
+        lastSigErr = sigErr;
+      }
+    }
+    if (!event) {
+      const sigErr = lastSigErr;
       logSecurityEvent({
         event_type: 'stripe_webhook_invalid_signature',
         severity: 'critical',
