@@ -11,6 +11,7 @@ export const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '
 export const mapboxGeocodingToken = process.env.MAPBOX_GEOCODING_TOKEN || '';
 
 export const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
+export const stripeConnectWebhookSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET || '';
 export const paypalWebhookId = process.env.PAYPAL_WEBHOOK_ID || '';
 export const paypalEnv = String(process.env.PAYPAL_ENV || 'sandbox').toLowerCase() === 'live' ? 'live' : 'sandbox';
 

@@ -180,6 +180,7 @@ const WEBHOOK_PATHS_EXEMPT_FROM_CSRF = [
   '/messages/inbound',
   '/messages/status',
   '/webhooks/stripe',
+  '/webhooks/stripe-connect',
   '/webhooks/paypal',
 ];
 app.use('/api', (req, res, next) => {
@@ -227,6 +228,9 @@ const port = Number(process.env.PORT || process.env.API_PORT || 3002);
 // Stripe requires the raw body for signature verification, so this route
 // uses express.raw() and is registered before the global express.json().
 app.post('/api/webhooks/stripe', express.raw({ type: 'application/json', limit: '1mb' }), stripeWebhookHandler);
+// Stripe Connect events are configured to hit /stripe-connect. Same handler:
+// it verifies the signature against either webhook secret (direct or Connect).
+app.post('/api/webhooks/stripe-connect', express.raw({ type: 'application/json', limit: '1mb' }), stripeWebhookHandler);
 
 // ── Global body parsing (after stripe webhook raw route) ──
 app.use(express.json({ limit: '512kb' }));
