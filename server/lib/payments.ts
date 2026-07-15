@@ -928,15 +928,21 @@ export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput)
       paymentId: String(data.id),
     });
 
-    // Emit invoice.paid event
+    // Emit invoice.paid event. Carry the client as related entity so the
+    // payment surfaces in the client's activity/events panel too (not just
+    // the invoice). Job id passed in metadata for the job panel.
     eventBus.emit('invoice.paid', {
       orgId: input.org_id,
       entityType: 'invoice',
       entityId: input.invoice_id,
+      relatedEntityType: input.client_id ? 'client' : undefined,
+      relatedEntityId: input.client_id || undefined,
       metadata: {
         payment_id: String(data.id),
         amount_cents: input.amount_cents,
         provider: input.provider,
+        client_id: input.client_id || null,
+        job_id: input.job_id || null,
       },
     });
   }

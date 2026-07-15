@@ -1914,6 +1914,26 @@ const fr: TranslationKeys = {
     noActivityYet: 'Aucune activité pour le moment.',
   },
 
+  // EventsPanel — unified events feed (client + job)
+  eventsPanel: {
+    title: 'Événements',
+    addNotePlaceholder: 'Ajouter une note…',
+    add: 'Ajouter',
+    condensedView: 'Vue condensée',
+    search: 'Rechercher',
+    collapse: 'Réduire',
+    expand: 'Agrandir',
+    noEventsYet: 'Aucun événement pour le moment.',
+    by: 'par',
+    to: 'À',
+    subject: 'Objet',
+    attachment: 'pièce jointe',
+    delete: 'Supprimer',
+    viewDetails: 'Voir détails',
+    hideDetails: 'Masquer',
+    open: 'Ouvrir',
+  },
+
   // Agent
   agent: {
     actionExecuted: 'Action exécutée',

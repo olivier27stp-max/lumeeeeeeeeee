@@ -99,6 +99,7 @@ const QuoteNew = React.lazy(() => import('./pages/QuoteNew'));
 import TaxSettings from './pages/TaxSettings';
 import ReminderSettings from './pages/ReminderSettings';
 import OAuthCallback from './pages/OAuthCallback';
+import EmailOAuthCallback from './pages/EmailOAuthCallback';
 import DispatchMap from './pages/DispatchMap';
 import OnboardingFlow from './pages/OnboardingFlow';
 import CheckoutSuccess from './pages/CheckoutSuccess';
@@ -551,6 +552,7 @@ export default function App() {
   const isOAuthCallback =
     location.pathname === '/auth/callback' ||
     location.pathname === '/apps/callback' ||
+    location.pathname === '/email/callback' ||
     location.pathname === '/verify-email';
   // Google/OAuth providers set email_confirmed_at automatically, so this only
   // triggers for unverified email/password sign-ups.
@@ -1277,6 +1279,8 @@ function AuthenticatedApp({
                     <Route path="/settings/roles" element={<Gated permission="users.update_role"><PageWrapper><SettingsRoles /></PageWrapper></Gated>} />
                     <Route path="/settings/users" element={<Navigate to="/settings/team" replace />} />
                     <Route path="/apps/callback" element={<Gated permission="integrations.update"><OAuthCallback /></Gated>} />
+                    {/* Email mailbox OAuth return — per-owner, no org permission gate. */}
+                    <Route path="/email/callback" element={<EmailOAuthCallback />} />
                     {/* BillingCheckout removed — upgrade goes through /checkout */}
                     <Route path="/settings/referrals" element={<Gated permission="settings.read"><PageWrapper><ReferFriend /></PageWrapper></Gated>} />
 {/* Platform Admin — owner-only, server enforces auth */}

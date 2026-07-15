@@ -335,10 +335,15 @@ export async function getTrackingPointsForDay(userId: string, isoDate: string): 
 }
 
 export async function getActiveLiveLocations(): Promise<LiveLocation[]> {
+  // Only positions refreshed recently. A rep whose app closed without ending
+  // its tracking session leaves an 'active'/'idle' row behind forever, which
+  // used to render as a permanent ghost marker on the map.
+  const freshSince = new Date(Date.now() - 10 * 60_000).toISOString();
   const { data, error } = await supabase
     .from('tracking_live_locations')
     .select('*')
-    .in('tracking_status', ['active', 'idle']);
+    .in('tracking_status', ['active', 'idle'])
+    .gte('recorded_at', freshSince);
   if (error) throw error;
 
   const rows = (data || []) as any[];

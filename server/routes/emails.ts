@@ -314,7 +314,9 @@ ${viewUrl ? `
       entityType: 'invoice',
       entityId: invoiceId,
       actorId: auth.user.id,
-      metadata: { invoice_number: invoice.invoice_number, client_name: clientName },
+      relatedEntityType: invoice.client_id ? 'client' : undefined,
+      relatedEntityId: invoice.client_id || undefined,
+      metadata: { invoice_number: invoice.invoice_number, client_name: clientName, client_id: invoice.client_id || null },
     });
 
     return res.json({ ok: true, emailId: emailResult?.messageId || null });
@@ -416,7 +418,9 @@ ${viewUrl ? `
       entityType: 'invoice',
       entityId: invoiceId,
       actorId: auth.user.id,
-      metadata: { invoice_number: (quote as any).invoice_number },
+      relatedEntityType: (quote as any).client_id ? 'client' : undefined,
+      relatedEntityId: (quote as any).client_id || undefined,
+      metadata: { invoice_number: (quote as any).invoice_number, client_id: (quote as any).client_id || null },
     });
 
     return res.json({ ok: true, emailId: emailResult?.messageId || null });

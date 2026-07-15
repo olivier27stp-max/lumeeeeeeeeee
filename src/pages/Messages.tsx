@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   MessageSquare,
+  Mail,
   Search,
   Send,
   Phone,
@@ -22,6 +23,7 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useTranslation } from '../i18n';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import PermissionGate from '../components/PermissionGate';
+import EmailInbox from '../components/messages/EmailInbox';
 import { displayPhone } from '../lib/piiSanitizer';
 import {
   fetchConversations,
@@ -270,6 +272,8 @@ export default function Messages() {
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [showNewModal, setShowNewModal] = useState(false);
+  // Channel toggle: keeps the SMS page exactly as before, adds an Email view.
+  const [channel, setChannel] = useState<'sms' | 'email'>('sms');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -474,7 +478,34 @@ export default function Messages() {
   return (
     <PermissionGate permission="automations.update">
     <>
-      {/* ── Full-height messaging layout matching reference ── */}
+      {/* ── Channel selector: SMS (unchanged) · Email ── */}
+      <div className="mb-3 inline-flex bg-surface-secondary rounded-xl p-1 gap-1">
+        {(['sms', 'email'] as const).map((ch) => (
+          <button
+            key={ch}
+            onClick={() => setChannel(ch)}
+            className={cn(
+              'flex items-center gap-2 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all',
+              channel === ch
+                ? 'bg-surface text-text-primary shadow-sm'
+                : 'text-text-tertiary hover:text-text-secondary'
+            )}
+          >
+            {ch === 'sms' ? <MessageSquare size={14} /> : <Mail size={14} />}
+            {ch === 'sms' ? 'SMS' : 'Email'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── EMAIL channel ── */}
+      {channel === 'email' && (
+        <div className="bg-surface rounded-2xl border border-border overflow-hidden flex" style={{ height: 'calc(100vh - 220px)' }}>
+          <EmailInbox />
+        </div>
+      )}
+
+      {/* ── SMS channel (existing page, unchanged) ── */}
+      {channel === 'sms' && (
       <div className="bg-surface rounded-2xl border border-border overflow-hidden flex" style={{ height: 'calc(100vh - 180px)' }}>
 
         {/* ── Left: Conversation Sidebar ── */}
@@ -699,6 +730,7 @@ export default function Messages() {
           )}
         </div>
       </div>
+      )}
 
       <AnimatePresence>
         {showNewModal && (

@@ -76,13 +76,18 @@ export default function D2DMap() {
   // Live reps on map
   const [liveReps, setLiveReps] = useState<LiveLocation[]>([]);
 
-  // Load live reps + poll every 15 seconds
+  // Load live reps + poll every 15 seconds.
+  // Own position is excluded: the user already has their blue GPS dot — their
+  // own rep marker would just sit next to it permanently.
   useEffect(() => {
     let mounted = true;
-    const load = () => {
-      getActiveLiveLocations()
-        .then((data) => { if (mounted) setLiveReps(data); })
-        .catch(() => {});
+    const load = async () => {
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const myId = sess.session?.user?.id;
+        const data = await getActiveLiveLocations();
+        if (mounted) setLiveReps(data.filter((r) => r.user_id !== myId));
+      } catch {}
     };
     load();
     const interval = setInterval(load, 15_000);

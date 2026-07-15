@@ -37,6 +37,7 @@ import { exportClientData, eraseClient } from '../lib/consentApi';
 import type { ClientRecord } from '../lib/clientsApi';
 import { BillingAddressSection } from '../components/BillingAddressSection';
 import PropertiesSection from '../components/PropertiesSection';
+import EventsPanel from '../components/events/EventsPanel';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { getInvoiceRowUiStatus } from '../lib/invoicesApi';
@@ -1080,6 +1081,8 @@ export default function ClientDetails() {
 
         {/* ──── RIGHT SIDEBAR ──── */}
         <div className="space-y-6 lg:sticky lg:top-5">
+          {/* Events / activity center */}
+          <EventsPanel entityType="client" entityId={id!} />
           {/* Contact Info */}
           <div className="section-card">
             <div className="px-5 py-3.5 border-b border-outline">

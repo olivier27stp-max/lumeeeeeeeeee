@@ -32,3 +32,10 @@ scripts/.env*
 .vscode/settings.json
 *.swp
 *.swo
+
+# Claude Code personal local settings
+.claude/settings.local.json
+
+# Email inbox — local mockups/preview (not committed)
+plan-email-preview.html
+maquette-email-messages.html
