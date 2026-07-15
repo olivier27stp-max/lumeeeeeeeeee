@@ -88,7 +88,8 @@ el.style.cssText='box-sizing:border-box;width:28px;height:28px;border-radius:50%
 el.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">'+c.icon+'</svg>';return el;}`;
 
 /**
- * Mapbox GL JS (satellite-streets) in a WebView — like the web map. No plugins.
+ * Mapbox GL JS (streets-v12, light — same style as the deployed web map) in a
+ * WebView. No plugins.
  * - choose a status, then TAP the map to place a pin (place mode)
  * - tap a pin → onSelectHouse (recolor)
  * - draw zones by tapping corners, finish from a native button
@@ -120,7 +121,7 @@ const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet" />
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
-<style>html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#111}
+<style>html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#e5e7eb}
 .me{position:relative;width:22px;height:22px}
 .me .p{position:absolute;inset:0;border-radius:50%;background:rgba(99,102,241,.25);animation:gpsPulse 2s ease-out infinite}
 .me .c{position:absolute;left:4px;top:4px;width:14px;height:14px;border-radius:50%;background:#6366f1;border:2.5px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4)}
@@ -132,7 +133,7 @@ const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
 mapboxgl.accessToken='${TOKEN}';
 function post(o){try{window.ReactNativeWebView.postMessage(JSON.stringify(o))}catch(e){}}
 ${COLOR_JS}
-var map=new mapboxgl.Map({container:'map',style:'mapbox://styles/mapbox/satellite-streets-v12',center:[${center.lng},${center.lat}],zoom:16});
+var map=new mapboxgl.Map({container:'map',style:'mapbox://styles/mapbox/streets-v12',center:[${center.lng},${center.lat}],zoom:16});
 var meEl=document.createElement('div');meEl.className='me';meEl.innerHTML='<div class="p"></div><div class="c"></div>';
 var meMarker=new mapboxgl.Marker({element:meEl,anchor:'center'}).setLngLat([${center.lng},${center.lat}]).addTo(map);
 
@@ -335,7 +336,7 @@ map.on('moveend',function(){var c=map.getCenter();post({type:'center',lat:c.lat,
         javaScriptEnabled
         domStorageEnabled
         startInLoadingState
-        style={{ flex: 1, backgroundColor: '#111' }}
+        style={{ flex: 1, backgroundColor: '#e5e7eb' }}
       />
     </View>
   );
