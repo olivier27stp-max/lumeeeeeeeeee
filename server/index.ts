@@ -55,6 +55,7 @@ import featureFlagsRouter from './routes/feature-flags';
 import scheduledReportsRouter from './routes/scheduled-reports';
 import goalsRouter from './routes/goals';
 import auditLogRouter from './routes/audit-log';
+import activityNotesRouter from './routes/activity-notes';
 import orgKnowledgeRouter from './routes/org-knowledge';
 import agentAuthRouter from './routes/agent-auth';
 import agentRouter from './routes/agent';
@@ -369,6 +370,7 @@ app.use('/api', onboardingRouter);
 app.use('/api', scheduledReportsRouter);
 app.use('/api', goalsRouter);
 app.use('/api', auditLogRouter);
+app.use('/api', activityNotesRouter);
 app.use('/api', orgKnowledgeRouter);
 // External agent auth (API-key → short-lived JWT) + webhook — owns its auth
 app.use('/api', agentAuthRouter);

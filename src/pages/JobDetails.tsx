@@ -52,6 +52,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import { useJobModalController } from '../contexts/JobModalController';
 import { useTranslation } from '../i18n';
 import ActivityTimeline from '../components/ActivityTimeline';
+import EventsPanel from '../components/events/EventsPanel';
 import { useDropZone } from '../hooks/useDropZone';
 import { getRecurrenceRule, createRecurrenceRule, deactivateRecurrenceRule, type RecurrenceRule, type RecurrenceFrequency } from '../lib/recurringJobsApi';
 import { getServiceContractByJob, type ServiceContract } from '../lib/serviceContractsApi';
@@ -2102,6 +2103,9 @@ export default function JobDetails() {
             </div>
           </div>
         )}
+
+        {/* ═══ EVENTS (unified activity center) ═══ */}
+        <EventsPanel entityType="job" entityId={id!} clientId={job.client_id || undefined} />
 
         {/* ═══ COMMUNICATIONS ═══ */}
         <CommunicationsTimeline jobId={id!} clientId={job.client_id || undefined} refreshKey={commRefreshKey} />

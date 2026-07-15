@@ -1922,6 +1922,23 @@ const en = {
     noActivityYet: 'No activity yet.',
   },
 
+  // EventsPanel — unified events feed (client + job)
+  eventsPanel: {
+    title: 'Events',
+    addNotePlaceholder: 'Add a note…',
+    add: 'Add',
+    condensedView: 'Condensed view',
+    search: 'Search',
+    collapse: 'Collapse',
+    expand: 'Expand',
+    noEventsYet: 'No events yet.',
+    by: 'by',
+    to: 'To',
+    subject: 'Subject',
+    attachment: 'attachment',
+    delete: 'Delete',
+  },
+
   // Agent
   agent: {
     actionExecuted: 'Action executed',
