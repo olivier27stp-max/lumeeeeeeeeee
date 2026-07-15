@@ -5,9 +5,9 @@
  * Renders nothing if the org has no resolvable city.
  */
 import { useQuery } from '@tanstack/react-query';
-import { MapPin } from 'lucide-react';
+import { MapPin, Wind, Droplets, ArrowUp, ArrowDown } from 'lucide-react';
 import { useTranslation } from '../i18n';
-import { getOrgHourlyWeather, weatherIcon, weatherLabel } from '../lib/weatherApi';
+import { getOrgHourlyWeather, weatherIcon, weatherLabel, outdoorWorkVerdict } from '../lib/weatherApi';
 
 export default function HomeWeatherStrip() {
   const { language } = useTranslation();
@@ -29,6 +29,9 @@ export default function HomeWeatherStrip() {
 
   const now = data.hours[0];
   const rest = data.hours.slice(1);
+  const verdict = outdoorWorkVerdict(data.todayPrecipMm, data.todayMaxWindKmh, fr);
+  const verdictDot =
+    verdict.level === 'good' ? 'bg-green-500' : verdict.level === 'ok' ? 'bg-amber-500' : 'bg-red-500';
 
   const hourFmt = (iso: string) => {
     const d = new Date(iso);
@@ -47,11 +50,20 @@ export default function HomeWeatherStrip() {
             </div>
             <div className="text-[44px] font-bold leading-none text-text-primary">{now.tempC}°</div>
             <div className="text-[13px] font-medium text-text-secondary">{weatherLabel(now.code, fr)}</div>
-            {now.precipProb >= 20 ? (
-              <div className="text-[12px] font-medium text-blue-600">
-                {fr ? 'Précip.' : 'Precip.'} {now.precipProb}%
-              </div>
-            ) : null}
+
+            {/* Compact useful stats for field crews */}
+            <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] font-medium text-text-tertiary">
+              <span className="inline-flex items-center gap-0.5">
+                <ArrowUp size={11} className="text-red-500" />{data.todayMaxC}°
+                <ArrowDown size={11} className="ml-0.5 text-blue-500" />{data.todayMinC}°
+              </span>
+              <span className="inline-flex items-center gap-0.5"><Wind size={11} />{data.todayMaxWindKmh}<span className="text-[9px]">km/h</span></span>
+              <span className="inline-flex items-center gap-0.5"><Droplets size={11} className="text-blue-500" />{data.todayPrecipMm}<span className="text-[9px]">mm</span></span>
+            </div>
+            <div className="mt-1 inline-flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-full ${verdictDot}`} />
+              <span className="text-[11px] font-semibold text-text-secondary">{verdict.label}</span>
+            </div>
           </div>
         </div>
 
