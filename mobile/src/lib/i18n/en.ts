@@ -3902,6 +3902,15 @@ const en = {
     assignToTeam: 'Assign to a team',
     none: 'None',
     saveZone: 'Save the zone',
+    // D2D map — search, filters, live reps (parity with web map-container)
+    searchAddressPlaceholder: 'Search a street, neighborhood…',
+    filters: 'Filters',
+    pinsStatusHeader: 'Pins — Status',
+    selectAll: 'Select all',
+    deselectAll: 'Deselect all',
+    showZonesFilter: 'Show zones',
+    showRepsFilter: 'Show reps',
+    repsOnline: '{count} online',
 
     // Time / clock tab
     timeTracking: 'Time tracking',

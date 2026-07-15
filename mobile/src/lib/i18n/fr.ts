@@ -3894,6 +3894,15 @@ const fr: TranslationKeys = {
     assignToTeam: 'Assigner à une équipe',
     none: 'Aucune',
     saveZone: 'Enregistrer la zone',
+    // D2D map — search, filters, live reps (parity with web map-container)
+    searchAddressPlaceholder: 'Rechercher une rue, un quartier…',
+    filters: 'Filtres',
+    pinsStatusHeader: 'Pins — Statut',
+    selectAll: 'Tout sélectionner',
+    deselectAll: 'Tout désélectionner',
+    showZonesFilter: 'Afficher les zones',
+    showRepsFilter: 'Voir les représentants',
+    repsOnline: '{count} en ligne',
 
     // Time / clock tab
     timeTracking: 'Suivi du temps',
