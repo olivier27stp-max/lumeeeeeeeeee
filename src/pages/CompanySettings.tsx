@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import PermissionGate from '../components/PermissionGate';
 import FileUpload from '../components/FileUpload';
+import AddressAutocomplete, { type StructuredAddress } from '../components/AddressAutocomplete';
 import { STORAGE_BUCKETS, deleteFile } from '../lib/storage';
 import LocationTrackingSettingCard from '../components/settings/LocationTrackingSettingCard';
 
@@ -398,11 +399,21 @@ export default function CompanySettings() {
             <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
               {t.companySettings.street1}
             </label>
-            <input
-              type="text"
+            <AddressAutocomplete
               value={form.street1}
-              onChange={(e) => update('street1', e.target.value)}
-              className="glass-input w-full mt-1"
+              onChange={(v) => update('street1', v)}
+              onSelect={(addr: StructuredAddress) => {
+                setForm((prev) => ({
+                  ...prev,
+                  street1: [addr.street_number, addr.street_name].filter(Boolean).join(' ') || addr.formatted_address,
+                  city: addr.city || prev.city,
+                  province: addr.province || prev.province,
+                  postal_code: addr.postal_code || prev.postal_code,
+                  country: addr.country || prev.country,
+                }));
+                setDirty(true);
+              }}
+              className="mt-1"
               placeholder="123 Main Street"
             />
           </div>
