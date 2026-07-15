@@ -162,6 +162,7 @@ export async function syncGmailInbox(accountId: string, max = 25): Promise<numbe
         account_id: account.id,
         user_id: account.user_id,
         provider_message_id: msg.id,
+        rfc_message_id: header(headers, 'Message-ID') || null,
         from_name: from.name,
         from_email: from.email,
         to_emails: parseAddressList(header(headers, 'To')),

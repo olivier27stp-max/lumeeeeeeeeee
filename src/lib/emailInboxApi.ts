@@ -137,6 +137,44 @@ export async function fetchThread(threadId: string): Promise<{ thread: EmailThre
   return res.json();
 }
 
+// ─── Send / reply / forward ──────────────────────────────────────────
+export async function sendEmail(payload: {
+  accountId: string;
+  to: string[];
+  cc?: string[];
+  subject: string;
+  bodyHtml: string;
+  threadId?: string; // present → reply into this thread
+}): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/email/send`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to send email');
+  }
+}
+
+// ─── Thread actions: read / unread / archive / trash ─────────────────
+export async function threadAction(
+  threadId: string,
+  action: 'read' | 'unread' | 'archive' | 'trash',
+): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/email/threads/${threadId}/action`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Action failed');
+  }
+}
+
 // ─── Disconnect a mailbox ────────────────────────────────────────────
 export async function disconnectMailbox(accountId: string): Promise<void> {
   const headers = await getAuthHeaders();

@@ -11,13 +11,15 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Mail, Plus, Loader2, CheckCircle2, AlertCircle, Trash2, RefreshCw,
   Search, Paperclip, ArrowLeft, ChevronLeft, Settings2,
+  Reply, ReplyAll, Forward, Send, X, Archive, MailOpen, Trash,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import DOMPurify from 'dompurify';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import {
   listEmailAccounts, connectMailbox, disconnectMailbox,
-  syncMailbox, fetchThreads, fetchThread,
+  syncMailbox, fetchThreads, fetchThread, sendEmail, threadAction,
   type EmailAccount, type EmailProviderSlug,
   type EmailThread, type EmailMessage,
 } from '../../lib/emailInboxApi';
@@ -81,6 +83,18 @@ function SenderAvatar({ name, email, seed, size = 40 }: {
       {initials(name, email)}
     </span>
   );
+}
+
+// ── Email HTML sanitization (anti-XSS) ────────────────────────
+// Strips <script>, event handlers, javascript: URIs, etc. Keeps images,
+// links and formatting. External links open in a new tab safely.
+function sanitizeEmailHtml(html: string): string {
+  const clean = DOMPurify.sanitize(html, {
+    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'button'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'style'],
+    ALLOW_DATA_ATTR: false,
+  });
+  return clean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -227,6 +241,21 @@ export default function EmailInbox() {
   const [threadSubject, setThreadSubject] = useState('');
   const [loadingMessages, setLoadingMessages] = useState(false);
 
+  // Composer (reply / reply-all / forward / new)
+  const [composeMode, setComposeMode] = useState<null | 'reply' | 'replyAll' | 'forward'>(null);
+  const [composeTo, setComposeTo] = useState('');
+  const [composeCc, setComposeCc] = useState('');
+  const [composeSubject, setComposeSubject] = useState('');
+  const [composeBody, setComposeBody] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
+  // New-message modal (compose from scratch, not tied to a thread)
+  const [showNewCompose, setShowNewCompose] = useState(false);
+  const [newTo, setNewTo] = useState('');
+  const [newCc, setNewCc] = useState('');
+  const [newSubject, setNewSubject] = useState('');
+  const [newBody, setNewBody] = useState('');
+  const [sendingNew, setSendingNew] = useState(false);
+
   // Load accounts on mount
   const loadAccounts = useCallback(async () => {
     try {
@@ -308,6 +337,7 @@ export default function EmailInbox() {
 
   const openThread = async (threadId: string) => {
     setSelectedThreadId(threadId);
+    setComposeMode(null);
     setLoadingMessages(true);
     try {
       const { thread, messages } = await fetchThread(threadId);
@@ -318,6 +348,123 @@ export default function EmailInbox() {
       toast.error(err?.message || 'Erreur');
     } finally {
       setLoadingMessages(false);
+    }
+  };
+
+  // ── Compose handlers ────────────────────────────────────────
+  const lastMsg = messages[messages.length - 1];
+
+  const startReply = (all: boolean) => {
+    if (!lastMsg) return;
+    const myEmail = accounts.find((a) => a.id === activeAccountId)?.email_address?.toLowerCase() || '';
+    const to = [lastMsg.from_email || ''].filter(Boolean);
+    const cc = all
+      ? [...lastMsg.to_emails, ...lastMsg.cc_emails]
+          .map((e) => e.toLowerCase())
+          .filter((e) => e && e !== myEmail && e !== (lastMsg.from_email || '').toLowerCase())
+      : [];
+    setComposeTo(to.join(', '));
+    setComposeCc([...new Set(cc)].join(', '));
+    setComposeSubject(threadSubject.startsWith('Re:') ? threadSubject : `Re: ${threadSubject}`);
+    setComposeBody('');
+    setComposeMode(all ? 'replyAll' : 'reply');
+  };
+
+  const startForward = () => {
+    if (!lastMsg) return;
+    const quoted = `<br><br>---------- Message transféré ----------<br>${lastMsg.body_html || lastMsg.body_text || ''}`;
+    setComposeTo('');
+    setComposeCc('');
+    setComposeSubject(threadSubject.startsWith('Fwd:') ? threadSubject : `Fwd: ${threadSubject}`);
+    setComposeBody(quoted);
+    setComposeMode('forward');
+  };
+
+  const closeCompose = () => {
+    setComposeMode(null);
+    setComposeTo(''); setComposeCc(''); setComposeSubject(''); setComposeBody('');
+  };
+
+  const doThreadAction = async (action: 'read' | 'unread' | 'archive' | 'trash') => {
+    if (!selectedThreadId) return;
+    try {
+      await threadAction(selectedThreadId, action);
+      if (action === 'archive' || action === 'trash') {
+        // Remove from the list and close the reading pane.
+        setThreads((prev) => prev.filter((t) => t.id !== selectedThreadId));
+        setSelectedThreadId(null);
+        toast.success(action === 'archive'
+          ? (language === 'fr' ? 'Archivé' : 'Archived')
+          : (language === 'fr' ? 'Supprimé' : 'Deleted'));
+      } else {
+        const read = action === 'read';
+        setThreads((prev) => prev.map((t) => (t.id === selectedThreadId ? { ...t, is_read: read } : t)));
+        if (action === 'unread') { setSelectedThreadId(null); }
+        toast.success(read ? (language === 'fr' ? 'Marqué comme lu' : 'Marked read') : (language === 'fr' ? 'Marqué non lu' : 'Marked unread'));
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Action échouée');
+    }
+  };
+
+  const parseEmails = (s: string) => s.split(',').map((e) => e.trim()).filter(Boolean);
+
+  const doSend = async () => {
+    if (!activeAccountId || !composeTo.trim() || !composeSubject.trim()) {
+      toast.error(language === 'fr' ? 'Destinataire et objet requis' : 'Recipient and subject required');
+      return;
+    }
+    setSendingEmail(true);
+    try {
+      // Wrap plain-text lines into HTML for a basic body.
+      const html = /<[a-z][\s\S]*>/i.test(composeBody)
+        ? composeBody
+        : composeBody.replace(/\n/g, '<br>');
+      await sendEmail({
+        accountId: activeAccountId,
+        to: parseEmails(composeTo),
+        cc: parseEmails(composeCc),
+        subject: composeSubject,
+        bodyHtml: html,
+        // reply/replyAll thread into the current conversation; forward starts fresh
+        threadId: composeMode === 'forward' ? undefined : (selectedThreadId || undefined),
+      });
+      toast.success(language === 'fr' ? 'Email envoyé' : 'Email sent');
+      closeCompose();
+      if (selectedThreadId) await openThread(selectedThreadId); // refresh with the new message
+    } catch (err: any) {
+      toast.error(err?.message || 'Envoi échoué');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  const openNewCompose = () => {
+    setNewTo(''); setNewCc(''); setNewSubject(''); setNewBody('');
+    setShowNewCompose(true);
+  };
+
+  const sendNew = async () => {
+    if (!activeAccountId || !newTo.trim() || !newSubject.trim()) {
+      toast.error(language === 'fr' ? 'Destinataire et objet requis' : 'Recipient and subject required');
+      return;
+    }
+    setSendingNew(true);
+    try {
+      const html = /<[a-z][\s\S]*>/i.test(newBody) ? newBody : newBody.replace(/\n/g, '<br>');
+      await sendEmail({
+        accountId: activeAccountId,
+        to: parseEmails(newTo),
+        cc: parseEmails(newCc),
+        subject: newSubject,
+        bodyHtml: html,
+      });
+      toast.success(language === 'fr' ? 'Email envoyé' : 'Email sent');
+      setShowNewCompose(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'Envoi échoué');
+    } finally {
+      setSendingNew(false);
     }
   };
 
@@ -362,6 +509,10 @@ export default function EmailInbox() {
           <span className="text-[13px] font-semibold text-text-primary truncate flex-1">
             {activeAccount?.email_address}
           </span>
+          <button onClick={openNewCompose} title={language === 'fr' ? 'Nouveau message' : 'Compose'}
+            className="w-8 h-8 grid place-items-center rounded-lg bg-primary text-white hover:bg-primary-hover">
+            <Plus size={16} />
+          </button>
           <button onClick={() => activeAccountId && handleSync(activeAccountId)} disabled={syncing}
             className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary" title="Synchroniser">
             <RefreshCw size={15} className={syncing ? 'animate-spin' : ''} />
@@ -436,6 +587,20 @@ export default function EmailInbox() {
                 <ArrowLeft size={18} />
               </button>
               <h3 className="text-[16px] font-bold text-text-primary truncate flex-1">{threadSubject}</h3>
+              <div className="flex items-center gap-1 shrink-0">
+                <button onClick={() => doThreadAction('unread')} title={language === 'fr' ? 'Marquer non lu' : 'Mark unread'}
+                  className="w-8 h-8 grid place-items-center rounded-lg hover:bg-surface-secondary text-text-secondary">
+                  <MailOpen size={16} />
+                </button>
+                <button onClick={() => doThreadAction('archive')} title={language === 'fr' ? 'Archiver' : 'Archive'}
+                  className="w-8 h-8 grid place-items-center rounded-lg hover:bg-surface-secondary text-text-secondary">
+                  <Archive size={16} />
+                </button>
+                <button onClick={() => doThreadAction('trash')} title={language === 'fr' ? 'Supprimer' : 'Delete'}
+                  className="w-8 h-8 grid place-items-center rounded-lg hover:bg-surface-secondary text-text-secondary hover:text-danger">
+                  <Trash size={16} />
+                </button>
+              </div>
             </div>
 
             {/* Messages */}
@@ -461,8 +626,8 @@ export default function EmailInbox() {
                     <div className="px-4 py-4">
                       {m.body_html ? (
                         <div className="email-html text-[14px] text-text-primary leading-relaxed break-words"
-                          // Provider-sanitized content; rendered read-only.
-                          dangerouslySetInnerHTML={{ __html: m.body_html }} />
+                          // Sanitized with DOMPurify (scripts/handlers stripped).
+                          dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(m.body_html) }} />
                       ) : (
                         <p className="text-[14px] text-text-primary leading-relaxed whitespace-pre-wrap break-words">
                           {m.body_text || m.snippet || ''}
@@ -484,9 +649,110 @@ export default function EmailInbox() {
                 ))
               )}
             </div>
+
+            {/* ── Action bar / Composer ── */}
+            {composeMode === null ? (
+              <div className="border-t border-border px-5 py-3 flex gap-2 shrink-0">
+                <button onClick={() => startReply(false)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-surface hover:bg-surface-secondary text-[13px] font-semibold text-text-primary">
+                  <Reply size={15} /> {language === 'fr' ? 'Répondre' : 'Reply'}
+                </button>
+                <button onClick={() => startReply(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-surface hover:bg-surface-secondary text-[13px] font-semibold text-text-primary">
+                  <ReplyAll size={15} /> {language === 'fr' ? 'Répondre à tous' : 'Reply all'}
+                </button>
+                <button onClick={startForward}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-surface hover:bg-surface-secondary text-[13px] font-semibold text-text-primary">
+                  <Forward size={15} /> {language === 'fr' ? 'Transférer' : 'Forward'}
+                </button>
+              </div>
+            ) : (
+              <div className="border-t border-border bg-surface shrink-0 max-h-[55%] overflow-y-auto">
+                <div className="flex items-center justify-between px-5 py-2.5 border-b border-border">
+                  <span className="text-[13px] font-bold text-text-primary">
+                    {composeMode === 'forward' ? (language === 'fr' ? 'Transférer' : 'Forward')
+                      : composeMode === 'replyAll' ? (language === 'fr' ? 'Répondre à tous' : 'Reply all')
+                      : (language === 'fr' ? 'Répondre' : 'Reply')}
+                  </span>
+                  <button onClick={closeCompose} className="p-1 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={15} /></button>
+                </div>
+                <div className="px-5 py-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] font-semibold text-text-tertiary w-8">{language === 'fr' ? 'À' : 'To'}</span>
+                    <input value={composeTo} onChange={(e) => setComposeTo(e.target.value)} placeholder="destinataire@email.com"
+                      className="flex-1 h-[34px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] font-semibold text-text-tertiary w-8">Cc</span>
+                    <input value={composeCc} onChange={(e) => setComposeCc(e.target.value)} placeholder="(optionnel)"
+                      className="flex-1 h-[34px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] font-semibold text-text-tertiary w-8">{language === 'fr' ? 'Objet' : 'Subj'}</span>
+                    <input value={composeSubject} onChange={(e) => setComposeSubject(e.target.value)}
+                      className="flex-1 h-[34px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
+                  </div>
+                  <textarea value={composeBody} onChange={(e) => setComposeBody(e.target.value)} rows={6}
+                    placeholder={language === 'fr' ? 'Votre message…' : 'Your message…'}
+                    className="w-full px-3 py-2.5 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border resize-none" />
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button onClick={closeCompose} className="px-4 py-2 rounded-lg text-[13px] text-text-secondary hover:bg-surface-secondary">
+                      {language === 'fr' ? 'Annuler' : 'Cancel'}
+                    </button>
+                    <button onClick={doSend} disabled={sendingEmail}
+                      className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-white text-[13px] font-bold hover:bg-primary-hover disabled:opacity-50">
+                      {sendingEmail ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                      {language === 'fr' ? 'Envoyer' : 'Send'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
+
+      {/* ── New message modal ── */}
+      {showNewCompose && (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setShowNewCompose(false)}>
+          <div className="bg-surface w-full md:max-w-[560px] md:mx-4 rounded-t-2xl md:rounded-2xl border border-border shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+              <h3 className="text-[15px] font-bold text-text-primary">{language === 'fr' ? 'Nouveau message' : 'New message'}</h3>
+              <button onClick={() => setShowNewCompose(false)} className="p-1 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={16} /></button>
+            </div>
+            <div className="px-5 py-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] font-semibold text-text-tertiary w-9">{language === 'fr' ? 'À' : 'To'}</span>
+                <input value={newTo} onChange={(e) => setNewTo(e.target.value)} placeholder="destinataire@email.com"
+                  className="flex-1 h-[36px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] font-semibold text-text-tertiary w-9">Cc</span>
+                <input value={newCc} onChange={(e) => setNewCc(e.target.value)} placeholder="(optionnel)"
+                  className="flex-1 h-[36px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] font-semibold text-text-tertiary w-9">{language === 'fr' ? 'Objet' : 'Subj'}</span>
+                <input value={newSubject} onChange={(e) => setNewSubject(e.target.value)}
+                  className="flex-1 h-[36px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
+              </div>
+              <textarea value={newBody} onChange={(e) => setNewBody(e.target.value)} rows={8}
+                placeholder={language === 'fr' ? 'Votre message…' : 'Your message…'}
+                className="w-full px-3 py-2.5 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border resize-none" />
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-3 border-t border-border">
+              <button onClick={() => setShowNewCompose(false)} className="px-4 py-2 rounded-lg text-[13px] text-text-secondary hover:bg-surface-secondary">
+                {language === 'fr' ? 'Annuler' : 'Cancel'}
+              </button>
+              <button onClick={sendNew} disabled={sendingNew}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-white text-[13px] font-bold hover:bg-primary-hover disabled:opacity-50">
+                {sendingNew ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                {language === 'fr' ? 'Envoyer' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

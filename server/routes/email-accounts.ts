@@ -21,6 +21,8 @@ import {
 } from '../lib/email/accountService';
 import { getServiceClient } from '../lib/supabase';
 import { syncGmailInbox } from '../lib/email/sync/gmail';
+import { sendGmail } from '../lib/email/send/gmail';
+import { applyGmailThreadAction } from '../lib/email/actions/gmail';
 
 const router = Router();
 
@@ -196,6 +198,110 @@ router.get('/email/threads/:threadId', async (req, res) => {
     res.json({ thread, messages: messages || [] });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to load thread' });
+  }
+});
+
+// ── Send / reply / forward ────────────────────────────────────
+// Body: { accountId, to[], cc?[], subject, bodyHtml, threadId? }
+// If threadId is provided → it's a reply into that thread (threading applied).
+router.post('/email/send', async (req, res) => {
+  try {
+    const ctx = await requireAuthedClient(req, res);
+    if (!ctx) return;
+
+    const { accountId, to, cc, subject, bodyHtml, threadId } = req.body || {};
+    if (!accountId || !Array.isArray(to) || to.length === 0 || !subject || !bodyHtml) {
+      res.status(400).json({ error: 'accountId, to[], subject and bodyHtml are required' });
+      return;
+    }
+
+    const account = await ownedAccount(ctx.user.id, accountId);
+    if (!account) { res.status(404).json({ error: 'Mailbox not found' }); return; }
+    if (account.provider !== 'gmail') { res.status(400).json({ error: 'Only Gmail sending is available yet' }); return; }
+
+    const db = getServiceClient();
+
+    // Fetch the mailbox address (the From).
+    const { data: acc } = await db.from('email_accounts').select('email_address').eq('id', accountId).maybeSingle();
+    const fromEmail = acc?.email_address || '';
+
+    // Reply threading: pull the thread's provider_thread_id + last inbound Message-ID.
+    let gmailThreadId: string | undefined;
+    let inReplyTo: string | undefined;
+    let references: string | undefined;
+    if (threadId) {
+      const { data: thread } = await db
+        .from('email_threads')
+        .select('provider_thread_id')
+        .eq('id', threadId)
+        .eq('user_id', ctx.user.id)
+        .maybeSingle();
+      if (thread) {
+        gmailThreadId = thread.provider_thread_id;
+        const { data: lastMsg } = await db
+          .from('email_messages')
+          .select('rfc_message_id')
+          .eq('thread_id', threadId)
+          .not('rfc_message_id', 'is', null)
+          .order('sent_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (lastMsg?.rfc_message_id) {
+          inReplyTo = lastMsg.rfc_message_id;
+          references = lastMsg.rfc_message_id;
+        }
+      }
+    }
+
+    const result = await sendGmail({
+      accountId,
+      fromEmail,
+      to,
+      cc: Array.isArray(cc) ? cc : [],
+      subject,
+      bodyHtml,
+      threadId: gmailThreadId,
+      inReplyTo,
+      references,
+    });
+
+    res.json({ ok: true, id: result.id });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to send email' });
+  }
+});
+
+// ── Thread action: read / unread / archive / trash ───────────
+router.post('/email/threads/:threadId/action', async (req, res) => {
+  try {
+    const ctx = await requireAuthedClient(req, res);
+    if (!ctx) return;
+
+    const action = String(req.body?.action || '');
+    if (!['read', 'unread', 'archive', 'trash'].includes(action)) {
+      res.status(400).json({ error: 'Invalid action' });
+      return;
+    }
+
+    const db = getServiceClient();
+    const { data: thread } = await db
+      .from('email_threads')
+      .select('id, account_id')
+      .eq('id', req.params.threadId)
+      .eq('user_id', ctx.user.id) // ownership
+      .maybeSingle();
+    if (!thread) { res.status(404).json({ error: 'Thread not found' }); return; }
+
+    const account = await ownedAccount(ctx.user.id, thread.account_id);
+    if (!account || account.provider !== 'gmail') {
+      res.status(400).json({ error: 'Only Gmail actions are available yet' });
+      return;
+    }
+
+    await applyGmailThreadAction(thread.account_id, thread.id, action as 'read' | 'unread' | 'archive' | 'trash');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Action failed' });
   }
 });
 
