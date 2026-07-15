@@ -114,10 +114,12 @@ export async function syncMailbox(accountId: string, max = 25): Promise<number> 
   return json.synced ?? 0;
 }
 
-// ─── List threads of a mailbox ───────────────────────────────────────
-export async function fetchThreads(accountId: string): Promise<EmailThread[]> {
+// ─── List threads of a mailbox (by folder) ───────────────────────────
+export type EmailFolder = 'inbox' | 'sent' | 'trash' | 'archive';
+
+export async function fetchThreads(accountId: string, folder: EmailFolder = 'inbox'): Promise<EmailThread[]> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/api/email/accounts/${accountId}/threads`, { headers });
+  const res = await fetch(`${API_BASE}/api/email/accounts/${accountId}/threads?folder=${folder}`, { headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Failed to load threads');

@@ -108,14 +108,48 @@ export async function syncGmailInbox(accountId: string, max = 25): Promise<numbe
     .maybeSingle();
   if (!account) throw new Error('Mailbox not found');
 
-  // 1. List recent inbox message IDs
-  const list = await gmailFetch(accessToken, `/messages?maxResults=${max}&labelIds=INBOX`);
-  const ids: string[] = (list.messages || []).map((m: { id: string }) => m.id);
+  // Sync each folder (Gmail label → our folder name + direction).
+  const folders: Array<{ label: string; folder: string; direction: 'inbound' | 'outbound' }> = [
+    { label: 'INBOX', folder: 'inbox', direction: 'inbound' },
+    { label: 'SENT', folder: 'sent', direction: 'outbound' },
+    { label: 'TRASH', folder: 'trash', direction: 'inbound' },
+  ];
+
+  let upserted = 0;
+  for (const f of folders) {
+    upserted += await syncFolder(db, accessToken, account, f.label, f.folder, f.direction, max);
+  }
+
+  await db
+    .from('email_accounts')
+    .update({ last_synced_at: new Date().toISOString(), status: 'connected' })
+    .eq('id', accountId);
+
+  return upserted;
+}
+
+// Sync one Gmail label into a local folder.
+async function syncFolder(
+  db: ReturnType<typeof getServiceClient>,
+  accessToken: string,
+  account: { id: string; user_id: string; org_id: string },
+  label: string,
+  folder: string,
+  direction: 'inbound' | 'outbound',
+  max: number,
+): Promise<number> {
+  let list: { messages?: Array<{ id: string }> };
+  try {
+    // TRASH needs includeSpamTrash=true to be listable.
+    const extra = label === 'TRASH' ? '&includeSpamTrash=true' : '';
+    list = await gmailFetch(accessToken, `/messages?maxResults=${max}&labelIds=${label}${extra}`);
+  } catch {
+    return 0;
+  }
+  const ids: string[] = (list.messages || []).map((m) => m.id);
   if (ids.length === 0) return 0;
 
   let upserted = 0;
-
-  // 2. Fetch each message (full), parse, upsert thread + message
   for (const id of ids) {
     let msg: GmailMessage;
     try {
@@ -132,7 +166,6 @@ export async function syncGmailInbox(accountId: string, max = 25): Promise<numbe
     const { html, text, attachments } = extractBody(msg.payload);
     const isRead = !(msg.labelIds || []).includes('UNREAD');
 
-    // Upsert thread
     const { data: thread } = await db
       .from('email_threads')
       .upsert({
@@ -147,14 +180,13 @@ export async function syncGmailInbox(accountId: string, max = 25): Promise<numbe
         last_message_at: sentAt,
         is_read: isRead,
         has_attachments: attachments.length > 0,
-        folder: 'inbox',
+        folder,
       }, { onConflict: 'account_id,provider_thread_id' })
       .select('id')
       .single();
 
     if (!thread) continue;
 
-    // Upsert message
     const { error: msgErr } = await db
       .from('email_messages')
       .upsert({
@@ -171,7 +203,7 @@ export async function syncGmailInbox(accountId: string, max = 25): Promise<numbe
         snippet: msg.snippet || '',
         body_html: html || null,
         body_text: text || null,
-        direction: 'inbound',
+        direction,
         is_read: isRead,
         has_attachments: attachments.length > 0,
         attachments,
@@ -180,12 +212,5 @@ export async function syncGmailInbox(accountId: string, max = 25): Promise<numbe
 
     if (!msgErr) upserted++;
   }
-
-  // 3. Stamp last sync time on the account (message_count is computed at read time)
-  await db
-    .from('email_accounts')
-    .update({ last_synced_at: new Date().toISOString(), status: 'connected' })
-    .eq('id', accountId);
-
   return upserted;
 }

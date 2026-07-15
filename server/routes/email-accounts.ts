@@ -155,11 +155,14 @@ router.get('/email/accounts/:id/threads', async (req, res) => {
     const account = await ownedAccount(ctx.user.id, req.params.id);
     if (!account) { res.status(404).json({ error: 'Mailbox not found' }); return; }
 
+    const folderParam = String(req.query.folder || 'inbox');
+    const folder = ['inbox', 'sent', 'trash', 'archive'].includes(folderParam) ? folderParam : 'inbox';
+
     const { data, error } = await getServiceClient()
       .from('email_threads')
       .select('id, subject, snippet, from_name, from_email, last_message_at, is_read, has_attachments, message_count, folder')
       .eq('account_id', account.id)
-      .eq('folder', 'inbox')
+      .eq('folder', folder)
       .order('last_message_at', { ascending: false })
       .limit(100);
 

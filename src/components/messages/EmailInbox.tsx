@@ -11,7 +11,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Mail, Plus, Loader2, CheckCircle2, AlertCircle, Trash2, RefreshCw,
   Search, Paperclip, ArrowLeft, ChevronLeft, Settings2,
-  Reply, ReplyAll, Forward, Send, X, Archive, MailOpen, Trash,
+  Reply, ReplyAll, Forward, Send, X, Archive, MailOpen, Trash, Inbox, SendHorizontal,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import DOMPurify from 'dompurify';
@@ -21,7 +21,7 @@ import {
   listEmailAccounts, connectMailbox, disconnectMailbox,
   syncMailbox, fetchThreads, fetchThread, sendEmail, threadAction, downloadAttachment,
   type EmailAccount, type EmailProviderSlug,
-  type EmailThread, type EmailMessage,
+  type EmailThread, type EmailMessage, type EmailFolder,
 } from '../../lib/emailInboxApi';
 
 // ── Brand logos (inline SVG, no external assets) ──────────────
@@ -235,6 +235,7 @@ export default function EmailInbox() {
   const [loadingThreads, setLoadingThreads] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState('');
+  const [folder, setFolder] = useState<EmailFolder>('inbox');
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<EmailMessage[]>([]);
@@ -271,10 +272,10 @@ export default function EmailInbox() {
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
 
   // Load threads when an account becomes active
-  const loadThreads = useCallback(async (accountId: string) => {
+  const loadThreads = useCallback(async (accountId: string, f: EmailFolder = 'inbox') => {
     setLoadingThreads(true);
     try {
-      setThreads(await fetchThreads(accountId));
+      setThreads(await fetchThreads(accountId, f));
     } catch (err: any) {
       toast.error(err?.message || 'Erreur de chargement');
     } finally {
@@ -287,14 +288,14 @@ export default function EmailInbox() {
     if (!activeAccountId) return;
     const acc = accounts.find((a) => a.id === activeAccountId);
     (async () => {
-      await loadThreads(activeAccountId);
+      await loadThreads(activeAccountId, folder);
       if (acc && !acc.last_synced_at) {
         // First time → pull the inbox automatically.
         void handleSync(activeAccountId, true);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeAccountId]);
+  }, [activeAccountId, folder]);
 
   const handleConnect = async (provider: EmailProviderSlug) => {
     setConnecting(provider);
@@ -326,7 +327,7 @@ export default function EmailInbox() {
     setSyncing(true);
     try {
       const n = await syncMailbox(accountId, max);
-      await loadThreads(accountId);
+      await loadThreads(accountId, folder);
       if (!silent) toast.success(language === 'fr' ? `${n} email(s) synchronisé(s)` : `${n} email(s) synced`);
     } catch (err: any) {
       if (!silent) toast.error(err?.message || 'Sync échouée');
@@ -530,6 +531,21 @@ export default function EmailInbox() {
           <button onClick={() => setManaging(true)} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary" title="Gérer les boîtes">
             <Settings2 size={15} />
           </button>
+        </div>
+
+        {/* Folder selector */}
+        <div className="px-3 pb-2 flex gap-1">
+          {([
+            { key: 'inbox' as const, label: language === 'fr' ? 'Reçus' : 'Inbox', Icon: Inbox },
+            { key: 'sent' as const, label: language === 'fr' ? 'Envoyés' : 'Sent', Icon: SendHorizontal },
+            { key: 'trash' as const, label: language === 'fr' ? 'Corbeille' : 'Trash', Icon: Trash },
+          ]).map(({ key, label, Icon }) => (
+            <button key={key} onClick={() => { setFolder(key); setSelectedThreadId(null); }}
+              className={cn('flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[12px] font-semibold transition-colors',
+                folder === key ? 'bg-surface-secondary text-text-primary' : 'text-text-tertiary hover:bg-surface-secondary')}>
+              <Icon size={13} /> {label}
+            </button>
+          ))}
         </div>
 
         {/* Search */}
