@@ -23,14 +23,16 @@ export interface WeatherForecast {
 // org, so we geocode the city name with Open-Meteo's free geocoding API.
 async function getOrgLocation(): Promise<{ city: string; lat: number; lng: number } | null> {
   const orgId = await getCurrentOrgIdOrThrow();
+  // The company's address lives in company_settings (not orgs).
   const { data, error } = await supabase
-    .from('orgs')
-    .select('city, address, postal_code')
-    .eq('id', orgId)
+    .from('company_settings')
+    .select('city, street1, postal_code')
+    .eq('org_id', orgId)
+    .limit(1)
     .maybeSingle();
   if (error || !data) return null;
 
-  const query = String(data.city || data.address || '').trim();
+  const query = String(data.city || data.street1 || '').trim();
   if (!query) return null;
 
   const geoUrl =
