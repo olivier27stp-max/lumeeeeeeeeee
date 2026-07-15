@@ -1937,6 +1937,9 @@ const en = {
     subject: 'Subject',
     attachment: 'attachment',
     delete: 'Delete',
+    viewDetails: 'View details',
+    hideDetails: 'Hide details',
+    open: 'Open',
   },
 
   // Agent

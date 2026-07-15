@@ -1929,6 +1929,9 @@ const fr: TranslationKeys = {
     subject: 'Objet',
     attachment: 'pièce jointe',
     delete: 'Supprimer',
+    viewDetails: 'Voir détails',
+    hideDetails: 'Masquer',
+    open: 'Ouvrir',
   },
 
   // Agent

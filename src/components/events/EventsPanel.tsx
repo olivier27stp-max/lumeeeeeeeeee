@@ -15,7 +15,7 @@ import {
   Send, Check, X, Calendar, Briefcase, CheckCircle,
   FileText, ReceiptText, AlertCircle, Bell, Mail,
   MessageCircle, Star, StickyNote, Search, CreditCard,
-  Paperclip, PanelRightClose,
+  Paperclip, PanelRightClose, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { fetchActivityLog, EVENT_TYPE_LABELS, type ActivityLogEntry } from '../../lib/activityApi';
@@ -123,6 +123,15 @@ export default function EventsPanel({ entityType, entityId, clientId }: EventsPa
   const [showSearch, setShowSearch] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [adding, setAdding] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  function toggleExpanded(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
 
   const commClientId = clientId || (entityType === 'client' ? entityId : undefined);
 
@@ -203,7 +212,8 @@ export default function EventsPanel({ entityType, entityId, clientId }: EventsPa
         kind: isEmail ? 'email' : 'sms',
         eventType: bounced ? 'email_bounced' : (isEmail ? 'email' : 'sms'),
         title: label,
-        detail: m.subject || (m.body_text ? m.body_text.slice(0, 60) : ''),
+        // Full text — the collapsed view truncates via line-clamp; "View details" shows all.
+        detail: isEmail ? (m.subject || (m.body_text || '')) : (m.body_text || m.subject || ''),
         timestamp: m.created_at,
         colorKey: bounced ? 'email_bounced' : (isEmail ? 'email' : 'sms'),
         iconKey: isEmail ? (bounced ? 'alert-circle' : 'mail') : 'message-circle',
@@ -347,13 +357,9 @@ export default function EventsPanel({ entityType, entityId, clientId }: EventsPa
                 <div className="space-y-3">
                   {feed.map((item) => {
                     const colorClass = EVENT_COLORS[item.colorKey] || 'bg-gray-100 text-gray-500';
-                    const clickable = Boolean(item.link);
+                    const isOpen = expanded.has(item.key);
                     return (
-                      <div
-                        key={item.key}
-                        onClick={clickable ? () => navigate(item.link!) : undefined}
-                        className={`flex gap-3 relative pl-1 group rounded-lg -mx-1 px-1 py-0.5 ${clickable ? 'cursor-pointer hover:bg-surface-tertiary/50 transition-colors' : ''}`}
-                      >
+                      <div key={item.key} className="flex gap-3 relative pl-1 group">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${colorClass}`}>
                           {ICON_MAP[item.iconKey] || <Plus size={14} />}
                         </div>
@@ -365,7 +371,7 @@ export default function EventsPanel({ entityType, entityId, clientId }: EventsPa
                             </span>
                           </div>
                           {item.detail && (
-                            <p className={`text-[12px] text-text-secondary mt-0.5 ${condensed ? 'line-clamp-1' : 'whitespace-pre-wrap'}`}>
+                            <p className={`text-[12px] text-text-secondary mt-0.5 ${isOpen ? 'whitespace-pre-wrap' : 'line-clamp-1'}`}>
                               {item.detail}
                             </p>
                           )}
@@ -373,41 +379,71 @@ export default function EventsPanel({ entityType, entityId, clientId }: EventsPa
                             <p className="text-[11px] text-text-tertiary mt-0.5">{tp.by} {item.actorName}</p>
                           )}
 
-                          {/* Expandable email card (detailed view only) */}
-                          {item.email && !condensed && (
-                            <div className="mt-2 rounded-lg border border-outline-subtle bg-surface-secondary p-3">
-                              <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase">Email</span>
-                                {(item.email.status === 'bounced' || item.email.status === 'failed') && (
-                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 uppercase">Bounce</span>
-                                )}
-                                {Array.isArray((item.email.metadata as any)?.attachments) && (item.email.metadata as any).attachments.length > 0 && (
-                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-surface-tertiary text-text-secondary flex items-center gap-1">
-                                    <Paperclip size={10} />
-                                    {(item.email.metadata as any).attachments.length} {tp.attachment}
-                                  </span>
-                                )}
-                              </div>
-                              {item.email.to_value && (
-                                <p className="text-[11px] text-text-tertiary"><span className="font-semibold">{tp.to}:</span> {item.email.to_value}</p>
+                          {/* "View details" toggle — on every event */}
+                          <button
+                            onClick={() => toggleExpanded(item.key)}
+                            className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors"
+                          >
+                            {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                            {isOpen ? tp.hideDetails : tp.viewDetails}
+                          </button>
+
+                          {/* Expanded detail area */}
+                          {isOpen && (
+                            <div className="mt-2 rounded-lg border border-outline-subtle bg-surface-secondary p-3 space-y-1">
+                              {/* Email / SMS full content */}
+                              {item.email ? (
+                                <>
+                                  <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase">Email</span>
+                                    {(item.email.status === 'bounced' || item.email.status === 'failed') && (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 uppercase">Bounce</span>
+                                    )}
+                                    {Array.isArray((item.email.metadata as any)?.attachments) && (item.email.metadata as any).attachments.length > 0 && (
+                                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-surface-tertiary text-text-secondary flex items-center gap-1">
+                                        <Paperclip size={10} />
+                                        {(item.email.metadata as any).attachments.length} {tp.attachment}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {item.email.to_value && (
+                                    <p className="text-[11px] text-text-tertiary"><span className="font-semibold">{tp.to}:</span> {item.email.to_value}</p>
+                                  )}
+                                  {item.email.subject && (
+                                    <p className="text-[11px] text-text-tertiary"><span className="font-semibold">{tp.subject}:</span> {item.email.subject}</p>
+                                  )}
+                                  {item.email.body_text && (
+                                    <p className="text-[11px] text-text-secondary mt-1.5 whitespace-pre-wrap">{item.email.body_text}</p>
+                                  )}
+                                </>
+                              ) : item.kind === 'sms' ? (
+                                <p className="text-[11px] text-text-secondary whitespace-pre-wrap">{item.detail || '—'}</p>
+                              ) : item.kind === 'note' ? (
+                                <p className="text-[11px] text-text-secondary whitespace-pre-wrap">{item.detail}</p>
+                              ) : (
+                                <>
+                                  <p className="text-[11px] text-text-secondary">{item.detail || (lang === 'fr' ? 'Aucun détail supplémentaire.' : 'No extra details.')}</p>
+                                  {item.link && (
+                                    <button
+                                      onClick={() => navigate(item.link!)}
+                                      className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                                    >
+                                      {tp.open} <ArrowRight size={11} />
+                                    </button>
+                                  )}
+                                </>
                               )}
-                              {item.email.subject && (
-                                <p className="text-[11px] text-text-tertiary"><span className="font-semibold">{tp.subject}:</span> {item.email.subject}</p>
-                              )}
-                              {item.email.body_text && (
-                                <p className="text-[11px] text-text-secondary mt-1.5 whitespace-pre-wrap line-clamp-6">{item.email.body_text}</p>
+
+                              {/* Note delete */}
+                              {item.noteId && (
+                                <button
+                                  onClick={() => handleDeleteNote(item.noteId!)}
+                                  className="text-[10px] text-text-tertiary hover:text-danger transition-colors"
+                                >
+                                  {tp.delete}
+                                </button>
                               )}
                             </div>
-                          )}
-
-                          {/* Note delete */}
-                          {item.noteId && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleDeleteNote(item.noteId!); }}
-                              className="mt-1 text-[10px] text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              {tp.delete}
-                            </button>
                           )}
                         </div>
                       </div>
