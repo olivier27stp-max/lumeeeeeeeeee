@@ -9,6 +9,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus, Edit2, RefreshCw, ArrowRight, Archive, Trash2,
   Send, Check, X, Calendar, Briefcase, CheckCircle,
@@ -69,6 +70,24 @@ interface FeedItem {
   iconKey: string;
   noteId?: string;            // for delete
   email?: CommunicationMessage; // for expandable email card
+  link?: string;              // navigate target on click
+}
+
+// Map an activity_log row to a destination route based on its entity.
+// Prefer the primary entity; fall back to related entity (e.g. a payment
+// logged on the invoice but surfaced on the client).
+function resolveLink(e: ActivityLogEntry): string | undefined {
+  const routeFor = (type: string | null, idVal: string | null): string | undefined => {
+    if (!idVal) return undefined;
+    switch (type) {
+      case 'invoice': return `/invoices/${idVal}`;
+      case 'quote': return `/quotes/${idVal}`;
+      case 'job': return `/jobs/${idVal}`;
+      case 'client': return `/clients/${idVal}`;
+      default: return undefined;
+    }
+  };
+  return routeFor(e.entity_type, e.entity_id) || routeFor(e.related_entity_type, e.related_entity_id);
 }
 
 interface EventsPanelProps {
@@ -85,6 +104,7 @@ function eventLabel(eventType: string, lang: 'en' | 'fr'): string {
 
 export default function EventsPanel({ entityType, entityId, clientId }: EventsPanelProps) {
   const { t, language } = useTranslation();
+  const navigate = useNavigate();
   const lang = (language === 'fr' ? 'fr' : 'en') as 'en' | 'fr';
   const tp = t.eventsPanel;
 
@@ -98,7 +118,6 @@ export default function EventsPanel({ entityType, entityId, clientId }: EventsPa
   const [showSearch, setShowSearch] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [adding, setAdding] = useState(false);
-  const [expandedEmail, setExpandedEmail] = useState<string | null>(null);
 
   const commClientId = clientId || (entityType === 'client' ? entityId : undefined);
 
@@ -163,6 +182,7 @@ export default function EventsPanel({ entityType, entityId, clientId }: EventsPa
         timestamp: e.created_at,
         colorKey: e.event_type,
         iconKey: EVENT_TYPE_LABELS[e.event_type]?.icon || 'plus',
+        link: resolveLink(e),
       });
     }
 
@@ -322,9 +342,13 @@ export default function EventsPanel({ entityType, entityId, clientId }: EventsPa
                 <div className="space-y-3">
                   {feed.map((item) => {
                     const colorClass = EVENT_COLORS[item.colorKey] || 'bg-gray-100 text-gray-500';
-                    const isEmailExpanded = !condensed && item.email && expandedEmail === item.key;
+                    const clickable = Boolean(item.link);
                     return (
-                      <div key={item.key} className="flex gap-3 relative pl-1 group">
+                      <div
+                        key={item.key}
+                        onClick={clickable ? () => navigate(item.link!) : undefined}
+                        className={`flex gap-3 relative pl-1 group rounded-lg -mx-1 px-1 py-0.5 ${clickable ? 'cursor-pointer hover:bg-surface-tertiary/50 transition-colors' : ''}`}
+                      >
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${colorClass}`}>
                           {ICON_MAP[item.iconKey] || <Plus size={14} />}
                         </div>
@@ -374,7 +398,7 @@ export default function EventsPanel({ entityType, entityId, clientId }: EventsPa
                           {/* Note delete */}
                           {item.noteId && (
                             <button
-                              onClick={() => handleDeleteNote(item.noteId!)}
+                              onClick={(e) => { e.stopPropagation(); handleDeleteNote(item.noteId!); }}
                               className="mt-1 text-[10px] text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
                             >
                               {tp.delete}
