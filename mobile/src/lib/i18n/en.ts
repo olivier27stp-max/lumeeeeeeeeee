@@ -3911,6 +3911,17 @@ const en = {
     showZonesFilter: 'Show zones',
     showRepsFilter: 'Show reps',
     repsOnline: '{count} online',
+    // D2D map — web-parity action buttons
+    addPin: 'Add a pin',
+    selectMode: 'Select',
+    cancelSelection: 'Cancel selection',
+    createZone: 'Create a zone',
+    tapMapNow: 'Tap the map',
+    drawZonePoints: 'Draw the zone ({count} points)',
+    tapPinsToSelect: 'Tap pins to select them',
+    selectedCount: '{count} selected',
+    deleteAll: 'Delete all',
+    deselect: 'Deselect',
 
     // Time / clock tab
     timeTracking: 'Time tracking',

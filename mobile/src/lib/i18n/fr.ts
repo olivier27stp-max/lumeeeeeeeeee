@@ -3903,6 +3903,17 @@ const fr: TranslationKeys = {
     showZonesFilter: 'Afficher les zones',
     showRepsFilter: 'Voir les représentants',
     repsOnline: '{count} en ligne',
+    // D2D map — web-parity action buttons
+    addPin: 'Ajouter un pin',
+    selectMode: 'Sélectionner',
+    cancelSelection: 'Annuler sélection',
+    createZone: 'Créer une zone',
+    tapMapNow: 'Touchez la carte',
+    drawZonePoints: 'Tracez la zone ({count} points)',
+    tapPinsToSelect: 'Touchez les pins à sélectionner',
+    selectedCount: '{count} sélectionné(s)',
+    deleteAll: 'Supprimer tout',
+    deselect: 'Désélectionner',
 
     // Time / clock tab
     timeTracking: 'Suivi du temps',

@@ -110,6 +110,43 @@ async function serverGet<T = any>(path: string): Promise<T> {
   return json as T;
 }
 
+async function serverDelete<T = any>(path: string): Promise<T> {
+  if (!BASE) throw new ServerError('Server URL not configured (EXPO_PUBLIC_WEB_URL).', 0, 'no_base');
+
+  const doFetch = async (token: string): Promise<Response> => {
+    try {
+      return await fetch(`${BASE}/api${path}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    } catch (e) {
+      throw new ServerError((e as Error)?.message ?? 'Network request failed.', 0, 'network');
+    }
+  };
+
+  let token = await freshToken();
+  if (!token) throw new ServerError('Not signed in.', 401, 'no_session');
+  let res = await doFetch(token);
+  if (res.status === 401) {
+    const refreshed = await freshToken(true);
+    if (refreshed && refreshed !== token) {
+      token = refreshed;
+      res = await doFetch(token);
+    }
+  }
+
+  let json: any = null;
+  try {
+    json = await res.json();
+  } catch {
+    /* empty */
+  }
+  if (!res.ok) throw new ServerError(json?.error ?? `Request failed (${res.status}).`, res.status, json?.code);
+  return json as T;
+}
+
+/** Soft-delete a D2D house pin via the same server route the web map uses. */
+export async function deleteFieldHouse(houseId: string): Promise<void> {
+  await serverDelete(`/field-sales/houses/${houseId}`);
+}
+
 export interface PayPeriodSummary {
   period: { start: string; end: string; payDate?: string } & Record<string, any>;
   hours: number;

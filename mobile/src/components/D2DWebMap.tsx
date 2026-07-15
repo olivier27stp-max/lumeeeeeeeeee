@@ -32,6 +32,8 @@ export interface D2DWebMapHandle {
   cancelZoneDraw: () => void;
   flyTo: (lat: number, lng: number, zoom?: number) => void;
   updateMe: (lat: number, lng: number) => void;
+  setSelectMode: (on: boolean) => void;
+  clearSelection: () => void;
 }
 
 interface Props {
@@ -48,6 +50,10 @@ interface Props {
   onPlace?: (lat: number, lng: number) => void;
   onZoneDrawn?: (coordinates: [number, number][]) => void;
   onCenterChange?: (lat: number, lng: number) => void;
+  /** Selected pin ids while in select mode (web's rectangle-select, tap-based) */
+  onSelectionChange?: (ids: string[]) => void;
+  /** Number of corners tapped so far while drawing a zone */
+  onDrawCount?: (count: number) => void;
 }
 
 const TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
@@ -90,7 +96,7 @@ el.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke
  * the map is ready, so updates never reload the WebView.
  */
 const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
-  { center, houses, zones = [], reps = [], showReps = true, showZones = true, visibleStatuses, onSelectHouse, onPlace, onZoneDrawn, onCenterChange },
+  { center, houses, zones = [], reps = [], showReps = true, showZones = true, visibleStatuses, onSelectHouse, onPlace, onZoneDrawn, onCenterChange, onSelectionChange, onDrawCount },
   ref,
 ) {
   const webRef = useRef<WebView>(null);
@@ -105,6 +111,8 @@ const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
     cancelZoneDraw: () => inject('window._cancelDraw&&window._cancelDraw()'),
     flyTo: (lat, lng, zoom = 17) => inject(`window._flyTo&&window._flyTo(${lng},${lat},${zoom})`),
     updateMe: (lat, lng) => inject(`window._updateMe&&window._updateMe(${lng},${lat})`),
+    setSelectMode: (on) => inject(`window._setSelectMode&&window._setSelectMode(${on})`),
+    clearSelection: () => inject('window._clearSelection&&window._clearSelection()'),
   }));
 
   const html = useMemo(() => {
@@ -113,17 +121,20 @@ const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet" />
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
 <style>html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#111}
-.me{position:relative;width:16px;height:16px;border-radius:50%;background:#2563EB;border:3px solid #fff;box-shadow:0 0 0 4px rgba(37,99,235,.3)}
+.me{position:relative;width:22px;height:22px}
+.me .p{position:absolute;inset:0;border-radius:50%;background:rgba(99,102,241,.25);animation:gpsPulse 2s ease-out infinite}
+.me .c{position:absolute;left:4px;top:4px;width:14px;height:14px;border-radius:50%;background:#6366f1;border:2.5px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4)}
 .hp{width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.6)}
 .mapboxgl-ctrl{display:none!important}
+@keyframes gpsPulse{0%{transform:scale(.8);opacity:1}100%{transform:scale(2.2);opacity:0}}
 @keyframes rep-pulse{0%{transform:scale(.9);opacity:1}100%{transform:scale(1.8);opacity:0}}</style>
 </head><body><div id="map"></div><script>
 mapboxgl.accessToken='${TOKEN}';
 function post(o){try{window.ReactNativeWebView.postMessage(JSON.stringify(o))}catch(e){}}
 ${COLOR_JS}
 var map=new mapboxgl.Map({container:'map',style:'mapbox://styles/mapbox/satellite-streets-v12',center:[${center.lng},${center.lat}],zoom:16});
-var meEl=document.createElement('div');meEl.className='me';
-var meMarker=new mapboxgl.Marker(meEl).setLngLat([${center.lng},${center.lat}]).addTo(map);
+var meEl=document.createElement('div');meEl.className='me';meEl.innerHTML='<div class="p"></div><div class="c"></div>';
+var meMarker=new mapboxgl.Marker({element:meEl,anchor:'center'}).setLngLat([${center.lng},${center.lat}]).addTo(map);
 
 var placing=false, drawing=false, pts=[];
 window._startPlace=function(){placing=true;map.getCanvas().style.cursor='crosshair';};
@@ -146,13 +157,36 @@ function updateDraw(){
   map.getSource('draw').setData(feat);
   map.getSource('drawpts').setData({type:'FeatureCollection',features:pts.map(function(p){return{type:'Feature',geometry:{type:'Point',coordinates:p},properties:{}}})});
 }
-window._startDraw=function(){drawing=true;pts=[];map.getCanvas().style.cursor='crosshair';updateDraw();};
+window._startDraw=function(){drawing=true;pts=[];map.getCanvas().style.cursor='crosshair';updateDraw();post({type:'drawcount',n:0});};
 window._finishDraw=function(){if(drawing&&pts.length>=3){post({type:'zone',coordinates:pts.slice()});}drawing=false;pts=[];map.getCanvas().style.cursor='';updateDraw();};
 window._cancelDraw=function(){drawing=false;pts=[];map.getCanvas().style.cursor='';updateDraw();};
+
+// --- Select mode: tap pins to multi-select (web's rectangle select, touch-adapted) ---
+var selecting=false, selected={};
+function setHl(id,on){
+  var rec=null;
+  for(var i=0;i<houseMarkers.length;i++){if(houseMarkers[i].id===id){rec=houseMarkers[i];break;}}
+  if(!rec)return;
+  var el=rec.marker.getElement();
+  el.style.outline=on?'2px solid rgba(239,68,68,0.8)':'';
+  el.style.outlineOffset=on?'2px':'';
+}
+function postSel(){post({type:'selection',ids:Object.keys(selected)});}
+window._clearSelection=function(){Object.keys(selected).forEach(function(id){setHl(id,false);});selected={};postSel();};
+window._setSelectMode=function(b){selecting=!!b;if(!selecting)window._clearSelection();};
+function houseTapped(id){
+  if(selecting){
+    if(selected[id]){delete selected[id];setHl(id,false);}
+    else{selected[id]=1;setHl(id,true);}
+    postSel();
+    return;
+  }
+  post({type:'house',id:id});
+}
 map.on('click',function(e){
   if(placing){post({type:'place',lat:e.lngLat.lat,lng:e.lngLat.lng});return;}
-  if(drawing){pts.push([e.lngLat.lng,e.lngLat.lat]);updateDraw();return;}
-  if(map.getLayer('houses-hit')){var f=map.queryRenderedFeatures(e.point,{layers:['houses-hit']});if(f&&f.length){post({type:'house',id:f[0].properties.id});}}
+  if(drawing){pts.push([e.lngLat.lng,e.lngLat.lat]);updateDraw();post({type:'drawcount',n:pts.length});return;}
+  if(map.getLayer('houses-hit')){var f=map.queryRenderedFeatures(e.point,{layers:['houses-hit']});if(f&&f.length){houseTapped(f[0].properties.id);}}
 });
 
 // --- Houses: web-look gradient markers + invisible tap layer, filterable ---
@@ -172,10 +206,11 @@ window._setFilters=function(list){
 window._setHouses=function(arr){
   allHouses=arr||[];
   houseMarkers.forEach(function(h){h.marker.remove();});houseMarkers=[];
+  selected={};postSel();
   allHouses.forEach(function(h){
     if(h.lat==null||h.lng==null)return;
     var el=makeMarker(h.status);
-    el.addEventListener('click',function(ev){ev.stopPropagation();ev.preventDefault();post({type:'house',id:h.id});});
+    el.addEventListener('click',function(ev){ev.stopPropagation();ev.preventDefault();houseTapped(h.id);});
     var m=new mapboxgl.Marker(el).setLngLat([h.lng,h.lat]).addTo(map);
     houseMarkers.push({id:h.id,bucket:bucketFor(h.status),marker:m});
   });
@@ -283,6 +318,8 @@ map.on('moveend',function(){var c=map.getCenter();post({type:'center',lat:c.lat,
       else if (msg.type === 'place') onPlace?.(msg.lat, msg.lng);
       else if (msg.type === 'center') onCenterChange?.(msg.lat, msg.lng);
       else if (msg.type === 'zone' && Array.isArray(msg.coordinates)) onZoneDrawn?.(msg.coordinates);
+      else if (msg.type === 'selection' && Array.isArray(msg.ids)) onSelectionChange?.(msg.ids);
+      else if (msg.type === 'drawcount') onDrawCount?.(msg.n ?? 0);
     } catch {
       /* ignore */
     }

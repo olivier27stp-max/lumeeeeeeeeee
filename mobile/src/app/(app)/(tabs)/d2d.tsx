@@ -10,13 +10,12 @@ import D2DWebMap, { D2DWebMapHandle } from '@/components/D2DWebMap';
 import {
   createHouseAt,
   createTerritory,
-  HouseEventType,
   HouseStatus,
   listHousesInBounds,
   listTerritories,
-  logHouseEvent,
 } from '@/lib/api/fieldSales';
 import { listTeams } from '@/lib/api/org';
+import { deleteFieldHouse } from '@/lib/api/server';
 import { getActiveLiveLocations } from '@/lib/api/tracking';
 import { useAuth } from '@/lib/auth';
 import { useTranslation, type TranslationKeys } from '@/lib/i18n';
@@ -46,7 +45,8 @@ const STATUS_TO_BUCKET: Record<string, string> = {
   not_interested: 'rejected', do_not_knock: 'rejected', rejected: 'rejected',
   quote_sent: 'appointment', appointment: 'appointment',
 };
-const EVENT_STATUSES = new Set(['sale', 'lead', 'quote_sent', 'callback', 'revisit', 'no_answer', 'do_not_knock']);
+
+type MapMode = 'view' | 'add_pin' | 'select' | 'draw_zone';
 
 export default function D2DMap() {
   const { t, language } = useTranslation();
@@ -61,22 +61,23 @@ export default function D2DMap() {
   const [mapCenter, setMapCenter] = useState(DEFAULT);
   const [ready, setReady] = useState(false);
 
-  const [pickerMode, setPickerMode] = useState<'place' | 'edit' | null>(null);
-  const [editHouseId, setEditHouseId] = useState<string | null>(null);
-  const [armed, setArmed] = useState<HouseStatus | null>(null);
-  const [drawing, setDrawing] = useState(false);
+  // Same modes as the web map-container
+  const [mode, setMode] = useState<MapMode>('view');
+  const [selectedStatus, setSelectedStatus] = useState<HouseStatus>('sale');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [drawCount, setDrawCount] = useState(0);
 
   const [zoneCoords, setZoneCoords] = useState<[number, number][] | null>(null);
   const [zoneName, setZoneName] = useState('');
   const [zoneTeam, setZoneTeam] = useState<string | null>(null);
 
-  // Filters (like the web's filter panel, as a bottom sheet)
+  // Filters (web's filter panel, as a dark bottom sheet)
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [activeBuckets, setActiveBuckets] = useState<Set<string>>(new Set(ALL_BUCKETS));
   const [showZones, setShowZones] = useState(true);
   const [showReps, setShowReps] = useState(true);
 
-  // Street search (Mapbox geocoding, like the web's top-center search)
+  // Street search (web's top-center search)
   const [searchQ, setSearchQ] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ id: string; place_name: string; center: [number, number] }>>([]);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,7 +96,7 @@ export default function D2DMap() {
             setCenter(c);
             setMapCenter(c);
           }
-          // Live GPS: keep the blue "me" dot moving, like the web's watchPosition
+          // Live GPS: keep the pulsing dot moving, like the web's watchPosition
           sub = await Location.watchPositionAsync(
             { accuracy: Location.Accuracy.Balanced, distanceInterval: 10 },
             (p) => mapRef.current?.updateMe(p.coords.latitude, p.coords.longitude),
@@ -144,6 +145,18 @@ export default function D2DMap() {
     [liveReps],
   );
 
+  // Colored per-status counts for the stats pill (web's top-right stats)
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {};
+    (houses ?? []).forEach((h) => {
+      const b = STATUS_TO_BUCKET[h.current_status ?? ''] ?? 'other';
+      c[b] = (c[b] ?? 0) + 1;
+    });
+    return c;
+  }, [houses]);
+  const totalPins = houses?.length ?? 0;
+  const totalZones = zones?.length ?? 0;
+
   // Stable references — a re-render (e.g. typing in the search bar) must not
   // re-inject houses/reps into the WebView and rebuild every marker.
   const mapHouses = useMemo(
@@ -163,16 +176,6 @@ export default function D2DMap() {
     [onlineReps],
   );
   const visibleStatuses = useMemo(() => [...activeBuckets], [activeBuckets]);
-
-  // Colored per-status counts for the top bar (web's top-right stats)
-  const counts = useMemo(() => {
-    const c: Record<string, number> = {};
-    (houses ?? []).forEach((h) => {
-      const b = STATUS_TO_BUCKET[h.current_status ?? ''] ?? 'other';
-      c[b] = (c[b] ?? 0) + 1;
-    });
-    return c;
-  }, [houses]);
 
   // Debounced street search
   useEffect(() => {
@@ -219,12 +222,41 @@ export default function D2DMap() {
     }
   };
 
-  // Place a brand-new pin at a tapped location (web flow: choose status → tap map).
-  const placePin = async (lat: number, lng: number) => {
-    const house = armed;
-    setArmed(null);
+  // --- Mode transitions (web's top-left buttons) ---
+  const enterAddPin = () => {
+    setMode('add_pin');
+    mapRef.current?.startPlace();
+  };
+  const exitAddPin = () => {
+    setMode('view');
     mapRef.current?.stopPlace();
-    if (!house || !orgId || !userId) return;
+  };
+  const enterSelect = () => {
+    setMode('select');
+    setSelectedIds([]);
+    mapRef.current?.setSelectMode(true);
+  };
+  const exitSelect = () => {
+    setMode('view');
+    setSelectedIds([]);
+    mapRef.current?.setSelectMode(false);
+  };
+  const enterDraw = () => {
+    setMode('draw_zone');
+    setDrawCount(0);
+    mapRef.current?.startZoneDraw();
+  };
+  const exitDraw = () => {
+    setMode('view');
+    setDrawCount(0);
+    mapRef.current?.cancelZoneDraw();
+  };
+
+  // Place a pin at the tapped location with the selected status (web add_pin flow)
+  const placePin = async (lat: number, lng: number) => {
+    const house = selectedStatus;
+    exitAddPin();
+    if (!orgId || !userId) return;
     try {
       const created = await createHouseAt({ orgId, userId, lat, lng, status: house });
       refetch();
@@ -234,35 +266,17 @@ export default function D2DMap() {
     }
   };
 
-  // Recolor an existing pin.
-  const recolor = async (house: HouseStatus) => {
-    const id = editHouseId;
-    setPickerMode(null);
-    setEditHouseId(null);
-    if (!id || !orgId || !userId) return;
+  // Bulk delete (web's "Supprimer tout")
+  const bulkDelete = async () => {
+    const ids = selectedIds;
+    if (!ids.length) return;
     try {
-      const isEvent = EVENT_STATUSES.has(house);
-      await logHouseEvent({
-        orgId,
-        houseId: id,
-        userId,
-        eventType: (isEvent ? house : 'status_change') as HouseEventType,
-        statusOverride: isEvent ? null : house,
-      });
+      const results = await Promise.allSettled(ids.map((id) => deleteFieldHouse(id)));
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      if (failed) Alert.alert(t.mobileField.pin, t.mobileField.errorPrefix.replace('{message}', `${failed}/${ids.length}`));
+    } finally {
+      exitSelect();
       refetch();
-      crmFor(house, houses?.find((h) => h.id === id)?.address ?? '');
-    } catch (e) {
-      Alert.alert(t.mobileField.pin, (e as Error).message);
-    }
-  };
-
-  const onChip = (house: HouseStatus) => {
-    if (pickerMode === 'place') {
-      setArmed(house);
-      setPickerMode(null);
-      mapRef.current?.startPlace();
-    } else if (pickerMode === 'edit') {
-      recolor(house);
     }
   };
 
@@ -298,10 +312,11 @@ export default function D2DMap() {
     });
   };
 
-  const idle = !pickerMode && !armed && !drawing;
+  const darkBtn = 'flex-row items-center gap-2 rounded-xl border border-white/10 bg-black/60 px-4 py-2.5';
+  const darkBtnText = 'text-[13px] font-semibold text-white/80';
 
   return (
-    <View className="flex-1">
+    <View className="flex-1 bg-[#080b10]">
       <D2DWebMap
         ref={mapRef}
         center={center}
@@ -313,40 +328,40 @@ export default function D2DMap() {
         visibleStatuses={visibleStatuses}
         onSelectHouse={(id) => {
           // Like the web popup: open the full pin sheet (status, customer, notes,
-          // history, schedule a visit) — not just a colour change.
+          // history, schedule a visit).
           router.push(`/(app)/d2d-house/${id}` as any);
         }}
         onPlace={placePin}
         onZoneDrawn={(c) => {
-          setDrawing(false);
+          setMode('view');
           setZoneCoords(c);
         }}
         onCenterChange={(lat, lng) => setMapCenter({ lat, lng })}
+        onSelectionChange={setSelectedIds}
+        onDrawCount={setDrawCount}
       />
 
-      {/* Top: street search + colored status counts (web's search bar + stats) */}
-      <View className="absolute left-5 right-5" style={{ top: insets.top + 8 }}>
-        <View
-          className="flex-row items-center rounded-xl bg-white/95 px-3"
-          style={{ shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6 }}
-        >
-          <SymbolView name="magnifyingglass" tintColor="#737373" size={16} resizeMode="scaleAspectFit" />
+      {/* ===== TOP — search (web top-center) + action buttons (web top-left) + stats ===== */}
+      <View className="absolute left-3 right-3" style={{ top: insets.top + 8 }}>
+        {/* Street search */}
+        <View className="flex-row items-center rounded-xl border border-white/10 bg-black/70 px-3">
+          <SymbolView name="magnifyingglass" tintColor="rgba(255,255,255,0.4)" size={15} resizeMode="scaleAspectFit" />
           <TextInput
             value={searchQ}
             onChangeText={setSearchQ}
             placeholder={t.mobileField.searchAddressPlaceholder}
-            placeholderTextColor="#A3A3A3"
+            placeholderTextColor="rgba(255,255,255,0.35)"
             autoCorrect={false}
-            className="flex-1 px-2 py-2.5 text-sm text-ink"
+            className="flex-1 px-2 py-2.5 text-[13px] text-white"
           />
           {searchQ ? (
             <Pressable onPress={() => { setSearchQ(''); setSearchResults([]); }} hitSlop={8}>
-              <SymbolView name="xmark.circle.fill" tintColor="#A3A3A3" size={18} resizeMode="scaleAspectFit" />
+              <SymbolView name="xmark.circle.fill" tintColor="rgba(255,255,255,0.4)" size={17} resizeMode="scaleAspectFit" />
             </Pressable>
           ) : null}
         </View>
         {searchResults.length > 0 ? (
-          <View className="mt-1 overflow-hidden rounded-xl bg-white/95" style={{ shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6 }}>
+          <View className="mt-1 overflow-hidden rounded-xl border border-white/10 bg-black/85">
             {searchResults.map((r) => (
               <Pressable
                 key={r.id}
@@ -356,29 +371,111 @@ export default function D2DMap() {
                   setSearchResults([]);
                   Keyboard.dismiss();
                 }}
-                className="border-b border-surface-border/50 px-3 py-2.5"
+                className="border-b border-white/5 px-3 py-2.5"
               >
-                <Text className="text-[13px] text-ink" numberOfLines={1}>{r.place_name}</Text>
+                <Text className="text-[12px] text-white/80" numberOfLines={1}>{r.place_name}</Text>
               </Pressable>
             ))}
           </View>
         ) : null}
-        <View
-          className="mt-2 flex-row items-center gap-3 self-start rounded-xl bg-white/90 px-3 py-1.5"
-          style={{ shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 6 }}
-        >
-          {PIN_STATUSES.filter((s) => counts[s.bucket]).map((s) => (
-            <View key={s.bucket} className="flex-row items-center gap-1">
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.color }} />
-              <Text className="text-xs font-bold text-ink">{counts[s.bucket]}</Text>
+
+        {/* Action buttons row (same buttons as web, dark translucent) */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" className="mt-2" contentContainerStyle={{ gap: 8 }}>
+          {mode === 'view' ? (
+            <>
+              <Pressable onPress={enterAddPin} className={darkBtn}>
+                <SymbolView name="plus" tintColor="rgba(255,255,255,0.8)" size={14} resizeMode="scaleAspectFit" />
+                <Text className={darkBtnText}>{t.mobileField.addPin}</Text>
+              </Pressable>
+              <Pressable onPress={enterSelect} className={darkBtn}>
+                <SymbolView name="rectangle.dashed" tintColor="rgba(255,255,255,0.8)" size={14} resizeMode="scaleAspectFit" />
+                <Text className={darkBtnText}>{t.mobileField.selectMode}</Text>
+              </Pressable>
+              {canDraw ? (
+                <Pressable onPress={enterDraw} className="flex-row items-center gap-2 rounded-xl border border-indigo-400/20 bg-indigo-500/15 px-4 py-2.5">
+                  <SymbolView name="hexagon" tintColor="#A5B4FC" size={14} resizeMode="scaleAspectFit" />
+                  <Text className="text-[13px] font-semibold text-indigo-300">{t.mobileField.createZone}</Text>
+                </Pressable>
+              ) : null}
+              <Pressable onPress={() => setFiltersOpen(true)} className={darkBtn}>
+                <SymbolView name="line.3.horizontal.decrease" tintColor="rgba(255,255,255,0.8)" size={14} resizeMode="scaleAspectFit" />
+                <Text className={darkBtnText}>{t.mobileField.filters}</Text>
+              </Pressable>
+            </>
+          ) : null}
+
+          {mode === 'add_pin' ? (
+            <Pressable onPress={exitAddPin} className="flex-row items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5">
+              <View className="h-2 w-2 rounded-full bg-white" />
+              <Text className="text-[13px] font-semibold text-white">{t.mobileField.tapMapNow}</Text>
+            </Pressable>
+          ) : null}
+
+          {mode === 'select' ? (
+            <Pressable onPress={exitSelect} className="flex-row items-center gap-2 rounded-xl bg-red-500/80 px-4 py-2.5">
+              <SymbolView name="xmark" tintColor="#FFFFFF" size={13} resizeMode="scaleAspectFit" />
+              <Text className="text-[13px] font-semibold text-white">{t.mobileField.cancelSelection}</Text>
+            </Pressable>
+          ) : null}
+
+          {mode === 'draw_zone' ? (
+            <>
+              <View className="flex-row items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5">
+                <View className="h-2 w-2 rounded-full bg-white" />
+                <Text className="text-[13px] font-semibold text-white">
+                  {t.mobileField.drawZonePoints.replace('{count}', String(drawCount))}
+                </Text>
+              </View>
+              {drawCount >= 3 ? (
+                <Pressable onPress={() => mapRef.current?.finishZoneDraw()} className="items-center justify-center rounded-xl bg-emerald-500 px-4 py-2.5">
+                  <Text className="text-[13px] font-semibold text-white">{t.mobileField.finish}</Text>
+                </Pressable>
+              ) : null}
+              <Pressable onPress={exitDraw} className="items-center justify-center rounded-xl border border-white/10 bg-black/60 px-4 py-2.5">
+                <Text className="text-[13px] font-semibold text-white/60">{t.mobileField.cancel}</Text>
+              </Pressable>
+            </>
+          ) : null}
+        </ScrollView>
+
+        {/* Status selector strip while adding a pin (web's inline selector) */}
+        {mode === 'add_pin' ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2" contentContainerStyle={{ gap: 4 }}>
+            <View className="flex-row items-center gap-1 rounded-xl border border-white/10 bg-black/60 p-1">
+              {PIN_STATUSES.map((s) => {
+                const on = selectedStatus === s.house;
+                return (
+                  <Pressable
+                    key={s.house}
+                    onPress={() => setSelectedStatus(s.house)}
+                    className={`flex-row items-center gap-1.5 rounded-lg px-2.5 py-1.5 ${on ? 'bg-white/15' : ''}`}
+                  >
+                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: s.color }} />
+                    <Text className={`text-[11px] font-medium ${on ? 'text-white' : 'text-white/40'}`}>{t.mobileField[s.labelKey]}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
-          ))}
-          <Text className="text-xs font-medium text-ink-muted">
-            {t.mobileField.housesZonesSummary
-              .replace('{houses}', String(houses?.length ?? 0))
-              .replace('{zones}', String(zones?.length ?? 0))}
-          </Text>
-        </View>
+          </ScrollView>
+        ) : null}
+
+        {/* Stats pill (web's top-right stats) */}
+        {totalPins > 0 && mode === 'view' ? (
+          <View className="mt-2 flex-row items-center gap-3 self-start rounded-xl border border-white/10 bg-black/60 px-4 py-2">
+            {PIN_STATUSES.filter((s) => counts[s.bucket]).map((s) => (
+              <View key={s.bucket} className="flex-row items-center gap-1.5">
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.color }} />
+                <Text className="text-[12px] font-bold text-white/80">{counts[s.bucket]}</Text>
+              </View>
+            ))}
+            <View className="h-4 w-px bg-white/10" />
+            <Text className="text-[12px] font-semibold text-white/50">
+              {t.mobileField.housesZonesSummary
+                .replace('{houses}', String(totalPins))
+                .replace('{zones}', String(totalZones))}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {!ready ? (
@@ -387,250 +484,173 @@ export default function D2DMap() {
         </View>
       ) : null}
 
-      {/* Big native buttons (bottom-right) */}
-      {idle ? (
-        <View className="absolute right-5 gap-3" style={{ bottom: insets.bottom + 24 }}>
-          <Pressable
-            onPress={() => setFiltersOpen(true)}
-            className="h-12 w-12 items-center justify-center self-end rounded-full bg-white"
-            style={{ shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } }}
-          >
-            <SymbolView name="line.3.horizontal.decrease" tintColor="#171717" size={20} resizeMode="scaleAspectFit" />
-          </Pressable>
-          <Pressable
-            onPress={recenter}
-            className="h-12 w-12 items-center justify-center self-end rounded-full bg-white"
-            style={{ shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } }}
-          >
-            <SymbolView name="location.fill" tintColor="#2563EB" size={20} resizeMode="scaleAspectFit" />
-          </Pressable>
-          {canDraw ? (
-            <Pressable
-              onPress={() => {
-                mapRef.current?.startZoneDraw();
-                setDrawing(true);
-              }}
-              className="h-16 w-16 items-center justify-center rounded-full bg-white"
-              style={{ shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } }}
-            >
-              <SymbolView name="square.dashed" tintColor="#171717" size={28} resizeMode="scaleAspectFit" />
-            </Pressable>
-          ) : null}
-          <Pressable
-            onPress={() => setPickerMode('place')}
-            className="h-16 w-16 items-center justify-center rounded-full bg-ink"
-            style={{ shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } }}
-          >
-            <SymbolView name="plus" tintColor="#FFFFFF" size={30} resizeMode="scaleAspectFit" />
-          </Pressable>
-        </View>
-      ) : null}
+      {/* GPS re-center (web's bottom-right dark square) */}
+      <Pressable
+        onPress={recenter}
+        className="absolute right-4 h-[38px] w-[38px] items-center justify-center rounded-lg border border-white/10 bg-black/70"
+        style={{ bottom: insets.bottom + 24 }}
+      >
+        <SymbolView name="location.fill" tintColor="rgba(255,255,255,0.7)" size={17} resizeMode="scaleAspectFit" />
+      </Pressable>
 
-      {/* "Tap the map to place" banner */}
-      {armed ? (
-        <View className="absolute left-5 right-5 flex-row items-center gap-3" style={{ bottom: insets.bottom + 24 }}>
-          <View className="flex-1 rounded-xl bg-white/90 px-4 py-3">
-            <Text className="text-sm font-medium text-ink">{t.mobileField.tapHouseOnMap}</Text>
+      {/* Select mode — bottom action bar (web's bottom-center bar) */}
+      {mode === 'select' ? (
+        <View className="absolute left-3 right-3 items-center" style={{ bottom: insets.bottom + 24 }}>
+          <View className="flex-row items-center gap-3 rounded-xl border border-white/10 bg-black/70 px-5 py-3">
+            {selectedIds.length === 0 ? (
+              <Text className="text-[13px] text-white/50">{t.mobileField.tapPinsToSelect}</Text>
+            ) : (
+              <>
+                <Text className="text-[13px] font-medium text-white">
+                  {t.mobileField.selectedCount.replace('{count}', String(selectedIds.length))}
+                </Text>
+                <Pressable onPress={bulkDelete} className="flex-row items-center gap-1.5 rounded-lg bg-red-500 px-4 py-2">
+                  <SymbolView name="trash" tintColor="#FFFFFF" size={13} resizeMode="scaleAspectFit" />
+                  <Text className="text-[12px] font-semibold text-white">{t.mobileField.deleteAll}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setSelectedIds([]);
+                    mapRef.current?.clearSelection();
+                  }}
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+                >
+                  <Text className="text-[12px] text-white/50">{t.mobileField.deselect}</Text>
+                </Pressable>
+              </>
+            )}
           </View>
-          <Pressable
-            onPress={() => {
-              setArmed(null);
-              mapRef.current?.stopPlace();
-            }}
-            className="h-12 items-center justify-center rounded-full bg-white px-4"
-          >
-            <Text className="text-sm font-semibold text-ink">{t.mobileField.cancel}</Text>
-          </Pressable>
         </View>
       ) : null}
 
-      {/* Zone drawing controls */}
-      {drawing ? (
-        <View className="absolute left-5 right-5 flex-row items-center gap-3" style={{ bottom: insets.bottom + 24 }}>
-          <View className="flex-1 rounded-xl bg-white/90 px-4 py-3">
-            <Text className="text-sm font-medium text-ink">{t.mobileField.tapCornersThenFinish}</Text>
-          </View>
-          <Pressable
-            onPress={() => {
-              mapRef.current?.cancelZoneDraw();
-              setDrawing(false);
-            }}
-            className="h-12 items-center justify-center rounded-full bg-white px-4"
-          >
-            <Text className="text-sm font-semibold text-ink">{t.mobileField.cancel}</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => mapRef.current?.finishZoneDraw()}
-            className="h-12 items-center justify-center rounded-full bg-ink px-5"
-          >
-            <Text className="text-sm font-semibold text-white">{t.mobileField.finish}</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {/* Status strip (choose to place / recolor) */}
-      {pickerMode ? (
-        <View
-          className="absolute left-0 right-0 rounded-t-3xl bg-white px-4 pt-4"
-          style={{ bottom: 0, paddingBottom: insets.bottom + 14, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12 }}
-        >
-          <View className="mb-3 flex-row items-center justify-between">
-            <Text className="text-base font-bold text-ink">
-              {pickerMode === 'place' ? t.mobileField.pickStatusThenTapMap : t.mobileField.changeStatus}
-            </Text>
-            <Pressable
-              onPress={() => {
-                setPickerMode(null);
-                setEditHouseId(null);
-              }}
-              hitSlop={10}
-            >
-              <SymbolView name="xmark.circle.fill" tintColor="#A3A3A3" size={24} resizeMode="scaleAspectFit" />
-            </Pressable>
-          </View>
-          <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 14, paddingBottom: 4 }}>
-            {pickerMode === 'edit' && editHouseId ? (
-              <Pressable
-                onPress={() => {
-                  const id = editHouseId;
-                  setPickerMode(null);
-                  setEditHouseId(null);
-                  router.push(`/(app)/d2d-house/${id}` as any);
-                }}
-                className="w-[72px] items-center gap-1"
-              >
-                <View className="h-12 w-12 items-center justify-center rounded-full bg-surface-sunken">
-                  <SymbolView name="doc.text" tintColor="#171717" size={22} resizeMode="scaleAspectFit" />
-                </View>
-                <Text className="text-center text-[11px] text-ink-muted">{t.mobileField.record}</Text>
-              </Pressable>
-            ) : null}
-            {PIN_STATUSES.map((s) => (
-              <Pressable key={s.house} onPress={() => onChip(s.house)} className="w-[72px] items-center gap-1">
-                <View
-                  className="h-12 w-12 rounded-full border-2 border-white"
-                  style={{ backgroundColor: s.color, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4 }}
-                />
-                <Text className="text-center text-[11px] text-ink-muted">{t.mobileField[s.labelKey]}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-      ) : null}
-
-      {/* Filters bottom sheet (web's filter panel, phone-adapted) */}
+      {/* ===== Filters — dark bottom sheet (web's filter panel) ===== */}
       <Modal visible={filtersOpen} transparent animationType="slide" onRequestClose={() => setFiltersOpen(false)}>
-        <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setFiltersOpen(false)}>
+        <Pressable className="flex-1 justify-end bg-black/50" onPress={() => setFiltersOpen(false)}>
           <Pressable
-            className="rounded-t-3xl bg-white px-5 pt-5"
+            className="rounded-t-3xl border-t border-white/10 bg-[#0c0c14] px-5 pt-5"
             style={{ paddingBottom: insets.bottom + 16 }}
             onPress={(e) => e.stopPropagation()}
           >
             <View className="mb-4 flex-row items-center justify-between">
-              <Text className="text-lg font-bold text-ink">{t.mobileField.filters}</Text>
+              <Text className="text-[15px] font-semibold text-white">{t.mobileField.filters}</Text>
               <Pressable onPress={() => setFiltersOpen(false)} hitSlop={10}>
-                <SymbolView name="xmark.circle.fill" tintColor="#A3A3A3" size={24} resizeMode="scaleAspectFit" />
+                <SymbolView name="xmark.circle.fill" tintColor="rgba(255,255,255,0.3)" size={24} resizeMode="scaleAspectFit" />
               </Pressable>
             </View>
 
             {/* Pins — status */}
             <View className="mb-2 flex-row items-center justify-between">
-              <Text className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">{t.mobileField.pinsStatusHeader}</Text>
+              <Text className="text-[10px] font-semibold uppercase tracking-wider text-white/30">{t.mobileField.pinsStatusHeader}</Text>
               <Pressable
                 onPress={() =>
                   setActiveBuckets(activeBuckets.size === ALL_BUCKETS.length ? new Set() : new Set(ALL_BUCKETS))
                 }
                 hitSlop={8}
               >
-                <Text className="text-xs font-medium text-ink-muted">
+                <Text className="text-[10px] font-medium text-white/40">
                   {activeBuckets.size === ALL_BUCKETS.length ? t.mobileField.deselectAll : t.mobileField.selectAll}
                 </Text>
               </Pressable>
             </View>
-            <View className="mb-4 flex-row flex-wrap gap-2">
+            <View className="mb-4">
               {PIN_STATUSES.map((s) => {
                 const on = activeBuckets.has(s.bucket);
                 return (
                   <Pressable
                     key={s.bucket}
                     onPress={() => toggleBucket(s.bucket)}
-                    className={`flex-row items-center gap-1.5 rounded-full border px-3 py-2 ${on ? 'border-ink bg-ink' : 'border-surface-border'}`}
+                    className={`flex-row items-center gap-2.5 rounded-lg px-3 py-2 ${on ? 'bg-white/10' : ''}`}
                   >
-                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.color }} />
-                    <Text className={`text-sm font-medium ${on ? 'text-white' : 'text-ink'}`}>
+                    <View
+                      className="h-4 w-4 items-center justify-center rounded border"
+                      style={{ borderColor: on ? s.color : 'rgba(255,255,255,0.15)', backgroundColor: on ? s.color : 'transparent' }}
+                    >
+                      {on ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={9} resizeMode="scaleAspectFit" /> : null}
+                    </View>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.color, opacity: on ? 1 : 0.35 }} />
+                    <Text className={`flex-1 text-[13px] font-medium ${on ? 'text-white' : 'text-white/30'}`}>
                       {t.mobileField[s.labelKey]}
-                      {counts[s.bucket] ? ` · ${counts[s.bucket]}` : ''}
                     </Text>
+                    {counts[s.bucket] ? <Text className="text-[11px] font-bold text-white/40">{counts[s.bucket]}</Text> : null}
                   </Pressable>
                 );
               })}
             </View>
 
-            {/* Zones toggle */}
-            <Pressable
-              onPress={() => setShowZones(!showZones)}
-              className="mb-2 flex-row items-center justify-between rounded-xl bg-surface-sunken px-4 py-3"
-            >
-              <Text className="text-sm font-medium text-ink">{t.mobileField.showZonesFilter}</Text>
-              <SymbolView
-                name={showZones ? 'checkmark.circle.fill' : 'circle'}
-                tintColor={showZones ? '#6366F1' : '#A3A3A3'}
-                size={22}
-                resizeMode="scaleAspectFit"
-              />
-            </Pressable>
+            {/* Zones */}
+            <View className="mb-3 border-t border-white/10 pt-3">
+              <Text className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-indigo-300/50">Zones</Text>
+              <Pressable
+                onPress={() => setShowZones(!showZones)}
+                className={`flex-row items-center gap-2.5 rounded-lg px-3 py-2 ${showZones ? 'bg-white/10' : ''}`}
+              >
+                <View
+                  className="h-4 w-4 items-center justify-center rounded border"
+                  style={{ borderColor: showZones ? '#6366F1' : 'rgba(255,255,255,0.15)', backgroundColor: showZones ? '#6366F1' : 'transparent' }}
+                >
+                  {showZones ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={9} resizeMode="scaleAspectFit" /> : null}
+                </View>
+                <Text className={`text-[13px] font-medium ${showZones ? 'text-white' : 'text-white/30'}`}>{t.mobileField.showZonesFilter}</Text>
+              </Pressable>
+            </View>
 
-            {/* Reps toggle */}
-            <Pressable
-              onPress={() => setShowReps(!showReps)}
-              className="flex-row items-center justify-between rounded-xl bg-surface-sunken px-4 py-3"
-            >
-              <View className="flex-row items-center gap-2">
-                <Text className="text-sm font-medium text-ink">{t.mobileField.showRepsFilter}</Text>
-                <Text className="text-xs font-semibold text-emerald-600">
+            {/* Reps */}
+            <View className="border-t border-white/10 pt-3">
+              <Text className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-300/50">{t.mobileField.showRepsFilter}</Text>
+              <Pressable
+                onPress={() => setShowReps(!showReps)}
+                className={`flex-row items-center gap-2.5 rounded-lg px-3 py-2 ${showReps ? 'bg-white/10' : ''}`}
+              >
+                <View
+                  className="h-4 w-4 items-center justify-center rounded border"
+                  style={{ borderColor: showReps ? '#22C55E' : 'rgba(255,255,255,0.15)', backgroundColor: showReps ? '#22C55E' : 'transparent' }}
+                >
+                  {showReps ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={9} resizeMode="scaleAspectFit" /> : null}
+                </View>
+                <Text className={`flex-1 text-[13px] font-medium ${showReps ? 'text-white' : 'text-white/30'}`}>{t.mobileField.showRepsFilter}</Text>
+                <Text className="text-[11px] font-medium text-emerald-400/60">
                   {t.mobileField.repsOnline.replace('{count}', String(onlineReps.length))}
                 </Text>
-              </View>
-              <SymbolView
-                name={showReps ? 'checkmark.circle.fill' : 'circle'}
-                tintColor={showReps ? '#22C55E' : '#A3A3A3'}
-                size={22}
-                resizeMode="scaleAspectFit"
-              />
-            </Pressable>
+              </Pressable>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
 
-      {/* New zone (admin/owner): name + assign team */}
+      {/* ===== New zone modal — dark (web's zone confirm) ===== */}
       <Modal visible={!!zoneCoords} transparent animationType="slide" onRequestClose={closeZone}>
-        <Pressable className="flex-1 justify-end bg-black/40" onPress={closeZone}>
-          <Pressable className="gap-3 rounded-t-3xl bg-white p-5" onPress={(e) => e.stopPropagation()}>
-            <Text className="text-lg font-bold text-ink">{t.mobileField.newZone}</Text>
+        <Pressable className="flex-1 justify-end bg-black/50" onPress={closeZone}>
+          <Pressable
+            className="gap-3 rounded-t-3xl border-t border-white/10 bg-[#0c0c14] p-5"
+            style={{ paddingBottom: insets.bottom + 16 }}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text className="text-[15px] font-semibold text-white">{t.mobileField.newZone}</Text>
             <TextInput
               value={zoneName}
               onChangeText={setZoneName}
               placeholder={t.mobileField.zoneNamePlaceholder}
-              className="rounded-xl border border-surface-border px-4 py-3 text-base text-ink"
+              placeholderTextColor="rgba(255,255,255,0.2)"
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
             />
-            <Text className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">{t.mobileField.assignToTeam}</Text>
+            <Text className="text-[10px] font-semibold uppercase tracking-wider text-white/30">{t.mobileField.assignToTeam}</Text>
             <View className="flex-row flex-wrap gap-2">
               <Pressable
                 onPress={() => setZoneTeam(null)}
-                className={`rounded-full border px-3.5 py-2 ${zoneTeam === null ? 'border-ink bg-ink' : 'border-surface-border'}`}
+                className={`rounded-full border px-3.5 py-2 ${zoneTeam === null ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
               >
-                <Text className={`text-sm font-medium ${zoneTeam === null ? 'text-white' : 'text-ink'}`}>{t.mobileField.none}</Text>
+                <Text className={`text-sm font-medium ${zoneTeam === null ? 'text-indigo-300' : 'text-white/50'}`}>{t.mobileField.none}</Text>
               </Pressable>
-              {(teams ?? []).map((t) => {
-                const sel = zoneTeam === t.id;
+              {(teams ?? []).map((tm) => {
+                const sel = zoneTeam === tm.id;
                 return (
                   <Pressable
-                    key={t.id}
-                    onPress={() => setZoneTeam(t.id)}
-                    className={`flex-row items-center gap-1.5 rounded-full border px-3.5 py-2 ${sel ? 'border-ink bg-ink' : 'border-surface-border'}`}
+                    key={tm.id}
+                    onPress={() => setZoneTeam(tm.id)}
+                    className={`flex-row items-center gap-1.5 rounded-full border px-3.5 py-2 ${sel ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
                   >
-                    {t.color_hex ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: t.color_hex }} /> : null}
-                    <Text className={`text-sm font-medium ${sel ? 'text-white' : 'text-ink'}`}>{t.name}</Text>
+                    {tm.color_hex ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tm.color_hex }} /> : null}
+                    <Text className={`text-sm font-medium ${sel ? 'text-indigo-300' : 'text-white/50'}`}>{tm.name}</Text>
                   </Pressable>
                 );
               })}
@@ -638,12 +658,12 @@ export default function D2DMap() {
             <Pressable
               onPress={saveZone}
               disabled={!zoneName.trim()}
-              className={`mt-1 items-center rounded-xl py-3.5 ${zoneName.trim() ? 'bg-ink' : 'bg-surface-border'}`}
+              className={`mt-1 items-center rounded-xl py-3.5 ${zoneName.trim() ? 'bg-indigo-500' : 'bg-white/10'}`}
             >
               <Text className="text-base font-semibold text-white">{t.mobileField.saveZone}</Text>
             </Pressable>
             <Pressable onPress={closeZone} className="items-center py-1">
-              <Text className="text-sm font-medium text-ink-muted">{t.mobileField.cancel}</Text>
+              <Text className="text-sm font-medium text-white/40">{t.mobileField.cancel}</Text>
             </Pressable>
           </Pressable>
         </Pressable>
