@@ -19,8 +19,21 @@ import {
   listEmailAccounts,
   disconnectEmailAccount,
 } from '../lib/email/accountService';
+import { getServiceClient } from '../lib/supabase';
+import { syncGmailInbox } from '../lib/email/sync/gmail';
 
 const router = Router();
+
+// Verify the account belongs to the caller (defence in depth on top of RLS).
+async function ownedAccount(userId: string, accountId: string) {
+  const { data } = await getServiceClient()
+    .from('email_accounts')
+    .select('id, provider, user_id')
+    .eq('id', accountId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  return data || null;
+}
 
 // ── List the caller's mailboxes ───────────────────────────────
 router.get('/email/accounts', async (req, res) => {
@@ -103,6 +116,86 @@ router.post('/email/accounts/:id/disconnect', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to disconnect' });
+  }
+});
+
+// ── Sync a mailbox (fetch recent emails from the provider) ────
+router.post('/email/accounts/:id/sync', async (req, res) => {
+  try {
+    const ctx = await requireAuthedClient(req, res);
+    if (!ctx) return;
+
+    const account = await ownedAccount(ctx.user.id, req.params.id);
+    if (!account) { res.status(404).json({ error: 'Mailbox not found' }); return; }
+
+    let synced = 0;
+    if (account.provider === 'gmail') {
+      synced = await syncGmailInbox(account.id);
+    } else {
+      // Outlook sync arrives in the next step.
+      res.status(400).json({ error: 'Outlook sync not available yet' });
+      return;
+    }
+    res.json({ ok: true, synced });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Sync failed' });
+  }
+});
+
+// ── List threads for a mailbox ────────────────────────────────
+router.get('/email/accounts/:id/threads', async (req, res) => {
+  try {
+    const ctx = await requireAuthedClient(req, res);
+    if (!ctx) return;
+
+    const account = await ownedAccount(ctx.user.id, req.params.id);
+    if (!account) { res.status(404).json({ error: 'Mailbox not found' }); return; }
+
+    const { data, error } = await getServiceClient()
+      .from('email_threads')
+      .select('id, subject, snippet, from_name, from_email, last_message_at, is_read, has_attachments, message_count, folder')
+      .eq('account_id', account.id)
+      .eq('folder', 'inbox')
+      .order('last_message_at', { ascending: false })
+      .limit(100);
+
+    if (error) throw new Error(error.message);
+    res.json({ threads: data || [] });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to load threads' });
+  }
+});
+
+// ── Get one thread with its messages ──────────────────────────
+router.get('/email/threads/:threadId', async (req, res) => {
+  try {
+    const ctx = await requireAuthedClient(req, res);
+    if (!ctx) return;
+
+    const db = getServiceClient();
+    const { data: thread } = await db
+      .from('email_threads')
+      .select('*')
+      .eq('id', req.params.threadId)
+      .eq('user_id', ctx.user.id)  // ownership
+      .maybeSingle();
+
+    if (!thread) { res.status(404).json({ error: 'Thread not found' }); return; }
+
+    const { data: messages } = await db
+      .from('email_messages')
+      .select('id, from_name, from_email, to_emails, cc_emails, subject, body_html, body_text, snippet, direction, is_read, has_attachments, attachments, sent_at')
+      .eq('thread_id', thread.id)
+      .order('sent_at', { ascending: true });
+
+    // Mark thread as read (best-effort, local only for now)
+    if (!thread.is_read) {
+      await db.from('email_threads').update({ is_read: true }).eq('id', thread.id);
+    }
+
+    res.json({ thread, messages: messages || [] });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to load thread' });
   }
 });
 

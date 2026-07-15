@@ -60,6 +60,83 @@ export async function connectMailbox(provider: EmailProviderSlug): Promise<void>
   window.location.href = url;
 }
 
+// ─── Inbox types ─────────────────────────────────────────────────────
+export interface EmailThread {
+  id: string;
+  subject: string | null;
+  snippet: string | null;
+  from_name: string | null;
+  from_email: string | null;
+  last_message_at: string | null;
+  is_read: boolean;
+  has_attachments: boolean;
+  message_count: number;
+  folder: string;
+}
+
+export interface EmailAttachment {
+  filename: string;
+  mimeType: string;
+  size: number;
+  attachmentId: string;
+}
+
+export interface EmailMessage {
+  id: string;
+  from_name: string | null;
+  from_email: string | null;
+  to_emails: string[];
+  cc_emails: string[];
+  subject: string | null;
+  body_html: string | null;
+  body_text: string | null;
+  snippet: string | null;
+  direction: 'inbound' | 'outbound';
+  is_read: boolean;
+  has_attachments: boolean;
+  attachments: EmailAttachment[];
+  sent_at: string | null;
+}
+
+// ─── Sync a mailbox (pull latest from Gmail/Outlook) ─────────────────
+export async function syncMailbox(accountId: string): Promise<number> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/email/accounts/${accountId}/sync`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Sync failed');
+  }
+  const json = await res.json();
+  return json.synced ?? 0;
+}
+
+// ─── List threads of a mailbox ───────────────────────────────────────
+export async function fetchThreads(accountId: string): Promise<EmailThread[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/email/accounts/${accountId}/threads`, { headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to load threads');
+  }
+  const json = await res.json();
+  return (json.threads || []) as EmailThread[];
+}
+
+// ─── Get one thread + its messages ───────────────────────────────────
+export async function fetchThread(threadId: string): Promise<{ thread: EmailThread; messages: EmailMessage[] }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/email/threads/${threadId}`, { headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to load thread');
+  }
+  return res.json();
+}
+
 // ─── Disconnect a mailbox ────────────────────────────────────────────
 export async function disconnectMailbox(accountId: string): Promise<void> {
   const headers = await getAuthHeaders();
