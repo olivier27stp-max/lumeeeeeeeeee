@@ -85,6 +85,21 @@ export async function getOrgHourlyWeather(hours = 12): Promise<WeatherForecast |
   return { city: loc.city, hours: slice };
 }
 
+// WMO weather code → short human label (fr/en).
+export function weatherLabel(code: number, fr: boolean): string {
+  if (code === 0) return fr ? 'Ciel dégagé' : 'Clear sky';
+  if (code <= 2) return fr ? 'Peu nuageux' : 'Partly cloudy';
+  if (code === 3) return fr ? 'Couvert' : 'Overcast';
+  if (code >= 45 && code <= 48) return fr ? 'Brouillard' : 'Fog';
+  if (code >= 51 && code <= 57) return fr ? 'Bruine' : 'Drizzle';
+  if (code >= 61 && code <= 67) return fr ? 'Pluie' : 'Rain';
+  if (code >= 71 && code <= 77) return fr ? 'Neige' : 'Snow';
+  if (code >= 80 && code <= 82) return fr ? 'Averses' : 'Showers';
+  if (code >= 85 && code <= 86) return fr ? 'Averses de neige' : 'Snow showers';
+  if (code >= 95) return fr ? 'Orage' : 'Thunderstorm';
+  return fr ? 'Variable' : 'Variable';
+}
+
 // WMO weather code → emoji + short label (fr/en). Day/night aware for clear sky.
 export function weatherIcon(code: number, isDay: boolean): string {
   if (code === 0) return isDay ? '☀️' : '🌙';
