@@ -7,18 +7,10 @@ import { getRepAvatar } from '../lib/constants/avatars';
 import { getLeaderboard, getRepPerformance } from '../lib/leaderboardApi';
 import { useCompany } from '../contexts/CompanyContext';
 import type { LeaderboardEntry, RepPerformanceDetail } from '../types';
-import {
-  TrendingUp,
-  TrendingDown,
-  ChevronRight,
-  Flame,
-  Crown,
-  X,
-  User,
-  Loader2,
-} from 'lucide-react';
+import { ChevronRight, X, User, Loader2, Search, Trophy } from 'lucide-react';
 
 type Period = 'daily' | 'weekly' | 'monthly';
+type Metric = 'sales' | 'revenue';
 
 interface RepData {
   rank: number;
@@ -27,8 +19,6 @@ interface RepData {
   avatar: string | null;
   closes: number;
   revenue: number;
-  trend: number;
-  streak: number;
 }
 
 function getInitials(name: string): string {
@@ -49,57 +39,6 @@ function RepAvatar({ rep, className, textClassName }: { rep: RepData; className?
   );
 }
 
-// ---------------------------------------------------------------------------
-// Demo fallback — 5 fictional reps shown when the API returns no results
-// (e.g. fresh org / no closed deals yet). userId prefixed `demo-` so the
-// drawer renders local stats instead of calling the API.
-// ---------------------------------------------------------------------------
-
-interface DemoRep extends RepData {
-  doorsKnocked: number;
-  conversations: number;
-  demosSet: number;
-  quotesSent: number;
-}
-
-const DEMO_REPS: DemoRep[] = [
-  { rank: 1, name: 'Marc Tremblay',  userId: 'demo-rep-1', avatar: 'https://i.pravatar.cc/80?u=demo-rep-1', closes: 24, revenue: 96000, trend: 12,  streak: 7, doorsKnocked: 210, conversations: 140, demosSet: 52, quotesSent: 38 },
-  { rank: 2, name: 'Sophie Gagné',   userId: 'demo-rep-2', avatar: 'https://i.pravatar.cc/80?u=demo-rep-2', closes: 21, revenue: 84500, trend: 8,   streak: 4, doorsKnocked: 198, conversations: 128, demosSet: 47, quotesSent: 33 },
-  { rank: 3, name: "Liam O'Connor",  userId: 'demo-rep-3', avatar: 'https://i.pravatar.cc/80?u=demo-rep-3', closes: 18, revenue: 71200, trend: -3,  streak: 0, doorsKnocked: 176, conversations: 110, demosSet: 40, quotesSent: 29 },
-  { rank: 4, name: 'Emma Roy',       userId: 'demo-rep-4', avatar: 'https://i.pravatar.cc/80?u=demo-rep-4', closes: 15, revenue: 58900, trend: 5,   streak: 2, doorsKnocked: 154, conversations: 95,  demosSet: 33, quotesSent: 24 },
-  { rank: 5, name: 'Noah Bélanger',  userId: 'demo-rep-5', avatar: 'https://i.pravatar.cc/80?u=demo-rep-5', closes: 11, revenue: 42300, trend: -6,  streak: 0, doorsKnocked: 132, conversations: 78,  demosSet: 26, quotesSent: 19 },
-];
-
-function demoToKPIs(rep: DemoRep): { key: string; value: string }[] {
-  const conv = rep.doorsKnocked ? (rep.closes / rep.doorsKnocked) * 100 : 0;
-  const avg = rep.closes ? rep.revenue / rep.closes : 0;
-  return [
-    { key: 'leads', value: String(rep.doorsKnocked) },
-    { key: 'contacted', value: String(rep.conversations) },
-    { key: 'deals', value: String(rep.demosSet) },
-    { key: 'quotes_sent', value: String(rep.quotesSent) },
-    { key: 'accounts', value: String(rep.closes) },
-    { key: 'revenue', value: `$${rep.revenue.toLocaleString()}` },
-    { key: 'conversion_rate', value: `${Math.round(conv)}%` },
-    { key: 'avg_ticket', value: `$${Math.round(avg).toLocaleString()}` },
-  ];
-}
-
-function demoToFunnel(rep: DemoRep): { key: string; value: number; max: number }[] {
-  const max = rep.doorsKnocked || 1;
-  return [
-    { key: 'leads', value: rep.doorsKnocked, max },
-    { key: 'contacted', value: rep.conversations, max },
-    { key: 'deals_open', value: rep.demosSet, max },
-    { key: 'quotes_sent', value: rep.quotesSent, max },
-    { key: 'accounts', value: rep.closes, max },
-  ];
-}
-
-// ---------------------------------------------------------------------------
-// Convert API LeaderboardEntry[] -> RepData[]
-// ---------------------------------------------------------------------------
-
 function apiToRepData(entries: LeaderboardEntry[]): RepData[] {
   return entries.map((e) => ({
     rank: e.rank,
@@ -108,14 +47,8 @@ function apiToRepData(entries: LeaderboardEntry[]): RepData[] {
     avatar: e.avatar_url ?? getRepAvatar(e.full_name),
     closes: e.closes,
     revenue: e.revenue,
-    trend: e.trend,
-    streak: 0, // streak not available from API
   }));
 }
-
-// ---------------------------------------------------------------------------
-// Period date helpers
-// ---------------------------------------------------------------------------
 
 function getPeriodDates(period: Period): { from: string; to: string } {
   const now = new Date();
@@ -134,10 +67,6 @@ function getPeriodDates(period: Period): { from: string; to: string } {
   }
   return { from, to };
 }
-
-// ---------------------------------------------------------------------------
-// Convert API RepPerformanceDetail -> KPI + funnel arrays
-// ---------------------------------------------------------------------------
 
 function perfToKPIs(perf: RepPerformanceDetail): { key: string; value: string }[] {
   return [
@@ -163,89 +92,32 @@ function perfToFunnel(perf: RepPerformanceDetail): { key: string; value: number;
   ];
 }
 
-// ---------------------------------------------------------------------------
-// Card styles
-// ---------------------------------------------------------------------------
+// Podium ring colors — gold / silver / bronze (mirrors the mobile RANK_RING).
+const RANK_RING = ['#F59E0B', '#94A3B8', '#EA580C'];
 
-interface CardStyle {
-  gradient: string;
-  overlay: string;
-  rankBg: string;
-  rankBorder: string;
-  rankIcon: string;
-  shadow: string;
-}
-
-const cardStyles: Record<number, CardStyle> = {
-  1: {
-    gradient: 'linear-gradient(135deg, #F59E0B 0%, #F97316 100%)',
-    overlay: 'rgba(255,255,255,0.08)',
-    rankBg: 'rgba(255,255,255,0.15)',
-    rankBorder: 'rgba(255,255,255,0.25)',
-    rankIcon: '#FFF7ED',
-    shadow: '0 10px 30px rgba(245,158,11,0.25), 0 4px 12px rgba(0,0,0,0.1)',
-  },
-  2: {
-    gradient: 'linear-gradient(135deg, #64748B 0%, #334155 100%)',
-    overlay: 'rgba(255,255,255,0.06)',
-    rankBg: 'rgba(255,255,255,0.12)',
-    rankBorder: 'rgba(255,255,255,0.2)',
-    rankIcon: '#E2E8F0',
-    shadow: '0 10px 30px rgba(51,65,85,0.3), 0 4px 12px rgba(0,0,0,0.1)',
-  },
-  3: {
-    gradient: 'linear-gradient(135deg, #FB923C 0%, #EA580C 100%)',
-    overlay: 'rgba(255,255,255,0.07)',
-    rankBg: 'rgba(255,255,255,0.12)',
-    rankBorder: 'rgba(255,255,255,0.2)',
-    rankIcon: '#FFEDD5',
-    shadow: '0 10px 30px rgba(234,88,12,0.25), 0 4px 12px rgba(0,0,0,0.1)',
-  },
-};
-
-const noiseTexture = `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`;
-
-// ---------------------------------------------------------------------------
-// Trend badge
-// ---------------------------------------------------------------------------
-
-function TrendBadge({ trend }: { trend: number }) {
-  if (trend === 0) return null;
-  const up = trend > 0;
-  return (
-    <span className={cn('inline-flex items-center gap-0.5 text-xs font-medium', up ? 'text-success' : 'text-error')}>
-      {up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-      {up ? '+' : ''}{trend}%
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
+const money = (v: number) =>
+  new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(v || 0);
 
 export default function D2DLeaderboard() {
   const navigate = useNavigate();
   const { language } = useTranslation();
   const fr = language === 'fr';
   const periodLabels: Record<Period, string> = fr
-    ? { daily: 'Quotidien', weekly: 'Hebdomadaire', monthly: 'Mensuel' }
-    : { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
+    ? { daily: 'Jour', weekly: 'Semaine', monthly: 'Mois' }
+    : { daily: 'Day', weekly: 'Week', monthly: 'Month' };
   const { currentOrgId } = useCompany();
   const [period, setPeriod] = useState<Period>('weekly');
-  // 'mine' = uniquement mon office ; 'all' = tous les offices de la compagnie.
+  const [metric, setMetric] = useState<Metric>('revenue');
   const [scope, setScope] = useState<'mine' | 'all'>('mine');
+  const [query, setQuery] = useState('');
   const [selectedRep, setSelectedRep] = useState<RepData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [podiumData, setPodiumData] = useState<RepData[]>([]);
-  const [leaderboardData, setLeaderboardData] = useState<RepData[]>([]);
+  const [reps, setReps] = useState<RepData[]>([]);
 
-  // Drawer detail state
   const [detailKPIs, setDetailKPIs] = useState<{ key: string; value: string }[]>([]);
   const [funnelSteps, setFunnelSteps] = useState<{ key: string; value: number; max: number }[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // Fetch leaderboard when period changes
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -253,20 +125,10 @@ export default function D2DLeaderboard() {
     getLeaderboard(period, { scope, orgId: currentOrgId ?? undefined })
       .then((entries) => {
         if (cancelled) return;
-        if (!entries || entries.length === 0) {
-          // No real data yet — fall back to fictional demo reps
-          setPodiumData(DEMO_REPS.slice(0, 3));
-          setLeaderboardData(DEMO_REPS.slice(3));
-        } else {
-          const all = apiToRepData(entries);
-          setPodiumData(all.slice(0, 3));
-          setLeaderboardData(all.slice(3));
-        }
+        setReps(entries && entries.length ? apiToRepData(entries) : []);
       })
       .catch(() => {
-        if (cancelled) return;
-        setPodiumData(DEMO_REPS.slice(0, 3));
-        setLeaderboardData(DEMO_REPS.slice(3));
+        if (!cancelled) setReps([]);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -275,22 +137,10 @@ export default function D2DLeaderboard() {
     return () => { cancelled = true; };
   }, [period, scope, currentOrgId]);
 
-  // Fetch rep detail when drawer opens
   const openRepDrawer = useCallback((rep: RepData) => {
     setSelectedRep(rep);
     setDetailLoading(true);
-
-    // Demo reps have no DB record — render their local stats directly
-    const demo = DEMO_REPS.find((d) => d.userId === rep.userId);
-    if (demo) {
-      setDetailKPIs(demoToKPIs(demo));
-      setFunnelSteps(demoToFunnel(demo));
-      setDetailLoading(false);
-      return;
-    }
-
     const { from, to } = getPeriodDates(period);
-
     getRepPerformance(rep.userId, from, to)
       .then(({ performance }) => {
         setDetailKPIs(perfToKPIs(performance));
@@ -300,12 +150,23 @@ export default function D2DLeaderboard() {
         setDetailKPIs([]);
         setFunnelSteps([]);
       })
-      .finally(() => {
-        setDetailLoading(false);
-      });
+      .finally(() => setDetailLoading(false));
   }, [period]);
 
-  const allReps = [...podiumData, ...leaderboardData];
+  // Sort by the selected metric (mirrors mobile: revenue → revenue then closes).
+  const board = [...reps].sort((a, b) =>
+    metric === 'revenue' ? b.revenue - a.revenue || b.closes - a.closes : b.closes - a.closes || b.revenue - a.revenue,
+  );
+  const valText = (r: RepData) => (metric === 'revenue' ? money(r.revenue) : String(r.closes));
+  const subText = (r: RepData) => (metric === 'revenue' ? `${r.closes} ${fr ? 'ventes' : 'sales'}` : money(r.revenue));
+
+  const q = query.trim().toLowerCase();
+  const searching = q.length > 0;
+  const filtered = searching ? board.filter((r) => r.name.toLowerCase().includes(q)) : board;
+
+  // Podium: places 2-1-3 so #1 sits in the middle, raised.
+  const podium = board.slice(0, 3);
+  const podiumOrder = [podium[1], podium[0], podium[2]].filter(Boolean) as RepData[];
 
   return (
     <div className="space-y-6">
@@ -315,178 +176,151 @@ export default function D2DLeaderboard() {
           <h2 className="text-lg font-semibold text-text-primary">{fr ? 'Classement' : 'Rankings'}</h2>
           <p className="mt-1 text-sm text-text-tertiary">{fr ? 'Classement de l\'équipe' : 'Team ranking'}</p>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Scope: mon office vs tous les offices de la compagnie */}
-          <div className="flex items-center rounded-lg border border-border-subtle overflow-hidden">
-            {(['mine', 'all'] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setScope(s)}
-                className={cn(
-                  'px-3 py-1.5 text-xs font-medium transition-colors',
-                  scope === s ? 'bg-white text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary',
-                )}
-              >
-                {s === 'mine'
-                  ? (fr ? 'Mon office' : 'My office')
-                  : (fr ? 'Tous les offices' : 'All offices')}
-              </button>
-            ))}
-          </div>
-          {/* Période */}
-          <div className="flex items-center rounded-lg border border-border-subtle overflow-hidden">
-            {(['daily', 'weekly', 'monthly'] as Period[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={cn(
-                  'px-3 py-1.5 text-xs font-medium transition-colors',
-                  period === p ? 'bg-white text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary',
-                )}
-              >
-                {periodLabels[p]}
-              </button>
-            ))}
-          </div>
+        <div className="flex items-center rounded-lg border border-border-subtle overflow-hidden">
+          {(['mine', 'all'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setScope(s)}
+              className={cn(
+                'px-3 py-1.5 text-xs font-medium transition-colors',
+                scope === s ? 'bg-white text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary',
+              )}
+            >
+              {s === 'mine' ? (fr ? 'Mon office' : 'My office') : (fr ? 'Tous les offices' : 'All offices')}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Loading state */}
+      {/* Period segmented control (mobile look) */}
+      <div className="flex rounded-2xl bg-surface-elevated p-1">
+        {(['daily', 'weekly', 'monthly'] as Period[]).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={cn(
+              'flex-1 rounded-xl py-2 text-sm font-semibold transition-colors',
+              period === p ? 'bg-white text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary',
+            )}
+          >
+            {periodLabels[p]}
+          </button>
+        ))}
+      </div>
+
+      {/* Metric pills */}
+      <div className="flex justify-center gap-2">
+        {(['sales', 'revenue'] as Metric[]).map((m) => (
+          <button
+            key={m}
+            onClick={() => setMetric(m)}
+            className={cn(
+              'rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors',
+              metric === m ? 'border-text-primary bg-text-primary text-surface' : 'border-border-subtle bg-white text-text-primary',
+            )}
+          >
+            {m === 'sales' ? (fr ? 'Ventes' : 'Sales') : (fr ? 'Revenus' : 'Revenue')}
+          </button>
+        ))}
+      </div>
+
+      {/* Search */}
+      <div className="flex items-center gap-2 rounded-2xl border border-border-subtle bg-white px-3.5 py-2.5">
+        <Search className="h-4 w-4 text-text-muted" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={fr ? 'Rechercher un rep…' : 'Search a rep…'}
+          className="flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted"
+        />
+        {searching && (
+          <button onClick={() => setQuery('')} className="text-text-muted hover:text-text-secondary">
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Loading / empty / content */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-text-muted" />
         </div>
-      ) : podiumData.length === 0 && leaderboardData.length === 0 ? (
+      ) : board.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <User className="h-10 w-10 text-text-muted/30" />
-          <p className="mt-3 text-sm font-medium text-text-secondary">Aucune donnée</p>
-          <p className="mt-1 text-xs text-text-muted">Aucun rep n'a de stats pour cette période.</p>
+          <Trophy className="h-11 w-11 text-text-muted/30" />
+          <p className="mt-3 text-sm font-medium text-text-secondary">{fr ? 'Aucune activité' : 'No activity'}</p>
+          <p className="mt-1 text-xs text-text-muted">
+            {fr ? 'Aucun rep n\'a de stats pour cette période.' : 'No rep has stats for this period.'}
+          </p>
         </div>
       ) : (
         <>
-          {/* Top 3 */}
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            {podiumData.map((rep) => {
-              const s = cardStyles[rep.rank];
-              return (
-                <button
-                  key={rep.rank}
-                  onClick={() => navigate(`/reps/${rep.userId}`)}
-                  className="group relative overflow-hidden rounded-[16px] p-6 text-left transition-all duration-200 hover:-translate-y-0.5"
-                  style={{
-                    background: s.gradient,
-                    boxShadow: s.shadow,
-                  }}
-                >
-                  {/* Radial glass overlay */}
-                  <div
-                    className="pointer-events-none absolute inset-0"
-                    style={{
-                      backgroundImage: `radial-gradient(circle at 20% 30%, rgba(255,255,255,0.15), transparent 40%), radial-gradient(circle at 80% 70%, rgba(255,255,255,0.1), transparent 50%)`,
-                    }}
-                  />
-                  {/* Noise grain */}
-                  <div
-                    className="pointer-events-none absolute inset-0 rounded-[16px]"
-                    style={{ backgroundImage: noiseTexture, opacity: 0.04, mixBlendMode: 'overlay' }}
-                  />
-                  {/* Light overlay */}
-                  <div className="pointer-events-none absolute inset-0" style={{ background: s.overlay }} />
-
-                  {/* Rank badge */}
-                  <div className="relative flex items-center justify-between">
-                    <div
-                      className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold"
-                      style={{
-                        background: s.rankBg,
-                        border: `1px solid ${s.rankBorder}`,
-                        backdropFilter: 'blur(8px)',
-                        color: s.rankIcon,
-                      }}
-                    >
-                      {rep.rank === 1 ? <Crown className="h-4 w-4" /> : rep.rank}
-                    </div>
-                    {rep.streak > 0 && (
-                      <div
-                        className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
-                        style={{ background: 'rgba(255,255,255,0.12)', color: s.rankIcon }}
-                      >
-                        <Flame className="h-3 w-3" />
-                        {rep.streak}d
+          {/* Podium 2-1-3 (only when not searching) */}
+          {!searching && (
+            <div className="flex items-start justify-center gap-6 pb-2 pt-3">
+              {podiumOrder.map((rep) => {
+                const isFirst = rep.rank === 1;
+                const ring = RANK_RING[rep.rank - 1] ?? 'transparent';
+                const avatarSize = isFirst ? 'h-[84px] w-[84px]' : 'h-16 w-16';
+                return (
+                  <button
+                    key={rep.userId}
+                    onClick={() => navigate(`/reps/${rep.userId}`)}
+                    className="flex flex-col items-center"
+                    style={{ marginTop: isFirst ? 0 : 20 }}
+                  >
+                    <div className="relative">
+                      <div style={{ border: `3px solid ${ring}`, borderRadius: 9999, padding: 2 }}>
+                        <RepAvatar
+                          rep={rep}
+                          className={cn(avatarSize, 'shadow-lg')}
+                          textClassName={isFirst ? 'text-2xl' : 'text-lg'}
+                        />
                       </div>
-                    )}
-                  </div>
+                      <div
+                        className="absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-[11px] font-bold text-white"
+                        style={{ background: ring }}
+                      >
+                        {rep.rank}
+                      </div>
+                    </div>
+                    <p className="mt-2 max-w-[120px] truncate text-center text-sm font-semibold text-text-primary">{rep.name}</p>
+                    <p className={cn('text-center font-bold text-text-primary', isFirst ? 'text-xl' : 'text-lg')}>
+                      {valText(rep)}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-                  {/* Avatar + name */}
-                  <div className="relative mt-5 flex flex-col items-center">
-                    <RepAvatar
-                      rep={rep}
-                      className="h-[72px] w-[72px] shadow-lg ring-2 ring-white/20"
-                      textClassName="text-2xl"
-                    />
-                    <p className="mt-3 text-base font-semibold text-white">{rep.name}</p>
-                  </div>
-
-                  {/* Closes */}
-                  <p className="relative mt-4 text-center text-sm font-semibold text-white/90">
-                    {rep.closes} {fr ? 'comptes' : 'accounts'}
-                  </p>
-
-                  {/* Revenue */}
-                  <p className="relative mt-3 text-center text-2xl font-bold text-white">
-                    ${(rep.revenue / 1000).toFixed(1)}k
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Rest of leaderboard */}
+          {/* Ranking list */}
           <Card>
             <CardContent className="p-0">
-              {allReps.map((rep, i) => (
+              {filtered.map((rep, i) => (
                 <button
-                  key={rep.rank}
+                  key={rep.userId}
                   onClick={() => openRepDrawer(rep)}
                   className={cn(
                     'flex w-full items-center gap-4 px-5 py-3 text-left transition-colors hover:bg-surface-elevated',
-                    i < allReps.length - 1 && 'border-b border-border-subtle',
+                    i < filtered.length - 1 && 'border-b border-border-subtle',
                   )}
                 >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-elevated text-xs font-semibold text-text-muted">
-                    {rep.rank}
-                  </div>
+                  <div className="w-6 text-center text-base font-bold text-text-muted">{rep.rank}</div>
 
                   <Link
                     to={`/reps/${rep.userId}`}
                     className="flex flex-1 items-center gap-3 min-w-0 group"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <RepAvatar rep={rep} className="h-7 w-7" textClassName="text-[11px]" />
-                    <p className="text-sm font-semibold text-text-primary group-hover:text-text-secondary transition-colors">{rep.name}</p>
+                    <RepAvatar rep={rep} className="h-9 w-9" textClassName="text-xs" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-text-primary group-hover:text-text-secondary transition-colors">{rep.name}</p>
+                      <p className="text-xs text-text-muted">{subText(rep)}</p>
+                    </div>
                   </Link>
 
-                  {rep.streak > 0 && (
-                    <div className="flex items-center gap-1 text-xs text-warning font-medium">
-                      <Flame className="h-3 w-3" />
-                      {rep.streak}d
-                    </div>
-                  )}
-
-                  <div className="text-right w-16">
-                    <p className="text-lg font-bold text-text-primary">{rep.closes}</p>
-                    <p className="text-[10px] text-text-muted font-medium">{fr ? 'comptes' : 'accounts'}</p>
-                  </div>
-
-                  <div className="text-right w-20">
-                    <p className="text-sm font-semibold text-text-secondary">${(rep.revenue / 1000).toFixed(1)}k</p>
-                    <p className="text-[10px] text-text-muted font-medium">{fr ? 'revenu' : 'revenue'}</p>
-                  </div>
-
-                  <div className="w-14 flex justify-end">
-                    <TrendBadge trend={rep.trend} />
-                  </div>
-
+                  <p className="text-right text-base font-bold text-text-primary">{valText(rep)}</p>
                   <ChevronRight className="h-4 w-4 text-text-muted" />
                 </button>
               ))}
@@ -495,7 +329,7 @@ export default function D2DLeaderboard() {
         </>
       )}
 
-      {/* Drawer */}
+      {/* Drawer (unchanged — real rep detail) */}
       {selectedRep && (
         <>
           <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setSelectedRep(null)} />
@@ -503,15 +337,7 @@ export default function D2DLeaderboard() {
             <div className="flex items-center justify-between border-b border-border-subtle px-5 py-4">
               <div className="flex items-center gap-3">
                 <RepAvatar rep={selectedRep} className="h-11 w-11" textClassName="text-sm" />
-                <div>
-                  <h3 className="text-sm font-semibold text-text-primary">{selectedRep.name}</h3>
-                  {selectedRep.streak > 0 && (
-                    <div className="mt-0.5 flex items-center gap-1 text-xs text-warning font-medium">
-                      <Flame className="h-3 w-3" />
-                      {selectedRep.streak}d streak
-                    </div>
-                  )}
-                </div>
+                <h3 className="text-sm font-semibold text-text-primary">{selectedRep.name}</h3>
               </div>
               <button onClick={() => setSelectedRep(null)} className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-secondary">
                 <X className="h-4 w-4" />
