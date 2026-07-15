@@ -12,11 +12,16 @@ export interface HourlyWeather {
   code: number;        // WMO weather code
   isDay: boolean;
   precipProb: number;  // precipitation probability %
+  windKmh: number;     // wind speed km/h
 }
 
 export interface WeatherForecast {
   city: string;
   hours: HourlyWeather[];
+  todayMaxC: number;
+  todayMinC: number;
+  todayPrecipMm: number;   // total precipitation today (mm)
+  todayMaxWindKmh: number; // peak wind gust-ish today (km/h)
 }
 
 // Read the org's city (fallback to address). Coordinates aren't stored on the
@@ -56,7 +61,8 @@ export async function getOrgHourlyWeather(hours = 12): Promise<WeatherForecast |
 
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}` +
-    `&hourly=temperature_2m,weather_code,is_day,precipitation_probability` +
+    `&hourly=temperature_2m,weather_code,is_day,precipitation_probability,wind_speed_10m` +
+    `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max` +
     `&timezone=auto&forecast_days=2`;
   const res = await fetch(url);
   if (!res.ok) return null;
@@ -79,10 +85,37 @@ export async function getOrgHourlyWeather(hours = 12): Promise<WeatherForecast |
       code: Number(h.weather_code?.[i] ?? 0),
       isDay: Number(h.is_day?.[i] ?? 1) === 1,
       precipProb: Math.round(Number(h.precipitation_probability?.[i] ?? 0)),
+      windKmh: Math.round(Number(h.wind_speed_10m?.[i] ?? 0)),
     });
   }
 
-  return { city: loc.city, hours: slice };
+  const d = data?.daily;
+  return {
+    city: loc.city,
+    hours: slice,
+    todayMaxC: Math.round(Number(d?.temperature_2m_max?.[0] ?? slice[0]?.tempC ?? 0)),
+    todayMinC: Math.round(Number(d?.temperature_2m_min?.[0] ?? slice[0]?.tempC ?? 0)),
+    todayPrecipMm: Math.round(Number(d?.precipitation_sum?.[0] ?? 0) * 10) / 10,
+    todayMaxWindKmh: Math.round(Number(d?.wind_speed_10m_max?.[0] ?? 0)),
+  };
+}
+
+/**
+ * Outdoor-work verdict for service crews (window cleaning, exterior work…).
+ * Based on today's rain and peak wind. Returns a level + short label.
+ */
+export function outdoorWorkVerdict(
+  precipMm: number,
+  maxWindKmh: number,
+  fr: boolean,
+): { level: 'good' | 'ok' | 'bad'; label: string } {
+  if (precipMm >= 5 || maxWindKmh >= 45) {
+    return { level: 'bad', label: fr ? 'Peu propice au travail' : 'Poor for outdoor work' };
+  }
+  if (precipMm >= 1 || maxWindKmh >= 30) {
+    return { level: 'ok', label: fr ? 'Conditions variables' : 'Variable conditions' };
+  }
+  return { level: 'good', label: fr ? 'Bon pour travailler' : 'Good for outdoor work' };
 }
 
 // WMO weather code → short human label (fr/en).
