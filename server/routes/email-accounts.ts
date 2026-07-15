@@ -23,6 +23,7 @@ import { getServiceClient } from '../lib/supabase';
 import { syncGmailInbox } from '../lib/email/sync/gmail';
 import { sendGmail } from '../lib/email/send/gmail';
 import { applyGmailThreadAction } from '../lib/email/actions/gmail';
+import { getValidAccessToken } from '../lib/email/accountService';
 
 const router = Router();
 
@@ -130,9 +131,10 @@ router.post('/email/accounts/:id/sync', async (req, res) => {
     const account = await ownedAccount(ctx.user.id, req.params.id);
     if (!account) { res.status(404).json({ error: 'Mailbox not found' }); return; }
 
+    const max = Math.min(Math.max(parseInt(String(req.body?.max || '25'), 10) || 25, 10), 100);
     let synced = 0;
     if (account.provider === 'gmail') {
-      synced = await syncGmailInbox(account.id);
+      synced = await syncGmailInbox(account.id, max);
     } else {
       // Outlook sync arrives in the next step.
       res.status(400).json({ error: 'Outlook sync not available yet' });
@@ -302,6 +304,48 @@ router.post('/email/threads/:threadId/action', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Action failed' });
+  }
+});
+
+// ── Download an attachment from a message ─────────────────────
+router.get('/email/messages/:messageId/attachments/:attachmentId', async (req, res) => {
+  try {
+    const ctx = await requireAuthedClient(req, res);
+    if (!ctx) return;
+
+    const db = getServiceClient();
+    // Find the local message (ownership) + its account + provider message id.
+    const { data: msg } = await db
+      .from('email_messages')
+      .select('account_id, provider_message_id, attachments')
+      .eq('id', req.params.messageId)
+      .eq('user_id', ctx.user.id)
+      .maybeSingle();
+    if (!msg) { res.status(404).json({ error: 'Message not found' }); return; }
+
+    const account = await ownedAccount(ctx.user.id, msg.account_id);
+    if (!account || account.provider !== 'gmail') { res.status(400).json({ error: 'Unsupported provider' }); return; }
+
+    const meta = (msg.attachments as Array<{ attachmentId: string; filename: string; mimeType: string }> | null)
+      ?.find((a) => a.attachmentId === req.params.attachmentId);
+    if (!meta) { res.status(404).json({ error: 'Attachment not found' }); return; }
+
+    const accessToken = await getValidAccessToken(msg.account_id);
+    if (!accessToken) { res.status(400).json({ error: 'Reconnect the mailbox' }); return; }
+
+    const gRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.provider_message_id}/attachments/${req.params.attachmentId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!gRes.ok) { res.status(502).json({ error: 'Failed to fetch attachment' }); return; }
+    const json = await gRes.json();
+    const data = Buffer.from(String(json.data || '').replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+
+    res.setHeader('Content-Type', meta.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${meta.filename.replace(/"/g, '')}"`);
+    res.send(data);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Download failed' });
   }
 });
 

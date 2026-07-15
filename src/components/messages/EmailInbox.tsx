@@ -19,7 +19,7 @@ import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import {
   listEmailAccounts, connectMailbox, disconnectMailbox,
-  syncMailbox, fetchThreads, fetchThread, sendEmail, threadAction,
+  syncMailbox, fetchThreads, fetchThread, sendEmail, threadAction, downloadAttachment,
   type EmailAccount, type EmailProviderSlug,
   type EmailThread, type EmailMessage,
 } from '../../lib/emailInboxApi';
@@ -322,10 +322,10 @@ export default function EmailInbox() {
     }
   };
 
-  const handleSync = async (accountId: string, silent = false) => {
+  const handleSync = async (accountId: string, silent = false, max = 25) => {
     setSyncing(true);
     try {
-      const n = await syncMailbox(accountId);
+      const n = await syncMailbox(accountId, max);
       await loadThreads(accountId);
       if (!silent) toast.success(language === 'fr' ? `${n} email(s) synchronisé(s)` : `${n} email(s) synced`);
     } catch (err: any) {
@@ -334,6 +334,16 @@ export default function EmailInbox() {
       setSyncing(false);
     }
   };
+
+  // Periodic background sync (light "real-time" — pulls new mail every 90s).
+  useEffect(() => {
+    if (!activeAccountId) return;
+    const iv = setInterval(() => {
+      if (!syncing) void handleSync(activeAccountId, true, 25);
+    }, 90000);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAccountId, syncing]);
 
   const openThread = async (threadId: string) => {
     setSelectedThreadId(threadId);
@@ -567,6 +577,14 @@ export default function EmailInbox() {
               </button>
             ))
           )}
+
+          {/* Load more */}
+          {!loadingThreads && filtered.length > 0 && (
+            <button onClick={() => activeAccountId && handleSync(activeAccountId, false, 100)} disabled={syncing}
+              className="w-full py-3 text-[13px] font-semibold text-text-secondary hover:bg-surface-secondary disabled:opacity-50">
+              {syncing ? (language === 'fr' ? 'Chargement…' : 'Loading…') : (language === 'fr' ? 'Charger plus' : 'Load more')}
+            </button>
+          )}
         </div>
       </div>
 
@@ -638,10 +656,13 @@ export default function EmailInbox() {
                     {m.attachments.length > 0 && (
                       <div className="flex flex-wrap gap-2 px-4 pb-4">
                         {m.attachments.map((a, i) => (
-                          <div key={i} className="flex items-center gap-2 border border-border rounded-lg px-3 py-2 text-[12.5px] bg-surface-secondary">
+                          <button key={i}
+                            onClick={() => downloadAttachment(m.id, a.attachmentId, a.filename).catch((e) => toast.error(e?.message || 'Téléchargement échoué'))}
+                            className="flex items-center gap-2 border border-border rounded-lg px-3 py-2 text-[12.5px] bg-surface-secondary hover:bg-surface-tertiary transition-colors"
+                            title={language === 'fr' ? 'Télécharger' : 'Download'}>
                             <Paperclip size={13} className="text-text-tertiary" />
                             <span className="text-text-primary truncate max-w-[160px]">{a.filename}</span>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     )}

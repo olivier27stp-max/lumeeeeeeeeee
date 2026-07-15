@@ -99,12 +99,12 @@ export interface EmailMessage {
 }
 
 // ─── Sync a mailbox (pull latest from Gmail/Outlook) ─────────────────
-export async function syncMailbox(accountId: string): Promise<number> {
+export async function syncMailbox(accountId: string, max = 25): Promise<number> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/api/email/accounts/${accountId}/sync`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({}),
+    body: JSON.stringify({ max }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -156,6 +156,22 @@ export async function sendEmail(payload: {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Failed to send email');
   }
+}
+
+// ─── Download an attachment (returns a blob URL to click) ────────────
+export async function downloadAttachment(messageId: string, attachmentId: string, filename: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/email/messages/${messageId}/attachments/${attachmentId}`, { headers });
+  if (!res.ok) throw new Error('Téléchargement échoué');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ─── Thread actions: read / unread / archive / trash ─────────────────
