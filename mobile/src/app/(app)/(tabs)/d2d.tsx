@@ -312,9 +312,6 @@ export default function D2DMap() {
     });
   };
 
-  const darkBtn = 'flex-row items-center gap-2 rounded-xl border border-white/10 bg-black/60 px-4 py-2.5';
-  const darkBtnText = 'text-[13px] font-semibold text-white/80';
-
   return (
     <View className="flex-1 bg-[#080b10]">
       <D2DWebMap
@@ -379,31 +376,32 @@ export default function D2DMap() {
           </View>
         ) : null}
 
-        {/* Action buttons row (same buttons as web, dark translucent) */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" className="mt-2" contentContainerStyle={{ gap: 8 }}>
-          {mode === 'view' ? (
-            <>
-              <Pressable onPress={enterAddPin} className={darkBtn}>
-                <SymbolView name="plus" tintColor="rgba(255,255,255,0.8)" size={14} resizeMode="scaleAspectFit" />
-                <Text className={darkBtnText}>{t.mobileField.addPin}</Text>
+        {/* Action buttons row (same buttons as web, compact so all 4 fit) */}
+        {mode === 'view' ? (
+          <View className="mt-2 flex-row" style={{ gap: 6 }}>
+            <Pressable onPress={enterAddPin} className="flex-1 flex-row items-center justify-center gap-1 rounded-xl border border-white/10 bg-black/60 px-1.5 py-2.5">
+              <SymbolView name="plus" tintColor="rgba(255,255,255,0.8)" size={11} resizeMode="scaleAspectFit" />
+              <Text className="text-[11px] font-semibold text-white/80" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t.mobileField.addPin}</Text>
+            </Pressable>
+            <Pressable onPress={enterSelect} className="flex-1 flex-row items-center justify-center gap-1 rounded-xl border border-white/10 bg-black/60 px-1.5 py-2.5">
+              <SymbolView name="rectangle.dashed" tintColor="rgba(255,255,255,0.8)" size={11} resizeMode="scaleAspectFit" />
+              <Text className="text-[11px] font-semibold text-white/80" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t.mobileField.selectMode}</Text>
+            </Pressable>
+            {canDraw ? (
+              <Pressable onPress={enterDraw} className="flex-1 flex-row items-center justify-center gap-1 rounded-xl border border-indigo-400/20 bg-indigo-500/15 px-1.5 py-2.5">
+                <SymbolView name="hexagon" tintColor="#A5B4FC" size={11} resizeMode="scaleAspectFit" />
+                <Text className="text-[11px] font-semibold text-indigo-300" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t.mobileField.createZone}</Text>
               </Pressable>
-              <Pressable onPress={enterSelect} className={darkBtn}>
-                <SymbolView name="rectangle.dashed" tintColor="rgba(255,255,255,0.8)" size={14} resizeMode="scaleAspectFit" />
-                <Text className={darkBtnText}>{t.mobileField.selectMode}</Text>
-              </Pressable>
-              {canDraw ? (
-                <Pressable onPress={enterDraw} className="flex-row items-center gap-2 rounded-xl border border-indigo-400/20 bg-indigo-500/15 px-4 py-2.5">
-                  <SymbolView name="hexagon" tintColor="#A5B4FC" size={14} resizeMode="scaleAspectFit" />
-                  <Text className="text-[13px] font-semibold text-indigo-300">{t.mobileField.createZone}</Text>
-                </Pressable>
-              ) : null}
-              <Pressable onPress={() => setFiltersOpen(true)} className={darkBtn}>
-                <SymbolView name="line.3.horizontal.decrease" tintColor="rgba(255,255,255,0.8)" size={14} resizeMode="scaleAspectFit" />
-                <Text className={darkBtnText}>{t.mobileField.filters}</Text>
-              </Pressable>
-            </>
-          ) : null}
+            ) : null}
+            <Pressable onPress={() => setFiltersOpen(true)} className="flex-1 flex-row items-center justify-center gap-1 rounded-xl border border-white/10 bg-black/60 px-1.5 py-2.5">
+              <SymbolView name="line.3.horizontal.decrease" tintColor="rgba(255,255,255,0.8)" size={11} resizeMode="scaleAspectFit" />
+              <Text className="text-[11px] font-semibold text-white/80" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t.mobileField.filters}</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
+        {mode !== 'view' ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" className="mt-2" contentContainerStyle={{ gap: 8 }}>
           {mode === 'add_pin' ? (
             <Pressable onPress={exitAddPin} className="flex-row items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5">
               <View className="h-2 w-2 rounded-full bg-white" />
@@ -437,6 +435,7 @@ export default function D2DMap() {
             </>
           ) : null}
         </ScrollView>
+        ) : null}
 
         {/* Status selector strip while adding a pin (web's inline selector) */}
         {mode === 'add_pin' ? (

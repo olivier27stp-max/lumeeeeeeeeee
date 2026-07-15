@@ -83,9 +83,11 @@ var SMAP={
 };
 function bucketFor(s){return SMAP[s]||'other';}
 function cfgFor(s){return CFG[bucketFor(s)]||CFG.other;}
+// Phone-sized: the web's 28px/12px pin reads tiny on a phone screen — 34px
+// circle with a 16px icon keeps the same look but stays legible and tappable.
 function makeMarker(s){var c=cfgFor(s);var el=document.createElement('div');
-el.style.cssText='box-sizing:border-box;width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,0.92);display:flex;align-items:center;justify-content:center;line-height:0;box-shadow:0 0 8px '+c.color+'66,0 2px 6px rgba(0,0,0,0.4);cursor:pointer;background:linear-gradient(135deg,'+c.from+','+c.to+')';
-el.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">'+c.icon+'</svg>';return el;}`;
+el.style.cssText='box-sizing:border-box;width:34px;height:34px;border-radius:50%;border:2.5px solid rgba(255,255,255,0.92);display:flex;align-items:center;justify-content:center;line-height:0;box-shadow:0 0 8px '+c.color+'66,0 2px 6px rgba(0,0,0,0.4);cursor:pointer;background:linear-gradient(135deg,'+c.from+','+c.to+')';
+el.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">'+c.icon+'</svg>';return el;}`;
 
 /**
  * Mapbox GL JS (streets-v12, light — same style as the deployed web map) in a
