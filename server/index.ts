@@ -139,7 +139,7 @@ app.use((req, res, next) => {
       // *.googleapis.com covers maps + solar (building heights) + tile (photorealistic
       // 3D tiles); *.gstatic.com is used by the 3D map renderer. Both are required by
       // the 3D height tool and were previously blocked (Solar fetch + 3D tiles failed).
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://*.gstatic.com https://api.stripe.com https://api.paypal.com https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com https://fal.run https://queue.fal.run",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://*.gstatic.com https://api.stripe.com https://api.paypal.com https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com https://fal.run https://queue.fal.run https://api.open-meteo.com https://geocoding-api.open-meteo.com",
       "worker-src 'self' blob:",
       "child-src 'self' blob:",
       "frame-src https://js.stripe.com https://www.paypal.com",
