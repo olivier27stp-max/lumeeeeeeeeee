@@ -40,19 +40,22 @@ export interface PinStatusConfig {
   iconPaths: string;
 }
 
+// Single source of truth for pin statuses — colors AND labels. Every surface
+// (map pins, visit modal, edit modal, filters, stats) reads from here so the
+// vocabulary stays consistent app-wide.
 export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
   closed_won: {
     color: '#22C55E',
     gradientFrom: '#4ADE80',
     gradientTo: '#16A34A',
-    label: 'Fermé ✓',
+    label: 'Vendu ✓',
     iconPaths: '<polyline points="20 6 9 17 4 12"/>',
   },
   follow_up: {
     color: '#06B6D4',
     gradientFrom: '#22D3EE',
     gradientTo: '#0891B2',
-    label: 'Suivi',
+    label: 'À repasser',
     iconPaths: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
   },
   appointment: {
@@ -66,14 +69,14 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     color: '#EAB308',
     gradientFrom: '#FDE047',
     gradientTo: '#CA8A04',
-    label: 'Pas de réponse',
+    label: 'Personne',
     iconPaths: '<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><circle cx="12" cy="17" r=".5"/>',
   },
   rejected: {
     color: '#EF4444',
     gradientFrom: '#F87171',
     gradientTo: '#DC2626',
-    label: 'Refusé',
+    label: 'Pas intéressé',
     iconPaths: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   },
   other: {

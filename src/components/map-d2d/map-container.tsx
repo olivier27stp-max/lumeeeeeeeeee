@@ -177,6 +177,44 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
 
   // --- Edit modal ---
   const [editingPin, setEditingPin] = useState<LeadPinData | null>(null);
+  // "Log prospecting pin" action modal. Two modes:
+  //  - isNew=true: the user clicked a HOUSE with no pin yet → choosing an
+  //    outcome creates the pin automatically with the right status.
+  //  - isNew=false: clicked an existing pin → choosing an outcome updates it.
+  const [actionPin, setActionPin] = useState<LeadPinData | null>(null);
+  const [actionIsNew, setActionIsNew] = useState(false);
+  // Locally-created pins (visit log / add-pin) — exempt from the reconcile
+  // sweep, since they aren't in initialPins until the next full reload.
+  const localPinIdsRef = useRef(new Set<string>());
+  // The live instance listens for map clicks (dispatched as a DOM event from
+  // the map handler) and opens the modal. Using an event decouples us from
+  // which component instance owns the Mapbox map under StrictMode remounts.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ pin: LeadPinData; isNew?: boolean }>).detail;
+      if (!detail?.pin) return;
+      setActionPin(detail.pin);
+      setActionIsNew(!!detail.isNew);
+      // New visit: resolve the real street address in the background
+      if (detail.isNew) {
+        const token = import.meta.env.VITE_MAPBOX_TOKEN;
+        if (token) {
+          fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${detail.pin.lng},${detail.pin.lat}.json?access_token=${token}&language=fr&limit=1`)
+            .then((r) => r.json())
+            .then((data) => {
+              const place = data?.features?.[0];
+              if (!place) return;
+              setActionPin((prev) => (prev && prev.id === detail.pin.id
+                ? { ...prev, address: place.place_name || prev.address, name: place.text || prev.name }
+                : prev));
+            })
+            .catch(() => {});
+        }
+      }
+    };
+    window.addEventListener('d2d:open-pin-modal', handler);
+    return () => window.removeEventListener('d2d:open-pin-modal', handler);
+  }, []);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -477,6 +515,14 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   }
 
   function placePin(map: mapboxgl.Map, pin: LeadPinData) {
+    // Idempotent: if a marker for this pin already exists, remove it first so
+    // re-renders/remounts never stack duplicate (ghost) markers on the map.
+    const existing = markersRef.current.get(pin.id);
+    if (existing) {
+      existing.marker.remove();
+      existing.noteMarker?.remove();
+      markersRef.current.delete(pin.id);
+    }
     const el = createLeadPinElement(pin.status);
     const editId = `e-${pin.id}`;
     const delId = `d-${pin.id}`;
@@ -548,10 +594,15 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
       });
     });
 
+    // Pin clicks are handled by the map's own 'click' handler (nearest-pin
+    // hit test in the view-mode branch), which fires reliably regardless of
+    // marker z-index / canvas stacking. Just show the pointer cursor here.
+    el.style.cursor = 'pointer';
+
     const marker = new mapboxgl.Marker({ element: el })
       .setLngLat([pin.lng, pin.lat])
-      .setPopup(popup)
       .addTo(map);
+    void popup;
 
     let noteMarker: mapboxgl.Marker | null = null;
     if (pin.note) {
@@ -583,7 +634,18 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   // Init map
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    const container = containerRef.current;
+    if (!container || mapRef.current) return;
+
+    // Synchronous guard against StrictMode's double-invoke: the map is built in
+    // an async IIFE, so mapRef.current isn't set until later and can't block the
+    // second pass. Mark the container element synchronously here — the second
+    // effect sees the flag and bails before creating a second stacked map.
+    if (container.dataset.mapInit === '1') return;
+    container.dataset.mapInit = '1';
+    // If a previous map left DOM behind (HMR / fast remount), empty the
+    // container so Mapbox doesn't warn and lose interactivity.
+    container.querySelectorAll('.mapboxgl-map').forEach((n) => n.remove());
 
     const token = import.meta.env.VITE_MAPBOX_TOKEN;
     if (!token) { setShowTokenMsg(true); return; }
@@ -594,9 +656,14 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
     function initMap(center: [number, number], startZoom: number) {
       const map = new mapboxgl.Map({
         container: containerRef.current!,
-        style: 'mapbox://styles/mapbox/satellite-streets-v12',
+        style: 'mapbox://styles/mapbox/streets-v12',
         center, zoom: startZoom, maxZoom: 22, minZoom: 1, antialias: true, attributionControl: false,
       });
+      // Assign the ref IMMEDIATELY (not in the async 'load' handler). Otherwise,
+      // under StrictMode's mount→unmount→remount, the cleanup runs before 'load'
+      // fires, sees mapRef.current === null, and never removes this map — leaving
+      // a second orphaned map stacked in the container that swallows pin clicks.
+      mapRef.current = map;
 
       map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
       map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'bottom-right');
@@ -606,16 +673,17 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
       map.addControl(new mapboxgl.ScaleControl({ maxWidth: 100 }), 'bottom-left');
 
       map.on('load', () => {
-        mapRef.current = map;
+        // If StrictMode already tore this effect down, this map is orphaned —
+        // remove it so it can't stack a ghost canvas over the live map's pins.
+        if (disposed) { map.remove(); return; }
         setMapReady(true);
 
         // Clear any stale caches
         try { localStorage.removeItem('d2d-map-pins'); localStorage.removeItem('d2d-map-zones'); } catch {}
 
-        // Load initial pins from API (passed via props)
-        if (initialPins?.length) {
-          initialPins.forEach((pin) => placePin(map, pin));
-        }
+        // Pins are placed by the [initialPins, mapReady] effect (which guards
+        // against duplicates). No placePin loop here — it had no dedupe guard
+        // and stacked duplicate markers that swallowed clicks.
 
         // Zone hover tooltip
         map.on('mousemove', (e) => {
@@ -623,7 +691,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
           map.getCanvas().style.cursor = features.length > 0 && mode === 'view' ? 'pointer' : (mode === 'draw_zone' || mode === 'add_pin' || mode === 'select' ? 'crosshair' : '');
         });
 
-        // Zone click
+        // Map click — pin / zone / draw / add-pin
         map.on('click', (e) => {
           // Draw zone mode — add points
           if (containerRef.current?.dataset.mapMode === 'draw_zone') {
@@ -649,6 +717,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
             const { lng, lat } = e.lngLat;
             const id = crypto.randomUUID();
             const pin: LeadPinData = { id, lat, lng, status, name: 'Nouveau lead', phone: '', email: '', address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, note: '' };
+            localPinIdsRef.current.add(id);
             placePin(map, pin);
             containerRef.current!.dataset.mapMode = 'view';
             map.getCanvas().style.cursor = '';
@@ -677,15 +746,46 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
             return;
           }
 
-          // View mode — check zone click
+          // View mode — pin click first, then zone click.
           if (containerRef.current?.dataset.mapMode === 'view') {
-            const features = map.queryRenderedFeatures(e.point).filter((f) => f.layer?.id?.startsWith('zone-fill-'));
-            if (features.length > 0) {
-              const props = features[0].properties;
-              const idx = parseInt(features[0].layer!.id.replace('zone-fill-', ''), 10);
-              const zone = zonesRef.current[idx];
-              if (zone) setSelectedZone(zone);
+            // Find the nearest pin to the click point (screen space). This is
+            // the reliable path: the map's own click always fires, regardless
+            // of marker z-index / canvas stacking that can eat DOM clicks.
+            let nearest: LeadPinData | null = null;
+            let nearestDist = Infinity;
+            const HIT_RADIUS_PX = 22;
+            markersRef.current.forEach(({ pin }) => {
+              const p = map.project([pin.lng, pin.lat]);
+              const d = Math.hypot(p.x - e.point.x, p.y - e.point.y);
+              if (d < nearestDist) { nearestDist = d; nearest = pin; }
+            });
+            if (nearest && nearestDist <= HIT_RADIUS_PX) {
+              window.dispatchEvent(new CustomEvent('d2d:open-pin-modal', { detail: { pin: nearest, isNew: false } }));
+              return;
             }
+
+            // Clicks on live-rep markers or the GPS dot are NOT house visits —
+            // ignore them instead of opening the visit-log modal.
+            let nearOther = false;
+            repMarkersRef.current.forEach((m) => {
+              const p = map.project(m.getLngLat());
+              if (Math.hypot(p.x - e.point.x, p.y - e.point.y) <= HIT_RADIUS_PX) nearOther = true;
+            });
+            if (gpsMarkerRef.current) {
+              const p = map.project(gpsMarkerRef.current.getLngLat());
+              if (Math.hypot(p.x - e.point.x, p.y - e.point.y) <= HIT_RADIUS_PX) nearOther = true;
+            }
+            if (nearOther) return;
+
+            // No pin here → the rep clicked a HOUSE: open the visit-log modal.
+            // Choosing an outcome in the modal creates the pin automatically.
+            const { lng, lat } = e.lngLat;
+            const draft: LeadPinData = {
+              id: crypto.randomUUID(), lat, lng, status: 'other',
+              name: 'Nouveau lead', phone: '', email: '',
+              address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, note: '',
+            };
+            window.dispatchEvent(new CustomEvent('d2d:open-pin-modal', { detail: { pin: draft, isNew: true } }));
           }
         });
       });
@@ -826,12 +926,60 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
       disposed = true;
       if (gpsWatchRef.current != null) { navigator.geolocation.clearWatch(gpsWatchRef.current); gpsWatchRef.current = null; }
       if (gpsMarkerRef.current) { gpsMarkerRef.current.remove(); gpsMarkerRef.current = null; }
+      // Clear pin markers so a remount rebuilds them fresh (no stacked duplicates).
+      markersRef.current.forEach(({ marker, noteMarker }) => { marker.remove(); noteMarker?.remove(); });
+      markersRef.current.clear();
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+      // Release the synchronous init guard so a real remount can rebuild.
+      if (container) delete container.dataset.mapInit;
+      setMapReady(false);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // mapReady is used by other effects below
   const [mapReady, setMapReady] = useState(false);
+
+  // Place pins whenever they arrive. The map's 'load' handler only sees the
+  // pins that existed at load time; the API usually resolves AFTER load, so
+  // without this effect the pins (and their click handlers) are never created.
+  // Reconciles markers to exactly match initialPins:
+  //  - removes markers whose pin is no longer present (stops ghost buildup),
+  //  - places pins that aren't on the map yet (placePin is idempotent).
+  // Also sweeps any orphaned .mapboxgl-marker DOM nodes left by a dead
+  // StrictMode/HMR instance that aren't tracked in markersRef.
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+    const wanted = new Set((initialPins ?? []).map((p) => p.id));
+
+    // Remove tracked markers that are no longer wanted — but keep pins the
+    // user just created locally (visit log / add-pin), which aren't in
+    // initialPins until the next full reload.
+    markersRef.current.forEach((rec, id) => {
+      if (!wanted.has(id) && !localPinIdsRef.current.has(id)) {
+        rec.marker.remove();
+        rec.noteMarker?.remove();
+        markersRef.current.delete(id);
+      }
+    });
+
+    // Sweep orphaned pin-marker DOM nodes that no tracked marker owns. Preserve
+    // GPS dot, rep markers, and zone-drawing markers (all also .mapboxgl-marker).
+    const tracked = new Set<HTMLElement>();
+    markersRef.current.forEach((rec) => { tracked.add(rec.marker.getElement()); if (rec.noteMarker) tracked.add(rec.noteMarker.getElement()); });
+    if (gpsMarkerRef.current) tracked.add(gpsMarkerRef.current.getElement());
+    repMarkersRef.current.forEach((m) => tracked.add(m.getElement()));
+    drawingMarkersRef.current.forEach((m) => tracked.add(m.getElement()));
+    map.getContainer().querySelectorAll('.mapboxgl-marker').forEach((node) => {
+      const el = node as HTMLElement;
+      if (!tracked.has(el)) el.remove();
+    });
+
+    // Place any missing pins.
+    (initialPins ?? []).forEach((pin) => {
+      if (!markersRef.current.has(pin.id)) placePin(map, pin);
+    });
+  }, [initialPins, mapReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Follow deep-link focus changes once the map is up (covers the case where
   // the URL's lat/lng change while the map page is already mounted).
@@ -1102,6 +1250,49 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   }
 
   // (Lume handlers removed — CRM actions handled via onPinClosedWon/onPinAppointment callbacks)
+
+  // ---------------------------------------------------------------------------
+  // Quick status change from the "Log prospecting pin" action modal.
+  // Same mechanics as handleSaveEdit: swap the marker, persist, fire CRM action.
+  // ---------------------------------------------------------------------------
+  function applyPinStatus(pin: LeadPinData, newStatus: PinStatus) {
+    if (!mapRef.current) return;
+    const current = markersRef.current.get(pin.id)?.pin || pin;
+    const statusChanged = current.status !== newStatus;
+    const rec = markersRef.current.get(pin.id);
+    if (rec) { rec.marker.remove(); if (rec.noteMarker) rec.noteMarker.remove(); markersRef.current.delete(pin.id); }
+    const updated: LeadPinData = { ...current, status: newStatus };
+    placePin(mapRef.current, updated);
+    setActionPin(null);
+
+    // Persist the update
+    onPinUpdatedRef.current?.(updated);
+
+    // Fire CRM action when the new status is CRM-linked
+    if (newStatus === 'closed_won' && !updated.job_id && onPinClosedWonRef.current) onPinClosedWonRef.current(updated);
+    else if (newStatus === 'appointment' && !updated.quote_id && onPinAppointmentRef.current) onPinAppointmentRef.current(updated);
+
+    void statusChanged;
+  }
+
+  // ---------------------------------------------------------------------------
+  // New visit logged from the modal (house clicked with no pin yet):
+  // create the pin with the chosen status, persist it, fire the CRM action.
+  // ---------------------------------------------------------------------------
+  function createVisitPin(pin: LeadPinData, newStatus: PinStatus) {
+    if (!mapRef.current) return;
+    const created: LeadPinData = { ...pin, status: newStatus };
+    localPinIdsRef.current.add(created.id);
+    placePin(mapRef.current, created);
+    setActionPin(null);
+
+    // Persist (parent creates the house/pin server-side)
+    onPinCreatedRef.current?.(created);
+
+    // CRM flow: closed won → create Job, appointment → create Quote
+    if (newStatus === 'closed_won' && onPinClosedWonRef.current) onPinClosedWonRef.current(created);
+    else if (newStatus === 'appointment' && onPinAppointmentRef.current) onPinAppointmentRef.current(created);
+  }
 
   // ---------------------------------------------------------------------------
   // Select mode
@@ -1791,54 +1982,214 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
       )}
 
       {/* ================================================================== */}
+      {/* "Log prospecting pin" action modal — opens when a pin is clicked    */}
+      {/* ================================================================== */}
+      {actionPin && (
+        <div
+          className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
+          onClick={() => setActionPin(null)}
+        >
+          <div
+            className="w-[380px] max-w-[92vw] overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header — new visit: fixed title · existing pin: name + status chip */}
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div className="min-w-0">
+                <h3 className="truncate text-[16px] font-bold text-slate-900">
+                  {actionIsNew ? (fr ? 'Consigner une visite' : 'Log prospecting pin') : (actionPin.name || 'Pin')}
+                </h3>
+                {!actionIsNew && (
+                  <span
+                    className="mt-1 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide"
+                    style={{ backgroundColor: `${PIN_STATUS_CONFIG[actionPin.status].color}18`, color: PIN_STATUS_CONFIG[actionPin.status].color }}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: PIN_STATUS_CONFIG[actionPin.status].color }} />
+                    {PIN_STATUS_CONFIG[actionPin.status].label}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setActionPin(null)}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                aria-label={fr ? 'Fermer' : 'Close'}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+
+            <div className="px-5 py-4">
+              {/* Info card: address (+ contact/note for existing pins) */}
+              <div className="space-y-1.5 rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
+                <p className="text-[13.5px] font-semibold leading-snug text-slate-800">{actionPin.address}</p>
+                <p className="text-[11.5px] font-medium text-slate-400">Lat/Lng: {actionPin.lat.toFixed(5)}, {actionPin.lng.toFixed(5)}</p>
+                {!actionIsNew && actionPin.phone && (
+                  <p className="text-[12.5px] text-slate-600">📞 <a href={`tel:${actionPin.phone}`} className="text-sky-600 hover:underline">{actionPin.phone}</a></p>
+                )}
+                {!actionIsNew && actionPin.email && (
+                  <p className="text-[12.5px] text-slate-600">✉️ <a href={`mailto:${actionPin.email}`} className="text-sky-600 hover:underline">{actionPin.email}</a></p>
+                )}
+                {!actionIsNew && actionPin.note && (
+                  <p className="rounded-lg bg-white px-2.5 py-1.5 text-[12px] leading-snug text-slate-500 ring-1 ring-slate-100">📝 {actionPin.note}</p>
+                )}
+                {!actionIsNew && actionPin.job_id && (
+                  <p className="text-[11.5px] font-semibold text-emerald-600">✓ {fr ? 'Job liée' : 'Job linked'}</p>
+                )}
+                {!actionIsNew && actionPin.quote_id && (
+                  <p className="text-[11.5px] font-semibold text-slate-500">✓ {fr ? 'Devis lié' : 'Quote linked'}</p>
+                )}
+              </div>
+
+              {/* Outcome buttons.
+                  New visit → big stacked buttons (the primary decision).
+                  Existing pin → compact 2×2 chips (info stays the focus). */}
+              {actionIsNew ? (
+                <div className="mt-4 flex flex-col gap-2.5">
+                  {(['no_answer', 'rejected', 'follow_up', 'closed_won'] as PinStatus[]).map((status) => {
+                    const cfg = PIN_STATUS_CONFIG[status];
+                    // Button color = the color of the pin it creates.
+                    const label = status === 'closed_won' ? (fr ? '+ Créer une Job' : '+ Create Job') : cfg.label;
+                    return (
+                      <button
+                        key={status}
+                        onClick={() => createVisitPin(actionPin, status)}
+                        className="w-full rounded-xl py-3 text-[14px] font-bold text-white shadow-sm transition-all hover:brightness-110 active:scale-[.99]"
+                        style={{ background: `linear-gradient(135deg, ${cfg.gradientFrom}, ${cfg.gradientTo})` }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <>
+                  <p className="mb-1.5 mt-4 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">{fr ? 'Statut' : 'Status'}</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {(['no_answer', 'rejected', 'follow_up', 'closed_won'] as PinStatus[]).map((status) => {
+                      const cfg = PIN_STATUS_CONFIG[status];
+                      const active = actionPin.status === status;
+                      return (
+                        <button
+                          key={status}
+                          onClick={() => applyPinStatus(actionPin, status)}
+                          className={`rounded-lg px-2 py-1.5 text-[12px] font-semibold transition-all active:scale-[.98] ${active ? 'text-white shadow-sm' : 'ring-1 ring-inset hover:brightness-95'}`}
+                          style={active
+                            ? { backgroundColor: cfg.color }
+                            : { color: cfg.color, backgroundColor: `${cfg.color}14`, ['--tw-ring-color' as string]: `${cfg.color}40` } as React.CSSProperties}
+                        >
+                          {active ? '✓ ' : ''}{status === 'closed_won' ? (fr ? 'Vendu ✓' : 'Sold ✓') : cfg.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* Secondary actions for an existing pin */}
+              {!actionIsNew && (
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => {
+                      const current = markersRef.current.get(actionPin.id)?.pin || actionPin;
+                      setActionPin(null);
+                      setEditingPin(current);
+                      setEditName(current.name);
+                      setEditPhone(current.phone || '');
+                      setEditEmail(current.email || '');
+                      setEditStatus(current.status);
+                      setEditNote(current.note);
+                    }}
+                    className="flex-1 rounded-lg bg-slate-100 py-2 text-[12.5px] font-semibold text-slate-600 transition-colors hover:bg-slate-200"
+                  >
+                    ✎ {fr ? 'Modifier' : 'Edit'}
+                  </button>
+                  {(actionPin.client_id || actionPin.lead_id || actionPin.job_id || actionPin.lume_job_id) && (
+                    <button
+                      onClick={() => {
+                        const current = markersRef.current.get(actionPin.id)?.pin || actionPin;
+                        setActionPin(null);
+                        onOpenClientRef.current?.(current);
+                      }}
+                      className="flex-1 rounded-lg bg-sky-50 py-2 text-[12.5px] font-semibold text-sky-600 transition-colors hover:bg-sky-100"
+                    >
+                      → {fr ? 'Fiche client' : 'Client'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      const current = markersRef.current.get(actionPin.id)?.pin || actionPin;
+                      setActionPin(null);
+                      requestPinDelete(current);
+                    }}
+                    className="rounded-lg bg-red-50 px-3 py-2 text-[12.5px] font-semibold text-red-500 transition-colors hover:bg-red-100"
+                    aria-label={fr ? 'Supprimer le pin' : 'Delete pin'}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              <button
+                onClick={() => setActionPin(null)}
+                className="mt-3 w-full py-2.5 text-[13.5px] font-semibold text-slate-500 transition-colors hover:text-slate-700"
+              >
+                {actionIsNew ? (fr ? 'Annuler' : 'Cancel') : (fr ? 'Fermer' : 'Close')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================== */}
       {/* Edit pin modal                                                     */}
       {/* ================================================================== */}
       {editingPin && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="w-[340px] rounded-2xl border border-white/10 bg-[#0c0c14] p-6 shadow-2xl">
-            <h3 className="text-[15px] font-semibold text-white">{fr ? 'Modifier le pin' : 'Edit pin'}</h3>
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
+          <div className="w-[340px] rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-black/5">
+            <h3 className="text-[15px] font-bold text-slate-900">{fr ? 'Modifier le pin' : 'Edit pin'}</h3>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Nom' : 'Name'}</label>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Nom' : 'Name'}</label>
               <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white outline-none focus:border-indigo-500/50" />
+                className="w-full rounded-lg px-3 py-2 text-[13px] text-slate-800 outline-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-400" />
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Téléphone' : 'Phone'}</label>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Téléphone' : 'Phone'}</label>
               <input type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="819-555-0100"
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white placeholder-white/20 outline-none focus:border-indigo-500/50" />
+                className="w-full rounded-lg px-3 py-2 text-[13px] text-slate-800 placeholder-slate-300 outline-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-400" />
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Courriel' : 'Email'}</label>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Courriel' : 'Email'}</label>
               <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="client@email.com"
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white placeholder-white/20 outline-none focus:border-indigo-500/50" />
+                className="w-full rounded-lg px-3 py-2 text-[13px] text-slate-800 placeholder-slate-300 outline-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-400" />
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Statut' : 'Status'}</label>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Statut' : 'Status'}</label>
               <div className="flex flex-wrap gap-1.5">
                 {statuses.map(([key, cfg]) => (
                   <button key={key} onClick={() => setEditStatus(key)}
-                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-medium transition-all ${editStatus === key ? 'border-white/20 bg-white/10 text-white' : 'border-white/5 bg-white/[.02] text-white/40'}`}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all ${editStatus === key ? 'text-white shadow-sm' : 'text-slate-500 ring-1 ring-inset ring-slate-200 hover:bg-slate-50'}`}
+                    style={editStatus === key ? { backgroundColor: cfg.color } : undefined}
                   >
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: cfg.color }} />
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: editStatus === key ? 'white' : cfg.color }} />
                     {cfg.label}
                   </button>
                 ))}
               </div>
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Note</label>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Note</label>
               <textarea value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder={fr ? 'Ajouter une note...' : 'Add a note...'} rows={3}
-                className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white placeholder-white/20 outline-none focus:border-indigo-500/50" />
+                className="w-full resize-none rounded-lg px-3 py-2 text-[13px] text-slate-800 placeholder-slate-300 outline-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-400" />
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Adresse' : 'Address'}</label>
-              <p className="text-[12px] text-white/40">{editingPin.address}</p>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Adresse' : 'Address'}</label>
+              <p className="text-[12px] text-slate-500">{editingPin.address}</p>
             </div>
             <div className="mt-6 flex gap-2">
-              <button onClick={handleSaveEdit} className="flex-1 rounded-lg bg-indigo-500 py-2 text-[12px] font-semibold text-white hover:bg-indigo-400">{fr ? 'Sauvegarder' : 'Save'}</button>
-              <button onClick={() => setEditingPin(null)} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-[12px] text-white/50">{fr ? 'Annuler' : 'Cancel'}</button>
+              <button onClick={handleSaveEdit} className="flex-1 rounded-lg bg-indigo-500 py-2 text-[12px] font-bold text-white transition-colors hover:bg-indigo-600">{fr ? 'Sauvegarder' : 'Save'}</button>
+              <button onClick={() => setEditingPin(null)} className="rounded-lg bg-slate-100 px-4 py-2 text-[12px] font-semibold text-slate-600 transition-colors hover:bg-slate-200">{fr ? 'Annuler' : 'Cancel'}</button>
               <button onClick={() => { const current = markersRef.current.get(editingPin.id)?.pin || editingPin; setEditingPin(null); requestPinDelete(current); }}
-                className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2 text-[12px] font-medium text-red-400">{fr ? 'Supprimer' : 'Delete'}</button>
+                className="rounded-lg bg-red-50 px-4 py-2 text-[12px] font-semibold text-red-500 transition-colors hover:bg-red-100">{fr ? 'Supprimer' : 'Delete'}</button>
             </div>
           </div>
         </div>
