@@ -12,6 +12,7 @@ import {
   type WorkflowSummary,
 } from '../lib/dashboardApi';
 import HomeHero from '../components/HomeHero';
+import HomeWeatherStrip from '../components/HomeWeatherStrip';
 import HomeKpiStrip from '../components/HomeKpiStrip';
 import HomeAgendaCard from '../components/HomeAgendaCard';
 import HomePipelineCard from '../components/HomePipelineCard';
@@ -63,6 +64,8 @@ export default function CrmWorkspace() {
 
   return (
     <div className="bg-surface min-h-screen p-6 lg:p-8">
+      <HomeWeatherStrip />
+
       <HomeHero appointmentsTotal={appointments.total} overdue={appointments.overdue} />
 
       <HomeKpiStrip performance={performance} appointments={appointments} loading={isLoading} />
