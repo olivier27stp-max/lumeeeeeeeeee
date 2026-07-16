@@ -19,6 +19,7 @@ import {
   resolveDateInput,
 } from '../lib/searchParsing';
 import { escapeRegExp, getSearchEntityLabel, getSearchItemHref } from '../lib/searchHelpers';
+import { entityIconClass } from '../lib/entityColors';
 import { useTranslation } from '../i18n';
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission, isFinanciallyRestricted } from '../lib/permissions';
@@ -85,6 +86,8 @@ interface QuickAction {
   icon: React.ElementType;
   destination: string;
   keywords: string;
+  /** Entity identity color for the icon, when the action targets a CRM section. */
+  entity?: 'request' | 'quote' | 'job' | 'invoice';
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
@@ -94,8 +97,8 @@ const QUICK_ACTIONS: QuickAction[] = [
   { id: 'qa-new-quote', label: 'Create New Quote', labelFr: 'Nouveau devis', icon: Plus, destination: '/quotes?action=new', keywords: 'create add new quote estimate devis nouveau' },
   { id: 'qa-new-invoice', label: 'Create New Invoice', labelFr: 'Nouvelle facture', icon: Plus, destination: '/invoices?action=new', keywords: 'create add new invoice bill facture nouveau' },
   { id: 'qa-calendar', label: 'Go to Calendar', labelFr: 'Calendrier', icon: Calendar, destination: '/calendar', keywords: 'calendar schedule horaire' },
-  { id: 'qa-invoices', label: 'Go to Invoices', labelFr: 'Factures', icon: Wallet, destination: '/invoices', keywords: 'invoices billing factures' },
-  { id: 'qa-quotes', label: 'Go to Quotes', labelFr: 'Devis', icon: ClipboardList, destination: '/quotes', keywords: 'quotes estimates devis' },
+  { id: 'qa-invoices', label: 'Go to Invoices', labelFr: 'Factures', icon: Wallet, destination: '/invoices', keywords: 'invoices billing factures', entity: 'invoice' },
+  { id: 'qa-quotes', label: 'Go to Quotes', labelFr: 'Devis', icon: ClipboardList, destination: '/quotes', keywords: 'quotes estimates devis', entity: 'quote' },
 ];
 
 // ── Helpers ──
@@ -567,6 +570,7 @@ function SearchResultRow({
   onMouseEnter: () => void;
   onClick: () => void;
 }) {
+  const quickAction = item.kind === 'quick_action' ? QUICK_ACTIONS.find((a) => a.id === item.id) : undefined;
   const Icon = item.entityType
     ? ENTITY_ICONS[item.entityType]
     : item.kind === 'date'
@@ -574,7 +578,7 @@ function SearchResultRow({
       : item.kind === 'command'
         ? Command
         : item.kind === 'quick_action'
-          ? (QUICK_ACTIONS.find((a) => a.id === item.id)?.icon || Zap)
+          ? (quickAction?.icon || Zap)
           : Search;
 
   const secondary = item.kind === 'entity' ? entitySecondaryLine(item, fr) : item.subtitle || null;
@@ -593,8 +597,8 @@ function SearchResultRow({
       )}
     >
       <div className="flex items-center gap-3.5">
-        {/* Bare icon — no chip, no halo */}
-        <Icon size={16} strokeWidth={1.75} className="shrink-0 text-text-tertiary" aria-hidden />
+        {/* Bare icon — no chip, no halo; entity sections keep their identity color */}
+        <Icon size={16} strokeWidth={1.75} className={cn('shrink-0', entityIconClass(item.entityType || quickAction?.entity))} aria-hidden />
 
         {/* Content: main + secondary */}
         <div className="min-w-0 flex-1">

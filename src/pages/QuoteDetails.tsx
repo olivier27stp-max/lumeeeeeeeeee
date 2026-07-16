@@ -235,6 +235,7 @@ export default function QuoteDetails() {
         <button onClick={() => navigate('/quotes')} className="mb-3 text-text-tertiary hover:text-text-primary transition-colors"><ArrowLeft size={16} /></button>
         <EntityHubHeader
           icon={<FileText size={18} strokeWidth={2} />}
+          iconTileClass="text-entity-quote"
           status={quote.status}
           title={editing === 'title' ? (
             <span className="flex items-center gap-2">
@@ -277,11 +278,11 @@ export default function QuoteDetails() {
                 <div className="absolute right-0 top-full mt-1 w-52 bg-surface border border-outline rounded-xl shadow-xl z-40 py-1 text-[13px]">
                   <button onClick={() => act(async () => { const { jobId } = await convertQuoteToJob(quote.id); toast.success('Converted'); navigate(`/jobs/${jobId}`); })}
                     disabled={quote.status !== 'approved' || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
-                    <Briefcase size={14} /> Convert to Job</button>
+                    <Briefcase size={14} className="text-entity-job" /> Convert to Job</button>
                   {['approved', 'awaiting_response', 'changes_requested', 'draft'].includes(quote.status) && (
                     <button onClick={() => act(async () => { const { invoiceId } = await convertQuoteToInvoice(quote.id); toast.success('Invoice created'); navigate(`/invoices/${invoiceId}`); })}
                       disabled={quote.status === 'converted' || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
-                      <FileText size={14} /> Convert to Invoice</button>
+                      <FileText size={14} className="text-entity-invoice" /> Convert to Invoice</button>
                   )}
                   <button onClick={() => act(async () => { const d = await duplicateQuote(quote.id); toast.success('Duplicated'); navigate(`/quotes/${d.quote.id}`); })}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">

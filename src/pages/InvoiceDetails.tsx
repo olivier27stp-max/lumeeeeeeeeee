@@ -170,6 +170,7 @@ export default function InvoiceDetails() {
 
       <EntityHubHeader
         icon={<ReceiptText size={18} strokeWidth={2} />}
+        iconTileClass="text-entity-invoice"
         status={uiStatus}
         title={
           <EntityNumberEditor

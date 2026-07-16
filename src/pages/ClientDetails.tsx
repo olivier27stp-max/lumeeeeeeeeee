@@ -536,7 +536,7 @@ export default function ClientDetails() {
         onClick={() => navigate(`/jobs/${job.id}`)}
         className="flex items-center gap-3 flex-1 text-left"
       >
-        <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary">
+        <div className="w-6 h-6 flex items-center justify-center text-entity-job">
           <Briefcase size={13} strokeWidth={2} />
         </div>
         <div>
@@ -649,7 +649,7 @@ export default function ClientDetails() {
                 onClick={() => setIsQuoteCreateOpen(true)}
                 className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors"
               >
-                <FileText size={14} /> {t.clientDetails.newQuote}
+                <FileText size={14} className="text-entity-quote" /> {t.clientDetails.newQuote}
               </button>
               <button
                 onClick={() => openJobModal({
@@ -830,7 +830,7 @@ export default function ClientDetails() {
                       onClick={() => { setActiveWorkMenuPos(null); setIsQuoteCreateOpen(true); }}
                       className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
                     >
-                      <FileText size={13} /> {t.clientDetails.newQuote}
+                      <FileText size={13} className="text-entity-quote" /> {t.clientDetails.newQuote}
                     </button>
                     <button
                       onClick={() => {
@@ -845,13 +845,13 @@ export default function ClientDetails() {
                       }}
                       className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
                     >
-                      <Briefcase size={13} /> {t.clientDetails.newJob}
+                      <Briefcase size={13} className="text-entity-job" /> {t.clientDetails.newJob}
                     </button>
                     <button
                       onClick={() => navigate(`/invoices/new?clientId=${client.id}`)}
                       className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
                     >
-                      <ReceiptText size={13} /> {t.invoices.newInvoice}
+                      <ReceiptText size={13} className="text-entity-invoice" /> {t.invoices.newInvoice}
                     </button>
                   </div>
                 </>
@@ -897,7 +897,7 @@ export default function ClientDetails() {
                       className="w-full rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between text-left hover:border-primary/30 transition-colors group"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><FileText size={13} strokeWidth={2} /></div>
+                        <div className="w-6 h-6 flex items-center justify-center text-entity-invoice"><FileText size={13} strokeWidth={2} /></div>
                         <div>
                           <div className="flex items-center gap-2">
                             {inv.invoice_number && <span className="text-[11px] font-bold text-text-tertiary">#{inv.invoice_number}</span>}
@@ -951,7 +951,7 @@ export default function ClientDetails() {
                       className="w-full rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-center justify-between text-left hover:border-primary/30 transition-colors group"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-6 h-6 rounded bg-surface-tertiary flex items-center justify-center text-text-secondary"><FileText size={13} strokeWidth={2} /></div>
+                        <div className="w-6 h-6 flex items-center justify-center text-entity-quote"><FileText size={13} strokeWidth={2} /></div>
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] font-bold text-text-tertiary">#{q.quote_number}</span>

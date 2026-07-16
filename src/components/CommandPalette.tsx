@@ -15,6 +15,7 @@ import {
   SearchEntityItem, SearchEntityType, fetchSearchSuggestions,
 } from '../lib/globalSearchApi';
 import { getSearchItemHref } from '../lib/searchHelpers';
+import { entityIconClass, ENTITY_ICON_CLASS } from '../lib/entityColors';
 import { useTranslation } from '../i18n';
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission, isFinanciallyRestricted } from '../lib/permissions';
@@ -24,6 +25,8 @@ interface CommandItem {
   label: string;
   sublabel?: string;
   icon: React.ElementType;
+  /** Entity identity color for the icon (requests/quotes/jobs/invoices). */
+  iconClass?: string;
   action: () => void;
   section: string;
   keywords?: string;
@@ -89,10 +92,10 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
     const cmds: CommandItem[] = [
       { id: 'nav-dashboard', label: t.commandPalette.dashboard, icon: Search, action: () => navigate('/dashboard'), section: t.commandPalette.navigation, keywords: 'home accueil' },
       { id: 'nav-clients', label: 'Clients', icon: Users, action: () => navigate('/clients'), section: t.commandPalette.navigation, keywords: 'customers' },
-      { id: 'nav-jobs', label: 'Jobs', icon: Briefcase, action: () => navigate('/jobs'), section: t.commandPalette.navigation, keywords: 'travaux' },
+      { id: 'nav-jobs', label: 'Jobs', icon: Briefcase, iconClass: entityIconClass('job'), action: () => navigate('/jobs'), section: t.commandPalette.navigation, keywords: 'travaux' },
       { id: 'nav-calendar', label: t.commandPalette.calendar, icon: Calendar, action: () => navigate('/calendar'), section: t.commandPalette.navigation, keywords: 'schedule horaire' },
-      ...(canSeeInvoices ? [{ id: 'nav-invoices', label: t.commandPalette.invoices, icon: FileText, action: () => navigate('/finances'), section: t.commandPalette.navigation, keywords: 'bills finances' }] : []),
-      { id: 'nav-quotes', label: t.clientDetails.quotes, icon: FileText, action: () => navigate('/quotes'), section: t.commandPalette.navigation, keywords: 'estimates' },
+      ...(canSeeInvoices ? [{ id: 'nav-invoices', label: t.commandPalette.invoices, icon: FileText, iconClass: entityIconClass('invoice'), action: () => navigate('/finances'), section: t.commandPalette.navigation, keywords: 'bills finances' }] : []),
+      { id: 'nav-quotes', label: t.clientDetails.quotes, icon: FileText, iconClass: entityIconClass('quote'), action: () => navigate('/quotes'), section: t.commandPalette.navigation, keywords: 'estimates' },
       ...(canSeePayments ? [{ id: 'nav-payments', label: t.commandPalette.payments, icon: CreditCard, action: () => navigate('/finances?tab=paiements'), section: t.commandPalette.navigation }] : []),
       { id: 'nav-messages', label: 'Messages', icon: MessageSquare, action: () => navigate('/messages'), section: t.commandPalette.navigation, keywords: 'sms text' },
       ...(canSeeAnalytics ? [{ id: 'nav-insights', label: 'Insights', icon: TrendingUp, action: () => navigate('/insights'), section: t.commandPalette.navigation, keywords: 'analytics stats' }] : []),
@@ -138,6 +141,7 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
             label: item.title,
             sublabel: item.subtitle || item.clientName || undefined,
             icon: ENTITY_ICONS[item.type] || Search,
+            iconClass: item.type in ENTITY_ICON_CLASS ? entityIconClass(item.type) : undefined,
             action: () => navigate(getSearchItemHref(item.type, item.id, { clientId: item.clientId, refId: item.refId })),
             section: fr ? sectionLabel.fr : sectionLabel.en,
           });
@@ -280,7 +284,7 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
                         isSelected ? 'bg-primary/10 text-primary' : 'text-text-primary hover:bg-surface-secondary',
                       )}
                     >
-                      <item.icon size={15} className={isSelected ? 'text-primary' : 'text-text-tertiary'} />
+                      <item.icon size={15} className={item.iconClass || (isSelected ? 'text-primary' : 'text-text-tertiary')} />
                       <div className="flex-1 min-w-0">
                         <span className="text-[13px] font-medium">{item.label}</span>
                         {item.sublabel && (
