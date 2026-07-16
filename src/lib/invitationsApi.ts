@@ -28,6 +28,7 @@ export interface OrgMember {
   status: MemberStatus;
   permissions: Record<string, boolean> | null;
   created_at: string;
+  experience_level: 'rookie' | 'experienced' | null;
   full_name: string;
   avatar_url: string | null;
   email?: string;

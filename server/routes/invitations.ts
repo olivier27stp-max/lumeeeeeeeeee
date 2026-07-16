@@ -144,7 +144,7 @@ router.get('/invitations/list', async (req, res) => {
     // Fetch memberships with profile data
     const { data: memberships, error: memError } = await admin
       .from('memberships')
-      .select('user_id, org_id, role, status, permissions, created_at')
+      .select('user_id, org_id, role, status, permissions, created_at, experience_level')
       .eq('org_id', auth.orgId);
 
     if (memError) {
@@ -173,6 +173,7 @@ router.get('/invitations/list', async (req, res) => {
         status: m.status,
         permissions: m.permissions,
         created_at: m.created_at,
+        experience_level: m.experience_level || null,
         full_name: profile?.full_name || '',
         avatar_url: profile?.avatar_url || null,
       };

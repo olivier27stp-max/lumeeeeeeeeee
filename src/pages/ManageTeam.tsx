@@ -50,6 +50,7 @@ import { getCurrentOrgId } from '../lib/orgApi';
 import { useCompany } from '../contexts/CompanyContext';
 import { fetchSeatUsage, fetchCurrentBilling, setExtraSeats } from '../lib/billingApi';
 import { fetchHourlyRates, setHourlyRate } from '../lib/teamMembersApi';
+import { setRepExperience } from '../lib/leaderboardApi';
 import SeatChargeConfirmModal from '../components/SeatChargeConfirmModal';
 
 // ── Constants ────────────────────────────────────────────────────
@@ -130,6 +131,19 @@ export default function ManageTeam() {
     } catch (err: any) {
       setRates((r) => ({ ...r, [member.user_id]: prev }));
       toast.error(isFr ? 'Échec de l\'enregistrement du taux' : 'Failed to save rate');
+    }
+  };
+
+  // Tag a rep first-year / experienced (drives leaderboard category filters).
+  const handleSaveExperience = async (member: OrgMember, level: 'rookie' | 'experienced' | null) => {
+    const prev = member.experience_level;
+    setMembers((ms) => ms.map((m) => m.user_id === member.user_id ? { ...m, experience_level: level } : m));
+    try {
+      await setRepExperience(member.user_id, level);
+      toast.success(isFr ? 'Catégorie enregistrée' : 'Category saved');
+    } catch {
+      setMembers((ms) => ms.map((m) => m.user_id === member.user_id ? { ...m, experience_level: prev } : m));
+      toast.error(isFr ? 'Échec de l\'enregistrement' : 'Failed to save');
     }
   };
 
@@ -402,6 +416,7 @@ export default function ManageTeam() {
                 onRemove={() => handleRemoveMember(member.user_id)}
                 rate={rates[member.user_id] || 0}
                 onSaveRate={(c) => handleSaveRate(member, c)}
+                onSaveExperience={(lvl) => handleSaveExperience(member, lvl)}
               />
             ))}
           </div>
@@ -647,6 +662,7 @@ interface MemberRowProps {
   onRemove: () => void;
   rate: number;
   onSaveRate: (cents: number) => void;
+  onSaveExperience?: (level: 'rookie' | 'experienced' | null) => void;
   isSuspended?: boolean;
 }
 
@@ -659,6 +675,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
   onRemove,
   rate,
   onSaveRate,
+  onSaveExperience,
   isSuspended,
 }) => {
   const { t } = useTranslation();
@@ -718,6 +735,22 @@ const MemberRow: React.FC<MemberRowProps> = ({
           </span>
         </div>
       </div>
+
+      {/* Sales-rep category (drives leaderboard: first-year vs experienced) */}
+      {onSaveExperience && member.role !== 'technician' && (
+        <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <label className="text-[11px] font-semibold text-text-tertiary hidden lg:block">{isFr ? 'Catégorie' : 'Category'}</label>
+          <select
+            value={member.experience_level ?? ''}
+            onChange={(e) => onSaveExperience((e.target.value || null) as 'rookie' | 'experienced' | null)}
+            className="rounded-lg border border-outline-subtle bg-surface-secondary/40 px-2 py-1.5 text-[12px] font-medium text-text-primary focus:border-primary focus:outline-none"
+          >
+            <option value="">{isFr ? '—' : '—'}</option>
+            <option value="rookie">{isFr ? '1re année' : 'First year'}</option>
+            <option value="experienced">{isFr ? 'Expérimenté' : 'Experienced'}</option>
+          </select>
+        </div>
+      )}
 
       {/* Hourly rate (labour cost input for profitability) */}
       <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
