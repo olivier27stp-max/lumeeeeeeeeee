@@ -58,6 +58,16 @@ export function getLeaderboard(
   );
 }
 
+export interface Office {
+  id: string;
+  name: string;
+}
+
+/** List the offices (orgs) of the caller's company for the office filter. */
+export function getOffices(): Promise<{ offices: Office[]; activeOrgId: string }> {
+  return apiFetch('/leaderboard/offices');
+}
+
 /** Admin: tag a rep as rookie / experienced (null = clear). */
 export function setRepExperience(
   userId: string,

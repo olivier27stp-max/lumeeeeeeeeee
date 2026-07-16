@@ -146,6 +146,26 @@ router.get('/leaderboard/realtime/:userId', async (req, res) => {
   }
 });
 
+// GET /api/leaderboard/offices — the offices (orgs) of the caller's company.
+// An "office" = an org; siblings share a company_group_id.
+router.get('/leaderboard/offices', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  try {
+    const sc = getServiceClient();
+    const { orgIds } = await resolveCompanyOrgIds(sc, auth.orgId);
+    const { data, error } = await sc
+      .from('orgs')
+      .select('id, name')
+      .in('id', orgIds)
+      .order('name');
+    if (error) throw error;
+    res.json({ offices: data || [], activeOrgId: auth.orgId });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // PATCH /api/leaderboard/rep/:userId/experience — admin tags a rep rookie/experienced.
 // Body: { experience_level: 'rookie' | 'experienced' | null }
 router.patch('/leaderboard/rep/:userId/experience', async (req, res) => {
