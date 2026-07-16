@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import type { RepPerformanceDetail, FsCommissionEntry } from '../types';
 import {
+  Navigation,
   Phone,
   MapPin,
   Briefcase,
@@ -353,6 +354,15 @@ export default function D2DRepProfile() {
 
   const p = profile;
 
+  // Commissions: next payout = amounts owed but not yet paid (pending + approved);
+  // all-time = everything already paid out.
+  const nextPayout = commissions
+    .filter((c) => c.status === 'pending' || c.status === 'approved')
+    .reduce((sum, c) => sum + (c.amount || 0), 0);
+  const allTimeCommissions = commissions
+    .filter((c) => c.status === 'paid')
+    .reduce((sum, c) => sum + (c.amount || 0), 0);
+
   return (
     <div className="min-h-[calc(100vh-3rem)] bg-surface dark:bg-[#0B0F14]">
 
@@ -438,7 +448,7 @@ export default function D2DRepProfile() {
           {/* ============================================================= */}
           <div className="col-span-8 space-y-5">
 
-            {/* KPI row — top 4 */}
+            {/* KPI row — performance */}
             <div className="grid grid-cols-4 gap-3">
               <KpiCard icon={DollarSign} label="Total Revenue" value={fmtCurrency(p.stats.revenue)} />
               <KpiCard icon={Target} label="Deals Closed" value={String(p.stats.closes)} />
@@ -446,45 +456,12 @@ export default function D2DRepProfile() {
               <KpiCard icon={BarChart3} label="Avg Deal Value" value={fmtCurrency(p.stats.avgDealValue)} />
             </div>
 
-            {/* KPI row — bottom 4 */}
-            <div className="grid grid-cols-4 gap-3">
-              <KpiCard icon={CircleDollarSign} label="Commission" value={fmtCurrency(p.stats.commission)} />
-              <KpiCard icon={ClipboardList} label="Active Leads" value={String(p.stats.activeLeads)} />
-              <KpiCard icon={CheckCircle2} label="Jobs Completed" value={String(p.stats.jobsCompleted)} />
-              <KpiCard icon={Clock} label="Jobs Pending" value={String(p.stats.jobsPending)} />
-            </div>
-
-            {/* KPI row — operations */}
+            {/* KPI row — activity + commissions */}
             <div className="grid grid-cols-3 gap-3">
-              <KpiCard icon={FileSignature} label="Contracts Signed" value={String(p.stats.contractsSigned)} />
-              <KpiCard icon={Timer} label="Hours Worked" value={`${p.stats.hoursWorked}h`} />
-              <KpiCard icon={CalendarCheck} label="Days Worked" value={String(p.stats.daysWorked)} />
+              <KpiCard icon={Navigation} label="Doors Knocked" value={String(p.stats.doors)} />
+              <KpiCard icon={CircleDollarSign} label="Next Payout" value={fmtCurrency(nextPayout)} />
+              <KpiCard icon={DollarSign} label="All-Time Commissions" value={fmtCurrency(allTimeCommissions)} />
             </div>
-
-            {/* Quarterly performance */}
-            {p.quarterSales.length > 0 && (
-              <CardPanel title="Sales by Quarter">
-                <div className="space-y-5">
-                  {p.quarterSales.map((q) => (
-                    <div key={q.label}>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[13px] font-semibold text-text-primary">{q.label}</span>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-[14px] font-bold text-text-primary">{fmtCurrency(q.value)}</span>
-                          <span className="text-[11px] font-semibold text-text-tertiary">{q.percent}%</span>
-                        </div>
-                      </div>
-                      <div className="h-3 w-full overflow-hidden rounded-full bg-surface-tertiary dark:bg-[rgba(255,255,255,0.04)]">
-                        <div
-                          className="h-full rounded-full transition-all duration-1000 ease-out bg-text-primary"
-                          style={{ width: `${q.percent}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardPanel>
-            )}
 
             {/* ── Closes (auto-linked via pipeline_deals.rep_id) ── */}
             <CardPanel title={`Closes (${closes.length})`}>
