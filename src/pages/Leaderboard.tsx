@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '../components/d2d/card';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
-import { getRepAvatar } from '../lib/constants/avatars';
 import { getLeaderboard, getRepPerformance, setRepExperience, getOffices, type Office } from '../lib/leaderboardApi';
 import { useCompany } from '../contexts/CompanyContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -33,13 +32,27 @@ function getInitials(name: string): string {
   return (first + last).toUpperCase();
 }
 
+// DiceBear "notionists" — same universe as the mobile UnifiedAvatar, so a rep
+// without a real photo gets the same generated character everywhere.
+function dicebearUrl(seed: string): string {
+  return `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(seed)}&backgroundColor=f5f5f5&radius=50`;
+}
+
 function RepAvatar({ rep, className, textClassName }: { rep: RepData; className?: string; textClassName?: string }) {
-  if (rep.avatar) {
-    return <img src={rep.avatar} alt={rep.name} className={cn('rounded-full object-cover', className)} />;
-  }
+  // Real uploaded photo wins; otherwise the generated DiceBear (seeded by the
+  // rep's stable user id). Initials show underneath while the image loads / on error.
+  const src = rep.avatar || dicebearUrl(rep.userId || rep.name);
   return (
-    <div className={cn('flex shrink-0 items-center justify-center rounded-full bg-black', className)}>
-      <span className={cn('font-bold text-white', textClassName)}>{getInitials(rep.name)}</span>
+    <div className={cn('relative shrink-0 overflow-hidden rounded-full bg-surface-elevated', className)}>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className={cn('font-bold text-text-muted', textClassName)}>{getInitials(rep.name)}</span>
+      </div>
+      <img
+        src={src}
+        alt={rep.name}
+        loading="lazy"
+        className="absolute inset-0 h-full w-full rounded-full object-cover"
+      />
     </div>
   );
 }
@@ -49,7 +62,7 @@ function apiToRepData(entries: LeaderboardEntry[]): RepData[] {
     rank: e.rank,
     name: e.full_name,
     userId: e.user_id,
-    avatar: e.avatar_url ?? getRepAvatar(e.full_name),
+    avatar: e.avatar_url ?? null,
     closes: e.closes,
     revenue: e.revenue,
     experienceLevel: e.experience_level ?? null,
