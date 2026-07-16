@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { requireAuthedClient, getServiceClient, isOrgMember, isOrgAdminOrOwner } from '../lib/supabase';
 import { ORG_UUID_RE, shouldUseRequestedOrg, leaderboardOrgIds } from '../lib/active-org';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
-import { getLeaderboard, getRepPerformance, calculateRepStats } from '../lib/field-sales/leaderboard-engine';
+import { getLeaderboard, getRepPerformance, calculateRepStats, periodRange, type DateWindow } from '../lib/field-sales/leaderboard-engine';
+import { endOfDay, startOfDay } from 'date-fns';
 import { getRepBadges } from '../lib/field-sales/gamification-engine';
 import { cached } from '../lib/cache';
 
@@ -28,15 +29,43 @@ async function resolveActiveOrgId(
   return auth.orgId;
 }
 
-// GET /api/leaderboard?period=daily|weekly|monthly&teamId=...&scope=mine|all&orgId=...
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Fenêtre de dates de la requête : soit une plage explicite ?from=&to=
+ * (YYYY-MM-DD, bornes inversées tolérées), soit le period legacy
+ * daily|weekly|monthly. Renvoie aussi une clé stable pour le cache.
+ */
+function resolveWindow(req: any): { window: DateWindow; key: string } | null {
+  const from = req.query.from as string | undefined;
+  const to = req.query.to as string | undefined;
+  if (from && to && DATE_ONLY_RE.test(from) && DATE_ONLY_RE.test(to)) {
+    const [lo, hi] = from <= to ? [from, to] : [to, from];
+    return {
+      window: {
+        start: startOfDay(new Date(`${lo}T00:00:00`)).toISOString(),
+        end: endOfDay(new Date(`${hi}T00:00:00`)).toISOString(),
+      },
+      key: `${lo}_${hi}`,
+    };
+  }
+
+  const period = (req.query.period as string) || 'daily';
+  if (!['daily', 'weekly', 'monthly'].includes(period)) return null;
+  return { window: periodRange(period as 'daily' | 'weekly' | 'monthly'), key: period };
+}
+
+// GET /api/leaderboard?from=YYYY-MM-DD&to=YYYY-MM-DD (ou ?period=daily|weekly|monthly)
+//   &teamId=...&scope=mine|all&orgId=...&experience=...
 router.get('/leaderboard', async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
 
-  const period = (req.query.period as string) || 'daily';
-  if (!['daily', 'weekly', 'monthly'].includes(period)) {
-    return res.status(400).json({ error: 'Invalid period. Use daily, weekly, or monthly.' });
+  const resolvedWindow = resolveWindow(req);
+  if (!resolvedWindow) {
+    return res.status(400).json({ error: 'Invalid period. Use from/to dates or daily, weekly, monthly.' });
   }
+  const { window, key: windowKey } = resolvedWindow;
 
   const teamId = req.query.teamId as string | undefined;
   const experienceRaw = req.query.experience as string | undefined;
@@ -56,15 +85,15 @@ router.get('/leaderboard', async (req, res) => {
     let cacheKey: string;
     if (scope === 'mine') {
       orgIds = leaderboardOrgIds('mine', activeOrgId, []);
-      cacheKey = `leaderboard:mine:${activeOrgId}:${period}:${teamId || 'all'}:${experience || 'all'}`;
+      cacheKey = `leaderboard:mine:${activeOrgId}:${windowKey}:${teamId || 'all'}:${experience || 'all'}`;
     } else {
       const resolved = await resolveCompanyOrgIds(sc, activeOrgId);
       orgIds = leaderboardOrgIds('all', activeOrgId, resolved.orgIds);
-      cacheKey = `leaderboard:all:${resolved.groupId}:${period}:${teamId || 'all'}:${experience || 'all'}`;
+      cacheKey = `leaderboard:all:${resolved.groupId}:${windowKey}:${teamId || 'all'}:${experience || 'all'}`;
     }
 
     const entries = await cached(cacheKey, 45, () =>
-      getLeaderboard(sc, orgIds, period as 'daily' | 'weekly' | 'monthly', undefined, teamId, experience)
+      getLeaderboard(sc, orgIds, window, teamId, experience)
     );
     res.json(entries);
   } catch (err: any) {

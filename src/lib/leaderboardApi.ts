@@ -49,12 +49,22 @@ export interface LeaderboardOptions {
   experience?: 'rookie' | 'experienced';
 }
 
+/** Plage de dates explicite (YYYY-MM-DD, inclusif). from === to = un seul jour. */
+export interface LeaderboardRange {
+  from: string;
+  to: string;
+}
+
 export function getLeaderboard(
-  period: 'daily' | 'weekly' | 'monthly',
+  periodOrRange: 'daily' | 'weekly' | 'monthly' | LeaderboardRange,
   opts: LeaderboardOptions = {}
 ): Promise<LeaderboardEntry[]> {
+  const windowParams =
+    typeof periodOrRange === 'string'
+      ? { period: periodOrRange }
+      : { from: periodOrRange.from, to: periodOrRange.to };
   return apiFetch(
-    `/leaderboard${qs({ period, teamId: opts.teamId, scope: opts.scope, orgId: opts.orgId, experience: opts.experience })}`
+    `/leaderboard${qs({ ...windowParams, teamId: opts.teamId, scope: opts.scope, orgId: opts.orgId, experience: opts.experience })}`
   );
 }
 

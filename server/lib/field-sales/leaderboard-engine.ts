@@ -1,10 +1,11 @@
 /**
  * Leaderboard & Performance Engine
  *
- * Source of truth: pipeline_deals (closed_won) for closes + revenue,
- * with leads/quotes used to compute the upstream funnel. Field-house
- * events are still aggregated for door-to-door specific metrics
- * (doors knocked, conversations) when available.
+ * Source of truth: jobs. A created job with a salesperson assigned (at
+ * creation or later via edit) IS a closed deal — attributed to
+ * jobs.salesperson_id, falling back to the creator. Only real org members
+ * (sales reps, admins, owners) are ranked. Leads/quotes still feed the
+ * upstream funnel metrics.
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
@@ -12,7 +13,12 @@ import { startOfDay, startOfWeek, startOfMonth, endOfDay, endOfWeek, endOfMonth,
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
-function periodRange(period: PeriodType, date: Date = new Date()) {
+export interface DateWindow {
+  start: string; // ISO
+  end: string;   // ISO
+}
+
+export function periodRange(period: PeriodType, date: Date = new Date()): DateWindow {
   switch (period) {
     case 'daily':
       return { start: startOfDay(date).toISOString(), end: endOfDay(date).toISOString() };
@@ -23,80 +29,87 @@ function periodRange(period: PeriodType, date: Date = new Date()) {
   }
 }
 
+// Roles that appear on the leaderboard — anyone else (or a non-member id
+// left over from test data) is dropped from the ranking.
+const RANKED_ROLES = new Set(['sales_rep', 'admin', 'owner']);
+
 function repIdOf(deal: any): string | null {
   return deal.rep_id || deal.created_by || null;
-}
-
-function dealValue(deal: any): number {
-  if (deal.value != null) return Number(deal.value);
-  if (deal.value_cents != null) return Number(deal.value_cents) / 100;
-  return 0;
 }
 
 // ---------------------------------------------------------------------------
 // Leaderboard
 // ---------------------------------------------------------------------------
 
+// A job counts for the assigned salesperson; jobs created without an
+// explicit assignment count for their creator.
+function repOfJob(job: any): string | null {
+  return job.salesperson_id || job.created_by || null;
+}
+
+function jobRevenue(job: any): number {
+  return (Number(job.total_cents) || 0) / 100;
+}
+
 export async function getLeaderboard(
   supabase: SupabaseClient,
   orgId: string | string[],
-  period: PeriodType,
-  date?: Date,
+  window: DateWindow,
   teamId?: string,
   experience?: 'rookie' | 'experienced'
 ) {
   // Un "office" = un org. Le leaderboard mélange tous les offices d'une
   // même compagnie : on accepte donc un ou plusieurs org_id.
   const orgIds = Array.isArray(orgId) ? orgId : [orgId];
-  const range = periodRange(period, date);
+  const range = window;
 
-  // Current period: closed_won deals
-  const { data: wonDeals, error } = await supabase
-    .from('pipeline_deals')
-    .select('id, rep_id, created_by, value, value_cents, won_at, stage')
+  // Current window: real jobs — une job créée = un deal closé.
+  const { data: jobs, error } = await supabase
+    .from('jobs')
+    .select('id, salesperson_id, created_by, total_cents, created_at')
     .in('org_id', orgIds)
-    .eq('stage', 'closed_won')
     .is('deleted_at', null)
-    .gte('won_at', range.start)
-    .lte('won_at', range.end);
+    .gte('created_at', range.start)
+    .lte('created_at', range.end);
   if (error) throw new Error(error.message);
 
   // Aggregate per rep
   const byRep = new Map<string, { closes: number; revenue: number }>();
-  for (const d of wonDeals ?? []) {
-    const rid = repIdOf(d);
+  for (const j of jobs ?? []) {
+    const rid = repOfJob(j);
     if (!rid) continue;
     const cur = byRep.get(rid) || { closes: 0, revenue: 0 };
     cur.closes += 1;
-    cur.revenue += dealValue(d);
+    cur.revenue += jobRevenue(j);
     byRep.set(rid, cur);
   }
 
   if (byRep.size === 0) return [];
 
-  // Previous period for trend
-  const prevDate = new Date(date || new Date());
-  if (period === 'daily') prevDate.setDate(prevDate.getDate() - 1);
-  else if (period === 'weekly') prevDate.setDate(prevDate.getDate() - 7);
-  else prevDate.setMonth(prevDate.getMonth() - 1);
-  const prevRange = periodRange(period, prevDate);
+  // Previous window of equal length for the trend
+  const startMs = new Date(range.start).getTime();
+  const endMs = new Date(range.end).getTime();
+  const durationMs = Math.max(endMs - startMs, 1);
+  const prevRange = {
+    start: new Date(startMs - 1 - durationMs).toISOString(),
+    end: new Date(startMs - 1).toISOString(),
+  };
 
   const userIds = Array.from(byRep.keys());
 
-  const [membersRes, prevWonRes, leadsRes] = await Promise.all([
+  const [membersRes, prevJobsRes, leadsRes] = await Promise.all([
     supabase
       .from('memberships')
       .select('user_id, full_name, avatar_url, role, team_id, experience_level, teams:team_id(name)')
       .in('org_id', orgIds)
       .in('user_id', userIds),
     supabase
-      .from('pipeline_deals')
-      .select('rep_id, created_by, value, value_cents')
+      .from('jobs')
+      .select('salesperson_id, created_by, total_cents')
       .in('org_id', orgIds)
-      .eq('stage', 'closed_won')
       .is('deleted_at', null)
-      .gte('won_at', prevRange.start)
-      .lte('won_at', prevRange.end),
+      .gte('created_at', prevRange.start)
+      .lte('created_at', prevRange.end),
     // doors_knocked / conversion baseline: count leads created in the period per rep
     supabase
       .from('clients')
@@ -111,10 +124,10 @@ export async function getLeaderboard(
   const memberMap = new Map((membersRes.data ?? []).map((m: any) => [m.user_id, m]));
 
   const prevRevenueMap = new Map<string, number>();
-  for (const d of prevWonRes.data ?? []) {
-    const rid = repIdOf(d);
+  for (const j of prevJobsRes.data ?? []) {
+    const rid = repOfJob(j);
     if (!rid) continue;
-    prevRevenueMap.set(rid, (prevRevenueMap.get(rid) || 0) + dealValue(d));
+    prevRevenueMap.set(rid, (prevRevenueMap.get(rid) || 0) + jobRevenue(j));
   }
 
   const leadsByRep = new Map<string, number>();
@@ -124,7 +137,13 @@ export async function getLeaderboard(
     leadsByRep.set(rid, (leadsByRep.get(rid) || 0) + 1);
   }
 
-  let entries = userIds.map((uid) => {
+  // Only real members with a ranked role — drops test reps and stale ids.
+  let entries = userIds
+    .filter((uid) => {
+      const m: any = memberMap.get(uid);
+      return m && RANKED_ROLES.has(m.role);
+    })
+    .map((uid) => {
     const m: any = memberMap.get(uid) || {};
     const stats = byRep.get(uid)!;
     const prevRevenue = prevRevenueMap.get(uid) || 0;
@@ -204,11 +223,11 @@ export async function getRepPerformance(
       .lte('created_at', toIso),
     supabase
       .from('jobs')
-      .select('id, status, salesperson_id, created_by, completed_at, total_cents')
+      .select('id, status, salesperson_id, created_by, created_at, total_cents')
       .in('org_id', orgIds)
       .is('deleted_at', null)
-      .gte('completed_at', fromIso)
-      .lte('completed_at', toIso),
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso),
   ]);
 
   const matchLead = (l: any) => (l.assigned_to || l.user_id || l.created_by) === userId;
@@ -219,7 +238,6 @@ export async function getRepPerformance(
   const myLeads = (leadsRes.data ?? []).filter(matchLead);
   const myQuotes = (quotesRes.data ?? []).filter(matchQuote);
   const myDeals = (dealsRes.data ?? []).filter(matchDeal);
-  const myWonDeals = myDeals.filter((d: any) => d.stage === 'closed_won' && d.won_at && d.won_at >= fromIso && d.won_at <= toIso);
   const myJobs = (jobsRes.data ?? []).filter(matchJob);
 
   const agg = {
@@ -228,8 +246,9 @@ export async function getRepPerformance(
     demos_set: myDeals.length,
     demos_held: myDeals.filter((d: any) => d.stage !== 'new_prospect').length,
     quotes_sent: myQuotes.filter((q: any) => q.sent_via_email_at || q.sent_via_sms_at || ['awaiting_response', 'changes_requested', 'approved', 'declined', 'converted'].includes(q.status)).length,
-    closes: myWonDeals.length,
-    revenue: myWonDeals.reduce((s: number, d: any) => s + dealValue(d), 0),
+    // Une job créée dans la fenêtre = un deal closé, attribué au salesperson
+    closes: myJobs.length,
+    revenue: myJobs.reduce((s: number, j: any) => s + jobRevenue(j), 0),
     conversion_rate: 0,
     average_ticket: 0,
     follow_ups_completed: myJobs.filter((j: any) => j.status === 'completed').length,
