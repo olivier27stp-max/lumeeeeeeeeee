@@ -97,12 +97,18 @@ export async function getLeaderboard(
 
   const userIds = Array.from(byRep.keys());
 
-  const [membersRes, prevJobsRes, leadsRes] = await Promise.all([
+  const [membersRes, profilesRes, prevJobsRes, leadsRes] = await Promise.all([
     supabase
       .from('memberships')
       .select('user_id, full_name, avatar_url, role, team_id, experience_level, teams:team_id(name)')
       .in('org_id', orgIds)
       .in('user_id', userIds),
+    // Canonical display name/avatar — memberships.full_name is often empty
+    // for real accounts (only invite flows fill it).
+    supabase
+      .from('profiles')
+      .select('id, full_name, avatar_url')
+      .in('id', userIds),
     supabase
       .from('jobs')
       .select('salesperson_id, created_by, total_cents')
@@ -122,6 +128,27 @@ export async function getLeaderboard(
   ]);
 
   const memberMap = new Map((membersRes.data ?? []).map((m: any) => [m.user_id, m]));
+  const profileMap = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p]));
+
+  // Last-resort names for accounts with neither profile nor membership name:
+  // auth user_metadata.full_name, then email (service client required).
+  const rankedIds = userIds.filter((uid) => {
+    const m: any = memberMap.get(uid);
+    return m && RANKED_ROLES.has(m.role);
+  });
+  const authNameMap = new Map<string, string>();
+  await Promise.all(
+    rankedIds
+      .filter((uid) => !profileMap.get(uid)?.full_name && !(memberMap.get(uid) as any)?.full_name)
+      .map(async (uid) => {
+        try {
+          const { data } = await (supabase as any).auth.admin.getUserById(uid);
+          const u = data?.user;
+          const name = u?.user_metadata?.full_name || u?.email || '';
+          if (name) authNameMap.set(uid, String(name));
+        } catch { /* keep Unknown */ }
+      })
+  );
 
   const prevRevenueMap = new Map<string, number>();
   for (const j of prevJobsRes.data ?? []) {
@@ -138,13 +165,10 @@ export async function getLeaderboard(
   }
 
   // Only real members with a ranked role — drops test reps and stale ids.
-  let entries = userIds
-    .filter((uid) => {
-      const m: any = memberMap.get(uid);
-      return m && RANKED_ROLES.has(m.role);
-    })
+  let entries = rankedIds
     .map((uid) => {
     const m: any = memberMap.get(uid) || {};
+    const profile: any = profileMap.get(uid) || {};
     const stats = byRep.get(uid)!;
     const prevRevenue = prevRevenueMap.get(uid) || 0;
     const trend = prevRevenue > 0
@@ -155,8 +179,8 @@ export async function getLeaderboard(
     return {
       rank: 0,
       user_id: uid,
-      full_name: m.full_name || 'Unknown',
-      avatar_url: m.avatar_url || null,
+      full_name: profile.full_name || m.full_name || authNameMap.get(uid) || 'Unknown',
+      avatar_url: profile.avatar_url || m.avatar_url || null,
       team_name: m.teams?.name || null,
       team_id: m.team_id || null,
       experience_level: m.experience_level || null,
