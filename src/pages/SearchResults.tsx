@@ -10,6 +10,7 @@ import {
 } from '../lib/globalSearchApi';
 import { cn } from '../lib/utils';
 import { escapeRegExp, getSearchEntityLabel, getSearchItemHref } from '../lib/searchHelpers';
+import StatusBadge from '../components/ui/StatusBadge';
 import PageHeader from '../components/ui/PageHeader';
 import { useTranslation } from '../i18n';
 
@@ -31,24 +32,6 @@ const ENTITY_COLORS: Record<SearchEntityType, string> = {
   request: 'text-cyan-600 bg-cyan-50 dark:text-cyan-400 dark:bg-cyan-500/10',
   team: 'text-neutral-700 bg-neutral-100 dark:text-neutral-300 dark:bg-neutral-500/10',
   event: 'text-rose-600 bg-rose-50 dark:text-rose-400 dark:bg-rose-500/10',
-};
-
-const STATUS_BADGE_COLORS: Record<string, string> = {
-  paid: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-  draft: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400',
-  sent: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/15 dark:text-neutral-400',
-  overdue: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400',
-  approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-  declined: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400',
-  completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-  cancelled: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400',
-  scheduled: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/15 dark:text-neutral-400',
-  'in progress': 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
-  active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-  new: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/15 dark:text-neutral-400',
-  action_required: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
-  changes_requested: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
-  archived: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400',
 };
 
 function parsePage(raw: string | null, fallback = 1) {
@@ -95,8 +78,6 @@ function ResultsList({ items, query }: { items: SearchEntityItem[]; query: strin
       {items.map((item) => {
         const Icon = ENTITY_ICONS[item.type] || SearchIcon;
         const colorClass = ENTITY_COLORS[item.type] || 'text-text-secondary bg-surface-tertiary';
-        const statusDisplay = item.status?.replace(/_/g, ' ');
-        const statusColor = statusDisplay ? (STATUS_BADGE_COLORS[item.status?.toLowerCase() || ''] || STATUS_BADGE_COLORS[statusDisplay.toLowerCase()] || 'bg-neutral-100 text-neutral-600') : null;
 
         return (
           <button
@@ -130,11 +111,7 @@ function ResultsList({ items, query }: { items: SearchEntityItem[]; query: strin
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">
-                {statusDisplay && statusColor ? (
-                  <span className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide leading-none', statusColor)}>
-                    {statusDisplay}
-                  </span>
-                ) : null}
+                {item.status ? <StatusBadge status={item.status} size="sm" /> : null}
                 <p className="text-[10px] text-text-tertiary">
                   {new Date(item.createdAt).toLocaleDateString()}
                 </p>

@@ -217,9 +217,11 @@ interface StatusBadgeProps {
   /** @deprecated the premium badge always renders an icon; kept for API compatibility */
   dot?: boolean;
   className?: string;
+  /** 'sm' — compact bubble for dense rows (search results); 'md' (default) matches tables */
+  size?: 'sm' | 'md';
 }
 
-export default function StatusBadge({ status, variant, className }: StatusBadgeProps) {
+export default function StatusBadge({ status, variant, className, size = 'md' }: StatusBadgeProps) {
   const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
 
@@ -241,6 +243,7 @@ export default function StatusBadge({ status, variant, className }: StatusBadgeP
       ? { bg: 'linear-gradient(135deg, #47280D 0%, #2B1706 100%)', icon: '#F58A2E', defaultIcon: AlertCircle }
       : variantStyle[resolvedVariant];
   const Icon = statusIcons[key] || style.defaultIcon;
+  const compact = size === 'sm';
 
   return (
     <span
@@ -251,10 +254,10 @@ export default function StatusBadge({ status, variant, className }: StatusBadgeP
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        height: 24,
+        height: compact ? 18 : 24,
         // No minWidth: the bubble hugs its label, so short statuses stay
         // compact and long ones grow naturally.
-        padding: '0 10px',
+        padding: compact ? '0 7px' : '0 10px',
         borderRadius: 999,
         background: style.bg,
         border: '1px solid rgba(255,255,255,0.08)',
@@ -265,14 +268,14 @@ export default function StatusBadge({ status, variant, className }: StatusBadgeP
         userSelect: 'none',
       }}
     >
-      <Icon size={12} color={style.icon} strokeWidth={2.25} aria-hidden />
+      <Icon size={compact ? 10 : 12} color={style.icon} strokeWidth={2.25} aria-hidden />
       <span
         aria-hidden
-        style={{ width: 1, height: 11, background: 'rgba(255,255,255,0.12)', margin: '0 6px' }}
+        style={{ width: 1, height: compact ? 9 : 11, background: 'rgba(255,255,255,0.12)', margin: compact ? '0 4px' : '0 6px' }}
       />
       <span
         style={{
-          fontSize: 10,
+          fontSize: compact ? 9 : 10,
           fontWeight: 600,
           letterSpacing: '0.06em',
           textTransform: 'uppercase',

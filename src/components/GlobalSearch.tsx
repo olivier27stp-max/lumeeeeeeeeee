@@ -12,7 +12,7 @@ import {
   fetchSearchSuggestions,
 } from '../lib/globalSearchApi';
 import { cn } from '../lib/utils';
-import { statusDotColor } from './ui/StatusBadge';
+import StatusBadge from './ui/StatusBadge';
 import {
   getCommandSuggestions,
   normalizeSearchQuery,
@@ -638,7 +638,7 @@ function SearchResultRow({
         {/* Status + date pinned to the right */}
         {(item.status || item.date) ? (
           <div className="flex shrink-0 flex-col items-end gap-1">
-            {item.status ? <CompactStatusPill status={item.status} isActive={isActive} /> : null}
+            {item.status ? <StatusBadge status={item.status} size="sm" /> : null}
             {item.date ? (
               <span className={cn('text-[10px]', isActive ? 'text-white/60' : 'text-text-tertiary')}>
                 {formatShortDate(item.date)}
@@ -648,27 +648,5 @@ function SearchResultRow({
         ) : null}
       </div>
     </button>
-  );
-}
-
-// Compact right-aligned status pill — the full StatusBadge is too tall for dropdown rows.
-function CompactStatusPill({ status, isActive }: { status: string; isActive: boolean }) {
-  const { t } = useTranslation();
-  const key = status.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
-  const label = (t as any).status?.[key] || status.replace(/_/g, ' ');
-
-  if (isActive) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-surface-card/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide leading-none text-white">
-        {label}
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-outline/60 bg-surface-secondary px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide leading-none text-text-secondary">
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: statusDotColor(status) }} />
-      {label}
-    </span>
   );
 }
