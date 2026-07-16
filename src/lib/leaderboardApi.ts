@@ -45,6 +45,8 @@ export interface LeaderboardOptions {
   scope?: 'mine' | 'all';
   /** Office actuellement sélectionné (transmis au serveur pour scoper 'mine'). */
   orgId?: string;
+  /** Catégorie d'expérience : recrue (1re année) ou expérimenté. */
+  experience?: 'rookie' | 'experienced';
 }
 
 export function getLeaderboard(
@@ -52,8 +54,19 @@ export function getLeaderboard(
   opts: LeaderboardOptions = {}
 ): Promise<LeaderboardEntry[]> {
   return apiFetch(
-    `/leaderboard${qs({ period, teamId: opts.teamId, scope: opts.scope, orgId: opts.orgId })}`
+    `/leaderboard${qs({ period, teamId: opts.teamId, scope: opts.scope, orgId: opts.orgId, experience: opts.experience })}`
   );
+}
+
+/** Admin: tag a rep as rookie / experienced (null = clear). */
+export function setRepExperience(
+  userId: string,
+  level: 'rookie' | 'experienced' | null,
+): Promise<{ ok: boolean; experience_level: string | null }> {
+  return apiFetch(`/leaderboard/rep/${userId}/experience`, {
+    method: 'PATCH',
+    body: JSON.stringify({ experience_level: level }),
+  });
 }
 
 export function getRepPerformance(

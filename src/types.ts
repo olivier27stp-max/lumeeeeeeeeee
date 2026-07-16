@@ -381,6 +381,8 @@ export interface LeaderboardEntry {
   full_name: string;
   avatar_url: string | null;
   team_name: string | null;
+  team_id: string | null;
+  experience_level: 'rookie' | 'experienced' | null;
   closes: number;
   revenue: number;
   doors_knocked: number;

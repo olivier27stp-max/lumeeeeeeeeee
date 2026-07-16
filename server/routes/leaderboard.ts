@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuthedClient, getServiceClient, isOrgMember } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient, isOrgMember, isOrgAdminOrOwner } from '../lib/supabase';
 import { ORG_UUID_RE, shouldUseRequestedOrg, leaderboardOrgIds } from '../lib/active-org';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { getLeaderboard, getRepPerformance, calculateRepStats } from '../lib/field-sales/leaderboard-engine';
@@ -39,6 +39,8 @@ router.get('/leaderboard', async (req, res) => {
   }
 
   const teamId = req.query.teamId as string | undefined;
+  const experienceRaw = req.query.experience as string | undefined;
+  const experience = experienceRaw === 'rookie' || experienceRaw === 'experienced' ? experienceRaw : undefined;
   // 'mine' = uniquement l'office actif ; 'all' = tous les offices de la
   // compagnie (company_group_id). Défaut prudent : 'all' (comportement legacy).
   const scope = (req.query.scope as string) === 'mine' ? 'mine' : 'all';
@@ -54,15 +56,15 @@ router.get('/leaderboard', async (req, res) => {
     let cacheKey: string;
     if (scope === 'mine') {
       orgIds = leaderboardOrgIds('mine', activeOrgId, []);
-      cacheKey = `leaderboard:mine:${activeOrgId}:${period}:${teamId || 'all'}`;
+      cacheKey = `leaderboard:mine:${activeOrgId}:${period}:${teamId || 'all'}:${experience || 'all'}`;
     } else {
       const resolved = await resolveCompanyOrgIds(sc, activeOrgId);
       orgIds = leaderboardOrgIds('all', activeOrgId, resolved.orgIds);
-      cacheKey = `leaderboard:all:${resolved.groupId}:${period}:${teamId || 'all'}`;
+      cacheKey = `leaderboard:all:${resolved.groupId}:${period}:${teamId || 'all'}:${experience || 'all'}`;
     }
 
     const entries = await cached(cacheKey, 45, () =>
-      getLeaderboard(sc, orgIds, period as 'daily' | 'weekly' | 'monthly', undefined, teamId)
+      getLeaderboard(sc, orgIds, period as 'daily' | 'weekly' | 'monthly', undefined, teamId, experience)
     );
     res.json(entries);
   } catch (err: any) {
@@ -139,6 +141,36 @@ router.get('/leaderboard/realtime/:userId', async (req, res) => {
     const { orgIds } = await resolveCompanyOrgIds(sc, auth.orgId);
     const stats = await calculateRepStats(sc, orgIds, req.params.userId);
     res.json(stats);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/leaderboard/rep/:userId/experience — admin tags a rep rookie/experienced.
+// Body: { experience_level: 'rookie' | 'experienced' | null }
+router.patch('/leaderboard/rep/:userId/experience', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const canManage = await isOrgAdminOrOwner(auth.client, auth.user.id, auth.orgId);
+  if (!canManage) return res.status(403).json({ error: 'Only owner/admin can classify reps.' });
+
+  const level = req.body?.experience_level;
+  if (level !== null && level !== 'rookie' && level !== 'experienced') {
+    return res.status(400).json({ error: 'experience_level must be rookie, experienced, or null.' });
+  }
+
+  try {
+    const sc = getServiceClient();
+    // Scope the update to reps in the admin's company (all offices).
+    const { orgIds } = await resolveCompanyOrgIds(sc, auth.orgId);
+    const { error } = await sc
+      .from('memberships')
+      .update({ experience_level: level })
+      .eq('user_id', req.params.userId)
+      .in('org_id', orgIds);
+    if (error) throw error;
+    res.json({ ok: true, experience_level: level });
   } catch (err: any) {
     res.status(500).json({ error: 'Internal server error' });
   }

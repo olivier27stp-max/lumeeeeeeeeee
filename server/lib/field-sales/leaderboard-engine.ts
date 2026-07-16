@@ -42,7 +42,8 @@ export async function getLeaderboard(
   orgId: string | string[],
   period: PeriodType,
   date?: Date,
-  teamId?: string
+  teamId?: string,
+  experience?: 'rookie' | 'experienced'
 ) {
   // Un "office" = un org. Le leaderboard mélange tous les offices d'une
   // même compagnie : on accepte donc un ou plusieurs org_id.
@@ -85,7 +86,7 @@ export async function getLeaderboard(
   const [membersRes, prevWonRes, leadsRes] = await Promise.all([
     supabase
       .from('memberships')
-      .select('user_id, full_name, avatar_url, role, team_name, team_id')
+      .select('user_id, full_name, avatar_url, role, team_name, team_id, experience_level')
       .in('org_id', orgIds)
       .in('user_id', userIds),
     supabase
@@ -139,6 +140,7 @@ export async function getLeaderboard(
       avatar_url: m.avatar_url || null,
       team_name: m.team_name || null,
       team_id: m.team_id || null,
+      experience_level: m.experience_level || null,
       closes: stats.closes,
       revenue: stats.revenue,
       doors_knocked: leads,
@@ -152,6 +154,10 @@ export async function getLeaderboard(
   if (teamId) {
     entries = entries.filter((e) => e.team_id === teamId);
   }
+  if (experience) {
+    entries = entries.filter((e) => e.experience_level === experience);
+  }
+  // Rank is assigned AFTER filtering, so each category has its own 1-2-3.
   entries.forEach((e, i) => { e.rank = i + 1; });
 
   return entries;
