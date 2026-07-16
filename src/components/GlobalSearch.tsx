@@ -12,7 +12,7 @@ import {
   fetchSearchSuggestions,
 } from '../lib/globalSearchApi';
 import { cn } from '../lib/utils';
-import StatusBadge from './ui/StatusBadge';
+import { statusDotColor } from './ui/StatusBadge';
 import {
   getCommandSuggestions,
   normalizeSearchQuery,
@@ -609,20 +609,9 @@ function SearchResultRow({
 
         {/* Content */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className={cn('truncate text-[13px] font-medium', isActive ? 'text-white' : 'text-text-primary')}>
-              {item.kind === 'entity' ? highlightText(item.label, query) : item.label}
-            </p>
-            {item.status ? (
-              isActive ? (
-                <span className="inline-flex items-center rounded-full bg-surface-card/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide leading-none text-white">
-                  {item.status.replace(/_/g, ' ')}
-                </span>
-              ) : (
-                <StatusBadge status={item.status} />
-              )
-            ) : null}
-          </div>
+          <p className={cn('truncate text-[13px] font-medium', isActive ? 'text-white' : 'text-text-primary')}>
+            {item.kind === 'entity' ? highlightText(item.label, query) : item.label}
+          </p>
           {(item.subtitle || item.amountCents || item.clientName) ? (
             <div className={cn('flex items-center gap-1.5 text-[11px]', isActive ? 'text-white/70' : 'text-text-secondary')}>
               {item.subtitle ? (
@@ -646,13 +635,40 @@ function SearchResultRow({
           ) : null}
         </div>
 
-        {/* Date on the right */}
-        {item.date ? (
-          <span className={cn('shrink-0 text-[10px]', isActive ? 'text-white/60' : 'text-text-tertiary')}>
-            {formatShortDate(item.date)}
-          </span>
+        {/* Status + date pinned to the right */}
+        {(item.status || item.date) ? (
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            {item.status ? <CompactStatusPill status={item.status} isActive={isActive} /> : null}
+            {item.date ? (
+              <span className={cn('text-[10px]', isActive ? 'text-white/60' : 'text-text-tertiary')}>
+                {formatShortDate(item.date)}
+              </span>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </button>
+  );
+}
+
+// Compact right-aligned status pill — the full StatusBadge is too tall for dropdown rows.
+function CompactStatusPill({ status, isActive }: { status: string; isActive: boolean }) {
+  const { t } = useTranslation();
+  const key = status.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
+  const label = (t as any).status?.[key] || status.replace(/_/g, ' ');
+
+  if (isActive) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-surface-card/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide leading-none text-white">
+        {label}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-outline/60 bg-surface-secondary px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide leading-none text-text-secondary">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: statusDotColor(status) }} />
+      {label}
+    </span>
   );
 }

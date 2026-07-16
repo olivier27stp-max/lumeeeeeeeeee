@@ -110,14 +110,7 @@ function ResultsList({ items, query }: { items: SearchEntityItem[]; query: strin
                 <Icon size={15} strokeWidth={1.75} />
               </span>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate text-[13px] font-bold text-text-primary">{highlightText(item.title, query)}</p>
-                  {statusDisplay && statusColor ? (
-                    <span className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide leading-none', statusColor)}>
-                      {statusDisplay}
-                    </span>
-                  ) : null}
-                </div>
+                <p className="truncate text-[13px] font-bold text-text-primary">{highlightText(item.title, query)}</p>
                 <div className="flex items-center gap-1.5 text-[11px] text-text-secondary">
                   {item.subtitle ? (
                     <span className="truncate">{highlightText(item.subtitle, query)}</span>
@@ -137,6 +130,11 @@ function ResultsList({ items, query }: { items: SearchEntityItem[]; query: strin
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">
+                {statusDisplay && statusColor ? (
+                  <span className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide leading-none', statusColor)}>
+                    {statusDisplay}
+                  </span>
+                ) : null}
                 <p className="text-[10px] text-text-tertiary">
                   {new Date(item.createdAt).toLocaleDateString()}
                 </p>
