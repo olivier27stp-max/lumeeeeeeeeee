@@ -4,10 +4,9 @@ import { Card, CardContent } from '../components/d2d/card';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { getRepAvatar } from '../lib/constants/avatars';
-import { getLeaderboard, getRepPerformance, setRepExperience } from '../lib/leaderboardApi';
+import { getLeaderboard, getRepPerformance, setRepExperience, getOffices, type Office } from '../lib/leaderboardApi';
 import { useCompany } from '../contexts/CompanyContext';
 import { usePermissions } from '../hooks/usePermissions';
-import { listTeams, type TeamRecord } from '../lib/teamsApi';
 import { toast } from 'sonner';
 import type { LeaderboardEntry, RepPerformanceDetail } from '../types';
 import { ChevronRight, X, User, Loader2, Search, Trophy } from 'lucide-react';
@@ -120,8 +119,8 @@ export default function D2DLeaderboard() {
   const [metric, setMetric] = useState<Metric>('revenue');
   const [scope, setScope] = useState<'mine' | 'all'>('mine');
   const [category, setCategory] = useState<Category>('all');
-  const [teamId, setTeamId] = useState<string>('');
-  const [teams, setTeams] = useState<TeamRecord[]>([]);
+  const [officeId, setOfficeId] = useState<string>(''); // '' = follow the scope toggle
+  const [offices, setOffices] = useState<Office[]>([]);
   const [query, setQuery] = useState('');
   const [selectedRep, setSelectedRep] = useState<RepData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -131,38 +130,34 @@ export default function D2DLeaderboard() {
   const [funnelSteps, setFunnelSteps] = useState<{ key: string; value: number; max: number }[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // Load the list of offices (teams) for the office filter.
+  // Load the list of offices (orgs of the company) for the office filter.
   useEffect(() => {
-    listTeams().then(setTeams).catch(() => setTeams([]));
+    getOffices().then((r) => setOffices(r.offices)).catch(() => setOffices([]));
   }, []);
 
-  const reload = useCallback(() => {
+  // Picking a specific office scopes to that org; otherwise follow the toggle.
+  const effectiveScope = officeId ? 'mine' : scope;
+  const effectiveOrgId = officeId || (currentOrgId ?? undefined);
+
+  const fetchBoard = useCallback((cancelledRef?: { current: boolean }) => {
     setLoading(true);
     getLeaderboard(period, {
-      scope,
-      orgId: currentOrgId ?? undefined,
-      teamId: teamId || undefined,
+      scope: effectiveScope,
+      orgId: effectiveOrgId,
       experience: category === 'all' ? undefined : category,
     })
-      .then((entries) => setReps(entries && entries.length ? apiToRepData(entries) : []))
-      .catch(() => setReps([]))
-      .finally(() => setLoading(false));
-  }, [period, scope, currentOrgId, teamId, category]);
+      .then((entries) => { if (!cancelledRef?.current) setReps(entries && entries.length ? apiToRepData(entries) : []); })
+      .catch(() => { if (!cancelledRef?.current) setReps([]); })
+      .finally(() => { if (!cancelledRef?.current) setLoading(false); });
+  }, [period, effectiveScope, effectiveOrgId, category]);
+
+  const reload = useCallback(() => fetchBoard(), [fetchBoard]);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    getLeaderboard(period, {
-      scope,
-      orgId: currentOrgId ?? undefined,
-      teamId: teamId || undefined,
-      experience: category === 'all' ? undefined : category,
-    })
-      .then((entries) => { if (!cancelled) setReps(entries && entries.length ? apiToRepData(entries) : []); })
-      .catch(() => { if (!cancelled) setReps([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [period, scope, currentOrgId, teamId, category]);
+    const ref = { current: false };
+    fetchBoard(ref);
+    return () => { ref.current = true; };
+  }, [fetchBoard]);
 
   // Admin: tag a rep rookie/experienced, then refresh.
   const tagRep = useCallback(async (userId: string, level: 'rookie' | 'experienced' | null) => {
@@ -214,20 +209,23 @@ export default function D2DLeaderboard() {
           <h2 className="text-lg font-semibold text-text-primary">{fr ? 'Classement' : 'Rankings'}</h2>
           <p className="mt-1 text-sm text-text-tertiary">{fr ? 'Classement de l\'équipe' : 'Team ranking'}</p>
         </div>
-        <div className="flex items-center rounded-lg border border-border-subtle overflow-hidden">
-          {(['mine', 'all'] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setScope(s)}
-              className={cn(
-                'px-3 py-1.5 text-xs font-medium transition-colors',
-                scope === s ? 'bg-white text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary',
-              )}
-            >
-              {s === 'mine' ? (fr ? 'Mon office' : 'My office') : (fr ? 'Tous les offices' : 'All offices')}
-            </button>
-          ))}
-        </div>
+        {/* Scope toggle — hidden when a specific office is selected (redundant). */}
+        {!officeId && (
+          <div className="flex items-center rounded-lg border border-border-subtle overflow-hidden">
+            {(['mine', 'all'] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setScope(s)}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-medium transition-colors',
+                  scope === s ? 'bg-white text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary',
+                )}
+              >
+                {s === 'mine' ? (fr ? 'Mon bureau' : 'My office') : (fr ? 'Tous les bureaux' : 'All offices')}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Period segmented control (mobile look) */}
@@ -283,15 +281,15 @@ export default function D2DLeaderboard() {
           ))}
         </div>
 
-        {teams.length > 0 && (
+        {offices.length > 1 && (
           <select
-            value={teamId}
-            onChange={(e) => setTeamId(e.target.value)}
+            value={officeId}
+            onChange={(e) => setOfficeId(e.target.value)}
             className="rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-xs font-medium text-text-primary outline-none"
           >
-            <option value="">{fr ? 'Tous les offices' : 'All offices'}</option>
-            {teams.map((tm) => (
-              <option key={tm.id} value={tm.id}>{tm.name}</option>
+            <option value="">{fr ? 'Tous les bureaux' : 'All offices'}</option>
+            {offices.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
             ))}
           </select>
         )}
