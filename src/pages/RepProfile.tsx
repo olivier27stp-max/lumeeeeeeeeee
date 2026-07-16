@@ -11,8 +11,8 @@ import {
   type RepPinKind,
 } from '../lib/repStatsApi';
 import { getCommissionEntries } from '../lib/commissionsApi';
+import { getRepProfileInfo } from '../lib/leaderboardApi';
 import { supabase } from '../lib/supabase';
-import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import type { FsCommissionEntry } from '../types';
 import { PIN_STATUS_CONFIG } from '../components/map-d2d/lead-pin';
 import { toast } from 'sonner';
@@ -112,6 +112,8 @@ export default function D2DRepProfile() {
   const paramId = id || memberId || '';
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  // Org (office) du rep — les stats sont scoppées dessus, pas sur l'org actif
+  const [repOrgId, setRepOrgId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [commissions, setCommissions] = useState<FsCommissionEntry[]>([]);
@@ -130,27 +132,18 @@ export default function D2DRepProfile() {
     let cancelled = false;
 
     async function fetchFromApi(userId: string) {
-      const orgId = await getCurrentOrgIdOrThrow();
-      const [profileRes, memberRes, officeRes] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, avatar_url, created_at').eq('id', userId).maybeSingle(),
-        supabase.from('team_members').select('id, first_name, last_name, email, phone, role, avatar_url, created_at').eq('user_id', userId).eq('org_id', orgId).maybeSingle(),
-        supabase.from('company_settings').select('company_name').eq('org_id', orgId).limit(1),
-      ]);
-
-      const dbProfile = profileRes.data;
-      const dbMember = memberRes.data;
+      // Résolu côté serveur : la RLS client bloque profiles/team_members pour
+      // les reps d'un autre office de la compagnie (leaderboard scope 'all').
+      const info = await getRepProfileInfo(userId);
+      const dbProfile = info.profile;
+      const dbMember = info.member;
 
       if (!dbProfile && !dbMember) {
         throw new Error('Profile not found');
       }
 
       // Office = the bureau (org) this rep is pinned to
-      let office = officeRes.data?.[0]?.company_name || '';
-      if (!office) {
-        const { data: billing } = await supabase
-          .from('org_billing_settings').select('company_name').eq('org_id', orgId).limit(1);
-        office = billing?.[0]?.company_name || '';
-      }
+      const office = info.office;
 
       // Build name from available sources
       const name = dbMember
@@ -178,7 +171,8 @@ export default function D2DRepProfile() {
         memberRowId: dbMember?.id || null,
       };
 
-      return result;
+      // info.orgId = l'org (office) du rep — sert à scoper ses stats
+      return { result, orgId: info.orgId };
     }
 
     async function load() {
@@ -197,8 +191,7 @@ export default function D2DRepProfile() {
         const { data: session } = await supabase.auth.getSession();
         if (!cancelled) setCurrentUserId(session.session?.user?.id ?? null);
 
-        const data = await fetchFromApi(paramId);
-        const orgId = await getCurrentOrgIdOrThrow();
+        const { result: data, orgId } = await fetchFromApi(paramId);
         const [commissionEntries, dealJobs, pins] = await Promise.all([
           getCommissionEntries({ userId: paramId }).catch(() => [] as Awaited<ReturnType<typeof getCommissionEntries>>),
           getRepDealJobs(paramId, orgId).catch(() => [] as RepDealJob[]),
@@ -206,6 +199,7 @@ export default function D2DRepProfile() {
         ]);
         if (!cancelled) {
           setProfile(data);
+          setRepOrgId(orgId);
           setCommissions(commissionEntries);
           setDeals(dealJobs);
           setPinCounts(pins);
@@ -226,13 +220,12 @@ export default function D2DRepProfile() {
 
   // Period stats — reloaded whenever the selected date / range changes
   useEffect(() => {
-    if (!isUUID(paramId)) return;
+    if (!isUUID(paramId) || !repOrgId) return;
     let cancelled = false;
     (async () => {
       setStatsLoading(true);
       try {
-        const orgId = await getCurrentOrgIdOrThrow();
-        const stats = await getRepPeriodStats(paramId, orgId, range.from, range.to);
+        const stats = await getRepPeriodStats(paramId, repOrgId, range.from, range.to);
         if (!cancelled) setPeriodStats(stats);
       } catch (err) {
         console.error('[RepProfile] Period stats fetch failed:', err);
@@ -242,7 +235,7 @@ export default function D2DRepProfile() {
       }
     })();
     return () => { cancelled = true; };
-  }, [paramId, range.from, range.to]);
+  }, [paramId, repOrgId, range.from, range.to]);
 
   // Rep-editable contact info (email / phone) — saved on team_members
   async function saveContactField(field: 'email' | 'phone', value: string) {

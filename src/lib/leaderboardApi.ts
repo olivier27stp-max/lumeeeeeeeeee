@@ -89,6 +89,38 @@ export function setRepExperience(
   });
 }
 
+export interface RepProfileInfo {
+  profile: {
+    id: string;
+    full_name: string | null;
+    avatar_url: string | null;
+    created_at: string | null;
+  } | null;
+  member: {
+    id: string;
+    org_id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    phone: string | null;
+    role: string | null;
+    avatar_url: string | null;
+    created_at: string | null;
+  } | null;
+  /** Nom du bureau (office) du rep. */
+  office: string;
+  /** Org du rep dans la compagnie — sert à scoper ses stats. */
+  orgId: string;
+}
+
+/**
+ * Identité du rep pour le Rep Hub — résolue côté serveur car la RLS client
+ * bloque profiles/team_members pour les reps d'un autre office.
+ */
+export function getRepProfileInfo(userId: string): Promise<RepProfileInfo> {
+  return apiFetch(`/leaderboard/rep/${userId}/profile`);
+}
+
 export function getRepPerformance(
   userId: string,
   from: string,

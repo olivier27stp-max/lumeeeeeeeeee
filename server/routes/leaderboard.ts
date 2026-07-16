@@ -160,6 +160,75 @@ router.get('/leaderboard/rep/:userId', async (req, res) => {
   }
 });
 
+// GET /api/leaderboard/rep/:userId/profile — identité du rep pour le Rep Hub.
+// Résolue côté serveur (service client) : la RLS client bloque profiles /
+// team_members pour un rep d'un autre office de la compagnie, ce qui faisait
+// tomber la page sur « Ce rep n'existe pas ».
+router.get('/leaderboard/rep/:userId/profile', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const { userId } = req.params;
+  if (!ORG_UUID_RE.test(userId)) {
+    return res.status(400).json({ error: 'Invalid user id.' });
+  }
+
+  try {
+    const sc = getServiceClient();
+    const { orgIds } = await resolveCompanyOrgIds(sc, auth.orgId);
+
+    const [membershipRes, memberRes, profileRes] = await Promise.all([
+      sc.from('memberships').select('org_id').eq('user_id', userId).in('org_id', orgIds).limit(1),
+      sc
+        .from('team_members')
+        .select('id, org_id, first_name, last_name, email, phone, role, avatar_url, created_at')
+        .eq('user_id', userId)
+        .in('org_id', orgIds)
+        .limit(1),
+      sc.from('profiles').select('id, full_name, avatar_url, created_at').eq('id', userId).maybeSingle(),
+    ]);
+
+    const membership = membershipRes.data?.[0] ?? null;
+    const member = memberRes.data?.[0] ?? null;
+
+    // Anti-IDOR : le rep doit appartenir à un office de la compagnie du caller.
+    if (!membership && !member) {
+      return res.status(404).json({ error: 'Rep not found in your company.' });
+    }
+
+    // Office = le bureau du rep (pas forcément l'office actif du caller)
+    const repOrgId = (member?.org_id as string) || (membership?.org_id as string) || auth.orgId;
+    let office = '';
+    const { data: settings } = await sc
+      .from('company_settings')
+      .select('company_name')
+      .eq('org_id', repOrgId)
+      .limit(1);
+    office = settings?.[0]?.company_name || '';
+    if (!office) {
+      const { data: billing } = await sc
+        .from('org_billing_settings')
+        .select('company_name')
+        .eq('org_id', repOrgId)
+        .limit(1);
+      office = billing?.[0]?.company_name || '';
+    }
+    if (!office) {
+      const { data: org } = await sc.from('orgs').select('name').eq('id', repOrgId).maybeSingle();
+      office = org?.name || '';
+    }
+
+    res.json({
+      profile: profileRes.data ?? null,
+      member,
+      office,
+      orgId: repOrgId,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/leaderboard/realtime/:userId — live stats from today's events
 router.get('/leaderboard/realtime/:userId', async (req, res) => {
   const auth = await requireAuthedClient(req, res);
