@@ -737,7 +737,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
       </div>
 
       {/* Sales-rep category (drives leaderboard: first-year vs experienced) */}
-      {onSaveExperience && member.role !== 'technician' && (
+      {onSaveExperience && member.role === 'sales_rep' && (
         <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
           <label className="text-[11px] font-semibold text-text-tertiary hidden lg:block">{isFr ? 'Catégorie' : 'Category'}</label>
           <select
