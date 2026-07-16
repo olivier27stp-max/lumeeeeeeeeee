@@ -253,6 +253,8 @@ function mapJob(raw: any, clientNameFallback?: string | null): Job {
     tax_lines: Array.isArray(raw.tax_lines) ? raw.tax_lines : [],
     job_type: raw.job_type || null,
     salesperson_id: raw.salesperson_id || null,
+    sale_date: raw.sale_date || null,
+    show_on_leaderboard: raw.show_on_leaderboard !== false,
     requires_invoicing: !!raw.requires_invoicing,
     billing_split: !!raw.billing_split,
     notes: raw.notes || null,
@@ -469,6 +471,8 @@ export async function getJobModalDraftById(id: string): Promise<JobModalDraft | 
     team_id: jobRow.team_id ?? null,
     job_number: jobRow.job_number ?? null,
     salesperson_id: jobRow.salesperson_id ?? null,
+    sale_date: jobRow.sale_date ?? null,
+    show_on_leaderboard: jobRow.show_on_leaderboard !== false,
     job_type: (jobRow.job_type as 'one_off' | 'recurring' | null) ?? 'one_off',
     property_address: jobRow.property_address ?? null,
     // Jobs only persist `property_address`. Pre-fill address_line1 from it so
@@ -535,6 +539,8 @@ export async function createJob(payload: {
   property_id?: string | null;
   team_id?: string | null;
   salesperson_id?: string | null;
+  sale_date?: string | null;
+  show_on_leaderboard?: boolean;
   description?: string | null;
   job_type?: string | null;
   property_address?: string | null;
@@ -633,6 +639,8 @@ export async function createJob(payload: {
       team_id: payload.team_id || null,
       client_name: clientName,
       salesperson_id: payload.salesperson_id || null,
+      ...(payload.sale_date !== undefined ? { sale_date: payload.sale_date } : {}),
+      ...(payload.show_on_leaderboard !== undefined ? { show_on_leaderboard: payload.show_on_leaderboard } : {}),
       requires_invoicing: payload.requires_invoicing ?? false,
       billing_split: payload.billing_split ?? false,
       subtotal: payload.subtotal ?? Number((payload.total_cents || 0) / 100),
@@ -660,12 +668,24 @@ export async function createJob(payload: {
       updatePayload.longitude = null;
     }
 
-    const { data: updated, error, status } = await supabase
+    let { data: updated, error, status } = await supabase
       .from('jobs')
       .update(updatePayload)
       .eq('id', payload.id)
       .select('*')
       .single();
+    if (error && isMissingLeaderboardColumnsError(error)) {
+      // Migration sale_date/show_on_leaderboard pas encore appliquée : on
+      // sauvegarde le job sans ces colonnes plutôt que d'échouer l'édition.
+      delete updatePayload.sale_date;
+      delete updatePayload.show_on_leaderboard;
+      ({ data: updated, error, status } = await supabase
+        .from('jobs')
+        .update(updatePayload)
+        .eq('id', payload.id)
+        .select('*')
+        .single());
+    }
     devLogJobWrite('update_jobs_response', {
       org_id: orgId,
       status,
@@ -709,6 +729,15 @@ export async function createJob(payload: {
         .eq('id', jobId);
       if (propError) throw propError;
     }
+
+    // The creation RPC doesn't accept salesperson/leaderboard params, so they
+    // are persisted right after the insert. This UPDATE is what fires the
+    // sync_job_leaderboard_deal trigger that registers the close.
+    await applySalespersonAndLeaderboardFields(jobId, {
+      salesperson_id: payload.salesperson_id || null,
+      sale_date: payload.sale_date,
+      show_on_leaderboard: payload.show_on_leaderboard,
+    });
 
     const { data: created, error: fetchError, status: fetchStatus } = await supabase
       .from('jobs_active')
@@ -1044,6 +1073,44 @@ export async function getSuggestedJobNumber(): Promise<string> {
  * 20260710000000. If that migration hasn't been applied yet the update
  * silently no-ops so job creation/editing never breaks.
  */
+/** True when the error is the 20260742 migration (sale_date / show_on_leaderboard) not being applied yet. */
+function isMissingLeaderboardColumnsError(error: any): boolean {
+  const message = String(error?.message || '').toLowerCase();
+  const code = String(error?.code || '').toUpperCase();
+  return (
+    (code === 'PGRST204' || code === '42703') &&
+    (message.includes('sale_date') || message.includes('show_on_leaderboard'))
+  );
+}
+
+/**
+ * Persist salesperson + leaderboard fields on a freshly created job (the
+ * creation RPC doesn't accept them). Falls back to salesperson-only if the
+ * sale_date/show_on_leaderboard migration isn't applied yet — never blocks
+ * the save.
+ */
+async function applySalespersonAndLeaderboardFields(
+  jobId: string,
+  fields: { salesperson_id: string | null; sale_date?: string | null; show_on_leaderboard?: boolean }
+): Promise<void> {
+  const patch: Record<string, unknown> = { salesperson_id: fields.salesperson_id };
+  if (fields.sale_date !== undefined) patch.sale_date = fields.sale_date;
+  if (fields.show_on_leaderboard !== undefined) patch.show_on_leaderboard = fields.show_on_leaderboard;
+
+  const { error } = await supabase.from('jobs').update(patch).eq('id', jobId);
+  if (!error) return;
+  if (isMissingLeaderboardColumnsError(error)) {
+    const { error: fallbackError } = await supabase
+      .from('jobs')
+      .update({ salesperson_id: fields.salesperson_id })
+      .eq('id', jobId);
+    if (!fallbackError) return;
+    console.warn('[jobs] salesperson persistence failed:', fallbackError.message);
+    return;
+  }
+  console.warn('[jobs] salesperson/leaderboard persistence failed:', error.message);
+}
+
 export async function applyJobExtras(
   jobId: string,
   extras: { askForReview?: boolean; assignedUserId?: string | null }
