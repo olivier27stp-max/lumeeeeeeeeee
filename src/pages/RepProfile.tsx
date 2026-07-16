@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Avatar } from '../components/d2d/avatar';
-import { getRepAvatar } from '../lib/constants/avatars';
 import { getRepPerformance, getRealtimeStats } from '../lib/leaderboardApi';
 import { getRepRealStats, type RepRealStats } from '../lib/repStatsApi';
 import { getCommissionEntries } from '../lib/commissionsApi';
@@ -9,9 +8,7 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import type { RepPerformanceDetail, FsCommissionEntry } from '../types';
 import {
-  MessageSquare,
   Phone,
-  Mail,
   MapPin,
   Briefcase,
   Hash,
@@ -31,9 +28,7 @@ import {
   FileSignature,
   Timer,
   CalendarCheck,
-  Navigation,
 } from 'lucide-react';
-import TechDayReplay from '../components/TechDayReplay';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -132,7 +127,6 @@ export default function D2DRepProfile() {
   const [loading, setLoading] = useState(true);
   const [commissions, setCommissions] = useState<FsCommissionEntry[]>([]);
   const [closes, setCloses] = useState<Array<{ id: string; title: string; value: number; stage: string; won_at: string | null; created_at: string }>>([]);
-  const [replayOpen, setReplayOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -389,7 +383,7 @@ export default function D2DRepProfile() {
         <div className="absolute -top-14">
           <div className="rounded-full p-[3px]" style={{ background: 'linear-gradient(135deg, #333, #666)', boxShadow: '0 0 24px rgba(0,0,0,0.2)' }}>
             <div className="rounded-full border-4 border-surface dark:border-[#0B0F14]">
-              <Avatar name={p.name} src={getRepAvatar(p.name)} size="lg" className="!h-[110px] !w-[110px]" />
+              <Avatar name={p.name} src={p.avatar_url || `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(p.id || p.name)}&backgroundColor=f5f5f5&radius=50`} size="lg" className="!h-[110px] !w-[110px]" />
             </div>
           </div>
         </div>
@@ -402,25 +396,9 @@ export default function D2DRepProfile() {
             {p.tagline && <p className="mt-1 text-[13px] text-text-tertiary italic">"{p.tagline}"</p>}
           </div>
 
-          {/* Actions */}
+          {/* Actions — Message / Email / Day-replay removed (features not shipping). */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setReplayOpen(true)}
-              className="flex items-center gap-2 rounded-xl border border-outline bg-surface-secondary text-text-primary px-4 py-2.5 text-[13px] font-bold hover:bg-surface-tertiary transition-colors"
-            >
-              <Navigation size={16} strokeWidth={2.5} />
-              Voir la journée
-            </button>
-            <Link
-              to="/feed"
-              className="flex items-center gap-2 rounded-xl bg-text-primary text-surface px-5 py-2.5 text-[13px] font-bold transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <MessageSquare size={16} strokeWidth={2.5} />
-              Message
-            </Link>
-            <ActionBtn icon={Phone} href={p.phone ? `tel:${p.phone}` : undefined} className="md:hidden" />
-            <ActionBtn icon={Mail} href={p.email ? `mailto:${p.email}` : undefined} />
-            {/* (dead Settings button removed — it had no handler) */}
+            <ActionBtn icon={Phone} href={p.phone ? `tel:${p.phone}` : undefined} />
           </div>
         </div>
       </div>
@@ -579,9 +557,6 @@ export default function D2DRepProfile() {
           </div>
         </div>
       </div>
-      {replayOpen && (
-        <TechDayReplay userId={p.id} userName={p.name} onClose={() => setReplayOpen(false)} />
-      )}
     </div>
   );
 }

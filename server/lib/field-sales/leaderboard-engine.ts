@@ -86,7 +86,7 @@ export async function getLeaderboard(
   const [membersRes, prevWonRes, leadsRes] = await Promise.all([
     supabase
       .from('memberships')
-      .select('user_id, full_name, avatar_url, role, team_name, team_id, experience_level')
+      .select('user_id, full_name, avatar_url, role, team_id, experience_level, teams:team_id(name)')
       .in('org_id', orgIds)
       .in('user_id', userIds),
     supabase
@@ -138,7 +138,7 @@ export async function getLeaderboard(
       user_id: uid,
       full_name: m.full_name || 'Unknown',
       avatar_url: m.avatar_url || null,
-      team_name: m.team_name || null,
+      team_name: m.teams?.name || null,
       team_id: m.team_id || null,
       experience_level: m.experience_level || null,
       closes: stats.closes,
