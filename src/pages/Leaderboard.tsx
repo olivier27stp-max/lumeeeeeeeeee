@@ -4,13 +4,17 @@ import { Card, CardContent } from '../components/d2d/card';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { getRepAvatar } from '../lib/constants/avatars';
-import { getLeaderboard, getRepPerformance } from '../lib/leaderboardApi';
+import { getLeaderboard, getRepPerformance, setRepExperience } from '../lib/leaderboardApi';
 import { useCompany } from '../contexts/CompanyContext';
+import { usePermissions } from '../hooks/usePermissions';
+import { listTeams, type TeamRecord } from '../lib/teamsApi';
+import { toast } from 'sonner';
 import type { LeaderboardEntry, RepPerformanceDetail } from '../types';
 import { ChevronRight, X, User, Loader2, Search, Trophy } from 'lucide-react';
 
 type Period = 'daily' | 'weekly' | 'monthly';
 type Metric = 'sales' | 'revenue';
+type Category = 'all' | 'rookie' | 'experienced';
 
 interface RepData {
   rank: number;
@@ -19,6 +23,8 @@ interface RepData {
   avatar: string | null;
   closes: number;
   revenue: number;
+  experienceLevel: 'rookie' | 'experienced' | null;
+  teamName: string | null;
 }
 
 function getInitials(name: string): string {
@@ -47,6 +53,8 @@ function apiToRepData(entries: LeaderboardEntry[]): RepData[] {
     avatar: e.avatar_url ?? getRepAvatar(e.full_name),
     closes: e.closes,
     revenue: e.revenue,
+    experienceLevel: e.experience_level ?? null,
+    teamName: e.team_name ?? null,
   }));
 }
 
@@ -106,9 +114,14 @@ export default function D2DLeaderboard() {
     ? { daily: 'Jour', weekly: 'Semaine', monthly: 'Mois' }
     : { daily: 'Day', weekly: 'Week', monthly: 'Month' };
   const { currentOrgId } = useCompany();
+  const { role } = usePermissions();
+  const isAdmin = role === 'owner' || role === 'admin';
   const [period, setPeriod] = useState<Period>('weekly');
   const [metric, setMetric] = useState<Metric>('revenue');
   const [scope, setScope] = useState<'mine' | 'all'>('mine');
+  const [category, setCategory] = useState<Category>('all');
+  const [teamId, setTeamId] = useState<string>('');
+  const [teams, setTeams] = useState<TeamRecord[]>([]);
   const [query, setQuery] = useState('');
   const [selectedRep, setSelectedRep] = useState<RepData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,24 +131,49 @@ export default function D2DLeaderboard() {
   const [funnelSteps, setFunnelSteps] = useState<{ key: string; value: number; max: number }[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // Load the list of offices (teams) for the office filter.
+  useEffect(() => {
+    listTeams().then(setTeams).catch(() => setTeams([]));
+  }, []);
+
+  const reload = useCallback(() => {
+    setLoading(true);
+    getLeaderboard(period, {
+      scope,
+      orgId: currentOrgId ?? undefined,
+      teamId: teamId || undefined,
+      experience: category === 'all' ? undefined : category,
+    })
+      .then((entries) => setReps(entries && entries.length ? apiToRepData(entries) : []))
+      .catch(() => setReps([]))
+      .finally(() => setLoading(false));
+  }, [period, scope, currentOrgId, teamId, category]);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-
-    getLeaderboard(period, { scope, orgId: currentOrgId ?? undefined })
-      .then((entries) => {
-        if (cancelled) return;
-        setReps(entries && entries.length ? apiToRepData(entries) : []);
-      })
-      .catch(() => {
-        if (!cancelled) setReps([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
+    getLeaderboard(period, {
+      scope,
+      orgId: currentOrgId ?? undefined,
+      teamId: teamId || undefined,
+      experience: category === 'all' ? undefined : category,
+    })
+      .then((entries) => { if (!cancelled) setReps(entries && entries.length ? apiToRepData(entries) : []); })
+      .catch(() => { if (!cancelled) setReps([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [period, scope, currentOrgId]);
+  }, [period, scope, currentOrgId, teamId, category]);
+
+  // Admin: tag a rep rookie/experienced, then refresh.
+  const tagRep = useCallback(async (userId: string, level: 'rookie' | 'experienced' | null) => {
+    try {
+      await setRepExperience(userId, level);
+      toast.success(fr ? 'Catégorie mise à jour' : 'Category updated');
+      reload();
+    } catch (e: any) {
+      toast.error(e?.message || (fr ? 'Échec' : 'Failed'));
+    }
+  }, [reload, fr]);
 
   const openRepDrawer = useCallback((rep: RepData) => {
     setSelectedRep(rep);
@@ -222,6 +260,41 @@ export default function D2DLeaderboard() {
             {m === 'sales' ? (fr ? 'Ventes' : 'Sales') : (fr ? 'Revenus' : 'Revenue')}
           </button>
         ))}
+      </div>
+
+      {/* Category tabs (all / rookie / experienced) + office filter */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex rounded-xl border border-border-subtle bg-white p-0.5">
+          {([
+            ['all', fr ? 'Tous' : 'All'],
+            ['rookie', fr ? '1re année' : 'First year'],
+            ['experienced', fr ? 'Expérimentés' : 'Experienced'],
+          ] as [Category, string][]).map(([c, label]) => (
+            <button
+              key={c}
+              onClick={() => setCategory(c)}
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+                category === c ? 'bg-text-primary text-surface' : 'text-text-muted hover:text-text-secondary',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {teams.length > 0 && (
+          <select
+            value={teamId}
+            onChange={(e) => setTeamId(e.target.value)}
+            className="rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-xs font-medium text-text-primary outline-none"
+          >
+            <option value="">{fr ? 'Tous les offices' : 'All offices'}</option>
+            {teams.map((tm) => (
+              <option key={tm.id} value={tm.id}>{tm.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Search */}
@@ -345,6 +418,35 @@ export default function D2DLeaderboard() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-5">
+              {/* Admin: classify this rep */}
+              {isAdmin && (
+                <div className="mb-5 rounded-lg border border-border-subtle bg-surface-elevated p-3">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                    {fr ? 'Catégorie du rep' : 'Rep category'}
+                  </p>
+                  <div className="flex gap-1.5">
+                    {([
+                      ['rookie', fr ? '1re année' : 'First year'],
+                      ['experienced', fr ? 'Expérimenté' : 'Experienced'],
+                      [null, fr ? 'Aucune' : 'None'],
+                    ] as [('rookie' | 'experienced' | null), string][]).map(([lvl, label]) => (
+                      <button
+                        key={String(lvl)}
+                        onClick={() => { tagRep(selectedRep.userId, lvl); setSelectedRep((p) => p ? { ...p, experienceLevel: lvl } : p); }}
+                        className={cn(
+                          'flex-1 rounded-md border px-2 py-1.5 text-xs font-semibold transition-colors',
+                          selectedRep.experienceLevel === lvl
+                            ? 'border-text-primary bg-text-primary text-surface'
+                            : 'border-border-subtle bg-white text-text-primary hover:bg-surface-elevated',
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {detailLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-6 w-6 animate-spin text-text-muted" />
