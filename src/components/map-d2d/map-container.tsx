@@ -176,6 +176,21 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   const [showReps, setShowReps] = useState(true);
   const repMarkersRef = useRef(new Map<string, mapboxgl.Marker>());
 
+  // --- Map style (plan / satellite) + boussole ---
+  const [mapStyleSat, setMapStyleSat] = useState(false);
+  const [compassBearing, setCompassBearing] = useState(0);
+
+  function toggleMapStyle() {
+    const map = mapRef.current;
+    if (!map) return;
+    if (mode === 'draw_zone') cancelDrawing();
+    const next = !mapStyleSat;
+    setMapStyleSat(next);
+    map.setStyle(next ? 'mapbox://styles/mapbox/satellite-streets-v12' : 'mapbox://styles/mapbox/streets-v12');
+    // setStyle wipes custom sources/layers — re-draw zones once the new style is in
+    map.once('style.load', () => renderZonesOnMap());
+  }
+
   // --- Select mode refs ---
   const selectBoxRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -1058,6 +1073,15 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
     mapRef.current.flyTo({ center: [focusLng, focusLat], zoom: 18, duration: 900 });
   }, [focusLng, focusLat, mapReady]);
 
+  // Boussole — suit la rotation de la carte
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    const onRotate = () => setCompassBearing(map.getBearing());
+    map.on('rotate', onRotate);
+    return () => { map.off('rotate', onRotate); };
+  }, [mapReady]);
+
   // Debounced street search via Mapbox geocoding
   useEffect(() => {
     if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
@@ -1502,18 +1526,85 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
       {/* Selection rectangle overlay */}
       <div ref={selectBoxRef} className="pointer-events-none absolute z-20 rounded border-2 border-red-400/60 bg-red-500/15" style={{ display: 'none' }} />
 
-      {/* Street search — loupe button (top right) */}
+      {/* ================================================================== */}
+      {/* RIGHT EDGE — Toolbar (boxes blanches, icônes rouges)               */}
+      {/* ================================================================== */}
       {!showTokenMsg && (
-        <button
-          onClick={() => setSearchModalOpen(true)}
-          className="pointer-events-auto absolute right-3 top-3 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/70 text-white/70 shadow-xl backdrop-blur-xl transition-all hover:scale-105 hover:border-indigo-400/40 hover:bg-white/10 hover:text-white"
-          title={fr ? 'Rechercher une adresse (⌘K)' : 'Search an address (⌘K)'}
-          aria-label={fr ? 'Rechercher' : 'Search'}
-        >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-        </button>
+        <div className="pointer-events-auto absolute right-3 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-2">
+          {/* Box 1 — Entonnoir : filtrer les pins */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${showFilters ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            title={fr ? 'Filtrer les pins' : 'Filter pins'}
+            aria-label={fr ? 'Filtres' : 'Filters'}
+          >
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+            </svg>
+          </button>
+          {/* Box 2 — Loupe : recherche */}
+          <button
+            onClick={() => setSearchModalOpen(true)}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${searchModalOpen ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            title={fr ? 'Rechercher une adresse (⌘K)' : 'Search an address (⌘K)'}
+            aria-label={fr ? 'Rechercher' : 'Search'}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+
+          {/* Box 3 — Doigt qui trace : création de zone */}
+          {canCreateZone(CURRENT_USER.role) && (
+            <button
+              onClick={() => {
+                if (mode === 'draw_zone') cancelDrawing();
+                else { setMode('draw_zone'); setDrawingPoints([]); }
+              }}
+              className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${mode === 'draw_zone' ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+              title={fr ? 'Créer une zone' : 'Create a zone'}
+              aria-label={fr ? 'Créer une zone' : 'Create a zone'}
+            >
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 5.5c1-2 4-3.2 6-2.7" strokeDasharray="1 2.6" />
+                <path d="M22 14a8 8 0 0 1-8 8" />
+                <path d="M18 11v-1a2 2 0 0 0-2-2 2 2 0 0 0-2 2" />
+                <path d="M14 10V9a2 2 0 0 0-2-2 2 2 0 0 0-2 2v1" />
+                <path d="M10 9.5V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v10" />
+                <path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+              </svg>
+            </button>
+          )}
+
+          {/* Box 4 — Plan plié : bascule plan / satellite */}
+          <button
+            onClick={toggleMapStyle}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${mapStyleSat ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            title={fr ? (mapStyleSat ? 'Passer en vue plan' : 'Passer en vue satellite') : (mapStyleSat ? 'Switch to map view' : 'Switch to satellite view')}
+            aria-label={fr ? 'Changer le style de carte' : 'Toggle map style'}
+          >
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" />
+              <path d="M15 5.764v15" /><path d="M9 3.236v15" />
+            </svg>
+          </button>
+
+          {/* Box 5 — Boussole (ronde) : indique le nord, clic = réaligner */}
+          <button
+            onClick={() => mapRef.current?.easeTo({ bearing: 0, pitch: 0, duration: 600 })}
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black shadow-lg shadow-black/30 transition-all hover:scale-105"
+            title={fr ? 'Boussole — cliquer pour réaligner au nord' : 'Compass — click to reset north'}
+            aria-label={fr ? 'Boussole' : 'Compass'}
+          >
+            <svg width="27" height="27" viewBox="0 0 24 24" style={{ transform: `rotate(${-compassBearing}deg)`, transition: 'transform .2s ease-out' }}>
+              <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M12 3.6v1.5M12 18.9v1.5M3.6 12h1.5M18.9 12h1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+              <path d="M12 5.6l2.1 6.4H9.9z" fill="#dc2626" />
+              <path d="M12 18.4L9.9 12h4.2z" fill="currentColor" />
+              <circle cx="12" cy="12" r="1.1" fill="white" stroke="currentColor" strokeWidth=".7" />
+            </svg>
+          </button>
+        </div>
       )}
 
       {/* Street search — spotlight modal */}
@@ -1787,18 +1878,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
               </button>
             )}
 
-            {/* Create Zone — only for authorized roles */}
-            {mode === 'view' && canCreateZone(CURRENT_USER.role) && (
-              <button
-                onClick={() => { setMode('draw_zone'); setDrawingPoints([]); }}
-                className="flex items-center gap-2 rounded-xl border border-indigo-400/20 bg-indigo-500/15 px-4 py-2.5 text-[13px] font-semibold text-indigo-300 shadow-xl backdrop-blur-xl transition-all hover:bg-indigo-500/25"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
-                </svg>
-                Créer une zone
-              </button>
-            )}
+            {/* Create Zone — déplacé dans la barre droite (box 3) */}
 
             {/* Draw zone active */}
             {mode === 'draw_zone' && (
@@ -1846,22 +1926,8 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
               </div>
             )}
 
-            {/* FILTER BUTTON — top right */}
-            <div className="relative">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold shadow-xl transition-all ${
-                  showFilters
-                    ? 'bg-white/15 text-white border border-white/20 backdrop-blur-xl'
-                    : 'border border-white/10 bg-black/60 text-white/70 backdrop-blur-xl hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-                </svg>
-                Filtres
-              </button>
-
+            {/* FILTER PANEL — ouvert par la box entonnoir de la barre droite */}
+            <div className="relative self-stretch">
               {/* FILTER PANEL */}
               {showFilters && (
                 <div className="absolute right-0 top-full mt-2 w-[280px] rounded-xl border border-white/10 bg-black/85 p-3 shadow-2xl backdrop-blur-xl">
