@@ -2165,6 +2165,7 @@ const en = {
     sms: 'SMS',
     newQuote: 'New Quote',
     newJob: 'New Job',
+    newItem: 'New Item',
     // Section headers
     properties: 'Properties',
     newProperty: 'New Property',

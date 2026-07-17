@@ -2157,6 +2157,7 @@ const fr: TranslationKeys = {
     sms: 'SMS',
     newQuote: 'Nouveau devis',
     newJob: 'Nouveau job',
+    newItem: 'Nouvel item',
     // Section headers
     properties: 'Propriétés',
     newProperty: 'Nouvelle propriété',

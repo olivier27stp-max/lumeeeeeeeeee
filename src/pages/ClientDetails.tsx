@@ -30,7 +30,10 @@ import {
   Contact,
   Download,
   ShieldX,
+  ClipboardList,
+  Wallet,
 } from 'lucide-react';
+import { entityIconClass } from '../lib/entityColors';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { clientDisplayName, getClientById, updateClient, listClientJobs, softDeleteClient } from '../lib/clientsApi';
 import { exportClientData, eraseClient } from '../lib/consentApi';
@@ -237,6 +240,7 @@ export default function ClientDetails() {
   // Tabs & dropdown
   const [activeTab, setActiveTab] = useState<OverviewTab>('active');
   const [showActionMenu, setShowActionMenu] = useState(false);
+  const [showNewItemMenu, setShowNewItemMenu] = useState(false);
   // Menu "+" des travaux actifs — position fixed pour échapper à l'overflow:hidden du section-card
   const [activeWorkMenuPos, setActiveWorkMenuPos] = useState<{ top: number; right: number } | null>(null);
 
@@ -645,24 +649,49 @@ export default function ClientDetails() {
                 </button>
               )}
 
-              <button
-                onClick={() => setIsQuoteCreateOpen(true)}
-                className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors"
-              >
-                <FileText size={14} className="text-entity-quote" /> {t.clientDetails.newQuote}
-              </button>
-              <button
-                onClick={() => openJobModal({
-                  initialValues: {
-                    client_id: client.id,
-                    property_address: fullAddress || null,
-                  },
-                  onCreated: () => { if (id) loadAllData(id); },
-                })}
-                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary text-white rounded-md text-[13px] font-medium hover:bg-primary-hover transition-colors"
-              >
-                <Plus size={14} /> {t.clientDetails.newJob}
-              </button>
+              {/* New Item dropdown — items mirror the global search bar (same icons, colors, labels) */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowNewItemMenu(!showNewItemMenu)}
+                  className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors"
+                >
+                  <Plus size={14} /> {t.clientDetails.newItem} <ChevronDown size={13} className="text-text-tertiary" />
+                </button>
+                {showNewItemMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowNewItemMenu(false)} />
+                    <div className="absolute right-0 top-full mt-1 z-50 w-44 bg-surface border border-outline rounded-md shadow-lg py-1">
+                      <button
+                        onClick={() => { setShowNewItemMenu(false); setIsQuoteCreateOpen(true); }}
+                        className="w-full px-3 py-2 text-[13px] text-text-primary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
+                      >
+                        <ClipboardList size={15} strokeWidth={2.5} className={entityIconClass('quote')} /> {language === 'fr' ? 'Devis' : 'Quote'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowNewItemMenu(false);
+                          openJobModal({
+                            initialValues: {
+                              client_id: client.id,
+                              property_address: fullAddress || null,
+                            },
+                            onCreated: () => { if (id) loadAllData(id); },
+                          });
+                        }}
+                        className="w-full px-3 py-2 text-[13px] text-text-primary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
+                      >
+                        <Briefcase size={15} strokeWidth={2.5} className={entityIconClass('job')} /> Job
+                      </button>
+                      <button
+                        onClick={() => { setShowNewItemMenu(false); navigate(`/invoices/new?clientId=${client.id}`); }}
+                        className="w-full px-3 py-2 text-[13px] text-text-primary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
+                      >
+                        <Wallet size={15} strokeWidth={2.5} className={entityIconClass('invoice')} /> {language === 'fr' ? 'Facture' : 'Invoice'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
 
               {/* More dropdown */}
               <div className="relative">
