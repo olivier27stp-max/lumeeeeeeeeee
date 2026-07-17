@@ -420,25 +420,7 @@ export const INTEGRATIONS: Integration[] = [
     official_setup_url: 'https://account.mapbox.com/access-tokens/',
     official_site_url: 'https://www.mapbox.com',
   },
-  {
-    id: 'traccar',
-    slug: 'traccar',
-    name: 'Traccar',
-    description_short: 'Suivi GPS de vos vehicules et equipements.',
-    description_long: 'Connectez Traccar pour suivre en temps reel la position de vos vehicules et equipements de service sur le terrain.',
-    category: 'Cartographie',
-    connection_type: 'api_key',
-    logo_color: '#1A73E8',
-    logo_initials: 'Tc',
-    auth_fields: [
-      { key: 'server_url', label: 'Server URL', type: 'url', required: true, placeholder: 'https://your-traccar.com' },
-      { key: 'username', label: 'Username', type: 'text', required: true },
-      { key: 'password', label: 'Password', type: 'password', required: true },
-    ],
-    supported_features: ['Suivi GPS temps reel', 'Historique de positions', 'Geofences', 'Alertes'],
-    official_site_url: 'https://www.traccar.org',
-    docs_url: 'https://www.traccar.org/api-reference/',
-  },
+  // (Traccar retiré du catalogue — trackers externes abandonnés, 2026-07-17)
 
   // ── Formulaires ──
   {
