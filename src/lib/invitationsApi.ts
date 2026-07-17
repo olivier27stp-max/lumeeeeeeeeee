@@ -157,6 +157,17 @@ export async function removeMember(userId: string): Promise<{ message: string }>
   return res.json();
 }
 
+/** Supprime DÉFINITIVEMENT un membre suspendu (2e temps après removeMember). */
+export async function deleteMember(userId: string): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE}/invitations/delete-member`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ userId }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete member.');
+  return res.json();
+}
+
 /** Réactive un membre suspendu (même gate de sièges que l'invitation). */
 export async function reactivateMember(userId: string): Promise<{ message: string }> {
   const res = await fetch(`${API_BASE}/invitations/reactivate-member`, {

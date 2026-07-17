@@ -945,4 +945,78 @@ router.post('/invitations/reactivate-member', validate(removeMemberSchema), asyn
   }
 });
 
+// ─── POST /invitations/delete-member — Permanently remove a SUSPENDED member ──
+// Deux temps voulus : « Retirer » suspend (réversible), puis ce delete efface
+// la membership pour de bon. On exige le statut suspendu pour empêcher une
+// suppression permanente en un clic. Les données créées par la personne
+// (jobs, ventes, historique) restent — on n'efface que l'accès et la
+// présence dans l'équipe. Le compte auth/profil global n'est PAS supprimé
+// (l'historique garde son nom, et il peut appartenir à d'autres compagnies).
+
+router.post('/invitations/delete-member', validate(removeMemberSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const admin = getServiceClient();
+    const isAdmin = await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only admins or owners can delete members.' });
+    }
+
+    const { userId } = req.body;
+    if (userId === auth.user.id) {
+      return res.status(400).json({ error: 'You cannot delete yourself.' });
+    }
+
+    const { data: membership } = await admin
+      .from('memberships')
+      .select('role, status')
+      .eq('user_id', userId)
+      .eq('org_id', auth.orgId)
+      .maybeSingle();
+
+    if (!membership) {
+      return res.status(404).json({ error: 'Member not found.' });
+    }
+    if (membership.role === 'owner') {
+      return res.status(403).json({ error: 'Cannot delete the organization owner.' });
+    }
+    if (membership.status !== 'suspended') {
+      return res.status(400).json({
+        error: 'Member must be removed (suspended) before permanent deletion.',
+        code: 'not_suspended',
+      });
+    }
+    // Seul le owner peut supprimer définitivement un admin (miroir du retrait).
+    if (membership.role === 'admin') {
+      const { data: callerMembership } = await admin
+        .from('memberships')
+        .select('role')
+        .eq('user_id', auth.user.id)
+        .eq('org_id', auth.orgId)
+        .maybeSingle();
+      if (callerMembership?.role !== 'owner') {
+        return res.status(403).json({ error: 'Only the organization owner can delete another admin.' });
+      }
+    }
+
+    const { error } = await admin
+      .from('memberships')
+      .delete()
+      .eq('user_id', userId)
+      .eq('org_id', auth.orgId);
+
+    if (error) {
+      console.error('[invitations/delete-member] delete failed:', error.message);
+      return res.status(500).json({ error: 'Failed to delete member.' });
+    }
+
+    return res.json({ message: 'Member permanently deleted from organization.' });
+  } catch (err: any) {
+    console.error('[invitations/delete-member]', err.message);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 export default router;
