@@ -3,14 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '../components/d2d/card';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
-import { getLeaderboard, getRepPerformance, setRepExperience, getOffices, type Office, type LeaderboardRange } from '../lib/leaderboardApi';
+import { getLeaderboard, getRepProfileInfo, setRepExperience, getOffices, type Office, type LeaderboardRange } from '../lib/leaderboardApi';
+import { getRepPeriodStats, type RepPeriodStats } from '../lib/repStatsApi';
 import { useCompany } from '../contexts/CompanyContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { toast } from 'sonner';
-import type { LeaderboardEntry, RepPerformanceDetail } from '../types';
-import { Calendar, ChevronRight, X, User, Loader2, Search, Trophy } from 'lucide-react';
+import type { LeaderboardEntry } from '../types';
+import { Calendar, ChevronDown, X, User, Loader2, Search, Trophy } from 'lucide-react';
 
-type Metric = 'sales' | 'revenue';
 type Category = 'all' | 'rookie' | 'experienced';
 
 interface RepData {
@@ -88,27 +88,18 @@ function formatRangeLabel(range: LeaderboardRange, fr: boolean): string {
   return `${parseIsoDate(range.from).toLocaleDateString(locale, short)} – ${parseIsoDate(range.to).toLocaleDateString(locale, short)}`;
 }
 
-function perfToKPIs(perf: RepPerformanceDetail): { key: string; value: string }[] {
+// Les 9 KPIs du Rep Hub (mêmes libellés que RepProfile), format leaderboard
+function statsToKPIs(stats: RepPeriodStats): { label: string; value: string; sub?: string }[] {
   return [
-    { key: 'leads', value: String(perf.doors_knocked) },
-    { key: 'contacted', value: String(perf.conversations) },
-    { key: 'deals', value: String(perf.demos_set) },
-    { key: 'quotes_sent', value: String(perf.quotes_sent) },
-    { key: 'accounts', value: String(perf.closes) },
-    { key: 'revenue', value: `$${perf.revenue.toLocaleString()}` },
-    { key: 'conversion_rate', value: `${Math.round(perf.conversion_rate)}%` },
-    { key: 'avg_ticket', value: `$${Math.round(perf.average_ticket || 0).toLocaleString()}` },
-  ];
-}
-
-function perfToFunnel(perf: RepPerformanceDetail): { key: string; value: number; max: number }[] {
-  const max = perf.doors_knocked || 1;
-  return [
-    { key: 'leads', value: perf.doors_knocked, max },
-    { key: 'contacted', value: perf.conversations, max },
-    { key: 'deals_open', value: perf.demos_set, max },
-    { key: 'quotes_sent', value: perf.quotes_sent, max },
-    { key: 'accounts', value: perf.closes, max },
+    { label: 'Revenue', value: money(stats.revenue) },
+    { label: 'Jobs', value: String(stats.jobs) },
+    { label: 'Service Revenue', value: money(stats.serviceRevenue) },
+    { label: 'Service Jobs', value: String(stats.serviceJobs) },
+    { label: 'APP', value: String(stats.app), sub: 'Pins rendez-vous' },
+    { label: 'VG', value: String(stats.vg), sub: 'Pins vente' },
+    { label: 'Contract Closing Rate', value: stats.contractClosingRate != null ? `${stats.contractClosingRate}%` : '—' },
+    { label: 'Cancel Rate', value: stats.cancelRate != null ? `${stats.cancelRate}%` : '—' },
+    { label: 'Days Worked', value: String(stats.daysWorked) },
   ];
 }
 
@@ -129,19 +120,18 @@ export default function D2DLeaderboard() {
   const [range, setRange] = useState<LeaderboardRange>(() => ({ from: todayIso(), to: todayIso() }));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [draft, setDraft] = useState<LeaderboardRange>(range);
-  const [metric, setMetric] = useState<Metric>('revenue');
   const [scope, setScope] = useState<'mine' | 'all'>('mine');
   const [category, setCategory] = useState<Category>('all');
   const [officeId, setOfficeId] = useState<string>(''); // '' = follow the scope toggle
   const [offices, setOffices] = useState<Office[]>([]);
   const [query, setQuery] = useState('');
-  const [selectedRep, setSelectedRep] = useState<RepData | null>(null);
   const [loading, setLoading] = useState(true);
   const [reps, setReps] = useState<RepData[]>([]);
 
-  const [detailKPIs, setDetailKPIs] = useState<{ key: string; value: string }[]>([]);
-  const [funnelSteps, setFunnelSteps] = useState<{ key: string; value: number; max: number }[]>([]);
-  const [detailLoading, setDetailLoading] = useState(false);
+  // Rangée dépliée + cache des stats Rep Hub, clé userId:from:to (période-scopé).
+  // undefined = fetch en cours, null = échec, objet = stats chargées.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedStats, setExpandedStats] = useState<Record<string, RepPeriodStats | null>>({});
 
   // Load the list of offices (orgs of the company) for the office filter.
   useEffect(() => {
@@ -183,27 +173,29 @@ export default function D2DLeaderboard() {
     }
   }, [reload, fr]);
 
-  const openRepDrawer = useCallback((rep: RepData) => {
-    setSelectedRep(rep);
-    setDetailLoading(true);
-    getRepPerformance(rep.userId, range.from, range.to)
-      .then(({ performance }) => {
-        setDetailKPIs(perfToKPIs(performance));
-        setFunnelSteps(perfToFunnel(performance));
-      })
-      .catch(() => {
-        setDetailKPIs([]);
-        setFunnelSteps([]);
-      })
-      .finally(() => setDetailLoading(false));
-  }, [range.from, range.to]);
+  // Stats Rep Hub de la rangée dépliée — org du rep résolue côté serveur
+  // (scope 'all offices' : le rep peut appartenir à un autre bureau).
+  useEffect(() => {
+    if (!expandedId) return;
+    const key = `${expandedId}:${range.from}:${range.to}`;
+    if (expandedStats[key] !== undefined) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const info = await getRepProfileInfo(expandedId);
+        const stats = await getRepPeriodStats(expandedId, info.orgId, range.from, range.to);
+        if (!cancelled) setExpandedStats((m) => ({ ...m, [key]: stats }));
+      } catch {
+        if (!cancelled) setExpandedStats((m) => ({ ...m, [key]: null }));
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedId, range.from, range.to]);
 
-  // Sort by the selected metric (mirrors mobile: revenue → revenue then closes).
-  const board = [...reps].sort((a, b) =>
-    metric === 'revenue' ? b.revenue - a.revenue || b.closes - a.closes : b.closes - a.closes || b.revenue - a.revenue,
-  );
-  const valText = (r: RepData) => (metric === 'revenue' ? money(r.revenue) : String(r.closes));
-  const subText = (r: RepData) => (metric === 'revenue' ? `${r.closes} ${fr ? 'ventes' : 'sales'}` : money(r.revenue));
+  // Classement : revenus, puis ventes (plus de choix de métrique).
+  const board = [...reps].sort((a, b) => b.revenue - a.revenue || b.closes - a.closes);
+  const salesText = (r: RepData) => `${r.closes} ${fr ? 'ventes' : 'sales'}`;
 
   const q = query.trim().toLowerCase();
   const searching = q.length > 0;
@@ -312,22 +304,6 @@ export default function D2DLeaderboard() {
         )}
       </div>
 
-      {/* Metric pills */}
-      <div className="flex justify-center gap-2">
-        {(['sales', 'revenue'] as Metric[]).map((m) => (
-          <button
-            key={m}
-            onClick={() => setMetric(m)}
-            className={cn(
-              'rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors',
-              metric === m ? 'border-text-primary bg-text-primary text-surface' : 'border-border-subtle bg-white text-text-primary',
-            )}
-          >
-            {m === 'sales' ? (fr ? 'Ventes' : 'Sales') : (fr ? 'Revenus' : 'Revenue')}
-          </button>
-        ))}
-      </div>
-
       {/* Category tabs (all / rookie / experienced) + office filter */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex rounded-xl border border-border-subtle bg-white p-0.5">
@@ -425,8 +401,9 @@ export default function D2DLeaderboard() {
                     </div>
                     <p className="mt-2 max-w-[120px] truncate text-center text-sm font-semibold text-text-primary">{rep.name}</p>
                     <p className={cn('text-center font-bold text-text-primary', isFirst ? 'text-xl' : 'text-lg')}>
-                      {valText(rep)}
+                      {money(rep.revenue)}
                     </p>
+                    <p className="text-center text-xs font-semibold text-text-muted">{salesText(rep)}</p>
                   </button>
                 );
               })}
@@ -436,132 +413,104 @@ export default function D2DLeaderboard() {
           {/* Ranking list */}
           <Card>
             <CardContent className="p-0">
-              {filtered.map((rep, i) => (
-                <button
-                  key={rep.userId}
-                  onClick={() => openRepDrawer(rep)}
-                  className={cn(
-                    'flex w-full items-center gap-4 px-5 py-3 text-left transition-colors hover:bg-surface-elevated',
-                    i < filtered.length - 1 && 'border-b border-border-subtle',
-                  )}
-                >
-                  <div className="w-6 text-center text-base font-bold text-text-muted">{rep.rank}</div>
+              {filtered.map((rep, i) => {
+                const expanded = expandedId === rep.userId;
+                const stats = expandedStats[`${rep.userId}:${range.from}:${range.to}`];
+                return (
+                  <div key={rep.userId} className={cn(i < filtered.length - 1 && 'border-b border-border-subtle')}>
+                    <button
+                      onClick={() => setExpandedId((cur) => (cur === rep.userId ? null : rep.userId))}
+                      className="flex w-full items-center gap-4 px-5 py-3 text-left transition-colors hover:bg-surface-elevated"
+                    >
+                      <div className="w-6 text-center text-base font-bold text-text-muted">{rep.rank}</div>
 
-                  <Link
-                    to={`/reps/${rep.userId}`}
-                    className="flex flex-1 items-center gap-3 min-w-0 group"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <RepAvatar rep={rep} className="h-9 w-9" textClassName="text-xs" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-text-primary group-hover:text-text-secondary transition-colors">{rep.name}</p>
-                      <p className="text-xs text-text-muted">{subText(rep)}</p>
-                    </div>
-                  </Link>
+                      <Link
+                        to={`/reps/${rep.userId}`}
+                        className="flex flex-1 items-center gap-3 min-w-0 group"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <RepAvatar rep={rep} className="h-9 w-9" textClassName="text-xs" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-text-primary group-hover:text-text-secondary transition-colors">{rep.name}</p>
+                          <p className="text-xs font-bold text-text-primary">{salesText(rep)}</p>
+                        </div>
+                      </Link>
 
-                  <p className="text-right text-base font-bold text-text-primary">{valText(rep)}</p>
-                  <ChevronRight className="h-4 w-4 text-text-muted" />
-                </button>
-              ))}
+                      <p className="text-right text-base font-bold text-text-primary">{money(rep.revenue)}</p>
+                      <ChevronDown className={cn('h-4 w-4 shrink-0 text-text-muted transition-transform duration-200', expanded && 'rotate-180')} />
+                    </button>
+
+                    {/* Rangée dépliée — les 9 stats du Rep Hub pour la période sélectionnée */}
+                    {expanded && (
+                      <div className="border-t border-border-subtle bg-surface-elevated/50 px-5 py-4">
+                        {stats === undefined ? (
+                          <div className="flex items-center justify-center py-6">
+                            <Loader2 className="h-5 w-5 animate-spin text-text-muted" />
+                          </div>
+                        ) : stats === null ? (
+                          <p className="py-4 text-center text-xs text-text-muted">
+                            {fr ? 'Stats indisponibles' : 'Stats unavailable'}
+                          </p>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-3 gap-2">
+                              {statsToKPIs(stats).map((kpi) => (
+                                <div key={kpi.label} className="rounded-lg border border-border-subtle bg-white px-3 py-2.5">
+                                  <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{kpi.label}</p>
+                                  <p className="mt-0.5 text-sm font-bold text-text-primary">{kpi.value}</p>
+                                  {kpi.sub && <p className="text-[10px] text-text-muted">{kpi.sub}</p>}
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Admin: classify this rep (vivait dans l'ancien drawer) */}
+                            {isAdmin && (
+                              <div className="mt-3">
+                                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                                  {fr ? 'Catégorie du rep' : 'Rep category'}
+                                </p>
+                                <div className="flex gap-1.5">
+                                  {([
+                                    ['rookie', fr ? '1re année' : 'First year'],
+                                    ['experienced', fr ? 'Expérimenté' : 'Experienced'],
+                                    [null, fr ? 'Aucune' : 'None'],
+                                  ] as [('rookie' | 'experienced' | null), string][]).map(([lvl, label]) => (
+                                    <button
+                                      key={String(lvl)}
+                                      onClick={() => tagRep(rep.userId, lvl)}
+                                      className={cn(
+                                        'flex-1 rounded-md border px-2 py-1.5 text-xs font-semibold transition-colors',
+                                        rep.experienceLevel === lvl
+                                          ? 'border-text-primary bg-text-primary text-surface'
+                                          : 'border-border-subtle bg-white text-text-primary hover:bg-surface-elevated',
+                                      )}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <Link
+                              to={`/reps/${rep.userId}`}
+                              className="mt-3 flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-white px-4 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-elevated"
+                            >
+                              <User size={14} />
+                              {fr ? 'Voir le profil complet' : 'View full profile'}
+                            </Link>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </CardContent>
           </Card>
         </>
       )}
 
-      {/* Drawer (unchanged — real rep detail) */}
-      {selectedRep && (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setSelectedRep(null)} />
-          <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-white border-l border-border-subtle shadow-xl animate-in slide-in-from-right duration-200">
-            <div className="flex items-center justify-between border-b border-border-subtle px-5 py-4">
-              <div className="flex items-center gap-3">
-                <RepAvatar rep={selectedRep} className="h-11 w-11" textClassName="text-sm" />
-                <h3 className="text-sm font-semibold text-text-primary">{selectedRep.name}</h3>
-              </div>
-              <button onClick={() => setSelectedRep(null)} className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-secondary">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-5">
-              {/* Admin: classify this rep */}
-              {isAdmin && (
-                <div className="mb-5 rounded-lg border border-border-subtle bg-surface-elevated p-3">
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                    {fr ? 'Catégorie du rep' : 'Rep category'}
-                  </p>
-                  <div className="flex gap-1.5">
-                    {([
-                      ['rookie', fr ? '1re année' : 'First year'],
-                      ['experienced', fr ? 'Expérimenté' : 'Experienced'],
-                      [null, fr ? 'Aucune' : 'None'],
-                    ] as [('rookie' | 'experienced' | null), string][]).map(([lvl, label]) => (
-                      <button
-                        key={String(lvl)}
-                        onClick={() => { tagRep(selectedRep.userId, lvl); setSelectedRep((p) => p ? { ...p, experienceLevel: lvl } : p); }}
-                        className={cn(
-                          'flex-1 rounded-md border px-2 py-1.5 text-xs font-semibold transition-colors',
-                          selectedRep.experienceLevel === lvl
-                            ? 'border-text-primary bg-text-primary text-surface'
-                            : 'border-border-subtle bg-white text-text-primary hover:bg-surface-elevated',
-                        )}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {detailLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-text-muted" />
-                </div>
-              ) : (
-                <>
-                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">{fr ? 'Détails de performance' : 'Performance detail'} · {formatRangeLabel(range, fr)}</h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    {detailKPIs.map((kpi) => (
-                      <div key={kpi.key} className="rounded-lg border border-border-subtle bg-surface-elevated px-3 py-3">
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{kpi.key}</p>
-                        <p className="mt-1 text-base font-bold text-text-primary">{kpi.value}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-6">
-                    <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">{fr ? 'Taux de conversion' : 'Conversion rate'}</h4>
-                    <div className="space-y-3">
-                      {funnelSteps.map((step) => (
-                        <div key={step.key}>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs text-text-tertiary">{step.key}</span>
-                            <span className="text-xs font-semibold text-text-primary">{step.value}</span>
-                          </div>
-                          <div className="h-1.5 rounded-full bg-surface-elevated">
-                            <div
-                              className="h-1.5 rounded-full bg-text-primary transition-all duration-500"
-                              style={{ width: `${(step.value / step.max) * 100}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <Link
-                    to={`/reps/${selectedRep.userId}`}
-                    className="mt-6 flex items-center justify-center gap-2 rounded-xl bg-text-primary text-surface px-5 py-3 text-sm font-semibold transition-opacity hover:opacity-90"
-                  >
-                    <User size={16} />
-                    {fr ? 'Voir le profil complet' : 'View Full Profile'}
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }
