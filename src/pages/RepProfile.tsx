@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Avatar } from '../components/d2d/avatar';
 import { getRepPerformance, getRealtimeStats } from '../lib/leaderboardApi';
-import { getRepRealStats, type RepRealStats } from '../lib/repStatsApi';
+import { getRepRealStats, getTechRealStats, type RepRealStats, type TechRealStats } from '../lib/repStatsApi';
+import { normalizeRole } from '../lib/permissions';
 import { getCommissionEntries } from '../lib/commissionsApi';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
@@ -126,6 +127,7 @@ export default function D2DRepProfile() {
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [techStats, setTechStats] = useState<TechRealStats | null>(null);
   const [commissions, setCommissions] = useState<FsCommissionEntry[]>([]);
   const [closes, setCloses] = useState<Array<{ id: string; title: string; value: number; stage: string; won_at: string | null; created_at: string }>>([]);
 
@@ -279,6 +281,21 @@ export default function D2DRepProfile() {
     load();
     return () => { cancelled = true; };
   }, [paramId]);
+
+  // Technicians: their jobs are linked via punches, not sales — load the
+  // tech-specific stats once the profile (and its role) is known.
+  useEffect(() => {
+    if (!profile || normalizeRole(profile.role) !== 'technician') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const orgId = await getCurrentOrgIdOrThrow();
+        const s = await getTechRealStats(profile.id, orgId);
+        if (!cancelled) setTechStats(s);
+      } catch { /* non-critical */ }
+    })();
+    return () => { cancelled = true; };
+  }, [profile?.id, profile?.role]);
 
   // ── Not found ──
   if (!loading && !profile) {
@@ -448,22 +465,39 @@ export default function D2DRepProfile() {
           {/* ============================================================= */}
           <div className="col-span-8 space-y-5">
 
-            {/* KPI row — performance */}
-            <div className="grid grid-cols-4 gap-3">
-              <KpiCard icon={DollarSign} label="Total Revenue" value={fmtCurrency(p.stats.revenue)} />
-              <KpiCard icon={Target} label="Deals Closed" value={String(p.stats.closes)} />
-              <KpiCard icon={Percent} label="Conversion" value={`${p.stats.conversion}%`} />
-              <KpiCard icon={BarChart3} label="Avg Deal Value" value={fmtCurrency(p.stats.avgDealValue)} />
-            </div>
+            {/* KPI rows — role-adapted: techs get job/hours stats (their jobs
+                come from punches), reps get the sales performance view. */}
+            {normalizeRole(p.role) === 'technician' ? (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <KpiCard icon={CheckCircle2} label="Jobs complétés" value={String(techStats?.jobsCompleted ?? '—')} />
+                  <KpiCard icon={ClipboardList} label="Jobs en cours" value={String(techStats?.jobsInProgress ?? '—')} />
+                  <KpiCard icon={DollarSign} label="Revenus générés" value={techStats ? fmtCurrency(techStats.revenueGenerated) : '—'} />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <KpiCard icon={Briefcase} label="Jobs travaillés" value={String(techStats?.jobsWorked ?? '—')} />
+                  <KpiCard icon={Clock} label="Heures travaillées" value={techStats ? `${techStats.hoursWorked}h` : '—'} />
+                  <KpiCard icon={CalendarCheck} label="Jours travaillés" value={String(techStats?.daysWorked ?? '—')} />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="grid grid-cols-4 gap-3">
+                  <KpiCard icon={DollarSign} label="Total Revenue" value={fmtCurrency(p.stats.revenue)} />
+                  <KpiCard icon={Target} label="Deals Closed" value={String(p.stats.closes)} />
+                  <KpiCard icon={Percent} label="Conversion" value={`${p.stats.conversion}%`} />
+                  <KpiCard icon={BarChart3} label="Avg Deal Value" value={fmtCurrency(p.stats.avgDealValue)} />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <KpiCard icon={Navigation} label="Doors Knocked" value={String(p.stats.doors)} />
+                  <KpiCard icon={CircleDollarSign} label="Next Payout" value={fmtCurrency(nextPayout)} />
+                  <KpiCard icon={DollarSign} label="All-Time Commissions" value={fmtCurrency(allTimeCommissions)} />
+                </div>
+              </>
+            )}
 
-            {/* KPI row — activity + commissions */}
-            <div className="grid grid-cols-3 gap-3">
-              <KpiCard icon={Navigation} label="Doors Knocked" value={String(p.stats.doors)} />
-              <KpiCard icon={CircleDollarSign} label="Next Payout" value={fmtCurrency(nextPayout)} />
-              <KpiCard icon={DollarSign} label="All-Time Commissions" value={fmtCurrency(allTimeCommissions)} />
-            </div>
-
-            {/* ── Closes (auto-linked via pipeline_deals.rep_id) ── */}
+            {/* ── Closes (auto-linked via pipeline_deals.rep_id) — sales roles only ── */}
+            {normalizeRole(p.role) !== 'technician' && (
             <CardPanel title={`Closes (${closes.length})`}>
               {closes.length === 0 ? (
                 <p className="text-sm text-text-tertiary text-center py-6">Aucun deal lié à ce rep pour le moment.</p>
@@ -492,8 +526,10 @@ export default function D2DRepProfile() {
                 </div>
               )}
             </CardPanel>
+            )}
 
-            {/* ── Commission history ── */}
+            {/* ── Commission history — sales roles only ── */}
+            {normalizeRole(p.role) !== 'technician' && (
             <CardPanel title={`Historique commissions (${commissions.length})`}>
               {commissions.length === 0 ? (
                 <p className="text-sm text-text-tertiary text-center py-6">Aucune commission enregistrée.</p>
@@ -531,6 +567,7 @@ export default function D2DRepProfile() {
                 </div>
               )}
             </CardPanel>
+            )}
           </div>
         </div>
       </div>
