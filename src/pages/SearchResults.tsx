@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Briefcase, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Contact, FileSignature, FileText,
+  Briefcase, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Contact, CreditCard, FileSignature, FileText,
   MapPin, ReceiptText, Search as SearchIcon, Users, UsersRound,
 } from 'lucide-react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
@@ -18,7 +18,7 @@ import { useTranslation } from '../i18n';
 const PAGE_SIZE = 20;
 
 const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
-  client: Users, property: MapPin, job: Briefcase, agreement: FileSignature, lead: Contact,
+  client: Users, property: MapPin, job: Briefcase, agreement: FileSignature, payment: CreditCard, lead: Contact,
   invoice: ReceiptText, quote: FileText, request: ClipboardList, team: UsersRound, event: CalendarDays,
 };
 
@@ -30,6 +30,7 @@ const ENTITY_COLORS: Record<SearchEntityType, string> = {
   property: 'text-text-secondary',
   job: entityIconClass('job'),
   agreement: 'text-text-secondary',
+  payment: entityIconClass('payment'),
   lead: 'text-text-secondary',
   invoice: entityIconClass('invoice'),
   quote: entityIconClass('quote'),
@@ -157,14 +158,15 @@ const TAB_ORDER: Array<{ key: SearchTab; labelKey: EntityGroupKey | 'all' }> = [
   { key: 'agreements', labelKey: 'agreements' },
   { key: 'requests', labelKey: 'requests' },
   { key: 'invoices', labelKey: 'invoices' },
+  { key: 'payments', labelKey: 'payments' },
   { key: 'leads', labelKey: 'leads' },
   { key: 'teams', labelKey: 'teams' },
   { key: 'events', labelKey: 'events' },
 ];
 
 const GROUP_KEY_TO_ENTITY_TYPE: Record<string, SearchEntityType> = {
-  clients: 'client', properties: 'property', jobs: 'job', agreements: 'agreement', leads: 'lead',
-  invoices: 'invoice', quotes: 'quote', requests: 'request', teams: 'team', events: 'event',
+  clients: 'client', properties: 'property', jobs: 'job', agreements: 'agreement', payments: 'payment',
+  leads: 'lead', invoices: 'invoice', quotes: 'quote', requests: 'request', teams: 'team', events: 'event',
 };
 
 export default function SearchResultsPage() {
@@ -215,7 +217,7 @@ export default function SearchResultsPage() {
     return () => { cancelled = true; };
   }, [query, tab, page, ...ALL_ENTITY_GROUP_KEYS.map((k) => entityPages[k])]);
 
-  const counts = payload?.counts || { clients: 0, properties: 0, jobs: 0, agreements: 0, leads: 0, invoices: 0, quotes: 0, requests: 0, teams: 0, events: 0, all: 0 };
+  const counts = payload?.counts || { clients: 0, properties: 0, jobs: 0, agreements: 0, payments: 0, leads: 0, invoices: 0, quotes: 0, requests: 0, teams: 0, events: 0, all: 0 };
 
   const tabs = useMemo(
     () => TAB_ORDER.map((tab) => ({

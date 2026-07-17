@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
-  Briefcase, Calendar, ClipboardList, Command, Contact, FileSignature, Inbox,
+  Briefcase, Calendar, ClipboardList, Command, Contact, CreditCard, FileSignature, Inbox,
   MapPin, Plus, Search, Users, UsersRound, Wallet, Zap,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -55,6 +55,7 @@ const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
   property: MapPin,
   job: Briefcase,
   agreement: FileSignature,
+  payment: CreditCard,
   lead: Contact,
   invoice: Wallet,
   quote: ClipboardList,
@@ -69,6 +70,7 @@ const ENTITY_TYPE_LABELS: Record<SearchEntityType, { en: string; fr: string }> =
   property: { en: 'Property', fr: 'Propriété' },
   job: { en: 'Job', fr: 'Job' },
   agreement: { en: 'Agreement', fr: 'Contrat' },
+  payment: { en: 'Payment', fr: 'Paiement' },
   lead: { en: 'Lead', fr: 'Prospect' },
   invoice: { en: 'Invoice', fr: 'Facture' },
   quote: { en: 'Quote', fr: 'Devis' },
@@ -126,11 +128,11 @@ function highlightText(text: string, query: string) {
 
 // ── Entity groups order ──
 
-const ENTITY_DISPLAY_ORDER: EntityGroupKey[] = ['clients', 'properties', 'jobs', 'quotes', 'agreements', 'requests', 'invoices', 'leads', 'teams', 'events'];
+const ENTITY_DISPLAY_ORDER: EntityGroupKey[] = ['clients', 'properties', 'jobs', 'quotes', 'agreements', 'requests', 'invoices', 'payments', 'leads', 'teams', 'events'];
 
 const ENTITY_KEY_TO_TYPE: Record<EntityGroupKey, SearchEntityType> = {
-  clients: 'client', properties: 'property', jobs: 'job', agreements: 'agreement', leads: 'lead',
-  invoices: 'invoice', quotes: 'quote', requests: 'request', teams: 'team', events: 'event',
+  clients: 'client', properties: 'property', jobs: 'job', agreements: 'agreement', payments: 'payment',
+  leads: 'lead', invoices: 'invoice', quotes: 'quote', requests: 'request', teams: 'team', events: 'event',
 };
 
 // ── Component ──
@@ -155,7 +157,7 @@ export default function GlobalSearch() {
   const [activeIndex, setActiveIndex] = useState(-1);
   const [entitySuggestions, setEntitySuggestions] = useState<SearchEntityItem[]>([]);
   const [groupedSuggestions, setGroupedSuggestions] = useState<Record<EntityGroupKey, SearchEntityItem[]>>({
-    clients: [], properties: [], jobs: [], agreements: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [],
+    clients: [], properties: [], jobs: [], agreements: [], payments: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [],
   });
 
   const normalizedQuery = useMemo(() => normalizeSearchQuery(query), [query]);
@@ -177,7 +179,7 @@ export default function GlobalSearch() {
     async function loadSuggestions() {
       if (debouncedQuery.length < MIN_QUERY_LENGTH) {
         setEntitySuggestions([]);
-        setGroupedSuggestions({ clients: [], properties: [], jobs: [], agreements: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
+        setGroupedSuggestions({ clients: [], properties: [], jobs: [], agreements: [], payments: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
         setLoading(false);
         return;
       }
@@ -187,12 +189,12 @@ export default function GlobalSearch() {
         const payload = await fetchSearchSuggestions(debouncedQuery, MAX_SUGGESTIONS);
         if (!cancelled) {
           setEntitySuggestions(payload.items || []);
-          setGroupedSuggestions(payload.grouped || { clients: [], properties: [], jobs: [], agreements: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
+          setGroupedSuggestions(payload.grouped || { clients: [], properties: [], jobs: [], agreements: [], payments: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
         }
       } catch {
         if (!cancelled) {
           setEntitySuggestions([]);
-          setGroupedSuggestions({ clients: [], properties: [], jobs: [], agreements: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
+          setGroupedSuggestions({ clients: [], properties: [], jobs: [], agreements: [], payments: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -265,8 +267,8 @@ export default function GlobalSearch() {
 
     // Entity results grouped by type (filter financial entities for restricted roles)
     for (const groupKey of ENTITY_DISPLAY_ORDER) {
-      // Skip invoice/payment groups for financially restricted users
-      if (financiallyRestricted && (groupKey === 'invoices' || groupKey === 'quotes')) continue;
+      // Skip financial groups for financially restricted users
+      if (financiallyRestricted && (groupKey === 'invoices' || groupKey === 'quotes' || groupKey === 'payments')) continue;
 
       const groupItems = groupedSuggestions[groupKey];
       if (!groupItems || groupItems.length === 0) continue;
@@ -323,7 +325,7 @@ export default function GlobalSearch() {
     setQuery('');
     setDebouncedQuery('');
     setEntitySuggestions([]);
-    setGroupedSuggestions({ clients: [], properties: [], jobs: [], agreements: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
+    setGroupedSuggestions({ clients: [], properties: [], jobs: [], agreements: [], payments: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [] });
     closeDropdown();
   }
 
@@ -525,13 +527,29 @@ export default function GlobalSearch() {
 
 // ── Result Row Component ──
 
+function formatMoney(cents: number, currency: string | null | undefined, fr: boolean) {
+  return new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', {
+    style: 'currency',
+    currency: currency || 'CAD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(cents / 100);
+}
+
 // One line per result: "Title (Client)". Bare numbers get their type as a
-// prefix ("658" → "Invoice #658"); clients show their name alone.
+// prefix ("658" → "Invoice #658"); payments show their amount
+// ("Payment – $1,092.26"); clients show their name alone.
 function entityRowText(item: SuggestionAction, fr: boolean): { main: string; context: string | null } {
   const typeLabel = item.entityType ? ENTITY_TYPE_LABELS[item.entityType][fr ? 'fr' : 'en'] : '';
   let main = item.label;
   const bareNumber = main.trim().match(/^#?(\d+)$/);
   if (bareNumber && typeLabel) main = `${typeLabel} #${bareNumber[1]}`;
+
+  if (item.entityType === 'payment') {
+    main = item.amountCents != null
+      ? `${typeLabel} – ${formatMoney(item.amountCents, item.currency, fr)}`
+      : typeLabel;
+  }
 
   if (item.entityType === 'client' || item.entityType === 'lead') {
     return { main, context: null };

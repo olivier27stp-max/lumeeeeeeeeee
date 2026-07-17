@@ -12,7 +12,7 @@
  * no circle, no halo, no gradient behind it.
  */
 
-export type ColoredEntity = 'request' | 'quote' | 'job' | 'invoice';
+export type ColoredEntity = 'request' | 'quote' | 'job' | 'invoice' | 'payment';
 
 /** Tailwind text-color class for an entity icon. */
 export const ENTITY_ICON_CLASS: Record<ColoredEntity, string> = {
@@ -20,6 +20,8 @@ export const ENTITY_ICON_CLASS: Record<ColoredEntity, string> = {
   quote: 'text-entity-quote',
   job: 'text-entity-job',
   invoice: 'text-entity-invoice',
+  // Payments belong to the Finances section — same navy as invoices
+  payment: 'text-entity-invoice',
 };
 
 /** Class for an entity if it has one, else the provided neutral fallback. */

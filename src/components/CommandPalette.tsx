@@ -39,7 +39,7 @@ interface CommandPaletteProps {
 }
 
 const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
-  client: Users, property: MapPin, job: Briefcase, agreement: FileSignature, lead: Contact,
+  client: Users, property: MapPin, job: Briefcase, agreement: FileSignature, payment: CreditCard, lead: Contact,
   invoice: ReceiptText, quote: FileText, request: ClipboardList, team: UsersRound, event: CalendarDays,
 };
 
@@ -48,6 +48,7 @@ const ENTITY_SECTION_LABELS: Record<SearchEntityType, { en: string; fr: string }
   property: { en: 'Properties', fr: 'Propriétés' },
   job: { en: 'Jobs', fr: 'Jobs' },
   agreement: { en: 'Agreements', fr: 'Contrats' },
+  payment: { en: 'Payments', fr: 'Paiements' },
   lead: { en: 'Leads', fr: 'Prospects' },
   invoice: { en: 'Invoices', fr: 'Factures' },
   quote: { en: 'Quotes', fr: 'Devis' },

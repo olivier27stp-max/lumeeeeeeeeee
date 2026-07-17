@@ -6,6 +6,7 @@ export function getSearchEntityLabel(type: SearchEntityType) {
     case 'property': return 'Properties';
     case 'job': return 'Jobs';
     case 'agreement': return 'Agreements';
+    case 'payment': return 'Payments';
     case 'lead': return 'Leads';
     case 'invoice': return 'Invoices';
     case 'quote': return 'Quotes';
@@ -33,6 +34,8 @@ export function getSearchItemHref(type: SearchEntityType, id: string, refs?: Sea
     case 'job': return `/jobs/${id}`;
     // agreement lives on its job hub
     case 'agreement': return refs?.refId ? `/jobs/${refs.refId}` : '/jobs';
+    // payment opens its invoice hub, else the payments tab of Finances
+    case 'payment': return refs?.refId ? `/invoices/${refs.refId}` : '/finances?tab=paiements';
     // leads are clients with status='lead' — open the client hub
     case 'lead': return `/clients/${id}`;
     case 'invoice': return `/invoices/${id}`;

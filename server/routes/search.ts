@@ -19,7 +19,7 @@ import {
 
 const router = Router();
 
-const ALL_ENTITY_KEYS = ['clients', 'properties', 'jobs', 'agreements', 'leads', 'invoices', 'quotes', 'requests', 'teams', 'events'] as const;
+const ALL_ENTITY_KEYS = ['clients', 'properties', 'jobs', 'agreements', 'payments', 'leads', 'invoices', 'quotes', 'requests', 'teams', 'events'] as const;
 type EntityGroupKey = typeof ALL_ENTITY_KEYS[number];
 
 const ENTITY_KEY_TO_TYPE: Record<EntityGroupKey, SearchEntityType> = {
@@ -27,6 +27,7 @@ const ENTITY_KEY_TO_TYPE: Record<EntityGroupKey, SearchEntityType> = {
   properties: 'property',
   jobs: 'job',
   agreements: 'agreement',
+  payments: 'payment',
   leads: 'lead',
   invoices: 'invoice',
   quotes: 'quote',
@@ -51,8 +52,8 @@ async function expandClientRelationships(
 
   const expanded: MappedItem[] = [];
 
-  // Fetch related jobs, quotes, invoices, requests, properties, agreements in parallel
-  const [jobsRes, quotesRes, invoicesRes, requestsRes, propertiesRes, agreementsRes] = await Promise.all([
+  // Fetch related jobs, quotes, invoices, requests, properties, agreements, payments in parallel
+  const [jobsRes, quotesRes, invoicesRes, requestsRes, propertiesRes, agreementsRes, paymentsRes] = await Promise.all([
     client
       .from('jobs')
       .select('id, title, job_number, client_id, client_name, status, total_cents, currency, scheduled_at, property_address, created_at')
@@ -101,6 +102,14 @@ async function expandClientRelationships(
       .in('client_id', clientIds)
       .order('created_at', { ascending: false })
       .limit(limitPerType),
+    client
+      .from('payments')
+      .select('id, client_id, invoice_id, status, method, provider, amount_cents, currency, payment_date, created_at')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .in('client_id', clientIds)
+      .order('payment_date', { ascending: false })
+      .limit(limitPerType),
   ]);
 
   const jobs = jobsRes.data;
@@ -109,6 +118,7 @@ async function expandClientRelationships(
   const requests = requestsRes.data;
   const properties = propertiesRes.data;
   const agreements = agreementsRes.data;
+  const payments = paymentsRes.data;
 
   for (const j of jobs || []) {
     if (existingIds.has(j.id)) continue;
@@ -231,6 +241,26 @@ async function expandClientRelationships(
     });
   }
 
+  for (const p of payments || []) {
+    if (existingIds.has(p.id)) continue;
+    existingIds.add(p.id);
+    expanded.push({
+      type: 'payment' as SearchEntityType,
+      id: p.id,
+      title: 'Payment',
+      subtitle: p.method || p.provider || 'Payment',
+      status: p.status || null,
+      amountCents: p.amount_cents ?? null,
+      currency: p.currency || null,
+      date: p.payment_date || null,
+      clientId: p.client_id || null,
+      clientName: null,
+      refId: p.invoice_id || null,
+      createdAt: p.created_at,
+      rank: 0.5,
+    });
+  }
+
   return expanded;
 }
 
@@ -248,7 +278,7 @@ async function handleSuggestions(req: import('express').Request, res: import('ex
   const limit = clampInt(req.query.limit, 8, 1, 12);
 
   const emptyGrouped: Record<EntityGroupKey, ReturnType<typeof mapSearchRows>> = {
-    clients: [], properties: [], jobs: [], agreements: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [],
+    clients: [], properties: [], jobs: [], agreements: [], payments: [], leads: [], invoices: [], quotes: [], requests: [], teams: [], events: [],
   };
 
   if (!q) {
@@ -336,7 +366,7 @@ router.get('/search/results', async (req, res) => {
   const tab = parseTab(req.query.tab);
   const pageSize = clampInt(req.query.pageSize, 20, 1, 20);
 
-  const emptyCounts = { clients: 0, properties: 0, jobs: 0, agreements: 0, leads: 0, invoices: 0, quotes: 0, requests: 0, teams: 0, events: 0, all: 0 };
+  const emptyCounts = { clients: 0, properties: 0, jobs: 0, agreements: 0, payments: 0, leads: 0, invoices: 0, quotes: 0, requests: 0, teams: 0, events: 0, all: 0 };
 
   if (!q) {
     const emptyGroups: Record<EntityGroupKey, ReturnType<typeof emptyPage>> = {} as any;
@@ -364,6 +394,7 @@ router.get('/search/results', async (req, res) => {
     const ctx = req.userContext || await getUserContext(client, auth.user.id, orgId);
     if (ctx && isFinanciallyRestricted(ctx)) {
       counts.invoices = 0;
+      counts.payments = 0;
       counts.all = Object.values(counts).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0);
     }
 
