@@ -132,36 +132,6 @@ const googleMaps = apiKeyProvider({
   },
 });
 
-// ── Traccar ───────────────────────────────────────────────────
-const traccar = apiKeyProvider({
-  slug: 'traccar',
-  display_name: 'Traccar',
-  credential_fields: [
-    { key: 'server_url', label: 'Server URL', type: 'url', required: true, placeholder: 'https://your-traccar.com' },
-    { key: 'username', label: 'Username', type: 'text', required: true },
-    { key: 'password', label: 'Password', type: 'password', required: true },
-  ],
-  testConnection: async (creds) => {
-    const url = creds.extra?.server_url;
-    const user = creds.extra?.username;
-    const pass = creds.extra?.password;
-    if (!url || !user || !pass) return { success: false, error: 'Server URL, username and password required' };
-    try {
-      const basicAuth = Buffer.from(`${user}:${pass}`).toString('base64');
-      const res = await fetch(`${url.replace(/\/$/, '')}/api/session`, {
-        method: 'GET',
-        headers: { Authorization: `Basic ${basicAuth}` },
-      });
-      if (res.status === 401) return { success: false, error: 'Invalid username or password' };
-      if (!res.ok) return { success: false, error: `Traccar API error: ${res.status}` };
-      const data = await res.json() as Record<string, unknown>;
-      return { success: true, account_name: (data as any).name || 'Traccar', account_id: String((data as any).id || '') };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : 'Failed to connect to Traccar' };
-    }
-  },
-});
-
 // ── Gemini ────────────────────────────────────────────────────
 const gemini = apiKeyProvider({
   slug: 'gemini',
@@ -508,7 +478,7 @@ const make = webhookProvider({ slug: 'make', display_name: 'Make' });
 
 export function registerGenericProviders(): void {
   const all = [
-    mailchimp, openai, googleMaps, traccar,
+    mailchimp, openai, googleMaps,
     gemini, claude, elevenlabs, github, vercel, mapbox,
     jotform, klaviyo, pandadoc, paypal, square, dropbox,
     xero,

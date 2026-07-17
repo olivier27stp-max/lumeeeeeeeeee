@@ -1,6 +1,5 @@
 import { useTranslation } from '../../i18n';
 import { useCompany } from '../../contexts/CompanyContext';
-import LocationServices from '../../components/LocationServices';
 import MyLocationConsentCard from '../../components/settings/MyLocationConsentCard';
 import LocationTrackingSettingCard from '../../components/settings/LocationTrackingSettingCard';
 import LocationConsentRoster from '../../components/settings/LocationConsentRoster';
@@ -25,7 +24,9 @@ export default function LocationSettings() {
         </>
       )}
 
-      <LocationServices />
+      {/* Les intégrations de trackers externes (Traccar / Life360) ont été
+          retirées sur demande de Rafba — jamais utilisées (0 config en prod).
+          Le tracking natif (navigateur/téléphone) couvre tout. */}
     </div>
   );
 }
