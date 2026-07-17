@@ -25,7 +25,6 @@ import PermissionGate from '../components/PermissionGate';
 import FileUpload from '../components/FileUpload';
 import AddressAutocomplete, { type StructuredAddress } from '../components/AddressAutocomplete';
 import { STORAGE_BUCKETS, deleteFile } from '../lib/storage';
-import LocationTrackingSettingCard from '../components/settings/LocationTrackingSettingCard';
 
 interface CompanyDetails {
   id?: string;
@@ -660,9 +659,9 @@ export default function CompanySettings() {
             feature that doesn't exist. The column is kept so stored values
             survive if a widget ships later. */}
 
-        <PermissionGate permission="settings.update">
-          <LocationTrackingSettingCard language={language === 'fr' ? 'fr' : 'en'} />
-        </PermissionGate>
+        {/* La carte du switch maître de localisation a été rapatriée sur la
+            page Localisation GPS (/settings/location), avec le roster des
+            consentements — tout le volet GPS au même endroit. */}
 
         {/* Save bar */}
         <div className={cn(

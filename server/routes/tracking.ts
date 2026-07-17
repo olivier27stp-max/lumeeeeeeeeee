@@ -1,8 +1,9 @@
 import express from 'express';
 import { z } from 'zod';
-import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
 import { validate } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
+import { checkLocationTrackingAllowed, clearConsentCache } from '../lib/location-consent';
 
 const router = express.Router();
 
@@ -53,6 +54,11 @@ router.post('/tracking/start', validate(startSessionSchema), async (req, res) =>
     if (!auth) return;
     const admin = getServiceClient();
     const { teamId, timeEntryId, source } = req.body;
+
+    // Verrou consentement (Loi 25) — le client se gate aussi, mais le
+    // serveur est la vraie frontière.
+    const denial = await checkLocationTrackingAllowed(admin, auth.orgId, auth.user.id);
+    if (denial) return res.status(403).json(denial);
 
     // Expire any stale active sessions
     await admin
@@ -140,6 +146,9 @@ router.post('/tracking/point', validate(recordPointSchema), async (req, res) => 
     const now = new Date().toISOString();
     const moving = is_moving ?? (speed_mps != null ? speed_mps > 0.5 : true);
 
+    const denialPoint = await checkLocationTrackingAllowed(admin, auth.orgId, auth.user.id);
+    if (denialPoint) return res.status(403).json(denialPoint);
+
     // Verify session belongs to user and is active
     const { data: session } = await admin
       .from('tracking_sessions')
@@ -203,6 +212,9 @@ router.post('/tracking/points-batch', validate(batchPointsSchema), async (req, r
     const admin = getServiceClient();
     const { sessionId, points } = req.body;
 
+    const denialBatch = await checkLocationTrackingAllowed(admin, auth.orgId, auth.user.id);
+    if (denialBatch) return res.status(403).json(denialBatch);
+
     const { data: session } = await admin
       .from('tracking_sessions')
       .select('id, org_id, team_id')
@@ -256,6 +268,85 @@ router.post('/tracking/points-batch', validate(batchPointsSchema), async (req, r
     return res.json({ ok: true, count: rows.length });
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to record batch.', '[tracking/points-batch]');
+  }
+});
+
+// ── Roster des consentements (admin/owner) ───────────────────────────────────
+// Chaque membre actif avec son statut : true (accepté) / false (refusé) /
+// null (jamais demandé) + horodatage. Alimente la page Localisation GPS.
+
+router.get('/tracking/consents', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    if (!await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId)) {
+      return res.status(403).json({ error: 'Admin or owner role required.' });
+    }
+
+    const { data: members } = await admin
+      .from('memberships')
+      .select('user_id, role')
+      .eq('org_id', auth.orgId)
+      .or('status.is.null,status.eq.active');
+
+    const ids = (members || []).map((m: any) => m.user_id);
+    const { data: profiles } = ids.length
+      ? await admin.from('profiles').select('id, full_name, location_consent, location_consent_at').in('id', ids)
+      : { data: [] };
+
+    const byId = new Map((profiles || []).map((p: any) => [p.id, p]));
+    const roster = (members || []).map((m: any) => {
+      const p = byId.get(m.user_id);
+      return {
+        user_id: m.user_id,
+        role: m.role,
+        full_name: p?.full_name || '',
+        consent: p?.location_consent ?? null,
+        consent_at: p?.location_consent_at ?? null,
+      };
+    });
+
+    return res.json({ roster });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to load consent roster.', '[tracking/consents]');
+  }
+});
+
+// ── Redemander le consentement ───────────────────────────────────────────────
+// Remet le statut à « jamais demandé » → le modal de consentement réapparaît
+// à la prochaine connexion du membre. Purge le cache du verrou serveur.
+
+const reRequestSchema = z.object({ userId: z.string().uuid() });
+
+router.post('/tracking/consents/re-request', validate(reRequestSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    if (!await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId)) {
+      return res.status(403).json({ error: 'Admin or owner role required.' });
+    }
+
+    const { userId } = req.body;
+    const { data: member } = await admin
+      .from('memberships')
+      .select('user_id')
+      .eq('org_id', auth.orgId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (!member) return res.status(404).json({ error: 'Member not found.' });
+
+    const { error } = await admin
+      .from('profiles')
+      .update({ location_consent: null, location_consent_at: null })
+      .eq('id', userId);
+    if (error) throw error;
+
+    clearConsentCache(userId);
+    return res.json({ ok: true, message: 'Consent will be requested at next sign-in.' });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to re-request consent.', '[tracking/consents/re-request]');
   }
 });
 

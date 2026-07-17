@@ -53,3 +53,40 @@ export async function setMyLocationConsent(userId: string, consent: boolean): Pr
   if (error) throw error;
   window.dispatchEvent(new CustomEvent(LOCATION_CONSENT_EVENT, { detail: { consent } }));
 }
+
+// ── Roster des consentements (admin/owner) ──────────────────────
+
+async function apiHeaders() {
+  const { data: { session } } = await supabase.auth.getSession();
+  let activeOrg = '';
+  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch {}
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${session?.access_token || ''}`,
+    'x-org-id': activeOrg,
+  };
+}
+
+export interface ConsentRosterEntry {
+  user_id: string;
+  role: string;
+  full_name: string;
+  consent: boolean | null;
+  consent_at: string | null;
+}
+
+export async function fetchConsentRoster(): Promise<ConsentRosterEntry[]> {
+  const res = await fetch('/api/tracking/consents', { headers: await apiHeaders() });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to load consent roster.');
+  return (await res.json()).roster || [];
+}
+
+/** Remet le membre à « jamais demandé » → le modal réapparaît à sa prochaine connexion. */
+export async function reRequestConsent(userId: string): Promise<void> {
+  const res = await fetch('/api/tracking/consents/re-request', {
+    method: 'POST',
+    headers: await apiHeaders(),
+    body: JSON.stringify({ userId }),
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to re-request consent.');
+}

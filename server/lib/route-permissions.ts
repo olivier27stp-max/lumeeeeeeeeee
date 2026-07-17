@@ -118,6 +118,10 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'POST /api/invitations/reactivate-member': 'users.invite',
   'POST /api/invitations/delete-member': 'users.delete',
 
+  // ── Consentements de localisation ──
+  'GET /api/tracking/consents': 'team.read',
+  'POST /api/tracking/consents/re-request': 'settings.update',
+
   // ── Role presets ──
   'POST /api/roles/update-preset': 'users.update_role',
   'GET /api/roles/presets': 'users.update_role',
