@@ -322,3 +322,57 @@ export async function getRepRealStats(userId: string, orgId: string): Promise<Re
     daysWorked,
   };
 }
+
+// ── Stats d'équipe en batch (page Membres) ──────────────────────
+// Même logique que getRepRealStats mais 3 requêtes pour TOUTE l'équipe
+// au lieu de 3 par membre, groupées côté client.
+
+export interface TeamMemberStats {
+  revenue: number;
+  jobsCompleted: number;
+  jobsTotal: number;
+  contractsSigned: number;
+  hoursWorked: number;
+}
+
+export async function getTeamStats(orgId: string, userIds: string[]): Promise<Record<string, TeamMemberStats>> {
+  if (userIds.length === 0) return {};
+  const [jobsRes, quotesRes, timeRes] = await Promise.all([
+    supabase
+      .from('jobs')
+      .select('status, total_amount, salesperson_id')
+      .eq('org_id', orgId)
+      .in('salesperson_id', userIds)
+      .is('deleted_at', null),
+    supabase
+      .from('quotes')
+      .select('created_by')
+      .eq('org_id', orgId)
+      .in('created_by', userIds)
+      .in('status', ['accepted', 'signed', 'won']),
+    supabase
+      .from('time_entries')
+      .select('punch_in_at, punch_out_at, breaks, employee_id')
+      .eq('org_id', orgId)
+      .in('employee_id', userIds)
+      .not('punch_out_at', 'is', null),
+  ]);
+
+  const out: Record<string, TeamMemberStats> = {};
+  const ensure = (id: string) => (out[id] ||= { revenue: 0, jobsCompleted: 0, jobsTotal: 0, contractsSigned: 0, hoursWorked: 0 });
+
+  for (const j of (jobsRes.data || []) as any[]) {
+    const s = ensure(j.salesperson_id);
+    s.revenue += Number(j.total_amount || 0);
+    s.jobsTotal += 1;
+    if (j.status === 'completed') s.jobsCompleted += 1;
+  }
+  for (const q of (quotesRes.data || []) as any[]) {
+    ensure(q.created_by).contractsSigned += 1;
+  }
+  for (const t of (timeRes.data || []) as any[]) {
+    ensure(t.employee_id).hoursWorked += diffHours(t.punch_in_at, t.punch_out_at, t.breaks);
+  }
+  for (const id of Object.keys(out)) out[id].hoursWorked = Math.round(out[id].hoursWorked * 10) / 10;
+  return out;
+}

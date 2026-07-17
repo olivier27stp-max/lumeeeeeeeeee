@@ -866,4 +866,83 @@ router.post('/invitations/remove-member', validate(removeMemberSchema), async (r
   }
 });
 
+// ─── POST /invitations/reactivate-member — Restore a suspended member ──
+// Repasse un membre suspendu à actif. Même gate de sièges que l'invitation :
+// le retour compte comme un siège, on bloque si la compagnie est au plafond.
+
+router.post('/invitations/reactivate-member', validate(removeMemberSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const admin = getServiceClient();
+    const isAdmin = await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only admins or owners can reactivate members.' });
+    }
+
+    const { userId } = req.body;
+
+    const { data: membership } = await admin
+      .from('memberships')
+      .select('role, status')
+      .eq('user_id', userId)
+      .eq('org_id', auth.orgId)
+      .maybeSingle();
+
+    if (!membership) {
+      return res.status(404).json({ error: 'Member not found.' });
+    }
+    if (membership.status !== 'suspended') {
+      return res.status(400).json({ error: 'Member is not suspended.', code: 'not_suspended' });
+    }
+
+    // ── Gate de sièges (miroir du gate d'invitation, company-wide) ──
+    {
+      const groupIds = await companyOrgIds(admin, auth.orgId);
+      const { data: seatSub } = await admin
+        .from('subscriptions')
+        .select('plan_id, extra_seats')
+        .in('org_id', groupIds)
+        .in('status', ['active', 'trialing'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const { data: seatPlan } = seatSub?.plan_id
+        ? await admin.from('plans').select('seats_included').eq('id', seatSub.plan_id).maybeSingle()
+        : { data: null };
+      const capacity = (seatPlan?.seats_included ?? 1) + (seatSub?.extra_seats ?? 0);
+
+      const [{ data: memberRows }, { count: pendingCount }] = await Promise.all([
+        admin.from('memberships').select('user_id').in('org_id', groupIds).or('status.is.null,status.eq.active'),
+        admin.from('invitations').select('*', { count: 'exact', head: true }).in('org_id', groupIds).eq('status', 'pending'),
+      ]);
+      const used = new Set((memberRows || []).map((m) => m.user_id)).size + (pendingCount ?? 0);
+      if (used >= capacity) {
+        return res.status(403).json({
+          error: `Seat limit reached (${capacity} used). Upgrade your plan or add seats to reactivate this member.`,
+          code: 'seat_limit_reached',
+          capacity,
+        });
+      }
+    }
+
+    const { error } = await admin
+      .from('memberships')
+      .update({ status: 'active' })
+      .eq('user_id', userId)
+      .eq('org_id', auth.orgId);
+
+    if (error) {
+      console.error('[invitations/reactivate-member] update failed:', error.message);
+      return res.status(500).json({ error: 'Failed to reactivate member.' });
+    }
+
+    return res.json({ message: 'Member reactivated.' });
+  } catch (err: any) {
+    console.error('[invitations/reactivate-member]', err.message);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 export default router;
