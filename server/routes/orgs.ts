@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../lib/validation';
-import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient, companyOrgIds } from '../lib/supabase';
 
 const router = Router();
 
@@ -11,10 +11,34 @@ const createOfficeSchema = z.object({
   name: z.string().trim().min(1, 'Office name is required.').max(120),
 });
 
+// ─── Helpers ─────────────────────────────────────────────────────
+
+/**
+ * Capacité de bureaux de la compagnie : included_offices du plan actif +
+ * extra_offices achetés. La sub est cherchée sur N'IMPORTE QUEL bureau de
+ * la compagnie (les bureaux secondaires n'ont pas de ligne subscriptions).
+ * Sans abonnement actif : 1 bureau, comme le gate de sièges.
+ */
+export async function getOfficeCapacity(admin: ReturnType<typeof getServiceClient>, officeIds: string[]): Promise<number> {
+  if (officeIds.length === 0) return 1;
+  const { data: sub } = await admin
+    .from('subscriptions')
+    .select('plan_id, extra_offices')
+    .in('org_id', officeIds)
+    .in('status', ['active', 'trialing'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { data: plan } = sub?.plan_id
+    ? await admin.from('plans').select('included_offices').eq('id', sub.plan_id).maybeSingle()
+    : { data: null };
+  return (plan?.included_offices ?? 1) + (sub?.extra_offices ?? 0);
+}
+
 // ─── POST /orgs/create-office ────────────────────────────────────
-// Crée un nouvel office (= org) dans la même compagnie (company_group_id)
-// que l'org courant. Réservé au propriétaire. Le créateur devient owner
-// du nouvel office.
+// Crée un nouvel office (= org) dans la même compagnie que l'org courant.
+// Réservé au propriétaire. Le créateur devient owner du nouvel office.
+// Bloqué quand la compagnie a déjà atteint included_offices + extra_offices.
 router.post('/orgs/create-office', validate(createOfficeSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
@@ -36,21 +60,33 @@ router.post('/orgs/create-office', validate(createOfficeSchema), async (req, res
 
     const { name } = req.body;
 
-    // Hérite du company_group_id de l'org courant (le trigger DB le ferait
-    // aussi, mais on le passe explicitement pour être robuste).
+    // ── Limite de bureaux (miroir du gate de sièges d'invitations.ts) ──
+    // Compagnie = les orgs du company_group du bureau actif.
+    const officeIds = await companyOrgIds(admin, auth.orgId);
+    const used = Math.max(1, officeIds.length);
+    const capacity = await getOfficeCapacity(admin, officeIds);
+
+    if (used >= capacity) {
+      return res.status(403).json({
+        error: `Office limit reached (${capacity} included in your plan). Add extra offices from Billing settings to create more.`,
+        code: 'office_limit_reached',
+        capacity,
+        used,
+      });
+    }
+
+    // Hérite explicitement du groupe du bureau actif (le trigger DB le ferait
+    // par created_by, mais passer le groupe couvre le cas d'un org dont le
+    // créateur n'est pas l'owner actuel). NOTE : orgs n'a pas de owner_id —
+    // le propriétaire effectif est created_by + memberships.role='owner'.
     const { data: currentOrg } = await admin
       .from('orgs')
       .select('company_group_id')
       .eq('id', auth.orgId)
       .maybeSingle();
 
-    const insertPayload: Record<string, any> = {
-      name,
-      owner_id: auth.user.id,
-    };
-    if (currentOrg?.company_group_id) {
-      insertPayload.company_group_id = currentOrg.company_group_id;
-    }
+    const insertPayload: Record<string, any> = { name, created_by: auth.user.id };
+    if (currentOrg?.company_group_id) insertPayload.company_group_id = currentOrg.company_group_id;
 
     const { data: newOrg, error: orgError } = await admin
       .from('orgs')

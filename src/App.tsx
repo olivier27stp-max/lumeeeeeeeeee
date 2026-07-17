@@ -66,6 +66,7 @@ import Subprocessors from './pages/Subprocessors';
 import { CookieBanner } from './components/CookieBanner';
 import Landing from './pages/Landing';
 import { supabase } from './lib/supabase';
+import { fetchCurrentBilling } from './lib/billingApi';
 import { countPendingQuotes } from './lib/quotesApi';
 import { countOverdueInvoices } from './lib/invoicesApi';
 import { User } from '@supabase/supabase-js';
@@ -480,14 +481,12 @@ export default function App() {
           setAccessBlockedReason('no_membership');
           return;
         }
-        const { data: sub } = await supabase
-          .from('subscriptions')
-          .select('id, status')
-          .eq('org_id', mem.org_id)
-          .in('status', ['active', 'trialing'])
-          .limit(1)
-          .maybeSingle();
-        if (sub) {
+        // L'abonnement vit sur UN seul bureau de la compagnie — un employé
+        // d'un bureau secondaire ne peut pas lire la sub du bureau principal
+        // (RLS). /billing/current la résout sur tout le company_group côté
+        // serveur (service role), donc on passe par l'API.
+        const { subscription } = await fetchCurrentBilling();
+        if (subscription && ['active', 'trialing'].includes(subscription.status)) {
           setHasSubscription(true);
           setAccessBlockedReason(null);
         } else {
@@ -495,7 +494,7 @@ export default function App() {
           setAccessBlockedReason('no_subscription');
         }
       } catch {
-        // If subscriptions table doesn't exist, treat as having a subscription (don't block)
+        // API indisponible → on ne bloque pas l'accès (fail-open, comme avant)
         setHasSubscription(true);
         setAccessBlockedReason(null);
       }

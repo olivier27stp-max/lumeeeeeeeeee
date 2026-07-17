@@ -230,6 +230,8 @@ export async function setExtraSeats(count: number): Promise<{ message: string; e
 
 export interface OfficeUsage {
   included: number;
+  /** Bureaux réels de la compagnie (orgs dont le owner est propriétaire). */
+  used: number;
   extras_charged: number;
   extra_price_cents: number;
   currency: string;

@@ -96,6 +96,29 @@ export async function resolveOrgId(client: SupabaseClient) {
   return String(membership?.org_id || '') || null;
 }
 
+/**
+ * Tous les bureaux (orgs) de la compagnie d'un org, via company_group_id.
+ * L'abonnement vit sur UN bureau ; toute vérification de droits (plan, sièges,
+ * bureaux) doit chercher sur l'ensemble du groupe. Retombe sur [orgId] si le
+ * groupe n'existe pas (migration pas posée, org orpheline).
+ */
+export async function companyOrgIds(admin: SupabaseClient, orgId: string): Promise<string[]> {
+  try {
+    const { data: org } = await admin
+      .from('orgs')
+      .select('company_group_id')
+      .eq('id', orgId)
+      .maybeSingle();
+    const gid = (org as any)?.company_group_id;
+    if (!gid) return [orgId];
+    const { data } = await admin.from('orgs').select('id').eq('company_group_id', gid);
+    const ids = (data || []).map((o: any) => String(o.id));
+    return ids.length ? ids : [orgId];
+  } catch {
+    return [orgId];
+  }
+}
+
 export async function requireAuthedClient(req: express.Request, res: express.Response) {
   const authorizationHeader = req.header('authorization');
   if (!authorizationHeader) {

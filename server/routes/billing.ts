@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import Stripe from 'stripe';
 import { validate } from '../lib/validation';
-import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, findUserByEmail } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, findUserByEmail, companyOrgIds } from '../lib/supabase';
 
 const router = Router();
 
@@ -71,12 +71,16 @@ router.get('/billing/current', async (req, res) => {
 
     const admin = getServiceClient();
 
+    // L'abonnement vit sur un seul bureau de la compagnie — on cherche sur
+    // tout le company_group pour que les bureaux secondaires le voient.
+    const orgIds = await companyOrgIds(admin, auth.orgId);
+
     // Fetch subscription and billing_profile in parallel
     const [subRes, profileRes] = await Promise.all([
       admin
         .from('subscriptions')
         .select('*')
-        .eq('org_id', auth.orgId)
+        .in('org_id', orgIds)
         // past_due included: the Settings billing tab has dedicated past-due UI
         // (fix-payment via the portal). Excluding it made a past_due org look
         // like "no subscription" and pushed them to buy a SECOND plan.
@@ -574,8 +578,10 @@ router.post('/billing/cancel', async (req, res) => {
     const { data: subRow, error: subFetchErr } = await admin
       .from('subscriptions')
       .select('id, stripe_subscription_id, status')
-      .eq('org_id', auth.orgId)
+      .in('org_id', await companyOrgIds(admin, auth.orgId))
       .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (subFetchErr) {
@@ -656,12 +662,14 @@ router.post('/billing/change-plan', validate(changePlanSchema), async (req, res)
       .maybeSingle();
     if (!targetPlan) return res.status(404).json({ error: 'Plan not found.' });
 
-    // Fetch current sub
+    // Fetch current sub (sur tout le company_group)
     const { data: subRow } = await admin
       .from('subscriptions')
       .select('id, plan_id, interval, currency, stripe_subscription_id, status')
-      .eq('org_id', auth.orgId)
+      .in('org_id', await companyOrgIds(admin, auth.orgId))
       .in('status', ['active', 'trialing'])
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (!subRow) return res.status(404).json({ error: 'No active subscription found.' });
 
@@ -986,8 +994,10 @@ router.post('/billing/cancel-scheduled-change', async (req, res) => {
     const { data: subRow } = await admin
       .from('subscriptions')
       .select('id, stripe_subscription_id, scheduled_plan_id')
-      .eq('org_id', auth.orgId)
+      .in('org_id', await companyOrgIds(admin, auth.orgId))
       .in('status', ['active', 'trialing'])
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (!subRow) return res.status(404).json({ error: 'No active subscription found.' });
     if (!subRow.scheduled_plan_id) {
@@ -1035,11 +1045,18 @@ router.get('/billing/seats', async (req, res) => {
 
     const admin = getServiceClient();
 
+    // Abonnement + sièges résolus au niveau de la compagnie : la sub vit sur
+    // un seul bureau, et les sièges = utilisateurs DISTINCTS de tous les
+    // bureaux (sinon un plan de 20 sièges en donnerait 20 par bureau).
+    const orgIds = await companyOrgIds(admin, auth.orgId);
+
     const { data: subRow } = await admin
       .from('subscriptions')
       .select('id, plan_id, currency, extra_seats')
-      .eq('org_id', auth.orgId)
+      .in('org_id', orgIds)
       .in('status', ['active', 'trialing'])
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (!subRow) {
@@ -1052,11 +1069,12 @@ router.get('/billing/seats', async (req, res) => {
       .eq('id', subRow.plan_id)
       .maybeSingle();
 
-    const { count: usedCount } = await admin
+    const { data: memberRows } = await admin
       .from('memberships')
-      .select('user_id', { count: 'exact', head: true })
-      .eq('org_id', auth.orgId)
+      .select('user_id')
+      .in('org_id', orgIds)
       .or('status.is.null,status.eq.active');
+    const usedCount = new Set((memberRows || []).map((m) => m.user_id)).size;
 
     const currency = (subRow.currency || 'CAD').toUpperCase();
     const extraPrice = currency === 'USD'
@@ -1101,8 +1119,10 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
     const { data: subRow } = await admin
       .from('subscriptions')
       .select('id, plan_id, currency, interval, stripe_subscription_id, stripe_seat_item_id, extra_seats')
-      .eq('org_id', auth.orgId)
+      .in('org_id', await companyOrgIds(admin, auth.orgId))
       .in('status', ['active', 'trialing'])
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (!subRow) return res.status(404).json({ error: 'No active subscription found.' });
 
@@ -1232,8 +1252,9 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
 });
 
 // ─── GET /billing/offices — Included offices vs extras billed ──
-// Returns { included, extras_charged, extra_price_cents, currency }
-// Offices have no usage entity (unlike seats); extras are a manual purchase.
+// Returns { included, used, extras_charged, extra_price_cents, currency }
+// `used` = real offices of the company (orgs owned by this office's owner) —
+// the same definition create-office enforces its limit against.
 
 router.get('/billing/offices', async (req, res) => {
   try {
@@ -1242,15 +1263,21 @@ router.get('/billing/offices', async (req, res) => {
 
     const admin = getServiceClient();
 
+    // Bureaux réels = orgs du company_group ; abonnement cherché sur le groupe
+    // (les bureaux secondaires n'ont pas de ligne subscriptions).
+    const orgIds = await companyOrgIds(admin, auth.orgId);
+
     const { data: subRow } = await admin
       .from('subscriptions')
       .select('id, plan_id, currency, extra_offices')
-      .eq('org_id', auth.orgId)
+      .in('org_id', orgIds)
       .in('status', ['active', 'trialing'])
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (!subRow) {
-      return res.json({ included: 0, extras_charged: 0, extra_price_cents: 0, currency: 'USD' });
+      return res.json({ included: 0, used: 0, extras_charged: 0, extra_price_cents: 0, currency: 'USD' });
     }
 
     const { data: plan } = await admin
@@ -1259,6 +1286,8 @@ router.get('/billing/offices', async (req, res) => {
       .eq('id', subRow.plan_id)
       .maybeSingle();
 
+    const used = Math.max(1, orgIds.length);
+
     const currency = (subRow.currency || 'CAD').toUpperCase();
     const extraPrice = currency === 'USD'
       ? plan?.extra_office_price_usd ?? 0
@@ -1266,6 +1295,7 @@ router.get('/billing/offices', async (req, res) => {
 
     return res.json({
       included: plan?.included_offices ?? 0,
+      used,
       extras_charged: subRow.extra_offices ?? 0,
       extra_price_cents: extraPrice,
       currency,
@@ -1300,8 +1330,10 @@ router.post('/billing/offices', validate(setOfficesSchema), async (req, res) => 
     const { data: subRow } = await admin
       .from('subscriptions')
       .select('id, plan_id, currency, interval, stripe_subscription_id, stripe_office_item_id, extra_offices')
-      .eq('org_id', auth.orgId)
+      .in('org_id', await companyOrgIds(admin, auth.orgId))
       .in('status', ['active', 'trialing'])
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (!subRow) return res.status(404).json({ error: 'No active subscription found.' });
 
@@ -1413,7 +1445,7 @@ router.post('/billing/customer-portal', async (req, res) => {
     const { data: subRow } = await admin
       .from('subscriptions')
       .select('stripe_customer_id')
-      .eq('org_id', auth.orgId)
+      .in('org_id', await companyOrgIds(admin, auth.orgId))
       .in('status', ['active', 'trialing', 'past_due'])
       .order('created_at', { ascending: false })
       .limit(1)
@@ -1846,12 +1878,12 @@ router.post('/billing/resend-receipt', async (req, res) => {
       return res.status(400).json({ error: 'subscription_id is required.' });
     }
 
-    // Verify subscription belongs to the org
+    // Verify subscription belongs to the company (any office of the group)
     const { data: sub } = await admin
       .from('subscriptions')
       .select('id')
       .eq('id', subscription_id)
-      .eq('org_id', auth.orgId)
+      .in('org_id', await companyOrgIds(admin, auth.orgId))
       .maybeSingle();
 
     if (!sub) {

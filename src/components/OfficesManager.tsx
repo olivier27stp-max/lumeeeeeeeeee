@@ -74,7 +74,9 @@ export default function OfficesManager({ onChange }: OfficesManagerProps) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[13px] font-semibold text-text-primary">
-            {totalOffices} {officeWord(totalOffices)}
+            {usage.used} / {totalOffices} {isFr
+              ? `${officeWord(totalOffices)} utilisé${totalOffices === 1 ? '' : 's'}`
+              : `${officeWord(totalOffices)} used`}
             {draft > 0 && (
               <span className="font-normal text-text-secondary">
                 {' '}· {usage.included} {isFr ? 'inclus' : 'included'} + {draft} {isFr ? 'en plus' : 'extra'}
@@ -90,6 +92,13 @@ export default function OfficesManager({ onChange }: OfficesManagerProps) {
                 ? `${usage.included} ${officeWord(usage.included)} inclus.`
                 : `${usage.included} ${officeWord(usage.included)} included.`)}
           </p>
+          {usage.used > totalOffices && (
+            <p className="text-[12px] text-amber-600 font-medium mt-0.5">
+              {isFr
+                ? `${usage.used - totalOffices} ${officeWord(usage.used - totalOffices)} au-delà de votre limite.`
+                : `${usage.used - totalOffices} ${officeWord(usage.used - totalOffices)} over your limit.`}
+            </p>
+          )}
         </div>
       </div>
 
