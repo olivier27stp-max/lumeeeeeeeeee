@@ -222,6 +222,19 @@ export async function executeSendSms(
   const to = config.to ? resolveTemplate(config.to, vars) : vars.client_phone;
   if (!to) return { success: false, error: 'No recipient phone' };
 
+  // CASL compliance — manual sends already blocked opted-out recipients, but
+  // automations bypassed the list entirely and kept texting after a STOP.
+  const optOutPhone = normalizeE164(to);
+  const { data: optOut } = await ctx.supabase
+    .from('sms_opt_outs')
+    .select('id')
+    .eq('org_id', ctx.orgId)
+    .eq('phone', optOutPhone)
+    .maybeSingle();
+  if (optOut) {
+    return { success: false, error: `Recipient ${optOutPhone} has opted out of SMS (STOP)` };
+  }
+
   const body = resolveTemplate(config.body, vars);
 
   try {
