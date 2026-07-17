@@ -7,6 +7,8 @@ import {
   PIN_STATUS_CONFIG,
   createLeadPinElement,
   createLeadPinPopupHTML,
+  popupCloseBtnId,
+  popupStatusDotId,
 } from './lead-pin';
 import { type ZoneData, getZoneColor } from './zone-types';
 import { getRepAvatar } from '../../lib/constants/avatars';
@@ -597,16 +599,15 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
     const el = createLeadPinElement(pin.status);
     const editId = `e-${pin.id}`;
     const delId = `d-${pin.id}`;
-    const crmId = `crm-${pin.id}`;
     const clientId = `client-${pin.id}`;
 
     const popup = new mapboxgl.Popup({
-      offset: 18, closeButton: false, closeOnClick: true, maxWidth: '280px', className: 'fp-popup', anchor: 'bottom',
+      offset: 18, closeButton: false, closeOnClick: true, maxWidth: '320px', className: 'fp-popup', anchor: 'bottom',
     });
 
     function refreshPopupHTML() {
       const current = markersRef.current.get(pin.id)?.pin || pin;
-      popup.setHTML(createLeadPinPopupHTML(current, editId, delId, crmId, fr ? 'fr' : 'en', clientId));
+      popup.setHTML(createLeadPinPopupHTML(current, editId, delId, fr ? 'fr' : 'en', clientId));
     }
 
     popup.on('open', () => {
@@ -639,19 +640,27 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
               requestPinDelete(current);
             };
           }
-          const crmBtn = document.getElementById(crmId);
-          if (crmBtn) {
-            crmBtn.onclick = (e) => {
+          const closeBtn = document.getElementById(popupCloseBtnId(pin.id));
+          if (closeBtn) {
+            closeBtn.onclick = (e) => {
               e.stopPropagation();
-              const current = markersRef.current.get(pin.id)?.pin || pin;
               popup.remove();
-              if (current.status === 'closed_won' && onPinClosedWonRef.current) {
-                onPinClosedWonRef.current(current);
-              } else if (current.status === 'lead' && onPinLeadRef.current) {
-                onPinLeadRef.current(current);
-              }
             };
           }
+          // Pastilles de statut — un tap change le statut (même mécanique que le
+          // modal Modifier). Re-taper Vendu/Lead sans job/devis relance le flow CRM.
+          (Object.keys(PIN_STATUS_CONFIG) as PinStatus[]).forEach((st) => {
+            const dot = document.getElementById(popupStatusDotId(pin.id, st));
+            if (dot) {
+              dot.onclick = (e) => {
+                e.stopPropagation();
+                const current = markersRef.current.get(pin.id)?.pin || pin;
+                if (current.status === st && st !== 'closed_won' && st !== 'lead') return;
+                popup.remove();
+                applyPinStatus(current, st);
+              };
+            }
+          });
           const clientBtn = document.getElementById(clientId);
           if (clientBtn) {
             clientBtn.onclick = (e) => {
@@ -1476,14 +1485,19 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
     >
       <style>{`
         .fp-popup .mapboxgl-popup-content {
-          background: rgba(12,12,20,.94) !important;
-          backdrop-filter: blur(20px) saturate(1.4) !important;
-          border: 1px solid rgba(255,255,255,.07) !important;
-          border-radius: 16px !important;
-          padding: 16px 18px !important;
-          box-shadow: 0 12px 40px rgba(0,0,0,.55) !important;
+          background: #ffffff !important;
+          border: 1px solid rgba(20,24,40,.09) !important;
+          border-radius: 18px !important;
+          padding: 14px 14px 12px !important;
+          box-shadow: 0 22px 55px rgba(20,25,50,.2), 0 4px 14px rgba(20,25,50,.12) !important;
         }
-        .fp-popup .mapboxgl-popup-tip { border-top-color: rgba(12,12,20,.94) !important; }
+        .fp-popup .mapboxgl-popup-tip { border-top-color: #ffffff !important; }
+        .fp-popup .ppq:hover, .fp-popup .ppx:hover { background: #e5e7ee !important; }
+        .fp-popup .ppcc:hover { background: #eae6dc !important; }
+        .fp-popup .pped:hover { background: #2b2f40 !important; border-color: #2b2f40 !important; }
+        .fp-popup .ppdel:hover { background: #e5e7ee !important; color: #dc2626 !important; }
+        .fp-popup .ppsd { transition: opacity .15s, transform .15s; }
+        .fp-popup .ppsd:hover { opacity: .85 !important; }
         .mapboxgl-ctrl-group {
           background: rgba(12,12,20,.85) !important; backdrop-filter: blur(10px) !important;
           border: 1px solid rgba(255,255,255,.07) !important; border-radius: 12px !important; overflow: hidden;

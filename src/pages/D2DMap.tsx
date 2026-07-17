@@ -58,6 +58,10 @@ function apiPinToLeadPin(pin: FieldPinLight): LeadPinData {
     lead_id: pin.lead_id ?? null,
     job_id: pin.job_id ?? null,
     quote_id: pin.quote_id ?? null,
+    assigned_user_id: pin.assigned_user_id ?? null,
+    assigned_user_name: pin.assigned_user_name ?? null,
+    assigned_user_avatar: pin.assigned_user_avatar ?? null,
+    created_at: pin.created_at ?? null,
   };
 }
 

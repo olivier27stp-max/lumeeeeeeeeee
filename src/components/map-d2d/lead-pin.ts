@@ -31,6 +31,12 @@ export interface LeadPinData {
   lume_job_id?: string | null;
   lume_status?: 'not_created' | 'creating' | 'created' | 'failed';
   lume_error?: string | null;
+  /** Rep qui a placé le pin (field_house_profiles.assigned_user_id, défaut = créateur) */
+  assigned_user_id?: string | null;
+  assigned_user_name?: string | null;
+  assigned_user_avatar?: string | null;
+  /** Date de placement (field_house_profiles.created_at) */
+  created_at?: string | null;
 }
 
 export interface PinStatusConfig {
@@ -140,106 +146,189 @@ export function createLeadPinElement(status: PinStatus): HTMLDivElement {
   return el;
 }
 
+// ---------------------------------------------------------------------------
+// Popup — refonte light (blanc, palette neutre beige/gris)
+// ---------------------------------------------------------------------------
+
+/** IDs DOM des contrôles internes de la popup — map-container s'y branche. */
+export const popupCloseBtnId = (pinId: string) => `ppx-${pinId}`;
+export const popupStatusDotId = (pinId: string, status: PinStatus) => `ppst-${pinId}-${status}`;
+
+const esc = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+function icStroke(paths: string, size = 12, sw = 2): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+}
+
+const IC = {
+  pin: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+  note: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+  phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+  sms: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3 7 12 13 21 7"/>',
+  nav: '<polygon points="3 11 22 2 13 21 11 13 3 11"/>',
+  user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  chevron: '<polyline points="9 18 15 12 9 6"/>',
+  pencil: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+  trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+};
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?';
+}
+
+function timeAgoLabel(iso: string, fr: boolean): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const mins = Math.floor((Date.now() - then) / 60000);
+  if (mins < 1) return fr ? "à l'instant" : 'just now';
+  if (mins < 60) return fr ? `il y a ${mins} min` : `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return fr ? `il y a ${hours} h` : `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return fr ? 'hier' : 'yesterday';
+  if (days < 7) return fr ? `il y a ${days} j` : `${days} d ago`;
+  return new Date(iso).toLocaleDateString(fr ? 'fr-CA' : 'en-CA', { day: 'numeric', month: 'short' });
+}
+
 export function createLeadPinPopupHTML(
   pin: LeadPinData,
   editBtnId: string,
   deleteBtnId: string,
-  crmBtnId?: string,
   lang: 'fr' | 'en' = 'fr',
   clientBtnId?: string,
 ): string {
-  const cfg = PIN_STATUS_CONFIG[pin.status];
   const fr = lang === 'fr';
   const L = {
-    createJob: fr ? '+ Créer une Job' : '+ Create Job',
-    jobLinked: fr ? '✓ Job liée' : '✓ Job linked',
-    createQuote: fr ? '+ Créer un Devis' : '+ Create Quote',
-    quoteLinked: fr ? '✓ Devis lié' : '✓ Quote linked',
-    leadActions: fr ? '+ Devis ou Contrat' : '+ Quote or Agreement',
-    edit: fr ? '✎ Modifier' : '✎ Edit',
-    openClient: fr ? '→ Voir la fiche client' : '→ Open client',
+    close: fr ? 'Fermer' : 'Close',
+    call: fr ? 'Appeler' : 'Call',
+    text: fr ? 'Texto' : 'Text',
+    email: fr ? 'Courriel' : 'Email',
+    directions: fr ? 'Itinéraire' : 'Directions',
+    noPhone: fr ? 'Aucun numéro' : 'No phone number',
+    noEmail: fr ? 'Aucun courriel' : 'No email',
+    status: fr ? 'Statut' : 'Status',
+    client: 'Client',
+    openHub: fr ? 'Ouvrir le hub client' : 'Open client hub',
+    noClient: fr ? 'Aucun client lié' : 'No linked client',
+    noClientSub: fr
+      ? 'Une job ou un devis créé depuis ce pin liera le client automatiquement.'
+      : 'Creating a job or quote from this pin links the client automatically.',
+    placedBy: fr ? 'Placé par' : 'Placed by',
+    editPin: fr ? 'Modifier le pin' : 'Edit pin',
+    deletePin: fr ? 'Supprimer le pin' : 'Delete pin',
   };
 
-  // "Open client" — shown whenever a client can be resolved (directly, or via
-  // the linked job/lead). Handler in map-container resolves the id and navigates.
-  const hasClient = !!(pin.client_id || pin.lead_id || pin.job_id || pin.lume_job_id);
-  const clientRow = clientBtnId && hasClient ? `
-    <button id="${clientBtnId}" style="
-      width:100%;padding:7px 0;border-radius:8px;margin-top:6px;
-      border:1px solid rgba(96,165,250,.3);background:rgba(96,165,250,.1);color:#60a5fa;
-      font-size:11px;font-weight:600;cursor:pointer;
-    ">${L.openClient}</button>
-  ` : '';
+  // Adresse : la rue en titre, le reste (ville, province) en sous-ligne
+  const addr = (pin.address || '').trim();
+  const commaAt = addr.indexOf(',');
+  const street = commaAt > 0 ? addr.slice(0, commaAt).trim() : addr;
+  const locality = commaAt > 0 ? addr.slice(commaAt + 1).trim() : '';
+  const title = street || pin.name || (fr ? 'Pin sans adresse' : 'Pin without address');
 
-  // CRM action button based on pin status
-  let crmRow = '';
-  if (crmBtnId) {
-    if (pin.status === 'closed_won' && !pin.job_id) {
-      crmRow = `
-        <button id="${crmBtnId}" style="
-          width:100%;padding:7px 0;border-radius:8px;margin-top:6px;
-          border:1px solid rgba(34,197,94,.3);background:rgba(34,197,94,.1);color:#4ade80;
-          font-size:11px;font-weight:600;cursor:pointer;
-        ">${L.createJob}</button>
-      `;
-    } else if (pin.status === 'closed_won' && pin.job_id) {
-      crmRow = `
-        <div style="margin-top:6px;padding:5px 8px;border-radius:8px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.15);font-size:10px;color:rgba(34,197,94,.7);text-align:center;">
-          ${L.jobLinked}
-        </div>
-      `;
-    } else if (pin.status === 'lead' && !pin.job_id && !pin.quote_id) {
-      crmRow = `
-        <button id="${crmBtnId}" style="
-          width:100%;padding:7px 0;border-radius:8px;margin-top:6px;
-          border:1px solid rgba(168,85,247,.3);background:rgba(168,85,247,.1);color:#C084FC;
-          font-size:11px;font-weight:600;cursor:pointer;
-        ">${L.leadActions}</button>
-      `;
-    } else if (pin.status === 'lead' && pin.quote_id) {
-      crmRow = `
-        <div style="margin-top:6px;padding:5px 8px;border-radius:8px;background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.15);font-size:10px;color:rgba(192,132,252,.8);text-align:center;">
-          ${L.quoteLinked}
-        </div>
-      `;
-    } else if (pin.status === 'appointment' && pin.quote_id) {
-      crmRow = `
-        <div style="margin-top:6px;padding:5px 8px;border-radius:8px;background:rgba(107,114,128,.08);border:1px solid rgba(107,114,128,.15);font-size:10px;color:rgba(107,114,128,.7);text-align:center;">
-          ${L.quoteLinked}
-        </div>
-      `;
-    }
+  const telDigits = pin.phone ? pin.phone.replace(/[^\d+]/g, '') : '';
+  const telHref = telDigits ? `tel:${telDigits}` : null;
+  const smsHref = telDigits ? `sms:${telDigits}` : null;
+  const mailHref = pin.email ? `mailto:${esc(pin.email)}` : null;
+  const mapsHref = addr ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}` : null;
+
+  const qBase = 'flex:1;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#f1f2f6;border:1px solid #e3e5ec;color:#3a4257;text-decoration:none;';
+  const quick = (href: string | null, lbl: string, disabledLbl: string, icon: string, external = false) =>
+    href
+      ? `<a href="${href}"${external ? ' target="_blank" rel="noopener"' : ''} class="ppq" title="${lbl}" aria-label="${lbl}" style="${qBase}cursor:pointer;">${icStroke(icon, 14)}</a>`
+      : `<span title="${disabledLbl}" aria-disabled="true" style="${qBase}opacity:.3;">${icStroke(icon, 14)}</span>`;
+
+  const label = (txt: string) =>
+    `<div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:rgba(26,29,41,.38);margin:14px 0 7px;">${txt}</div>`;
+
+  // Rangée des 7 statuts — un tap change le statut (bindé dans map-container)
+  const statusDots = (Object.keys(PIN_STATUS_CONFIG) as PinStatus[]).map((st) => {
+    const c = PIN_STATUS_CONFIG[st];
+    const active = st === pin.status;
+    return `<button type="button" id="${popupStatusDotId(pin.id, st)}" class="ppsd" title="${c.label}" aria-label="${c.label}" aria-pressed="${active}" style="width:30px;height:30px;border-radius:50%;flex:none;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;background:linear-gradient(135deg,${c.gradientFrom},${c.gradientTo});border:2px solid ${active ? '#fff' : 'transparent'};${active ? `box-shadow:0 0 0 2px ${c.color},0 4px 10px rgba(20,25,50,.18);transform:scale(1.08);opacity:1;` : 'opacity:.4;'}">${svgIcon(c.iconPaths, 12, true)}</button>`;
+  }).join('');
+
+  // Bloc client — le pin appartient au client ; la carte ouvre son hub.
+  // pin.name retombe parfois sur l'adresse ou un libellé de placement — dans
+  // ces cas on ne le traite pas comme un nom de client.
+  const hasClient = !!(pin.client_id || pin.lead_id || pin.job_id || pin.lume_job_id);
+  const rawName = (pin.name || '').trim();
+  const placeholderNames = ['Pin', 'Nouveau lead', 'New lead'];
+  const isRealName = !!rawName && rawName !== title && rawName !== addr && !placeholderNames.includes(rawName);
+  const clientName = isRealName ? rawName : '';
+  const cardInner = (nm: string, sub: string, chevron: boolean) => `
+    <span style="width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;color:#fff;background:#2b2f3a;">${esc(initials(nm))}</span>
+    <span style="flex:1;min-width:0;">
+      <b style="display:block;font-size:12.5px;font-weight:650;color:#1a1d29;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(nm)}</b>
+      <span style="display:block;font-size:10.5px;color:rgba(26,29,41,.55);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sub}</span>
+    </span>
+    ${chevron ? `<span style="color:rgba(26,29,41,.45);flex:none;display:flex;">${icStroke(IC.chevron, 14, 2.5)}</span>` : ''}`;
+  const cardBase = 'width:100%;margin-top:4px;border-radius:12px;padding:10px 11px;display:flex;align-items:center;gap:10px;text-align:left;background:#f2efe9;border:1px solid #e1dccf;';
+  let clientBlock: string;
+  if (hasClient && clientBtnId) {
+    const sub = esc(pin.phone || pin.email || '') || L.openHub;
+    clientBlock = `<button type="button" id="${clientBtnId}" class="ppcc" title="${L.openHub}" style="${cardBase}cursor:pointer;">${cardInner(clientName || 'Client', sub, true)}</button>`;
+  } else if (clientName) {
+    clientBlock = `<div style="${cardBase}">${cardInner(clientName, esc(pin.phone || pin.email || ''), false)}</div>`;
+  } else {
+    clientBlock = `
+      <div style="width:100%;margin-top:4px;border-radius:12px;padding:11px 12px;display:flex;align-items:flex-start;gap:10px;border:1px dashed rgba(20,24,40,.22);">
+        <span style="width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;background:#f1f2f6;border:1px dashed #b9bdc9;color:#8b91a3;">${icStroke(IC.user, 14)}</span>
+        <span style="min-width:0;">
+          <b style="display:block;font-size:12.5px;font-weight:650;color:#1a1d29;">${L.noClient}</b>
+          <span style="display:block;font-size:10.5px;color:rgba(26,29,41,.48);margin-top:1px;line-height:1.45;">${L.noClientSub}</span>
+        </span>
+      </div>`;
+  }
+
+  // « Placé par » — chaque pin appartient au rep qui l'a posé (assigned_user_id)
+  let placedBy = '';
+  if (pin.assigned_user_name) {
+    const av = pin.assigned_user_avatar
+      ? `<img src="${esc(pin.assigned_user_avatar)}" alt="" style="width:22px;height:22px;border-radius:50%;flex:none;object-fit:cover;border:1px solid #dfe2e9;"/>`
+      : `<span style="width:22px;height:22px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff;background:#6b7280;">${esc(initials(pin.assigned_user_name))}</span>`;
+    const when = pin.created_at ? timeAgoLabel(pin.created_at, fr) : '';
+    placedBy = `
+      <div style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:11px;color:rgba(26,29,41,.55);">
+        ${av}
+        <span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${L.placedBy} <b style="color:#1a1d29;font-weight:650;">${esc(pin.assigned_user_name)}</b></span>
+        ${when ? `<span style="margin-left:auto;flex:none;color:rgba(26,29,41,.4);font-size:10.5px;">${when}</span>` : ''}
+      </div>`;
   }
 
   return `
-    <div style="font-family:Inter,system-ui,sans-serif;min-width:210px;">
-      <div style="margin-bottom:10px;">
-        <span style="
-          display:inline-flex;align-items:center;gap:5px;
-          padding:3px 10px;border-radius:999px;
-          font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
-          background:${cfg.color}15;color:${cfg.color};border:1px solid ${cfg.color}30;
-        ">${svgIcon(cfg.iconPaths, 10, true)} ${cfg.label}</span>
+    <div style="font-family:Inter,system-ui,sans-serif;width:290px;max-width:100%;color:#1a1d29;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+        <div style="min-width:0;">
+          <div style="font-size:15.5px;font-weight:700;letter-spacing:-.01em;line-height:1.25;">${esc(title)}</div>
+          ${locality ? `<div style="display:flex;align-items:center;gap:5px;margin-top:3px;font-size:11.5px;color:rgba(26,29,41,.55);"><span style="display:flex;color:rgba(26,29,41,.35);">${icStroke(IC.pin, 11)}</span><span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(locality)}</span></div>` : ''}
+        </div>
+        <button type="button" id="${popupCloseBtnId(pin.id)}" class="ppx" title="${L.close}" aria-label="${L.close}" style="width:26px;height:26px;border-radius:8px;flex:none;display:flex;align-items:center;justify-content:center;background:#f1f2f6;border:1px solid #e3e5ec;color:#5d6373;cursor:pointer;padding:0;">${icStroke(IC.x, 12, 2.5)}</button>
       </div>
-      <div style="font-size:14px;font-weight:600;color:#fff;">${pin.name}</div>
-      ${pin.phone ? `<div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:4px;">📞 <a href="tel:${pin.phone}" class="md:hidden" style="color:#60a5fa;text-decoration:none;">${pin.phone}</a><span class="hidden md:inline">${pin.phone}</span></div>` : ''}
-      ${pin.email ? `<div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px;">✉️ <a href="mailto:${pin.email}" style="color:#60a5fa;text-decoration:none;">${pin.email}</a></div>` : ''}
-      <div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:5px;">📍 ${pin.address}</div>
-      ${pin.note ? `<div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:6px;padding:6px 8px;background:rgba(255,255,255,.04);border-radius:6px;border:1px solid rgba(255,255,255,.06);line-height:1.4;">📝 ${pin.note}</div>` : ''}
-      <div style="margin-top:12px;display:flex;gap:6px;">
-        <button id="${editBtnId}" style="
-          flex:1;padding:7px 0;border-radius:8px;
-          border:1px solid ${cfg.color}30;background:${cfg.color}12;color:${cfg.color};
-          font-size:11px;font-weight:600;cursor:pointer;
-        ">${L.edit}</button>
-        <button id="${deleteBtnId}" style="
-          padding:7px 12px;border-radius:8px;
-          border:1px solid rgba(239,68,68,.25);background:rgba(239,68,68,.08);color:#f87171;
-          font-size:11px;font-weight:600;cursor:pointer;
-        ">✕</button>
+
+      ${pin.note ? `<div style="margin-top:10px;padding:9px 11px;border-radius:10px;background:#f4f5f8;border:1px solid #e7e9ef;display:flex;gap:8px;font-size:11.5px;line-height:1.45;color:rgba(26,29,41,.72);"><span style="flex:none;margin-top:2px;color:rgba(26,29,41,.35);display:flex;">${icStroke(IC.note, 12)}</span><span>${esc(pin.note)}</span></div>` : ''}
+
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        ${quick(telHref, L.call, L.noPhone, IC.phone)}
+        ${quick(smsHref, L.text, L.noPhone, IC.sms)}
+        ${quick(mailHref, L.email, L.noEmail, IC.mail)}
+        ${quick(mapsHref, L.directions, L.directions, IC.nav, true)}
       </div>
-      ${crmRow}
-      ${clientRow}
+
+      ${label(L.status)}
+      <div style="display:flex;justify-content:space-between;gap:4px;">${statusDots}</div>
+
+      ${label(L.client)}
+      ${clientBlock}
+      ${placedBy}
+
+      <div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid rgba(20,24,40,.08);">
+        <button type="button" id="${editBtnId}" class="pped" style="flex:1;padding:8px 0;border-radius:9px;cursor:pointer;background:#1a1d29;border:1px solid #1a1d29;color:#fff;font-size:11.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;">${icStroke(IC.pencil, 12)}${L.editPin}</button>
+        <button type="button" id="${deleteBtnId}" class="ppdel" title="${L.deletePin}" aria-label="${L.deletePin}" style="width:38px;border-radius:9px;cursor:pointer;flex:none;background:#eceef2;border:1px solid #dfe2e9;color:#5d6373;display:flex;align-items:center;justify-content:center;">${icStroke(IC.trash, 13)}</button>
+      </div>
     </div>
   `;
 }

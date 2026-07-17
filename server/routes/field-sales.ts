@@ -1160,11 +1160,25 @@ router.get('/pins', async (req: Request, res: Response) => {
       // Filter out soft-deleted houses to prevent ghost pins from appearing
       const { data: pins, error } = await admin
         .from('field_pins')
-        .select('id, house_id, status, has_note, pin_color, field_house_profiles!inner(lat, lng, address, metadata, current_status, client_id, lead_id, quote_id, job_id, assigned_user_id, territory_id, deleted_at)')
+        .select('id, house_id, status, has_note, pin_color, field_house_profiles!inner(lat, lng, address, metadata, current_status, client_id, lead_id, quote_id, job_id, assigned_user_id, territory_id, created_at, deleted_at)')
         .eq('org_id', auth.orgId)
         .is('field_house_profiles.deleted_at', null);
 
       if (error) throw error;
+
+      // « Placé par » — resolve the assigned rep's display name + avatar so the
+      // map popup can show them without extra client-side round trips.
+      const repIds = [...new Set((pins ?? []).map((p: any) => p.field_house_profiles?.assigned_user_id).filter(Boolean))];
+      const repNameMap: Record<string, string> = {};
+      const repAvatarMap: Record<string, string> = {};
+      if (repIds.length > 0) {
+        const [{ data: members }, { data: profs }] = await Promise.all([
+          admin.from('memberships').select('user_id, full_name').eq('org_id', auth.orgId).in('user_id', repIds),
+          admin.from('profiles').select('id, avatar_url').in('id', repIds),
+        ]);
+        for (const m of members ?? []) if (m.full_name) repNameMap[m.user_id] = m.full_name;
+        for (const pr of profs ?? []) if (pr.avatar_url) repAvatarMap[pr.id] = pr.avatar_url;
+      }
 
       // Get latest note for each house that has_note
       const houseIdsWithNotes = (pins ?? []).filter((p: any) => p.has_note).map((p: any) => p.house_id);
@@ -1195,6 +1209,9 @@ router.get('/pins', async (req: Request, res: Response) => {
         customer_name: p.field_house_profiles?.metadata?.customer_name ?? null,
         address: p.field_house_profiles?.address ?? null,
         assigned_user_id: p.field_house_profiles?.assigned_user_id ?? null,
+        assigned_user_name: p.field_house_profiles?.assigned_user_id ? (repNameMap[p.field_house_profiles.assigned_user_id] ?? null) : null,
+        assigned_user_avatar: p.field_house_profiles?.assigned_user_id ? (repAvatarMap[p.field_house_profiles.assigned_user_id] ?? null) : null,
+        created_at: p.field_house_profiles?.created_at ?? null,
         territory_id: p.field_house_profiles?.territory_id ?? null,
         client_id: p.field_house_profiles?.client_id ?? null,
         lead_id: p.field_house_profiles?.lead_id ?? null,

@@ -134,6 +134,11 @@ export interface FieldPinLight {
   customer_name?: string | null;
   address?: string | null;
   assigned_user_id?: string | null;
+  /** « Placé par » — nom + avatar du rep assigné, résolus côté serveur */
+  assigned_user_name?: string | null;
+  assigned_user_avatar?: string | null;
+  /** Date de placement (field_house_profiles.created_at) */
+  created_at?: string | null;
   territory_id?: string | null;
   client_id?: string | null;
   lead_id?: string | null;
