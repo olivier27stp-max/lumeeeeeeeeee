@@ -46,6 +46,7 @@ COPY server ./server
 COPY src/lib/crypto.ts ./src/lib/crypto.ts
 COPY src/lib/stripeClient.ts ./src/lib/stripeClient.ts
 COPY src/lib/paypalClient.ts ./src/lib/paypalClient.ts
+COPY src/lib/permissions.ts ./src/lib/permissions.ts
 # `src/lib/supabaseAdmin.ts` is now a stub that throws if imported from
 # client code (real impl lives at `server/lib/supabaseAdmin.ts` for security
 # — commit c12b767). The stub exists so Railway/BuildKit cache layers that
