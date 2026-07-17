@@ -1,5 +1,7 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
+import { validate } from '../lib/validation';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 
 const router = Router();
@@ -75,7 +77,7 @@ const US_STATES: Array<[string, string, number]> = [
   ['AL', 'Alabama', 4], ['AK', 'Alaska', 0], ['AZ', 'Arizona', 5.6], ['AR', 'Arkansas', 6.5],
   ['CO', 'Colorado', 2.9], ['CT', 'Connecticut', 6.35], ['DE', 'Delaware', 0], ['GA', 'Georgia', 4],
   ['HI', 'Hawaii', 4], ['ID', 'Idaho', 6], ['IL', 'Illinois', 6.25], ['IN', 'Indiana', 7], ['IA', 'Iowa', 6],
-  ['KS', 'Kansas', 6.5], ['KY', 'Kentucky', 6], ['LA', 'Louisiana', 4.45], ['ME', 'Maine', 5.5],
+  ['KS', 'Kansas', 6.5], ['KY', 'Kentucky', 6], ['LA', 'Louisiana', 5], ['ME', 'Maine', 5.5],
   ['MD', 'Maryland', 6], ['MA', 'Massachusetts', 6.25], ['MI', 'Michigan', 6], ['MN', 'Minnesota', 6.875],
   ['MS', 'Mississippi', 7], ['MO', 'Missouri', 4.225], ['MT', 'Montana', 0], ['NE', 'Nebraska', 5.5],
   ['NV', 'Nevada', 6.85], ['NH', 'New Hampshire', 0], ['NJ', 'New Jersey', 6.625], ['NM', 'New Mexico', 4.875],
@@ -295,8 +297,30 @@ router.get('/taxes/collected', async (req, res) => {
   }
 });
 
+// ── Validation (Zod) ──
+const setupTaxSchema = z.object({
+  preset_key: z.string().trim().min(1, 'Preset is required.').max(20),
+  make_default: z.boolean().optional(),
+});
+
+const createTaxConfigSchema = z.object({
+  name: z.string().trim().min(1, 'Tax name is required.').max(120),
+  rate: z.number().min(0, 'Rate must be ≥ 0.').max(100, 'Rate must be ≤ 100.').optional(),
+  type: z.enum(['percentage', 'fixed']).optional(),
+  region: z.string().trim().max(20).optional(),
+  country: z.string().trim().max(5).optional(),
+  is_compound: z.boolean().optional(),
+});
+
+const updateTaxConfigSchema = z.object({
+  name: z.string().trim().min(1, 'Tax name is required.').max(120).optional(),
+  rate: z.number().min(0, 'Rate must be ≥ 0.').max(100, 'Rate must be ≤ 100.').optional(),
+  is_active: z.boolean().optional(),
+  registration_number: z.string().trim().max(60).nullable().optional(),
+});
+
 // ── POST /taxes/setup — setup taxes from a preset (e.g. "QC") ──
-router.post('/taxes/setup', async (req, res) => {
+router.post('/taxes/setup', validate(setupTaxSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
@@ -308,6 +332,20 @@ router.post('/taxes/setup', async (req, res) => {
     const { preset_key, make_default } = req.body;
     const preset = PRESETS[preset_key];
     if (!preset) return res.status(400).json({ error: 'Invalid preset key.' });
+
+    // Une seule région par code : l'UI filtre déjà, mais l'API acceptait les
+    // doublons (groupes et taxes dupliqués au rechargement). Le flux
+    // d'onboarding tolère le 409 (try/catch non bloquant).
+    const { data: existingGroup } = await admin
+      .from('tax_groups')
+      .select('id')
+      .eq('org_id', auth.orgId)
+      .eq('region', preset.region)
+      .limit(1)
+      .maybeSingle();
+    if (existingGroup) {
+      return res.status(409).json({ error: 'This tax region is already configured.' });
+    }
 
     // Create tax configs
     const configRows = preset.taxes.map(t => ({
@@ -358,7 +396,7 @@ router.post('/taxes/setup', async (req, res) => {
 });
 
 // ── POST /taxes/config — create custom tax and add to default group ──
-router.post('/taxes/config', async (req, res) => {
+router.post('/taxes/config', validate(createTaxConfigSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
@@ -368,7 +406,6 @@ router.post('/taxes/config', async (req, res) => {
     }
 
     const { name, rate, type, region, country, is_compound } = req.body;
-    if (!name) return res.status(400).json({ error: 'Tax name is required.' });
 
     // Create the tax config
     const { data: config, error } = await admin.from('tax_configs').insert({
@@ -405,7 +442,7 @@ router.post('/taxes/config', async (req, res) => {
 });
 
 // ── PUT /taxes/config/:id — update tax config ──
-router.put('/taxes/config/:id', async (req, res) => {
+router.put('/taxes/config/:id', validate(updateTaxConfigSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;

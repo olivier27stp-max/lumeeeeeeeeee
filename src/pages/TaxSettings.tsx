@@ -11,8 +11,8 @@ import {
   type TaxConfig, type TaxGroup, type TaxGroupItem, type TaxPreset,
 } from '../lib/taxApi';
 
-function formatMoney(cents: number, currency: string = 'CAD') {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency }).format(cents / 100);
+function formatMoney(cents: number, currency: string = 'CAD', locale: string = 'en-CA') {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(cents / 100);
 }
 
 // Example formats for Canadian registration numbers — typos here end up on
@@ -373,17 +373,17 @@ export default function TaxSettings() {
               <div className="bg-surface-secondary/50 rounded-lg p-4 space-y-1.5 text-[12px]">
                 <div className="flex justify-between">
                   <span className="text-text-secondary">{fr ? 'Sous-total' : 'Subtotal'}</span>
-                  <span className="tabular-nums font-medium text-text-primary">{formatMoney(previewSubtotal, currency)}</span>
+                  <span className="tabular-nums font-medium text-text-primary">{formatMoney(previewSubtotal, currency, fr ? 'fr-CA' : 'en-CA')}</span>
                 </div>
                 {previewTaxes.map((t, i) => (
                   <div key={i} className="flex justify-between">
                     <span className="text-text-tertiary">{t.name}</span>
-                    <span className="tabular-nums text-text-secondary">{formatMoney(t.amount, currency)}</span>
+                    <span className="tabular-nums text-text-secondary">{formatMoney(t.amount, currency, fr ? 'fr-CA' : 'en-CA')}</span>
                   </div>
                 ))}
                 <div className="flex justify-between pt-1.5 mt-1 border-t border-outline/50 font-semibold text-[13px]">
                   <span className="text-text-primary">{fr ? 'Total' : 'Total'}</span>
-                  <span className="tabular-nums text-text-primary">{formatMoney(previewTotal, currency)}</span>
+                  <span className="tabular-nums text-text-primary">{formatMoney(previewTotal, currency, fr ? 'fr-CA' : 'en-CA')}</span>
                 </div>
               </div>
             </div>
