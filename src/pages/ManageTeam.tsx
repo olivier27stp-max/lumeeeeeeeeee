@@ -49,7 +49,7 @@ import { getCurrentOrgId } from '../lib/orgApi';
 import { useCompany } from '../contexts/CompanyContext';
 import { fetchSeatUsage, fetchCurrentBilling, setExtraSeats } from '../lib/billingApi';
 import { fetchHourlyRates, setHourlyRate } from '../lib/teamMembersApi';
-import { setRepExperience } from '../lib/leaderboardApi';
+import { setRepExperience, setRepLeaderboardVisibility } from '../lib/leaderboardApi';
 import SeatChargeConfirmModal from '../components/SeatChargeConfirmModal';
 
 // ── Constants ────────────────────────────────────────────────────
@@ -142,6 +142,21 @@ export default function ManageTeam() {
       toast.success(isFr ? 'Catégorie enregistrée' : 'Category saved');
     } catch {
       setMembers((ms) => ms.map((m) => m.user_id === member.user_id ? { ...m, experience_level: prev } : m));
+      toast.error(isFr ? 'Échec de l\'enregistrement' : 'Failed to save');
+    }
+  };
+
+  // Affiche/masque un membre sur le leaderboard des ventes (défaut : visible).
+  const handleSaveLeaderboardVisibility = async (member: OrgMember, visible: boolean) => {
+    const prev = member.show_on_leaderboard;
+    setMembers((ms) => ms.map((m) => m.user_id === member.user_id ? { ...m, show_on_leaderboard: visible } : m));
+    try {
+      await setRepLeaderboardVisibility(member.user_id, visible);
+      toast.success(visible
+        ? (isFr ? 'Visible sur le leaderboard' : 'Visible on leaderboard')
+        : (isFr ? 'Masqué du leaderboard' : 'Hidden from leaderboard'));
+    } catch {
+      setMembers((ms) => ms.map((m) => m.user_id === member.user_id ? { ...m, show_on_leaderboard: prev } : m));
       toast.error(isFr ? 'Échec de l\'enregistrement' : 'Failed to save');
     }
   };
@@ -412,6 +427,7 @@ export default function ManageTeam() {
                 rate={rates[member.user_id] || 0}
                 onSaveRate={(c) => handleSaveRate(member, c)}
                 onSaveExperience={(lvl) => handleSaveExperience(member, lvl)}
+                onSaveLeaderboardVisibility={(visible) => handleSaveLeaderboardVisibility(member, visible)}
               />
             ))}
           </div>
@@ -658,6 +674,7 @@ interface MemberRowProps {
   rate: number;
   onSaveRate: (cents: number) => void;
   onSaveExperience?: (level: 'rookie' | 'experienced' | null) => void;
+  onSaveLeaderboardVisibility?: (visible: boolean) => void;
   isSuspended?: boolean;
 }
 
@@ -671,6 +688,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
   rate,
   onSaveRate,
   onSaveExperience,
+  onSaveLeaderboardVisibility,
   isSuspended,
 }) => {
   const { t } = useTranslation();
@@ -730,6 +748,35 @@ const MemberRow: React.FC<MemberRowProps> = ({
           </span>
         </div>
       </div>
+
+      {/* Appear on sales leaderboard — activé par défaut, pas pour les techniciens */}
+      {onSaveLeaderboardVisibility && member.role !== 'technician' && (() => {
+        const visible = member.show_on_leaderboard !== false;
+        return (
+          <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <label className="text-[11px] font-semibold text-text-tertiary hidden lg:block">Leaderboard</label>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={visible}
+              aria-label={isFr ? 'Apparaît sur le leaderboard des ventes' : 'Appear on sales leaderboard'}
+              title={isFr ? 'Apparaît sur le leaderboard des ventes' : 'Appear on sales leaderboard'}
+              onClick={() => onSaveLeaderboardVisibility(!visible)}
+              className={cn(
+                'relative w-9 h-5 rounded-full transition-colors flex-shrink-0',
+                visible ? 'bg-primary' : 'bg-surface-tertiary',
+              )}
+            >
+              <span
+                className={cn(
+                  'absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
+                  visible ? 'translate-x-4' : 'translate-x-0',
+                )}
+              />
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Sales-rep category (drives leaderboard: first-year vs experienced) */}
       {onSaveExperience && member.role === 'sales_rep' && (

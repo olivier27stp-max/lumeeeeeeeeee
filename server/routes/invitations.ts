@@ -163,6 +163,17 @@ router.get('/invitations/list', async (req, res) => {
       profiles = profileData || [];
     }
 
+    // Flag « appear on sales leaderboard » — requête séparée : la colonne
+    // manque tant que la migration 20260744000000 n'est pas appliquée, dans
+    // ce cas l'erreur est ignorée et tout le monde est visible par défaut.
+    const hiddenOnLeaderboard = new Set<string>();
+    const flagsRes = await admin
+      .from('memberships')
+      .select('user_id')
+      .eq('org_id', auth.orgId)
+      .eq('show_on_leaderboard', false);
+    if (!flagsRes.error) for (const f of flagsRes.data ?? []) hiddenOnLeaderboard.add((f as any).user_id);
+
     // Fetch auth users for emails + last_sign_in
     const members = (memberships || []).map((m: any) => {
       const profile = profiles.find((p: any) => p.id === m.user_id);
@@ -174,6 +185,7 @@ router.get('/invitations/list', async (req, res) => {
         permissions: m.permissions,
         created_at: m.created_at,
         experience_level: m.experience_level || null,
+        show_on_leaderboard: !hiddenOnLeaderboard.has(m.user_id),
         full_name: profile?.full_name || '',
         avatar_url: profile?.avatar_url || null,
       };

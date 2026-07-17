@@ -29,6 +29,8 @@ export interface OrgMember {
   permissions: Record<string, boolean> | null;
   created_at: string;
   experience_level: 'rookie' | 'experienced' | null;
+  /** Apparaît sur le leaderboard des ventes (défaut true). */
+  show_on_leaderboard?: boolean;
   full_name: string;
   avatar_url: string | null;
   email?: string;

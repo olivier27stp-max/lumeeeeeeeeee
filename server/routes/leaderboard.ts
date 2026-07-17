@@ -300,4 +300,35 @@ router.patch('/leaderboard/rep/:userId/experience', async (req, res) => {
   }
 });
 
+// PATCH /api/leaderboard/rep/:userId/visibility — admin affiche/masque un
+// membre sur le leaderboard des ventes. Body: { show_on_leaderboard: boolean }
+// Nécessite la migration 20260744000000 (memberships.show_on_leaderboard).
+router.patch('/leaderboard/rep/:userId/visibility', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const canManage = await isOrgAdminOrOwner(auth.client, auth.user.id, auth.orgId);
+  if (!canManage) return res.status(403).json({ error: 'Only owner/admin can change leaderboard visibility.' });
+
+  const visible = req.body?.show_on_leaderboard;
+  if (typeof visible !== 'boolean') {
+    return res.status(400).json({ error: 'show_on_leaderboard must be a boolean.' });
+  }
+
+  try {
+    const sc = getServiceClient();
+    // Scope the update to reps in the admin's company (all offices).
+    const { orgIds } = await resolveCompanyOrgIds(sc, auth.orgId);
+    const { error } = await sc
+      .from('memberships')
+      .update({ show_on_leaderboard: visible })
+      .eq('user_id', req.params.userId)
+      .in('org_id', orgIds);
+    if (error) throw error;
+    res.json({ ok: true, show_on_leaderboard: visible });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

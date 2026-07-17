@@ -3,9 +3,9 @@
  *
  * Source of truth: jobs. A created job with a salesperson assigned (at
  * creation or later via edit) IS a closed deal — attributed to
- * jobs.salesperson_id, falling back to the creator. Only real org members
- * (sales reps, admins, owners) are ranked. Leads/quotes still feed the
- * upstream funnel metrics.
+ * jobs.salesperson_id, falling back to the creator. The leaderboard is
+ * roster-based: every org member except technicians appears, even with zero
+ * activity in the window. Leads/quotes still feed the upstream funnel metrics.
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
@@ -29,9 +29,9 @@ export function periodRange(period: PeriodType, date: Date = new Date()): DateWi
   }
 }
 
-// Roles that appear on the leaderboard — anyone else (or a non-member id
-// left over from test data) is dropped from the ranking.
-const RANKED_ROLES = new Set(['sales_rep', 'admin', 'owner']);
+// Tout le monde apparaît sur le leaderboard sauf les techniciens (et les
+// non-membres — ids de test ou comptes retirés de l'org).
+const EXCLUDED_ROLES = new Set(['technician']);
 
 function repIdOf(deal: any): string | null {
   return deal.rep_id || deal.created_by || null;
@@ -84,8 +84,6 @@ export async function getLeaderboard(
     byRep.set(rid, cur);
   }
 
-  if (byRep.size === 0) return [];
-
   // Previous window of equal length for the trend
   const startMs = new Date(range.start).getTime();
   const endMs = new Date(range.end).getTime();
@@ -95,20 +93,13 @@ export async function getLeaderboard(
     end: new Date(startMs - 1).toISOString(),
   };
 
-  const userIds = Array.from(byRep.keys());
-
-  const [membersRes, profilesRes, prevJobsRes, leadsRes] = await Promise.all([
+  // Roster : tous les membres des orgs sauf les techniciens — le leaderboard
+  // affiche toute l'équipe, même à 0$ d'activité dans la période.
+  const [membersRes, prevJobsRes, leadsRes] = await Promise.all([
     supabase
       .from('memberships')
       .select('user_id, full_name, avatar_url, role, team_id, experience_level, teams:team_id(name)')
-      .in('org_id', orgIds)
-      .in('user_id', userIds),
-    // Canonical display name/avatar — memberships.full_name is often empty
-    // for real accounts (only invite flows fill it).
-    supabase
-      .from('profiles')
-      .select('id, full_name, avatar_url')
-      .in('id', userIds),
+      .in('org_id', orgIds),
     supabase
       .from('jobs')
       .select('salesperson_id, created_by, total_cents')
@@ -127,15 +118,34 @@ export async function getLeaderboard(
       .lte('created_at', range.end),
   ]);
 
-  const memberMap = new Map((membersRes.data ?? []).map((m: any) => [m.user_id, m]));
+  const roster = (membersRes.data ?? []).filter((m: any) => !EXCLUDED_ROLES.has(m.role));
+  const userIds = Array.from(new Set(roster.map((m: any) => m.user_id as string)));
+  if (userIds.length === 0) return [];
+
+  const memberMap = new Map(roster.map((m: any) => [m.user_id, m]));
+
+  // Flag « appear on sales leaderboard » (settings du team member). Requête
+  // séparée : tant que la migration 20260744000000 n'est pas appliquée la
+  // colonne manque, l'erreur est ignorée et tout le monde reste visible.
+  const hiddenIds = new Set<string>();
+  const flagsRes = await supabase
+    .from('memberships')
+    .select('user_id')
+    .in('org_id', orgIds)
+    .eq('show_on_leaderboard', false);
+  if (!flagsRes.error) for (const f of flagsRes.data ?? []) hiddenIds.add((f as any).user_id);
+
+  // Canonical display name/avatar — memberships.full_name is often empty
+  // for real accounts (only invite flows fill it).
+  const profilesRes = await supabase
+    .from('profiles')
+    .select('id, full_name, avatar_url')
+    .in('id', userIds);
   const profileMap = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p]));
 
   // Last-resort names for accounts with neither profile nor membership name:
   // auth user_metadata.full_name, then email (service client required).
-  const rankedIds = userIds.filter((uid) => {
-    const m: any = memberMap.get(uid);
-    return m && RANKED_ROLES.has(m.role);
-  });
+  const rankedIds = userIds.filter((uid) => !hiddenIds.has(uid));
   const authNameMap = new Map<string, string>();
   await Promise.all(
     rankedIds
@@ -164,12 +174,12 @@ export async function getLeaderboard(
     leadsByRep.set(rid, (leadsByRep.get(rid) || 0) + 1);
   }
 
-  // Only real members with a ranked role — drops test reps and stale ids.
+  // Toute l'équipe (sauf techniciens et flag masqué) — zéro-fill sans activité.
   let entries = rankedIds
     .map((uid) => {
     const m: any = memberMap.get(uid) || {};
     const profile: any = profileMap.get(uid) || {};
-    const stats = byRep.get(uid)!;
+    const stats = byRep.get(uid) || { closes: 0, revenue: 0 };
     const prevRevenue = prevRevenueMap.get(uid) || 0;
     const trend = prevRevenue > 0
       ? Math.round(((stats.revenue - prevRevenue) / prevRevenue) * 100)
@@ -192,7 +202,8 @@ export async function getLeaderboard(
     };
   });
 
-  entries.sort((a, b) => b.revenue - a.revenue);
+  // Tri stable : revenue, puis closes, puis nom (les 0$ sortent alphabétiques).
+  entries.sort((a, b) => b.revenue - a.revenue || b.closes - a.closes || a.full_name.localeCompare(b.full_name));
 
   if (teamId) {
     entries = entries.filter((e) => e.team_id === teamId);

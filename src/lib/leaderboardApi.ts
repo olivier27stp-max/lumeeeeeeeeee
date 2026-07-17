@@ -78,6 +78,17 @@ export function getOffices(): Promise<{ offices: Office[]; activeOrgId: string }
   return apiFetch('/leaderboard/offices');
 }
 
+/** Admin : affiche/masque un membre sur le leaderboard des ventes. */
+export function setRepLeaderboardVisibility(
+  userId: string,
+  visible: boolean,
+): Promise<{ ok: boolean; show_on_leaderboard: boolean }> {
+  return apiFetch(`/leaderboard/rep/${userId}/visibility`, {
+    method: 'PATCH',
+    body: JSON.stringify({ show_on_leaderboard: visible }),
+  });
+}
+
 /** Admin: tag a rep as rookie / experienced (null = clear). */
 export function setRepExperience(
   userId: string,
