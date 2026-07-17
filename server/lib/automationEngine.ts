@@ -65,6 +65,36 @@ function buildExecutionKey(ruleId: string, entityId: string, actionIndex: number
   return `${ruleId}:${entityId}:${actionIndex}:${today}`;
 }
 
+// ── Quiet hours (SMS only) ──────────────────────────────────
+// No automated text lands on a client's phone outside 08:00–19:59 local
+// (Québec). Emails/notifications are unaffected — only SMS wakes people up.
+
+const QUIET_TZ = 'America/Toronto';
+const SEND_START_HOUR = 8;
+const SEND_END_HOUR = 20; // exclusive — last send at 19:59
+
+function localHour(d: Date): number {
+  return parseInt(
+    new Intl.DateTimeFormat('en-CA', { timeZone: QUIET_TZ, hour: '2-digit', hour12: false }).format(d),
+    10,
+  );
+}
+
+export function isQuietHours(d: Date = new Date()): boolean {
+  const h = localHour(d);
+  return h < SEND_START_HOUR || h >= SEND_END_HOUR;
+}
+
+/** Next moment inside the send window, stepping 30 min (DST-safe, no tz lib). */
+export function nextSendTime(from: Date = new Date()): Date {
+  const next = new Date(from);
+  for (let i = 0; i < 48; i++) {
+    next.setTime(next.getTime() + 30 * 60 * 1000);
+    if (!isQuietHours(next)) return next;
+  }
+  return from;
+}
+
 // ── Execute actions for a rule ──────────────────────────────
 
 async function executeRuleActions(
@@ -92,6 +122,27 @@ async function executeRuleActions(
   for (let i = 0; i < rule.actions.length; i++) {
     const action = rule.actions[i];
     const executionKey = buildExecutionKey(rule.id, event.entityId, i);
+
+    // Defer immediate SMS fired during quiet hours to the next send window.
+    if (action.type === 'send_sms' && isQuietHours()) {
+      try {
+        await config.supabase.from('automation_scheduled_tasks').insert({
+          org_id: event.orgId,
+          automation_rule_id: rule.id,
+          entity_type: event.entityType,
+          entity_id: event.entityId,
+          action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
+          execute_at: nextSendTime().toISOString(),
+          status: 'pending',
+          execution_key: executionKey,
+        });
+        console.log(`[automationEngine] SMS deferred to send window (quiet hours) for rule "${rule.name}"`);
+      } catch (err: any) {
+        if (err?.code !== '23505') console.error('[automationEngine] failed to defer quiet-hours SMS:', err.message);
+      }
+      continue;
+    }
+
     const startTime = Date.now();
 
     try {
@@ -347,6 +398,16 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
   if (!tasks || tasks.length === 0) return;
 
   for (const task of tasks as any[]) {
+    // Quiet hours: push due SMS tasks to the next send window without
+    // consuming an attempt — the client shouldn't be texted at night.
+    if (task.action_config?.type === 'send_sms' && isQuietHours()) {
+      await supabase
+        .from('automation_scheduled_tasks')
+        .update({ execute_at: nextSendTime().toISOString() })
+        .eq('id', task.id);
+      continue;
+    }
+
     // Mark as running
     await supabase
       .from('automation_scheduled_tasks')
