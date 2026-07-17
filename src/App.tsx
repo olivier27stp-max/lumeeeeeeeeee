@@ -54,7 +54,6 @@ import Schedule from './pages/Schedule';
 import SettingsLayout, { SettingsIndex } from './pages/settings/SettingsLayout';
 import ProfileSettings from './pages/settings/ProfileSettings';
 import BillingSettings from './pages/settings/BillingSettings';
-import LanguageSettings from './pages/settings/LanguageSettings';
 import LocationSettings from './pages/settings/LocationSettings';
 import ArchivesPanel from './components/ArchivesPanel';
 import SupportPanel from './components/SupportPanel';
@@ -1245,7 +1244,8 @@ function AuthenticatedApp({
                     <Route path="/settings" element={<PageWrapper><SettingsLayout /></PageWrapper>}>
                       <Route index element={<SettingsIndex />} />
                       <Route path="profile" element={<Gated permission="settings.read"><ProfileSettings /></Gated>} />
-                      <Route path="language" element={<Gated permission="settings.read"><LanguageSettings /></Gated>} />
+                      {/* Language moved into the profile page */}
+                      <Route path="language" element={<Navigate to="/settings/profile" replace />} />
                       <Route path="company" element={<Gated permission="settings.update"><CompanySettings /></Gated>} />
                       <Route path="billing" element={<Gated permission="settings.read"><BillingSettings /></Gated>} />
                       <Route path="products" element={<Gated permission="settings.update"><ProductsServices /></Gated>} />

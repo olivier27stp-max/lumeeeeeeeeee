@@ -53,7 +53,7 @@ function KpiCard({ icon: Icon, label, value }: { icon: LucideIcon; label: string
 }
 
 export default function ProfileSettings() {
-  const { language } = useTranslation();
+  const { language, setLanguage } = useTranslation();
   const isFr = language === 'fr';
   const navigate = useNavigate();
   const permsCtx = usePermissions();
@@ -350,6 +350,28 @@ export default function ProfileSettings() {
               </p>
             </div>
           )}
+        </div>
+
+        {/* Interface language — inline selector (replaces the old standalone Langue page) */}
+        <div>
+          <label className="text-xs font-medium text-text-tertiary">{isFr ? "Langue de l'interface" : 'Interface language'}</label>
+          <div className="flex items-center gap-2 mt-1.5">
+            {([{ code: 'en', label: 'English', flag: '🇬🇧' }, { code: 'fr', label: 'Français', flag: '🇫🇷' }] as const).map((lang) => (
+              <button
+                key={lang.code}
+                type="button"
+                onClick={() => setLanguage(lang.code)}
+                className={cn(
+                  'flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border text-[13px] font-semibold transition-all',
+                  language === lang.code
+                    ? 'border-primary bg-primary/5 text-text-primary'
+                    : 'border-outline-subtle text-text-secondary hover:border-outline hover:bg-surface-secondary/40'
+                )}
+              >
+                <span>{lang.flag}</span>{lang.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <button

@@ -3,7 +3,6 @@ import {
   Shield,
   CreditCard,
   Settings as SettingsIcon,
-  Globe,
   Zap,
   Building,
   Users,
@@ -53,8 +52,8 @@ export function useSettingsNav(): NavGroup[] {
     {
       heading: isFr ? 'Mon compte' : 'My account',
       items: [
-        { path: '/settings/profile', label: isFr ? 'Profil & sécurité' : 'Profile & security', icon: User },
-        { path: '/settings/language', label: t.settings.language, icon: Globe },
+        // Language selection lives inside the profile page — no separate page.
+        { path: '/settings/profile', label: isFr ? 'Mon profil' : 'My profile', icon: User },
       ],
     },
     {
@@ -116,7 +115,7 @@ export function useSettingsNav(): NavGroup[] {
 const LEGACY_TAB_TO_PATH: Record<string, string> = {
   account: 'profile',
   billing: 'billing',
-  language: 'language',
+  language: 'profile',
   company: 'company',
   products: 'products',
   payments: 'payments',

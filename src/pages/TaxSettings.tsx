@@ -52,7 +52,7 @@ export default function TaxSettings() {
         .maybeSingle()
         .then(({ data: cs }) => { if (cs?.currency) setCurrency(cs.currency); });
     } catch (err: any) {
-      toast.error(err.message || 'Failed to load taxes');
+      toast.error(err.message || (fr ? 'Échec du chargement des taxes' : 'Failed to load taxes'));
     } finally { setLoading(false); }
   }, []);
 
@@ -62,7 +62,7 @@ export default function TaxSettings() {
     setBusy(true);
     try {
       await setupTaxPreset(key, groups.length === 0);
-      toast.success('Tax region added');
+      toast.success(fr ? 'Région de taxe ajoutée' : 'Tax region added');
       await load();
       setShowAddRegion(false);
     } catch (err: any) { toast.error(err.message); }
@@ -73,18 +73,18 @@ export default function TaxSettings() {
     setBusy(true);
     try {
       await setDefaultTaxGroup(id);
-      toast.success('Default tax region updated');
+      toast.success(fr ? 'Région par défaut mise à jour' : 'Default tax region updated');
       await load();
     } catch (err: any) { toast.error(err.message); }
     finally { setBusy(false); }
   };
 
   const handleDeleteGroup = async (id: string, name: string) => {
-    if (!confirm(`Delete tax region "${name}" and all its taxes?`)) return;
+    if (!confirm(fr ? `Supprimer la région « ${name} » et toutes ses taxes ?` : `Delete tax region "${name}" and all its taxes?`)) return;
     setBusy(true);
     try {
       await deleteTaxGroup(id);
-      toast.success('Tax region removed');
+      toast.success(fr ? 'Région de taxe supprimée' : 'Tax region removed');
       await load();
     } catch (err: any) { toast.error(err.message); }
     finally { setBusy(false); }
@@ -94,28 +94,30 @@ export default function TaxSettings() {
     try {
       await updateTaxConfig(config.id, { is_active: !config.is_active });
       setConfigs(prev => prev.map(c => c.id === config.id ? { ...c, is_active: !c.is_active } : c));
-      toast.success(config.is_active ? `${config.name} disabled` : `${config.name} enabled`);
+      toast.success(config.is_active
+        ? (fr ? `${config.name} désactivée` : `${config.name} disabled`)
+        : (fr ? `${config.name} activée` : `${config.name} enabled`));
     } catch (err: any) { toast.error(err.message); }
   };
 
   const handleSaveRate = async (config: TaxConfig) => {
     const newRate = parseFloat(editRate);
-    if (isNaN(newRate) || newRate < 0 || newRate > 100) { toast.error('Rate must be between 0% and 100%'); return; }
+    if (isNaN(newRate) || newRate < 0 || newRate > 100) { toast.error(fr ? 'Le taux doit être entre 0 % et 100 %' : 'Rate must be between 0% and 100%'); return; }
     try {
       await updateTaxConfig(config.id, { rate: newRate });
       setConfigs(prev => prev.map(c => c.id === config.id ? { ...c, rate: newRate } : c));
       setEditingId(null);
-      toast.success('Rate updated');
+      toast.success(fr ? 'Taux mis à jour' : 'Rate updated');
     } catch (err: any) { toast.error(err.message); }
   };
 
   const handleSaveName = async (config: TaxConfig) => {
-    if (!editName.trim()) { toast.error('Name required'); return; }
+    if (!editName.trim()) { toast.error(fr ? 'Nom requis' : 'Name required'); return; }
     try {
       await updateTaxConfig(config.id, { name: editName.trim() });
       setConfigs(prev => prev.map(c => c.id === config.id ? { ...c, name: editName.trim() } : c));
       setEditingNameId(null);
-      toast.success('Name updated');
+      toast.success(fr ? 'Nom mis à jour' : 'Name updated');
     } catch (err: any) { toast.error(err.message); }
   };
 
@@ -124,30 +126,30 @@ export default function TaxSettings() {
       await updateTaxRegistrationNumber(config.id, editRegNum.trim());
       setConfigs(prev => prev.map(c => c.id === config.id ? { ...c, registration_number: editRegNum.trim() || null } : c));
       setEditingRegNumId(null);
-      toast.success('Registration number updated');
+      toast.success(fr ? "Numéro d'enregistrement mis à jour" : 'Registration number updated');
     } catch (err: any) { toast.error(err.message); }
   };
 
   const handleDeleteTax = async (config: TaxConfig) => {
-    if (!confirm(`Remove tax "${config.name}"?`)) return;
+    if (!confirm(fr ? `Supprimer la taxe « ${config.name} » ?` : `Remove tax "${config.name}"?`)) return;
     try {
       // Real delete (was a deactivate stub — the "removed" tax reappeared
       // struck-through on the next load).
       await deleteTaxConfig(config.id);
       setConfigs(prev => prev.filter(c => c.id !== config.id));
-      toast.success(`${config.name} removed`);
+      toast.success(fr ? `${config.name} supprimée` : `${config.name} removed`);
       await load();
     } catch (err: any) { toast.error(err.message); }
   };
 
   const handleAddCustom = async () => {
-    if (!customName.trim()) { toast.error('Name required'); return; }
+    if (!customName.trim()) { toast.error(fr ? 'Nom requis' : 'Name required'); return; }
     const rate = parseFloat(customRate);
-    if (isNaN(rate) || rate < 0) { toast.error('Invalid rate'); return; }
+    if (isNaN(rate) || rate < 0) { toast.error(fr ? 'Taux invalide' : 'Invalid rate'); return; }
     setBusy(true);
     try {
       await createTaxConfig({ name: customName.trim(), rate });
-      toast.success('Custom tax added');
+      toast.success(fr ? 'Taxe personnalisée ajoutée' : 'Custom tax added');
       setCustomName(''); setCustomRate(''); setShowCustomTax(false);
       await load();
     } catch (err: any) { toast.error(err.message); }
@@ -199,8 +201,8 @@ export default function TaxSettings() {
           <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-primary/5 border border-primary/10">
             <Info size={16} className="text-primary shrink-0 mt-0.5" />
             <div className="text-[12px] text-text-secondary leading-relaxed">
-              Taxes configured here are <span className="font-semibold text-text-primary">automatically applied</span> to all new quotes, invoices, and jobs.
-              The default region is used when no specific client region is detected.
+              {fr ? <>Les taxes configurées ici sont <span className="font-semibold text-text-primary">appliquées automatiquement</span> aux nouveaux devis, factures et jobs. La région par défaut est utilisée quand aucune région client n'est détectée.</>
+                : <>Taxes configured here are <span className="font-semibold text-text-primary">automatically applied</span> to all new quotes, invoices, and jobs. The default region is used when no specific client region is detected.</>}
             </div>
           </div>
 
@@ -299,7 +301,7 @@ export default function TaxSettings() {
                           {editingRegNumId === tax.id ? (
                             <div className="flex items-center gap-1.5">
                               <input type="text" value={editRegNum} onChange={e => setEditRegNum(e.target.value)}
-                                className="glass-input w-52 text-[11px]" placeholder="Registration number" autoFocus
+                                className="glass-input w-52 text-[11px]" placeholder={fr ? "Numéro d'enregistrement" : 'Registration number'} autoFocus
                                 onKeyDown={e => { if (e.key === 'Enter') handleSaveRegNum(tax); if (e.key === 'Escape') setEditingRegNumId(null); }} />
                               <button onClick={() => handleSaveRegNum(tax)} className="p-0.5 text-primary"><Check size={11} /></button>
                               <button onClick={() => setEditingRegNumId(null)} className="p-0.5 text-text-tertiary"><X size={11} /></button>
@@ -316,7 +318,7 @@ export default function TaxSettings() {
                       </div>
                     ))}
                     {taxes.length === 0 && (
-                      <div className="px-5 py-4 text-[12px] text-text-tertiary text-center">No taxes in this region</div>
+                      <div className="px-5 py-4 text-[12px] text-text-tertiary text-center">{fr ? 'Aucune taxe dans cette région' : 'No taxes in this region'}</div>
                     )}
                   </div>
 
@@ -324,10 +326,12 @@ export default function TaxSettings() {
                   {activeTaxes.length > 0 && (
                     <div className="px-5 py-2.5 bg-surface-secondary/50 border-t border-outline/30 flex items-center justify-between text-[12px]">
                       <span className="text-text-tertiary">
-                        {activeTaxes.length} tax{activeTaxes.length !== 1 ? 'es' : ''} active
+                        {fr
+                          ? `${activeTaxes.length} taxe${activeTaxes.length !== 1 ? 's' : ''} active${activeTaxes.length !== 1 ? 's' : ''}`
+                          : `${activeTaxes.length} tax${activeTaxes.length !== 1 ? 'es' : ''} active`}
                       </span>
                       <span className="font-semibold text-text-primary tabular-nums">
-                        Combined: {combinedRate.toFixed(3)}%
+                        {fr ? 'Combiné' : 'Combined'} : {combinedRate.toFixed(3)}%
                       </span>
                     </div>
                   )}
@@ -337,9 +341,11 @@ export default function TaxSettings() {
           ) : (
             <div className="section-card p-10 text-center">
               <MapPin size={32} className="text-text-tertiary/30 mx-auto mb-3" />
-              <h3 className="text-[15px] font-semibold text-text-primary">No tax regions configured</h3>
+              <h3 className="text-[15px] font-semibold text-text-primary">{fr ? 'Aucune région de taxe configurée' : 'No tax regions configured'}</h3>
               <p className="text-[12px] text-text-tertiary mt-1 max-w-sm mx-auto">
-                Select your business region below to automatically apply the correct taxes to quotes, invoices, and jobs.
+                {fr
+                  ? 'Sélectionnez votre région ci-dessous pour appliquer automatiquement les bonnes taxes aux devis, factures et jobs.'
+                  : 'Select your business region below to automatically apply the correct taxes to quotes, invoices, and jobs.'}
               </p>
             </div>
           )}
