@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { sendSafeError } from '../lib/error-handler';
+import { checkLocationTrackingAllowed } from '../lib/location-consent';
 import {
   startSession,
   endSession,
@@ -30,6 +31,10 @@ router.post('/field-sessions/start', async (req, res) => {
 
   try {
     const sc = getServiceClient();
+    // Verrou consentement (Loi 25) — les sessions terrain enregistrent la
+    // position du rep, même exigence que le tracking dispatch.
+    const denial = await checkLocationTrackingAllowed(sc, auth.orgId, auth.user.id);
+    if (denial) return res.status(403).json(denial);
     const session = await startSession(sc, auth.orgId, {
       userId: auth.user.id,
       territoryId,
@@ -101,6 +106,8 @@ router.post('/field-sessions/:id/gps', async (req, res) => {
 
   try {
     const sc = getServiceClient();
+    const denial = await checkLocationTrackingAllowed(sc, auth.orgId, auth.user.id);
+    if (denial) return res.status(403).json(denial);
     const point = await recordGpsPoint(sc, req.params.id, auth.user.id, lat, lng, accuracy ?? null, auth.orgId);
     res.json(point);
   } catch (err: any) {
