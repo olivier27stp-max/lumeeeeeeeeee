@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -25,6 +25,8 @@ import {
   StickyNote,
   Star,
   RotateCcw,
+  SlidersHorizontal,
+  Check,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
@@ -49,7 +51,16 @@ interface ActivityItem {
   subtitle: string;
   timestamp: string;
   link?: string;
-  actionLabel?: string;
+}
+
+interface NotifRow {
+  id: string;
+  type: string;
+  title: string;
+  body?: string | null;
+  link?: string | null;
+  created_at: string;
+  actor_name?: string | null;
 }
 
 function timeAgo(dateStr: string, lang: string): string {
@@ -81,52 +92,60 @@ function timeAgo(dateStr: string, lang: string): string {
   return date.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
 }
 
+/** En-tête de groupe : Aujourd'hui / Hier / « mardi 15 juillet ». */
+function dayLabel(dateStr: string, lang: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
+  if (diffDays <= 0) return lang === 'fr' ? 'Aujourd\'hui' : 'Today';
+  if (diffDays === 1) return lang === 'fr' ? 'Hier' : 'Yesterday';
+  return d.toLocaleDateString(lang === 'fr' ? 'fr-CA' : 'en-CA', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
+}
+
+// Icône nue (sans cercle ni fond) teintée couleur d'entité ou sémantique.
 const ICON_MAP: Record<string, { icon: typeof Activity; color: string }> = {
-  client_created: { icon: UserPlus, color: 'text-success bg-success/10' },
-  client_updated: { icon: Edit3, color: 'text-primary bg-primary/10' },
-  client_deleted: { icon: Trash2, color: 'text-danger bg-danger/10' },
-  lead_created: { icon: Contact, color: 'text-text-secondary bg-surface-tertiary' },
-  request_created: { icon: Inbox, color: 'text-entity-request bg-entity-request/10' },
-  lead_updated: { icon: Edit3, color: 'text-text-secondary bg-surface-tertiary' },
-  job_created: { icon: Briefcase, color: 'text-entity-job bg-entity-job/10' },
-  job_updated: { icon: Edit3, color: 'text-entity-job bg-entity-job/10' },
-  // Devis — événements des triggers DB (migration 20260747000000)
-  quote_created: { icon: FileText, color: 'text-entity-quote bg-entity-quote/10' },
-  quote_updated: { icon: Edit3, color: 'text-entity-quote bg-entity-quote/10' },
-  quote_sent: { icon: Send, color: 'text-entity-quote bg-entity-quote/10' },
-  quote_approved: { icon: CheckCircle2, color: 'text-success bg-success/10' },
-  quote_accepted: { icon: CheckCircle2, color: 'text-success bg-success/10' },
-  quote_declined: { icon: XCircle, color: 'text-danger bg-danger/10' },
-  quote_changes_requested: { icon: Edit3, color: 'text-warning bg-warning/10' },
-  quote_archived: { icon: Archive, color: 'text-entity-quote bg-entity-quote/10' },
-  quote_deleted: { icon: Trash2, color: 'text-entity-quote bg-entity-quote/10' },
-  quote_opened: { icon: Eye, color: 'text-entity-quote bg-entity-quote/10' },
-  // Factures
-  invoice_created: { icon: FileText, color: 'text-entity-invoice bg-entity-invoice/10' },
-  invoice_updated: { icon: Edit3, color: 'text-entity-invoice bg-entity-invoice/10' },
-  invoice_sent: { icon: Send, color: 'text-entity-invoice bg-entity-invoice/10' },
-  invoice_paid: { icon: CheckCircle2, color: 'text-success bg-success/10' },
-  invoice_deleted: { icon: Trash2, color: 'text-entity-invoice bg-entity-invoice/10' },
-  // Paiements (manuels et automatiques)
-  payment_received: { icon: CreditCard, color: 'text-success bg-success/10' },
-  payment_failed: { icon: AlertCircle, color: 'text-danger bg-danger/10' },
-  payment_refunded: { icon: RotateCcw, color: 'text-warning bg-warning/10' },
-  payment_updated: { icon: Edit3, color: 'text-entity-invoice bg-entity-invoice/10' },
-  payment_deleted: { icon: Trash2, color: 'text-entity-invoice bg-entity-invoice/10' },
-  // Notes, avis, cartes
-  note_created: { icon: StickyNote, color: 'text-text-secondary bg-surface-tertiary' },
-  note_deleted: { icon: Trash2, color: 'text-text-secondary bg-surface-tertiary' },
-  review_received: { icon: Star, color: 'text-warning bg-warning/10' },
-  card_saved: { icon: CreditCard, color: 'text-primary bg-primary/10' },
-  message_sent: { icon: MessageSquare, color: 'text-text-secondary bg-surface-tertiary' },
-  message_received: { icon: MessageSquare, color: 'text-text-secondary bg-surface-tertiary' },
-  task_completed: { icon: CheckSquare, color: 'text-text-secondary bg-surface-tertiary' },
-  event_created: { icon: Calendar, color: 'text-text-secondary bg-surface-tertiary' },
+  client_created: { icon: UserPlus, color: 'text-success' },
+  client_updated: { icon: Edit3, color: 'text-text-tertiary' },
+  client_deleted: { icon: Trash2, color: 'text-text-tertiary' },
+  lead_created: { icon: Contact, color: 'text-text-tertiary' },
+  lead_updated: { icon: Edit3, color: 'text-text-tertiary' },
+  request_created: { icon: Inbox, color: 'text-entity-request' },
+  job_created: { icon: Briefcase, color: 'text-entity-job' },
+  job_updated: { icon: Edit3, color: 'text-entity-job' },
+  quote_created: { icon: FileText, color: 'text-entity-quote' },
+  quote_updated: { icon: Edit3, color: 'text-entity-quote' },
+  quote_sent: { icon: Send, color: 'text-entity-quote' },
+  quote_approved: { icon: CheckCircle2, color: 'text-success' },
+  quote_accepted: { icon: CheckCircle2, color: 'text-success' },
+  quote_declined: { icon: XCircle, color: 'text-danger' },
+  quote_changes_requested: { icon: Edit3, color: 'text-warning' },
+  quote_archived: { icon: Archive, color: 'text-entity-quote' },
+  quote_deleted: { icon: Trash2, color: 'text-entity-quote' },
+  quote_opened: { icon: Eye, color: 'text-entity-quote' },
+  invoice_created: { icon: FileText, color: 'text-entity-invoice' },
+  invoice_updated: { icon: Edit3, color: 'text-entity-invoice' },
+  invoice_sent: { icon: Send, color: 'text-entity-invoice' },
+  invoice_paid: { icon: CheckCircle2, color: 'text-success' },
+  invoice_deleted: { icon: Trash2, color: 'text-entity-invoice' },
+  payment_received: { icon: CreditCard, color: 'text-success' },
+  payment_failed: { icon: AlertCircle, color: 'text-danger' },
+  payment_refunded: { icon: RotateCcw, color: 'text-warning' },
+  payment_updated: { icon: Edit3, color: 'text-entity-invoice' },
+  payment_deleted: { icon: Trash2, color: 'text-entity-invoice' },
+  note_created: { icon: StickyNote, color: 'text-text-secondary' },
+  note_deleted: { icon: Trash2, color: 'text-text-secondary' },
+  review_received: { icon: Star, color: 'text-warning' },
+  card_saved: { icon: CreditCard, color: 'text-primary' },
+  message_sent: { icon: MessageSquare, color: 'text-text-secondary' },
+  message_received: { icon: MessageSquare, color: 'text-text-secondary' },
+  task_completed: { icon: CheckSquare, color: 'text-text-secondary' },
+  event_created: { icon: Calendar, color: 'text-entity-job' },
 };
 
-// Libellés localisés par type. Les notifications créées par les triggers DB
-// portent un titre français générique — quand le type est connu ici, on le
-// remplace par le libellé dans la langue de l'utilisateur.
+// Libellés localisés par type — fallback quand l'événement n'a pas d'acteur.
 const TYPE_LABELS: Record<string, { fr: string; en: string }> = {
   client_created: { fr: 'Nouveau client', en: 'New client' },
   client_updated: { fr: 'Client modifié', en: 'Client updated' },
@@ -139,6 +158,7 @@ const TYPE_LABELS: Record<string, { fr: string; en: string }> = {
   quote_updated: { fr: 'Devis modifié', en: 'Quote updated' },
   quote_sent: { fr: 'Devis envoyé', en: 'Quote sent' },
   quote_approved: { fr: 'Devis approuvé', en: 'Quote approved' },
+  quote_accepted: { fr: 'Devis approuvé', en: 'Quote approved' },
   quote_declined: { fr: 'Devis refusé', en: 'Quote declined' },
   quote_changes_requested: { fr: 'Modifications demandées', en: 'Changes requested' },
   quote_archived: { fr: 'Devis archivé', en: 'Quote archived' },
@@ -164,18 +184,115 @@ const TYPE_LABELS: Record<string, { fr: string; en: string }> = {
   event_created: { fr: 'Événement créé', en: 'Event created' },
 };
 
-function getLabel(type: string, name: string, lang: string): { title: string; subtitle: string } {
-  const l = TYPE_LABELS[type] || { fr: type, en: type };
-  return {
-    title: lang === 'fr' ? l.fr : l.en,
-    subtitle: name,
-  };
+// Titres « acteur en premier » : « William Hébert a créé une facture ».
+// payment_failed est volontairement absent — un échec d'autopay n'a pas
+// d'acteur, on garde le libellé neutre.
+const ACTOR_VERBS: Record<string, { fr: string; en: string }> = {
+  quote_created: { fr: 'a créé un devis', en: 'created a quote' },
+  quote_updated: { fr: 'a modifié un devis', en: 'updated a quote' },
+  quote_sent: { fr: 'a envoyé un devis', en: 'sent a quote' },
+  quote_approved: { fr: 'a approuvé un devis', en: 'approved a quote' },
+  quote_accepted: { fr: 'a approuvé un devis', en: 'approved a quote' },
+  quote_declined: { fr: 'a refusé un devis', en: 'declined a quote' },
+  quote_changes_requested: { fr: 'a demandé des modifications', en: 'requested changes' },
+  quote_archived: { fr: 'a archivé un devis', en: 'archived a quote' },
+  quote_deleted: { fr: 'a supprimé un devis', en: 'deleted a quote' },
+  invoice_created: { fr: 'a créé une facture', en: 'created an invoice' },
+  invoice_updated: { fr: 'a modifié une facture', en: 'updated an invoice' },
+  invoice_sent: { fr: 'a envoyé une facture', en: 'sent an invoice' },
+  invoice_paid: { fr: 'a payé une facture', en: 'paid an invoice' },
+  invoice_deleted: { fr: 'a supprimé une facture', en: 'deleted an invoice' },
+  payment_received: { fr: 'a effectué un paiement', en: 'made a payment' },
+  payment_refunded: { fr: 'a été remboursé', en: 'was refunded' },
+  payment_updated: { fr: 'a modifié un paiement', en: 'edited a payment' },
+  payment_deleted: { fr: 'a supprimé un paiement', en: 'deleted a payment' },
+  note_created: { fr: 'a ajouté une note', en: 'added a note' },
+  note_deleted: { fr: 'a supprimé une note', en: 'deleted a note' },
+  review_received: { fr: 'a laissé un avis', en: 'left a review' },
+  card_saved: { fr: 'a enregistré une carte', en: 'saved a card' },
+};
+
+// ── Customize center : les 11 catégories, toutes visibles par défaut ──
+const CATEGORIES: Array<{ key: string; fr: string; en: string }> = [
+  { key: 'clients', fr: 'Clients', en: 'Clients' },
+  { key: 'requests', fr: 'Demandes', en: 'Requests' },
+  { key: 'quotes', fr: 'Devis', en: 'Quotes' },
+  { key: 'jobs', fr: 'Jobs', en: 'Jobs' },
+  { key: 'visits', fr: 'Visites', en: 'Visits' },
+  { key: 'invoices', fr: 'Factures', en: 'Invoices' },
+  { key: 'payments', fr: 'Paiements', en: 'Payments' },
+  { key: 'notes', fr: 'Notes', en: 'Notes' },
+  { key: 'reviews', fr: 'Avis', en: 'Reviews' },
+  { key: 'marketing', fr: 'Marketing', en: 'Marketing' },
+  { key: 'timesheets', fr: 'Feuilles de temps', en: 'Timesheets' },
+];
+
+/** Catégorie d'un type d'événement — null = toujours visible (non catégorisé). */
+function categoryOf(type: string): string | null {
+  if (type.startsWith('client_') || type.startsWith('lead_')) return 'clients';
+  if (type.startsWith('request_')) return 'requests';
+  if (type.startsWith('quote_')) return 'quotes';
+  if (type.startsWith('job_')) return 'jobs';
+  if (type.startsWith('visit_') || type === 'event_created') return 'visits';
+  if (type.startsWith('invoice_')) return 'invoices';
+  if (type.startsWith('payment_') || type === 'card_saved') return 'payments';
+  if (type.startsWith('note_')) return 'notes';
+  if (type === 'review_received') return 'reviews';
+  if (type.startsWith('campaign_') || type.startsWith('marketing_')) return 'marketing';
+  if (type.startsWith('timesheet_') || type.startsWith('timeclock_')) return 'timesheets';
+  return null;
 }
 
-/** Titre d'une notification : libellé localisé si le type est connu, sinon le titre stocké. */
-function notifTitle(type: string, storedTitle: string, lang: string): string {
-  const l = TYPE_LABELS[type];
-  return l ? (lang === 'fr' ? l.fr : l.en) : storedTitle;
+const HIDDEN_KEY = 'lume-activity-center-hidden';
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Extrait le dernier montant $X du body pour le remonter dans le titre. */
+function extractAmount(body: string): { amount: string | null; rest: string } {
+  const matches = body.match(/\$[\d,]+(?:\.\d{2})?/g);
+  if (!matches) return { amount: null, rest: body };
+  const amount = matches[matches.length - 1];
+  let rest = body.replace(new RegExp('\\s*·\\s*' + escapeRegExp(amount)), '');
+  rest = rest.replace(new RegExp('^' + escapeRegExp(amount) + '\\s*·\\s*'), '');
+  if (rest.trim() === amount) rest = '';
+  return { amount, rest };
+}
+
+/** Compose l'item affiché à partir d'une ligne notifications. */
+function buildNotifItem(n: NotifRow, language: string): ActivityItem {
+  const iconInfo = ICON_MAP[n.type] || { icon: Activity, color: 'text-text-tertiary' };
+  const { amount, rest } = extractAmount(n.body || '');
+  const actor = (n.actor_name || '').trim() || null;
+
+  // Ligne 2 : le body, sans le montant (remonté au titre) ni l'acteur (déjà au titre).
+  let subtitle = rest;
+  if (actor && subtitle) {
+    subtitle = subtitle
+      .replace(new RegExp('\\s*·\\s*' + escapeRegExp(actor)), '')
+      .replace(new RegExp('^' + escapeRegExp(actor) + '\\s*·\\s*'), '');
+    if (subtitle.trim() === actor) subtitle = '';
+  }
+
+  // Ligne 1 : « acteur + verbe » quand on connaît l'acteur, sinon libellé localisé.
+  const verb = actor ? ACTOR_VERBS[n.type] : undefined;
+  const label = TYPE_LABELS[n.type];
+  let title = verb && actor
+    ? `${actor} ${language === 'fr' ? verb.fr : verb.en}`
+    : (label ? (language === 'fr' ? label.fr : label.en) : n.title);
+  if (amount) title += ` — ${amount}`;
+
+  return {
+    id: `notif-${n.id}`,
+    type: n.type,
+    icon: iconInfo.icon,
+    iconColor: iconInfo.color,
+    title,
+    subtitle: subtitle.trim(),
+    timestamp: n.created_at,
+    link: n.link || undefined,
+  };
 }
 
 export default function ActivityCenter({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -185,6 +302,34 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
   const [loading, setLoading] = useState(true);
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>(() => desktopNotificationPermission());
   const [notifOn, setNotifOn] = useState<boolean>(() => desktopNotificationsEnabled());
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [hidden, setHidden] = useState<Set<string>>(() => {
+    try {
+      return new Set<string>(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]'));
+    } catch {
+      return new Set<string>();
+    }
+  });
+
+  function toggleCategory(key: string) {
+    setHidden(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...next])); } catch { /* quota */ }
+      return next;
+    });
+  }
+
+  // Fermer le menu Customize au clic à l'extérieur
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -204,23 +349,11 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: `org_id=eq.${orgId}` },
-        (payload: { new: { id: string; type: string; title: string; body?: string; link?: string; created_at: string; is_read: boolean } }) => {
-          const n = payload.new;
-          const iconInfo = ICON_MAP[n.type] || { icon: Activity, color: 'text-text-tertiary bg-surface-tertiary' };
-          const newItem: ActivityItem = {
-            id: `notif-${n.id}`,
-            type: n.type,
-            icon: iconInfo.icon,
-            iconColor: iconInfo.color,
-            title: notifTitle(n.type, n.title, language),
-            subtitle: n.body || '',
-            timestamp: n.created_at,
-            link: n.link || undefined,
-            actionLabel: n.link ? (t.activityCenter.view) : undefined,
-          };
-          setActivities((prev) => [newItem, ...prev].slice(0, 50));
+        (payload: { new: NotifRow & { is_read: boolean } }) => {
+          const newItem = buildNotifItem(payload.new, language);
+          setActivities((prev) => [newItem, ...prev].slice(0, 100));
           // Mark as read immediately since panel is open
-          supabase.from('notifications').update({ is_read: true }).eq('id', n.id).then(() => {});
+          supabase.from('notifications').update({ is_read: true }).eq('id', payload.new.id).then(() => {});
         }
       )
       .subscribe();
@@ -237,7 +370,7 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
       const orgId = await getCurrentOrgIdOrThrow();
       const items: ActivityItem[] = [];
 
-      // Fetch recent clients
+      // Clients récents (créés / modifiés) — pas encore couverts par les triggers
       const { data: clients } = await supabase
         .from('clients')
         .select('id, first_name, last_name, created_at, updated_at')
@@ -249,22 +382,23 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
         const name = `${c.first_name || ''} ${c.last_name || ''}`.trim();
         const isNew = new Date(c.updated_at).getTime() - new Date(c.created_at).getTime() < 5000;
         const type = isNew ? 'client_created' : 'client_updated';
-        const label = getLabel(type, name, language);
         const iconInfo = ICON_MAP[type];
+        const title = isNew && name
+          ? (language === 'fr' ? `${name} est maintenant client` : `${name} became a client`)
+          : `${language === 'fr' ? TYPE_LABELS[type].fr : TYPE_LABELS[type].en}`;
         items.push({
           id: `client-${c.id}`,
           type,
           icon: iconInfo.icon,
           iconColor: iconInfo.color,
-          title: label.title,
-          subtitle: label.subtitle,
+          title,
+          subtitle: isNew && name ? '' : name,
           timestamp: isNew ? c.created_at : c.updated_at,
           link: `/clients/${c.id}`,
-          actionLabel: t.activityCenter.viewClient,
         });
       }
 
-      // Fetch recent leads (clients with status='lead')
+      // Leads récents (clients avec status='lead')
       const { data: leads } = await supabase
         .from('clients')
         .select('id, first_name, last_name, created_at')
@@ -276,20 +410,20 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
 
       for (const l of leads || []) {
         const name = `${l.first_name || ''} ${l.last_name || ''}`.trim();
-        const label = getLabel('lead_created', name, language);
         const iconInfo = ICON_MAP['lead_created'];
         items.push({
           id: `lead-${l.id}`,
           type: 'lead_created',
           icon: iconInfo.icon,
           iconColor: iconInfo.color,
-          title: label.title,
-          subtitle: label.subtitle,
+          title: language === 'fr' ? TYPE_LABELS.lead_created.fr : TYPE_LABELS.lead_created.en,
+          subtitle: name,
           timestamp: l.created_at,
+          link: `/clients/${l.id}`,
         });
       }
 
-      // Fetch recent jobs
+      // Jobs récents — pas encore couverts par les triggers
       const { data: jobs } = await supabase
         .from('jobs')
         .select('id, title, created_at')
@@ -298,82 +432,89 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
         .limit(8);
 
       for (const j of jobs || []) {
-        const label = getLabel('job_created', j.title || '', language);
         const iconInfo = ICON_MAP['job_created'];
         items.push({
           id: `job-${j.id}`,
           type: 'job_created',
           icon: iconInfo.icon,
           iconColor: iconInfo.color,
-          title: label.title,
-          subtitle: label.subtitle,
+          title: language === 'fr' ? TYPE_LABELS.job_created.fr : TYPE_LABELS.job_created.en,
+          subtitle: j.title || '',
           timestamp: j.created_at,
+          link: `/jobs/${j.id}`,
         });
       }
 
-      // Factures et paiements : plus de scraping des tables — les triggers DB
-      // (migration 20260747000000) journalisent créations, modifications,
-      // envois, paiements (réussis ET échoués) et suppressions dans
-      // notifications. Le scraping affichait les paiements échoués/supprimés
-      // comme « Paiement reçu ».
-
-      // Fetch recent messages
-      const { data: msgs } = await supabase
-        .from('messages')
-        .select('id, direction, phone_number, message_text, created_at')
-        .eq('org_id', orgId)
-        .order('created_at', { ascending: false })
-        .limit(8);
-
-      for (const m of msgs || []) {
-        const type = m.direction === 'outbound' ? 'message_sent' : 'message_received';
-        const preview = (m.message_text || '').slice(0, 40) + ((m.message_text || '').length > 40 ? '...' : '');
-        const label = getLabel(type, preview, language);
-        const iconInfo = ICON_MAP[type];
-        items.push({
-          id: `msg-${m.id}`,
-          type,
-          icon: iconInfo.icon,
-          iconColor: iconInfo.color,
-          title: label.title,
-          subtitle: label.subtitle,
-          timestamp: m.created_at,
-        });
-      }
-
-      // Notifications : le journal d'événements (devis, factures, paiements,
-      // notes, avis, cartes — via triggers DB) + les types historiques.
+      // Le journal d'événements (devis, factures, paiements, notes, avis,
+      // cartes — via triggers DB) + types historiques. select('*') pour
+      // tolérer l'absence de actor_name tant que la migration n'est pas
+      // appliquée (supabase-js avale les erreurs de colonne inconnue).
       const { data: notifications } = await supabase
         .from('notifications')
-        .select('id, type, title, body, link, created_at')
+        .select('*')
         .eq('org_id', orgId)
         .order('created_at', { ascending: false })
-        .limit(40);
+        .limit(60);
 
-      for (const n of notifications || []) {
-        const iconInfo = ICON_MAP[n.type] || { icon: Activity, color: 'text-text-tertiary bg-surface-tertiary' };
-        items.push({
-          id: `notif-${n.id}`,
-          type: n.type,
-          icon: iconInfo.icon,
-          iconColor: iconInfo.color,
-          title: notifTitle(n.type, n.title, language),
-          subtitle: n.body || '',
-          timestamp: n.created_at,
-          link: n.link || undefined,
-          actionLabel: n.link ? t.activityCenter.view : undefined,
-        });
+      for (const n of (notifications || []) as NotifRow[]) {
+        items.push(buildNotifItem(n, language));
       }
 
       // Sort all by timestamp descending
       items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-      setActivities(items.slice(0, 50));
+      setActivities(items.slice(0, 100));
     } catch (err) {
       console.error('Failed to load activities:', err);
     } finally {
       setLoading(false);
     }
+  }
+
+  const visibleItems = activities.filter(a => {
+    const cat = categoryOf(a.type);
+    return !cat || !hidden.has(cat);
+  });
+
+  // Rendu groupé par jour avec en-têtes collants
+  const feedNodes: React.ReactNode[] = [];
+  let currentDay: string | null = null;
+  for (const item of visibleItems) {
+    const day = dayLabel(item.timestamp, language);
+    if (day !== currentDay) {
+      currentDay = day;
+      feedNodes.push(
+        <div
+          key={`day-${day}`}
+          className="sticky top-0 z-10 bg-surface-card/95 backdrop-blur-sm px-5 sm:px-7 pt-3.5 pb-2 text-[10.5px] font-bold uppercase tracking-[0.12em] text-text-tertiary"
+        >
+          {day}
+        </div>
+      );
+    }
+    feedNodes.push(
+      <div
+        key={item.id}
+        className={cn(
+          'flex gap-4 px-5 sm:px-7 py-[17px] border-b border-outline-subtle last:border-b-0 transition-colors',
+          item.link ? 'cursor-pointer hover:bg-surface-secondary/60' : 'hover:bg-surface-secondary/40',
+        )}
+        onClick={item.link ? () => { navigate(item.link!); onClose(); } : undefined}
+      >
+        <div className="shrink-0 pt-0.5">
+          <item.icon size={18} strokeWidth={1.8} className={item.iconColor} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[14px] font-bold text-text-primary leading-snug">{item.title}</p>
+          {item.subtitle && (
+            <p className="text-[13px] text-text-secondary leading-snug mt-0.5">{item.subtitle}</p>
+          )}
+          <p className="text-[11.5px] text-text-tertiary mt-1 tabular-nums">
+            {timeAgo(item.timestamp, language)}
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -385,137 +526,158 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-black/20"
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-40 bg-black/30"
             onClick={onClose}
           />
-          {/* Panel */}
-          <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed top-0 right-0 bottom-0 z-50 w-[400px] max-w-[90vw] bg-surface border-l border-outline/60 shadow-2xl flex flex-col"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-outline/60">
-              <div className="flex items-center gap-3">
-                <Activity size={16} className="text-primary" />
-                <h2 className="text-xl font-bold text-text-primary">
+          {/* Modale centrée (plein écran sur mobile) */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none sm:p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="pointer-events-auto bg-surface-card w-full h-full sm:w-[600px] sm:h-[720px] sm:max-h-[86vh] sm:rounded-2xl sm:border sm:border-outline shadow-2xl flex flex-col overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 sm:px-7 pt-5 sm:pt-6 pb-3">
+                <h2 className="text-lg font-bold text-text-primary tracking-tight">
                   {language === 'fr' ? 'Centre d\'activités' : 'Activity Center'}
                 </h2>
+                <button
+                  onClick={onClose}
+                  className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
+                >
+                  <X size={15} />
+                </button>
               </div>
-              <button
-                onClick={onClose}
-                className="p-2 rounded-xl text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
 
-            {/* Desktop notifications opt-in — fires native OS alerts when Lume
-                is open but not the focused tab. Hidden once blocked at the browser level. */}
-            {desktopNotificationsSupported() && notifPerm !== 'denied' && (
-              <div className="px-6 py-3 border-b border-outline/60 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <BellRing size={14} className="text-primary shrink-0" />
-                  <span className="text-[12px] text-text-secondary truncate">
-                    {notifPerm === 'granted' && notifOn
-                      ? (language === 'fr' ? 'Notifications bureau activées' : 'Desktop notifications on')
-                      : (language === 'fr' ? 'Soyez alerté même sur un autre onglet' : 'Get alerted even on another tab')}
-                  </span>
-                </div>
-                {notifPerm === 'granted' && notifOn ? (
+              {/* Toolbar — Customize center */}
+              <div className="px-5 sm:px-7 pb-3.5 border-b border-outline-subtle">
+                <div ref={menuRef} className="relative inline-block">
                   <button
-                    onClick={() => { setDesktopNotificationsEnabled(false); setNotifOn(false); }}
-                    className="text-[11px] font-medium text-text-tertiary hover:text-text-primary shrink-0 transition-colors"
+                    onClick={() => setMenuOpen(o => !o)}
+                    aria-haspopup="true"
+                    aria-expanded={menuOpen}
+                    className="inline-flex items-center gap-2 h-8 px-3 rounded-lg bg-surface-secondary border border-outline text-[12.5px] font-semibold text-text-primary hover:bg-surface-tertiary transition-colors"
                   >
-                    {language === 'fr' ? 'Désactiver' : 'Turn off'}
+                    <SlidersHorizontal size={14} className="text-text-tertiary" />
+                    {language === 'fr' ? 'Personnaliser le centre' : 'Customize center'}
                   </button>
-                ) : (
-                  <button
-                    onClick={async () => {
-                      let perm: NotificationPermission = notifPerm;
-                      if (perm === 'granted') {
-                        setDesktopNotificationsEnabled(true);
-                      } else {
-                        perm = await requestDesktopNotificationPermission();
-                        setNotifPerm(perm);
-                      }
-                      const enabled = desktopNotificationsEnabled();
-                      setNotifOn(enabled);
-
-                      if (enabled) {
-                        // Immediate proof it works — force past the foreground guard.
-                        showDesktopNotification({
-                          title: 'Lume',
-                          body: language === 'fr'
-                            ? 'Notifications bureau activées ✅'
-                            : 'Desktop notifications enabled ✅',
-                          tag: 'lume-notif-test',
-                          force: true,
-                        });
-                        toast.success(language === 'fr'
-                          ? 'Notifications bureau activées'
-                          : 'Desktop notifications enabled');
-                      } else if (perm === 'denied') {
-                        toast.error(language === 'fr'
-                          ? 'Notifications bloquées dans le navigateur. Autorisez-les dans les réglages du site.'
-                          : 'Notifications are blocked in the browser. Allow them in site settings.');
-                      }
-                    }}
-                    className="text-[11px] font-semibold text-primary hover:underline shrink-0"
-                  >
-                    {language === 'fr' ? 'Activer' : 'Enable'}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Activity list */}
-            <div className="flex-1 overflow-y-auto">
-              {loading ? (
-                <div className="p-10 flex justify-center">
-                  <div className="w-5 h-5 border-2 border-outline-subtle border-t-text-primary rounded-full animate-spin" />
-                </div>
-              ) : activities.length === 0 ? (
-                <div className="p-10 text-center text-text-tertiary text-[13px]">
-                  {t.activityCenter.noRecentActivity}
-                </div>
-              ) : (
-                <div className="py-3">
-                  {activities.map((item, idx) => (
-                    <div
-                      key={item.id}
-                      className={cn(
-                        "flex items-start gap-3.5 px-6 py-3.5 transition-all duration-150",
-                        item.link ? "hover:bg-surface-tertiary/50 cursor-pointer" : "",
-                      )}
-                      onClick={item.link ? () => { navigate(item.link!); onClose(); } : undefined}
-                    >
-                      <div className={cn("w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 mt-0.5", item.iconColor)}>
-                        <item.icon size={15} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-bold text-text-primary">{item.title}</p>
-                        <p className="text-[12px] text-text-tertiary truncate mt-0.5">{item.subtitle}</p>
-                        {item.actionLabel && item.link && (
+                  {menuOpen && (
+                    <div className="absolute top-full left-0 mt-1 w-56 max-h-[340px] overflow-y-auto bg-surface-card border border-outline rounded-xl shadow-lg z-30 p-1.5">
+                      <p className="px-2.5 pt-1.5 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+                        {language === 'fr' ? 'Afficher dans le fil' : 'Show in feed'}
+                      </p>
+                      {CATEGORIES.map(c => {
+                        const checked = !hidden.has(c.key);
+                        return (
                           <button
-                            onClick={(e) => { e.stopPropagation(); navigate(item.link!); onClose(); }}
-                            className="mt-1.5 text-[11px] font-bold text-primary hover:text-primary/80 transition-colors"
+                            key={c.key}
+                            role="menuitemcheckbox"
+                            aria-checked={checked}
+                            onClick={() => toggleCategory(c.key)}
+                            className={cn(
+                              'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-left transition-colors hover:bg-surface-secondary',
+                              checked ? 'text-text-primary' : 'text-text-tertiary',
+                            )}
                           >
-                            {item.actionLabel}
+                            <span
+                              className={cn(
+                                'w-4 h-4 rounded-[5px] border flex items-center justify-center shrink-0 transition-colors',
+                                checked ? 'bg-primary border-primary' : 'bg-surface-card border-outline-strong',
+                              )}
+                            >
+                              {checked && <Check size={11} strokeWidth={3.2} className="text-primary-foreground" />}
+                            </span>
+                            {language === 'fr' ? c.fr : c.en}
                           </button>
-                        )}
-                      </div>
-                      <span className="text-[10px] font-medium text-text-tertiary shrink-0 mt-1">
-                        {timeAgo(item.timestamp, language)}
-                      </span>
+                        );
+                      })}
                     </div>
-                  ))}
+                  )}
+                </div>
+              </div>
+
+              {/* Desktop notifications opt-in — fires native OS alerts when Lume
+                  is open but not the focused tab. Hidden once blocked at the browser level. */}
+              {desktopNotificationsSupported() && notifPerm !== 'denied' && (
+                <div className="px-5 sm:px-7 py-2.5 border-b border-outline-subtle flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <BellRing size={14} className="text-primary shrink-0" />
+                    <span className="text-[12px] text-text-secondary truncate">
+                      {notifPerm === 'granted' && notifOn
+                        ? (language === 'fr' ? 'Notifications bureau activées' : 'Desktop notifications on')
+                        : (language === 'fr' ? 'Soyez alerté même sur un autre onglet' : 'Get alerted even on another tab')}
+                    </span>
+                  </div>
+                  {notifPerm === 'granted' && notifOn ? (
+                    <button
+                      onClick={() => { setDesktopNotificationsEnabled(false); setNotifOn(false); }}
+                      className="text-[11px] font-medium text-text-tertiary hover:text-text-primary shrink-0 transition-colors"
+                    >
+                      {language === 'fr' ? 'Désactiver' : 'Turn off'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        let perm: NotificationPermission = notifPerm;
+                        if (perm === 'granted') {
+                          setDesktopNotificationsEnabled(true);
+                        } else {
+                          perm = await requestDesktopNotificationPermission();
+                          setNotifPerm(perm);
+                        }
+                        const enabled = desktopNotificationsEnabled();
+                        setNotifOn(enabled);
+
+                        if (enabled) {
+                          // Immediate proof it works — force past the foreground guard.
+                          showDesktopNotification({
+                            title: 'Lume',
+                            body: language === 'fr'
+                              ? 'Notifications bureau activées ✅'
+                              : 'Desktop notifications enabled ✅',
+                            tag: 'lume-notif-test',
+                            force: true,
+                          });
+                          toast.success(language === 'fr'
+                            ? 'Notifications bureau activées'
+                            : 'Desktop notifications enabled');
+                        } else if (perm === 'denied') {
+                          toast.error(language === 'fr'
+                            ? 'Notifications bloquées dans le navigateur. Autorisez-les dans les réglages du site.'
+                            : 'Notifications are blocked in the browser. Allow them in site settings.');
+                        }
+                      }}
+                      className="text-[11px] font-semibold text-primary hover:underline shrink-0"
+                    >
+                      {language === 'fr' ? 'Activer' : 'Enable'}
+                    </button>
+                  )}
                 </div>
               )}
-            </div>
-          </motion.div>
+
+              {/* Feed — une seule colonne, groupée par jour */}
+              <div className="flex-1 overflow-y-auto overscroll-contain">
+                {loading ? (
+                  <div className="p-10 flex justify-center">
+                    <div className="w-5 h-5 border-2 border-outline-subtle border-t-text-primary rounded-full animate-spin" />
+                  </div>
+                ) : visibleItems.length === 0 ? (
+                  <div className="p-12 text-center text-text-tertiary text-[13px]">
+                    {activities.length > 0
+                      ? (language === 'fr'
+                        ? 'Tout est masqué — réactivez des catégories dans « Personnaliser le centre ».'
+                        : 'Everything is hidden — re-enable categories in Customize center.')
+                      : t.activityCenter.noRecentActivity}
+                  </div>
+                ) : (
+                  <div className="pb-2">{feedNodes}</div>
+                )}
+              </div>
+            </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>
