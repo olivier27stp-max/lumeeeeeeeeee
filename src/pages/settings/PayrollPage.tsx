@@ -24,8 +24,10 @@ import {
   markPeriodPaid,
   unmarkPeriodPaid,
   downloadPayrollCsv,
+  getPayHistory,
   type PeriodSummary,
   type PayrollRow,
+  type PayHistoryEntry,
 } from '../../lib/payrollApi';
 import PayrollSettingsPanel from '../../components/payroll/PayrollSettingsPanel';
 
@@ -64,6 +66,21 @@ export default function PayrollPage() {
   const [adjAmount, setAdjAmount] = useState('');
   const [adjNote, setAdjNote] = useState('');
   const [adjSaving, setAdjSaving] = useState(false);
+
+  // Per-employee pay history, lazy-loaded when a row is expanded.
+  const [historyByUser, setHistoryByUser] = useState<Record<string, PayHistoryEntry[] | 'loading'>>({});
+
+  async function openRow(userId: string) {
+    setOpenUserId(userId);
+    if (historyByUser[userId]) return;
+    setHistoryByUser((prev) => ({ ...prev, [userId]: 'loading' }));
+    try {
+      const { payments } = await getPayHistory(userId);
+      setHistoryByUser((prev) => ({ ...prev, [userId]: payments }));
+    } catch {
+      setHistoryByUser((prev) => ({ ...prev, [userId]: [] }));
+    }
+  }
 
   const load = useCallback(async (r?: string) => {
     setLoading(true);
@@ -133,6 +150,12 @@ export default function PayrollPage() {
         toast.success(fr ? `${row.name} marqué payé` : `${row.name} marked paid`);
       }
       await load(ref);
+      // The paid list changed — drop the cached history so it reloads fresh.
+      setHistoryByUser((prev) => {
+        const next = { ...prev };
+        delete next[row.user_id];
+        return next;
+      });
     } catch (err: any) {
       toast.error(err?.message || (fr ? 'Échec' : 'Failed'));
     } finally {
@@ -280,7 +303,7 @@ export default function PayrollPage() {
             return (
               <div key={row.user_id}>
                 <button
-                  onClick={() => setOpenUserId(isOpen ? null : row.user_id)}
+                  onClick={() => (isOpen ? setOpenUserId(null) : openRow(row.user_id))}
                   className="w-full grid grid-cols-2 md:grid-cols-[1fr_70px_80px_90px_90px_90px_100px_110px] gap-2 px-4 py-3 items-center text-left hover:bg-surface-secondary/40 transition-colors"
                 >
                   <span className="flex items-center gap-1.5 min-w-0">
@@ -355,6 +378,40 @@ export default function PayrollPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Pay history for this employee */}
+                    {!summary?.migration_missing && (() => {
+                      const hist = historyByUser[row.user_id];
+                      return (
+                        <div>
+                          <p className="text-[10.5px] font-bold uppercase tracking-wider text-text-tertiary mb-1.5">
+                            {fr ? 'Historique de paie' : 'Pay history'}
+                          </p>
+                          {hist === 'loading' || hist === undefined ? (
+                            <Loader2 size={13} className="animate-spin text-text-tertiary" />
+                          ) : hist.length === 0 ? (
+                            <p className="text-[11.5px] text-text-tertiary">
+                              {fr ? 'Aucune paye enregistrée — marquez une période « Payé » pour bâtir l\'historique.' : 'No recorded pays — mark a period as paid to build history.'}
+                            </p>
+                          ) : (
+                            <div className="space-y-1">
+                              {hist.map((h) => (
+                                <div key={h.period_start} className="flex items-center justify-between gap-3 rounded-lg bg-surface-card border border-outline/50 px-3 py-1.5 text-[12px]">
+                                  <span className="text-text-secondary tabular-nums">
+                                    {fmtDate(h.period_start, fr)} → {fmtDate(h.period_end, fr)}
+                                  </span>
+                                  <span className="text-text-tertiary tabular-nums hidden sm:inline">
+                                    {Number(h.hours).toFixed(1)} h
+                                    {h.commission_cents > 0 && <> · {fr ? 'comm.' : 'comm.'} {money(h.commission_cents)}</>}
+                                  </span>
+                                  <span className="font-semibold text-text-primary tabular-nums">{money(h.total_cents)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Paid toggle */}
                     {!summary?.migration_missing && (
