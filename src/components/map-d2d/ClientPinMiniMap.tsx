@@ -15,7 +15,8 @@ import { useTranslation } from '../../i18n';
 // Same FieldSales API status → pin status mapping as D2DMap.
 const STATUS_MAP: Record<string, PinStatus> = {
   sale: 'closed_won', sold: 'closed_won', closed_won: 'closed_won',
-  lead: 'follow_up', follow_up: 'follow_up', callback: 'follow_up',
+  lead: 'lead',
+  follow_up: 'follow_up', callback: 'follow_up',
   no_answer: 'no_answer',
   not_interested: 'rejected', do_not_knock: 'rejected', rejected: 'rejected',
   quote_sent: 'appointment', appointment: 'appointment',

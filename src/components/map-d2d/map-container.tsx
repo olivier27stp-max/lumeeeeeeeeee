@@ -93,8 +93,8 @@ function matchesDateFilter(dateStr: string, filter: DateFilter): boolean {
 export interface MapContainerProps {
   /** Called when a pin is set to closed_won — should open the Job modal */
   onPinClosedWon?: (pin: LeadPinData) => void;
-  /** Called when a pin is set to appointment — should open the Quote modal */
-  onPinAppointment?: (pin: LeadPinData) => void;
+  /** Called when a pin is set to lead — should open the agreement/quote/skip choice */
+  onPinLead?: (pin: LeadPinData) => void;
   /** Called when the "Open client" popup action is used — resolves + navigates to the client page */
   onOpenClient?: (pin: LeadPinData) => void;
   /** Initial pins to render (loaded from API by parent) */
@@ -113,7 +113,7 @@ export interface MapContainerProps {
   focusCenter?: [number, number] | null;
 }
 
-export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, initialPins, onPinCreated, onPinDeleted, onPinUpdated, liveReps: liveRepsProp, pinLinkUpdates, focusCenter = null }: MapContainerProps = {}) {
+export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialPins, onPinCreated, onPinDeleted, onPinUpdated, liveReps: liveRepsProp, pinLinkUpdates, focusCenter = null }: MapContainerProps = {}) {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const containerRef = useRef<HTMLDivElement>(null);
@@ -122,8 +122,8 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   // Stable refs for callbacks (avoids stale closure in map click handler)
   const onPinClosedWonRef = useRef(onPinClosedWon);
   onPinClosedWonRef.current = onPinClosedWon;
-  const onPinAppointmentRef = useRef(onPinAppointment);
-  onPinAppointmentRef.current = onPinAppointment;
+  const onPinLeadRef = useRef(onPinLead);
+  onPinLeadRef.current = onPinLead;
   const onOpenClientRef = useRef(onOpenClient);
   onOpenClientRef.current = onOpenClient;
   const onPinCreatedRef = useRef(onPinCreated);
@@ -165,7 +165,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   // --- Filters ---
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<PinStatus>>(
-    new Set(['closed_won', 'follow_up', 'appointment', 'no_answer', 'rejected', 'other'])
+    new Set(['closed_won', 'lead', 'follow_up', 'appointment', 'no_answer', 'rejected', 'other'])
   );
   const [showNotes, setShowNotes] = useState(true);
   const [pinDateFilter, setPinDateFilter] = useState<DateFilter>('all');
@@ -647,8 +647,8 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
               popup.remove();
               if (current.status === 'closed_won' && onPinClosedWonRef.current) {
                 onPinClosedWonRef.current(current);
-              } else if (current.status === 'appointment' && onPinAppointmentRef.current) {
-                onPinAppointmentRef.current(current);
+              } else if (current.status === 'lead' && onPinLeadRef.current) {
+                onPinLeadRef.current(current);
               }
             };
           }
@@ -809,13 +809,13 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
                 const finalPin = rec?.pin || pin;
                 // Save pin to DB
                 onPinCreatedRef.current?.(finalPin);
-                // Trigger CRM flow based on pin status
+                // Trigger CRM flow based on pin status (Vendu + Lead only)
                 if (finalPin.status === 'closed_won') onPinClosedWonRef.current?.(finalPin);
-                if (finalPin.status === 'appointment') onPinAppointmentRef.current?.(finalPin);
+                if (finalPin.status === 'lead') onPinLeadRef.current?.(finalPin);
               }).catch(() => {
                 onPinCreatedRef.current?.(pin);
                 if (pin.status === 'closed_won') onPinClosedWonRef.current?.(pin);
-                if (pin.status === 'appointment') onPinAppointmentRef.current?.(pin);
+                if (pin.status === 'lead') onPinLeadRef.current?.(pin);
               });
             return;
           }
@@ -1318,14 +1318,14 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
     // Notify parent to persist the update
     onPinUpdatedRef.current?.(updated);
 
-    // Trigger CRM action if status changed to a CRM-linked status
-    if (statusChanged || (!updated.job_id && newStatus === 'closed_won') || (!updated.quote_id && newStatus === 'appointment')) {
+    // Trigger CRM action if status changed to a CRM-linked status (Vendu + Lead only)
+    if (statusChanged || (!updated.job_id && newStatus === 'closed_won') || (!updated.job_id && !updated.quote_id && newStatus === 'lead')) {
       if (newStatus === 'closed_won' && !updated.job_id && onPinClosedWonRef.current) onPinClosedWonRef.current(updated);
-      if (newStatus === 'appointment' && !updated.quote_id && onPinAppointmentRef.current) onPinAppointmentRef.current(updated);
+      if (newStatus === 'lead' && !updated.job_id && !updated.quote_id && onPinLeadRef.current) onPinLeadRef.current(updated);
     }
   }
 
-  // (Lume handlers removed — CRM actions handled via onPinClosedWon/onPinAppointment callbacks)
+  // (Lume handlers removed — CRM actions handled via onPinClosedWon/onPinLead callbacks)
 
   // ---------------------------------------------------------------------------
   // Quick status change from the "Log prospecting pin" action modal.
@@ -1344,9 +1344,9 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
     // Persist the update
     onPinUpdatedRef.current?.(updated);
 
-    // Fire CRM action when the new status is CRM-linked
+    // Fire CRM action when the new status is CRM-linked (Vendu + Lead only)
     if (newStatus === 'closed_won' && !updated.job_id && onPinClosedWonRef.current) onPinClosedWonRef.current(updated);
-    else if (newStatus === 'appointment' && !updated.quote_id && onPinAppointmentRef.current) onPinAppointmentRef.current(updated);
+    else if (newStatus === 'lead' && !updated.job_id && !updated.quote_id && onPinLeadRef.current) onPinLeadRef.current(updated);
 
     void statusChanged;
   }
@@ -1365,9 +1365,9 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
     // Persist (parent creates the house/pin server-side)
     onPinCreatedRef.current?.(created);
 
-    // CRM flow: closed won → create Job, appointment → create Quote
+    // CRM flow: closed won → create Job, lead → agreement/quote/skip choice
     if (newStatus === 'closed_won' && onPinClosedWonRef.current) onPinClosedWonRef.current(created);
-    else if (newStatus === 'appointment' && onPinAppointmentRef.current) onPinAppointmentRef.current(created);
+    else if (newStatus === 'lead' && onPinLeadRef.current) onPinLeadRef.current(created);
   }
 
   // ---------------------------------------------------------------------------
@@ -2226,7 +2226,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
                   Existing pin → compact 2×2 chips (info stays the focus). */}
               {actionIsNew ? (
                 <div className="mt-4 flex flex-col gap-2.5">
-                  {(['no_answer', 'rejected', 'follow_up', 'closed_won'] as PinStatus[]).map((status) => {
+                  {(['no_answer', 'rejected', 'follow_up', 'lead', 'closed_won'] as PinStatus[]).map((status) => {
                     const cfg = PIN_STATUS_CONFIG[status];
                     // Button color = the color of the pin it creates.
                     const label = status === 'closed_won' ? (fr ? '+ Créer une Job' : '+ Create Job') : cfg.label;
@@ -2246,7 +2246,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
                 <>
                   <p className="mb-1.5 mt-4 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">{fr ? 'Statut' : 'Status'}</p>
                   <div className="grid grid-cols-2 gap-1.5">
-                    {(['no_answer', 'rejected', 'follow_up', 'closed_won'] as PinStatus[]).map((status) => {
+                    {(['no_answer', 'rejected', 'follow_up', 'lead', 'closed_won'] as PinStatus[]).map((status) => {
                       const cfg = PIN_STATUS_CONFIG[status];
                       const active = actionPin.status === status;
                       return (

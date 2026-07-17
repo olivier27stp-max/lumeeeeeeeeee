@@ -12,7 +12,7 @@ import type { Lead } from '../../types';
 // CRM Action types
 // ---------------------------------------------------------------------------
 
-export type CrmAction = 'open_job' | 'open_quote' | 'none';
+export type CrmAction = 'open_job' | 'open_lead_choice' | 'none';
 
 export interface PinCrmMapping {
   action: CrmAction;
@@ -30,11 +30,13 @@ export const PIN_STATUS_CRM_MAP: Record<PinStatus, PinCrmMapping> = {
     label: 'Créer une Job',
     description: 'Ouvre le formulaire de création de Job CRM',
   },
-  appointment: {
-    action: 'open_quote',
-    label: 'Créer un Devis',
-    description: 'Ouvre le formulaire de création de Devis CRM',
+  lead: {
+    action: 'open_lead_choice',
+    label: 'Devis ou Contrat',
+    description: 'Propose de créer un devis, un contrat, ou de passer',
   },
+  // Seuls les pins Vendu et Lead déclenchent une action au placement.
+  appointment: { action: 'none', label: '', description: '' },
   follow_up: { action: 'none', label: '', description: '' },
   no_answer: { action: 'none', label: '', description: '' },
   rejected: { action: 'none', label: '', description: '' },
@@ -78,6 +80,7 @@ export function pinToLeadData(pin: LeadPinData): Partial<Lead> {
 export function pinToJobDraft(pin: LeadPinData) {
   return {
     title: `Job — ${pin.name}`,
+    client_id: pin.client_id || pin.lead_id || null,
     property_address: pin.address || null,
     description: [
       pin.note ? `Note D2D: ${pin.note}` : '',

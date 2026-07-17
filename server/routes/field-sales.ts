@@ -18,8 +18,8 @@ router.use(guardCommonShape);
 
 const STATUS_COLORS: Record<string, string> = {
   unknown: '#6b7280', no_answer: '#9ca3af', not_interested: '#ef4444',
-  lead: '#3b82f6', quote_sent: '#a855f7', sale: '#22c55e',
-  callback: '#f59e0b', do_not_knock: '#dc2626', revisit: '#06b6d4',
+  lead: '#A855F7', quote_sent: '#a855f7', sale: '#22c55e',
+  callback: '#06b6d4', do_not_knock: '#dc2626', revisit: '#06b6d4',
 };
 
 // ---------------------------------------------------------------------------
@@ -271,7 +271,7 @@ router.post('/houses', async (req: Request, res: Response) => {
     // (lat/lng null) and would slip past the distance check.
     const { data: nearby } = await admin
       .from('field_house_profiles')
-      .select('id, address, address_normalized, lat, lng, client_id, metadata')
+      .select('id, address, address_normalized, lat, lng, client_id, metadata, current_status')
       .eq('org_id', auth.orgId)
       .is('deleted_at', null);
 
@@ -285,7 +285,10 @@ router.post('/houses', async (req: Request, res: Response) => {
     // duplicate above and as the 23505 fallback when an insert races us.
     const mergeIntoExisting = async (existing: any) => {
       const updates: Record<string, any> = { updated_at: new Date().toISOString() };
-      if (status) updates.current_status = status;
+      // Priorité Vendu : une maison 'sale' (job assignée) n'est jamais
+      // rétrogradée par un nouveau pin — seule une job pilote 'sale'.
+      const keepSale = existing.current_status === 'sale' && status !== 'sale';
+      if (status && !keepSale) updates.current_status = status;
       if (clientId && !existing.client_id) updates.client_id = clientId;
       if (assigned_user_id) updates.assigned_user_id = assigned_user_id;
       // The dropped pin has real coordinates; houses created by the clients
@@ -299,8 +302,8 @@ router.post('/houses', async (req: Request, res: Response) => {
 
       await admin.from('field_house_profiles').update(updates).eq('id', existing.id);
 
-      // Update pin visual
-      const pinStatus = status || 'unknown';
+      // Update pin visual (never repaint a sold pin to a lower status)
+      const pinStatus = keepSale ? 'sale' : (status || 'unknown');
       await admin.from('field_pins')
         .update({ status: pinStatus, pin_color: STATUS_COLORS[pinStatus] || '#9CA3AF', has_note: !!note_text, updated_at: new Date().toISOString() })
         .eq('house_id', existing.id);
@@ -344,7 +347,7 @@ router.post('/houses', async (req: Request, res: Response) => {
       if ((hErr as any).code === '23505') {
         const { data: existing } = await admin
           .from('field_house_profiles')
-          .select('id, address, address_normalized, lat, lng, client_id, metadata')
+          .select('id, address, address_normalized, lat, lng, client_id, metadata, current_status')
           .eq('org_id', auth.orgId)
           .eq('address_normalized', addressNorm)
           .is('deleted_at', null)

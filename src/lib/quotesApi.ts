@@ -347,7 +347,8 @@ export async function createQuote(payload: {
   // 6. Automation: new quote created → move deal to "New Prospect"
   moveLeadDealToStage(payload.lead_id || null, 'new_prospect');
 
-  // 6b. Sales map: drop a 🩵 Suivi pin at the quote's property (non-blocking).
+  // 6b. Sales map: drop a 🟣 Lead pin at the quote's property (non-blocking).
+  // Server-side guard keeps the pin 🟢 Vendu when the client already has a job.
   syncEntityPin('quote', quoteId, 'lead');
 
   // 7. Return full detail
@@ -491,8 +492,8 @@ export async function updateQuoteStatus(
   }
   if (newStatus === 'declined') {
     emitQuoteDeclined({ quoteId, leadId: quoteData.lead_id || undefined });
-    // Sales map: turn the linked pin 🔴 Refusé (non-blocking).
-    syncEntityPin('quote', quoteId, 'not_interested');
+    // Sales map: le pin n'est PAS repeint — un refus de devis ne change jamais
+    // le statut du pin (règle : seul le lien client/job pilote le pin).
   }
 
   return quoteData;

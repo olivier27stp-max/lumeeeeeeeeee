@@ -46,9 +46,9 @@ const PIN_EVENT_TYPES = new Set([
 // Pin colours aligned with the map UI (PIN_STATUS_CONFIG in src/components/map-d2d/lead-pin.ts).
 // NOTE: only DB-CHECK-valid statuses appear here ('sale', not the invalid 'sold').
 const PIN_STATUS_COLORS: Record<string, string> = {
-  sale: '#22C55E',          // closed_won → green (Fermé)
-  lead: '#06B6D4',          // follow_up → cyan (Suivi)
-  callback: '#06B6D4',      // follow_up → cyan
+  sale: '#22C55E',          // closed_won → green (Vendu)
+  lead: '#A855F7',          // lead → mauve (cible)
+  callback: '#06B6D4',      // follow_up → cyan (À repasser)
   revisit: '#06B6D4',       // follow_up → cyan
   not_interested: '#EF4444',// rejected → red (Refusé)
   do_not_knock: '#EF4444',  // rejected → red
@@ -118,7 +118,7 @@ export async function autoCreateOrMergePin(
   //    still waiting for geocoding, lat/lng null) or within 50m
   const { data: nearby } = await admin
     .from('field_house_profiles')
-    .select('id, address_normalized, lat, lng, client_id, lead_id, quote_id, job_id, territory_id, metadata')
+    .select('id, address_normalized, lat, lng, client_id, lead_id, quote_id, job_id, territory_id, metadata, current_status')
     .eq('org_id', org_id)
     .is('deleted_at', null);
 
@@ -131,6 +131,10 @@ export async function autoCreateOrMergePin(
   let isNew = false;
   let houseId: string;
   let territoryId: string | null = null;
+
+  // Priorité Vendu : une maison déjà 'sale' (job assignée) n'est jamais
+  // rétrogradée par un sync de quote/lead — seule une job pilote 'sale'.
+  let effectiveStatus = resolvedStatus;
 
   if (existingHouse) {
     // Merge: update existing house with new entity links
@@ -150,7 +154,10 @@ export async function autoCreateOrMergePin(
     if (entity_type === 'job') updates.job_id = entity_id;
 
     // Reflect the latest lifecycle status on the existing house (drives pin colour).
-    updates.current_status = resolvedStatus;
+    if ((existingHouse as any).current_status === 'sale' && resolvedStatus !== 'sale') {
+      effectiveStatus = 'sale';
+    }
+    updates.current_status = effectiveStatus;
     updates.last_activity_at = now;
 
     // We have real coordinates; trigger/backfill houses may not be geocoded yet.
@@ -215,7 +222,7 @@ export async function autoCreateOrMergePin(
       // merge our links into that house instead of failing.
       const { data: raced } = await admin
         .from('field_house_profiles')
-        .select('id, territory_id')
+        .select('id, territory_id, current_status')
         .eq('org_id', org_id)
         .eq('address_normalized', addressNorm)
         .is('deleted_at', null)
@@ -224,8 +231,11 @@ export async function autoCreateOrMergePin(
       isNew = false;
       houseId = raced.id;
       territoryId = raced.territory_id;
+      if ((raced as any).current_status === 'sale' && resolvedStatus !== 'sale') {
+        effectiveStatus = 'sale';
+      }
       await admin.from('field_house_profiles').update({
-        current_status: resolvedStatus,
+        current_status: effectiveStatus,
         last_activity_at: now,
         updated_at: now,
         ...(houseData.client_id ? { client_id: houseData.client_id } : {}),
@@ -241,7 +251,7 @@ export async function autoCreateOrMergePin(
   }
 
   // 2. Upsert pin
-  const pinStatus = resolvedStatus;
+  const pinStatus = effectiveStatus;
   const pinColor = PIN_STATUS_COLORS[pinStatus] ?? '#9CA3AF';
 
   const { data: existingPin } = await admin
@@ -284,9 +294,9 @@ export async function autoCreateOrMergePin(
     org_id,
     house_id: houseId,
     user_id,
-    event_type: PIN_EVENT_TYPES.has(resolvedStatus) ? resolvedStatus : 'status_change',
-    note_text: `Auto-synced from ${entity_type} (${resolvedStatus})`,
-    metadata: { auto_linked: true, entity_type, entity_id, status: resolvedStatus },
+    event_type: PIN_EVENT_TYPES.has(effectiveStatus) ? effectiveStatus : 'status_change',
+    note_text: `Auto-synced from ${entity_type} (${effectiveStatus})`,
+    metadata: { auto_linked: true, entity_type, entity_id, status: effectiveStatus },
     created_at: now,
   });
 

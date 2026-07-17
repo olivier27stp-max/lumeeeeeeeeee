@@ -96,6 +96,8 @@ export interface JobDraftInitialValues {
   end_at?: string | null;
   requires_invoicing?: boolean;
   billing_split?: boolean;
+  /** Pre-check the "Create agreement" box (e.g. Lead pin → "Create an agreement") */
+  create_agreement?: boolean;
   line_items?: JobDraftLineItem[];
   subtotal?: number | null;
   tax_total?: number | null;
@@ -499,6 +501,7 @@ export default function NewJobModal({
     setLeadId(initialValues?.lead_id || null);
     setClientId(initialValues?.client_id || '');
     setPropertyId(initialValues?.property_id || '');
+    setCreateAgreement(!isEditMode && !!initialValues?.create_agreement);
     if (isEditMode) {
       setTeamSelection(initialValues?.team_id || UNASSIGNED_TEAM_VALUE);
     } else {

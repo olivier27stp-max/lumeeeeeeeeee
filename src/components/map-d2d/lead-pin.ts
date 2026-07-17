@@ -4,6 +4,7 @@
 
 export type PinStatus =
   | 'closed_won'
+  | 'lead'
   | 'follow_up'
   | 'appointment'
   | 'no_answer'
@@ -50,6 +51,14 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     gradientTo: '#16A34A',
     label: 'Vendu ✓',
     iconPaths: '<polyline points="20 6 9 17 4 12"/>',
+  },
+  lead: {
+    color: '#A855F7',
+    gradientFrom: '#C084FC',
+    gradientTo: '#9333EA',
+    label: 'Lead',
+    // Sniper target: scope circle + 4 crosshair ticks + center dot
+    iconPaths: '<circle cx="12" cy="12" r="7"/><line x1="12" y1="2" x2="12" y2="5.5"/><line x1="12" y1="18.5" x2="12" y2="22"/><line x1="2" y1="12" x2="5.5" y2="12"/><line x1="18.5" y1="12" x2="22" y2="12"/><circle cx="12" cy="12" r="1" fill="white" stroke="none"/>',
   },
   follow_up: {
     color: '#06B6D4',
@@ -146,6 +155,7 @@ export function createLeadPinPopupHTML(
     jobLinked: fr ? '✓ Job liée' : '✓ Job linked',
     createQuote: fr ? '+ Créer un Devis' : '+ Create Quote',
     quoteLinked: fr ? '✓ Devis lié' : '✓ Quote linked',
+    leadActions: fr ? '+ Devis ou Contrat' : '+ Quote or Agreement',
     edit: fr ? '✎ Modifier' : '✎ Edit',
     openClient: fr ? '→ Voir la fiche client' : '→ Open client',
   };
@@ -178,13 +188,19 @@ export function createLeadPinPopupHTML(
           ${L.jobLinked}
         </div>
       `;
-    } else if (pin.status === 'appointment' && !pin.quote_id) {
+    } else if (pin.status === 'lead' && !pin.job_id && !pin.quote_id) {
       crmRow = `
         <button id="${crmBtnId}" style="
           width:100%;padding:7px 0;border-radius:8px;margin-top:6px;
-          border:1px solid rgba(107,114,128,.3);background:rgba(107,114,128,.1);color:#9CA3AF;
+          border:1px solid rgba(168,85,247,.3);background:rgba(168,85,247,.1);color:#C084FC;
           font-size:11px;font-weight:600;cursor:pointer;
-        ">${L.createQuote}</button>
+        ">${L.leadActions}</button>
+      `;
+    } else if (pin.status === 'lead' && pin.quote_id) {
+      crmRow = `
+        <div style="margin-top:6px;padding:5px 8px;border-radius:8px;background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.15);font-size:10px;color:rgba(192,132,252,.8);text-align:center;">
+          ${L.quoteLinked}
+        </div>
       `;
     } else if (pin.status === 'appointment' && pin.quote_id) {
       crmRow = `

@@ -12,8 +12,8 @@ import { geocodeAddress, normalizeAddress } from './helpers';
 
 const STATUS_COLORS: Record<string, string> = {
   unknown: '#6b7280', no_answer: '#9ca3af', not_interested: '#ef4444',
-  lead: '#3b82f6', quote_sent: '#a855f7', sale: '#22c55e',
-  callback: '#f59e0b', do_not_knock: '#dc2626', revisit: '#06b6d4',
+  lead: '#A855F7', quote_sent: '#a855f7', sale: '#22c55e',
+  callback: '#06b6d4', do_not_knock: '#dc2626', revisit: '#06b6d4',
 };
 
 function haversineMetres(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -84,7 +84,7 @@ export async function upsertLeadPinForClient(
     // 1. Existing house at the same normalized address
     const { data: byAddress } = await admin
       .from('field_house_profiles')
-      .select('id, client_id, lat')
+      .select('id, client_id, lat, current_status')
       .eq('org_id', input.orgId)
       .eq('address_normalized', addressNorm)
       .is('deleted_at', null)
@@ -92,6 +92,9 @@ export async function upsertLeadPinForClient(
 
     let houseId: string | null = byAddress?.id ?? null;
     let existingClientId: string | null = byAddress?.client_id ?? null;
+    // Priorité Vendu : une maison déjà 'sale' (job assignée) n'est jamais
+    // rétrogradée en 'lead' par une request entrante.
+    let existingStatus: string | null = (byAddress as any)?.current_status ?? null;
     // House created without coords (e.g. by the trg_clients_ensure_field_pin
     // DB trigger, which cannot geocode): fill them in during the merge below.
     const needsCoords = !!byAddress && byAddress.lat == null;
@@ -110,7 +113,7 @@ export async function upsertLeadPinForClient(
 
         const { data: nearby } = await admin
           .from('field_house_profiles')
-          .select('id, lat, lng, client_id, lead_id, metadata')
+          .select('id, lat, lng, client_id, lead_id, metadata, current_status')
           .eq('org_id', input.orgId)
           .is('deleted_at', null);
         // Merge into a nearby house only when identities are compatible: 50 m
@@ -130,6 +133,7 @@ export async function upsertLeadPinForClient(
         if (duplicate) {
           houseId = duplicate.id;
           existingClientId = duplicate.client_id ?? null;
+          existingStatus = (duplicate as any).current_status ?? null;
         }
       } else {
         geocodePending = true;
@@ -141,11 +145,13 @@ export async function upsertLeadPinForClient(
     }
 
     const created = !houseId;
+    // 'sale' garde toujours le dessus sur 'lead'
+    const pinStatus = existingStatus === 'sale' ? 'sale' : 'lead';
 
     if (houseId) {
-      // Merge: mark the existing house as a fresh lead
+      // Merge: mark the existing house as a fresh lead (unless already sold)
       const patch: Record<string, unknown> = {
-        current_status: 'lead',
+        current_status: pinStatus,
         client_id: existingClientId || input.clientId,
         last_activity_at: now,
         updated_at: now,
@@ -199,7 +205,7 @@ export async function upsertLeadPinForClient(
     if (existingPin?.id) {
       const { error: pinErr } = await admin
         .from('field_pins')
-        .update({ status: 'lead', pin_color: STATUS_COLORS.lead, has_note: !!input.noteText, updated_at: now })
+        .update({ status: pinStatus, pin_color: STATUS_COLORS[pinStatus], has_note: !!input.noteText, updated_at: now })
         .eq('id', existingPin.id);
       if (pinErr) console.error('[field-pin] pin update failed:', pinErr.message);
     } else {
@@ -207,8 +213,8 @@ export async function upsertLeadPinForClient(
         org_id: input.orgId,
         house_id: houseId,
         user_id: input.actorId,
-        status: 'lead',
-        pin_color: STATUS_COLORS.lead,
+        status: pinStatus,
+        pin_color: STATUS_COLORS[pinStatus],
         has_note: !!input.noteText,
       });
       if (pinErr) console.error('[field-pin] pin insert failed:', pinErr.message);

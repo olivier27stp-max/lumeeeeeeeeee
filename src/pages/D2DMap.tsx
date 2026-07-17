@@ -18,20 +18,25 @@ import { softDeleteClient } from '../lib/clientsApi';
 import { toast } from 'sonner';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useTranslation } from '../i18n';
 
 // Map FieldSales API status → LeadPinData status
 const STATUS_MAP: Record<string, PinStatus> = {
   sale: 'closed_won', sold: 'closed_won', closed_won: 'closed_won',
-  lead: 'follow_up', follow_up: 'follow_up', callback: 'follow_up',
+  lead: 'lead',
+  follow_up: 'follow_up', callback: 'follow_up',
   no_answer: 'no_answer',
   not_interested: 'rejected', do_not_knock: 'rejected', rejected: 'rejected',
   quote_sent: 'appointment', appointment: 'appointment',
   unknown: 'other', new: 'other', knocked: 'other', note: 'other', revisit: 'other', other: 'other',
 };
 
+// NOTE: DB 'lead' is now reserved for the Lead pin (client prospects); manual
+// "À repasser" pins are stored as 'callback' (migration 20260746000000).
 const REVERSE_STATUS_MAP: Record<PinStatus, string> = {
   closed_won: 'sale',
-  follow_up: 'lead',
+  lead: 'lead',
+  follow_up: 'callback',
   appointment: 'quote_sent',
   no_answer: 'no_answer',
   rejected: 'not_interested',
@@ -59,6 +64,8 @@ function apiPinToLeadPin(pin: FieldPinLight): LeadPinData {
 export default function D2DMap() {
   const { openJobModal } = useJobModalController();
   const navigate = useNavigate();
+  const { language } = useTranslation();
+  const fr = language === 'fr';
 
   // Deep-link focus (?lat=..&lng=..) — e.g. the client mini map in the job
   // form links here to open the map directly on that client's pin.
@@ -98,6 +105,9 @@ export default function D2DMap() {
   const [showQuoteModal, setShowQuoteModal] = useState(false);
   const [quoteLead, setQuoteLead] = useState<Lead | null>(null);
   const [pendingQuotePin, setPendingQuotePin] = useState<LeadPinData | null>(null);
+
+  // Lead pin placed → "agreement / quote / skip" choice modal
+  const [leadChoicePin, setLeadChoicePin] = useState<LeadPinData | null>(null);
 
   // Local link updates pushed into MapContainer (so popup shows "Job liée" right away)
   const [pinLinkUpdates, setPinLinkUpdates] = useState<Record<string, { job_id?: string; quote_id?: string; client_id?: string; lead_id?: string }>>({});
@@ -186,12 +196,12 @@ export default function D2DMap() {
   }, [pinHouseMap, handlePinCreated]);
 
   // ---------------------------------------------------------------------------
-  // Pin → Job (closed_won)
+  // Pin → Job creation form. Shared by the Vendu pin and the Lead pin's
+  // "Create an agreement" choice (withAgreement pre-checks the contract box).
   // ---------------------------------------------------------------------------
-  const handlePinClosedWon = useCallback((pin: LeadPinData) => {
-    if (pin.job_id) return;
+  const openJobForPin = useCallback((pin: LeadPinData, opts?: { withAgreement?: boolean }) => {
     openJobModal({
-      initialValues: pinToJobDraft(pin),
+      initialValues: { ...pinToJobDraft(pin), ...(opts?.withAgreement ? { create_agreement: true } : {}) },
       sourceContext: { type: 'door-to-door' },
       onCreated: (job) => {
         // Link the pin/house to the created job
@@ -205,11 +215,20 @@ export default function D2DMap() {
     });
   }, [openJobModal, pinHouseMap]);
 
-  // ---------------------------------------------------------------------------
-  // Pin → Quote (appointment)
-  // ---------------------------------------------------------------------------
-  const handlePinAppointment = useCallback((pin: LeadPinData) => {
-    if (pin.quote_id) return;
+  // Pin Vendu → Job creation form
+  const handlePinClosedWon = useCallback((pin: LeadPinData) => {
+    if (pin.job_id) return;
+    openJobForPin(pin);
+  }, [openJobForPin]);
+
+  // Pin Lead placé → choix "Créer un contrat / Créer un devis / Passer"
+  const handlePinLead = useCallback((pin: LeadPinData) => {
+    if (pin.job_id) return;
+    setLeadChoicePin(pin);
+  }, []);
+
+  // Choix "Create a quote" (depuis le pin Lead)
+  const openQuoteForPin = useCallback((pin: LeadPinData) => {
     setPendingQuotePin(pin);
     setQuoteLead(pinToQuoteLead(pin));
     setShowQuoteModal(true);
@@ -267,7 +286,7 @@ export default function D2DMap() {
       <MapContainer
         focusCenter={focusCenter}
         onPinClosedWon={handlePinClosedWon}
-        onPinAppointment={handlePinAppointment}
+        onPinLead={handlePinLead}
         onOpenClient={handleOpenClient}
         initialPins={initialPins}
         onPinCreated={handlePinCreated}
@@ -293,6 +312,46 @@ export default function D2DMap() {
         lead={quoteLead}
         createLeadInline={true}
       />
+
+      {/* Lead pin → "agreement / quote / skip" choice */}
+      {leadChoicePin && (
+        <div
+          className="absolute inset-0 z-[70] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
+          onClick={() => setLeadChoicePin(null)}
+        >
+          <div
+            className="w-[360px] max-w-[92vw] overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h3 className="text-[16px] font-bold text-slate-900">
+                {fr ? 'Nouveau lead' : 'New lead'}
+              </h3>
+              <p className="mt-0.5 truncate text-[12px] text-slate-400">{leadChoicePin.address}</p>
+            </div>
+            <div className="flex flex-col gap-2.5 px-5 py-4">
+              <button
+                onClick={() => { const pin = leadChoicePin; setLeadChoicePin(null); openJobForPin(pin, { withAgreement: true }); }}
+                className="w-full rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 py-3 text-[14px] font-bold text-white shadow-sm transition-all hover:brightness-110 active:scale-[.99]"
+              >
+                {fr ? 'Créer un contrat' : 'Create an agreement'}
+              </button>
+              <button
+                onClick={() => { const pin = leadChoicePin; setLeadChoicePin(null); openQuoteForPin(pin); }}
+                className="w-full rounded-xl bg-gradient-to-br from-purple-300 to-purple-500 py-3 text-[14px] font-bold text-white shadow-sm transition-all hover:brightness-110 active:scale-[.99]"
+              >
+                {fr ? 'Créer un devis' : 'Create a quote'}
+              </button>
+              <button
+                onClick={() => setLeadChoicePin(null)}
+                className="w-full py-2.5 text-[13.5px] font-semibold text-slate-500 transition-colors hover:text-slate-700"
+              >
+                {fr ? 'Passer pour le moment' : 'Skip for now'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

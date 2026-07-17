@@ -31,25 +31,16 @@ const admin = createClient(url, key);
 
 const STATUS_COLORS = {
   unknown: '#6b7280', no_answer: '#9ca3af', not_interested: '#ef4444',
-  lead: '#3b82f6', quote_sent: '#a855f7', sale: '#22c55e',
+  lead: '#A855F7', quote_sent: '#a855f7', sale: '#22c55e',
 };
 
 // Même mapping statut client → statut pin que sync_field_pin_from_client
+// (20260746000000) : job assignée (active) → Vendu ; lead → Lead ; sinon
+// unknown. Le lead_status ne pilote plus le pin — une quote ne le change jamais.
 function pinStatusForClient(c) {
   if (c.status === 'active') return 'sale';
-  if (c.status !== 'lead') return 'unknown';
-  switch (c.lead_status || 'new_prospect') {
-    case 'no_response': case 'follow_up_1': case 'contacted':
-      return 'no_answer';
-    case 'quote_sent': case 'follow_up_2': case 'follow_up_3': case 'estimate_sent':
-      return 'quote_sent';
-    case 'closed_won': case 'closed': case 'won':
-      return 'sale';
-    case 'closed_lost': case 'lost':
-      return 'not_interested';
-    default:
-      return 'lead';
-  }
+  if (c.status === 'lead') return 'lead';
+  return 'unknown';
 }
 
 // ── Géocodage : mêmes variantes progressives que server/lib/fieldPinSync.ts ──

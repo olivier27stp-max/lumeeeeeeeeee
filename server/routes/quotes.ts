@@ -1303,28 +1303,10 @@ router.post('/quotes/public/decline', async (req, res) => {
       reason: reason || 'Declined by client',
     });
 
-    // Sales map: turn the quote's pin 🔴 Refusé. Matched by quote_id (the house
-    // already exists from quote creation). No event row here: field_house_events
-    // requires a non-null user_id and this is an unauthenticated public flow.
-    try {
-      const { data: house } = await admin
-        .from('field_house_profiles')
-        .select('id')
-        .eq('org_id', quote.org_id)
-        .eq('quote_id', quote.id)
-        .is('deleted_at', null)
-        .maybeSingle();
-      if (house) {
-        await admin.from('field_house_profiles')
-          .update({ current_status: 'not_interested', last_activity_at: now, updated_at: now })
-          .eq('id', house.id);
-        await admin.from('field_pins')
-          .update({ status: 'not_interested', pin_color: '#EF4444', updated_at: now })
-          .eq('house_id', house.id);
-      }
-    } catch (pinErr) {
-      console.warn('[quotes/public/decline] pin sync failed (non-blocking):', pinErr);
-    }
+    // Sales map: le pin n'est volontairement PAS repeint ici — un refus de
+    // devis ne change jamais le statut du pin (règle : seuls le client et
+    // l'assignation d'une job pilotent le pin). Le rep peut marquer « Pas
+    // intéressé » manuellement sur la carte.
 
     // Resolve client name
     let clientName = 'Client';
