@@ -23,9 +23,9 @@ import { supabase } from '../../lib/supabase';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import { usePermissions } from '../../hooks/usePermissions';
-import { ROLE_LABELS, normalizeRole, type TeamRole } from '../../lib/permissions';
+import { ROLE_LABELS, normalizeRole, hasPermission, type TeamRole } from '../../lib/permissions';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
-import { getRepRealStats, type RepRealStats } from '../../lib/repStatsApi';
+import { getRepRealStats, getTechRealStats, type RepRealStats, type TechRealStats } from '../../lib/repStatsApi';
 import { getCommissionEntries } from '../../lib/commissionsApi';
 import { Avatar } from '../../components/d2d/avatar';
 
@@ -53,7 +53,7 @@ function KpiCard({ icon: Icon, label, value }: { icon: LucideIcon; label: string
 }
 
 export default function ProfileSettings() {
-  const { language } = useTranslation();
+  const { language, setLanguage } = useTranslation();
   const isFr = language === 'fr';
   const navigate = useNavigate();
   const permsCtx = usePermissions();
@@ -75,6 +75,16 @@ export default function ProfileSettings() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Banner — stored by convention at avatars/banners/{userId} (no DB column);
+  // the <img> falls back to the gradient when no banner was ever uploaded.
+  const [bannerBroken, setBannerBroken] = useState(false);
+  const [bannerVersion, setBannerVersion] = useState(0);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+  const bannerUrl = userId
+    ? `${supabase.storage.from('avatars').getPublicUrl(`banners/${userId}`).data.publicUrl}?v=${bannerVersion}`
+    : null;
+
   // Email change flow
   const [changingEmail, setChangingEmail] = useState(false);
   const [newEmail, setNewEmail] = useState('');
@@ -82,10 +92,14 @@ export default function ProfileSettings() {
 
   // Stats
   const [stats, setStats] = useState<RepRealStats | null>(null);
+  const [techStats, setTechStats] = useState<TechRealStats | null>(null);
   const [commissions, setCommissions] = useState<{ nextPayout: number; allTime: number } | null>(null);
   const [closesCount, setClosesCount] = useState<number | null>(null);
   // Owners/admins opt into the sales view; reps/techs always see their block.
   const [showSalesStats, setShowSalesStats] = useState(role === 'sales_rep');
+  // Techs have zero financial permissions by default — hide revenue unless granted.
+  const canSeeRevenue = role === 'owner' || role === 'admin'
+    || hasPermission(permsCtx.permissions, 'financial.view_pricing', role);
 
   useEffect(() => {
     (async () => {
@@ -122,11 +136,23 @@ export default function ProfileSettings() {
     })();
   }, []);
 
-  // Load role-adapted stats lazily (and only once the sales view is wanted
-  // for owner/admin — techs get their block from the same fetch).
+  // Technician stats — jobs come from the tech's punches, not sales data.
+  useEffect(() => {
+    if (!userId || role !== 'technician' || techStats) return;
+    (async () => {
+      try {
+        const orgId = await getCurrentOrgIdOrThrow();
+        setTechStats(await getTechRealStats(userId, orgId));
+      } catch {
+        // Non-critical.
+      }
+    })();
+  }, [userId, role, techStats]);
+
+  // Sales stats — loaded lazily once the sales view is wanted.
   useEffect(() => {
     if (!userId) return;
-    if (role !== 'technician' && !showSalesStats) return;
+    if (role === 'technician' || !showSalesStats) return;
     if (stats) return;
     (async () => {
       try {
@@ -187,6 +213,30 @@ export default function ProfileSettings() {
       toast.error(e.message || (isFr ? 'Échec de la sauvegarde' : 'Save failed'));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleBannerChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !userId) return;
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error(isFr ? 'Image trop lourde (max 8 Mo)' : 'Image too large (max 8MB)');
+      return;
+    }
+    setUploadingBanner(true);
+    try {
+      const { error } = await supabase.storage
+        .from('avatars')
+        .upload(`banners/${userId}`, file, { upsert: true, contentType: file.type });
+      if (error) throw error;
+      setBannerBroken(false);
+      setBannerVersion((v) => v + 1);
+      toast.success(isFr ? 'Bannière mise à jour' : 'Banner updated');
+    } catch (err: any) {
+      toast.error(err.message || (isFr ? "Échec de l'envoi de la bannière" : 'Banner upload failed'));
+    } finally {
+      setUploadingBanner(false);
+      if (bannerInputRef.current) bannerInputRef.current.value = '';
     }
   }
 
@@ -261,7 +311,26 @@ export default function ProfileSettings() {
     <div className="max-w-2xl space-y-5">
       {/* ── Profile header — banner + avatar + name/role ── */}
       <div className="section-card overflow-hidden !p-0">
-        <div className="h-24 bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-800" />
+        <div className="relative h-24 bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-800">
+          {bannerUrl && !bannerBroken && (
+            <img
+              src={bannerUrl}
+              alt=""
+              onError={() => setBannerBroken(true)}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => bannerInputRef.current?.click()}
+            disabled={uploadingBanner}
+            className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-black/35 backdrop-blur text-white flex items-center justify-center hover:bg-black/50 transition-colors disabled:opacity-60"
+            title={isFr ? 'Changer la bannière' : 'Change banner'}
+          >
+            {uploadingBanner ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
+          </button>
+          <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={handleBannerChange} />
+        </div>
         <div className="px-6 pb-5">
           <div className="flex items-end justify-between -mt-10">
             <div className="relative">
@@ -352,6 +421,28 @@ export default function ProfileSettings() {
           )}
         </div>
 
+        {/* Interface language — inline selector (replaces the old standalone Langue page) */}
+        <div>
+          <label className="text-xs font-medium text-text-tertiary">{isFr ? "Langue de l'interface" : 'Interface language'}</label>
+          <div className="flex items-center gap-2 mt-1.5">
+            {([{ code: 'en', label: 'English', flag: '🇬🇧' }, { code: 'fr', label: 'Français', flag: '🇫🇷' }] as const).map((lang) => (
+              <button
+                key={lang.code}
+                type="button"
+                onClick={() => setLanguage(lang.code)}
+                className={cn(
+                  'flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border text-[13px] font-semibold transition-all',
+                  language === lang.code
+                    ? 'border-primary bg-primary/5 text-text-primary'
+                    : 'border-outline-subtle text-text-secondary hover:border-outline hover:bg-surface-secondary/40'
+                )}
+              >
+                <span>{lang.flag}</span>{lang.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <button
           onClick={handleSave}
           disabled={saving || !dirty}
@@ -366,11 +457,14 @@ export default function ProfileSettings() {
       {role === 'technician' ? (
         <div className="space-y-3">
           <p className="text-xs font-medium text-text-tertiary px-1">{isFr ? 'Mes statistiques' : 'My stats'}</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <KpiCard icon={CheckCircle2} label={isFr ? 'Jobs complétés' : 'Jobs completed'} value={String(stats?.jobsCompleted ?? '—')} />
-            <KpiCard icon={ClipboardList} label={isFr ? 'Jobs à venir' : 'Upcoming jobs'} value={String(stats?.jobsPending ?? '—')} />
-            <KpiCard icon={Clock} label={isFr ? 'Heures travaillées' : 'Hours worked'} value={stats ? `${stats.hoursWorked}h` : '—'} />
-            <KpiCard icon={CalendarCheck} label={isFr ? 'Jours travaillés' : 'Days worked'} value={String(stats?.daysWorked ?? '—')} />
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <KpiCard icon={CheckCircle2} label={isFr ? 'Jobs complétés' : 'Jobs completed'} value={String(techStats?.jobsCompleted ?? '—')} />
+            <KpiCard icon={ClipboardList} label={isFr ? 'Jobs en cours' : 'Jobs in progress'} value={String(techStats?.jobsInProgress ?? '—')} />
+            {canSeeRevenue && (
+              <KpiCard icon={DollarSign} label={isFr ? 'Revenus générés' : 'Revenue generated'} value={techStats ? fmtCurrency(techStats.revenueGenerated) : '—'} />
+            )}
+            <KpiCard icon={Clock} label={isFr ? 'Heures travaillées' : 'Hours worked'} value={techStats ? `${techStats.hoursWorked}h` : '—'} />
+            <KpiCard icon={CalendarCheck} label={isFr ? 'Jours travaillés' : 'Days worked'} value={String(techStats?.daysWorked ?? '—')} />
           </div>
         </div>
       ) : (
