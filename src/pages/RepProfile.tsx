@@ -17,7 +17,6 @@ import { toast } from 'sonner';
 import {
   Phone,
   Mail,
-  MapPin,
   Briefcase,
   Building2,
   Calendar,
@@ -407,13 +406,6 @@ export default function D2DRepProfile() {
             {/* Pins placed on the sales map during the period, one row per pin type */}
             <CardPanel title="Pins">
               <div className="space-y-3">
-                <div className="flex items-center justify-between rounded-xl border border-outline dark:border-[rgba(255,255,255,0.04)] bg-surface-secondary dark:bg-[rgba(255,255,255,0.02)] px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <MapPin size={14} className="text-text-secondary" />
-                    <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-text-tertiary">Pins</span>
-                  </div>
-                  <span className="text-[16px] font-extrabold tabular-nums text-text-primary">{pinCounts?.total ?? 0}</span>
-                </div>
                 <div className="space-y-1">
                   {PIN_KIND_ORDER.map((kind) => {
                     const cfg = PIN_STATUS_CONFIG[kind];
