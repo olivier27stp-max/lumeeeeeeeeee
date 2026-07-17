@@ -2003,13 +2003,13 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
       {/* BOTTOM CENTER — Add-pin status toolbar                             */}
       {/* ================================================================== */}
       {!showTokenMsg && mode === 'add_pin' && (
-        <div className="pointer-events-none absolute bottom-8 left-1/2 z-20 w-[min(440px,calc(100vw-1rem))] -translate-x-1/2">
-          <div className="pointer-events-auto flex items-end gap-0.5 overflow-x-auto rounded-2xl border border-white/10 bg-black/75 px-2.5 py-2 shadow-2xl backdrop-blur-xl">
+        <div className="pointer-events-none absolute bottom-8 left-1/2 z-20 w-[min(640px,calc(100vw-1rem))] -translate-x-1/2">
+          <div className="pointer-events-auto flex items-end gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-black/75 px-2.5 py-2 shadow-2xl backdrop-blur-xl">
             {statuses.map(([key, cfg]) => (
               <button
                 key={key}
                 onClick={() => setSelectedStatus(key)}
-                className={`flex min-w-[62px] flex-1 flex-col items-center gap-1.5 rounded-xl px-1 py-1.5 transition-all ${selectedStatus === key ? 'bg-white/15' : 'hover:bg-white/[.07]'}`}
+                className={`flex min-w-[82px] flex-1 flex-col items-center gap-1.5 rounded-xl px-1.5 py-1.5 transition-all ${selectedStatus === key ? 'bg-white/15' : 'hover:bg-white/[.07]'}`}
               >
                 {/* Réplique exacte du pin de la carte (createLeadPinElement) */}
                 <span
