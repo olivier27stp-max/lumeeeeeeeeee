@@ -69,7 +69,7 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     color: '#EAB308',
     gradientFrom: '#FDE047',
     gradientTo: '#CA8A04',
-    label: 'Personne',
+    label: 'Aucune réponse',
     iconPaths: '<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><circle cx="12" cy="17" r=".5"/>',
   },
   rejected: {

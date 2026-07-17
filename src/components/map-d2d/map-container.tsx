@@ -2009,16 +2009,24 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
               <button
                 key={key}
                 onClick={() => setSelectedStatus(key)}
-                className={`flex min-w-[62px] flex-1 flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition-all ${selectedStatus === key ? 'bg-white/15' : 'hover:bg-white/[.07]'}`}
+                className={`flex min-w-[62px] flex-1 flex-col items-center gap-1.5 rounded-xl px-1 py-1.5 transition-all ${selectedStatus === key ? 'bg-white/15' : 'hover:bg-white/[.07]'}`}
               >
-                <svg
-                  width="26" height="26" viewBox="0 0 24 24"
-                  className={`transition-transform ${selectedStatus === key ? 'scale-110' : ''}`}
-                  style={selectedStatus === key ? { filter: `drop-shadow(0 0 6px ${cfg.color})` } : undefined}
+                {/* Réplique exacte du pin de la carte (createLeadPinElement) */}
+                <span
+                  className={`flex h-7 w-7 items-center justify-center rounded-full transition-transform ${selectedStatus === key ? 'scale-110' : ''}`}
+                  style={{
+                    background: `linear-gradient(135deg, ${cfg.gradientFrom}, ${cfg.gradientTo})`,
+                    border: '2px solid rgba(255,255,255,0.92)',
+                    boxShadow: selectedStatus === key
+                      ? `0 0 14px ${cfg.color}CC, 0 2px 6px rgba(0,0,0,0.4)`
+                      : `0 0 8px ${cfg.color}66, 0 2px 6px rgba(0,0,0,0.4)`,
+                  }}
                 >
-                  <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" fill={cfg.color} stroke="white" strokeWidth="1.4" />
-                  <circle cx="12" cy="10" r="3" fill="white" />
-                </svg>
+                  <svg
+                    width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+                    dangerouslySetInnerHTML={{ __html: cfg.iconPaths }}
+                  />
+                </span>
                 <span className={`whitespace-nowrap text-center text-[10px] font-medium leading-tight ${selectedStatus === key ? 'text-white' : 'text-white/50'}`}>
                   {cfg.label}
                 </span>
