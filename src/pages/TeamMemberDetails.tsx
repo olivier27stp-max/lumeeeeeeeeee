@@ -31,6 +31,7 @@ import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import { updateMemberRole, removeMember } from '../lib/invitationsApi';
 import MemberPermissionsEditor from '../components/team/MemberPermissionsEditor';
+import MemberCommissionPlan from '../components/team/MemberCommissionPlan';
 import {
   type TeamRole,
   type PermissionsMap,
@@ -64,6 +65,7 @@ interface MemberData {
   postal_code: string;
   country: string;
   labour_cost_hourly: number | null;
+  compensation_mode: 'hourly' | 'commission' | 'both';
   working_hours: WeeklySchedule;
   permissions: PermissionsMap;
   communication_preferences: CommunicationPreferences;
@@ -107,6 +109,9 @@ export default function TeamMemberDetails() {
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState<MemberData | null>(null);
   const [initialRole, setInitialRole] = useState<TeamRole | null>(null);
+  // team_members.compensation_mode ships behind a migration — hide the mode
+  // selector until the column exists.
+  const [hasCompMode, setHasCompMode] = useState(false);
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
@@ -151,12 +156,14 @@ export default function TeamMemberDetails() {
           postal_code: data.postal_code || '',
           country: data.country || '',
           labour_cost_hourly: (parsedCost !== null && !isNaN(parsedCost)) ? parsedCost : null,
+          compensation_mode: (data.compensation_mode as 'hourly' | 'commission' | 'both') || 'hourly',
           working_hours: (data.working_hours as WeeklySchedule) || getDefaultSchedule(),
           permissions: perms,
           communication_preferences: (data.communication_preferences as CommunicationPreferences) || DEFAULT_COMMUNICATION_PREFS,
           created_at: data.created_at,
         });
         setInitialRole(((data.role as TeamRole) || 'technician'));
+        setHasCompMode('compensation_mode' in data);
         if (data.avatar_url) setAvatarPreview(data.avatar_url);
       } else {
         toast.error(t.teamMember.memberNotFound);
@@ -323,6 +330,7 @@ export default function TeamMemberDetails() {
         postal_code: form.postal_code.trim(),
         country: form.country.trim(),
         labour_cost_hourly: sanitizedCost,
+        ...(hasCompMode ? { compensation_mode: form.compensation_mode } : {}),
         // Keep the P&L column in sync: profitability reads hourly_rate_cents,
         // not labour_cost_hourly — editing here used to have no effect on job
         // costing despite the copy claiming it did.
@@ -484,36 +492,77 @@ export default function TeamMemberDetails() {
           </div>
         </div>
 
-        {/* ─── Section 2: Labour Cost ──────────────────────── */}
+        {/* ─── Section 2: Compensation ─────────────────────── */}
         <div className="section-card p-5 space-y-4">
           <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
             <DollarSign size={12} />
-            {isFr ? 'Coût de main-d\'œuvre' : 'Labour Cost'}
+            {isFr ? 'Rémunération' : 'Compensation'}
           </h3>
-          <div className="max-w-xs">
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-              {isFr ? 'Coût horaire de l\'employé' : 'Employee Cost Per Hour'}
-            </label>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[13px] font-semibold text-text-tertiary">$</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.labour_cost_hourly ?? ''}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  update('labour_cost_hourly', val === '' ? null : parseFloat(val));
-                }}
-                className="glass-input w-full"
-                placeholder="0.00"
-              />
-              <span className="text-[12px] text-text-tertiary whitespace-nowrap">/ {t.teamMember.hour}</span>
+
+          {/* Pay mode — hidden until the compensation_mode migration is applied */}
+          {hasCompMode && (
+            <div>
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider mb-2 block">
+                {isFr ? 'Mode de rémunération' : 'Pay mode'}
+              </label>
+              <div className="flex gap-2 flex-wrap">
+                {([
+                  { value: 'hourly' as const, label: isFr ? 'Taux horaire' : 'Hourly' },
+                  { value: 'commission' as const, label: 'Commission' },
+                  { value: 'both' as const, label: isFr ? 'Horaire + commission' : 'Hourly + commission' },
+                ]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => update('compensation_mode', opt.value)}
+                    className={cn(
+                      'px-4 py-2 rounded-xl border transition-all text-[13px] font-semibold',
+                      form.compensation_mode === opt.value
+                        ? 'border-primary bg-primary/5 text-text-primary'
+                        : 'border-outline-subtle text-text-secondary hover:border-outline'
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-text-tertiary mt-1.5">
+                {isFr
+                  ? 'La page Paie combine automatiquement heures × taux + commissions selon ce qui s\'applique.'
+                  : 'The Payroll page automatically combines hours × rate + commissions as applicable.'}
+              </p>
             </div>
-            <p className="text-[11px] text-text-tertiary mt-1.5">
-              {isFr ? 'Utilisé pour l\'estimation des coûts et les rapports de rentabilité.' : 'Used for job costing and profitability reports.'}
-            </p>
-          </div>
+          )}
+
+          {(!hasCompMode || form.compensation_mode !== 'commission') && (
+            <div className="max-w-xs">
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+                {isFr ? 'Taux horaire' : 'Hourly rate'}
+              </label>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[13px] font-semibold text-text-tertiary">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.labour_cost_hourly ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    update('labour_cost_hourly', val === '' ? null : parseFloat(val));
+                  }}
+                  className="glass-input w-full"
+                  placeholder="0.00"
+                />
+                <span className="text-[12px] text-text-tertiary whitespace-nowrap">/ {t.teamMember.hour}</span>
+              </div>
+              <p className="text-[11px] text-text-tertiary mt-1.5">
+                {isFr ? 'Utilisé pour la paie, l\'estimation des coûts et les rapports de rentabilité.' : 'Used for payroll, job costing and profitability reports.'}
+              </p>
+            </div>
+          )}
+
+          {hasCompMode && form.compensation_mode !== 'hourly' && form.user_id && (
+            <MemberCommissionPlan userId={form.user_id} isFr={isFr} />
+          )}
         </div>
 
 

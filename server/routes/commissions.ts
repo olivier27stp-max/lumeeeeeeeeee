@@ -210,6 +210,84 @@ router.post('/commissions/rules', async (req, res) => {
   }
 });
 
+// PUT /api/commissions/rules/:id (admin) — the client API called this route
+// but it never existed server-side (silent 404 on every rule edit).
+router.put('/commissions/rules/:id', async (req, res) => {
+  const auth = await requireAdmin(req, res);
+  if (!auth) return;
+
+  const ALLOWED = [
+    'name', 'description', 'priority', 'is_active',
+    'base_kind', 'base_percent', 'base_value_cents',
+    'product_overrides', 'performance_tiers', 'bonuses',
+    'attribution', 'assigned_user_ids',
+  ];
+  const payload: Record<string, any> = {};
+  for (const key of ALLOWED) {
+    if (req.body[key] !== undefined) payload[key] = req.body[key];
+  }
+  if (Object.keys(payload).length === 0) return res.status(400).json({ error: 'No editable fields provided.' });
+
+  try {
+    const sc = getServiceClient();
+    const { data, error } = await sc
+      .from('fs_commission_rules')
+      .update({ ...payload, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .eq('org_id', auth.orgId)
+      .is('deleted_at', null)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    res.json(data);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+  }
+});
+
+// POST /api/commissions/rules/assign-member (admin) — atomically move a rep
+// onto ONE plan: removed from every other active rule's assigned_user_ids,
+// added to the target (rule_id null = default plan only).
+router.post('/commissions/rules/assign-member', async (req, res) => {
+  const auth = await requireAdmin(req, res);
+  if (!auth) return;
+
+  const userId = String(req.body?.user_id || '').trim();
+  const ruleId = req.body?.rule_id ? String(req.body.rule_id).trim() : null;
+  if (!userId) return res.status(400).json({ error: 'user_id is required.' });
+
+  try {
+    const sc = getServiceClient();
+    const { data: rules, error } = await sc
+      .from('fs_commission_rules')
+      .select('id, assigned_user_ids')
+      .eq('org_id', auth.orgId)
+      .is('deleted_at', null);
+    if (error) throw new Error(error.message);
+    if (ruleId && !(rules || []).some((r: any) => r.id === ruleId)) {
+      return res.status(404).json({ error: 'Commission rule not found.' });
+    }
+
+    for (const rule of rules || []) {
+      const current: string[] = Array.isArray(rule.assigned_user_ids) ? rule.assigned_user_ids : [];
+      const shouldContain = rule.id === ruleId;
+      const contains = current.includes(userId);
+      if (contains === shouldContain) continue;
+      const next = shouldContain ? [...current, userId] : current.filter((u) => u !== userId);
+      const { error: upErr } = await sc
+        .from('fs_commission_rules')
+        .update({ assigned_user_ids: next, updated_at: new Date().toISOString() })
+        .eq('id', rule.id)
+        .eq('org_id', auth.orgId);
+      if (upErr) throw new Error(upErr.message);
+    }
+
+    res.json({ ok: true, rule_id: ruleId });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+  }
+});
+
 // DELETE /api/commissions/rules/:id (admin) — soft delete
 router.delete('/commissions/rules/:id', async (req, res) => {
   const auth = await requireAdmin(req, res);
