@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 
 export interface PredefinedService {
   id: string;
@@ -15,9 +16,13 @@ export interface PredefinedService {
 }
 
 export async function listPredefinedServices(): Promise<PredefinedService[]> {
+  // Filter by the ACTIVE org explicitly — RLS alone lets every org the user
+  // belongs to through, which mixes catalogs for multi-office companies.
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('predefined_services')
     .select('*')
+    .eq('org_id', orgId)
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
@@ -32,22 +37,14 @@ export async function createPredefinedService(service: {
   category?: string;
   default_duration_minutes?: number;
 }): Promise<PredefinedService> {
-  // Get org_id from the user's membership
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
-
-  const { data: membership } = await supabase
-    .from('memberships')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single();
-  if (!membership) throw new Error('No organization found');
+  // Use the ACTIVE org — resolving via `memberships … limit(1)` picked an
+  // arbitrary org for multi-org users, so services landed in the wrong company.
+  const orgId = await getCurrentOrgIdOrThrow();
 
   const { data, error } = await supabase
     .from('predefined_services')
     .insert({
-      org_id: membership.org_id,
+      org_id: orgId,
       name: service.name,
       description: service.description || null,
       default_price_cents: service.default_price_cents,
@@ -79,10 +76,14 @@ export async function updatePredefinedService(id: string, updates: Partial<{
   return data as PredefinedService;
 }
 
-export async function deletePredefinedService(id: string): Promise<void> {
+/**
+ * Soft delete: quotes/jobs keep referencing the row, it just stops being
+ * offered in pickers. Hard delete would orphan historical line items.
+ */
+export async function archivePredefinedService(id: string): Promise<void> {
   const { error } = await supabase
     .from('predefined_services')
-    .delete()
+    .update({ is_active: false, updated_at: new Date().toISOString() })
     .eq('id', id);
   if (error) throw error;
 }
