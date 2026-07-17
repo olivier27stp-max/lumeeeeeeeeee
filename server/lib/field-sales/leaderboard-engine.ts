@@ -98,7 +98,7 @@ export async function getLeaderboard(
   const [membersRes, prevJobsRes, leadsRes] = await Promise.all([
     supabase
       .from('memberships')
-      .select('user_id, full_name, avatar_url, role, team_id, experience_level, teams:team_id(name)')
+      .select('user_id, org_id, full_name, avatar_url, role, team_id, experience_level, teams:team_id(name)')
       .in('org_id', orgIds),
     supabase
       .from('jobs')
@@ -142,6 +142,10 @@ export async function getLeaderboard(
     .select('id, full_name, avatar_url')
     .in('id', userIds);
   const profileMap = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p]));
+
+  // Nom du bureau (org) de chaque rep — mêmes noms que le filtre d'offices.
+  const orgsRes = await supabase.from('orgs').select('id, name').in('id', orgIds);
+  const orgNameMap = new Map((orgsRes.data ?? []).map((o: any) => [o.id, o.name as string]));
 
   // Last-resort names for accounts with neither profile nor membership name:
   // auth user_metadata.full_name, then email (service client required).
@@ -193,6 +197,7 @@ export async function getLeaderboard(
       avatar_url: profile.avatar_url || m.avatar_url || null,
       team_name: m.teams?.name || null,
       team_id: m.team_id || null,
+      office_name: orgNameMap.get(m.org_id) || null,
       experience_level: m.experience_level || null,
       closes: stats.closes,
       revenue: stats.revenue,

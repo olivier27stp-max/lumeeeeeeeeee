@@ -22,6 +22,7 @@ interface RepData {
   revenue: number;
   experienceLevel: 'rookie' | 'experienced' | null;
   teamName: string | null;
+  officeName: string | null;
 }
 
 function getInitials(name: string): string {
@@ -66,6 +67,7 @@ function apiToRepData(entries: LeaderboardEntry[]): RepData[] {
     revenue: e.revenue,
     experienceLevel: e.experience_level ?? null,
     teamName: e.team_name ?? null,
+    officeName: e.office_name ?? null,
   }));
 }
 
@@ -432,11 +434,17 @@ export default function D2DLeaderboard() {
                         <RepAvatar rep={rep} className="h-9 w-9" textClassName="text-xs" />
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-text-primary group-hover:text-text-secondary transition-colors">{rep.name}</p>
-                          <p className="text-xs font-bold text-text-primary">{salesText(rep)}</p>
+                          {/* Bureau du rep — pertinent seulement quand la compagnie a 2+ offices */}
+                          {offices.length > 1 && rep.officeName && (
+                            <p className="truncate text-xs text-text-muted">{rep.officeName}</p>
+                          )}
                         </div>
                       </Link>
 
-                      <p className="text-right text-base font-bold text-text-primary">{money(rep.revenue)}</p>
+                      <p className="shrink-0 text-base font-bold text-text-primary">
+                        {rep.closes} <span className="text-xs font-semibold text-text-muted">{fr ? 'ventes' : 'sales'}</span>
+                      </p>
+                      <p className="shrink-0 text-right text-base font-bold text-text-primary">{money(rep.revenue)}</p>
                       <ChevronDown className={cn('h-4 w-4 shrink-0 text-text-muted transition-transform duration-200', expanded && 'rotate-180')} />
                     </button>
 

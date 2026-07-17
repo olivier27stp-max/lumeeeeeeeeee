@@ -384,6 +384,8 @@ export interface LeaderboardEntry {
   avatar_url: string | null;
   team_name: string | null;
   team_id: string | null;
+  /** Nom du bureau (org) du rep — affiché seulement si la compagnie a 2+ offices. */
+  office_name: string | null;
   experience_level: 'rookie' | 'experienced' | null;
   closes: number;
   revenue: number;
