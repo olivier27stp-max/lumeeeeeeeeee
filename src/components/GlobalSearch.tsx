@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
-  Briefcase, CalendarDays, ClipboardList, Command, Contact, CreditCard, FileSignature, FileText,
-  MapPin, Plus, ReceiptText, Search, Users, UsersRound, Zap,
+  Briefcase, Calendar, ClipboardList, Command, Contact, FileSignature, Inbox,
+  MapPin, Plus, Search, Users, UsersRound, Wallet, Zap,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -12,7 +12,6 @@ import {
   fetchSearchSuggestions,
 } from '../lib/globalSearchApi';
 import { cn } from '../lib/utils';
-import StatusBadge from './ui/StatusBadge';
 import {
   getCommandSuggestions,
   normalizeSearchQuery,
@@ -20,6 +19,7 @@ import {
   resolveDateInput,
 } from '../lib/searchParsing';
 import { escapeRegExp, getSearchEntityLabel, getSearchItemHref } from '../lib/searchHelpers';
+import { entityIconClass } from '../lib/entityColors';
 import { useTranslation } from '../i18n';
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission, isFinanciallyRestricted } from '../lib/permissions';
@@ -48,7 +48,7 @@ const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 200;
 const MAX_SUGGESTIONS = 12;
 
-// ── Icon mapping ──
+// ── Icon mapping — same icons as the sidebar nav, rendered bare (no chip) ──
 
 const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
   client: Users,
@@ -56,24 +56,25 @@ const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
   job: Briefcase,
   agreement: FileSignature,
   lead: Contact,
-  invoice: ReceiptText,
-  quote: FileText,
-  request: ClipboardList,
+  invoice: Wallet,
+  quote: ClipboardList,
+  request: Inbox,
   team: UsersRound,
-  event: CalendarDays,
+  event: Calendar,
 };
 
-const ENTITY_COLORS: Record<SearchEntityType, string> = {
-  client: 'text-text-secondary bg-surface-secondary',
-  property: 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-500/10',
-  job: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10',
-  agreement: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10',
-  lead: 'text-text-secondary bg-surface-secondary',
-  invoice: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10',
-  quote: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10',
-  request: 'text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-500/10',
-  team: 'text-neutral-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-500/10',
-  event: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10',
+// Singular type label for the secondary line ("Property · Olivier St-Pierre")
+const ENTITY_TYPE_LABELS: Record<SearchEntityType, { en: string; fr: string }> = {
+  client: { en: 'Client', fr: 'Client' },
+  property: { en: 'Property', fr: 'Propriété' },
+  job: { en: 'Job', fr: 'Job' },
+  agreement: { en: 'Agreement', fr: 'Contrat' },
+  lead: { en: 'Lead', fr: 'Prospect' },
+  invoice: { en: 'Invoice', fr: 'Facture' },
+  quote: { en: 'Quote', fr: 'Devis' },
+  request: { en: 'Request', fr: 'Demande' },
+  team: { en: 'Team', fr: 'Équipe' },
+  event: { en: 'Event', fr: 'Événement' },
 };
 
 // ── Quick Actions ──
@@ -85,6 +86,8 @@ interface QuickAction {
   icon: React.ElementType;
   destination: string;
   keywords: string;
+  /** Entity identity color for the icon, when the action targets a CRM section. */
+  entity?: 'request' | 'quote' | 'job' | 'invoice';
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
@@ -93,9 +96,9 @@ const QUICK_ACTIONS: QuickAction[] = [
   { id: 'qa-new-job', label: 'Create New Job', labelFr: 'Nouvelle job', icon: Plus, destination: '/jobs?action=new', keywords: 'create add new job work travail nouveau' },
   { id: 'qa-new-quote', label: 'Create New Quote', labelFr: 'Nouveau devis', icon: Plus, destination: '/quotes?action=new', keywords: 'create add new quote estimate devis nouveau' },
   { id: 'qa-new-invoice', label: 'Create New Invoice', labelFr: 'Nouvelle facture', icon: Plus, destination: '/invoices?action=new', keywords: 'create add new invoice bill facture nouveau' },
-  { id: 'qa-calendar', label: 'Go to Calendar', labelFr: 'Calendrier', icon: CalendarDays, destination: '/calendar', keywords: 'calendar schedule horaire' },
-  { id: 'qa-invoices', label: 'Go to Invoices', labelFr: 'Factures', icon: ReceiptText, destination: '/invoices', keywords: 'invoices billing factures' },
-  { id: 'qa-quotes', label: 'Go to Quotes', labelFr: 'Devis', icon: FileText, destination: '/quotes', keywords: 'quotes estimates devis' },
+  { id: 'qa-calendar', label: 'Go to Calendar', labelFr: 'Calendrier', icon: Calendar, destination: '/calendar', keywords: 'calendar schedule horaire' },
+  { id: 'qa-invoices', label: 'Go to Invoices', labelFr: 'Factures', icon: Wallet, destination: '/invoices', keywords: 'invoices billing factures', entity: 'invoice' },
+  { id: 'qa-quotes', label: 'Go to Quotes', labelFr: 'Devis', icon: ClipboardList, destination: '/quotes', keywords: 'quotes estimates devis', entity: 'quote' },
 ];
 
 // ── Helpers ──
@@ -114,30 +117,11 @@ function highlightText(text: string, query: string) {
     const isMatch = tokens.some((tk) => tk.toLowerCase() === part.toLowerCase());
     if (!isMatch) return <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>;
     return (
-      <mark key={`${part}-${index}`} className="rounded bg-primary/15 px-0.5 text-inherit">
+      <mark key={`${part}-${index}`} className="bg-transparent font-extrabold text-text-primary">
         {part}
       </mark>
     );
   });
-}
-
-function formatAmount(cents: number, currency?: string | null) {
-  const amount = cents / 100;
-  return new Intl.NumberFormat('en-CA', {
-    style: 'currency',
-    currency: currency || 'CAD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
-function formatShortDate(dateStr: string | null | undefined) {
-  if (!dateStr) return null;
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return null;
-    return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
-  } catch { return null; }
 }
 
 // ── Entity groups order ──
@@ -226,8 +210,8 @@ export default function GlobalSearch() {
     };
   }, []);
 
-  // Build suggestion items
-  const { allItems, sections } = useMemo(() => {
+  // Build suggestion items (sections still computed for ordering; rendered flat)
+  const { allItems } = useMemo(() => {
     const secs: Array<{ key: string; label: string; items: SuggestionAction[] }> = [];
     const all: SuggestionAction[] = [];
 
@@ -427,7 +411,7 @@ export default function GlobalSearch() {
     <div ref={rootRef} className="relative w-48 md:w-56 transition-[width] duration-300 ease-out focus-within:w-[20rem] md:focus-within:w-[28rem]" onBlur={handleBlur}>
       {/* Search Input */}
       <div className="relative group">
-        <Search size={15} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary transition-colors group-focus-within:text-primary" />
+        <Search size={15} strokeWidth={1.75} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary transition-colors duration-150 group-focus-within:text-text-secondary" />
         <input
           ref={inputRef}
           value={query}
@@ -439,7 +423,7 @@ export default function GlobalSearch() {
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           placeholder={t.globalSearch.placeholder}
-          className="glass-input w-full rounded-xl pl-10 pr-4 focus:pr-20 py-1 text-[13px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+          className="glass-input h-9 w-full rounded-lg pl-9 pr-4 focus:pr-16 py-0 text-[13px]"
           aria-label="Global search"
           role="combobox"
           aria-expanded={showDropdown}
@@ -451,7 +435,7 @@ export default function GlobalSearch() {
           }
           aria-autocomplete="list"
         />
-        <kbd className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 hidden items-center gap-0.5 rounded-lg border border-outline/60 bg-surface-secondary/50 px-2 py-1 text-[10px] font-mono text-text-tertiary sm:group-focus-within:inline-flex">
+        <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden items-center rounded-md border border-outline px-1.5 py-0.5 text-[10px] font-mono text-text-tertiary sm:group-focus-within:inline-flex">
           Ctrl K
         </kbd>
       </div>
@@ -461,64 +445,54 @@ export default function GlobalSearch() {
         <div
           id={listboxId}
           role="listbox"
-          className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-[520px] overflow-y-auto rounded-2xl border border-outline/60 bg-surface shadow-2xl backdrop-blur-sm"
+          className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-[520px] overflow-y-auto rounded-xl border border-outline bg-surface-card shadow-lg"
         >
           {/* Loading state */}
           {loading && flatItems.length === 0 ? (
-            <div className="px-4 py-6">
-              <div className="space-y-2">
-                <div className="h-5 w-2/3 animate-pulse rounded bg-surface-tertiary" />
-                <div className="h-5 w-1/2 animate-pulse rounded bg-surface-tertiary" />
-                <div className="h-5 w-3/4 animate-pulse rounded bg-surface-tertiary" />
+            <div className="px-4 py-8">
+              <div className="space-y-3">
+                <div className="h-4 w-2/3 animate-pulse rounded bg-surface-secondary" />
+                <div className="h-4 w-1/2 animate-pulse rounded bg-surface-secondary" />
+                <div className="h-4 w-3/4 animate-pulse rounded bg-surface-secondary" />
               </div>
             </div>
           ) : null}
 
           {/* Empty state */}
           {!loading && flatItems.length === 0 && !seeAllItem ? (
-            <div className="px-4 py-6 text-center">
-              <Search size={20} className="mx-auto mb-2 text-text-tertiary" />
+            <div className="px-4 py-8 text-center">
+              <Search size={18} strokeWidth={1.75} className="mx-auto mb-2 text-text-tertiary" />
               <p className="text-[13px] text-text-secondary">{t.globalSearch.noSuggestions}</p>
             </div>
           ) : null}
 
-          {/* Results */}
+          {/* Results — flat list, no section headers */}
           {flatItems.length > 0 || seeAllItem ? (
-            <div className="py-1">
-              {sections.map((section) => (
-                <div key={section.key}>
-                  <p className="px-4 pb-1 pt-3 text-xs font-medium text-text-tertiary">
-                    {section.label}
-                  </p>
-                  {section.items.map((item) => {
-                    const flatIndex = flatItems.findIndex((f) => f.id === item.id);
-                    const isActive = flatIndex === activeIndex;
-                    return (
-                      <SearchResultRow
-                        key={item.id}
-                        item={item}
-                        isActive={isActive}
-                        listboxId={listboxId}
-                        query={normalizedQuery}
-                        onMouseEnter={() => setActiveIndex(flatIndex)}
-                        onClick={() => handleSelect(item)}
-                      />
-                    );
-                  })}
-                </div>
+            <div className="py-1.5">
+              {flatItems.map((item, index) => (
+                <SearchResultRow
+                  key={item.id}
+                  item={item}
+                  isActive={index === activeIndex}
+                  fr={fr}
+                  listboxId={listboxId}
+                  query={normalizedQuery}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => handleSelect(item)}
+                />
               ))}
 
               {/* See all results */}
               {seeAllItem ? (
-                <div className="border-t border-outline/60 px-2.5 py-2.5">
+                <div className="mt-2 border-t border-outline pt-1.5">
                   <button
                     type="button"
                     onClick={() => handleSelect(seeAllItem)}
-                    className="w-full rounded-xl px-3 py-2.5 text-left text-[13px] font-medium text-primary transition-colors hover:bg-primary/5"
+                    className="mx-1.5 w-[calc(100%-0.75rem)] rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-text-secondary transition-colors duration-150 hover:bg-surface-secondary"
                   >
-                    <div className="flex items-center gap-2">
-                      <Search size={13} />
-                      <span>{seeAllItem.label}</span>
+                    <div className="flex items-center gap-3.5">
+                      <Search size={16} strokeWidth={1.75} className="shrink-0 text-text-tertiary" />
+                      <span className="truncate">{seeAllItem.label}</span>
                     </div>
                   </button>
                 </div>
@@ -528,16 +502,16 @@ export default function GlobalSearch() {
 
           {/* Footer hints */}
           {flatItems.length > 0 ? (
-            <div className="flex items-center gap-4 border-t border-outline/60 px-4 py-2 text-[10px] text-text-tertiary">
-              <span className="flex items-center gap-1">
+            <div className="flex items-center gap-4 border-t border-outline px-[18px] py-2 text-[10px] text-text-tertiary">
+              <span className="flex items-center gap-1.5">
                 <kbd className="rounded border border-outline px-1 py-0.5 font-mono">↑↓</kbd>
                 {t.commandPalette.navigate}
               </span>
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1.5">
                 <kbd className="rounded border border-outline px-1 py-0.5 font-mono">↵</kbd>
                 {t.commandPalette.open}
               </span>
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1.5">
                 <kbd className="rounded border border-outline px-1 py-0.5 font-mono">esc</kbd>
                 {t.commandPalette.close}
               </span>
@@ -551,9 +525,30 @@ export default function GlobalSearch() {
 
 // ── Result Row Component ──
 
+// One line per result: "Title (Client)". Bare numbers get their type as a
+// prefix ("658" → "Invoice #658"); clients show their name alone.
+function entityRowText(item: SuggestionAction, fr: boolean): { main: string; context: string | null } {
+  const typeLabel = item.entityType ? ENTITY_TYPE_LABELS[item.entityType][fr ? 'fr' : 'en'] : '';
+  let main = item.label;
+  const bareNumber = main.trim().match(/^#?(\d+)$/);
+  if (bareNumber && typeLabel) main = `${typeLabel} #${bareNumber[1]}`;
+
+  if (item.entityType === 'client' || item.entityType === 'lead') {
+    return { main, context: null };
+  }
+  const context =
+    item.clientName && item.clientName !== item.label
+      ? item.clientName
+      : item.subtitle && item.subtitle !== item.label
+        ? item.subtitle
+        : null;
+  return { main, context };
+}
+
 function SearchResultRow({
   item,
   isActive,
+  fr,
   listboxId,
   query,
   onMouseEnter,
@@ -562,26 +557,26 @@ function SearchResultRow({
   key?: React.Key;
   item: SuggestionAction;
   isActive: boolean;
+  fr: boolean;
   listboxId: string;
   query: string;
   onMouseEnter: () => void;
   onClick: () => void;
 }) {
+  const quickAction = item.kind === 'quick_action' ? QUICK_ACTIONS.find((a) => a.id === item.id) : undefined;
   const Icon = item.entityType
     ? ENTITY_ICONS[item.entityType]
     : item.kind === 'date'
-      ? CalendarDays
+      ? Calendar
       : item.kind === 'command'
         ? Command
         : item.kind === 'quick_action'
-          ? (QUICK_ACTIONS.find((a) => a.id === item.id)?.icon || Zap)
+          ? (quickAction?.icon || Zap)
           : Search;
 
-  const iconColor = item.entityType
-    ? ENTITY_COLORS[item.entityType]
-    : isActive
-      ? 'text-white bg-surface-card/20'
-      : 'text-text-secondary bg-surface-tertiary';
+  const { main, context } = item.kind === 'entity'
+    ? entityRowText(item, fr)
+    : { main: item.label, context: null };
 
   return (
     <button
@@ -592,66 +587,21 @@ function SearchResultRow({
       onMouseEnter={onMouseEnter}
       onClick={onClick}
       className={cn(
-        'mx-1.5 w-[calc(100%-0.75rem)] rounded-xl px-3 py-2.5 text-left transition-all duration-150',
-        isActive ? 'bg-primary text-white' : 'hover:bg-surface-secondary'
+        'mx-1.5 w-[calc(100%-0.75rem)] rounded-lg px-3 py-2.5 text-left transition-colors duration-150',
+        isActive ? 'bg-surface-secondary' : 'hover:bg-surface-secondary'
       )}
     >
-      <div className="flex items-center gap-3">
-        {/* Icon */}
-        <span
-          className={cn(
-            'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors',
-            isActive ? 'bg-surface-card/20 text-white' : iconColor
-          )}
-        >
-          <Icon size={14} strokeWidth={1.75} />
-        </span>
+      <div className="flex items-center gap-3.5">
+        {/* Bare icon — no chip, no halo; entity sections keep their identity color */}
+        <Icon size={17} strokeWidth={2.5} className={cn('shrink-0', entityIconClass(item.entityType || quickAction?.entity))} aria-hidden />
 
-        {/* Content */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className={cn('truncate text-[13px] font-medium', isActive ? 'text-white' : 'text-text-primary')}>
-              {item.kind === 'entity' ? highlightText(item.label, query) : item.label}
-            </p>
-            {item.status ? (
-              isActive ? (
-                <span className="inline-flex items-center rounded-full bg-surface-card/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide leading-none text-white">
-                  {item.status.replace(/_/g, ' ')}
-                </span>
-              ) : (
-                <StatusBadge status={item.status} />
-              )
-            ) : null}
-          </div>
-          {(item.subtitle || item.amountCents || item.clientName) ? (
-            <div className={cn('flex items-center gap-1.5 text-[11px]', isActive ? 'text-white/70' : 'text-text-secondary')}>
-              {item.subtitle ? (
-                <span className="truncate">
-                  {item.kind === 'entity' ? highlightText(item.subtitle, query) : item.subtitle}
-                </span>
-              ) : null}
-              {item.clientName && item.clientName !== item.subtitle && item.clientName !== item.label ? (
-                <>
-                  {item.subtitle ? <span className="shrink-0">·</span> : null}
-                  <span className="truncate">{item.clientName}</span>
-                </>
-              ) : null}
-              {item.amountCents != null && item.amountCents > 0 ? (
-                <>
-                  <span className="shrink-0">·</span>
-                  <span className="shrink-0 font-medium">{formatAmount(item.amountCents, item.currency)}</span>
-                </>
-              ) : null}
-            </div>
+        {/* One line: "Title (Client)" — wraps to 2 lines only when too long */}
+        <p className="min-w-0 flex-1 text-[15px] font-extrabold leading-snug text-text-primary line-clamp-2">
+          {item.kind === 'entity' ? highlightText(main, query) : main}
+          {context ? (
+            <span className="font-semibold text-text-secondary"> ({highlightText(context, query)})</span>
           ) : null}
-        </div>
-
-        {/* Date on the right */}
-        {item.date ? (
-          <span className={cn('shrink-0 text-[10px]', isActive ? 'text-white/60' : 'text-text-tertiary')}>
-            {formatShortDate(item.date)}
-          </span>
-        ) : null}
+        </p>
       </div>
     </button>
   );

@@ -44,6 +44,16 @@ const ROLE_CAN_CREATE_ZONE: UserRole[] = ['owner', 'admin', 'team_manager'];
 const ROLE_CAN_ASSIGN_ZONE: UserRole[] = ['owner', 'admin', 'team_manager'];
 const ROLE_CAN_DELETE_ANY_ZONE: UserRole[] = ['owner', 'admin'];
 
+// Map base styles — satellite is essential in rural areas where OSM has no
+// building footprints (streets-v12 renders nothing where houses aren't mapped).
+const STREETS_STYLE = 'mapbox://styles/mapbox/streets-v12';
+const SATELLITE_STYLE = 'mapbox://styles/mapbox/satellite-streets-v12';
+const MAP_STYLE_KEY = 'd2d-map-style';
+
+function loadSavedSatellite(): boolean {
+  try { return localStorage.getItem(MAP_STYLE_KEY) === 'satellite'; } catch { return false; }
+}
+
 // Simulated current user — replace with real auth context
 const CURRENT_USER = {
   id: 'user-1',
@@ -160,10 +170,14 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   const [showNotes, setShowNotes] = useState(true);
   const [pinDateFilter, setPinDateFilter] = useState<DateFilter>('all');
   const [showZones, setShowZones] = useState(true);
+  const [satellite, setSatellite] = useState(loadSavedSatellite);
   const [zoneDateFilter, setZoneDateFilter] = useState<DateFilter>('all');
   const [filterByRep, setFilterByRep] = useState<string>('all');
   const [showReps, setShowReps] = useState(true);
   const repMarkersRef = useRef(new Map<string, mapboxgl.Marker>());
+
+  // --- Boussole ---
+  const [compassBearing, setCompassBearing] = useState(0);
 
   // --- Select mode refs ---
   const selectBoxRef = useRef<HTMLDivElement>(null);
@@ -224,11 +238,48 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   // --- Lume ---
   // CRM actions handled via props callbacks
 
-  // --- Street search ---
+  // --- Street search (spotlight modal) ---
+  const RECENT_SEARCHES_KEY = 'lume.d2d.recent-searches';
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ id: string; place_name: string; center: [number, number] }>>([]);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [searchHighlight, setSearchHighlight] = useState(-1);
+  const [recentSearches, setRecentSearches] = useState<Array<{ id: string; place_name: string; center: [number, number] }>>(() => {
+    try { return JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) ?? '[]'); } catch { return []; }
+  });
   const searchTimerRef = useRef<number | null>(null);
+
+  const selectSearchResult = (r: { id: string; place_name: string; center: [number, number] }) => {
+    mapRef.current?.flyTo({ center: r.center, zoom: 17, duration: 800 });
+    setRecentSearches((prev) => {
+      const next = [r, ...prev.filter((p) => p.place_name !== r.place_name)].slice(0, 8);
+      try { localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next)); } catch { /* quota/private mode */ }
+      return next;
+    });
+    setSearchModalOpen(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    setSearchHighlight(-1);
+  };
+
+  const clearRecentSearches = () => {
+    setRecentSearches([]);
+    try { localStorage.removeItem(RECENT_SEARCHES_KEY); } catch { /* ignore */ }
+  };
+
+  // ⌘K / Ctrl+K toggles the search spotlight, Escape closes it
+  useEffect(() => {
+    function onSearchKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchModalOpen((v) => !v);
+      } else if (e.key === 'Escape') {
+        setSearchModalOpen(false);
+      }
+    }
+    window.addEventListener('keydown', onSearchKey);
+    return () => window.removeEventListener('keydown', onSearchKey);
+  }, []);
 
   // --- Pin navigation (Find & Replace style) ---
   const [navigatingStatus, setNavigatingStatus] = useState<PinStatus | null>(null);
@@ -455,6 +506,25 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   }
 
   // ---------------------------------------------------------------------------
+  // Base style toggle (plan / satellite)
+  // ---------------------------------------------------------------------------
+  function toggleSatellite() {
+    const map = mapRef.current;
+    if (!map) return;
+    const next = !satellite;
+    setSatellite(next);
+    try { localStorage.setItem(MAP_STYLE_KEY, next ? 'satellite' : 'streets'); } catch {}
+    map.setStyle(next ? SATELLITE_STYLE : STREETS_STYLE);
+    // setStyle wipes every custom source/layer (zones, drawing preview) —
+    // DOM markers (pins, GPS dot, reps) survive. Re-add layers once the new
+    // style is ready.
+    map.once('style.load', () => {
+      renderZonesOnMap();
+      if (drawingPoints.length >= 2) renderDrawingPreview(map, drawingPoints);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Pin CRUD
   // ---------------------------------------------------------------------------
   function toggleNotes() {
@@ -656,7 +726,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
     function initMap(center: [number, number], startZoom: number) {
       const map = new mapboxgl.Map({
         container: containerRef.current!,
-        style: 'mapbox://styles/mapbox/streets-v12',
+        style: loadSavedSatellite() ? SATELLITE_STYLE : STREETS_STYLE,
         center, zoom: startZoom, maxZoom: 22, minZoom: 1, antialias: true, attributionControl: false,
       });
       // Assign the ref IMMEDIATELY (not in the async 'load' handler). Otherwise,
@@ -991,11 +1061,20 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
     mapRef.current.flyTo({ center: [focusLng, focusLat], zoom: 18, duration: 900 });
   }, [focusLng, focusLat, mapReady]);
 
+  // Boussole — suit la rotation de la carte
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    const onRotate = () => setCompassBearing(map.getBearing());
+    map.on('rotate', onRotate);
+    return () => { map.off('rotate', onRotate); };
+  }, [mapReady]);
+
   // Debounced street search via Mapbox geocoding
   useEffect(() => {
     if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
     const q = searchQuery.trim();
-    if (q.length < 3) { setSearchResults([]); return; }
+    if (q.length < 2) { setSearchResults([]); return; }
     const token = import.meta.env.VITE_MAPBOX_TOKEN;
     if (!token) return;
     searchTimerRef.current = window.setTimeout(() => {
@@ -1010,7 +1089,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
           setSearchResults(features);
         })
         .catch(() => setSearchResults([]));
-    }, 250);
+    }, 200);
     return () => { if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current); };
   }, [searchQuery]);
 
@@ -1382,10 +1461,6 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   // Render
   // ---------------------------------------------------------------------------
   const statuses = Object.entries(PIN_STATUS_CONFIG) as [PinStatus, (typeof PIN_STATUS_CONFIG)[PinStatus]][];
-  const totalPins = markersRef.current.size;
-  const counts: Record<PinStatus, number> = { closed_won: 0, follow_up: 0, appointment: 0, no_answer: 0, rejected: 0, other: 0 };
-  markersRef.current.forEach(({ pin }) => { counts[pin.status]++; });
-  const totalZones = zonesRef.current.length;
 
   const dateLabels: Record<DateFilter, string> = fr
     ? { today: "Aujourd'hui", yesterday: 'Hier', this_month: 'Ce mois', this_year: 'Cette année', all: 'Tout' }
@@ -1428,57 +1503,199 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
         .mapboxgl-ctrl-attrib a { color: rgba(255,255,255,.2) !important; font-size: 10px !important; }
         .mapboxgl-marker { cursor: pointer !important; z-index: 5 !important; }
         .mapboxgl-popup { z-index: 15 !important; }
+        @keyframes d2dSearchIn { from { opacity: 0; transform: translateY(-10px) scale(.97); } to { opacity: 1; transform: none; } }
+        @keyframes d2dSearchBackdrop { from { opacity: 0; } to { opacity: 1; } }
       `}</style>
 
       {/* Selection rectangle overlay */}
       <div ref={selectBoxRef} className="pointer-events-none absolute z-20 rounded border-2 border-red-400/60 bg-red-500/15" style={{ display: 'none' }} />
 
-      {/* Street search */}
+      {/* ================================================================== */}
+      {/* RIGHT EDGE — Toolbar (boxes blanches, icônes rouges)               */}
+      {/* ================================================================== */}
       {!showTokenMsg && (
-        <div className="pointer-events-auto absolute left-1/2 top-3 z-30 w-[min(240px,calc(100vw-2rem))] -translate-x-1/2">
-          <div className="relative">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40">
+        <div className="pointer-events-auto absolute right-3 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-2">
+          {/* Box 1 — Entonnoir : filtrer les pins */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${showFilters ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            title={fr ? 'Filtrer les pins' : 'Filter pins'}
+            aria-label={fr ? 'Filtres' : 'Filters'}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+            </svg>
+          </button>
+          {/* Box 2 — Loupe : recherche */}
+          <button
+            onClick={() => setSearchModalOpen(true)}
+            className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${searchModalOpen ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            title={fr ? 'Rechercher une adresse (⌘K)' : 'Search an address (⌘K)'}
+            aria-label={fr ? 'Rechercher' : 'Search'}
+          >
+            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
-              onFocus={() => setSearchOpen(true)}
-              onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
-              placeholder={fr ? 'Rechercher une rue, un quartier, un code postal…' : 'Search a street, neighborhood, postal code…'}
-              className="w-full rounded-xl border border-white/10 bg-black/70 py-2.5 pl-9 pr-9 text-[13px] text-white placeholder-white/35 shadow-xl outline-none backdrop-blur-xl focus:border-indigo-400/40"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => { setSearchQuery(''); setSearchResults([]); }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-white/40 hover:bg-white/10 hover:text-white"
-                aria-label={fr ? 'Effacer' : 'Clear'}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            )}
-            {searchOpen && searchResults.length > 0 && (
-              <div className="absolute left-0 right-0 top-full mt-1 max-h-[300px] overflow-auto rounded-xl border border-white/10 bg-black/85 shadow-2xl backdrop-blur-xl">
-                {searchResults.map((r) => (
-                  <button
-                    key={r.id}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      mapRef.current?.flyTo({ center: r.center, zoom: 17, duration: 800 });
-                      setSearchOpen(false);
-                      setSearchQuery(r.place_name);
-                    }}
-                    className="block w-full truncate px-3 py-2 text-left text-[12px] text-white/80 hover:bg-white/10"
-                  >
-                    {r.place_name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          </button>
+
+          {/* Box 3 — Doigt qui trace : création de zone */}
+          {canCreateZone(CURRENT_USER.role) && (
+            <button
+              onClick={() => {
+                if (mode === 'draw_zone') cancelDrawing();
+                else { setMode('draw_zone'); setDrawingPoints([]); }
+              }}
+              className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${mode === 'draw_zone' ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+              title={fr ? 'Créer une zone' : 'Create a zone'}
+              aria-label={fr ? 'Créer une zone' : 'Create a zone'}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 5.5c1-2 4-3.2 6-2.7" strokeDasharray="1 2.6" />
+                <path d="M22 14a8 8 0 0 1-8 8" />
+                <path d="M18 11v-1a2 2 0 0 0-2-2 2 2 0 0 0-2 2" />
+                <path d="M14 10V9a2 2 0 0 0-2-2 2 2 0 0 0-2 2v1" />
+                <path d="M10 9.5V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v10" />
+                <path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+              </svg>
+            </button>
+          )}
+
+          {/* Box 4 — Plan plié : bascule plan / satellite */}
+          <button
+            onClick={toggleSatellite}
+            className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${satellite ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            title={fr ? (satellite ? 'Passer en vue plan' : 'Passer en vue satellite') : (satellite ? 'Switch to map view' : 'Switch to satellite view')}
+            aria-label={fr ? 'Changer le style de carte' : 'Toggle map style'}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" />
+              <path d="M15 5.764v15" /><path d="M9 3.236v15" />
+            </svg>
+          </button>
+
+          {/* Box 5 — Boussole (ronde) : indique le nord, clic = réaligner */}
+          <button
+            onClick={() => mapRef.current?.easeTo({ bearing: 0, pitch: 0, duration: 600 })}
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black shadow-lg shadow-black/30 transition-all hover:scale-105"
+            title={fr ? 'Boussole — cliquer pour réaligner au nord' : 'Compass — click to reset north'}
+            aria-label={fr ? 'Boussole' : 'Compass'}
+          >
+            <svg width="27" height="27" viewBox="0 0 24 24" style={{ transform: `rotate(${-compassBearing}deg)`, transition: 'transform .2s ease-out' }}>
+              <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M12 3.6v1.5M12 18.9v1.5M3.6 12h1.5M18.9 12h1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+              <path d="M12 5.6l2.1 6.4H9.9z" fill="#dc2626" />
+              <path d="M12 18.4L9.9 12h4.2z" fill="currentColor" />
+              <circle cx="12" cy="12" r="1.1" fill="white" stroke="currentColor" strokeWidth=".7" />
+            </svg>
+          </button>
         </div>
       )}
+
+      {/* Street search — spotlight modal */}
+      {!showTokenMsg && searchModalOpen && (() => {
+        const searchTyping = searchQuery.trim().length >= 2;
+        const searchList = searchTyping ? searchResults : recentSearches;
+        return (
+          <div
+            className="absolute inset-0 z-40 flex items-start justify-center bg-black/50 px-4 pt-[14vh] backdrop-blur-[3px]"
+            style={{ animation: 'd2dSearchBackdrop .15s ease-out' }}
+            onMouseDown={() => setSearchModalOpen(false)}
+          >
+            <div
+              className="w-[min(560px,100%)] overflow-hidden rounded-2xl border border-white/10 bg-[#0c0c14]/95 shadow-[0_24px_80px_rgba(0,0,0,.65)] backdrop-blur-2xl"
+              style={{ animation: 'd2dSearchIn .18s cubic-bezier(.2,.9,.3,1)' }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="relative border-b border-white/[.08]">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-300/70">
+                  <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  autoFocus
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setSearchHighlight(-1); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setSearchHighlight((i) => Math.min(i + 1, searchList.length - 1)); }
+                    else if (e.key === 'ArrowUp') { e.preventDefault(); setSearchHighlight((i) => Math.max(i - 1, -1)); }
+                    else if (e.key === 'Enter') {
+                      const pick = searchList[searchHighlight] ?? searchList[0];
+                      if (pick) selectSearchResult(pick);
+                    }
+                  }}
+                  placeholder={fr ? 'Rechercher une rue, un quartier, un code postal…' : 'Search a street, neighborhood, postal code…'}
+                  className="w-full bg-transparent py-4 pl-11 pr-20 text-[15px] text-white placeholder-white/30 outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => { setSearchQuery(''); setSearchResults([]); setSearchHighlight(-1); }}
+                    className="absolute right-12 top-1/2 -translate-y-1/2 rounded-md p-1 text-white/40 hover:bg-white/10 hover:text-white"
+                    aria-label={fr ? 'Effacer' : 'Clear'}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                )}
+                <kbd className="absolute right-4 top-1/2 -translate-y-1/2 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-white/35">esc</kbd>
+              </div>
+
+              <div className="max-h-[320px] overflow-auto py-1.5">
+                {searchTyping ? (
+                  searchResults.length > 0 ? (
+                    searchResults.map((r, idx) => (
+                      <button
+                        key={r.id}
+                        onMouseEnter={() => setSearchHighlight(idx)}
+                        onClick={() => selectSearchResult(r)}
+                        className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-[13px] transition-colors ${searchHighlight === idx ? 'bg-indigo-500/20 text-white' : 'text-white/80 hover:bg-white/[.07]'}`}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-indigo-300/60">
+                          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" />
+                        </svg>
+                        <span className="truncate">{r.place_name}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="px-4 py-6 text-center text-[12.5px] text-white/35">
+                      {fr ? <>Aucun résultat pour «&nbsp;{searchQuery.trim()}&nbsp;»</> : <>No results for “{searchQuery.trim()}”</>}
+                    </p>
+                  )
+                ) : recentSearches.length > 0 ? (
+                  <>
+                    <div className="flex items-center justify-between px-4 pb-1 pt-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-white/35">{fr ? 'Recherches récentes' : 'Recent searches'}</span>
+                      <button onClick={clearRecentSearches} className="text-[10.5px] text-white/30 transition-colors hover:text-white/70">{fr ? 'Effacer' : 'Clear'}</button>
+                    </div>
+                    {recentSearches.map((r, idx) => (
+                      <button
+                        key={r.place_name}
+                        onMouseEnter={() => setSearchHighlight(idx)}
+                        onClick={() => selectSearchResult(r)}
+                        className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-[13px] transition-colors ${searchHighlight === idx ? 'bg-indigo-500/20 text-white' : 'text-white/80 hover:bg-white/[.07]'}`}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-white/30">
+                          <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+                        </svg>
+                        <span className="truncate">{r.place_name}</span>
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  <div className="px-4 py-8 text-center">
+                    <p className="text-[13px] text-white/50">{fr ? 'Cherchez une rue, un quartier ou un code postal' : 'Search a street, neighborhood or postal code'}</p>
+                    <p className="mt-1 text-[11.5px] text-white/25">{fr ? 'Les suggestions apparaissent dès que vous tapez' : 'Suggestions appear as you type'}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 border-t border-white/[.08] px-4 py-2 text-[10.5px] text-white/30">
+                <span className="flex items-center gap-1"><kbd className="rounded border border-white/10 bg-white/5 px-1 py-px">↑</kbd><kbd className="rounded border border-white/10 bg-white/5 px-1 py-px">↓</kbd> {fr ? 'naviguer' : 'navigate'}</span>
+                <span className="flex items-center gap-1"><kbd className="rounded border border-white/10 bg-white/5 px-1 py-px">↵</kbd> {fr ? 'sélectionner' : 'select'}</span>
+                <span className="flex items-center gap-1"><kbd className="rounded border border-white/10 bg-white/5 px-1 py-px">esc</kbd> {fr ? 'fermer' : 'close'}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Custom GPS re-center button (replaces Mapbox GeolocateControl to avoid duplicate dot) */}
       {!showTokenMsg && (
@@ -1632,18 +1849,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
               </button>
             )}
 
-            {/* Create Zone — only for authorized roles */}
-            {mode === 'view' && canCreateZone(CURRENT_USER.role) && (
-              <button
-                onClick={() => { setMode('draw_zone'); setDrawingPoints([]); }}
-                className="flex items-center gap-2 rounded-xl border border-indigo-400/20 bg-indigo-500/15 px-4 py-2.5 text-[13px] font-semibold text-indigo-300 shadow-xl backdrop-blur-xl transition-all hover:bg-indigo-500/25"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
-                </svg>
-                Créer une zone
-              </button>
-            )}
+            {/* Create Zone — déplacé dans la barre droite (box 3) */}
 
             {/* Draw zone active */}
             {mode === 'draw_zone' && (
@@ -1665,48 +1871,11 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
           </div>
 
           {/* ================================================================ */}
-          {/* TOP RIGHT — Filter button + stats                                */}
+          {/* TOP RIGHT — Filter panel                                         */}
           {/* ================================================================ */}
           <div className="pointer-events-auto flex items-center gap-2">
-            {/* Pin stats */}
-            {totalPins > 0 && (
-              <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/60 px-4 py-2.5 shadow-xl backdrop-blur-xl">
-                {statuses.map(([key, cfg]) => {
-                  if (!counts[key]) return null;
-                  return (
-                    <div key={key} className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: cfg.color }} />
-                      <span className="text-[12px] font-bold tabular-nums text-white/80">{counts[key]}</span>
-                    </div>
-                  );
-                })}
-                <div className="h-4 w-px bg-white/10" />
-                <span className="text-[12px] font-semibold text-white/50">{totalPins} pin{totalPins > 1 ? 's' : ''}</span>
-                {totalZones > 0 && (
-                  <>
-                    <div className="h-4 w-px bg-white/10" />
-                    <span className="text-[12px] font-semibold text-indigo-300/70">{totalZones} zone{totalZones > 1 ? 's' : ''}</span>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* FILTER BUTTON — top right */}
-            <div className="relative">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold shadow-xl transition-all ${
-                  showFilters
-                    ? 'bg-white/15 text-white border border-white/20 backdrop-blur-xl'
-                    : 'border border-white/10 bg-black/60 text-white/70 backdrop-blur-xl hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-                </svg>
-                Filtres
-              </button>
-
+            {/* FILTER PANEL — ouvert par la box entonnoir de la barre droite */}
+            <div className="relative self-stretch">
               {/* FILTER PANEL */}
               {showFilters && (
                 <div className="absolute right-0 top-full mt-2 w-[280px] rounded-xl border border-white/10 bg-black/85 p-3 shadow-2xl backdrop-blur-xl">

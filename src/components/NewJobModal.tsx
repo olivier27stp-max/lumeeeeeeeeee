@@ -80,6 +80,8 @@ export interface JobDraftInitialValues {
   team_id?: string | null;
   job_number?: string | null;
   salesperson_id?: string | null;
+  sale_date?: string | null;
+  show_on_leaderboard?: boolean;
   job_type?: 'one_off' | 'recurring';
   property_address?: string | null;
   address_line1?: string | null;
@@ -118,6 +120,8 @@ interface NewJobModalProps {
     team_id?: string | null;
     job_number?: string | null;
     salesperson_id?: string | null;
+    sale_date?: string | null;
+    show_on_leaderboard?: boolean;
     description?: string | null;
     job_type?: string | null;
     property_address?: string | null;
@@ -316,6 +320,10 @@ export default function NewJobModal({
   const [nextJobNumber, setNextJobNumber] = useState<string | null>(null);
   const [salespersonId, setSalespersonId] = useState('');
   const [salespeople, setSalespeople] = useState<Array<{ id: string; label: string }>>([]);
+  // Journée du close pour le leaderboard — défaut : aujourd'hui, modifiable
+  // pour entrer un close oublié sans fausser le classement du jour courant.
+  const [saleDate, setSaleDate] = useState(new Date().toISOString().slice(0, 10));
+  const [showOnLeaderboard, setShowOnLeaderboard] = useState(true);
   const [jobType, setJobType] = useState<'one_off' | 'recurring'>('one_off');
   // Assignment: choose between assigning an individual user or a team (tabs)
   const [assignMode, setAssignMode] = useState<'user' | 'team'>('team');
@@ -529,6 +537,8 @@ export default function NewJobModal({
     setAssignedUserId(initialAssignedUser);
     setAssignMode(initialAssignedUser && !(initialValues?.team_id) ? 'user' : 'team');
     setAskForReview(Boolean(iv?.ask_for_review));
+    setSaleDate(initialValues?.sale_date || new Date().toISOString().slice(0, 10));
+    setShowOnLeaderboard(initialValues?.show_on_leaderboard !== false);
     setServiceYear(new Date().getFullYear());
     setServiceMonthDates({});
     setCreateContract(false);
@@ -850,6 +860,8 @@ export default function NewJobModal({
     setTeamSuggestions([]);
     setJobNumber('');
     setSalespersonId('');
+    setSaleDate(new Date().toISOString().slice(0, 10));
+    setShowOnLeaderboard(true);
     setJobType('one_off');
     setVisitDrafts([newVisitDraft()]);
     setRemovedVisitIds([]);
@@ -1296,6 +1308,8 @@ export default function NewJobModal({
         team_id: teamIdPayload,
         job_number: jobNumberToSend || null,
         salesperson_id: salespersonId || null,
+        sale_date: saleDate || null,
+        show_on_leaderboard: showOnLeaderboard,
         description,
         job_type: jobType,
         property_address: [addressLine1, addressCity, addressProvince, addressPostalCode].filter(Boolean).join(', ') || null,
@@ -1473,6 +1487,41 @@ export default function NewJobModal({
                         </option>
                       ))}
                     </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Date de création' : 'Date of creation'}</label>
+                    <input
+                      type="date"
+                      value={saleDate}
+                      onChange={(event) => setSaleDate(event.target.value)}
+                      className="glass-input w-full"
+                    />
+                    <p className="text-[12px] text-text-tertiary">
+                      {language === 'fr'
+                        ? 'Le close compte pour le leaderboard de cette journée — pratique pour entrer une vente oubliée.'
+                        : "The close counts toward that day's leaderboard — handy for logging a sale you forgot to enter."}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-text-tertiary">Leaderboard</label>
+                    <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-outline px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={showOnLeaderboard}
+                        onChange={(event) => setShowOnLeaderboard(event.target.checked)}
+                        className="h-4 w-4 mt-0.5 rounded"
+                      />
+                      <span>
+                        <span className="block text-[13px] font-medium text-text-primary">{language === 'fr' ? 'Afficher sur le leaderboard' : 'Show on leaderboard'}</span>
+                        <span className="text-[12px] text-text-tertiary">
+                          {language === 'fr'
+                            ? 'Décocher pour que ce job ne compte pas dans les stats du vendeur.'
+                            : "Uncheck so this job doesn't count in the salesperson's stats."}
+                        </span>
+                      </span>
+                    </label>
                   </div>
                 </div>
                 <label className="flex items-start gap-3 cursor-pointer">

@@ -3,14 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '../components/d2d/card';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
-import { getLeaderboard, getRepPerformance, setRepExperience, getOffices, type Office } from '../lib/leaderboardApi';
+import { getLeaderboard, getRepPerformance, setRepExperience, getOffices, type Office, type LeaderboardRange } from '../lib/leaderboardApi';
 import { useCompany } from '../contexts/CompanyContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { toast } from 'sonner';
 import type { LeaderboardEntry, RepPerformanceDetail } from '../types';
-import { ChevronRight, X, User, Loader2, Search, Trophy } from 'lucide-react';
+import { Calendar, ChevronRight, X, User, Loader2, Search, Trophy } from 'lucide-react';
 
-type Period = 'daily' | 'weekly' | 'monthly';
 type Metric = 'sales' | 'revenue';
 type Category = 'all' | 'rookie' | 'experienced';
 
@@ -70,22 +69,23 @@ function apiToRepData(entries: LeaderboardEntry[]): RepData[] {
   }));
 }
 
-function getPeriodDates(period: Period): { from: string; to: string } {
-  const now = new Date();
-  const to = now.toISOString().slice(0, 10);
-  let from: string;
-  if (period === 'daily') {
-    from = to;
-  } else if (period === 'weekly') {
-    const d = new Date(now);
-    d.setDate(d.getDate() - 6);
-    from = d.toISOString().slice(0, 10);
-  } else {
-    const d = new Date(now);
-    d.setDate(d.getDate() - 29);
-    from = d.toISOString().slice(0, 10);
+// Local YYYY-MM-DD (en-CA locale formats exactly that way)
+function todayIso(): string {
+  return new Date().toLocaleDateString('en-CA');
+}
+
+function parseIsoDate(s: string): Date {
+  return new Date(`${s}T00:00:00`);
+}
+
+// "mercredi 16 juillet 2026" for a single day, "12 juill. – 16 juill. 2026" for a range
+function formatRangeLabel(range: LeaderboardRange, fr: boolean): string {
+  const locale = fr ? 'fr-CA' : 'en-CA';
+  if (range.from === range.to) {
+    return parseIsoDate(range.from).toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   }
-  return { from, to };
+  const short: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
+  return `${parseIsoDate(range.from).toLocaleDateString(locale, short)} – ${parseIsoDate(range.to).toLocaleDateString(locale, short)}`;
 }
 
 function perfToKPIs(perf: RepPerformanceDetail): { key: string; value: string }[] {
@@ -122,13 +122,13 @@ export default function D2DLeaderboard() {
   const navigate = useNavigate();
   const { language } = useTranslation();
   const fr = language === 'fr';
-  const periodLabels: Record<Period, string> = fr
-    ? { daily: 'Jour', weekly: 'Semaine', monthly: 'Mois' }
-    : { daily: 'Day', weekly: 'Week', monthly: 'Month' };
   const { currentOrgId } = useCompany();
   const { role } = usePermissions();
   const isAdmin = role === 'owner' || role === 'admin';
-  const [period, setPeriod] = useState<Period>('weekly');
+  // Date / période sélectionnée — toutes les stats de la page suivent cette fenêtre.
+  const [range, setRange] = useState<LeaderboardRange>(() => ({ from: todayIso(), to: todayIso() }));
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [draft, setDraft] = useState<LeaderboardRange>(range);
   const [metric, setMetric] = useState<Metric>('revenue');
   const [scope, setScope] = useState<'mine' | 'all'>('mine');
   const [category, setCategory] = useState<Category>('all');
@@ -154,7 +154,7 @@ export default function D2DLeaderboard() {
 
   const fetchBoard = useCallback((cancelledRef?: { current: boolean }) => {
     setLoading(true);
-    getLeaderboard(period, {
+    getLeaderboard(range, {
       scope: effectiveScope,
       orgId: effectiveOrgId,
       experience: category === 'all' ? undefined : category,
@@ -162,7 +162,7 @@ export default function D2DLeaderboard() {
       .then((entries) => { if (!cancelledRef?.current) setReps(entries && entries.length ? apiToRepData(entries) : []); })
       .catch(() => { if (!cancelledRef?.current) setReps([]); })
       .finally(() => { if (!cancelledRef?.current) setLoading(false); });
-  }, [period, effectiveScope, effectiveOrgId, category]);
+  }, [range.from, range.to, effectiveScope, effectiveOrgId, category]);
 
   const reload = useCallback(() => fetchBoard(), [fetchBoard]);
 
@@ -186,8 +186,7 @@ export default function D2DLeaderboard() {
   const openRepDrawer = useCallback((rep: RepData) => {
     setSelectedRep(rep);
     setDetailLoading(true);
-    const { from, to } = getPeriodDates(period);
-    getRepPerformance(rep.userId, from, to)
+    getRepPerformance(rep.userId, range.from, range.to)
       .then(({ performance }) => {
         setDetailKPIs(perfToKPIs(performance));
         setFunnelSteps(perfToFunnel(performance));
@@ -197,7 +196,7 @@ export default function D2DLeaderboard() {
         setFunnelSteps([]);
       })
       .finally(() => setDetailLoading(false));
-  }, [period]);
+  }, [range.from, range.to]);
 
   // Sort by the selected metric (mirrors mobile: revenue → revenue then closes).
   const board = [...reps].sort((a, b) =>
@@ -241,20 +240,76 @@ export default function D2DLeaderboard() {
         )}
       </div>
 
-      {/* Period segmented control (mobile look) */}
-      <div className="flex rounded-2xl bg-surface-elevated p-1">
-        {(['daily', 'weekly', 'monthly'] as Period[]).map((p) => (
+      {/* Date / period selector — every stat on this page follows this window */}
+      <div className="relative">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-white px-4 py-2.5">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Calendar className="h-4 w-4 shrink-0 text-text-muted" />
+            <p className="truncate text-sm font-semibold text-text-primary">{formatRangeLabel(range, fr)}</p>
+          </div>
           <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={cn(
-              'flex-1 rounded-xl py-2 text-sm font-semibold transition-colors',
-              period === p ? 'bg-white text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary',
-            )}
+            onClick={() => { setDraft(range); setPickerOpen((o) => !o); }}
+            className="shrink-0 rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-elevated"
           >
-            {periodLabels[p]}
+            {fr ? 'Changer' : 'Change'}
           </button>
-        ))}
+        </div>
+
+        {pickerOpen && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setPickerOpen(false)} />
+            <div className="absolute right-0 top-[calc(100%+8px)] z-20 w-72 rounded-2xl border border-border-subtle bg-white p-4 shadow-xl">
+              <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                {fr ? 'Date ou période' : 'Date or period'}
+              </p>
+              <div className="space-y-2.5">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-text-secondary">{fr ? 'Du' : 'From'}</span>
+                  <input
+                    type="date"
+                    value={draft.from}
+                    max={todayIso()}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!v) return;
+                      setDraft((d) => ({ from: v, to: v > d.to ? v : d.to }));
+                    }}
+                    className="w-full rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-text-secondary">{fr ? 'Au' : 'To'}</span>
+                  <input
+                    type="date"
+                    value={draft.to}
+                    min={draft.from}
+                    max={todayIso()}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!v) return;
+                      setDraft((d) => ({ from: v < d.from ? v : d.from, to: v }));
+                    }}
+                    className="w-full rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary outline-none"
+                  />
+                </label>
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={() => { const t = todayIso(); setDraft({ from: t, to: t }); }}
+                  className="flex-1 rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-elevated"
+                >
+                  {fr ? "Aujourd'hui" : 'Today'}
+                </button>
+                <button
+                  onClick={() => { setRange(draft); setPickerOpen(false); }}
+                  className="flex-1 rounded-lg bg-text-primary px-3 py-1.5 text-xs font-semibold text-surface transition-opacity hover:opacity-90"
+                >
+                  {fr ? 'Appliquer' : 'Apply'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Metric pills */}
@@ -464,7 +519,7 @@ export default function D2DLeaderboard() {
                 </div>
               ) : (
                 <>
-                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">{fr ? 'Détails de performance' : 'Performance detail'} ({periodLabels[period]})</h4>
+                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">{fr ? 'Détails de performance' : 'Performance detail'} · {formatRangeLabel(range, fr)}</h4>
                   <div className="grid grid-cols-2 gap-2">
                     {detailKPIs.map((kpi) => (
                       <div key={kpi.key} className="rounded-lg border border-border-subtle bg-surface-elevated px-3 py-3">

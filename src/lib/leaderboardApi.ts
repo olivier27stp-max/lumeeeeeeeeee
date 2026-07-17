@@ -49,12 +49,22 @@ export interface LeaderboardOptions {
   experience?: 'rookie' | 'experienced';
 }
 
+/** Plage de dates explicite (YYYY-MM-DD, inclusif). from === to = un seul jour. */
+export interface LeaderboardRange {
+  from: string;
+  to: string;
+}
+
 export function getLeaderboard(
-  period: 'daily' | 'weekly' | 'monthly',
+  periodOrRange: 'daily' | 'weekly' | 'monthly' | LeaderboardRange,
   opts: LeaderboardOptions = {}
 ): Promise<LeaderboardEntry[]> {
+  const windowParams =
+    typeof periodOrRange === 'string'
+      ? { period: periodOrRange }
+      : { from: periodOrRange.from, to: periodOrRange.to };
   return apiFetch(
-    `/leaderboard${qs({ period, teamId: opts.teamId, scope: opts.scope, orgId: opts.orgId, experience: opts.experience })}`
+    `/leaderboard${qs({ ...windowParams, teamId: opts.teamId, scope: opts.scope, orgId: opts.orgId, experience: opts.experience })}`
   );
 }
 
@@ -77,6 +87,39 @@ export function setRepExperience(
     method: 'PATCH',
     body: JSON.stringify({ experience_level: level }),
   });
+}
+
+export interface RepProfileInfo {
+  profile: {
+    id: string;
+    full_name: string | null;
+    avatar_url: string | null;
+  } | null;
+  member: {
+    id: string;
+    org_id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    phone: string | null;
+    role: string | null;
+    avatar_url: string | null;
+    created_at: string | null;
+  } | null;
+  /** Nom du bureau (office) du rep. */
+  office: string;
+  /** Org du rep dans la compagnie — sert à scoper ses stats. */
+  orgId: string;
+  /** Date de création du compte auth (fallback pour la date d'embauche). */
+  accountCreatedAt: string | null;
+}
+
+/**
+ * Identité du rep pour le Rep Hub — résolue côté serveur car la RLS client
+ * bloque profiles/team_members pour les reps d'un autre office.
+ */
+export function getRepProfileInfo(userId: string): Promise<RepProfileInfo> {
+  return apiFetch(`/leaderboard/rep/${userId}/profile`);
 }
 
 export function getRepPerformance(

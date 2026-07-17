@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { requireAuthedClient, getServiceClient, isOrgMember, isOrgAdminOrOwner } from '../lib/supabase';
 import { ORG_UUID_RE, shouldUseRequestedOrg, leaderboardOrgIds } from '../lib/active-org';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
-import { getLeaderboard, getRepPerformance, calculateRepStats } from '../lib/field-sales/leaderboard-engine';
+import { getLeaderboard, getRepPerformance, calculateRepStats, periodRange, type DateWindow } from '../lib/field-sales/leaderboard-engine';
+import { endOfDay, startOfDay } from 'date-fns';
 import { getRepBadges } from '../lib/field-sales/gamification-engine';
 import { cached } from '../lib/cache';
 
@@ -28,15 +29,43 @@ async function resolveActiveOrgId(
   return auth.orgId;
 }
 
-// GET /api/leaderboard?period=daily|weekly|monthly&teamId=...&scope=mine|all&orgId=...
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Fenêtre de dates de la requête : soit une plage explicite ?from=&to=
+ * (YYYY-MM-DD, bornes inversées tolérées), soit le period legacy
+ * daily|weekly|monthly. Renvoie aussi une clé stable pour le cache.
+ */
+function resolveWindow(req: any): { window: DateWindow; key: string } | null {
+  const from = req.query.from as string | undefined;
+  const to = req.query.to as string | undefined;
+  if (from && to && DATE_ONLY_RE.test(from) && DATE_ONLY_RE.test(to)) {
+    const [lo, hi] = from <= to ? [from, to] : [to, from];
+    return {
+      window: {
+        start: startOfDay(new Date(`${lo}T00:00:00`)).toISOString(),
+        end: endOfDay(new Date(`${hi}T00:00:00`)).toISOString(),
+      },
+      key: `${lo}_${hi}`,
+    };
+  }
+
+  const period = (req.query.period as string) || 'daily';
+  if (!['daily', 'weekly', 'monthly'].includes(period)) return null;
+  return { window: periodRange(period as 'daily' | 'weekly' | 'monthly'), key: period };
+}
+
+// GET /api/leaderboard?from=YYYY-MM-DD&to=YYYY-MM-DD (ou ?period=daily|weekly|monthly)
+//   &teamId=...&scope=mine|all&orgId=...&experience=...
 router.get('/leaderboard', async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
 
-  const period = (req.query.period as string) || 'daily';
-  if (!['daily', 'weekly', 'monthly'].includes(period)) {
-    return res.status(400).json({ error: 'Invalid period. Use daily, weekly, or monthly.' });
+  const resolvedWindow = resolveWindow(req);
+  if (!resolvedWindow) {
+    return res.status(400).json({ error: 'Invalid period. Use from/to dates or daily, weekly, monthly.' });
   }
+  const { window, key: windowKey } = resolvedWindow;
 
   const teamId = req.query.teamId as string | undefined;
   const experienceRaw = req.query.experience as string | undefined;
@@ -56,15 +85,15 @@ router.get('/leaderboard', async (req, res) => {
     let cacheKey: string;
     if (scope === 'mine') {
       orgIds = leaderboardOrgIds('mine', activeOrgId, []);
-      cacheKey = `leaderboard:mine:${activeOrgId}:${period}:${teamId || 'all'}:${experience || 'all'}`;
+      cacheKey = `leaderboard:mine:${activeOrgId}:${windowKey}:${teamId || 'all'}:${experience || 'all'}`;
     } else {
       const resolved = await resolveCompanyOrgIds(sc, activeOrgId);
       orgIds = leaderboardOrgIds('all', activeOrgId, resolved.orgIds);
-      cacheKey = `leaderboard:all:${resolved.groupId}:${period}:${teamId || 'all'}:${experience || 'all'}`;
+      cacheKey = `leaderboard:all:${resolved.groupId}:${windowKey}:${teamId || 'all'}:${experience || 'all'}`;
     }
 
     const entries = await cached(cacheKey, 45, () =>
-      getLeaderboard(sc, orgIds, period as 'daily' | 'weekly' | 'monthly', undefined, teamId, experience)
+      getLeaderboard(sc, orgIds, window, teamId, experience)
     );
     res.json(entries);
   } catch (err: any) {
@@ -126,6 +155,81 @@ router.get('/leaderboard/rep/:userId', async (req, res) => {
       return { performance, badges };
     });
     res.json(payload);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/leaderboard/rep/:userId/profile — identité du rep pour le Rep Hub.
+// Résolue côté serveur (service client) : la RLS client bloque profiles /
+// team_members pour un rep d'un autre office de la compagnie, ce qui faisait
+// tomber la page sur « Ce rep n'existe pas ».
+router.get('/leaderboard/rep/:userId/profile', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const { userId } = req.params;
+  if (!ORG_UUID_RE.test(userId)) {
+    return res.status(400).json({ error: 'Invalid user id.' });
+  }
+
+  try {
+    const sc = getServiceClient();
+    const { orgIds } = await resolveCompanyOrgIds(sc, auth.orgId);
+
+    // NB : pas de profiles.created_at — la colonne n'existe pas en prod. La
+    // date de création du compte vient de l'API admin auth à la place.
+    const [membershipRes, memberRes, profileRes, authUserRes] = await Promise.all([
+      sc.from('memberships').select('org_id').eq('user_id', userId).in('org_id', orgIds).limit(1),
+      sc
+        .from('team_members')
+        .select('id, org_id, first_name, last_name, email, phone, role, avatar_url, created_at')
+        .eq('user_id', userId)
+        .in('org_id', orgIds)
+        .limit(1),
+      sc.from('profiles').select('id, full_name, avatar_url').eq('id', userId).maybeSingle(),
+      sc.auth.admin.getUserById(userId),
+    ]);
+    if (profileRes.error) console.error('[leaderboard] rep profile select failed:', profileRes.error.message);
+    if (memberRes.error) console.error('[leaderboard] rep team_member select failed:', memberRes.error.message);
+
+    const membership = membershipRes.data?.[0] ?? null;
+    const member = memberRes.data?.[0] ?? null;
+
+    // Anti-IDOR : le rep doit appartenir à un office de la compagnie du caller.
+    if (!membership && !member) {
+      return res.status(404).json({ error: 'Rep not found in your company.' });
+    }
+
+    // Office = le bureau du rep (pas forcément l'office actif du caller)
+    const repOrgId = (member?.org_id as string) || (membership?.org_id as string) || auth.orgId;
+    let office = '';
+    const { data: settings } = await sc
+      .from('company_settings')
+      .select('company_name')
+      .eq('org_id', repOrgId)
+      .limit(1);
+    office = settings?.[0]?.company_name || '';
+    if (!office) {
+      const { data: billing } = await sc
+        .from('org_billing_settings')
+        .select('company_name')
+        .eq('org_id', repOrgId)
+        .limit(1);
+      office = billing?.[0]?.company_name || '';
+    }
+    if (!office) {
+      const { data: org } = await sc.from('orgs').select('name').eq('id', repOrgId).maybeSingle();
+      office = org?.name || '';
+    }
+
+    res.json({
+      profile: profileRes.data ?? null,
+      member,
+      office,
+      orgId: repOrgId,
+      accountCreatedAt: authUserRes.data?.user?.created_at ?? null,
+    });
   } catch (err: any) {
     res.status(500).json({ error: 'Internal server error' });
   }

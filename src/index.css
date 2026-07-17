@@ -63,6 +63,14 @@
   --color-info: #2563eb;
   --color-info-light: #eff6ff;
 
+  /* ── Entity identity — one solid icon color per CRM section.
+     Requests = amber, Quotes = bordeaux, Jobs = green, Invoices = navy.
+     Icons only: no chip, no halo, no gradient. ── */
+  --color-entity-request: #d97706;
+  --color-entity-quote: #9f1239;
+  --color-entity-job: #15803d;
+  --color-entity-invoice: #1e3a8a;
+
   /* ── Extended palette — for charts, tags, visual richness ── */
   --color-violet: #737373;
   --color-violet-light: #f5f5f5;
@@ -241,6 +249,12 @@
     --color-danger-medium: #fca5a5;
     --color-info: #60a5fa;
     --color-info-light: #0f1520;
+
+    /* Entity identity — same hues, lifted for contrast on near-black */
+    --color-entity-request: #f59e0b;
+    --color-entity-quote: #fb7185;
+    --color-entity-job: #4ade80;
+    --color-entity-invoice: #60a5fa;
 
     /* Extended palette — dark mode */
     --color-violet: #8e8e96;

@@ -10,6 +10,8 @@ import {
 } from '../lib/globalSearchApi';
 import { cn } from '../lib/utils';
 import { escapeRegExp, getSearchEntityLabel, getSearchItemHref } from '../lib/searchHelpers';
+import { entityIconClass } from '../lib/entityColors';
+import StatusBadge from '../components/ui/StatusBadge';
 import PageHeader from '../components/ui/PageHeader';
 import { useTranslation } from '../i18n';
 
@@ -20,35 +22,20 @@ const ENTITY_ICONS: Record<SearchEntityType, React.ElementType> = {
   invoice: ReceiptText, quote: FileText, request: ClipboardList, team: UsersRound, event: CalendarDays,
 };
 
+// Bare icon color per entity — the four CRM sections keep their identity
+// color (requests amber, quotes bordeaux, jobs green, invoices navy); the
+// rest stay neutral. No chip, no background behind the icon.
 const ENTITY_COLORS: Record<SearchEntityType, string> = {
-  client: 'text-text-secondary bg-surface-secondary',
-  property: 'text-teal-600 bg-teal-50 dark:text-teal-400 dark:bg-teal-500/10',
-  job: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-500/10',
-  agreement: 'text-violet-600 bg-violet-50 dark:text-violet-400 dark:bg-violet-500/10',
-  lead: 'text-text-secondary bg-surface-secondary',
-  invoice: 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10',
-  quote: 'text-indigo-600 bg-indigo-50 dark:text-indigo-400 dark:bg-indigo-500/10',
-  request: 'text-cyan-600 bg-cyan-50 dark:text-cyan-400 dark:bg-cyan-500/10',
-  team: 'text-neutral-700 bg-neutral-100 dark:text-neutral-300 dark:bg-neutral-500/10',
-  event: 'text-rose-600 bg-rose-50 dark:text-rose-400 dark:bg-rose-500/10',
-};
-
-const STATUS_BADGE_COLORS: Record<string, string> = {
-  paid: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-  draft: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400',
-  sent: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/15 dark:text-neutral-400',
-  overdue: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400',
-  approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-  declined: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400',
-  completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-  cancelled: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400',
-  scheduled: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/15 dark:text-neutral-400',
-  'in progress': 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
-  active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-  new: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-500/15 dark:text-neutral-400',
-  action_required: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
-  changes_requested: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
-  archived: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400',
+  client: 'text-text-secondary',
+  property: 'text-text-secondary',
+  job: entityIconClass('job'),
+  agreement: 'text-text-secondary',
+  lead: 'text-text-secondary',
+  invoice: entityIconClass('invoice'),
+  quote: entityIconClass('quote'),
+  request: entityIconClass('request'),
+  team: 'text-text-secondary',
+  event: 'text-text-secondary',
 };
 
 function parsePage(raw: string | null, fallback = 1) {
@@ -94,9 +81,7 @@ function ResultsList({ items, query }: { items: SearchEntityItem[]; query: strin
     <div className="space-y-2">
       {items.map((item) => {
         const Icon = ENTITY_ICONS[item.type] || SearchIcon;
-        const colorClass = ENTITY_COLORS[item.type] || 'text-text-secondary bg-surface-tertiary';
-        const statusDisplay = item.status?.replace(/_/g, ' ');
-        const statusColor = statusDisplay ? (STATUS_BADGE_COLORS[item.status?.toLowerCase() || ''] || STATUS_BADGE_COLORS[statusDisplay.toLowerCase()] || 'bg-neutral-100 text-neutral-600') : null;
+        const colorClass = ENTITY_COLORS[item.type] || 'text-text-secondary';
 
         return (
           <button
@@ -106,18 +91,11 @@ function ResultsList({ items, query }: { items: SearchEntityItem[]; query: strin
             className="w-full rounded-xl border border-outline bg-surface px-3 py-3 text-left transition-colors hover:bg-surface-secondary"
           >
             <div className="flex items-start gap-3">
-              <span className={cn('mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', colorClass)}>
-                <Icon size={15} strokeWidth={1.75} />
+              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center">
+                <Icon size={16} strokeWidth={1.75} className={colorClass} />
               </span>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate text-[13px] font-bold text-text-primary">{highlightText(item.title, query)}</p>
-                  {statusDisplay && statusColor ? (
-                    <span className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide leading-none', statusColor)}>
-                      {statusDisplay}
-                    </span>
-                  ) : null}
-                </div>
+                <p className="truncate text-[13px] font-bold text-text-primary">{highlightText(item.title, query)}</p>
                 <div className="flex items-center gap-1.5 text-[11px] text-text-secondary">
                   {item.subtitle ? (
                     <span className="truncate">{highlightText(item.subtitle, query)}</span>
@@ -137,6 +115,7 @@ function ResultsList({ items, query }: { items: SearchEntityItem[]; query: strin
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">
+                {item.status ? <StatusBadge status={item.status} size="sm" /> : null}
                 <p className="text-[10px] text-text-tertiary">
                   {new Date(item.createdAt).toLocaleDateString()}
                 </p>

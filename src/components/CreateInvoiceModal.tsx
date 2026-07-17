@@ -437,8 +437,8 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
               <div className="p-5 space-y-3">
                 <button onClick={() => { setMode('job'); setStep('select-job'); setSearchValue(''); }}
                   className="w-full flex items-center gap-4 p-4 rounded-xl border border-outline/50 hover:border-primary/40 hover:bg-primary/5 transition-all group text-left">
-                  <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
-                    <Briefcase size={20} className="text-primary" />
+                  <div className="w-11 h-11 flex items-center justify-center shrink-0">
+                    <Briefcase size={20} className="text-entity-job" />
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-text-primary">{fr ? 'À partir d\'un job' : 'From a Job'}</p>
@@ -537,7 +537,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                 <section className="item-form flex-1 overflow-y-auto px-5 py-4 space-y-4">
                   {selectedJob && (
                     <div className="flex items-center gap-2 text-xs text-text-muted bg-surface-secondary/50 rounded-lg px-3 py-2">
-                      <Briefcase size={13} className="text-primary shrink-0" />
+                      <Briefcase size={13} className="text-entity-job shrink-0" />
                       <span>{fr ? 'Depuis le job :' : 'From job:'} <strong className="text-text-primary">{selectedJob.title}</strong></span>
                     </div>
                   )}

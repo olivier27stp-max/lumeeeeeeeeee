@@ -97,6 +97,8 @@ export interface Job {
   tax_lines?: Array<{ code: string; label: string; rate: number; enabled: boolean }>;
   job_type?: string | null;
   salesperson_id?: string | null;
+  sale_date?: string | null;
+  show_on_leaderboard?: boolean;
   requires_invoicing?: boolean;
   billing_split?: boolean;
   notes?: string | null;

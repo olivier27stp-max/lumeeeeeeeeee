@@ -208,6 +208,7 @@ export default function RequestDetails() {
       {/* ═══ HUB HEADER ═══ */}
       <EntityHubHeader
         icon={<Inbox size={18} strokeWidth={2} />}
+        iconTileClass="text-entity-request"
         status={s.archived_at ? 'archived' : 'new'}
         title={name ? (fr ? `Demande de ${name}` : `Request from ${name}`) : (fr ? 'Demande' : 'Request')}
         client={{ id: s.client_id, name: name || s.company || '' }}
@@ -243,12 +244,12 @@ export default function RequestDetails() {
                   <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
                   <div className="absolute right-0 top-full mt-1 z-50 w-52 rounded-lg border border-outline bg-surface shadow-lg py-1">
                     <DropdownItem
-                      icon={<FileText size={13} />}
+                      icon={<FileText size={13} className="text-entity-quote" />}
                       label={fr ? 'Convertir en devis' : 'Convert to quote'}
                       onClick={() => { setMoreOpen(false); setQuoteModalOpen(true); }}
                     />
                     <DropdownItem
-                      icon={<Briefcase size={13} />}
+                      icon={<Briefcase size={13} className="text-entity-job" />}
                       label={fr ? 'Convertir en job' : 'Convert to job'}
                       onClick={handleConvertToJob}
                     />

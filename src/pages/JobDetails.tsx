@@ -975,6 +975,7 @@ export default function JobDetails() {
         {/* ═══ HUB HEADER ═══ */}
         <EntityHubHeader
           icon={<Briefcase size={18} strokeWidth={2} />}
+          iconTileClass="text-entity-job"
           status={job.status}
           statusExtra={isToday ? <span className="badge-neutral text-[11px]">Today</span> : null}
           title={job.title || job.client_name || 'Job'}
@@ -1065,7 +1066,7 @@ export default function JobDetails() {
                     <DropdownItem icon={<Send size={13} />} label="Send Follow-up" onClick={() => { setEmailMode('followup'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
                     <DropdownItem icon={<Mail size={13} />} label="Send Email" onClick={() => { setEmailMode('generic'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
                     <div className="border-t border-border my-1" />
-                    {canSeeInvoices && <DropdownItem icon={<FileText size={13} />} label={isCreatingInvoice ? 'Creating...' : 'Create Invoice'} onClick={handleCreateInvoice} disabled={isCreatingInvoice} />}
+                    {canSeeInvoices && <DropdownItem icon={<FileText size={13} className="text-entity-invoice" />} label={isCreatingInvoice ? 'Creating...' : 'Create Invoice'} onClick={handleCreateInvoice} disabled={isCreatingInvoice} />}
                     <DropdownItem icon={<Copy size={13} />} label="Clone Job" onClick={() => {
                       setMoreActionsOpen(false);
                       openJobModal({
@@ -1228,7 +1229,7 @@ export default function JobDetails() {
           {/* Line Items */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
             <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-              <div className="icon-tile icon-tile-sm icon-tile-blue">
+              <div className="icon-tile icon-tile-sm text-entity-job">
                 <Briefcase size={13} strokeWidth={2} />
               </div>
               Line Items
@@ -1444,7 +1445,7 @@ export default function JobDetails() {
           >
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <div className="icon-tile icon-tile-sm icon-tile-blue">
+                <div className="icon-tile icon-tile-sm text-entity-quote">
                   <FileText size={13} strokeWidth={2} />
                 </div>
                 {language === 'fr' ? 'Soumission approuvée' : 'Approved Quote'} · #{sourceQuote.quote_number}
@@ -1696,7 +1697,7 @@ export default function JobDetails() {
         {canSeeInvoices && <div className="rounded-xl border border-outline bg-surface overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
             <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-              <div className="icon-tile icon-tile-sm icon-tile-blue">
+              <div className="icon-tile icon-tile-sm text-entity-invoice">
                 <ReceiptText size={13} strokeWidth={2} />
               </div>
               Invoices
