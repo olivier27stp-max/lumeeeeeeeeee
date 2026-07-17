@@ -23,16 +23,8 @@ import {
   Briefcase,
   Building2,
   Calendar,
-  CalendarDays,
-  CalendarCheck,
   ChevronRight,
   ArrowLeft,
-  Target,
-  DollarSign,
-  Percent,
-  CircleDollarSign,
-  ClipboardList,
-  XCircle,
   Pencil,
   Check,
   X,
@@ -458,19 +450,19 @@ export default function D2DRepProfile() {
             {/* KPI grid — the 9 period stats */}
             <div className={`space-y-3 transition-opacity ${statsLoading ? 'opacity-50' : ''}`}>
               <div className="grid grid-cols-3 gap-3">
-                <KpiCard icon={DollarSign} label="Revenue" value={fmtCurrency(periodStats?.revenue ?? 0)} />
-                <KpiCard icon={Briefcase} label="Jobs" value={String(periodStats?.jobs ?? 0)} />
-                <KpiCard icon={CircleDollarSign} label="Service Revenue" value={fmtCurrency(periodStats?.serviceRevenue ?? 0)} />
+                <KpiCard label="Revenue" value={fmtCurrency(periodStats?.revenue ?? 0)} />
+                <KpiCard label="Jobs" value={String(periodStats?.jobs ?? 0)} />
+                <KpiCard label="Service Revenue" value={fmtCurrency(periodStats?.serviceRevenue ?? 0)} />
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <KpiCard icon={ClipboardList} label="Service Jobs" value={String(periodStats?.serviceJobs ?? 0)} />
-                <KpiCard icon={CalendarCheck} label="APP" value={String(periodStats?.app ?? 0)} sub="Pins rendez-vous" />
-                <KpiCard icon={Target} label="VG" value={String(periodStats?.vg ?? 0)} sub="Pins vente" />
+                <KpiCard label="Service Jobs" value={String(periodStats?.serviceJobs ?? 0)} />
+                <KpiCard label="APP" value={String(periodStats?.app ?? 0)} sub="Pins rendez-vous" />
+                <KpiCard label="VG" value={String(periodStats?.vg ?? 0)} sub="Pins vente" />
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <KpiCard icon={Percent} label="Contract Closing Rate" value={periodStats?.contractClosingRate != null ? `${periodStats.contractClosingRate}%` : '—'} />
-                <KpiCard icon={XCircle} label="Cancel Rate" value={periodStats?.cancelRate != null ? `${periodStats.cancelRate}%` : '—'} />
-                <KpiCard icon={CalendarDays} label="Days Worked" value={String(periodStats?.daysWorked ?? 0)} />
+                <KpiCard label="Contract Closing Rate" value={periodStats?.contractClosingRate != null ? `${periodStats.contractClosingRate}%` : '—'} />
+                <KpiCard label="Cancel Rate" value={periodStats?.cancelRate != null ? `${periodStats.cancelRate}%` : '—'} />
+                <KpiCard label="Days Worked" value={String(periodStats?.daysWorked ?? 0)} />
               </div>
             </div>
 
@@ -743,14 +735,11 @@ function DateRangeBox({ range, onChange }: {
   );
 }
 
-function KpiCard({ icon: Icon, label, value, sub }: { icon: React.ComponentType<{ size: number; className?: string }>; label: string; value: string; sub?: string }) {
+function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-2xl border border-outline bg-surface-elevated dark:bg-[#111519] dark:border-[rgba(255,255,255,0.06)] px-4 py-4">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-tertiary dark:bg-[rgba(255,255,255,0.04)] mb-3">
-        <Icon size={16} className="text-text-secondary" />
-      </div>
+      <p className="mb-3 text-[15px] font-extrabold text-text-primary leading-tight">{label}</p>
       <p className="text-[22px] font-extrabold text-text-primary tracking-tight">{value}</p>
-      <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-text-tertiary">{label}</p>
       {sub && <p className="mt-0.5 text-[10px] text-text-tertiary">{sub}</p>}
     </div>
   );
