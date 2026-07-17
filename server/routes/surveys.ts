@@ -147,15 +147,9 @@ router.post('/survey/:token', async (req, res) => {
         metadata: { rating, feedback, survey_id: survey.id },
       });
 
-      // Create admin notification
-      const clientName = feedback ? feedback.slice(0, 50) : 'A client';
-      await supabase.from('notifications').insert({
-        org_id: survey.org_id,
-        type: 'alert',
-        title: 'Low satisfaction rating received',
-        body: `Rating: ${rating}/5. ${feedback || 'No comment provided.'}`,
-        reference_id: survey.job_id || survey.client_id || null,
-      });
+      // Notification « Avis client reçu » : émise par le trigger DB sur
+      // satisfaction_surveys (migration 20260747000000) — couvre toutes les
+      // notes, la basse comme la bonne. On garde la tâche de suivi ici.
 
       // Create follow-up task
       await supabase.from('tasks').insert({

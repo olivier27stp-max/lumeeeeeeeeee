@@ -831,32 +831,10 @@ export async function findExistingPaymentByIdentifiers(admin: SupabaseClient, in
   return null;
 }
 
-export async function createInvoicePaidNotification(input: {
-  orgId: string;
-  invoiceId?: string | null;
-  paymentId?: string | null;
-  title?: string | null;
-}) {
-  if (!input.orgId || !input.invoiceId) return;
-  const admin = getServiceClient();
-  const payload = {
-    org_id: input.orgId,
-    type: 'invoice_paid',
-    ref_id: input.invoiceId,
-    title: input.title || 'Invoice paid',
-    body: `Invoice ${input.invoiceId} was paid.`,
-    metadata: {
-      invoice_id: input.invoiceId,
-      payment_id: input.paymentId || null,
-    },
-  };
-
-  const { error } = await admin.from('notifications').insert(payload);
-  if (error) {
-    // eslint-disable-next-line no-console
-    console.error('notification_insert_failed', { code: error.code, message: error.message });
-  }
-}
+// « Facture payée » / « Paiement reçu » sont journalisés par les triggers DB
+// (migration 20260747000000) sur payments + invoices — plus d'insert applicatif
+// ici. L'ancien createInvoicePaidNotification échouait de toute façon en
+// silence (colonnes ref_id/metadata inexistantes dans notifications).
 
 export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput) {
   const admin = getServiceClient();
@@ -882,13 +860,6 @@ export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput)
         .update(updatePayload)
         .eq('id', existing.id);
       if (updateError) throw updateError;
-      if (input.status === 'succeeded' && input.invoice_id) {
-        await createInvoicePaidNotification({
-          orgId: input.org_id,
-          invoiceId: input.invoice_id,
-          paymentId: existing.id,
-        });
-      }
     }
     return { id: existing.id, inserted: false };
   }
@@ -922,12 +893,6 @@ export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput)
   }
 
   if (input.status === 'succeeded' && input.invoice_id) {
-    await createInvoicePaidNotification({
-      orgId: input.org_id,
-      invoiceId: input.invoice_id,
-      paymentId: String(data.id),
-    });
-
     // Emit invoice.paid event. Carry the client as related entity so the
     // payment surfaces in the client's activity/events panel too (not just
     // the invoice). Job id passed in metadata for the job panel.

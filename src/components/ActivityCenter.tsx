@@ -18,6 +18,13 @@ import {
   Eye,
   BellRing,
   Inbox,
+  CheckCircle2,
+  XCircle,
+  Archive,
+  AlertCircle,
+  StickyNote,
+  Star,
+  RotateCcw,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
@@ -79,44 +86,96 @@ const ICON_MAP: Record<string, { icon: typeof Activity; color: string }> = {
   client_updated: { icon: Edit3, color: 'text-primary bg-primary/10' },
   client_deleted: { icon: Trash2, color: 'text-danger bg-danger/10' },
   lead_created: { icon: Contact, color: 'text-text-secondary bg-surface-tertiary' },
-  request_created: { icon: Inbox, color: 'text-primary bg-primary/10' },
+  request_created: { icon: Inbox, color: 'text-entity-request bg-entity-request/10' },
   lead_updated: { icon: Edit3, color: 'text-text-secondary bg-surface-tertiary' },
-  job_created: { icon: Briefcase, color: 'text-text-secondary bg-surface-tertiary' },
-  job_updated: { icon: Edit3, color: 'text-text-secondary bg-surface-tertiary' },
-  invoice_created: { icon: FileText, color: 'text-success bg-success/10' },
-  invoice_sent: { icon: Send, color: 'text-primary bg-primary/10' },
+  job_created: { icon: Briefcase, color: 'text-entity-job bg-entity-job/10' },
+  job_updated: { icon: Edit3, color: 'text-entity-job bg-entity-job/10' },
+  // Devis — événements des triggers DB (migration 20260747000000)
+  quote_created: { icon: FileText, color: 'text-entity-quote bg-entity-quote/10' },
+  quote_updated: { icon: Edit3, color: 'text-entity-quote bg-entity-quote/10' },
+  quote_sent: { icon: Send, color: 'text-entity-quote bg-entity-quote/10' },
+  quote_approved: { icon: CheckCircle2, color: 'text-success bg-success/10' },
+  quote_accepted: { icon: CheckCircle2, color: 'text-success bg-success/10' },
+  quote_declined: { icon: XCircle, color: 'text-danger bg-danger/10' },
+  quote_changes_requested: { icon: Edit3, color: 'text-warning bg-warning/10' },
+  quote_archived: { icon: Archive, color: 'text-entity-quote bg-entity-quote/10' },
+  quote_deleted: { icon: Trash2, color: 'text-entity-quote bg-entity-quote/10' },
+  quote_opened: { icon: Eye, color: 'text-entity-quote bg-entity-quote/10' },
+  // Factures
+  invoice_created: { icon: FileText, color: 'text-entity-invoice bg-entity-invoice/10' },
+  invoice_updated: { icon: Edit3, color: 'text-entity-invoice bg-entity-invoice/10' },
+  invoice_sent: { icon: Send, color: 'text-entity-invoice bg-entity-invoice/10' },
+  invoice_paid: { icon: CheckCircle2, color: 'text-success bg-success/10' },
+  invoice_deleted: { icon: Trash2, color: 'text-entity-invoice bg-entity-invoice/10' },
+  // Paiements (manuels et automatiques)
   payment_received: { icon: CreditCard, color: 'text-success bg-success/10' },
+  payment_failed: { icon: AlertCircle, color: 'text-danger bg-danger/10' },
+  payment_refunded: { icon: RotateCcw, color: 'text-warning bg-warning/10' },
+  payment_updated: { icon: Edit3, color: 'text-entity-invoice bg-entity-invoice/10' },
+  payment_deleted: { icon: Trash2, color: 'text-entity-invoice bg-entity-invoice/10' },
+  // Notes, avis, cartes
+  note_created: { icon: StickyNote, color: 'text-text-secondary bg-surface-tertiary' },
+  note_deleted: { icon: Trash2, color: 'text-text-secondary bg-surface-tertiary' },
+  review_received: { icon: Star, color: 'text-warning bg-warning/10' },
+  card_saved: { icon: CreditCard, color: 'text-primary bg-primary/10' },
   message_sent: { icon: MessageSquare, color: 'text-text-secondary bg-surface-tertiary' },
   message_received: { icon: MessageSquare, color: 'text-text-secondary bg-surface-tertiary' },
   task_completed: { icon: CheckSquare, color: 'text-text-secondary bg-surface-tertiary' },
-  quote_opened: { icon: Eye, color: 'text-text-secondary bg-surface-tertiary' },
   event_created: { icon: Calendar, color: 'text-text-secondary bg-surface-tertiary' },
 };
 
-function getLabel(type: string, name: string, lang: string): { title: string; subtitle: string } {
-  const labels: Record<string, { fr: string; en: string }> = {
-    client_created: { fr: 'Nouveau client', en: 'New client' },
-    client_updated: { fr: 'Client modifié', en: 'Client updated' },
-    client_deleted: { fr: 'Client supprimé', en: 'Client deleted' },
-    lead_created: { fr: 'Nouveau lead', en: 'New lead' },
-    lead_updated: { fr: 'Lead modifié', en: 'Lead updated' },
-    job_created: { fr: 'Nouveau job', en: 'New job' },
-    job_updated: { fr: 'Job modifié', en: 'Job updated' },
-    invoice_created: { fr: 'Facture créée', en: 'Invoice created' },
-    invoice_sent: { fr: 'Facture envoyée', en: 'Invoice sent' },
-    payment_received: { fr: 'Paiement reçu', en: 'Payment received' },
-    message_sent: { fr: 'Message envoyé', en: 'Message sent' },
-    message_received: { fr: 'Message reçu', en: 'Message received' },
-    task_completed: { fr: 'Tâche complétée', en: 'Task completed' },
-    event_created: { fr: 'Événement créé', en: 'Event created' },
-    quote_opened: { fr: 'Devis ouvert', en: 'Quote opened' },
-  };
+// Libellés localisés par type. Les notifications créées par les triggers DB
+// portent un titre français générique — quand le type est connu ici, on le
+// remplace par le libellé dans la langue de l'utilisateur.
+const TYPE_LABELS: Record<string, { fr: string; en: string }> = {
+  client_created: { fr: 'Nouveau client', en: 'New client' },
+  client_updated: { fr: 'Client modifié', en: 'Client updated' },
+  client_deleted: { fr: 'Client supprimé', en: 'Client deleted' },
+  lead_created: { fr: 'Nouveau lead', en: 'New lead' },
+  lead_updated: { fr: 'Lead modifié', en: 'Lead updated' },
+  job_created: { fr: 'Nouveau job', en: 'New job' },
+  job_updated: { fr: 'Job modifié', en: 'Job updated' },
+  quote_created: { fr: 'Devis créé', en: 'Quote created' },
+  quote_updated: { fr: 'Devis modifié', en: 'Quote updated' },
+  quote_sent: { fr: 'Devis envoyé', en: 'Quote sent' },
+  quote_approved: { fr: 'Devis approuvé', en: 'Quote approved' },
+  quote_declined: { fr: 'Devis refusé', en: 'Quote declined' },
+  quote_changes_requested: { fr: 'Modifications demandées', en: 'Changes requested' },
+  quote_archived: { fr: 'Devis archivé', en: 'Quote archived' },
+  quote_deleted: { fr: 'Devis supprimé', en: 'Quote deleted' },
+  quote_opened: { fr: 'Devis ouvert', en: 'Quote opened' },
+  invoice_created: { fr: 'Facture créée', en: 'Invoice created' },
+  invoice_updated: { fr: 'Facture modifiée', en: 'Invoice updated' },
+  invoice_sent: { fr: 'Facture envoyée', en: 'Invoice sent' },
+  invoice_paid: { fr: 'Facture payée', en: 'Invoice paid' },
+  invoice_deleted: { fr: 'Facture supprimée', en: 'Invoice deleted' },
+  payment_received: { fr: 'Paiement reçu', en: 'Payment received' },
+  payment_failed: { fr: 'Paiement échoué', en: 'Payment failed' },
+  payment_refunded: { fr: 'Paiement remboursé', en: 'Payment refunded' },
+  payment_updated: { fr: 'Paiement modifié', en: 'Payment updated' },
+  payment_deleted: { fr: 'Paiement supprimé', en: 'Payment deleted' },
+  note_created: { fr: 'Note ajoutée', en: 'Note added' },
+  note_deleted: { fr: 'Note supprimée', en: 'Note deleted' },
+  review_received: { fr: 'Avis client reçu', en: 'Client review received' },
+  card_saved: { fr: 'Carte enregistrée', en: 'Card saved' },
+  message_sent: { fr: 'Message envoyé', en: 'Message sent' },
+  message_received: { fr: 'Message reçu', en: 'Message received' },
+  task_completed: { fr: 'Tâche complétée', en: 'Task completed' },
+  event_created: { fr: 'Événement créé', en: 'Event created' },
+};
 
-  const l = labels[type] || { fr: type, en: type };
+function getLabel(type: string, name: string, lang: string): { title: string; subtitle: string } {
+  const l = TYPE_LABELS[type] || { fr: type, en: type };
   return {
     title: lang === 'fr' ? l.fr : l.en,
     subtitle: name,
   };
+}
+
+/** Titre d'une notification : libellé localisé si le type est connu, sinon le titre stocké. */
+function notifTitle(type: string, storedTitle: string, lang: string): string {
+  const l = TYPE_LABELS[type];
+  return l ? (lang === 'fr' ? l.fr : l.en) : storedTitle;
 }
 
 export default function ActivityCenter({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -153,7 +212,7 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
             type: n.type,
             icon: iconInfo.icon,
             iconColor: iconInfo.color,
-            title: n.title,
+            title: notifTitle(n.type, n.title, language),
             subtitle: n.body || '',
             timestamp: n.created_at,
             link: n.link || undefined,
@@ -252,28 +311,11 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
         });
       }
 
-      // Fetch recent invoices
-      const { data: invoices } = await supabase
-        .from('invoices')
-        .select('id, invoice_number, status, created_at')
-        .eq('org_id', orgId)
-        .order('created_at', { ascending: false })
-        .limit(8);
-
-      for (const inv of invoices || []) {
-        const type = inv.status === 'sent' ? 'invoice_sent' : 'invoice_created';
-        const label = getLabel(type, `#${inv.invoice_number || inv.id.slice(0, 8)}`, language);
-        const iconInfo = ICON_MAP[type];
-        items.push({
-          id: `inv-${inv.id}`,
-          type,
-          icon: iconInfo.icon,
-          iconColor: iconInfo.color,
-          title: label.title,
-          subtitle: label.subtitle,
-          timestamp: inv.created_at,
-        });
-      }
+      // Factures et paiements : plus de scraping des tables — les triggers DB
+      // (migration 20260747000000) journalisent créations, modifications,
+      // envois, paiements (réussis ET échoués) et suppressions dans
+      // notifications. Le scraping affichait les paiements échoués/supprimés
+      // comme « Paiement reçu ».
 
       // Fetch recent messages
       const { data: msgs } = await supabase
@@ -299,36 +341,14 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
         });
       }
 
-      // Fetch recent payments
-      const { data: payments } = await supabase
-        .from('payments')
-        .select('id, amount_cents, currency, created_at')
-        .eq('org_id', orgId)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      for (const p of payments || []) {
-        const amount = ((p.amount_cents || 0) / 100).toFixed(2);
-        const label = getLabel('payment_received', `$${amount} ${p.currency || 'CAD'}`, language);
-        const iconInfo = ICON_MAP['payment_received'];
-        items.push({
-          id: `pay-${p.id}`,
-          type: 'payment_received',
-          icon: iconInfo.icon,
-          iconColor: iconInfo.color,
-          title: label.title,
-          subtitle: label.subtitle,
-          timestamp: p.created_at,
-        });
-      }
-
-      // Fetch notifications (quote opens, etc.)
+      // Notifications : le journal d'événements (devis, factures, paiements,
+      // notes, avis, cartes — via triggers DB) + les types historiques.
       const { data: notifications } = await supabase
         .from('notifications')
         .select('id, type, title, body, link, created_at')
         .eq('org_id', orgId)
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(40);
 
       for (const n of notifications || []) {
         const iconInfo = ICON_MAP[n.type] || { icon: Activity, color: 'text-text-tertiary bg-surface-tertiary' };
@@ -337,9 +357,11 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
           type: n.type,
           icon: iconInfo.icon,
           iconColor: iconInfo.color,
-          title: n.title,
+          title: notifTitle(n.type, n.title, language),
           subtitle: n.body || '',
           timestamp: n.created_at,
+          link: n.link || undefined,
+          actionLabel: n.link ? t.activityCenter.view : undefined,
         });
       }
 

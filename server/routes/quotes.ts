@@ -936,24 +936,8 @@ router.post('/quotes/public/accept', async (req, res) => {
       source_type: 'signature',
     });
 
-    // Resolve client name
-    let clientName = signer_name;
-    if (quote.client_id) {
-      const { data: client } = await admin
-        .from('clients').select('first_name, last_name')
-        .eq('id', quote.client_id).maybeSingle();
-      if (client) clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim() || signer_name;
-    }
-
-    // Create notification
-    await admin.from('notifications').insert({
-      org_id: quote.org_id,
-      type: 'quote_accepted',
-      title: `${clientName} accepted quote #${quote.quote_number}`,
-      body: `Quote #${quote.quote_number} has been accepted and signed by ${signer_name}.`,
-      icon: 'check-circle',
-      reference_id: quote.id,
-    });
+    // Notification « Devis approuvé » : émise par le trigger DB sur le
+    // changement de statut (migration 20260747000000).
 
     // Emit event
     eventBus.emit('quote.approved', {
@@ -1308,28 +1292,26 @@ router.post('/quotes/public/decline', async (req, res) => {
     // l'assignation d'une job pilotent le pin). Le rep peut marquer « Pas
     // intéressé » manuellement sur la carte.
 
-    // Resolve client name
-    let clientName = 'Client';
-    if (quote.client_id) {
-      const { data: client } = await admin
-        .from('clients').select('first_name, last_name')
-        .eq('id', quote.client_id).maybeSingle();
-      if (client) clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client';
-    } else if (quote.lead_id) {
-      const { data: lead } = await admin
-        .from('clients').select('first_name, last_name')
-        .eq('id', quote.lead_id).maybeSingle();
-      if (lead) clientName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Client';
+    // L'événement « Devis refusé » est créé par le trigger DB au changement
+    // de statut (migration 20260747000000) — on l'enrichit ici avec la
+    // raison donnée par le client, que le trigger ne peut pas connaître.
+    if (reason) {
+      const cutoff = new Date(Date.now() - 60_000).toISOString();
+      const { data: notif } = await admin.from('notifications')
+        .select('id, body')
+        .eq('org_id', quote.org_id)
+        .eq('type', 'quote_declined')
+        .eq('reference_id', quote.id)
+        .gte('created_at', cutoff)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (notif) {
+        await admin.from('notifications').update({
+          body: `${notif.body ? `${notif.body} — ` : ''}« ${reason} »`.slice(0, 300),
+        }).eq('id', notif.id);
+      }
     }
-
-    await admin.from('notifications').insert({
-      org_id: quote.org_id,
-      type: 'quote_declined',
-      title: `${clientName} declined quote #${quote.quote_number}`,
-      body: reason ? `Reason: ${reason}` : `Quote #${quote.quote_number} was declined.`,
-      icon: 'x-circle',
-      reference_id: quote.id,
-    });
 
     eventBus.emit('quote.declined', {
       orgId: quote.org_id,
@@ -1397,29 +1379,26 @@ router.post('/quotes/public/request-changes', async (req, res) => {
       reason: `Changes requested by client: ${message}`,
     });
 
-    // Resolve client name
-    let clientName = 'Client';
-    if (quote.client_id) {
-      const { data: client } = await admin
-        .from('clients').select('first_name, last_name')
-        .eq('id', quote.client_id).maybeSingle();
-      if (client) clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client';
-    } else if (quote.lead_id) {
-      const { data: lead } = await admin
-        .from('clients').select('first_name, last_name')
-        .eq('id', quote.lead_id).maybeSingle();
-      if (lead) clientName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Client';
+    // L'événement « Modifications demandées » est créé par le trigger DB au
+    // changement de statut (migration 20260747000000) — on l'enrichit ici
+    // avec le message du client, que le trigger ne peut pas connaître.
+    {
+      const cutoff = new Date(Date.now() - 60_000).toISOString();
+      const { data: notif } = await admin.from('notifications')
+        .select('id, body')
+        .eq('org_id', quote.org_id)
+        .eq('type', 'quote_changes_requested')
+        .eq('reference_id', quote.id)
+        .gte('created_at', cutoff)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (notif) {
+        await admin.from('notifications').update({
+          body: `${notif.body ? `${notif.body} — ` : ''}« ${message} »`.slice(0, 300),
+        }).eq('id', notif.id);
+      }
     }
-
-    await admin.from('notifications').insert({
-      org_id: quote.org_id,
-      type: 'quote_changes_requested',
-      title: `${clientName} requested changes on quote #${quote.quote_number}`,
-      body: message,
-      icon: 'pencil',
-      link: `/quotes/${quote.id}`,
-      reference_id: quote.id,
-    });
 
     eventBus.emit('quote.changes_requested', {
       orgId: quote.org_id,
