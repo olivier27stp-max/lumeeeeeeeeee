@@ -145,10 +145,9 @@ import FieldSales from './pages/FieldSales';
 import D2DMap from './pages/D2DMap';
 import D2DPipeline from './pages/D2DPipeline';
 import D2DReports from './pages/D2DReports';
-// D2DSettingsGeneral removed from routing: it was an unwired mock (hardcoded
-// demo company, Save/Upload buttons with no handlers). /d2d-settings/general
-// now redirects to /d2d-settings/teams.
-import D2DSettingsTeams from './pages/D2DSettingsTeams';
+// D2DSettingsGeneral (mock non branché) puis D2DSettingsTeams (config terrain)
+// retirées sur demande de Rafba — les équipes restent assignables à
+// l'invitation ; /d2d-settings/* redirige vers /settings/team.
 import D2DOnboarding from './pages/D2DOnboarding';
 import SettingsRoles from './pages/SettingsRoles';
 import PermissionGate from './components/PermissionGate';
@@ -1302,8 +1301,8 @@ function AuthenticatedApp({
                     {/* Commissions: role-based dashboard from main — not restricted to the Vente module/plan flag */}
                     <Route path="/commissions" element={<Gated permission="commissions.read"><PageWrapper><Commissions /></PageWrapper></Gated>} />
                     <Route path="/d2d-reports" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DReports /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
-                    <Route path="/d2d-settings/general" element={<Navigate to="/d2d-settings/teams" replace />} />
-                    <Route path="/d2d-settings/teams" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><D2DSettingsTeams /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
+                    <Route path="/d2d-settings/general" element={<Navigate to="/settings/team" replace />} />
+                    <Route path="/d2d-settings/teams" element={<Navigate to="/settings/team" replace />} />
                     <Route path="/d2d-onboarding" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DOnboarding /></ModuleGate></PlanFeatureGate></Gated>} />
                     <Route path="/settings/team/:memberId/profile" element={<Gated permission="team.read"><RepProfile /></Gated>} />
                     <Route path="/reps/:id" element={<Gated permission="team.read"><RepProfile /></Gated>} />
