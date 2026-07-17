@@ -728,6 +728,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
         container: containerRef.current!,
         style: loadSavedSatellite() ? SATELLITE_STYLE : STREETS_STYLE,
         center, zoom: startZoom, maxZoom: 22, minZoom: 1, antialias: true, attributionControl: false,
+        doubleClickZoom: true,
       });
       // Assign the ref IMMEDIATELY (not in the async 'load' handler). Otherwise,
       // under StrictMode's mount→unmount→remount, the cleanup runs before 'load'
@@ -1515,7 +1516,19 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
       {/* ================================================================== */}
       {!showTokenMsg && (
         <div className="pointer-events-auto absolute right-3 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-2">
-          {/* Box 1 — Entonnoir : filtrer les pins */}
+          {/* Box 1 — Pin : ajouter un pin (toolbar de statuts en bas) */}
+          <button
+            onClick={() => setMode(mode === 'add_pin' ? 'view' : 'add_pin')}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${mode === 'add_pin' ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            title={fr ? (mode === 'add_pin' ? "Annuler l'ajout de pin" : 'Ajouter un pin') : (mode === 'add_pin' ? 'Cancel pin placement' : 'Add a pin')}
+            aria-label={fr ? 'Ajouter un pin' : 'Add a pin'}
+          >
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" />
+            </svg>
+          </button>
+
+          {/* Box 2 — Entonnoir : filtrer les pins */}
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${showFilters ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
@@ -1526,7 +1539,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
               <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
             </svg>
           </button>
-          {/* Box 2 — Loupe : recherche */}
+          {/* Box 3 — Loupe : recherche */}
           <button
             onClick={() => setSearchModalOpen(true)}
             className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${searchModalOpen ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
@@ -1538,7 +1551,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
             </svg>
           </button>
 
-          {/* Box 3 — Doigt qui trace : création de zone */}
+          {/* Box 4 — Doigt qui trace : création de zone */}
           {canCreateZone(CURRENT_USER.role) && (
             <button
               onClick={() => {
@@ -1560,7 +1573,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
             </button>
           )}
 
-          {/* Box 4 — Sélection rectangle : sélectionner des pins */}
+          {/* Box 5 — Sélection rectangle : sélectionner des pins */}
           <button
             onClick={() => { if (mode === 'select') exitSelectMode(); else enterSelectMode(); }}
             className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${mode === 'select' ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
@@ -1573,7 +1586,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
             </svg>
           </button>
 
-          {/* Box 5 — Plan plié : bascule plan / satellite */}
+          {/* Box 6 — Plan plié : bascule plan / satellite */}
           <button
             onClick={toggleSatellite}
             className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${satellite ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
@@ -1586,7 +1599,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
             </svg>
           </button>
 
-          {/* Box 6 — Boussole (ronde) : indique le nord, clic = réaligner */}
+          {/* Box 7 — Boussole (ronde) : indique le nord, clic = réaligner */}
           <button
             onClick={() => mapRef.current?.easeTo({ bearing: 0, pitch: 0, duration: 600 })}
             className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black shadow-lg shadow-black/30 transition-all hover:scale-105"
@@ -1803,39 +1816,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
       {!showTokenMsg && (
         <div className="pointer-events-none absolute left-4 right-4 top-4 z-10 flex items-start justify-between">
           <div className="pointer-events-auto flex flex-wrap items-center gap-2">
-            {/* Add pin */}
-            {mode === 'view' && (
-              <button
-                onClick={() => setMode('add_pin')}
-                className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/60 px-4 py-2.5 text-[13px] font-semibold text-white/80 shadow-xl backdrop-blur-xl transition-all hover:bg-white/10"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14m-7-7h14" /></svg>
-                Ajouter un pin
-              </button>
-            )}
-
-            {/* Add pin active */}
-            {mode === 'add_pin' && (
-              <>
-                <button
-                  onClick={() => setMode('view')}
-                  className="flex items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5 text-[13px] font-semibold text-white shadow-xl shadow-indigo-500/25 transition-all"
-                >
-                  <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-white" /></span>
-                  Cliquez sur la carte
-                </button>
-                <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-black/60 p-1 shadow-xl backdrop-blur-xl">
-                  {statuses.map(([key, cfg]) => (
-                    <button key={key} onClick={() => setSelectedStatus(key)}
-                      className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all ${selectedStatus === key ? 'bg-white/12 text-white' : 'text-white/40 hover:text-white/70'}`}
-                    >
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cfg.color }} />
-                      {cfg.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+            {/* Add pin — déplacé dans la barre droite (box 1) + toolbar du bas */}
 
             {/* Select mode — déplacé dans la barre droite (box 4) */}
 
@@ -2014,6 +1995,35 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================== */}
+      {/* BOTTOM CENTER — Add-pin status toolbar                             */}
+      {/* ================================================================== */}
+      {!showTokenMsg && mode === 'add_pin' && (
+        <div className="pointer-events-none absolute bottom-8 left-1/2 z-20 w-[min(440px,calc(100vw-1rem))] -translate-x-1/2">
+          <div className="pointer-events-auto flex items-end gap-0.5 overflow-x-auto rounded-2xl border border-white/10 bg-black/75 px-2.5 py-2 shadow-2xl backdrop-blur-xl">
+            {statuses.map(([key, cfg]) => (
+              <button
+                key={key}
+                onClick={() => setSelectedStatus(key)}
+                className={`flex min-w-[62px] flex-1 flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition-all ${selectedStatus === key ? 'bg-white/15' : 'hover:bg-white/[.07]'}`}
+              >
+                <svg
+                  width="26" height="26" viewBox="0 0 24 24"
+                  className={`transition-transform ${selectedStatus === key ? 'scale-110' : ''}`}
+                  style={selectedStatus === key ? { filter: `drop-shadow(0 0 6px ${cfg.color})` } : undefined}
+                >
+                  <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" fill={cfg.color} stroke="white" strokeWidth="1.4" />
+                  <circle cx="12" cy="10" r="3" fill="white" />
+                </svg>
+                <span className={`whitespace-nowrap text-center text-[10px] font-medium leading-tight ${selectedStatus === key ? 'text-white' : 'text-white/50'}`}>
+                  {cfg.label}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
       )}
