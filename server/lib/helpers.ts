@@ -1,6 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import express from 'express';
-import { mapboxGeocodingToken } from './config';
+import { googleGeocodingKey, mapboxGeocodingToken } from './config';
 
 // ── Types ──
 
@@ -8,7 +8,16 @@ export type SearchEntityType = 'client' | 'property' | 'job' | 'agreement' | 'pa
 export type SearchTab = 'all' | 'clients' | 'properties' | 'jobs' | 'agreements' | 'payments' | 'leads' | 'invoices' | 'quotes' | 'requests' | 'teams' | 'events';
 export type PaymentStatus = 'succeeded' | 'pending' | 'failed' | 'refunded';
 
-export type GeocodeResult = { latitude: number; longitude: number; provider: 'mapbox' | 'nominatim' };
+// precision: 'rooftop' = on the building, 'interpolated' = address point at the
+// street front, 'approximate' = street/postcode/locality centroid. Approximate
+// results must never be silently trusted as a house position.
+export type GeocodePrecision = 'rooftop' | 'interpolated' | 'approximate';
+export type GeocodeResult = {
+  latitude: number;
+  longitude: number;
+  provider: 'google' | 'mapbox' | 'nominatim';
+  precision: GeocodePrecision;
+};
 
 export interface SearchRow {
   entity_type: SearchEntityType;
@@ -286,6 +295,26 @@ export async function ensureLeadInPipeline(params: {
 
 // ── Geocoding ──
 
+export async function geocodeWithGoogle(address: string): Promise<GeocodeResult | null> {
+  if (!googleGeocodingKey) return null;
+  const endpoint = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&region=ca&key=${encodeURIComponent(googleGeocodingKey)}`;
+  const response = await fetch(endpoint);
+  if (!response.ok) return null;
+  const payload = (await response.json()) as any;
+  const top = payload?.results?.[0];
+  const latitude = Number(top?.geometry?.location?.lat);
+  const longitude = Number(top?.geometry?.location?.lng);
+  if (!isValidLatitude(latitude) || !isValidLongitude(longitude)) return null;
+  const locationType = String(top?.geometry?.location_type || '');
+  const isAddress = (top?.types ?? []).some((t: string) =>
+    t === 'street_address' || t === 'premise' || t === 'subpremise');
+  const precision: GeocodePrecision =
+    locationType === 'ROOFTOP' ? 'rooftop'
+    : locationType === 'RANGE_INTERPOLATED' || isAddress ? 'interpolated'
+    : 'approximate';
+  return { latitude, longitude, provider: 'google', precision };
+}
+
 export async function geocodeWithMapbox(address: string): Promise<GeocodeResult | null> {
   if (!mapboxGeocodingToken) return null;
   const endpoint = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json`;
@@ -294,12 +323,17 @@ export async function geocodeWithMapbox(address: string): Promise<GeocodeResult 
   );
   if (!response.ok) return null;
   const payload = (await response.json()) as any;
-  const center = payload?.features?.[0]?.center;
+  const feature = payload?.features?.[0];
+  const center = feature?.center;
   if (!Array.isArray(center) || center.length < 2) return null;
   const longitude = Number(center[0]);
   const latitude = Number(center[1]);
   if (!isValidLatitude(latitude) || !isValidLongitude(longitude)) return null;
-  return { latitude, longitude, provider: 'mapbox' };
+  // Mapbox address points sit at the street front; anything else (place,
+  // postcode, locality, neighborhood) is a centroid.
+  const precision: GeocodePrecision =
+    (feature?.place_type ?? []).includes('address') ? 'interpolated' : 'approximate';
+  return { latitude, longitude, provider: 'mapbox', precision };
 }
 
 export async function geocodeWithNominatim(address: string): Promise<GeocodeResult | null> {
@@ -311,20 +345,30 @@ export async function geocodeWithNominatim(address: string): Promise<GeocodeResu
     },
   });
   if (!response.ok) return null;
-  const payload = (await response.json()) as Array<{ lat?: string; lon?: string }>;
+  const payload = (await response.json()) as Array<{ lat?: string; lon?: string; class?: string; type?: string }>;
   const top = payload?.[0];
   const latitude = Number(top?.lat || '');
   const longitude = Number(top?.lon || '');
   if (!isValidLatitude(latitude) || !isValidLongitude(longitude)) return null;
-  return { latitude, longitude, provider: 'nominatim' };
+  // OSM without a matching house number falls back to the road itself
+  // (class 'highway') or a place centroid — that is how pins ended up in the
+  // middle of the street. Only building/house matches are precise.
+  const precision: GeocodePrecision =
+    top?.class === 'building' || top?.type === 'house' ? 'rooftop' : 'approximate';
+  return { latitude, longitude, provider: 'nominatim', precision };
 }
 
 export async function geocodeAddress(address: string): Promise<GeocodeResult | null> {
   const normalized = normalizeAddress(address);
   if (!normalized) return null;
-  const mapboxResult = await geocodeWithMapbox(normalized);
-  if (mapboxResult) return mapboxResult;
-  return geocodeWithNominatim(normalized);
+  let approximate: GeocodeResult | null = null;
+  for (const provider of [geocodeWithGoogle, geocodeWithMapbox, geocodeWithNominatim]) {
+    const result = await provider(normalized).catch(() => null);
+    if (!result) continue;
+    if (result.precision !== 'approximate') return result;
+    approximate ??= result;
+  }
+  return approximate;
 }
 
 // ── Misc helpers ──

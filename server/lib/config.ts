@@ -8,7 +8,12 @@ dotenv.config();
 export const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
 export const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 export const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-export const mapboxGeocodingToken = process.env.MAPBOX_GEOCODING_TOKEN || '';
+// Geocoding providers. MAPBOX_GEOCODING_TOKEN was never set in prod, which
+// silently disabled Mapbox and sent every server-side geocode to Nominatim
+// (street-centerline results) — hence the VITE_ fallbacks: those vars are
+// already present at runtime on Railway. Dedicated server keys still win.
+export const mapboxGeocodingToken = process.env.MAPBOX_GEOCODING_TOKEN || process.env.VITE_MAPBOX_TOKEN || '';
+export const googleGeocodingKey = process.env.GOOGLE_GEOCODING_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
 export const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 export const stripeConnectWebhookSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET || '';

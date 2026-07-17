@@ -8,7 +8,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { geocodeAddress, normalizeAddress } from './helpers';
+import { geocodeAddress, normalizeAddress, type GeocodePrecision, type GeocodeResult } from './helpers';
 
 const STATUS_COLORS: Record<string, string> = {
   unknown: '#6b7280', no_answer: '#9ca3af', not_interested: '#ef4444',
@@ -54,15 +54,24 @@ function addressVariants(address: string): string[] {
   return [...new Set(variants)].slice(0, 4);
 }
 
-/** geocodeAddress with the fallback chain above. */
+/**
+ * geocodeAddress with the fallback chain above. Prefers a precise hit
+ * (rooftop/interpolated) from any variant over an approximate centroid: an
+ * approximate result is only returned when no variant resolves precisely,
+ * so it can be flagged instead of silently trusted.
+ */
 export async function geocodeWithFallback(
   address: string,
-): Promise<{ latitude: number; longitude: number; variant: string } | null> {
+): Promise<{ latitude: number; longitude: number; variant: string; provider: GeocodeResult['provider']; precision: GeocodePrecision } | null> {
+  let approximate: { latitude: number; longitude: number; variant: string; provider: GeocodeResult['provider']; precision: GeocodePrecision } | null = null;
   for (const variant of addressVariants(address)) {
     const geo = await geocodeAddress(variant);
-    if (geo) return { latitude: geo.latitude, longitude: geo.longitude, variant };
+    if (!geo) continue;
+    const hit = { latitude: geo.latitude, longitude: geo.longitude, variant, provider: geo.provider, precision: geo.precision };
+    if (geo.precision !== 'approximate') return hit;
+    approximate ??= hit;
   }
-  return null;
+  return approximate;
 }
 
 /**
@@ -84,7 +93,7 @@ export async function upsertLeadPinForClient(
     // 1. Existing house at the same normalized address
     const { data: byAddress } = await admin
       .from('field_house_profiles')
-      .select('id, client_id, lat, current_status')
+      .select('id, client_id, lat, current_status, metadata')
       .eq('org_id', input.orgId)
       .eq('address_normalized', addressNorm)
       .is('deleted_at', null)
@@ -101,6 +110,7 @@ export async function upsertLeadPinForClient(
     let lat: number | null = null;
     let lng: number | null = null;
     let geocodePending = false;
+    let geoMeta: Record<string, unknown> = {};
 
     // 2. No address match → geocode, then merge with any house within 50 m.
     //    A geocode failure does NOT abort: the house + pin are still created
@@ -110,6 +120,13 @@ export async function upsertLeadPinForClient(
       if (geo) {
         lat = geo.latitude;
         lng = geo.longitude;
+        geoMeta = {
+          geocode_status: geo.precision === 'approximate' ? 'approximate' : 'resolved',
+          geocode_provider: geo.provider,
+          geocode_precision: geo.precision,
+          geocode_variant: geo.variant,
+          geocoded_at: now,
+        };
 
         const { data: nearby } = await admin
           .from('field_house_profiles')
@@ -161,6 +178,14 @@ export async function upsertLeadPinForClient(
         if (geo) {
           patch.lat = geo.latitude;
           patch.lng = geo.longitude;
+          patch.metadata = {
+            ...((byAddress as any)?.metadata || {}),
+            geocode_status: geo.precision === 'approximate' ? 'approximate' : 'resolved',
+            geocode_provider: geo.provider,
+            geocode_precision: geo.precision,
+            geocode_variant: geo.variant,
+            geocoded_at: now,
+          };
         }
       }
       await admin.from('field_house_profiles').update(patch).eq('id', houseId);
@@ -183,7 +208,7 @@ export async function upsertLeadPinForClient(
             customer_name: input.customerName || null,
             customer_phone: input.customerPhone || null,
             customer_email: input.customerEmail || null,
-            ...(geocodePending ? { geocode_status: 'pending' } : {}),
+            ...(geocodePending ? { geocode_status: 'pending' } : geoMeta),
           },
         })
         .select('id')
@@ -287,7 +312,14 @@ export async function repairMissingPinCoords(admin: SupabaseClient): Promise<num
       if (!geo) continue;
 
       const now = new Date().toISOString();
-      const metadata = { ...(house.metadata || {}), geocode_status: 'resolved', geocode_variant: geo.variant };
+      const metadata = {
+        ...(house.metadata || {}),
+        geocode_status: geo.precision === 'approximate' ? 'approximate' : 'resolved',
+        geocode_provider: geo.provider,
+        geocode_precision: geo.precision,
+        geocode_variant: geo.variant,
+        geocoded_at: now,
+      };
       const { error: updErr } = await admin
         .from('field_house_profiles')
         .update({ lat: geo.latitude, lng: geo.longitude, metadata, updated_at: now })
