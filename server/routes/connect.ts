@@ -4,6 +4,7 @@ import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
 import {
   createConnectedAccount,
   createOnboardingLink,
+  createDashboardLoginLink,
   refreshAccountStatus,
   getConnectedAccount,
 } from '../lib/stripe-connect';
@@ -73,6 +74,24 @@ router.post('/connect/refresh-onboarding-link', async (req, res) => {
     return res.json(link);
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to refresh onboarding link.', '[connect/refresh-onboarding-link]');
+  }
+});
+
+// ── Dashboard login link (payouts, balance, bank account) ──
+
+router.post('/connect/dashboard-link', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const orgId = parseOrgId(req.body?.orgId) || auth.orgId;
+    const canManage = await isOrgAdminOrOwner(auth.client, auth.user.id, orgId);
+    if (!canManage) return res.status(403).json({ error: 'Only owner/admin can access the payouts dashboard.' });
+
+    const link = await createDashboardLoginLink(orgId);
+    return res.json(link);
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to create dashboard link.', '[connect/dashboard-link]');
   }
 });
 
