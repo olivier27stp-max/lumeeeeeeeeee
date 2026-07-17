@@ -267,13 +267,27 @@ export async function executeCreateTask(
   const title = resolveTemplate(config.title, vars);
   const description = config.description ? resolveTemplate(config.description, vars) : '';
 
+  // tasks.created_by is NOT NULL and automations run without a user —
+  // attribute the task to the org owner so it lands in someone's list.
+  const { data: owner } = await ctx.supabase
+    .from('memberships')
+    .select('user_id')
+    .eq('org_id', ctx.orgId)
+    .eq('role', 'owner')
+    .limit(1)
+    .maybeSingle();
+  if (!owner?.user_id) return { success: false, error: 'No org owner found to own the task' };
+
+  // Column names verified against prod: linked_entity_* (not entity_*),
+  // status enum uses 'open' (not 'pending').
   const { error } = await ctx.supabase.from('tasks').insert({
     org_id: ctx.orgId,
     title,
-    description,
-    status: 'pending',
-    entity_type: ctx.entityType,
-    entity_id: ctx.entityId,
+    description: description || null,
+    status: 'open',
+    linked_entity_type: ctx.entityType,
+    linked_entity_id: ctx.entityId,
+    created_by: owner.user_id,
     due_date: config.due_date || null,
   });
 
