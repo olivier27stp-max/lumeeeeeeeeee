@@ -80,11 +80,11 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     iconPaths: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   },
   other: {
-    color: '#9CA3AF',
-    gradientFrom: '#D1D5DB',
-    gradientTo: '#6B7280',
+    color: '#F97316',
+    gradientFrom: '#FB923C',
+    gradientTo: '#EA580C',
     label: 'Autre',
-    iconPaths: '<circle cx="12" cy="12" r="1.5"/>',
+    iconPaths: '<circle cx="12" cy="12" r="4.5" fill="white" stroke="none"/>',
   },
 };
 
