@@ -48,6 +48,29 @@ export async function toggleAutomationRule(id: string, isActive: boolean): Promi
   if (error) throw error;
 }
 
+/**
+ * Replace the body of the send_sms action inside a rule's actions array.
+ * Read-modify-write: the other actions (email, tasks, logs) are untouched.
+ */
+export async function updateRuleSmsBody(id: string, body: string): Promise<void> {
+  const { data: rule, error: readErr } = await supabase
+    .from('automation_rules')
+    .select('actions')
+    .eq('id', id)
+    .single();
+  if (readErr) throw readErr;
+
+  const actions = ((rule?.actions || []) as AutomationRule['actions']).map((a) =>
+    a.type === 'send_sms' ? { ...a, config: { ...a.config, body } } : a
+  );
+
+  const { error } = await supabase
+    .from('automation_rules')
+    .update({ actions, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 /** Manually trigger preset seeding for an org (admin use only) */
 export async function seedDefaultPresets(): Promise<number> {
   const orgId = await getCurrentOrgId();
