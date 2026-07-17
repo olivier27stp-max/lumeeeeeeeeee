@@ -45,7 +45,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
-import { entityIconClass } from './lib/entityColors';
 import Dashboard from './pages/Dashboard';
 import CrmWorkspace from './pages/CrmWorkspace';
 import Clients from './pages/Clients';
@@ -758,19 +757,6 @@ function AuthenticatedApp({
     return true;
   };
 
-  // Entity identity colors — the nav icon of each CRM section keeps its
-  // signature color (requests amber, quotes bordeaux, jobs green, invoices navy).
-  const navEntityOfItem: Record<string, string> = {
-    requests: 'request',
-    quotes: 'quote',
-    jobs: 'job',
-    finances: 'invoice',
-  };
-  const navIconClass = (itemId: string, active: boolean) =>
-    navEntityOfItem[itemId]
-      ? entityIconClass(navEntityOfItem[itemId])
-      : active ? 'text-sidebar-text-active' : 'text-sidebar-text';
-
   const navSections: NavSection[] = [
     {
       label: null,
@@ -974,7 +960,9 @@ function AuthenticatedApp({
                           />
                         )}
                         <span className="relative">
-                          <item.icon size={17} strokeWidth={active ? 2.2 : 1.8} className={navIconClass(item.id, active)} />
+                          <item.icon size={17} strokeWidth={active ? 2.2 : 1.8} className={cn(
+                            active ? "text-sidebar-text-active" : "text-sidebar-text"
+                          )} />
                           {item.id === 'messages' && unreadSms > 0 && !sidebarExpanded && (
                             <span className="absolute -top-1.5 -right-1.5 bg-danger text-white text-[7px] font-bold rounded-full min-w-[12px] h-[12px] flex items-center justify-center px-0.5">
                               {unreadSms > 9 ? '9+' : unreadSms}
@@ -1047,7 +1035,7 @@ function AuthenticatedApp({
                           {active && (
                             <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-sidebar-accent" />
                           )}
-                          <item.icon size={17} strokeWidth={active ? 2.2 : 1.8} className={navIconClass(item.id, active)} />
+                          <item.icon size={17} strokeWidth={active ? 2.2 : 1.8} className={cn(active ? "text-sidebar-text-active" : "text-sidebar-text")} />
                           <span className="truncate">{item.label}</span>
                         </button>
                       );
@@ -1071,7 +1059,7 @@ function AuthenticatedApp({
                     active ? "bg-sidebar-active text-sidebar-text-active font-semibold" : "text-sidebar-text font-medium hover:bg-sidebar-hover hover:text-sidebar-text-active"
                   )}
                 >
-                  <item.icon size={17} strokeWidth={active ? 2.2 : 1.8} className={navIconClass(item.id, active)} />
+                  <item.icon size={17} strokeWidth={active ? 2.2 : 1.8} className={cn(active ? "text-sidebar-text-active" : "text-sidebar-text")} />
                 </button>
               );
             })}

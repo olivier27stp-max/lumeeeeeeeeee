@@ -117,7 +117,7 @@ function highlightText(text: string, query: string) {
     const isMatch = tokens.some((tk) => tk.toLowerCase() === part.toLowerCase());
     if (!isMatch) return <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>;
     return (
-      <mark key={`${part}-${index}`} className="bg-transparent font-semibold text-text-primary">
+      <mark key={`${part}-${index}`} className="bg-transparent font-extrabold text-text-primary">
         {part}
       </mark>
     );
@@ -210,8 +210,8 @@ export default function GlobalSearch() {
     };
   }, []);
 
-  // Build suggestion items
-  const { allItems, sections } = useMemo(() => {
+  // Build suggestion items (sections still computed for ordering; rendered flat)
+  const { allItems } = useMemo(() => {
     const secs: Array<{ key: string; label: string; items: SuggestionAction[] }> = [];
     const all: SuggestionAction[] = [];
 
@@ -466,31 +466,20 @@ export default function GlobalSearch() {
             </div>
           ) : null}
 
-          {/* Results */}
+          {/* Results — flat list, no section headers */}
           {flatItems.length > 0 || seeAllItem ? (
-            <div className="pb-1.5 pt-0.5">
-              {sections.map((section) => (
-                <div key={section.key}>
-                  <p className="px-[18px] pb-1.5 pt-4 text-[10.5px] font-medium uppercase tracking-[0.08em] text-text-tertiary">
-                    {section.label}
-                  </p>
-                  {section.items.map((item) => {
-                    const flatIndex = flatItems.findIndex((f) => f.id === item.id);
-                    const isActive = flatIndex === activeIndex;
-                    return (
-                      <SearchResultRow
-                        key={item.id}
-                        item={item}
-                        isActive={isActive}
-                        fr={fr}
-                        listboxId={listboxId}
-                        query={normalizedQuery}
-                        onMouseEnter={() => setActiveIndex(flatIndex)}
-                        onClick={() => handleSelect(item)}
-                      />
-                    );
-                  })}
-                </div>
+            <div className="py-1.5">
+              {flatItems.map((item, index) => (
+                <SearchResultRow
+                  key={item.id}
+                  item={item}
+                  isActive={index === activeIndex}
+                  fr={fr}
+                  listboxId={listboxId}
+                  query={normalizedQuery}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => handleSelect(item)}
+                />
               ))}
 
               {/* See all results */}
@@ -598,11 +587,11 @@ function SearchResultRow({
     >
       <div className="flex items-center gap-3.5">
         {/* Bare icon — no chip, no halo; entity sections keep their identity color */}
-        <Icon size={16} strokeWidth={1.75} className={cn('shrink-0', entityIconClass(item.entityType || quickAction?.entity))} aria-hidden />
+        <Icon size={16} strokeWidth={2.5} className={cn('shrink-0', entityIconClass(item.entityType || quickAction?.entity))} aria-hidden />
 
         {/* Content: main + secondary */}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold text-text-primary">
+          <p className="truncate text-[14px] font-extrabold text-text-primary">
             {item.kind === 'entity' ? highlightText(item.label, query) : item.label}
           </p>
           {secondary ? (
