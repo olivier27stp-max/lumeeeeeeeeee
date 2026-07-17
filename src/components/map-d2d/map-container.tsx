@@ -1700,11 +1700,6 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
                 )}
               </div>
 
-              <div className="flex items-center gap-3 border-t border-white/[.08] px-4 py-2 text-[10.5px] text-white/30">
-                <span className="flex items-center gap-1"><kbd className="rounded border border-white/10 bg-white/5 px-1 py-px">↑</kbd><kbd className="rounded border border-white/10 bg-white/5 px-1 py-px">↓</kbd> {fr ? 'naviguer' : 'navigate'}</span>
-                <span className="flex items-center gap-1"><kbd className="rounded border border-white/10 bg-white/5 px-1 py-px">↵</kbd> {fr ? 'sélectionner' : 'select'}</span>
-                <span className="flex items-center gap-1"><kbd className="rounded border border-white/10 bg-white/5 px-1 py-px">esc</kbd> {fr ? 'fermer' : 'close'}</span>
-              </div>
             </div>
           </div>
         );
