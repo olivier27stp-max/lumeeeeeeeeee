@@ -10,6 +10,8 @@ export interface ClientRecord {
   id: string;
   /** Numéro séquentiel par org (trigger DB) — absent tant que la migration n'est pas appliquée. */
   client_number?: string | null;
+  /** Exonéré de taxes (gouvernements, Premières Nations, OSBL…) — absent tant que la migration n'est pas appliquée. */
+  tax_exempt?: boolean;
   first_name: string;
   last_name: string;
   company: string | null;

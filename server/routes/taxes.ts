@@ -143,22 +143,37 @@ router.get('/taxes/resolve', async (req, res) => {
       'GEORGIA': 'US-GA', 'ARIZONA': 'US-AZ',
     };
 
-    // Try to detect region from client's province
-    if (clientId) {
-      const { data: client } = await admin.from('clients').select('province').eq('id', clientId).eq('org_id', auth.orgId).maybeSingle();
-      if (client?.province) {
-        region = client.province.toUpperCase().trim();
-        region = PROVINCE_MAP[region] || region;
+    // Load the client/lead row once (leads live in the clients table too).
+    // tax_exempt ships behind a migration — retry without it so resolve keeps
+    // working before the column exists.
+    const rowId = clientId || leadId;
+    let clientRow: { province?: string | null; address?: string | null; tax_exempt?: boolean } | null = null;
+    if (rowId) {
+      const full = await admin.from('clients').select('province, address, tax_exempt').eq('id', rowId).eq('org_id', auth.orgId).maybeSingle();
+      if (full.error) {
+        const fallback = await admin.from('clients').select('province, address').eq('id', rowId).eq('org_id', auth.orgId).maybeSingle();
+        clientRow = fallback.data;
+      } else {
+        clientRow = full.data;
       }
     }
-    // Fallback: try lead's address (a lead is a client now)
-    if (!region && leadId) {
-      const { data: lead } = await admin.from('clients').select('address').eq('id', leadId).eq('org_id', auth.orgId).maybeSingle();
-      if (lead?.address) {
-        const addr = lead.address.toUpperCase();
-        for (const [name, code] of Object.entries(PROVINCE_MAP)) {
-          if (addr.includes(name)) { region = code; break; }
-        }
+
+    // Tax-exempt client (governments, First Nations, non-profits…): no taxes
+    // on their documents, whatever the region.
+    if (clientRow?.tax_exempt) {
+      return res.json({ taxes: [], group: null, region: 'EXEMPT', exempt: true });
+    }
+
+    // Try to detect region from the client's province
+    if (clientRow?.province) {
+      region = clientRow.province.toUpperCase().trim();
+      region = PROVINCE_MAP[region] || region;
+    }
+    // Fallback: scan the address for a province name
+    if (!region && clientRow?.address) {
+      const addr = clientRow.address.toUpperCase();
+      for (const [name, code] of Object.entries(PROVINCE_MAP)) {
+        if (addr.includes(name)) { region = code; break; }
       }
     }
 
