@@ -1560,7 +1560,20 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
             </button>
           )}
 
-          {/* Box 4 — Plan plié : bascule plan / satellite */}
+          {/* Box 4 — Sélection rectangle : sélectionner des pins */}
+          <button
+            onClick={() => { if (mode === 'select') exitSelectMode(); else enterSelectMode(); }}
+            className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${mode === 'select' ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            title={fr ? (mode === 'select' ? 'Annuler la sélection' : 'Sélectionner des pins') : (mode === 'select' ? 'Cancel selection' : 'Select pins')}
+            aria-label={fr ? 'Sélectionner' : 'Select'}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 3a2 2 0 0 0-2 2" /><path d="M19 3a2 2 0 0 1 2 2" /><path d="M21 19a2 2 0 0 1-2 2" /><path d="M5 21a2 2 0 0 1-2-2" />
+              <path d="M9 3h1" /><path d="M9 21h1" /><path d="M14 3h1" /><path d="M14 21h1" /><path d="M3 9v1" /><path d="M3 14v1" /><path d="M21 9v1" /><path d="M21 14v1" />
+            </svg>
+          </button>
+
+          {/* Box 5 — Plan plié : bascule plan / satellite */}
           <button
             onClick={toggleSatellite}
             className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${satellite ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
@@ -1573,7 +1586,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
             </svg>
           </button>
 
-          {/* Box 5 — Boussole (ronde) : indique le nord, clic = réaligner */}
+          {/* Box 6 — Boussole (ronde) : indique le nord, clic = réaligner */}
           <button
             onClick={() => mapRef.current?.easeTo({ bearing: 0, pitch: 0, duration: 600 })}
             className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black shadow-lg shadow-black/30 transition-all hover:scale-105"
@@ -1829,25 +1842,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
               </>
             )}
 
-            {/* Select mode */}
-            {mode === 'view' && (
-              <button
-                onClick={enterSelectMode}
-                className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/60 px-4 py-2.5 text-[13px] font-semibold text-white/80 shadow-xl backdrop-blur-xl transition-all hover:bg-white/10"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 3a2 2 0 0 0-2 2" /><path d="M19 3a2 2 0 0 1 2 2" /><path d="M21 19a2 2 0 0 1-2 2" /><path d="M5 21a2 2 0 0 1-2-2" />
-                  <path d="M9 3h1" /><path d="M9 21h1" /><path d="M14 3h1" /><path d="M14 21h1" /><path d="M3 9v1" /><path d="M3 14v1" /><path d="M21 9v1" /><path d="M21 14v1" />
-                </svg>
-                Sélectionner
-              </button>
-            )}
-            {mode === 'select' && (
-              <button onClick={exitSelectMode} className="flex items-center gap-2 rounded-xl bg-red-500/80 px-4 py-2.5 text-[13px] font-semibold text-white shadow-xl shadow-red-500/25 transition-all">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                Annuler sélection
-              </button>
-            )}
+            {/* Select mode — déplacé dans la barre droite (box 4) */}
 
             {/* Create Zone — déplacé dans la barre droite (box 3) */}
 
