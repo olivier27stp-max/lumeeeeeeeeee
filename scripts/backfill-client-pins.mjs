@@ -56,7 +56,7 @@ function addressVariants(address) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const mapboxToken = process.env.MAPBOX_GEOCODING_TOKEN || process.env.VITE_MAPBOX_TOKEN || '';
-const googleKey = process.env.VITE_GOOGLE_MAPS_API_KEY || '';
+const googleKey = process.env.GOOGLE_GEOCODING_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
 async function geocodeOnce(q) {
   if (mapboxToken) {
