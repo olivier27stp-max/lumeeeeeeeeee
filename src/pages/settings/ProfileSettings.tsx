@@ -16,6 +16,9 @@ import {
   CheckCircle2,
   TrendingUp,
   ChevronRight,
+  MapPin,
+  Cake,
+  Shield,
   type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -61,14 +64,22 @@ export default function ProfileSettings() {
 
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [orgId, setOrgId] = useState<string | null>(null);
   const [email, setEmail] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [savedFullName, setSavedFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [memberRowId, setMemberRowId] = useState<string | null>(null);
-  const [phone, setPhone] = useState('');
-  const [savedPhone, setSavedPhone] = useState('');
   const [hireDate, setHireDate] = useState('');
+
+  // Editable fields + their last-saved snapshot (drives `dirty`)
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [city, setCity] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [savedInfo, setSavedInfo] = useState({ firstName: '', lastName: '', phone: '', city: '', birthDate: '' });
+  // team_members.birth_date ships behind a migration — feature-detect on the
+  // loaded row so the page works before AND after the column exists.
+  const [hasBirthCol, setHasBirthCol] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -109,23 +120,43 @@ export default function ProfileSettings() {
         setUserId(user.id);
         setEmail(user.email || '');
 
-        const orgId = await getCurrentOrgIdOrThrow().catch(() => null);
-        const [profileRes, memberRes] = await Promise.all([
+        const currentOrgId = await getCurrentOrgIdOrThrow().catch(() => null);
+        setOrgId(currentOrgId);
+        const [profileRes, memberRes, birthColRes] = await Promise.all([
           supabase.from('profiles').select('full_name, avatar_url').eq('id', user.id).maybeSingle(),
-          orgId
-            ? supabase.from('team_members').select('id, phone, avatar_url, created_at').eq('user_id', user.id).eq('org_id', orgId).maybeSingle()
+          currentOrgId
+            ? supabase.from('team_members').select('*').eq('user_id', user.id).eq('org_id', currentOrgId).maybeSingle()
             : Promise.resolve({ data: null } as any),
+          // Feature-detect the birth_date column (ships behind a migration)
+          // independently of whether this user has a team_members row yet.
+          supabase.from('team_members').select('birth_date').limit(1),
         ]);
+        setHasBirthCol(!birthColRes.error);
 
         const p = profileRes.data;
         const m = memberRes.data;
-        setFullName(p?.full_name || '');
-        setSavedFullName(p?.full_name || '');
         setAvatarUrl(m?.avatar_url || p?.avatar_url || null);
+
+        // First/last come from team_members when available; otherwise split
+        // profiles.full_name so the two fields are still editable.
+        const nameParts = (p?.full_name || '').trim().split(/\s+/).filter(Boolean);
+        const first = m?.first_name || nameParts[0] || '';
+        const last = m?.last_name || nameParts.slice(1).join(' ') || '';
+        const info = {
+          firstName: first,
+          lastName: last,
+          phone: m?.phone || '',
+          city: m?.city || '',
+          birthDate: m?.birth_date || '',
+        };
+        setFirstName(info.firstName);
+        setLastName(info.lastName);
+        setPhone(info.phone);
+        setCity(info.city);
+        setBirthDate(info.birthDate);
+        setSavedInfo(info);
         if (m) {
           setMemberRowId(m.id);
-          setPhone(m.phone || '');
-          setSavedPhone(m.phone || '');
           if (m.created_at) {
             setHireDate(new Date(m.created_at).toLocaleDateString(isFr ? 'fr-CA' : 'en-CA', { month: 'long', year: 'numeric' }));
           }
@@ -180,33 +211,51 @@ export default function ProfileSettings() {
     })();
   }, [userId, role, showSalesStats, stats]);
 
-  const dirty = fullName.trim() !== savedFullName || phone.trim() !== savedPhone;
+  const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
+  const dirty =
+    firstName.trim() !== savedInfo.firstName ||
+    lastName.trim() !== savedInfo.lastName ||
+    phone.trim() !== savedInfo.phone ||
+    city.trim() !== savedInfo.city ||
+    birthDate !== savedInfo.birthDate;
 
   async function handleSave() {
     if (!userId) return;
     setSaving(true);
     setSaved(false);
     try {
-      const name = fullName.trim();
       const { error: profileErr } = await supabase
         .from('profiles')
-        .update({ full_name: name })
+        .update({ full_name: fullName })
         .eq('id', userId);
       if (profileErr) throw profileErr;
 
+      const memberPayload: Record<string, any> = {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        phone: phone.trim() || null,
+        city: city.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
+      if (hasBirthCol) memberPayload.birth_date = birthDate || null;
       if (memberRowId) {
-        // Keep the team view in sync (name split + phone).
-        const parts = name.split(/\s+/);
-        const first = parts[0] || '';
-        const last = parts.slice(1).join(' ');
         const { error: memberErr } = await supabase
           .from('team_members')
-          .update({ phone: phone.trim() || null, first_name: first, last_name: last, updated_at: new Date().toISOString() })
+          .update(memberPayload)
           .eq('id', memberRowId);
         if (memberErr) throw memberErr;
+      } else if (orgId) {
+        // Owners created before the team module have no team_members row —
+        // create it here so phone/city/birth date have somewhere to live.
+        const { data: created, error: memberErr } = await supabase
+          .from('team_members')
+          .insert({ ...memberPayload, org_id: orgId, user_id: userId, email, role, status: 'active' })
+          .select('id')
+          .single();
+        if (memberErr) throw memberErr;
+        if (created) setMemberRowId(created.id);
       }
-      setSavedFullName(name);
-      setSavedPhone(phone.trim());
+      setSavedInfo({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phone.trim(), city: city.trim(), birthDate });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e: any) {
@@ -366,18 +415,58 @@ export default function ProfileSettings() {
         <p className="text-xs font-medium text-text-tertiary">{isFr ? 'Mes informations' : 'My information'}</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
-            <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Nom complet' : 'Full name'}</label>
-            <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} className="glass-input w-full mt-1.5" />
+            <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Prénom' : 'First name'}</label>
+            <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="glass-input w-full mt-1.5" placeholder={isFr ? 'Olivier' : 'John'} />
           </div>
-          {memberRowId && (
+          <div>
+            <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Nom' : 'Last name'}</label>
+            <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} className="glass-input w-full mt-1.5" placeholder={isFr ? 'Tremblay' : 'Smith'} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Téléphone' : 'Phone'}</label>
+            <div className="relative mt-1.5">
+              <Phone size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="glass-input w-full !pl-9" placeholder="514 555 0123" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Ville' : 'City'}</label>
+            <div className="relative mt-1.5">
+              <MapPin size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+              <input type="text" value={city} onChange={(e) => setCity(e.target.value)} className="glass-input w-full !pl-9" placeholder={isFr ? 'Drummondville' : 'Montreal'} />
+            </div>
+          </div>
+          {hasBirthCol && (
             <div>
-              <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Téléphone' : 'Phone'}</label>
+              <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Date de naissance' : 'Date of birth'}</label>
               <div className="relative mt-1.5">
-                <Phone size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="glass-input w-full !pl-9" placeholder="514 555 0123" />
+                <Cake size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                <input
+                  type="date"
+                  value={birthDate}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  className="glass-input w-full !pl-9"
+                />
               </div>
             </div>
           )}
+          <div>
+            <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Rôle' : 'Role'}</label>
+            <div className="relative mt-1.5">
+              <Shield size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+              <input type="text" disabled value={roleLabel} className="glass-input w-full !pl-9 opacity-60" />
+            </div>
+            {(role === 'owner' || role === 'admin') && (
+              <button
+                type="button"
+                onClick={() => navigate('/settings/team')}
+                className="mt-1 text-[11px] font-medium text-text-tertiary hover:text-text-primary underline"
+              >
+                {isFr ? 'Gérer les rôles de l\'équipe →' : 'Manage team roles →'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Email + change flow */}

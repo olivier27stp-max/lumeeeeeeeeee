@@ -80,6 +80,10 @@ export default function CompanySettings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [orgId, setOrgId] = useState<string | null>(null);
+  // When the initial load fails, saving is blocked: the form would be empty
+  // and the org_id upsert would overwrite the existing row with blanks.
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     if (!dirty) return;
@@ -91,22 +95,25 @@ export default function CompanySettings() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [dirty]);
 
-  useEffect(() => {
-    async function fetchCompany() {
+  async function fetchCompany() {
+      setLoading(true);
+      setLoadFailed(false);
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         // Try to fetch from company_settings table (scoped to current org)
-        const orgId = await getCurrentOrgIdOrThrow();
+        const currentOrgId = await getCurrentOrgIdOrThrow();
+        setOrgId(currentOrgId);
         const { data, error } = await supabase
           .from('company_settings')
           .select('*')
-          .eq('org_id', orgId)
+          .eq('org_id', currentOrgId)
           .limit(1)
           .maybeSingle();
+        if (error) throw error;
 
-        if (data && !error) {
+        if (data) {
           setForm({
             id: data.id,
             org_id: data.org_id,
@@ -131,11 +138,15 @@ export default function CompanySettings() {
       } catch (e: any) {
         // Warn instead of failing silently: saving on top of a failed load
         // used to create a duplicate settings row.
+        setLoadFailed(true);
         toast.error(e?.message || 'Failed to load company settings.');
       }
       setLoading(false);
-    }
+  }
+
+  useEffect(() => {
     fetchCompany();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const update = <K extends keyof CompanyDetails>(key: K, value: CompanyDetails[K]) => {
@@ -145,6 +156,28 @@ export default function CompanySettings() {
   };
 
   const handleSave = async () => {
+    if (loadFailed) return;
+
+    // Validate before writing — these values feed invoices, quotes and
+    // outgoing emails, where a bad address fails silently downstream.
+    const email = form.email.trim();
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      toast.error(language === 'fr' ? 'Adresse courriel invalide.' : 'Invalid email address.');
+      return;
+    }
+    // Tolerate "www.example.com" — normalize to https:// instead of rejecting.
+    let website = form.website.trim();
+    if (website && !/^https?:\/\//i.test(website)) website = `https://${website}`;
+    if (website && !/^https?:\/\/[^\s.]+\.\S{2,}/i.test(website)) {
+      toast.error(language === 'fr' ? 'Adresse du site web invalide.' : 'Invalid website URL.');
+      return;
+    }
+    const reviewUrl = form.google_review_url.trim();
+    if (reviewUrl && !/^https?:\/\/[^\s.]+\.\S{2,}/i.test(reviewUrl)) {
+      toast.error(language === 'fr' ? 'Lien Google Review invalide (doit commencer par https://).' : 'Invalid Google Review URL (must start with https://).');
+      return;
+    }
+
     setSaving(true);
     setSaved(false);
     try {
@@ -154,8 +187,8 @@ export default function CompanySettings() {
       const payload = {
         company_name: form.company_name.trim(),
         phone: form.phone.trim(),
-        website: form.website.trim(),
-        email: form.email.trim(),
+        website,
+        email,
         street1: form.street1.trim(),
         street2: form.street2.trim(),
         city: form.city.trim(),
@@ -210,6 +243,8 @@ export default function CompanySettings() {
 
       setSaved(true);
       setDirty(false);
+      // Reflect normalized values (e.g. auto-prefixed https://) in the form.
+      setForm((prev) => ({ ...prev, website, email }));
       queryClient.invalidateQueries({ queryKey: ['crm-revenue-goal'] });
       queryClient.invalidateQueries({ queryKey: ['org-revenue-goal'] });
       toast.success(language === 'fr' ? 'Paramètres de l\'entreprise enregistrés.' : 'Company settings saved.');
@@ -225,7 +260,15 @@ export default function CompanySettings() {
   // global "Save" button meant an uploaded logo was silently lost when the
   // user navigated away without saving (recurring trap: logo_url stayed empty
   // while every quote/agreement/invoice preview showed no logo).
+  // Extract the storage path from a public logo URL so the old file can be
+  // deleted when the logo is removed or replaced (files were piling up).
+  const logoStoragePath = (url: string): string | null => {
+    const rest = url.split(`/object/public/${STORAGE_BUCKETS.COMPANY_LOGOS}/`)[1];
+    return rest ? decodeURIComponent(rest.split('?')[0]) : null;
+  };
+
   const persistLogo = async (url: string) => {
+    const previousUrl = form.logo_url;
     try {
       if (form.id) {
         const { error } = await supabase
@@ -246,6 +289,11 @@ export default function CompanySettings() {
         if (data) setForm((prev) => ({ ...prev, id: data.id, org_id: data.org_id }));
       }
       setForm((prev) => ({ ...prev, logo_url: url }));
+      // Clean up the replaced/removed file — best-effort, the DB is already right.
+      if (previousUrl && previousUrl !== url) {
+        const oldPath = logoStoragePath(previousUrl);
+        if (oldPath) deleteFile(STORAGE_BUCKETS.COMPANY_LOGOS, oldPath).catch(() => {});
+      }
       toast.success(url
         ? (language === 'fr' ? 'Logo enregistré.' : 'Logo saved.')
         : (language === 'fr' ? 'Logo retiré.' : 'Logo removed.'));
@@ -282,11 +330,11 @@ export default function CompanySettings() {
       <motion.div
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-2xl space-y-5"
+        className="max-w-3xl space-y-6"
       >
         {/* Company Logo */}
-        <div className="section-card p-5 space-y-4">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+        <div className="section-card p-6 space-y-4">
+          <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
             <ImageIcon size={12} /> {language === 'fr' ? 'Logo de l\'entreprise' : 'Company Logo'}
           </h3>
 
@@ -318,7 +366,7 @@ export default function CompanySettings() {
           ) : (
             <FileUpload
               bucket={STORAGE_BUCKETS.COMPANY_LOGOS}
-              path={form.org_id || 'default'}
+              path={orgId || form.org_id || 'default'}
               accept="image/*"
               maxSizeMb={5}
               normalizeImageMaxDim={1024}
@@ -328,13 +376,13 @@ export default function CompanySettings() {
         </div>
 
         {/* Company Info */}
-        <div className="section-card p-5 space-y-4">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
+        <div className="section-card p-6 space-y-4">
+          <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary">
             {language === 'fr' ? 'Détails de l\'entreprise' : 'Company Details'}
           </h3>
 
           <div>
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
               {language === 'fr' ? 'Nom de l\'entreprise' : 'Company Name'}
             </label>
             <input
@@ -348,7 +396,7 @@ export default function CompanySettings() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
                 <Phone size={10} /> {t.companySettings.phoneNumber}
               </label>
               <input
@@ -360,7 +408,7 @@ export default function CompanySettings() {
               />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
                 <Globe size={10} /> {t.companySettings.websiteUrl}
               </label>
               <input
@@ -374,7 +422,7 @@ export default function CompanySettings() {
           </div>
 
           <div>
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
               <Mail size={10} /> {t.companySettings.emailAddress}
             </label>
             <input
@@ -388,13 +436,13 @@ export default function CompanySettings() {
         </div>
 
         {/* Address */}
-        <div className="section-card p-5 space-y-4">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+        <div className="section-card p-6 space-y-4">
+          <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
             <MapPin size={12} /> {t.billing.address}
           </h3>
 
           <div>
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
               {t.companySettings.street1}
             </label>
             <AddressAutocomplete
@@ -417,7 +465,7 @@ export default function CompanySettings() {
           </div>
 
           <div>
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
               {t.companySettings.street2}
             </label>
             <input
@@ -431,7 +479,7 @@ export default function CompanySettings() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                 {t.billing.city}
               </label>
               <input
@@ -442,7 +490,7 @@ export default function CompanySettings() {
               />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                 {t.companySettings.provinceState}
               </label>
               <input
@@ -456,7 +504,7 @@ export default function CompanySettings() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                 {t.billing.postalCode}
               </label>
               <input
@@ -467,7 +515,7 @@ export default function CompanySettings() {
               />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                 {t.billing.country}
               </label>
               <input
@@ -482,13 +530,13 @@ export default function CompanySettings() {
         </div>
 
         {/* Financial Goal */}
-        <div className="section-card p-5 space-y-4">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+        <div className="section-card p-6 space-y-4">
+          <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
             <Target size={12} /> {language === 'fr' ? 'Objectif financier' : 'Financial Goal'}
           </h3>
 
           <div>
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
               {language === 'fr' ? 'Objectif de revenus ($)' : 'Revenue Goal ($)'}
             </label>
             <input
@@ -503,7 +551,7 @@ export default function CompanySettings() {
               className="glass-input w-full mt-1"
               placeholder="100000"
             />
-            <p className="text-[11px] text-text-tertiary mt-1">
+            <p className="text-[12px] text-text-tertiary mt-1">
               {language === 'fr'
                 ? 'Le diagramme d\'objectif dans Insights affichera la progression par rapport à ce montant.'
                 : 'The goal chart in Insights will display progress against this amount.'}
@@ -512,13 +560,13 @@ export default function CompanySettings() {
         </div>
 
         {/* Google Reviews */}
-        <div className="section-card p-5 space-y-4">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+        <div className="section-card p-6 space-y-4">
+          <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
             <Star size={12} /> {t.companySettings.googleReviews}
           </h3>
 
           <div>
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
               <ExternalLink size={10} /> {t.companySettings.googleReviewUrl}
             </label>
             <input
@@ -528,7 +576,7 @@ export default function CompanySettings() {
               className="glass-input w-full mt-1"
               placeholder="https://g.page/r/your-business/review"
             />
-            <p className="text-[11px] text-text-tertiary mt-1">
+            <p className="text-[12px] text-text-tertiary mt-1">
               {language === 'fr'
                 ? 'Les clients satisfaits seront redirigés vers ce lien pour laisser un avis.'
                 : 'Satisfied customers will be redirected to this link to leave a review.'}
@@ -537,10 +585,10 @@ export default function CompanySettings() {
 
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-text-primary">
+              <p className="text-sm font-medium text-text-primary">
                 {language === 'fr' ? 'Activer les demandes d\'avis' : 'Enable review requests'}
               </p>
-              <p className="text-[11px] text-text-tertiary">
+              <p className="text-[12px] text-text-tertiary">
                 {language === 'fr'
                   ? 'Envoyer automatiquement des demandes d\'avis après complétion d\'un travail'
                   : 'Automatically send review requests after job completion'}
@@ -581,13 +629,13 @@ export default function CompanySettings() {
         </div>
 
         {/* ── Regional ── */}
-        <div className="section-card p-5 space-y-4">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
+        <div className="section-card p-6 space-y-4">
+          <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary">
             {language === 'fr' ? 'Régional' : 'Regional'}
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                 {language === 'fr' ? 'Devise' : 'Currency'}
               </label>
               <select
@@ -623,14 +671,21 @@ export default function CompanySettings() {
             ? 'border-amber-300 bg-amber-50/95 dark:border-amber-700 dark:bg-amber-900/40'
             : 'border-outline bg-surface-card/90'
         )}>
-          <span className="text-[12px] text-text-secondary">
-            {dirty
-              ? (language === 'fr' ? 'Modifications non sauvegardées' : 'Unsaved changes')
-              : (language === 'fr' ? 'Tout est à jour' : 'All changes saved')}
+          <span className="text-[13px] text-text-secondary">
+            {loadFailed
+              ? (language === 'fr' ? 'Chargement échoué — sauvegarde bloquée pour protéger vos données' : 'Load failed — saving is blocked to protect your data')
+              : dirty
+                ? (language === 'fr' ? 'Modifications non sauvegardées' : 'Unsaved changes')
+                : (language === 'fr' ? 'Tout est à jour' : 'All changes saved')}
           </span>
+          {loadFailed && (
+            <button onClick={() => { void fetchCompany(); }} className="glass-button text-[12px]">
+              {language === 'fr' ? 'Réessayer' : 'Retry'}
+            </button>
+          )}
           <button
             onClick={handleSave}
-            disabled={saving || !dirty}
+            disabled={saving || !dirty || loadFailed}
             className={cn(
               'glass-button inline-flex items-center gap-1.5',
               saved && '!bg-success !text-white !border-success',
