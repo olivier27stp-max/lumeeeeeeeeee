@@ -118,6 +118,23 @@ export interface RepPeriodStats {
   daysWorked: number;
 }
 
+/** Local-day boundaries (YYYY-MM-DD, inclusive) → UTC ISO for timestamptz comparisons */
+function periodBounds(from: string, to: string): { fromISO: string; toISO: string } {
+  return {
+    fromISO: new Date(`${from}T00:00:00`).toISOString(),
+    toISO: new Date(`${to}T23:59:59.999`).toISOString(),
+  };
+}
+
+/**
+ * Jobs créditées au rep — même logique que le leaderboard : salesperson
+ * explicite, sinon créateur (jobs d'avant le fix salesperson_id), plus les
+ * jobs qui lui sont assignées via assigned_user_id.
+ */
+function repJobCreditFilter(userId: string): string {
+  return `salesperson_id.eq.${userId},assigned_user_id.eq.${userId},and(salesperson_id.is.null,created_by.eq.${userId})`;
+}
+
 /** from/to are local calendar dates (YYYY-MM-DD), both inclusive. */
 export async function getRepPeriodStats(
   userId: string,
@@ -125,16 +142,14 @@ export async function getRepPeriodStats(
   from: string,
   to: string
 ): Promise<RepPeriodStats> {
-  // Local-day boundaries → UTC for timestamptz comparisons
-  const fromISO = new Date(`${from}T00:00:00`).toISOString();
-  const toISO = new Date(`${to}T23:59:59.999`).toISOString();
+  const { fromISO, toISO } = periodBounds(from, to);
 
   const [jobsRes, quotesRes, pinsRes, timeRes] = await Promise.all([
     supabase
       .from('jobs')
       .select('id, status, total_amount, job_type')
       .eq('org_id', orgId)
-      .eq('salesperson_id', userId)
+      .or(repJobCreditFilter(userId))
       .is('deleted_at', null)
       .gte('created_at', fromISO)
       .lte('created_at', toISO),
@@ -207,12 +222,21 @@ export interface RepPinCounts {
   byKind: Record<RepPinKind, number>;
 }
 
-export async function getRepPinCounts(userId: string, orgId: string): Promise<RepPinCounts> {
+/** Pins posés par le rep durant la période sélectionnée (from/to inclusifs). */
+export async function getRepPinCounts(
+  userId: string,
+  orgId: string,
+  from: string,
+  to: string
+): Promise<RepPinCounts> {
+  const { fromISO, toISO } = periodBounds(from, to);
   const { data } = await supabase
     .from('field_pins')
     .select('id, status')
     .eq('org_id', orgId)
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .gte('created_at', fromISO)
+    .lte('created_at', toISO);
 
   const byKind: Record<RepPinKind, number> = {
     closed_won: 0, follow_up: 0, appointment: 0, no_answer: 0, rejected: 0, other: 0,
@@ -223,10 +247,10 @@ export async function getRepPinCounts(userId: string, orgId: string): Promise<Re
 }
 
 // ---------------------------------------------------------------------------
-// Deals — jobs where the rep is the assigned salesperson (For Deals section)
+// Jobs — jobs créditées au rep (section Jobs du hub), filtrées par période
 // ---------------------------------------------------------------------------
 
-export interface RepDealJob {
+export interface RepJob {
   id: string;
   job_number: string | null;
   title: string;
@@ -235,16 +259,25 @@ export interface RepDealJob {
   created_at: string;
 }
 
-export async function getRepDealJobs(userId: string, orgId: string, limit = 50): Promise<RepDealJob[]> {
+export async function getRepJobs(
+  userId: string,
+  orgId: string,
+  from: string,
+  to: string,
+  limit = 50
+): Promise<RepJob[]> {
+  const { fromISO, toISO } = periodBounds(from, to);
   const { data } = await supabase
     .from('jobs')
     .select('id, job_number, title, status, total_amount, created_at')
     .eq('org_id', orgId)
-    .eq('salesperson_id', userId)
+    .or(repJobCreditFilter(userId))
     .is('deleted_at', null)
+    .gte('created_at', fromISO)
+    .lte('created_at', toISO)
     .order('created_at', { ascending: false })
     .limit(limit);
-  return (data || []) as RepDealJob[];
+  return (data || []) as RepJob[];
 }
 
 export async function getRepRealStats(userId: string, orgId: string): Promise<RepRealStats> {

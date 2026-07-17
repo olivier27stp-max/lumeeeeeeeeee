@@ -4,10 +4,10 @@ import { Avatar } from '../components/d2d/avatar';
 import {
   getRepPeriodStats,
   getRepPinCounts,
-  getRepDealJobs,
+  getRepJobs,
   type RepPeriodStats,
   type RepPinCounts,
-  type RepDealJob,
+  type RepJob,
   type RepPinKind,
 } from '../lib/repStatsApi';
 import { getRepProfileInfo } from '../lib/leaderboardApi';
@@ -106,7 +106,7 @@ export default function D2DRepProfile() {
   const [repOrgId, setRepOrgId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [deals, setDeals] = useState<RepDealJob[]>([]);
+  const [repJobs, setRepJobs] = useState<RepJob[]>([]);
   const [pinCounts, setPinCounts] = useState<RepPinCounts | null>(null);
 
   // Stats period — defaults to today; a single date has from === to
@@ -181,15 +181,9 @@ export default function D2DRepProfile() {
         if (!cancelled) setCurrentUserId(session.session?.user?.id ?? null);
 
         const { result: data, orgId } = await fetchFromApi(paramId);
-        const [dealJobs, pins] = await Promise.all([
-          getRepDealJobs(paramId, orgId).catch(() => [] as RepDealJob[]),
-          getRepPinCounts(paramId, orgId).catch(() => null),
-        ]);
         if (!cancelled) {
           setProfile(data);
           setRepOrgId(orgId);
-          setDeals(dealJobs);
-          setPinCounts(pins);
           setLoading(false);
         }
       } catch (err) {
@@ -205,18 +199,26 @@ export default function D2DRepProfile() {
     return () => { cancelled = true; };
   }, [paramId]);
 
-  // Period stats — reloaded whenever the selected date / range changes
+  // Period data — stats, pins et jobs suivent tous la date/période sélectionnée
   useEffect(() => {
     if (!isUUID(paramId) || !repOrgId) return;
     let cancelled = false;
     (async () => {
       setStatsLoading(true);
       try {
-        const stats = await getRepPeriodStats(paramId, repOrgId, range.from, range.to);
-        if (!cancelled) setPeriodStats(stats);
-      } catch (err) {
-        console.error('[RepProfile] Period stats fetch failed:', err);
-        if (!cancelled) setPeriodStats(null);
+        const [stats, jobs, pins] = await Promise.all([
+          getRepPeriodStats(paramId, repOrgId, range.from, range.to).catch((err) => {
+            console.error('[RepProfile] Period stats fetch failed:', err);
+            return null;
+          }),
+          getRepJobs(paramId, repOrgId, range.from, range.to).catch(() => [] as RepJob[]),
+          getRepPinCounts(paramId, repOrgId, range.from, range.to).catch(() => null),
+        ]);
+        if (!cancelled) {
+          setPeriodStats(stats);
+          setRepJobs(jobs);
+          setPinCounts(pins);
+        }
       } finally {
         if (!cancelled) setStatsLoading(false);
       }
@@ -270,26 +272,24 @@ export default function D2DRepProfile() {
             <div className="h-[116px] w-[116px] rounded-full animate-pulse bg-surface-tertiary dark:bg-[rgba(255,255,255,0.06)]" />
           </div>
 
-          {/* Name row skeleton */}
-          <div className="flex items-end justify-between pt-16 pb-6">
-            <div className="pl-1 space-y-2">
+          {/* Name row + Details card skeleton */}
+          <div className="flex items-start justify-between gap-6 pt-16 pb-6">
+            <div className="pl-1 space-y-2 shrink-0">
               <div className="h-8 w-48 rounded-lg animate-pulse bg-surface-tertiary dark:bg-[rgba(255,255,255,0.06)]" />
               <div className="h-4 w-32 rounded-lg animate-pulse bg-surface-tertiary dark:bg-[rgba(255,255,255,0.04)]" />
               <div className="h-3 w-40 rounded-lg animate-pulse bg-surface-tertiary dark:bg-[rgba(255,255,255,0.03)]" />
             </div>
-            <div className="flex items-center gap-2">
-              <div className="h-10 w-10 rounded-xl animate-pulse bg-surface-tertiary dark:bg-[rgba(255,255,255,0.04)]" />
-            </div>
+            <div className="h-40 flex-1 rounded-2xl animate-pulse bg-surface-tertiary dark:bg-[rgba(255,255,255,0.04)]" />
           </div>
         </div>
 
         {/* Content grid skeleton */}
         <div className="mx-auto max-w-6xl px-8 pb-10">
+          <div className="mb-5 h-10 rounded-xl animate-pulse bg-surface-tertiary dark:bg-[rgba(255,255,255,0.04)]" />
           <div className="grid grid-cols-12 gap-5">
             {/* Left column */}
             <div className="col-span-4 space-y-5">
               <div className="h-64 rounded-2xl animate-pulse bg-surface-tertiary dark:bg-[rgba(255,255,255,0.04)]" />
-              <div className="h-40 rounded-2xl animate-pulse bg-surface-tertiary dark:bg-[rgba(255,255,255,0.04)]" />
             </div>
             {/* Right column */}
             <div className="col-span-8 space-y-5">
@@ -350,58 +350,67 @@ export default function D2DRepProfile() {
           </div>
         </div>
 
-        {/* Name row */}
-        <div className="flex items-end justify-between pt-16 pb-6">
-          <div className="pl-1">
+        {/* Name row + Details card — Details étirée à l'horizontale, à droite de la pdp */}
+        <div className="flex items-start justify-between gap-6 pt-16 pb-6">
+          <div className="pl-1 shrink-0">
             <h1 className="text-[28px] font-extrabold text-text-primary tracking-tight">{p.name}</h1>
             <p className="mt-1 text-[14px] font-semibold text-text-secondary">{p.role}</p>
             {p.tagline && <p className="mt-1 text-[13px] text-text-tertiary italic">"{p.tagline}"</p>}
+            {/* Actions — Message / Email / Day-replay removed (features not shipping). */}
+            <div className="mt-3 flex items-center gap-2">
+              <ActionBtn icon={Phone} href={p.phone ? `tel:${p.phone}` : undefined} />
+            </div>
           </div>
 
-          {/* Actions — Message / Email / Day-replay removed (features not shipping). */}
-          <div className="flex items-center gap-2">
-            <ActionBtn icon={Phone} href={p.phone ? `tel:${p.phone}` : undefined} />
+          {/* Info card */}
+          <div className="flex-1 min-w-0 rounded-2xl border border-outline bg-surface-elevated dark:bg-[#111519] dark:border-[rgba(255,255,255,0.06)] p-5">
+            <h3 className="mb-4 text-[13px] font-bold text-text-primary">Details</h3>
+            <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+              <InfoRow icon={Building2} label="Office" value={p.office || '—'} />
+              <InfoRow icon={Briefcase} label="Department" value={p.department} />
+              <InfoRow icon={Calendar} label="Hire Date" value={p.hire_date || '—'} />
+              <EditableInfoRow
+                icon={Mail}
+                label="Email"
+                value={p.email}
+                type="email"
+                placeholder="Ajouter un email"
+                canEdit={canEditContact}
+                onSave={(v) => saveContactField('email', v)}
+              />
+              <EditableInfoRow
+                icon={Phone}
+                label="Phone Number"
+                value={p.phone}
+                type="tel"
+                placeholder="Ajouter un numéro"
+                canEdit={canEditContact}
+                onSave={(v) => saveContactField('phone', v)}
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Content grid ── */}
+      {/* ── Content ── */}
       <div className="mx-auto max-w-6xl px-8 pb-10">
+
+        {/* Period header — pleine largeur au-dessus des boxes */}
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <p className="text-[19px] font-extrabold text-text-primary tracking-tight truncate">
+            {singleDay ? fmtFullDate(range.from) : `Du ${fmtFullDate(range.from).toLowerCase()} au ${fmtFullDate(range.to).toLowerCase()}`}
+          </p>
+          <DateRangeBox range={range} onChange={(from, to) => setRange({ from, to })} />
+        </div>
+
         <div className="grid grid-cols-12 gap-5">
 
           {/* ============================================================= */}
           {/* LEFT COLUMN                                                    */}
           {/* ============================================================= */}
-          <div className="col-span-4 space-y-5">
+          <div className={`col-span-4 space-y-5 transition-opacity ${statsLoading ? 'opacity-50' : ''}`}>
 
-            {/* Info card */}
-            <CardPanel title="Details">
-              <div className="space-y-4">
-                <InfoRow icon={Building2} label="Office" value={p.office || '—'} />
-                <InfoRow icon={Briefcase} label="Department" value={p.department} />
-                <InfoRow icon={Calendar} label="Hire Date" value={p.hire_date || '—'} />
-                <EditableInfoRow
-                  icon={Mail}
-                  label="Email"
-                  value={p.email}
-                  type="email"
-                  placeholder="Ajouter un email"
-                  canEdit={canEditContact}
-                  onSave={(v) => saveContactField('email', v)}
-                />
-                <EditableInfoRow
-                  icon={Phone}
-                  label="Phone Number"
-                  value={p.phone}
-                  type="tel"
-                  placeholder="Ajouter un numéro"
-                  canEdit={canEditContact}
-                  onSave={(v) => saveContactField('phone', v)}
-                />
-              </div>
-            </CardPanel>
-
-            {/* Pins placed on the sales map, one row per pin type */}
+            {/* Pins placed on the sales map during the period, one row per pin type */}
             <CardPanel title="Pins">
               <div className="space-y-3">
                 <div className="flex items-center justify-between rounded-xl border border-outline dark:border-[rgba(255,255,255,0.04)] bg-surface-secondary dark:bg-[rgba(255,255,255,0.02)] px-4 py-3">
@@ -432,18 +441,10 @@ export default function D2DRepProfile() {
           {/* ============================================================= */}
           {/* RIGHT COLUMN                                                   */}
           {/* ============================================================= */}
-          <div className="col-span-8 space-y-5">
-
-            {/* Period header — full date + date/range picker box */}
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[15px] font-bold text-text-primary truncate">
-                {singleDay ? fmtFullDate(range.from) : `Du ${fmtFullDate(range.from).toLowerCase()} au ${fmtFullDate(range.to).toLowerCase()}`}
-              </p>
-              <DateRangeBox range={range} onChange={(from, to) => setRange({ from, to })} />
-            </div>
+          <div className={`col-span-8 space-y-5 transition-opacity ${statsLoading ? 'opacity-50' : ''}`}>
 
             {/* KPI grid — the 9 period stats */}
-            <div className={`space-y-3 transition-opacity ${statsLoading ? 'opacity-50' : ''}`}>
+            <div className="space-y-3">
               <div className="grid grid-cols-3 gap-3">
                 <KpiCard label="Revenue" value={fmtCurrency(periodStats?.revenue ?? 0)} />
                 <KpiCard label="Jobs" value={String(periodStats?.jobs ?? 0)} />
@@ -461,10 +462,10 @@ export default function D2DRepProfile() {
               </div>
             </div>
 
-            {/* ── Deals — jobs where the rep is the assigned salesperson ── */}
-            <CardPanel title={`Deals (${deals.length})`}>
-              {deals.length === 0 ? (
-                <p className="text-sm text-text-tertiary text-center py-6">Aucune job assignée à ce rep pour le moment.</p>
+            {/* ── Jobs — jobs créditées au rep durant la période ── */}
+            <CardPanel title={`Jobs (${repJobs.length})`}>
+              {repJobs.length === 0 ? (
+                <p className="text-sm text-text-tertiary text-center py-6">Aucune job pour ce rep dans cette période.</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -478,17 +479,17 @@ export default function D2DRepProfile() {
                       </tr>
                     </thead>
                     <tbody>
-                      {deals.slice(0, 15).map((d) => (
+                      {repJobs.slice(0, 15).map((j) => (
                         <tr
-                          key={d.id}
-                          onClick={() => navigate(`/jobs/${d.id}`)}
+                          key={j.id}
+                          onClick={() => navigate(`/jobs/${j.id}`)}
                           className="border-b border-outline/50 last:border-0 cursor-pointer hover:bg-surface-secondary dark:hover:bg-[rgba(255,255,255,0.03)] transition-colors"
                         >
-                          <td className="px-2 py-2 text-text-tertiary tabular-nums text-[12px]">{d.job_number || '—'}</td>
-                          <td className="px-2 py-2 text-text-primary font-medium truncate max-w-[200px]">{d.title || '—'}</td>
-                          <td className="px-2 py-2 text-text-secondary capitalize text-[12px]">{(d.status || '').replace(/_/g, ' ')}</td>
-                          <td className="px-2 py-2 text-right tabular-nums text-text-primary">{fmtCurrency(Number(d.total_amount || 0))}</td>
-                          <td className="px-2 py-2 text-text-tertiary text-[12px]">{new Date(d.created_at).toLocaleDateString('fr-CA')}</td>
+                          <td className="px-2 py-2 text-text-tertiary tabular-nums text-[12px]">{j.job_number || '—'}</td>
+                          <td className="px-2 py-2 text-text-primary font-medium truncate max-w-[200px]">{j.title || '—'}</td>
+                          <td className="px-2 py-2 text-text-secondary capitalize text-[12px]">{(j.status || '').replace(/_/g, ' ')}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-text-primary">{fmtCurrency(Number(j.total_amount || 0))}</td>
+                          <td className="px-2 py-2 text-text-tertiary text-[12px]">{new Date(j.created_at).toLocaleDateString('fr-CA')}</td>
                         </tr>
                       ))}
                     </tbody>
