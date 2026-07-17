@@ -4,6 +4,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import { findOrCreateConversation, normalizeE164 } from '../helpers';
 
 export interface ActionContext {
   supabase: SupabaseClient;
@@ -224,11 +225,31 @@ export async function executeSendSms(
   const body = resolveTemplate(config.body, vars);
 
   try {
-    await ctx.twilio.client.messages.create({
+    const sent = await ctx.twilio.client.messages.create({
       body,
       from: ctx.twilio.phoneNumber,
       to,
     });
+
+    // Log into the conversations inbox — without this, automation texts were
+    // invisible in Messages (they only existed at Twilio) and looked unsent.
+    try {
+      const normalized = normalizeE164(to);
+      const conversation = await findOrCreateConversation(ctx.supabase, ctx.orgId, normalized);
+      await ctx.supabase.from('messages').insert({
+        conversation_id: conversation.id,
+        org_id: ctx.orgId,
+        client_id: conversation.client_id || null,
+        phone_number: normalized,
+        direction: 'outbound',
+        message_text: body,
+        status: 'sent',
+        provider_message_id: sent?.sid || null,
+      });
+    } catch {
+      // Best-effort: a logging failure must not fail the send itself.
+    }
+
     return { success: true, data: { to, body } };
   } catch (err: any) {
     return { success: false, error: err.message };
