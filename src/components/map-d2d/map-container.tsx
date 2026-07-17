@@ -2027,7 +2027,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                     dangerouslySetInnerHTML={{ __html: cfg.iconPaths }}
                   />
                 </span>
-                <span className={`whitespace-nowrap text-center text-[10px] font-medium leading-tight ${selectedStatus === key ? 'text-white' : 'text-white/50'}`}>
+                <span className="whitespace-nowrap text-center text-[10px] font-medium leading-tight text-white">
                   {cfg.label}
                 </span>
               </button>
