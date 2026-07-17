@@ -4,10 +4,10 @@ import { Card, CardContent } from '../components/d2d/card';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { getLeaderboard, getRepProfileInfo, getOffices, type Office, type LeaderboardRange } from '../lib/leaderboardApi';
-import { getRepPeriodStats, type RepPeriodStats } from '../lib/repStatsApi';
+import { getRepPeriodStats, getRepPinCounts, type RepPeriodStats, type RepPinCounts } from '../lib/repStatsApi';
 import { useCompany } from '../contexts/CompanyContext';
 import type { LeaderboardEntry } from '../types';
-import { Calendar, ChevronDown, X, User, Loader2, Search, Trophy } from 'lucide-react';
+import { Calendar, ChevronDown, X, User, Loader2, Search, Trophy, DoorOpen, MessagesSquare, TrendingUp } from 'lucide-react';
 
 type Category = 'all' | 'rookie' | 'experienced';
 
@@ -130,6 +130,8 @@ export default function D2DLeaderboard() {
   // undefined = fetch en cours, null = échec, objet = stats chargées.
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [expandedStats, setExpandedStats] = useState<Record<string, RepPeriodStats | null>>({});
+  // Pins du rep déplié (boxe Terrain) — même clé période-scopée que expandedStats.
+  const [expandedPins, setExpandedPins] = useState<Record<string, RepPinCounts | null>>({});
 
   // Load the list of offices (orgs of the company) for the office filter.
   useEffect(() => {
@@ -168,10 +170,19 @@ export default function D2DLeaderboard() {
     (async () => {
       try {
         const info = await getRepProfileInfo(expandedId);
-        const stats = await getRepPeriodStats(expandedId, info.orgId, range.from, range.to);
-        if (!cancelled) setExpandedStats((m) => ({ ...m, [key]: stats }));
+        const [stats, pins] = await Promise.all([
+          getRepPeriodStats(expandedId, info.orgId, range.from, range.to),
+          getRepPinCounts(expandedId, info.orgId, range.from, range.to),
+        ]);
+        if (!cancelled) {
+          setExpandedStats((m) => ({ ...m, [key]: stats }));
+          setExpandedPins((m) => ({ ...m, [key]: pins }));
+        }
       } catch {
-        if (!cancelled) setExpandedStats((m) => ({ ...m, [key]: null }));
+        if (!cancelled) {
+          setExpandedStats((m) => ({ ...m, [key]: null }));
+          setExpandedPins((m) => ({ ...m, [key]: null }));
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -402,6 +413,7 @@ export default function D2DLeaderboard() {
               {filtered.map((rep, i) => {
                 const expanded = expandedId === rep.userId;
                 const stats = expandedStats[`${rep.userId}:${range.from}:${range.to}`];
+                const pins = expandedPins[`${rep.userId}:${range.from}:${range.to}`];
                 return (
                   <div key={rep.userId} className={cn(i < filtered.length - 1 && 'border-b border-border-subtle')}>
                     <button
@@ -445,6 +457,28 @@ export default function D2DLeaderboard() {
                           </p>
                         ) : (
                           <>
+                            {/* Terrain — portes / conversations / ventes de la période (dérivé des pins) */}
+                            {pins && (
+                              <div className="mb-2 rounded-lg border border-border-subtle bg-white px-4 py-3">
+                                <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">Terrain</p>
+                                <div className="mt-2.5 grid grid-cols-3">
+                                  {([
+                                    [DoorOpen, pins.total, fr ? 'Portes' : 'Doors'],
+                                    [MessagesSquare, pins.total - pins.byKind.no_answer, fr ? 'Conversations' : 'Talks'],
+                                    [TrendingUp, pins.byKind.closed_won, fr ? 'Ventes' : 'Sales'],
+                                  ] as [typeof DoorOpen, number, string][]).map(([Icon, value, label], idx) => (
+                                    <div key={label} className={cn('flex flex-col gap-1.5', idx > 0 && 'border-l border-border-subtle pl-4')}>
+                                      <Icon className="h-4 w-4 text-text-primary" />
+                                      <div>
+                                        <p className="text-xl font-extrabold leading-none tracking-tight tabular-nums text-text-primary">{value}</p>
+                                        <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-text-muted">{label}</p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
                             <div className="grid grid-cols-3 gap-2">
                               {statsToKPIs(stats).map((kpi) => (
                                 <div key={kpi.label} className="rounded-lg border border-border-subtle bg-white px-3 py-2.5">

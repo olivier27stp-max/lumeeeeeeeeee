@@ -25,6 +25,9 @@ import {
   Pencil,
   Check,
   X,
+  DoorOpen,
+  MessagesSquare,
+  TrendingUp,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -403,6 +406,15 @@ export default function D2DRepProfile() {
           {/* ============================================================= */}
           <div className={`col-span-4 space-y-5 transition-opacity ${statsLoading ? 'opacity-50' : ''}`}>
 
+            {/* Terrain — portes cognées / conversations / ventes, dérivé des pins de la période */}
+            <CardPanel title="Terrain">
+              <div className="grid grid-cols-3">
+                <TerrainCell icon={DoorOpen} value={pinCounts?.total ?? 0} label="Portes" first />
+                <TerrainCell icon={MessagesSquare} value={(pinCounts?.total ?? 0) - (pinCounts?.byKind.no_answer ?? 0)} label="Conversations" />
+                <TerrainCell icon={TrendingUp} value={pinCounts?.byKind.closed_won ?? 0} label="Ventes" />
+              </div>
+            </CardPanel>
+
             {/* Pins placed on the sales map during the period, one row per pin type */}
             <CardPanel title="Pins">
               <div className="space-y-3">
@@ -501,6 +513,24 @@ function ActionBtn({ icon: Icon, href, className }: { icon: React.ComponentType<
     return <a href={href} className={cls}><Icon size={18} className="text-text-tertiary" /></a>;
   }
   return <button className={cls}><Icon size={18} className="text-text-tertiary" /></button>;
+}
+
+/** Cellule de la boxe Terrain — icône filaire, chiffre extrabold, libellé uppercase */
+function TerrainCell({ icon: Icon, value, label, first }: {
+  icon: React.ComponentType<{ size: number; className?: string }>;
+  value: number;
+  label: string;
+  first?: boolean;
+}) {
+  return (
+    <div className={`flex flex-col gap-2 py-0.5 pr-1 ${first ? 'pl-1' : 'border-l border-outline pl-4 dark:border-[rgba(255,255,255,0.08)]'}`}>
+      <Icon size={17} className="text-text-primary" />
+      <div>
+        <p className="text-[26px] font-extrabold leading-none tracking-tight tabular-nums text-text-primary">{value}</p>
+        <p className="mt-1.5 text-[9px] font-extrabold uppercase tracking-[0.1em] text-text-secondary">{label}</p>
+      </div>
+    </div>
+  );
 }
 
 function CardPanel({ title, children }: { title: string; children: React.ReactNode }) {
