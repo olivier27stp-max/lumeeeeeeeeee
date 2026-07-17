@@ -37,6 +37,7 @@ import {
   revokeInvitation,
   updateMemberRole,
   removeMember,
+  reactivateMember,
   type OrgMember,
   type Invitation,
   type MemberRole,
@@ -47,7 +48,8 @@ import MfaEnroll from '../components/auth/MfaEnroll';
 import MfaChallenge from '../components/auth/MfaChallenge';
 import { getCurrentOrgId } from '../lib/orgApi';
 import { useCompany } from '../contexts/CompanyContext';
-import { fetchSeatUsage, fetchCurrentBilling, setExtraSeats } from '../lib/billingApi';
+import { fetchSeatUsage, fetchCurrentBilling, setExtraSeats, type SeatUsage } from '../lib/billingApi';
+import { getTeamStats, type TeamMemberStats } from '../lib/repStatsApi';
 import { fetchHourlyRates, setHourlyRate } from '../lib/teamMembersApi';
 import { setRepExperience, setRepLeaderboardVisibility } from '../lib/leaderboardApi';
 import SeatChargeConfirmModal from '../components/SeatChargeConfirmModal';
@@ -72,6 +74,12 @@ const ROLE_DESCRIPTIONS_FR: Record<MemberRole, string[]> = {
   sales_rep:  ['Prospects & pipeline', 'Devis & propositions', 'Clients & suivis'],
   technician: ['Voir les jobs assignés', 'Suivi des feuilles de temps', 'Accès CRM limité'],
 };
+
+// Format compact aligné sur la page Profil ($12.4k) — total_amount est en dollars.
+function fmtCompactMoney(n: number): string {
+  if (n >= 1000) return `$${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k`;
+  return `$${Math.round(n)}`;
+}
 
 function formatRelativeDate(dateStr: string | null, lang: string): string {
   if (!dateStr) return lang === 'fr' ? 'Jamais' : 'Never';
@@ -100,6 +108,11 @@ export default function ManageTeam() {
   const [roleChangeMember, setRoleChangeMember] = useState<OrgMember | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [rates, setRates] = useState<Record<string, number>>({});
+  const [seatUsage, setSeatUsage] = useState<SeatUsage | null>(null);
+  const [teamStats, setTeamStats] = useState<Record<string, TeamMemberStats>>({});
+  const [roleFilter, setRoleFilter] = useState<MemberRole | 'all'>('all');
+  const [removeTarget, setRemoveTarget] = useState<OrgMember | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
 
   const isFr = language === 'fr';
   const roleDescriptions = isFr ? ROLE_DESCRIPTIONS_FR : ROLE_DESCRIPTIONS_EN;
@@ -110,6 +123,12 @@ export default function ManageTeam() {
       setMembers(data.members);
       setInvitations(data.invitations);
       fetchHourlyRates().then(setRates).catch(() => {});
+      fetchSeatUsage().then(setSeatUsage).catch(() => {});
+      // Stats réelles par membre (3 requêtes batch pour toute l'équipe)
+      getCurrentOrgId()
+        .then((orgId) => orgId ? getTeamStats(orgId, data.members.map((m) => m.user_id)) : {})
+        .then(setTeamStats)
+        .catch(() => {});
     } catch (err: any) {
       console.error('Failed to load team:', err.message);
       toast.error(isFr ? 'Erreur lors du chargement de l\'équipe.' : 'Failed to load team.');
@@ -164,13 +183,21 @@ export default function ManageTeam() {
   const activeMembers = useMemo(() =>
     members
       .filter((m) => m.status === 'active')
+      .filter((m) => roleFilter === 'all' || m.role === roleFilter)
       .filter((m) => {
         if (!search.trim()) return true;
         const q = search.toLowerCase();
         return m.full_name.toLowerCase().includes(q) || (m.email || '').toLowerCase().includes(q);
       }),
-    [members, search]
+    [members, search, roleFilter]
   );
+
+  // Comptes par rôle (pour les puces de filtre) — sur les membres actifs.
+  const roleCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const m of members) if (m.status === 'active') counts[m.role] = (counts[m.role] || 0) + 1;
+    return counts;
+  }, [members]);
 
   const suspendedMembers = useMemo(() =>
     members.filter((m) => m.status === 'suspended'),
@@ -349,13 +376,34 @@ export default function ManageTeam() {
     }
   };
 
-  const handleRemoveMember = async (userId: string) => {
+  const handleRemoveMember = async () => {
+    if (!removeTarget) return;
+    setRemoveBusy(true);
     try {
-      await removeMember(userId);
+      await removeMember(removeTarget.user_id);
       toast.success(t.manageTeam.memberRemoved);
+      setRemoveTarget(null);
       await loadTeam();
     } catch (err: any) {
       toast.error(err.message);
+    } finally {
+      setRemoveBusy(false);
+    }
+  };
+
+  const handleReactivate = async (member: OrgMember) => {
+    try {
+      await reactivateMember(member.user_id);
+      toast.success(isFr ? `${member.full_name || 'Membre'} réactivé — accès restauré` : `${member.full_name || 'Member'} reactivated — access restored`);
+      await loadTeam();
+    } catch (err: any) {
+      if (err?.code === 'seat_limit_reached') {
+        toast.error(isFr
+          ? 'Limite de sièges atteinte — ajoutez un siège dans Forfait et facturation avant de réactiver ce membre.'
+          : err.message);
+      } else {
+        toast.error(err.message);
+      }
     }
   };
 
@@ -384,16 +432,85 @@ export default function ManageTeam() {
         </button>
       </PageHeader>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t.manageTeam.searchMembers}
-          className="glass-input w-full !pl-10"
-        />
+      {/* ── Capacité de sièges (plan de la compagnie) ── */}
+      {seatUsage && seatUsage.included > 0 && (() => {
+        const capacity = seatUsage.included + seatUsage.extras_charged;
+        const pct = Math.min(100, Math.round((seatUsage.used / capacity) * 100));
+        const nearLimit = seatUsage.used >= capacity - 1;
+        const atLimit = seatUsage.used >= capacity;
+        return (
+          <div className="section-card rounded-2xl p-4 flex items-center gap-4">
+            <div className={cn(
+              'w-11 h-11 rounded-2xl flex items-center justify-center shrink-0',
+              atLimit ? 'bg-danger/10 text-danger' : nearLimit ? 'bg-warning/10 text-warning' : 'bg-emerald-500/10 text-emerald-600',
+            )}>
+              <Users size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline gap-2">
+                <p className="text-[13px] font-bold text-text-primary tabular-nums">
+                  {seatUsage.used} / {capacity} {isFr ? 'sièges utilisés' : 'seats used'}
+                </p>
+                {seatUsage.extras_charged > 0 && (
+                  <span className="text-[11px] text-text-tertiary">
+                    ({seatUsage.included} {isFr ? 'inclus' : 'included'} + {seatUsage.extras_charged} {isFr ? 'extra' : 'extra'})
+                  </span>
+                )}
+              </div>
+              <div className="mt-1.5 h-1.5 bg-surface-secondary rounded-full overflow-hidden">
+                <div
+                  className={cn('h-full rounded-full transition-all', atLimit ? 'bg-danger' : nearLimit ? 'bg-warning' : 'bg-emerald-500')}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+            <button
+              onClick={() => navigate('/settings/billing')}
+              className="shrink-0 text-[11px] font-semibold text-text-tertiary hover:text-text-primary underline whitespace-nowrap"
+            >
+              {isFr ? 'Gérer le forfait' : 'Manage plan'}
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* Search + role filters */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="relative max-w-md flex-1">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t.manageTeam.searchMembers}
+            className="glass-input w-full !pl-10"
+          />
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {([['all', isFr ? 'Tous' : 'All'], ...(['owner', 'admin', 'sales_rep', 'technician'] as MemberRole[])
+            .filter((r) => (roleCounts[r] || 0) > 0)
+            .map((r) => [r, isFr ? ROLE_CONFIG[r].label_fr : ROLE_CONFIG[r].label_en] as [string, string]),
+          ] as Array<[string, string]>).map(([value, label]) => {
+            const count = value === 'all'
+              ? Object.values(roleCounts).reduce((s, n) => s + n, 0)
+              : roleCounts[value] || 0;
+            const selected = roleFilter === value;
+            return (
+              <button
+                key={value}
+                onClick={() => setRoleFilter(value as MemberRole | 'all')}
+                className={cn(
+                  'px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all whitespace-nowrap',
+                  selected
+                    ? 'bg-text-primary text-surface border-text-primary'
+                    : 'bg-surface-card text-text-secondary border-outline-subtle hover:border-outline',
+                )}
+              >
+                {label} <span className="tabular-nums opacity-70">{count}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Active Members */}
@@ -423,11 +540,12 @@ export default function ManageTeam() {
                 openMenuId={openMenuId}
                 setOpenMenuId={setOpenMenuId}
                 onChangeRole={() => setRoleChangeMember(member)}
-                onRemove={() => handleRemoveMember(member.user_id)}
+                onRemove={() => setRemoveTarget(member)}
                 rate={rates[member.user_id] || 0}
                 onSaveRate={(c) => handleSaveRate(member, c)}
                 onSaveExperience={(lvl) => handleSaveExperience(member, lvl)}
                 onSaveLeaderboardVisibility={(visible) => handleSaveLeaderboardVisibility(member, visible)}
+                stats={teamStats[member.user_id]}
               />
             ))}
           </div>
@@ -465,9 +583,22 @@ export default function ManageTeam() {
                       {t.manageTeam.pending}
                     </span>
                   </div>
-                  <p className="text-[12px] text-text-tertiary">
-                    {t.agent.expires}: {new Date(inv.expires_at).toLocaleDateString(t.dashboard.enus, { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </p>
+                  {(() => {
+                    // Les invitations expirent après 48 h — countdown visible.
+                    const hoursLeft = Math.floor((new Date(inv.expires_at).getTime() - Date.now()) / 3_600_000);
+                    if (hoursLeft <= 0) {
+                      return (
+                        <p className="text-[12px] font-medium text-danger">
+                          {isFr ? 'Expirée — renvoyez-la pour générer un nouveau lien' : 'Expired — resend to generate a fresh link'}
+                        </p>
+                      );
+                    }
+                    return (
+                      <p className={cn('text-[12px]', hoursLeft < 12 ? 'font-medium text-warning' : 'text-text-tertiary')}>
+                        {isFr ? `Expire dans ${hoursLeft} h` : `Expires in ${hoursLeft}h`}
+                      </p>
+                    );
+                  })()}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
@@ -512,6 +643,7 @@ export default function ManageTeam() {
                 setOpenMenuId={setOpenMenuId}
                 onChangeRole={() => setRoleChangeMember(member)}
                 onRemove={() => {}}
+                onReactivate={() => handleReactivate(member)}
                 rate={rates[member.user_id] || 0}
                 onSaveRate={(c) => handleSaveRate(member, c)}
                 isSuspended
@@ -612,6 +744,46 @@ export default function ManageTeam() {
         />
       )}
 
+      {/* Remove Member confirmation */}
+      <Modal
+        open={!!removeTarget}
+        onClose={() => !removeBusy && setRemoveTarget(null)}
+        title={isFr ? 'Retirer ce membre ?' : 'Remove this member?'}
+        description={removeTarget?.full_name || removeTarget?.email || ''}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-danger/5 border border-danger/20 px-4 py-3 space-y-1.5">
+            <p className="text-[13px] font-semibold text-text-primary">
+              {isFr ? 'Ce qui va se passer :' : 'What happens:'}
+            </p>
+            <ul className="text-[12px] text-text-secondary space-y-1">
+              <li>• {isFr ? 'Son accès au CRM est coupé immédiatement (déconnexion forcée).' : 'Their CRM access is cut immediately (forced sign-out).'}</li>
+              <li>• {isFr ? 'Son siège est libéré sur votre forfait.' : 'Their seat is freed on your plan.'}</li>
+              <li>• {isFr ? 'Ses données (jobs, ventes, historique) restent intactes.' : 'Their data (jobs, sales, history) stays intact.'}</li>
+              <li>• {isFr ? 'Vous pourrez le réactiver plus tard depuis la section « Suspendus ».' : 'You can reactivate them later from the "Suspended" section.'}</li>
+            </ul>
+          </div>
+          <div className="flex gap-2.5 justify-end">
+            <button
+              className="glass-button-ghost"
+              disabled={removeBusy}
+              onClick={() => setRemoveTarget(null)}
+            >
+              {isFr ? 'Annuler' : 'Cancel'}
+            </button>
+            <button
+              className="glass-button bg-danger text-white hover:bg-danger/90 inline-flex items-center gap-2"
+              disabled={removeBusy}
+              onClick={handleRemoveMember}
+            >
+              {removeBusy ? <Loader2 size={13} className="animate-spin" /> : <UserX size={13} />}
+              {isFr ? 'Retirer du CRM' : 'Remove from CRM'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Change Role Modal */}
       <Modal
         open={!!roleChangeMember}
@@ -671,11 +843,13 @@ interface MemberRowProps {
   setOpenMenuId: (id: string | null) => void;
   onChangeRole: () => void;
   onRemove: () => void;
+  onReactivate?: () => void;
   rate: number;
   onSaveRate: (cents: number) => void;
   onSaveExperience?: (level: 'rookie' | 'experienced' | null) => void;
   onSaveLeaderboardVisibility?: (visible: boolean) => void;
   isSuspended?: boolean;
+  stats?: TeamMemberStats;
 }
 
 const MemberRow: React.FC<MemberRowProps> = ({
@@ -685,11 +859,13 @@ const MemberRow: React.FC<MemberRowProps> = ({
   setOpenMenuId,
   onChangeRole,
   onRemove,
+  onReactivate,
   rate,
   onSaveRate,
   onSaveExperience,
   onSaveLeaderboardVisibility,
   isSuspended,
+  stats,
 }) => {
   const { t } = useTranslation();
   const isFr = language === 'fr';
@@ -747,6 +923,25 @@ const MemberRow: React.FC<MemberRowProps> = ({
             {t.manageTeam.joined}: {formatRelativeDate(member.created_at, language)}
           </span>
         </div>
+        {/* Mini-stats réelles (jobs/ventes/heures) — batch via getTeamStats */}
+        {stats && !isSuspended && (
+          <div className="flex items-center gap-3 mt-1 text-[11px] text-text-tertiary tabular-nums">
+            {member.role === 'technician' ? (
+              <>
+                <span><span className="font-semibold text-text-secondary">{stats.jobsCompleted}</span> {isFr ? 'jobs complétés' : 'jobs done'}</span>
+                {stats.hoursWorked > 0 && (
+                  <span><span className="font-semibold text-text-secondary">{stats.hoursWorked}</span> h {isFr ? 'travaillées' : 'worked'}</span>
+                )}
+              </>
+            ) : (
+              <>
+                <span><span className="font-semibold text-text-secondary">{fmtCompactMoney(stats.revenue)}</span> {isFr ? 'de revenu' : 'revenue'}</span>
+                <span><span className="font-semibold text-text-secondary">{stats.contractsSigned}</span> {isFr ? 'contrats' : 'contracts'}</span>
+                <span><span className="font-semibold text-text-secondary">{stats.jobsTotal}</span> jobs</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Appear on sales leaderboard — activé par défaut, pas pour les techniciens */}
@@ -847,6 +1042,18 @@ const MemberRow: React.FC<MemberRowProps> = ({
                     >
                       <UserX size={13} />
                       {isFr ? 'Retirer de l\'équipe' : 'Remove from team'}
+                    </button>
+                  </>
+                )}
+                {isSuspended && onReactivate && (
+                  <>
+                    <div className="border-t border-border my-1" />
+                    <button
+                      onClick={() => { setOpenMenuId(null); onReactivate(); }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-success hover:bg-success/10 transition-colors"
+                    >
+                      <UserCheck size={13} />
+                      {isFr ? 'Réactiver l\'accès' : 'Reactivate access'}
                     </button>
                   </>
                 )}

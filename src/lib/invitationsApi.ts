@@ -156,3 +156,19 @@ export async function removeMember(userId: string): Promise<{ message: string }>
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to remove member.');
   return res.json();
 }
+
+/** Réactive un membre suspendu (même gate de sièges que l'invitation). */
+export async function reactivateMember(userId: string): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE}/invitations/reactivate-member`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ userId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const err = new Error(data.error || 'Failed to reactivate member.') as Error & { code?: string };
+    err.code = data.code;
+    throw err;
+  }
+  return res.json();
+}
