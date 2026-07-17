@@ -106,8 +106,6 @@ export interface RepPeriodStats {
   servicedRevenue: number;
   /** Nombre de jobs du rep marquées completed */
   servicedJobs: number;
-  /** APP — appointment pins ('quote_sent') placed by rep on the sales map */
-  app: number;
   /** Valeur moyenne par contrat — revenue ÷ jobs, null si aucune job */
   avgContractValue: number | null;
   /** Quotes approved/converted ÷ quotes created by rep, in % — null if no quotes */
@@ -144,7 +142,7 @@ export async function getRepPeriodStats(
 ): Promise<RepPeriodStats> {
   const { fromISO, toISO } = periodBounds(from, to);
 
-  const [jobsRes, quotesRes, pinsRes, timeRes] = await Promise.all([
+  const [jobsRes, quotesRes, timeRes] = await Promise.all([
     supabase
       .from('jobs')
       .select('id, status, total_amount')
@@ -161,13 +159,6 @@ export async function getRepPeriodStats(
       .gte('created_at', fromISO)
       .lte('created_at', toISO),
     supabase
-      .from('field_pins')
-      .select('id, status')
-      .eq('org_id', orgId)
-      .eq('user_id', userId)
-      .gte('created_at', fromISO)
-      .lte('created_at', toISO),
-    supabase
       .from('time_entries')
       .select('date')
       .eq('org_id', orgId)
@@ -178,7 +169,6 @@ export async function getRepPeriodStats(
 
   const jobs = jobsRes.data || [];
   const quotes = quotesRes.data || [];
-  const pins = pinsRes.data || [];
   const times = timeRes.data || [];
 
   const completedJobs = jobs.filter((j: any) => j.status === 'completed');
@@ -191,7 +181,6 @@ export async function getRepPeriodStats(
     jobs: jobs.length,
     servicedRevenue: completedJobs.reduce((sum, j: any) => sum + Number(j.total_amount || 0), 0),
     servicedJobs: completedJobs.length,
-    app: pins.filter((p: any) => p.status === 'quote_sent').length,
     avgContractValue: jobs.length > 0 ? Math.round(revenue / jobs.length) : null,
     contractClosingRate: quotes.length > 0 ? Math.round((quotesWon / quotes.length) * 100) : null,
     cancelRate: jobs.length > 0 ? Math.round((cancelled / jobs.length) * 100) : null,

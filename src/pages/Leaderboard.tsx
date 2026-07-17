@@ -88,14 +88,13 @@ function formatRangeLabel(range: LeaderboardRange, fr: boolean): string {
   return `${parseIsoDate(range.from).toLocaleDateString(locale, short)} – ${parseIsoDate(range.to).toLocaleDateString(locale, short)}`;
 }
 
-// Les 9 KPIs du Rep Hub (mêmes libellés que RepProfile), format leaderboard
+// Les 8 KPIs du Rep Hub (mêmes libellés que RepProfile), format leaderboard
 function statsToKPIs(stats: RepPeriodStats): { label: string; value: string; sub?: string }[] {
   return [
     { label: 'Revenue', value: money(stats.revenue) },
     { label: 'Jobs', value: String(stats.jobs) },
     { label: 'Serviced Revenue', value: money(stats.servicedRevenue) },
     { label: 'Serviced Jobs', value: String(stats.servicedJobs) },
-    { label: 'APP', value: String(stats.app), sub: 'Pins rendez-vous' },
     { label: 'Avg Contract Value', value: stats.avgContractValue != null ? money(stats.avgContractValue) : '—' },
     { label: 'Closing Rate', value: stats.contractClosingRate != null ? `${stats.contractClosingRate}%` : '—' },
     { label: 'Cancel Rate', value: stats.cancelRate != null ? `${stats.cancelRate}%` : '—' },

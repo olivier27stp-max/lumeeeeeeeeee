@@ -442,23 +442,16 @@ export default function D2DRepProfile() {
           {/* ============================================================= */}
           <div className={`col-span-8 space-y-5 transition-opacity ${statsLoading ? 'opacity-50' : ''}`}>
 
-            {/* KPI grid — the 9 period stats */}
-            <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
-                <KpiCard label="Revenue" value={fmtCurrency(periodStats?.revenue ?? 0)} />
-                <KpiCard label="Jobs" value={String(periodStats?.jobs ?? 0)} />
-                <KpiCard label="Serviced Revenue" value={fmtCurrency(periodStats?.servicedRevenue ?? 0)} />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <KpiCard label="Serviced Jobs" value={String(periodStats?.servicedJobs ?? 0)} />
-                <KpiCard label="APP" value={String(periodStats?.app ?? 0)} sub="Pins rendez-vous" />
-                <KpiCard label="Avg Contract Value" value={periodStats?.avgContractValue != null ? fmtCurrency(periodStats.avgContractValue) : '—'} />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <KpiCard label="Closing Rate" value={periodStats?.contractClosingRate != null ? `${periodStats.contractClosingRate}%` : '—'} />
-                <KpiCard label="Cancel Rate" value={periodStats?.cancelRate != null ? `${periodStats.cancelRate}%` : '—'} />
-                <KpiCard label="Days Worked" value={String(periodStats?.daysWorked ?? 0)} />
-              </div>
+            {/* KPI grid — the 8 period stats */}
+            <div className="grid grid-cols-3 gap-3">
+              <KpiCard label="Revenue" value={fmtCurrency(periodStats?.revenue ?? 0)} />
+              <KpiCard label="Jobs" value={String(periodStats?.jobs ?? 0)} />
+              <KpiCard label="Serviced Revenue" value={fmtCurrency(periodStats?.servicedRevenue ?? 0)} />
+              <KpiCard label="Serviced Jobs" value={String(periodStats?.servicedJobs ?? 0)} />
+              <KpiCard label="Avg Contract Value" value={periodStats?.avgContractValue != null ? fmtCurrency(periodStats.avgContractValue) : '—'} />
+              <KpiCard label="Closing Rate" value={periodStats?.contractClosingRate != null ? `${periodStats.contractClosingRate}%` : '—'} />
+              <KpiCard label="Cancel Rate" value={periodStats?.cancelRate != null ? `${periodStats.cancelRate}%` : '—'} />
+              <KpiCard label="Days Worked" value={String(periodStats?.daysWorked ?? 0)} />
             </div>
 
             {/* ── Jobs — jobs créditées au rep durant la période ── */}
