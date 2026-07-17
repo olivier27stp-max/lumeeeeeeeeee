@@ -222,11 +222,18 @@ export function createLeadPinPopupHTML(
     deletePin: fr ? 'Supprimer le pin' : 'Delete pin',
   };
 
-  // Adresse : la rue en titre, le reste (ville, province) en sous-ligne
+  // Adresse : la rue en titre, le reste (ville, province) en sous-ligne.
+  // Format québécois « 2317, boul. X, Laval » : la virgule après le numéro
+  // civique ne doit pas couper le titre — on la recolle au nom de rue.
   const addr = (pin.address || '').trim();
-  const commaAt = addr.indexOf(',');
-  const street = commaAt > 0 ? addr.slice(0, commaAt).trim() : addr;
-  const locality = commaAt > 0 ? addr.slice(commaAt + 1).trim() : '';
+  const addrParts = addr.split(',').map((s) => s.trim()).filter(Boolean);
+  let street = addrParts[0] || '';
+  let restFrom = 1;
+  if (/^\d+[a-zA-Z]?$/.test(street) && addrParts.length > 1) {
+    street = `${addrParts[0]}, ${addrParts[1]}`;
+    restFrom = 2;
+  }
+  const locality = addrParts.slice(restFrom).join(', ');
   const title = street || pin.name || (fr ? 'Pin sans adresse' : 'Pin without address');
 
   const telDigits = pin.phone ? pin.phone.replace(/[^\d+]/g, '') : '';
