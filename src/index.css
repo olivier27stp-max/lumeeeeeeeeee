@@ -1471,3 +1471,92 @@ body.dark textarea::placeholder {
 body.dark .crm-row-hover {
   background-color: rgba(255, 255, 255, 0.07); /* dark mode: pale gray */
 }
+
+/* ══════════════════════════════════════════════════════
+   TOASTS (sonner) — pastille monochrome Lume.
+   Remplace le look richColors : la pastille prend la couleur
+   du bouton primaire (noire en clair, blanche en sombre — les
+   tokens --color-primary s'inversent déjà sous body.dark).
+   La couleur sémantique ne vit que dans l'icône + la barre
+   de temps. Icônes injectées via le prop `icons` du Toaster
+   (App.tsx), classe posée via toastOptions.className.
+   ══════════════════════════════════════════════════════ */
+.lume-toast[data-sonner-toast] {
+  position: relative;
+  background: var(--color-primary) !important;
+  color: var(--color-primary-foreground) !important;
+  border: none !important;
+  border-radius: 999px !important;
+  width: fit-content !important;
+  margin-left: auto; /* top-right : la pastille reste collée à droite */
+  padding: 10px 16px 11px 14px !important;
+  gap: 9px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  box-shadow: 0 8px 24px rgba(23, 23, 23, 0.22), 0 2px 6px rgba(23, 23, 23, 0.14) !important;
+  overflow: hidden;
+}
+.lume-toast[data-sonner-toast]:has([data-description]) {
+  border-radius: 18px !important;
+}
+/* bottom-center (mobile) : centrer la pastille dans le toaster */
+[data-sonner-toaster][data-x-position='center'] .lume-toast[data-sonner-toast] {
+  margin-inline: auto;
+}
+body.dark .lume-toast[data-sonner-toast] {
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.65) !important;
+}
+.lume-toast [data-description] {
+  color: color-mix(in srgb, var(--color-primary-foreground) 60%, transparent) !important;
+  font-size: 12px;
+  font-weight: 400;
+}
+/* Couleur sémantique : uniquement l'icône. Variantes claires sur
+   pastille noire (mode clair), foncées sur pastille blanche (sombre). */
+.lume-toast [data-icon] { color: var(--color-primary-foreground); }
+.lume-toast[data-type='success'] [data-icon] { color: #34d399; }
+.lume-toast[data-type='error']   [data-icon] { color: #f87171; }
+.lume-toast[data-type='info']    [data-icon] { color: #60a5fa; }
+.lume-toast[data-type='warning'] [data-icon] { color: #fbbf24; }
+body.dark .lume-toast[data-type='success'] [data-icon] { color: #059669; }
+body.dark .lume-toast[data-type='error']   [data-icon] { color: #dc2626; }
+body.dark .lume-toast[data-type='info']    [data-icon] { color: #2563eb; }
+body.dark .lume-toast[data-type='warning'] [data-icon] { color: #d97706; }
+.lume-toast [data-button] {
+  background: var(--color-primary-foreground) !important;
+  color: var(--color-primary) !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+/* Barre de temps — 2 px, couleur sémantique, se vide sur la durée
+   (synchro avec duration: 3500 dans App.tsx). Sonner met ses timers
+   en pause au survol du toaster : on fige l'animation au même moment. */
+.lume-toast[data-sonner-toast]::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  border-radius: 2px;
+  transform-origin: left;
+  animation: lume-toast-countdown 3500ms linear forwards;
+}
+.lume-toast[data-type='success']::after { background: #34d399; }
+.lume-toast[data-type='error']::after   { background: #f87171; }
+.lume-toast[data-type='info']::after    { background: #60a5fa; }
+.lume-toast[data-type='warning']::after { background: #fbbf24; }
+body.dark .lume-toast[data-type='success']::after { background: #059669; }
+body.dark .lume-toast[data-type='error']::after   { background: #dc2626; }
+body.dark .lume-toast[data-type='info']::after    { background: #2563eb; }
+body.dark .lume-toast[data-type='warning']::after { background: #d97706; }
+.lume-toast[data-type='loading']::after { display: none; }
+[data-sonner-toaster]:hover .lume-toast::after { animation-play-state: paused; }
+@keyframes lume-toast-countdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lume-toast[data-sonner-toast]::after { display: none; }
+}

@@ -42,6 +42,10 @@ import {
   Repeat,
   CalendarCheck,
   Brain,
+  Check,
+  Info,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -177,6 +181,17 @@ import { useCommandPaletteShortcut } from './hooks/useCommandPaletteShortcut';
 
 // Platform Admin — lazy loaded, owner-only
 const PlatformAdmin = React.lazy(() => import('./pages/PlatformAdmin'));
+
+// Toasts (sonner) — pastille monochrome Lume, styles dans index.css (.lume-toast).
+// Partagé par les deux <Toaster> (VerifyEmailGate + AuthenticatedApp).
+const lumeToastIcons = {
+  success: <Check size={15} strokeWidth={2.5} />,
+  error: <X size={15} strokeWidth={2.5} />,
+  info: <Info size={15} strokeWidth={2.5} />,
+  warning: <AlertCircle size={15} strokeWidth={2.5} />,
+  loading: <Loader2 size={15} strokeWidth={2.5} className="animate-spin" />,
+};
+const lumeToastOptions = { className: 'lume-toast', duration: 3500 };
 
 type NavItem = {
   id: string;
@@ -565,11 +580,10 @@ export default function App() {
     return (
       <>
         <Toaster
-          richColors
           position="top-right"
-          toastOptions={{
-            className: '!rounded-lg !border !border-outline !shadow-md !text-[13px] !font-medium',
-          }}
+          gap={8}
+          icons={lumeToastIcons}
+          toastOptions={lumeToastOptions}
         />
         <VerifyEmailGate email={user.email || ''} />
       </>
@@ -826,13 +840,12 @@ function AuthenticatedApp({
   return (
     <JobModalControllerProvider>
       <Toaster
-        richColors
         // On mobile, top-right overlaps the header / floats badly; bottom-center keeps
         // toasts out of the way of scroll content.
         position={typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'bottom-center' : 'top-right'}
-        toastOptions={{
-          className: '!rounded-lg !border !border-outline !shadow-md !text-[13px] !font-medium',
-        }}
+        gap={8}
+        icons={lumeToastIcons}
+        toastOptions={lumeToastOptions}
       />
       <CookieBanner />
       <div className="flex h-screen overflow-hidden bg-surface">
