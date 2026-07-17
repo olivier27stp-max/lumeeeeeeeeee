@@ -461,17 +461,18 @@ export default function D2DLeaderboard() {
                             {pins && (
                               <div className="mb-2 rounded-lg border border-border-subtle bg-white px-4 py-3">
                                 <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">Terrain</p>
-                                <div className="mt-2.5 grid grid-cols-3">
+                                {/* Milieu plus large : « Conversations » est le libellé le plus long */}
+                                <div className="mt-2.5 grid grid-cols-[1fr_1.4fr_1fr]">
                                   {([
                                     [DoorOpen, pins.total, fr ? 'Portes' : 'Doors'],
                                     [MessagesSquare, pins.total - pins.byKind.no_answer, fr ? 'Conversations' : 'Talks'],
                                     [TrendingUp, pins.byKind.closed_won, fr ? 'Ventes' : 'Sales'],
                                   ] as [typeof DoorOpen, number, string][]).map(([Icon, value, label], idx) => (
-                                    <div key={label} className={cn('flex flex-col gap-1.5', idx > 0 && 'border-l border-border-subtle pl-4')}>
-                                      <Icon className="h-4 w-4 text-text-primary" />
-                                      <div>
+                                    <div key={label} className={cn('flex min-w-0 flex-col gap-1.5 overflow-hidden', idx > 0 && 'border-l border-border-subtle pl-4')}>
+                                      <Icon className="h-4 w-4 shrink-0 text-text-primary" />
+                                      <div className="min-w-0">
                                         <p className="text-xl font-extrabold leading-none tracking-tight tabular-nums text-text-primary">{value}</p>
-                                        <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-text-muted">{label}</p>
+                                        <p className="mt-1 truncate text-[9px] font-bold uppercase tracking-[0.1em] text-text-muted">{label}</p>
                                       </div>
                                     </div>
                                   ))}

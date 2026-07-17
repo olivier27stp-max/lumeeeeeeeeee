@@ -408,7 +408,8 @@ export default function D2DRepProfile() {
 
             {/* Terrain — portes cognées / conversations / ventes, dérivé des pins de la période */}
             <CardPanel title="Terrain">
-              <div className="grid grid-cols-3">
+              {/* Milieu plus large : « Conversations » est le libellé le plus long */}
+              <div className="grid grid-cols-[1fr_1.4fr_1fr]">
                 <TerrainCell icon={DoorOpen} value={pinCounts?.total ?? 0} label="Portes" first />
                 <TerrainCell icon={MessagesSquare} value={(pinCounts?.total ?? 0) - (pinCounts?.byKind.no_answer ?? 0)} label="Conversations" />
                 <TerrainCell icon={TrendingUp} value={pinCounts?.byKind.closed_won ?? 0} label="Ventes" />
@@ -523,11 +524,11 @@ function TerrainCell({ icon: Icon, value, label, first }: {
   first?: boolean;
 }) {
   return (
-    <div className={`flex flex-col gap-2 py-0.5 pr-1 ${first ? 'pl-1' : 'border-l border-outline pl-4 dark:border-[rgba(255,255,255,0.08)]'}`}>
-      <Icon size={17} className="text-text-primary" />
-      <div>
+    <div className={`flex min-w-0 flex-col gap-2 overflow-hidden py-0.5 pr-1 ${first ? 'pl-1' : 'border-l border-outline pl-4 dark:border-[rgba(255,255,255,0.08)]'}`}>
+      <Icon size={17} className="shrink-0 text-text-primary" />
+      <div className="min-w-0">
         <p className="text-[26px] font-extrabold leading-none tracking-tight tabular-nums text-text-primary">{value}</p>
-        <p className="mt-1.5 text-[9px] font-extrabold uppercase tracking-[0.1em] text-text-secondary">{label}</p>
+        <p className="mt-1.5 truncate text-[9px] font-extrabold uppercase tracking-[0.1em] text-text-secondary">{label}</p>
       </div>
     </div>
   );
