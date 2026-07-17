@@ -3,6 +3,7 @@ import { Archive, Loader2, RotateCcw, Search, Trash2, User, Briefcase, Contact }
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from '../i18n';
+import { usePermissions } from '../hooks/usePermissions';
 import { formatDate, cn } from '../lib/utils';
 import {
   ArchiveData,
@@ -19,6 +20,10 @@ type ArchiveTab = 'all' | 'clients' | 'leads' | 'jobs';
 
 export default function ArchivesPanel() {
   const { t } = useTranslation();
+  // Restaurer/supprimer = owner/admin seulement (les RPC l'exigent côté DB —
+  // on cache les boutons au lieu de laisser les autres rôles manger un 403).
+  const permCtx = usePermissions();
+  const canManage = permCtx.role === 'owner' || permCtx.role === 'admin';
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ArchiveData>({ clients: [], leads: [], jobs: [] });
   const [tab, setTab] = useState<ArchiveTab>('all');
@@ -231,6 +236,9 @@ export default function ArchivesPanel() {
                         </p>
                       </td>
                       <td className="px-4 py-3">
+                        {!canManage ? (
+                          <span className="text-[11px] text-text-tertiary">—</span>
+                        ) : (
                         <div className="flex items-center gap-1.5">
                           <button
                             onClick={() => void handleRestore(item)}
@@ -252,6 +260,7 @@ export default function ArchivesPanel() {
                             <Trash2 size={12} />
                           </button>
                         </div>
+                        )}
                       </td>
                     </motion.tr>
                   );
