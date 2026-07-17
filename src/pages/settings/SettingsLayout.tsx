@@ -85,7 +85,6 @@ export function useSettingsNav(): NavGroup[] {
         { path: '/settings/roles', label: isFr ? 'Rôles & Permissions' : 'Roles & Permissions', icon: Shield },
         { path: '/settings/payroll', label: t.settings.payroll, icon: CalendarIcon },
         { path: '/settings/location', label: isFr ? 'Localisation GPS' : 'GPS tracking', icon: MapPin },
-        { path: '/d2d-settings/teams', label: isFr ? 'Config terrain (D2D)' : 'Field config (D2D)', icon: MapPin, external: true },
       ],
     },
     {
