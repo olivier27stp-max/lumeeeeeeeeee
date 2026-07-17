@@ -149,7 +149,13 @@ function CreateOfficeModal({
       toast.success(fr ? 'Bureau créé' : 'Office created');
       onCreated(office.id);
     } catch (err: any) {
-      toast.error(err.message || (fr ? 'Échec de la création.' : 'Failed to create office.'));
+      if (err?.code === 'office_limit_reached') {
+        toast.error(fr
+          ? `Limite de bureaux atteinte — votre plan en inclut ${err.capacity}. Ajoutez un bureau supplémentaire dans Réglages → Forfait et facturation.`
+          : err.message);
+      } else {
+        toast.error(err.message || (fr ? 'Échec de la création.' : 'Failed to create office.'));
+      }
     } finally {
       setSaving(false);
     }

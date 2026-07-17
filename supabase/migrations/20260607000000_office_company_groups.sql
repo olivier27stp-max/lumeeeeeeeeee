@@ -12,16 +12,19 @@ begin;
 alter table public.orgs add column if not exists company_group_id uuid;
 create index if not exists idx_orgs_company_group on public.orgs (company_group_id);
 
--- ─── Backfill : les orgs d'un même propriétaire forment un groupe ──
+-- ─── Backfill : les orgs d'un même créateur forment un groupe ──
+-- NOTE: le schéma réel n'a pas de colonne owner_id — le propriétaire
+-- effectif est created_by (aligné avec memberships.role = 'owner').
 with groups as (
-  select owner_id, gen_random_uuid() as gid
+  select created_by, gen_random_uuid() as gid
   from public.orgs
-  group by owner_id
+  where created_by is not null
+  group by created_by
 )
 update public.orgs o
 set company_group_id = g.gid
 from groups g
-where o.owner_id = g.owner_id
+where o.created_by = g.created_by
   and o.company_group_id is null;
 
 -- Filet de sécurité : tout org restant sans groupe en reçoit un.
@@ -43,7 +46,8 @@ begin
   if new.company_group_id is null then
     select o.company_group_id into new.company_group_id
     from public.orgs o
-    where o.owner_id = new.owner_id
+    where o.created_by = new.created_by
+      and new.created_by is not null
       and o.company_group_id is not null
     limit 1;
 

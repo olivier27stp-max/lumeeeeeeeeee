@@ -2,7 +2,7 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { validate, passwordSchema } from '../lib/validation';
-import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, companyOrgIds } from '../lib/supabase';
 import { getBaseUrl } from '../lib/config';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { extractIP } from '../lib/security';
@@ -281,29 +281,33 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
     }
 
     // ── Seat-limit enforcement ──────────────────────────────────────────
-    // Block the invite if the office is already at capacity: the plan's
-    // included seats + any purchased extra seats. Counts active members +
-    // pending invitations so a burst of invites can't overshoot the plan.
+    // Block the invite if the COMPANY is already at capacity: the plan's
+    // included seats + any purchased extra seats. L'abonnement vit sur un
+    // seul bureau du company_group (un bureau secondaire n'a pas de ligne
+    // subscriptions), et les sièges = utilisateurs DISTINCTS de toute la
+    // compagnie + invitations en attente, pour qu'une rafale d'invites ne
+    // dépasse pas le plan.
     {
+      const groupIds = await companyOrgIds(admin, targetOrgId);
       const { data: seatSub } = await admin
         .from('subscriptions')
         .select('plan_id, extra_seats')
-        .eq('org_id', targetOrgId)
+        .in('org_id', groupIds)
         .in('status', ['active', 'trialing'])
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
       const { data: seatPlan } = seatSub?.plan_id
         ? await admin.from('plans').select('seats_included').eq('id', seatSub.plan_id).maybeSingle()
         : { data: null };
       const capacity = (seatPlan?.seats_included ?? 1) + (seatSub?.extra_seats ?? 0);
 
-      // NOTE: count with '*' — the memberships table has NO `id` column, so
-      // select('id') returned a null count and the owner was never counted,
-      // silently disabling the whole seat limit.
-      const [{ count: memberCount }, { count: pendingCount }] = await Promise.all([
-        admin.from('memberships').select('*', { count: 'exact', head: true }).eq('org_id', targetOrgId).eq('status', 'active'),
-        admin.from('invitations').select('*', { count: 'exact', head: true }).eq('org_id', targetOrgId).eq('status', 'pending'),
+      // Membres distincts (status actif ou null — vieux rangs) sur le groupe.
+      const [{ data: memberRows }, { count: pendingCount }] = await Promise.all([
+        admin.from('memberships').select('user_id').in('org_id', groupIds).or('status.is.null,status.eq.active'),
+        admin.from('invitations').select('*', { count: 'exact', head: true }).in('org_id', groupIds).eq('status', 'pending'),
       ]);
-      const used = (memberCount ?? 0) + (pendingCount ?? 0);
+      const used = new Set((memberRows || []).map((m) => m.user_id)).size + (pendingCount ?? 0);
       if (used >= capacity) {
         return res.status(403).json({
           error: `Seat limit reached (${capacity} used). Upgrade your plan or add seats to invite more people.`,

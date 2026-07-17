@@ -72,6 +72,11 @@ export default function BillingSettings() {
     ? `$${(subscription.amount_cents / 100).toFixed(0)}`
     : null;
 
+  // Display currency follows the subscription (checkout defaults to CAD).
+  // The grid used to hardcode *_usd fields, showing USD prices to CAD customers.
+  const currency: 'CAD' | 'USD' =
+    (subscription?.currency || 'CAD').toUpperCase() === 'USD' ? 'USD' : 'CAD';
+
   // Progress bar calculation
   const now = Date.now();
   const periodStart = subscription?.current_period_start ? new Date(subscription.current_period_start).getTime() : 0;
@@ -194,9 +199,11 @@ export default function BillingSettings() {
                   <p className="text-[11px] text-emerald-300 font-medium">
                     {(() => {
                       // Real yearly price from the plans table (hardcoded ×0.85 before).
-                      const yrMo = currentPlan.yearly_price_usd
-                        ? Math.round(currentPlan.yearly_price_usd / 1200)
-                        : Math.round(currentPlan.monthly_price_usd / 100 * 0.85);
+                      const yearlyP = currency === 'USD' ? currentPlan.yearly_price_usd : currentPlan.yearly_price_cad;
+                      const monthlyP = currency === 'USD' ? currentPlan.monthly_price_usd : currentPlan.monthly_price_cad;
+                      const yrMo = yearlyP
+                        ? Math.round(yearlyP / 1200)
+                        : Math.round(monthlyP / 100 * 0.85);
                       return isFr
                         ? `Économisez en passant à l'annuel ($${yrMo}/mois)`
                         : `Save by switching to annual ($${yrMo}/mo)`;
@@ -279,6 +286,7 @@ export default function BillingSettings() {
         plans={plans}
         currentPlan={currentPlan ?? null}
         subscription={subscription}
+        currency={currency}
         isFr={isFr}
         navigate={navigate}
         onRefresh={refresh}
@@ -292,6 +300,7 @@ function PlansGrid({
   plans,
   currentPlan,
   subscription,
+  currency,
   isFr,
   navigate,
   onRefresh,
@@ -299,6 +308,7 @@ function PlansGrid({
   plans: Plan[];
   currentPlan: Plan | null;
   subscription: Subscription | null;
+  currency: 'CAD' | 'USD';
   isFr: boolean;
   navigate: (path: string) => void;
   onRefresh: () => Promise<void> | void;
@@ -429,19 +439,21 @@ function PlansGrid({
           const isFeatured = plan.slug === 'pro';
           const isUpgrade = hasActiveSub && plan.sort_order > currentOrder;
           const isDowngrade = hasActiveSub && plan.sort_order < currentOrder;
-          const price = plan.monthly_price_usd / 100;
+          const price = (currency === 'USD' ? plan.monthly_price_usd : plan.monthly_price_cad) / 100;
+          const extraSeatPrice = currency === 'USD' ? plan.extra_seat_price_usd : plan.extra_seat_price_cad;
+          const extraOfficePrice = currency === 'USD' ? plan.extra_office_price_usd : plan.extra_office_price_cad;
           const features: string[] = Array.isArray(plan.features) ? plan.features : [];
           const seatsInfo = plan.seats_included
             ? `${plan.seats_included} ${isFr ? 'utilisateurs inclus' : 'users included'}`
             : null;
-          const extraSeat = plan.extra_seat_price_usd
-            ? `+$${plan.extra_seat_price_usd / 100}/${isFr ? 'utilisateur supplémentaire' : 'extra user'}`
+          const extraSeat = extraSeatPrice
+            ? `+$${extraSeatPrice / 100}/${isFr ? 'utilisateur supplémentaire' : 'extra user'}`
             : null;
           const officesInfo = plan.included_offices
             ? `${plan.included_offices} ${isFr ? (plan.included_offices === 1 ? 'bureau inclus' : 'bureaux inclus') : (plan.included_offices === 1 ? 'office included' : 'offices included')}`
             : null;
-          const extraOffice = plan.extra_office_price_usd
-            ? `+$${plan.extra_office_price_usd / 100}/${isFr ? 'bureau supplémentaire' : 'extra office'}`
+          const extraOffice = extraOfficePrice
+            ? `+$${extraOfficePrice / 100}/${isFr ? 'bureau supplémentaire' : 'extra office'}`
             : null;
 
           let ctaLabel: string;
@@ -560,6 +572,7 @@ function PlansGrid({
         <DowngradeModal
           fromPlan={currentPlan}
           toPlan={downgradeTarget}
+          currency={currency}
           interval={subscription?.interval ?? 'monthly'}
           periodEnd={subscription?.current_period_end ?? null}
           isFr={isFr}
@@ -584,6 +597,7 @@ function PlansGrid({
 function DowngradeModal({
   fromPlan,
   toPlan,
+  currency,
   interval,
   periodEnd,
   isFr,
@@ -594,6 +608,7 @@ function DowngradeModal({
 }: {
   fromPlan: Plan;
   toPlan: Plan;
+  currency: 'CAD' | 'USD';
   interval: 'monthly' | 'yearly';
   periodEnd: string | null;
   isFr: boolean;
@@ -629,15 +644,17 @@ function DowngradeModal({
 
   // Prices — real yearly price from the plans table when available (the old
   // hardcoded ×0.85 drifted from the actual pricing model).
+  const monthlyOf = (p: Plan) => (currency === 'USD' ? p.monthly_price_usd : p.monthly_price_cad);
+  const yearlyOf = (p: Plan) => (currency === 'USD' ? p.yearly_price_usd : p.yearly_price_cad);
   const yearlyMo = (p: Plan) =>
-    p.yearly_price_usd ? Math.round(p.yearly_price_usd / 1200) : Math.round(p.monthly_price_usd * 0.85 / 100);
-  const fromPrice = interval === 'yearly' ? yearlyMo(fromPlan) : fromPlan.monthly_price_usd / 100;
-  const toPrice = interval === 'yearly' ? yearlyMo(toPlan) : toPlan.monthly_price_usd / 100;
+    yearlyOf(p) ? Math.round(yearlyOf(p) / 1200) : Math.round(monthlyOf(p) * 0.85 / 100);
+  const fromPrice = interval === 'yearly' ? yearlyMo(fromPlan) : monthlyOf(fromPlan) / 100;
+  const toPrice = interval === 'yearly' ? yearlyMo(toPlan) : monthlyOf(toPlan) / 100;
   const monthlySavings = fromPrice - toPrice;
 
   // Yearly retention offer (only if currently monthly)
   const yearlyDiscount = yearlyMo(fromPlan);
-  const yearlyAnnualSavings = (fromPlan.monthly_price_usd / 100 - yearlyDiscount) * 12;
+  const yearlyAnnualSavings = (monthlyOf(fromPlan) / 100 - yearlyDiscount) * 12;
 
   // Effective date (end of current period)
   const effectiveDate = periodEnd
