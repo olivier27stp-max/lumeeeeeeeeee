@@ -5,13 +5,23 @@ import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from '../i18n';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import {
-  listTaxes, setupTaxPreset, updateTaxConfig, deleteTaxConfig, deleteTaxGroup, setDefaultTaxGroup, createTaxConfig, updateTaxRegistrationNumber,
+  listTaxes, setupTaxPreset, updateTaxConfig, deleteTaxConfig, deleteTaxGroup, setDefaultTaxGroup, createTaxConfig, updateTaxRegistrationNumber, calculateTaxes,
   type TaxConfig, type TaxGroup, type TaxGroupItem, type TaxPreset,
 } from '../lib/taxApi';
 
 function formatMoney(cents: number, currency: string = 'CAD') {
   return new Intl.NumberFormat('en-CA', { style: 'currency', currency }).format(cents / 100);
+}
+
+// Example formats for Canadian registration numbers — typos here end up on
+// official invoices, so show the expected shape.
+function regNumPlaceholder(taxName: string, fr: boolean): string {
+  const n = taxName.toUpperCase();
+  if (n.includes('TVQ') || n.includes('QST')) return fr ? 'ex. 1234567890 TQ0001' : 'e.g. 1234567890 TQ0001';
+  if (n.includes('TPS') || n.includes('GST') || n.includes('HST') || n.includes('TVH')) return fr ? 'ex. 123456789 RT0001' : 'e.g. 123456789 RT0001';
+  return fr ? "Numéro d'enregistrement" : 'Registration number';
 }
 
 export default function TaxSettings() {
@@ -44,12 +54,15 @@ export default function TaxSettings() {
       setGroups(data.groups);
       setGroupItems(data.group_items);
       setPresets(data.presets);
-      supabase
-        .from('company_settings')
-        .select('currency')
-        .limit(1)
-        .maybeSingle()
-        .then(({ data: cs }) => { if (cs?.currency) setCurrency(cs.currency); });
+      getCurrentOrgIdOrThrow().then((orgId) =>
+        supabase
+          .from('company_settings')
+          .select('currency')
+          .eq('org_id', orgId)
+          .limit(1)
+          .maybeSingle()
+          .then(({ data: cs }) => { if (cs?.currency) setCurrency(cs.currency); })
+      ).catch(() => {});
     } catch (err: any) {
       toast.error(err.message || (fr ? 'Échec du chargement des taxes' : 'Failed to load taxes'));
     } finally { setLoading(false); }
@@ -170,12 +183,12 @@ export default function TaxSettings() {
 
   const availablePresets = presets.filter(p => !groups.some(g => g.region === p.region) && p.key !== 'NONE');
 
-  // Preview calc
+  // Preview calc — same engine as quotes/invoices so compound taxes match.
   const defaultRegion = setupRegions.find(r => r.group.is_default);
   const previewSubtotal = 100000; // $1,000
-  const previewTaxes = defaultRegion?.activeTaxes.map(t => ({
-    name: t.name, amount: Math.round(previewSubtotal * t.rate / 100),
-  })) || [];
+  const previewTaxes = defaultRegion
+    ? calculateTaxes(previewSubtotal, 0, defaultRegion.activeTaxes).map(t => ({ name: t.name, amount: t.amount_cents }))
+    : [];
   const previewTotal = previewSubtotal + previewTaxes.reduce((s, t) => s + t.amount, 0);
 
   return (
@@ -222,7 +235,7 @@ export default function TaxSettings() {
                       )}
                       {activeTaxes.length > 0 && (
                         <span className="text-[11px] text-text-tertiary font-medium tabular-nums">
-                          {combinedRate.toFixed(3)}% combined
+                          {combinedRate.toFixed(3)}% {fr ? 'combiné' : 'combined'}
                         </span>
                       )}
                     </div>
@@ -263,7 +276,7 @@ export default function TaxSettings() {
                                 <button onClick={() => { setEditingNameId(tax.id); setEditName(tax.name); }}
                                   className={cn('text-[13px] font-medium group flex items-center gap-1', tax.is_active ? 'text-text-primary' : 'text-text-tertiary line-through')}>
                                   {tax.name}
-                                  <Pencil size={10} className="opacity-0 group-hover:opacity-100 text-text-tertiary" />
+                                  <Pencil size={10} className="md:opacity-0 md:group-hover:opacity-100 text-text-tertiary" />
                                 </button>
                               )}
                               {tax.is_compound && <span className="text-[10px] text-text-tertiary">(compound)</span>}
@@ -285,10 +298,10 @@ export default function TaxSettings() {
                                 <button onClick={() => { setEditingId(tax.id); setEditRate(String(tax.rate)); }}
                                   className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-text-primary transition-colors group">
                                   <span className="tabular-nums font-medium">{tax.rate}%</span>
-                                  <Pencil size={11} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  <Pencil size={11} className="md:opacity-0 md:group-hover:opacity-100 transition-opacity" />
                                 </button>
                                 <button onClick={() => handleDeleteTax(tax)}
-                                  className="p-1 text-text-tertiary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                                  className="p-1 text-text-tertiary hover:text-red-500 md:opacity-0 md:group-hover:opacity-100 transition-all">
                                   <Trash2 size={11} />
                                 </button>
                               </div>
@@ -300,7 +313,7 @@ export default function TaxSettings() {
                           {editingRegNumId === tax.id ? (
                             <div className="flex items-center gap-1.5">
                               <input type="text" value={editRegNum} onChange={e => setEditRegNum(e.target.value)}
-                                className="glass-input w-52 text-[11px]" placeholder={fr ? "Numéro d'enregistrement" : 'Registration number'} autoFocus
+                                className="glass-input w-52 text-[11px]" placeholder={regNumPlaceholder(tax.name, fr)} autoFocus
                                 onKeyDown={e => { if (e.key === 'Enter') handleSaveRegNum(tax); if (e.key === 'Escape') setEditingRegNumId(null); }} />
                               <button onClick={() => handleSaveRegNum(tax)} className="p-0.5 text-primary"><Check size={11} /></button>
                               <button onClick={() => setEditingRegNumId(null)} className="p-0.5 text-text-tertiary"><X size={11} /></button>
@@ -309,7 +322,7 @@ export default function TaxSettings() {
                             <button onClick={() => { setEditingRegNumId(tax.id); setEditRegNum(tax.registration_number || ''); }}
                               className="text-[11px] text-text-tertiary hover:text-text-secondary transition-colors flex items-center gap-1 group">
                               {tax.registration_number
-                                ? <><span>No: {tax.registration_number}</span><Pencil size={9} className="opacity-0 group-hover:opacity-100" /></>
+                                ? <><span>{fr ? 'N°' : 'No.'} {tax.registration_number}</span><Pencil size={9} className="md:opacity-0 md:group-hover:opacity-100" /></>
                                 : <><Plus size={9} /><span>{fr ? "Ajouter un numéro d'enregistrement" : 'Add registration number'}</span></>}
                             </button>
                           )}
@@ -455,24 +468,26 @@ export default function TaxSettings() {
                 <button onClick={() => setShowCustomTax(false)} className="p-1 text-text-tertiary hover:text-text-primary"><X size={14} /></button>
               </div>
               <p className="text-[11px] text-text-tertiary mb-3">
-                This tax will be added to your default region and applied to all new documents.
+                {fr
+                  ? 'Cette taxe sera ajoutée à votre région par défaut et appliquée aux nouveaux documents.'
+                  : 'This tax will be added to your default region and applied to all new documents.'}
               </p>
               <div className="flex items-end gap-3">
                 <div className="flex-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary block mb-1">Name</label>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary block mb-1">{fr ? 'Nom' : 'Name'}</label>
                   <input type="text" value={customName} onChange={e => setCustomName(e.target.value)}
-                    className="glass-input w-full text-[13px]" placeholder="e.g. Service Tax"
+                    className="glass-input w-full text-[13px]" placeholder={fr ? 'ex. Taxe de service' : 'e.g. Service Tax'}
                     onKeyDown={e => { if (e.key === 'Enter') handleAddCustom(); }} />
                 </div>
                 <div className="w-28">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary block mb-1">Rate %</label>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary block mb-1">{fr ? 'Taux %' : 'Rate %'}</label>
                   <input type="number" step="0.001" value={customRate} onChange={e => setCustomRate(e.target.value)}
                     className="glass-input w-full text-[13px]" placeholder="0"
                     onKeyDown={e => { if (e.key === 'Enter') handleAddCustom(); }} />
                 </div>
                 <button onClick={handleAddCustom} disabled={busy || !customName.trim()}
                   className={cn('glass-button-primary text-[13px] px-4 py-2', (!customName.trim() || busy) && 'opacity-50')}>
-                  Add
+                  {fr ? 'Ajouter' : 'Add'}
                 </button>
               </div>
             </div>

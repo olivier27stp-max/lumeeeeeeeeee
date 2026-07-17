@@ -190,6 +190,7 @@ function DetailPageSkeleton() {
 // ─── Main Component ──────────────────────────────────────────────────
 export default function ClientDetails() {
   const { t, language } = useTranslation();
+  const isFr = language === 'fr';
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
@@ -1267,6 +1268,45 @@ export default function ClientDetails() {
               )}
             </div>
           </div>
+
+          {/* Tax exemption — only once the clients.tax_exempt migration ran */}
+          {client && 'tax_exempt' in client && (
+            <div className="section-card px-5 py-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[13px] font-semibold text-text-primary">
+                  {isFr ? 'Exonéré de taxes' : 'Tax exempt'}
+                </p>
+                <p className="text-[11px] text-text-tertiary mt-0.5">
+                  {isFr
+                    ? 'Aucune taxe sur les devis, jobs et factures de ce client (gouvernements, Premières Nations, OSBL…).'
+                    : 'No taxes on this client\'s quotes, jobs and invoices (governments, First Nations, non-profits…).'}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!!client.tax_exempt}
+                onClick={async () => {
+                  const next = !client.tax_exempt;
+                  setClient((prev) => (prev ? { ...prev, tax_exempt: next } : prev));
+                  try {
+                    const orgId = await getCurrentOrgIdOrThrow();
+                    const { error } = await supabase.from('clients').update({ tax_exempt: next }).eq('id', client.id).eq('org_id', orgId);
+                    if (error) throw error;
+                    toast.success(next
+                      ? (isFr ? 'Client exonéré de taxes' : 'Client marked tax exempt')
+                      : (isFr ? 'Exonération retirée' : 'Tax exemption removed'));
+                  } catch {
+                    setClient((prev) => (prev ? { ...prev, tax_exempt: !next } : prev));
+                    toast.error(isFr ? 'Échec de la mise à jour' : 'Update failed');
+                  }
+                }}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${client.tax_exempt ? 'bg-primary' : 'bg-surface-tertiary'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-surface-card shadow-sm transition-transform ${client.tax_exempt ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+          )}
 
           {/* Billing History */}
           <div className="section-card">

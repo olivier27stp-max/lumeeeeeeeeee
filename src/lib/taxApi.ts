@@ -57,6 +57,8 @@ export interface ResolvedTaxes {
   taxes: TaxConfig[];
   group: TaxGroup | null;
   region: string;
+  /** True when the client is flagged tax-exempt — taxes is then always empty. */
+  exempt?: boolean;
 }
 
 async function jsonOrEmpty(res: Response) {
@@ -166,7 +168,9 @@ export function calculateTaxes(subtotalCents: number, discountCents: number, tax
     const amount = t.type === 'percentage'
       ? Math.round((t.is_compound ? runningBase : base) * t.rate / 100)
       : Math.round(t.rate * 100);
-    if (t.is_compound) runningBase += amount;
+    // A compound tax applies on base + ALL previous taxes (compound or not),
+    // so every tax must feed the running base for the ones after it.
+    runningBase += amount;
     return { name: t.name, rate: t.rate, amount_cents: amount, registration_number: t.registration_number || null };
   });
 }
