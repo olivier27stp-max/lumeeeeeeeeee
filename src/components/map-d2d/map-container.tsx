@@ -1651,6 +1651,10 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
                   }}
                   placeholder={fr ? 'Rechercher une rue, un quartier, un code postal…' : 'Search a street, neighborhood, postal code…'}
                   className="w-full bg-transparent py-4 pl-11 pr-20 text-[15px] text-white placeholder-white/30 outline-none"
+                  /* le typebar global (index.css, non-layeré) force un fond
+                     var(--color-surface) sur tous les inputs — blanc en mode
+                     clair, donc texte blanc invisible; l'inline le neutralise */
+                  style={{ backgroundColor: 'transparent' }}
                 />
                 {searchQuery && (
                   <button
@@ -2082,6 +2086,8 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
               <input type="text" value={zoneNameInput} onChange={(e) => setZoneNameInput(e.target.value)}
                 placeholder={`Zone ${zonesRef.current.length + 1}`}
                 className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white outline-none focus:border-indigo-500/50"
+                /* neutralise le fond blanc du typebar global (mode clair) */
+                style={{ backgroundColor: 'rgba(255,255,255,.05)' }}
               />
             </div>
 
@@ -2090,6 +2096,8 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
                 <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Assigner à un représentant' : 'Assign to a rep'}</label>
                 <select value={zoneAssignInput} onChange={(e) => setZoneAssignInput(e.target.value)}
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white outline-none focus:border-indigo-500/50"
+                  /* neutralise le fond blanc du typebar global (mode clair) */
+                  style={{ backgroundColor: 'rgba(255,255,255,.05)' }}
                 >
                   <option value="">{fr ? 'Non assigné' : 'Unassigned'}</option>
                   {SALES_REPS.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
