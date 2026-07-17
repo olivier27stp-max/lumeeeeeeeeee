@@ -621,7 +621,7 @@ export default function ClientDetails() {
             {/* Action buttons */}
             <div className="flex items-center gap-2 flex-wrap">
               {client.phone && (
-                <a href={`tel:${client.phone}`} className="md:hidden inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title={t.clientDetails.call}>
+                <a href={`tel:${client.phone}`} className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors" title={t.clientDetails.call}>
                   <Phone size={14} /> {t.clientDetails.call}
                 </a>
               )}
@@ -653,7 +653,7 @@ export default function ClientDetails() {
               <div className="relative">
                 <button
                   onClick={() => setShowNewItemMenu(!showNewItemMenu)}
-                  className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-normal hover:bg-surface-secondary transition-colors"
                 >
                   <Plus size={14} /> {t.clientDetails.newItem} <ChevronDown size={13} className="text-text-tertiary" />
                 </button>
