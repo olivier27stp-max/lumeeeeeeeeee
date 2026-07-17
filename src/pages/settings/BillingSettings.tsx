@@ -1,156 +1,31 @@
-import React, { useState, useEffect } from 'react';
-import {
-  User,
-  Shield,
-  CreditCard,
-  Check,
-  Loader2,
-  Settings as SettingsIcon,
-  Globe,
-  Zap,
-  Building,
-  Users,
-  Package,
-  MapPin,
-  Receipt,
-  Wallet,
-  Archive,
-  FileText,
-  Gift,
-  MessageSquare,
-  X,
-  Sparkles,
-  Calendar as CalendarIcon,
-  LifeBuoy,
-  Bell,
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { CreditCard, Check, Loader2, X, Sparkles, Calendar as CalendarIcon } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { Profile } from '../types';
-import { cn } from '../lib/utils';
-import SmsStepUp from '../components/auth/SmsStepUp';
-import { getSmsStatus, type SmsStatus } from '../lib/mfaSmsApi';
-import { useTranslation, Language } from '../i18n';
-import LocationServices from '../components/LocationServices';
-import MyLocationConsentCard from '../components/settings/MyLocationConsentCard';
-import ArchivesPanel from '../components/ArchivesPanel';
-import SeatsBanner from '../components/SeatsBanner';
-import OfficesManager from '../components/OfficesManager';
-import SupportPanel from '../components/SupportPanel';
-import PayrollSettingsPanel from '../components/payroll/PayrollSettingsPanel';
-import { fetchPlans, fetchCurrentBilling, changePlan, openCustomerPortal, cancelScheduledChange, type Plan, type Subscription } from '../lib/billingApi';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { usePlatformOwner } from '../hooks/usePlatformOwner';
-
-// ─── All settings tabs (unified) ─────────────────────────────────
-type SettingsTab =
-  | 'account' | 'billing' | 'language'
-  | 'company' | 'products' | 'payments' | 'reminders' | 'messaging' | 'taxes' | 'automations' | 'request-form'
-  | 'support' | 'manage-team' | 'location'
-  | 'archives' | 'referrals' | 'payroll'
-  | 'roles' | 'd2d-config';
-
-interface NavItem {
-  id: SettingsTab;
-  label: string;
-  icon: typeof User;
-  link?: string; // if set, navigates to external route instead of inline tab
-}
-
-interface NavGroup {
-  heading: string;
-  items: NavItem[];
-}
-
-// (PlaceholderPanel and the Workspace tab were removed: the placeholder was
-//  unused, and workspace duplicated the company name + carried a lume.crm/slug
-//  field wired to nothing and a months-old "dark mode coming soon" row. The org
-//  name is now edited in Company Settings.)
-
-// ─── Main Component ──────────────────────────────────────────────
-// ── SMS 2FA Section Component ──
-// Risk-based, payments-scoped: owners verify a mobile number; sensitive payment
-// actions on a new device then require an SMS code (device trusted 30 days).
-function MfaSection() {
-  const { t, language } = useTranslation();
-  const fr = language === 'fr';
-  const [status, setStatus] = React.useState<SmsStatus | null>(null);
-  const [statusFailed, setStatusFailed] = React.useState(false);
-  const [showStepUp, setShowStepUp] = React.useState(false);
-
-  const load = React.useCallback(async () => {
-    setStatusFailed(false);
-    try { setStatus(await getSmsStatus()); } catch { setStatus(null); setStatusFailed(true); }
-  }, []);
-  React.useEffect(() => { load(); }, [load]);
-
-  if (showStepUp) {
-    return (
-      <div className="glass-card rounded-2xl p-6">
-        <SmsStepUp
-          mode="enroll"
-          onDone={() => { setShowStepUp(false); load(); }}
-          onCancel={() => setShowStepUp(false)}
-        />
-      </div>
-    );
-  }
-
-  const enrolled = !!status?.enrolled;
-  const smsOff = !!status && !status.sms_configured;
-
-  return (
-    <div className="glass-card rounded-2xl p-6 space-y-5">
-      <p className="text-xs font-medium text-text-tertiary">{t.settings.security}</p>
-      <div className="flex items-center justify-between p-4 bg-surface-secondary rounded-xl">
-        <div className="flex items-center gap-3.5">
-          <Shield size={18} className={enrolled ? 'text-green-600' : 'text-text-tertiary'} />
-          <div>
-            <p className="text-[13px] font-semibold text-text-primary">
-              {fr ? 'Vérification par SMS' : 'SMS verification'}
-            </p>
-            <p className="text-xs text-text-tertiary">
-              {fr
-                ? 'Requise pour les actions de paiement sur un nouvel appareil.'
-                : 'Required for payment actions on a new device.'}
-              {enrolled && status?.phone_hint ? `  ·  •••• ${status.phone_hint}` : ''}
-            </p>
-          </div>
-        </div>
-        {status === null && statusFailed ? (
-          // Fetch failed — show a dash instead of spinning forever.
-          <span className="text-[10px] text-text-tertiary">—</span>
-        ) : status === null ? (
-          <Loader2 size={14} className="animate-spin text-text-tertiary" />
-        ) : smsOff ? (
-          <span className="text-[10px] text-text-tertiary">{fr ? 'SMS non configuré' : 'SMS not configured'}</span>
-        ) : enrolled ? (
-          <div className="flex items-center gap-2.5">
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 rounded-full px-3 py-1">
-              <Check size={9} /> {fr ? 'Actif' : 'Active'}
-            </span>
-            <button onClick={() => setShowStepUp(true)} className="glass-button-ghost text-[10px] font-medium">
-              {fr ? 'Changer le numéro' : 'Change number'}
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowStepUp(true)}
-            className="glass-button-secondary text-[11px] !py-2 !px-4"
-          >
-            {fr ? 'Configurer' : 'Set up'}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
+import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
+import SeatsBanner from '../../components/SeatsBanner';
+import OfficesManager from '../../components/OfficesManager';
+import {
+  fetchPlans,
+  fetchCurrentBilling,
+  changePlan,
+  openCustomerPortal,
+  cancelScheduledChange,
+  type Plan,
+  type Subscription,
+} from '../../lib/billingApi';
 
 /* ═══════════════════════════════════════════════════════════════
-   Billing Tab — connected to real Stripe/DB data
+   Plan & billing — connected to real Stripe/DB data.
+   Extracted from the old Settings.tsx hub during the settings refonte.
    ═══════════════════════════════════════════════════════════════ */
-function BillingTab({ navigate, isFr, t }: { navigate: (path: string) => void; isFr: boolean; t: any }) {
+export default function BillingSettings() {
+  const { t, language } = useTranslation();
+  const isFr = language === 'fr';
+  const navigate = useNavigate();
+
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
@@ -223,9 +98,6 @@ function BillingTab({ navigate, isFr, t }: { navigate: (path: string) => void; i
     return 'bg-white/10 text-white/60';
   };
 
-  // (Subscription cancellation goes through the Stripe customer portal button —
-  //  a previous in-app cancel handler was dead code and was removed.)
-
   // Cancel a scheduled plan change (release Stripe Subscription Schedule)
   const [cancelingScheduled, setCancelingScheduled] = useState(false);
   const handleCancelScheduled = async () => {
@@ -258,7 +130,7 @@ function BillingTab({ navigate, isFr, t }: { navigate: (path: string) => void; i
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-2xl space-y-6">
       {/* ── Current Plan Card ── */}
       {subscription && subscription.status !== 'canceled' ? (
         <div className="glass-card rounded-2xl p-6 bg-gradient-to-br from-indigo-700 via-blue-700 to-blue-800 overflow-hidden relative">
@@ -817,13 +689,13 @@ function DowngradeModal({
                 <div className="text-right">
                   <p className="text-[9px] uppercase font-bold tracking-wider text-white/60">{isFr ? 'De' : 'From'}</p>
                   <p className="text-sm font-extrabold">{fromPlan.name}</p>
-                  <p className="text-[10px] text-white/70 tabular-nums">${fromPrice}/{interval === 'yearly' ? (isFr ? 'mois' : 'mo') : (isFr ? 'mois' : 'mo')}</p>
+                  <p className="text-[10px] text-white/70 tabular-nums">${fromPrice}/{isFr ? 'mois' : 'mo'}</p>
                 </div>
                 <div className="text-white/40 text-xl">→</div>
                 <div>
                   <p className="text-[9px] uppercase font-bold tracking-wider text-white/60">{isFr ? 'Vers' : 'To'}</p>
                   <p className="text-sm font-extrabold">{toPlan.name}</p>
-                  <p className="text-[10px] text-white/70 tabular-nums">${toPrice}/{interval === 'yearly' ? (isFr ? 'mois' : 'mo') : (isFr ? 'mois' : 'mo')}</p>
+                  <p className="text-[10px] text-white/70 tabular-nums">${toPrice}/{isFr ? 'mois' : 'mo'}</p>
                 </div>
               </div>
               {monthlySavings > 0 && (
@@ -967,297 +839,6 @@ function DowngradeModal({
           </button>
         </div>
       </motion.div>
-    </div>
-  );
-}
-
-export default function Settings() {
-  const { t, language, setLanguage } = useTranslation();
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const isPlatformOwner = usePlatformOwner();
-
-  // Read initial tab from URL ?tab=payments (for redirects from Payment Settings etc.)
-  const urlTab = searchParams.get('tab') as SettingsTab | null;
-  const [activeTab, setActiveTab] = useState<SettingsTab>(urlTab || 'account');
-
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [fullName, setFullName] = useState('');
-  const [userEmail, setUserEmail] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  const isFr = language === 'fr';
-
-  // Sync tab with URL
-  useEffect(() => {
-    if (urlTab && urlTab !== activeTab) {
-      setActiveTab(urlTab);
-    }
-  }, [urlTab]);
-
-  const handleTabChange = (tab: SettingsTab) => {
-    setActiveTab(tab);
-    setSearchParams({ tab });
-  };
-
-  useEffect(() => {
-    async function fetchProfile() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserEmail(user.email || '');
-        const { data } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        setProfile(data);
-        setFullName(data?.full_name || '');
-      }
-      setLoading(false);
-    }
-    fetchProfile();
-  }, []);
-
-  async function handleSaveProfile() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    setSaving(true);
-    setSaved(false);
-    const { error } = await supabase
-      .from('profiles')
-      .update({ full_name: fullName.trim() })
-      .eq('id', user.id);
-    setSaving(false);
-    if (!error) {
-      setSaved(true);
-      setProfile((prev) => prev ? { ...prev, full_name: fullName.trim() } : prev);
-      setTimeout(() => setSaved(false), 2000);
-    } else {
-      toast.error(error.message); // was silently swallowed
-    }
-  }
-
-  // ─── Navigation structure (3 sections, simplified) ───────────
-  // 5 logical groups (was 3 catch-alls): Mon compte / Entreprise /
-  // Communication & ventes / Équipe / Plus. The old "Espace de travail" tab is
-  // gone — the org name is edited in Company Settings (single source), the
-  // lume.crm/slug field was wired to nothing, and the dark-mode row was a
-  // months-old "coming soon".
-  const navSections: NavGroup[] = [
-    {
-      heading: isFr ? 'Mon compte' : 'My account',
-      items: [
-        { id: 'account',   label: isFr ? 'Profil & sécurité' : 'Profile & security', icon: User },
-        { id: 'language',  label: t.settings.language,   icon: Globe },
-      ],
-    },
-    {
-      heading: isFr ? 'Entreprise' : 'Business',
-      items: [
-        { id: 'company',   label: t.settings.companySettings, icon: Building, link: '/settings/company' },
-        { id: 'billing',   label: isFr ? 'Forfait & facturation' : 'Plan & billing', icon: CreditCard },
-        { id: 'taxes',     label: 'Taxes',                     icon: Receipt, link: '/settings/taxes' },
-        { id: 'products',  label: t.settings.productsServices, icon: Package, link: '/settings/products' },
-        { id: 'payments',  label: 'Lume Payments',             icon: Wallet, link: '/settings/payments' },
-      ],
-    },
-    {
-      heading: isFr ? 'Communication & ventes' : 'Communication & sales',
-      items: [
-        { id: 'messaging',    label: isFr ? 'Messagerie SMS' : 'SMS Messaging', icon: MessageSquare, link: '/settings/messaging' },
-        { id: 'reminders',    label: isFr ? 'Rappels de paiement' : 'Payment reminders', icon: Bell, link: '/settings/reminders' },
-        { id: 'request-form', label: (t.settings as any).requestForm || (t.requestForm.requestForm), icon: FileText, link: '/settings/request-form' },
-        { id: 'automations',  label: t.settings.automations,      icon: Zap, link: '/automations' },
-        // Points at /teams: the /general page was an unwired mock (now a redirect).
-        { id: 'd2d-config',   label: isFr ? 'Config Vente (D2D)' : 'Sales Config (D2D)', icon: MapPin, link: '/d2d-settings/teams' },
-      ],
-    },
-    {
-      heading: t.settings.team,
-      items: [
-        { id: 'manage-team', label: isFr ? 'Membres' : 'Members',                icon: Users, link: '/settings/team' },
-        { id: 'roles',       label: isFr ? 'Rôles & Permissions' : 'Roles & Permissions', icon: Shield, link: '/settings/roles' },
-        { id: 'payroll',     label: t.settings.payroll,                          icon: CalendarIcon },
-        { id: 'location',    label: isFr ? 'Localisation GPS' : 'GPS tracking',  icon: MapPin },
-      ],
-    },
-    {
-      heading: isFr ? 'Plus' : 'More',
-      items: [
-        { id: 'archives',  label: (t.settings as any).archives || 'Archives', icon: Archive },
-        { id: 'referrals' as SettingsTab, label: t.referFriend.referAFriend,  icon: Gift, link: '/settings/referrals' },
-        { id: 'support',   label: 'Support', icon: LifeBuoy },
-      ],
-    },
-    // Platform section — owner-only, shown at the very bottom
-    ...(isPlatformOwner ? [{
-      heading: isFr ? 'Plateforme' : 'Platform',
-      items: [
-        { id: 'platform-admin' as SettingsTab, label: 'Platform Admin', icon: Shield, link: '/platform-admin' },
-      ],
-    }] : []),
-  ];
-
-  // Items that navigate to a separate route
-  const linkItems = new Set(navSections.flatMap((s) => s.items.filter((i) => i.link).map((i) => i.id)));
-
-  // Plan labels kept for legacy — billing tab now uses real data
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="w-11 h-11 rounded-2xl bg-surface-secondary flex items-center justify-center">
-          <SettingsIcon size={20} className="text-text-tertiary" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-text-primary tracking-tight">{t.settings.title}</h1>
-          <p className="text-[12px] text-text-tertiary mt-0.5">{t.settings.subtitle}</p>
-        </div>
-      </div>
-
-      <div className="flex flex-col lg:flex-row gap-8">
-        {/* ── Sidebar ─────────────────────────────────── */}
-        <div className="lg:w-60 flex flex-col gap-6 shrink-0">
-          {navSections.map((section, sIdx) => (
-            <div key={sIdx}>
-              <p className="px-3 pb-2 text-xs font-medium text-text-tertiary">
-                {section.heading}
-              </p>
-              <div className="space-y-0.5">
-                {section.items.map((item) => {
-                  const isActive = activeTab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        if (item.link) {
-                          navigate(item.link);
-                        } else {
-                          handleTabChange(item.id);
-                        }
-                      }}
-                      className={cn(
-                        'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all',
-                        isActive
-                          ? 'bg-surface-secondary text-text-primary font-semibold'
-                          : 'text-text-secondary hover:bg-surface-secondary/50 hover:text-text-primary'
-                      )}
-                    >
-                      <item.icon size={15} className={isActive ? 'text-primary' : 'text-text-tertiary'} />
-                      <span className="truncate">{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* ── Content Area ────────────────────────────── */}
-        <div className="flex-1 max-w-2xl">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, x: 6 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="space-y-6"
-          >
-            {/* ═══ ACCOUNT ═══ */}
-            {activeTab === 'account' && (
-              <div className="space-y-6">
-                <div className="glass-card rounded-2xl p-6 space-y-6">
-                  <div className="flex items-center gap-4">
-                    <div className="avatar-md text-lg">
-                      {profile?.full_name?.[0] || 'U'}
-                    </div>
-                    <div>
-                      <h3 className="text-[13px] font-bold text-text-primary">{t.settings.profilePicture}</h3>
-                      {/* "Update your avatar" copy removed — there is no upload control
-                          on this tab, so the promise was a dead end. */}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div>
-                      <label className="text-xs font-medium text-text-tertiary">{t.settings.fullName}</label>
-                      <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} className="glass-input w-full mt-1.5" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-text-tertiary">{t.settings.emailAddress}</label>
-                      <input type="email" disabled value={userEmail} className="glass-input w-full mt-1.5 opacity-50" />
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleSaveProfile}
-                    disabled={saving || fullName.trim() === (profile?.full_name || '')}
-                    className={cn('glass-button-primary inline-flex items-center gap-2', saved && '!bg-success !text-white !border-success')}
-                  >
-                    {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <Check size={13} /> : null}
-                    {saving ? t.common.saving : saved ? t.common.saved : t.common.save}
-                  </button>
-                </div>
-                <MfaSection />
-              </div>
-            )}
-
-            {/* ═══ BILLING ═══ */}
-            {activeTab === 'billing' && (
-              <BillingTab navigate={navigate} isFr={isFr} t={t} />
-            )}
-
-            {/* ═══ WORKSPACE ═══ */}
-
-            {/* ═══ LANGUAGE ═══ */}
-            {activeTab === 'language' && (
-              <div className="glass-card rounded-2xl p-6 space-y-5">
-                <p className="text-xs font-medium text-text-tertiary">{t.settings.languageLabel}</p>
-                <p className="text-[13px] text-text-secondary leading-relaxed">{t.settings.languageDesc}</p>
-                <div className="space-y-3">
-                  {([
-                    { code: 'en' as Language, label: 'English', flag: '🇬🇧' },
-                    { code: 'fr' as Language, label: 'Français', flag: '🇫🇷' },
-                  ]).map((lang) => (
-                    <button
-                      key={lang.code}
-                      onClick={() => setLanguage(lang.code)}
-                      className={cn(
-                        'w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left',
-                        language === lang.code ? 'border-primary bg-primary/5' : 'border-outline-subtle hover:border-outline hover:bg-surface-secondary/40'
-                      )}
-                    >
-                      <div className="flex items-center gap-3.5">
-                        <span className="text-xl">{lang.flag}</span>
-                        <span className="text-[13px] font-semibold text-text-primary">{lang.label}</span>
-                      </div>
-                      {language === lang.code && (
-                        <span className="badge-info text-[10px]"><Check size={10} className="inline mr-0.5" />{t.settings.current}</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ═══ PLACEHOLDER PANELS for unbuilt sections ═══ */}
-            {activeTab === 'location' && (
-              <div className="space-y-6">
-                <MyLocationConsentCard language={isFr ? 'fr' : 'en'} />
-                <LocationServices />
-              </div>
-            )}
-            {activeTab === 'archives' && (
-              <ArchivesPanel />
-            )}
-            {activeTab === 'support' && (
-              <SupportPanel />
-            )}
-            {activeTab === 'payroll' && (
-              <PayrollSettingsPanel />
-            )}
-          </motion.div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import { Shield, ChevronDown, ChevronRight, Lock, Loader2, Check, RotateCcw } from 'lucide-react';
-import BackToSettings from '../components/ui/BackToSettings';
 import {
   ALL_ROLES, ROLE_LABELS, ROLE_PRESETS, PERMISSION_GROUPS,
   FINANCIAL_PERMISSION_KEYS,
@@ -153,7 +152,6 @@ export default function SettingsRoles() {
         {/* Header with back button */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <BackToSettings />
             <div>
               <h2 className="text-lg font-semibold text-text-primary flex items-center gap-2">
                 <Shield size={20} className="text-accent" />

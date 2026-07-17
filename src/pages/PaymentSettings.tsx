@@ -1,9 +1,89 @@
 import React from 'react';
+import { Check, Loader2, Shield } from 'lucide-react';
 import { useTranslation } from '../i18n';
-import { cn } from '../lib/utils';
 import PermissionGate from '../components/PermissionGate';
 import ConnectOnboarding from '../components/ConnectOnboarding';
-import BackToSettings from '../components/ui/BackToSettings';
+import SmsStepUp from '../components/auth/SmsStepUp';
+import { getSmsStatus, type SmsStatus } from '../lib/mfaSmsApi';
+
+// ── SMS 2FA — payment-security section ──
+// Risk-based, payments-scoped: owners verify a mobile number; sensitive payment
+// actions on a new device then require an SMS code (device trusted 30 days).
+// Lives here (not on the profile page) because it protects payment actions.
+function MfaSection() {
+  const { t, language } = useTranslation();
+  const fr = language === 'fr';
+  const [status, setStatus] = React.useState<SmsStatus | null>(null);
+  const [statusFailed, setStatusFailed] = React.useState(false);
+  const [showStepUp, setShowStepUp] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    setStatusFailed(false);
+    try { setStatus(await getSmsStatus()); } catch { setStatus(null); setStatusFailed(true); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  if (showStepUp) {
+    return (
+      <section className="section-card p-5">
+        <SmsStepUp
+          mode="enroll"
+          onDone={() => { setShowStepUp(false); load(); }}
+          onCancel={() => setShowStepUp(false)}
+        />
+      </section>
+    );
+  }
+
+  const enrolled = !!status?.enrolled;
+  const smsOff = !!status && !status.sms_configured;
+
+  return (
+    <section className="section-card p-5 space-y-4">
+      <h3 className="text-[14px] font-semibold text-text-primary">{t.settings.security}</h3>
+      <div className="flex items-center justify-between p-4 bg-surface-secondary rounded-xl">
+        <div className="flex items-center gap-3.5">
+          <Shield size={18} className={enrolled ? 'text-green-600' : 'text-text-tertiary'} />
+          <div>
+            <p className="text-[13px] font-semibold text-text-primary">
+              {fr ? 'Vérification par SMS' : 'SMS verification'}
+            </p>
+            <p className="text-xs text-text-tertiary">
+              {fr
+                ? 'Requise pour les actions de paiement sur un nouvel appareil.'
+                : 'Required for payment actions on a new device.'}
+              {enrolled && status?.phone_hint ? `  ·  •••• ${status.phone_hint}` : ''}
+            </p>
+          </div>
+        </div>
+        {status === null && statusFailed ? (
+          // Fetch failed — show a dash instead of spinning forever.
+          <span className="text-[10px] text-text-tertiary">—</span>
+        ) : status === null ? (
+          <Loader2 size={14} className="animate-spin text-text-tertiary" />
+        ) : smsOff ? (
+          <span className="text-[10px] text-text-tertiary">{fr ? 'SMS non configuré' : 'SMS not configured'}</span>
+        ) : enrolled ? (
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 rounded-full px-3 py-1">
+              <Check size={9} /> {fr ? 'Actif' : 'Active'}
+            </span>
+            <button onClick={() => setShowStepUp(true)} className="glass-button-ghost text-[10px] font-medium">
+              {fr ? 'Changer le numéro' : 'Change number'}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowStepUp(true)}
+            className="glass-button-secondary text-[11px] !py-2 !px-4"
+          >
+            {fr ? 'Configurer' : 'Set up'}
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
 
 export default function PaymentSettings() {
   const { t, language } = useTranslation();
@@ -13,19 +93,16 @@ export default function PaymentSettings() {
     // to demand payments.create and showed "Access Restricted" to users the
     // route itself let in. (Connect activation stays admin-gated server-side.)
     <PermissionGate permission="settings.read">
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <BackToSettings />
-          <div className="flex-1">
-            <h1 className="text-xl font-bold text-text-primary tracking-tight">
-              {t.commandPalette.payments}
-            </h1>
-            <p className="text-[12px] text-text-tertiary mt-0.5">
-              {language === 'fr'
-                ? 'Acceptez les paiements en ligne de vos clients via Lume Payments.'
-                : 'Accept online payments from your clients via Lume Payments.'}
-            </p>
-          </div>
+      <div className="max-w-2xl space-y-6">
+        <div>
+          <h1 className="text-xl font-bold text-text-primary tracking-tight">
+            {t.commandPalette.payments}
+          </h1>
+          <p className="text-[12px] text-text-tertiary mt-0.5">
+            {language === 'fr'
+              ? 'Acceptez les paiements en ligne de vos clients via Lume Payments.'
+              : 'Accept online payments from your clients via Lume Payments.'}
+          </p>
         </div>
 
         <ConnectOnboarding />
@@ -76,6 +153,8 @@ export default function PaymentSettings() {
             </div>
           </div>
         </section>
+
+        <MfaSection />
 
         <section className="section-card p-5 space-y-2">
           <h3 className="text-[14px] font-semibold text-text-primary">

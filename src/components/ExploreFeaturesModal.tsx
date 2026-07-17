@@ -209,7 +209,7 @@ export default function ExploreFeaturesModal({ open, onClose }: ExploreFeaturesM
 
   const handleUpgrade = () => {
     onClose();
-    navigate('/settings?tab=billing');
+    navigate('/settings/billing');
   };
 
   return (

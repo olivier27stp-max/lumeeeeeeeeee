@@ -51,7 +51,14 @@ import Clients from './pages/Clients';
 import NewClient from './pages/NewClient';
 import ClientDetails from './pages/ClientDetails';
 import Schedule from './pages/Schedule';
-import SettingsPage from './pages/Settings';
+import SettingsLayout, { SettingsIndex } from './pages/settings/SettingsLayout';
+import ProfileSettings from './pages/settings/ProfileSettings';
+import BillingSettings from './pages/settings/BillingSettings';
+import LanguageSettings from './pages/settings/LanguageSettings';
+import LocationSettings from './pages/settings/LocationSettings';
+import ArchivesPanel from './components/ArchivesPanel';
+import SupportPanel from './components/SupportPanel';
+import PayrollSettingsPanel from './components/payroll/PayrollSettingsPanel';
 import Auth from './pages/Auth';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
@@ -1197,7 +1204,7 @@ function AuthenticatedApp({
             <ErrorBoundary labels={t.errorBoundary}>
                   <Routes>
                     <Route path="/" element={<Navigate to="/day" replace />} />
-                    <Route path="/pricing" element={<Navigate to={{ pathname: '/settings', search: '?tab=billing' }} replace />} />
+                    <Route path="/pricing" element={<Navigate to="/settings/billing" replace />} />
                     <Route path="/lume-agent" element={<Gated permission="external_agent.use"><PlanFeatureGate flag="includes_ai"><PageWrapper><MrLumePage /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/dashboard" element={<Navigate to="/lume-agent" replace />} />
                     <Route path="/day" element={<Gated permission="settings.read"><PageWrapper><CrmWorkspace /></PageWrapper></Gated>} />
@@ -1230,16 +1237,36 @@ function AuthenticatedApp({
                     <Route path="/invoices/:id/edit" element={<Gated permission="invoices.update"><PageWrapper><InvoiceEdit /></PageWrapper></Gated>} />
                     <Route path="/insights" element={<Gated permission="reports.read"><PageWrapper><Statistiques /></PageWrapper></Gated>} />
                     <Route path="/payments" element={<PaymentsRedirect />} />
-                    <Route path="/payments/settings" element={<Navigate to="/settings?tab=payments" replace />} />
+                    <Route path="/payments/settings" element={<Navigate to="/settings/payments" replace />} />
                     <Route path="/timesheets" element={<Gated permission="timesheets.read"><PlanFeatureGate flag="includes_timesheets"><PageWrapper><Timesheets /></PageWrapper></PlanFeatureGate></Gated>} />
-                    <Route path="/settings" element={<Gated permission="settings.read"><PageWrapper><SettingsPage /></PageWrapper></Gated>} />
+                    {/* Settings — unified layout: persistent sidebar + nested sub-pages.
+                        Old ?tab= deep links are redirected by SettingsIndex. Each child
+                        keeps the same permission/plan gates as its old standalone route. */}
+                    <Route path="/settings" element={<PageWrapper><SettingsLayout /></PageWrapper>}>
+                      <Route index element={<SettingsIndex />} />
+                      <Route path="profile" element={<Gated permission="settings.read"><ProfileSettings /></Gated>} />
+                      <Route path="language" element={<Gated permission="settings.read"><LanguageSettings /></Gated>} />
+                      <Route path="company" element={<Gated permission="settings.update"><CompanySettings /></Gated>} />
+                      <Route path="billing" element={<Gated permission="settings.read"><BillingSettings /></Gated>} />
+                      <Route path="products" element={<Gated permission="settings.update"><ProductsServices /></Gated>} />
+                      <Route path="taxes" element={<Gated permission="settings.update"><TaxSettings /></Gated>} />
+                      <Route path="payments" element={<Gated permission="settings.read"><PaymentSettings /></Gated>} />
+                      <Route path="reminders" element={<Gated permission="settings.update"><ReminderSettings /></Gated>} />
+                      <Route path="messaging" element={<Gated permission="settings.read"><SettingsMessaging /></Gated>} />
+                      <Route path="request-form" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_request_forms"><RequestFormSettings /></PlanFeatureGate></Gated>} />
+                      <Route path="team" element={<Gated permission="team.read"><ManageTeam /></Gated>} />
+                      <Route path="roles" element={<Gated permission="users.update_role"><SettingsRoles /></Gated>} />
+                      <Route path="payroll" element={<Gated permission="settings.read"><div className="max-w-2xl"><PayrollSettingsPanel /></div></Gated>} />
+                      <Route path="location" element={<Gated permission="settings.read"><LocationSettings /></Gated>} />
+                      <Route path="archives" element={<Gated permission="settings.read"><div className="max-w-2xl"><ArchivesPanel /></div></Gated>} />
+                      <Route path="marketplace" element={<Gated permission="integrations.read"><PlanFeatureGate flag="includes_marketplace"><AppMarketplace /></PlanFeatureGate></Gated>} />
+                      <Route path="referrals" element={<Gated permission="settings.read"><ReferFriend /></Gated>} />
+                      <Route path="support" element={<Gated permission="settings.read"><div className="max-w-2xl"><SupportPanel /></div></Gated>} />
+                    </Route>
                     <Route path="/account/privacy" element={<PageWrapper><PrivacyCenter /></PageWrapper>} />
                     <Route path="/privacy" element={<Privacy />} />
                     <Route path="/terms" element={<Terms />} />
           <Route path="/subprocessors" element={<Subprocessors />} />
-                    <Route path="/settings/payments" element={<Gated permission="settings.read"><PageWrapper><PaymentSettings /></PageWrapper></Gated>} />
-                    <Route path="/settings/messaging" element={<Gated permission="settings.read"><PageWrapper><SettingsMessaging /></PageWrapper></Gated>} />
-                    <Route path="/settings/products" element={<Gated permission="settings.update"><PageWrapper><ProductsServices /></PageWrapper></Gated>} />
                     <Route path="/automations" element={<Gated permission="automations.read"><PlanFeatureGate flag="includes_automations"><PageWrapper><Automations /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/tasks" element={<Gated permission="settings.read"><PageWrapper><TasksPage /></PageWrapper></Gated>} />
                     <Route path="/courses" element={<Gated permission="settings.read"><PlanFeatureGate flag="includes_courses"><div className="px-8 py-6"><Courses /></div></PlanFeatureGate></Gated>} />
@@ -1249,9 +1276,7 @@ function AuthenticatedApp({
                     <Route path="/courses/:id/edit" element={<Gated permission="settings.update"><CourseBuilder /></Gated>} />
                     <Route path="/automations/hub" element={<Navigate to="/automations" replace />} />
                     <Route path="/automations/builder" element={<Navigate to="/automations" replace />} />
-                    <Route path="/settings/company" element={<Gated permission="settings.update"><PageWrapper><CompanySettings /></PageWrapper></Gated>} />
                     <Route path="/company-settings" element={<Navigate to="/settings/company" replace />} />
-                    <Route path="/settings/team" element={<Gated permission="team.read"><PageWrapper><ManageTeam /></PageWrapper></Gated>} />
                     <Route path="/manage-team" element={<Navigate to="/settings/team" replace />} />
                     <Route path="/settings/team/:memberId" element={<Gated permission="team.read"><PageWrapper><TeamMemberDetails /></PageWrapper></Gated>} />
                     {/* Dispatch: NO PageWrapper — full-bleed */}
@@ -1270,19 +1295,12 @@ function AuthenticatedApp({
                     <Route path="/d2d-onboarding" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DOnboarding /></ModuleGate></PlanFeatureGate></Gated>} />
                     <Route path="/settings/team/:memberId/profile" element={<Gated permission="team.read"><RepProfile /></Gated>} />
                     <Route path="/reps/:id" element={<Gated permission="team.read"><RepProfile /></Gated>} />
-                    <Route path="/settings/marketplace" element={<Gated permission="integrations.read"><PlanFeatureGate flag="includes_marketplace"><PageWrapper><AppMarketplace /></PageWrapper></PlanFeatureGate></Gated>} />
-                    <Route path="/settings/request-form" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_request_forms"><PageWrapper><RequestFormSettings /></PageWrapper></PlanFeatureGate></Gated>} />
                     {/* NOTE: /quotes/presets and /quotes/templates moved before /quotes/:id to prevent route conflict */}
-                    <Route path="/settings/taxes" element={<Gated permission="settings.update"><PageWrapper><TaxSettings /></PageWrapper></Gated>} />
-                    {/* Payment-reminder settings — the page + server routes existed but were never routed. */}
-                    <Route path="/settings/reminders" element={<Gated permission="settings.update"><PageWrapper><ReminderSettings /></PageWrapper></Gated>} />
-                    <Route path="/settings/roles" element={<Gated permission="users.update_role"><PageWrapper><SettingsRoles /></PageWrapper></Gated>} />
                     <Route path="/settings/users" element={<Navigate to="/settings/team" replace />} />
                     <Route path="/apps/callback" element={<Gated permission="integrations.update"><OAuthCallback /></Gated>} />
                     {/* Email mailbox OAuth return — per-owner, no org permission gate. */}
                     <Route path="/email/callback" element={<EmailOAuthCallback />} />
                     {/* BillingCheckout removed — upgrade goes through /checkout */}
-                    <Route path="/settings/referrals" element={<Gated permission="settings.read"><PageWrapper><ReferFriend /></PageWrapper></Gated>} />
 {/* Platform Admin — owner-only, server enforces auth */}
                     <Route path="/platform-admin" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><PlatformAdmin /></PageWrapper></React.Suspense> : <Navigate to="/lume-agent" replace />} />
                     <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
