@@ -16,7 +16,6 @@ import {
   MessageSquare,
   Calendar as CalendarIcon,
   LifeBuoy,
-  Bell,
   Store,
   ArrowLeft,
   type LucideIcon,
@@ -69,7 +68,6 @@ export function useSettingsNav(): NavGroup[] {
         { path: '/settings/products', label: t.settings.productsServices, icon: Package },
         { path: '/settings/taxes', label: 'Taxes', icon: Receipt },
         { path: '/settings/payments', label: 'Lume Payments', icon: Wallet },
-        { path: '/settings/reminders', label: isFr ? 'Rappels de paiement' : 'Payment reminders', icon: Bell },
       ],
     },
     {
@@ -119,7 +117,8 @@ const LEGACY_TAB_TO_PATH: Record<string, string> = {
   company: 'company',
   products: 'products',
   payments: 'payments',
-  reminders: 'reminders',
+  // The standalone reminders page was removed — old links land on Lume Payments.
+  reminders: 'payments',
   messaging: 'messaging',
   taxes: 'taxes',
   'request-form': 'request-form',
