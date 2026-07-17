@@ -44,6 +44,16 @@ const ROLE_CAN_CREATE_ZONE: UserRole[] = ['owner', 'admin', 'team_manager'];
 const ROLE_CAN_ASSIGN_ZONE: UserRole[] = ['owner', 'admin', 'team_manager'];
 const ROLE_CAN_DELETE_ANY_ZONE: UserRole[] = ['owner', 'admin'];
 
+// Map base styles — satellite is essential in rural areas where OSM has no
+// building footprints (streets-v12 renders nothing where houses aren't mapped).
+const STREETS_STYLE = 'mapbox://styles/mapbox/streets-v12';
+const SATELLITE_STYLE = 'mapbox://styles/mapbox/satellite-streets-v12';
+const MAP_STYLE_KEY = 'd2d-map-style';
+
+function loadSavedSatellite(): boolean {
+  try { return localStorage.getItem(MAP_STYLE_KEY) === 'satellite'; } catch { return false; }
+}
+
 // Simulated current user — replace with real auth context
 const CURRENT_USER = {
   id: 'user-1',
@@ -160,6 +170,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   const [showNotes, setShowNotes] = useState(true);
   const [pinDateFilter, setPinDateFilter] = useState<DateFilter>('all');
   const [showZones, setShowZones] = useState(true);
+  const [satellite, setSatellite] = useState(loadSavedSatellite);
   const [zoneDateFilter, setZoneDateFilter] = useState<DateFilter>('all');
   const [filterByRep, setFilterByRep] = useState<string>('all');
   const [showReps, setShowReps] = useState(true);
@@ -492,6 +503,25 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   }
 
   // ---------------------------------------------------------------------------
+  // Base style toggle (plan / satellite)
+  // ---------------------------------------------------------------------------
+  function toggleSatellite() {
+    const map = mapRef.current;
+    if (!map) return;
+    const next = !satellite;
+    setSatellite(next);
+    try { localStorage.setItem(MAP_STYLE_KEY, next ? 'satellite' : 'streets'); } catch {}
+    map.setStyle(next ? SATELLITE_STYLE : STREETS_STYLE);
+    // setStyle wipes every custom source/layer (zones, drawing preview) —
+    // DOM markers (pins, GPS dot, reps) survive. Re-add layers once the new
+    // style is ready.
+    map.once('style.load', () => {
+      renderZonesOnMap();
+      if (drawingPoints.length >= 2) renderDrawingPreview(map, drawingPoints);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Pin CRUD
   // ---------------------------------------------------------------------------
   function toggleNotes() {
@@ -693,7 +723,7 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
     function initMap(center: [number, number], startZoom: number) {
       const map = new mapboxgl.Map({
         container: containerRef.current!,
-        style: 'mapbox://styles/mapbox/streets-v12',
+        style: loadSavedSatellite() ? SATELLITE_STYLE : STREETS_STYLE,
         center, zoom: startZoom, maxZoom: 22, minZoom: 1, antialias: true, attributionControl: false,
       });
       // Assign the ref IMMEDIATELY (not in the async 'load' handler). Otherwise,
@@ -1591,6 +1621,19 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
           </div>
         );
       })()}
+
+      {/* Plan / satellite base-style toggle */}
+      {!showTokenMsg && (
+        <button
+          onClick={toggleSatellite}
+          className={`pointer-events-auto absolute bottom-[118px] right-3 z-10 flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-white/10 shadow-xl backdrop-blur-xl transition-all ${satellite ? 'bg-indigo-500/80 text-white hover:bg-indigo-400' : 'bg-black/70 text-white/60 hover:bg-white/15 hover:text-white'}`}
+          title={satellite ? (fr ? 'Vue plan' : 'Map view') : (fr ? 'Vue satellite' : 'Satellite view')}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" />
+          </svg>
+        </button>
+      )}
 
       {/* Custom GPS re-center button (replaces Mapbox GeolocateControl to avoid duplicate dot) */}
       {!showTokenMsg && (
