@@ -96,8 +96,8 @@ function statsToKPIs(stats: RepPeriodStats): { label: string; value: string; sub
     { label: 'Service Revenue', value: money(stats.serviceRevenue) },
     { label: 'Service Jobs', value: String(stats.serviceJobs) },
     { label: 'APP', value: String(stats.app), sub: 'Pins rendez-vous' },
-    { label: 'VG', value: String(stats.vg), sub: 'Pins vente' },
-    { label: 'Contract Closing Rate', value: stats.contractClosingRate != null ? `${stats.contractClosingRate}%` : '—' },
+    { label: 'Avg Contract Value', value: stats.avgContractValue != null ? money(stats.avgContractValue) : '—' },
+    { label: 'Closing Rate', value: stats.contractClosingRate != null ? `${stats.contractClosingRate}%` : '—' },
     { label: 'Cancel Rate', value: stats.cancelRate != null ? `${stats.cancelRate}%` : '—' },
     { label: 'Days Worked', value: String(stats.daysWorked) },
   ];

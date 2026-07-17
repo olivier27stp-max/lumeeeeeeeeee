@@ -108,8 +108,8 @@ export interface RepPeriodStats {
   serviceJobs: number;
   /** APP — appointment pins ('quote_sent') placed by rep on the sales map */
   app: number;
-  /** VG — sale pins ('sale') placed by rep on the sales map */
-  vg: number;
+  /** Valeur moyenne par contrat — revenue ÷ jobs, null si aucune job */
+  avgContractValue: number | null;
   /** Quotes approved/converted ÷ quotes created by rep, in % — null if no quotes */
   contractClosingRate: number | null;
   /** Cancelled jobs ÷ total jobs, in % — null if no jobs */
@@ -184,14 +184,15 @@ export async function getRepPeriodStats(
   const serviceJobsList = jobs.filter((j: any) => j.job_type === 'recurring');
   const cancelled = jobs.filter((j: any) => j.status === 'cancelled').length;
   const quotesWon = quotes.filter((q: any) => q.status === 'approved' || q.status === 'converted').length;
+  const revenue = jobs.reduce((sum, j: any) => sum + Number(j.total_amount || 0), 0);
 
   return {
-    revenue: jobs.reduce((sum, j: any) => sum + Number(j.total_amount || 0), 0),
+    revenue,
     jobs: jobs.length,
     serviceRevenue: serviceJobsList.reduce((sum, j: any) => sum + Number(j.total_amount || 0), 0),
     serviceJobs: serviceJobsList.length,
     app: pins.filter((p: any) => p.status === 'quote_sent').length,
-    vg: pins.filter((p: any) => p.status === 'sale').length,
+    avgContractValue: jobs.length > 0 ? Math.round(revenue / jobs.length) : null,
     contractClosingRate: quotes.length > 0 ? Math.round((quotesWon / quotes.length) * 100) : null,
     cancelRate: jobs.length > 0 ? Math.round((cancelled / jobs.length) * 100) : null,
     daysWorked: new Set(times.map((t: any) => t.date)).size,
@@ -199,22 +200,20 @@ export async function getRepPeriodStats(
 }
 
 // ---------------------------------------------------------------------------
-// Pin counts — all pins the rep placed on the sales map, grouped by the six
-// map pin types (same DB status → pin type mapping as D2DMap)
+// Pin counts — all pins the rep placed on the sales map, grouped by the seven
+// map pin types (same DB status → pin type mapping as D2DMap's STATUS_MAP)
 // ---------------------------------------------------------------------------
 
-export type RepPinKind = 'closed_won' | 'follow_up' | 'appointment' | 'no_answer' | 'rejected' | 'other';
+export type RepPinKind = 'closed_won' | 'lead' | 'follow_up' | 'appointment' | 'no_answer' | 'rejected' | 'other';
 
 const DB_PIN_TO_KIND: Record<string, RepPinKind> = {
-  sale: 'closed_won',
-  lead: 'follow_up',
-  callback: 'follow_up',
-  quote_sent: 'appointment',
+  sale: 'closed_won', sold: 'closed_won', closed_won: 'closed_won',
+  lead: 'lead',
+  follow_up: 'follow_up', callback: 'follow_up',
   no_answer: 'no_answer',
-  not_interested: 'rejected',
-  do_not_knock: 'rejected',
-  unknown: 'other',
-  revisit: 'other',
+  not_interested: 'rejected', do_not_knock: 'rejected', rejected: 'rejected',
+  quote_sent: 'appointment', appointment: 'appointment',
+  unknown: 'other', new: 'other', knocked: 'other', note: 'other', revisit: 'other', other: 'other',
 };
 
 export interface RepPinCounts {
@@ -239,7 +238,7 @@ export async function getRepPinCounts(
     .lte('created_at', toISO);
 
   const byKind: Record<RepPinKind, number> = {
-    closed_won: 0, follow_up: 0, appointment: 0, no_answer: 0, rejected: 0, other: 0,
+    closed_won: 0, lead: 0, follow_up: 0, appointment: 0, no_answer: 0, rejected: 0, other: 0,
   };
   for (const p of data || []) byKind[DB_PIN_TO_KIND[p.status as string] || 'other']++;
 

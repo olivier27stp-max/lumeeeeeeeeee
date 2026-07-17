@@ -68,9 +68,9 @@ function fmtShortDate(d: string): string {
   });
 }
 
-/** Display order of the six sales-map pin types in the Pins card */
+/** Display order of the seven sales-map pin types in the Pins card */
 const PIN_KIND_ORDER: RepPinKind[] = [
-  'closed_won', 'appointment', 'follow_up', 'no_answer', 'rejected', 'other',
+  'closed_won', 'lead', 'appointment', 'follow_up', 'no_answer', 'rejected', 'other',
 ];
 
 // ---------------------------------------------------------------------------
@@ -447,10 +447,10 @@ export default function D2DRepProfile() {
               <div className="grid grid-cols-3 gap-3">
                 <KpiCard label="Service Jobs" value={String(periodStats?.serviceJobs ?? 0)} />
                 <KpiCard label="APP" value={String(periodStats?.app ?? 0)} sub="Pins rendez-vous" />
-                <KpiCard label="VG" value={String(periodStats?.vg ?? 0)} sub="Pins vente" />
+                <KpiCard label="Avg Contract Value" value={periodStats?.avgContractValue != null ? fmtCurrency(periodStats.avgContractValue) : '—'} />
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <KpiCard label="Contract Closing Rate" value={periodStats?.contractClosingRate != null ? `${periodStats.contractClosingRate}%` : '—'} />
+                <KpiCard label="Closing Rate" value={periodStats?.contractClosingRate != null ? `${periodStats.contractClosingRate}%` : '—'} />
                 <KpiCard label="Cancel Rate" value={periodStats?.cancelRate != null ? `${periodStats.cancelRate}%` : '—'} />
                 <KpiCard label="Days Worked" value={String(periodStats?.daysWorked ?? 0)} />
               </div>
