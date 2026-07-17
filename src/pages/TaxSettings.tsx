@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from '../i18n';
-import BackToSettings from '../components/ui/BackToSettings';
 import {
   listTaxes, setupTaxPreset, updateTaxConfig, deleteTaxConfig, deleteTaxGroup, setDefaultTaxGroup, createTaxConfig, updateTaxRegistrationNumber,
   type TaxConfig, type TaxGroup, type TaxGroupItem, type TaxPreset,
@@ -182,7 +181,6 @@ export default function TaxSettings() {
     <div className="space-y-6 max-w-3xl">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <BackToSettings />
         <div className="flex-1">
           <h1 className="text-[22px] font-bold text-text-primary tracking-tight">{fr ? 'Paramètres de taxe' : 'Tax Settings'}</h1>
           <p className="text-[12px] text-text-tertiary mt-0.5">

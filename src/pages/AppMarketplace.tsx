@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import BackToSettings from '../components/ui/BackToSettings';
 import {
   Check,
   ChevronRight,
@@ -941,7 +940,6 @@ export default function AppMarketplace() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <BackToSettings />
         <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
           <Zap size={18} className="text-white" />
         </div>

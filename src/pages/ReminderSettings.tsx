@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Loader2, Bell, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
-import BackToSettings from '../components/ui/BackToSettings';
 import {
   fetchReminderSettings,
   updateReminderSettings,
@@ -114,7 +113,6 @@ export default function ReminderSettingsPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center gap-3">
-        <BackToSettings />
         <div className="flex items-center gap-2">
           <Bell size={20} className="text-text-secondary" />
           <h1 className="text-xl font-bold text-text-primary">

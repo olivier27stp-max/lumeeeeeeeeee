@@ -18,7 +18,6 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { cn } from '../lib/utils';
 import { PageHeader } from '../components/ui';
-import BackToSettings from '../components/ui/BackToSettings';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -272,7 +271,6 @@ export default function CompanySettings() {
     <PermissionGate permission="settings.update">
     <div className="space-y-8">
       <div className="flex items-center gap-3">
-        <BackToSettings />
         <PageHeader
           title={language === 'fr' ? 'Paramètres de l\'entreprise' : 'Company Settings'}
           subtitle={t.companySettings.informationUsedForInvoicesQuotesAndEmail}

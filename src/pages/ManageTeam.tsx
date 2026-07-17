@@ -10,7 +10,6 @@ import {
   Loader2,
   Check,
   X,
-  ArrowLeft,
   Search,
   Crown,
   ShieldCheck,
@@ -364,10 +363,6 @@ export default function ManageTeam() {
         icon={Users}
         iconColor="blue"
       >
-        <button className="glass-button-ghost inline-flex items-center gap-2" onClick={() => navigate('/settings')}>
-          <ArrowLeft size={14} />
-          {t.manageTeam.settings}
-        </button>
         <button className="glass-button-primary inline-flex items-center gap-2" onClick={() => setShowInviteModal(true)}>
           <MailPlus size={14} />
           {t.manageTeam.inviteMember}
