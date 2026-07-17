@@ -12,7 +12,6 @@ import {
   XCircle,
   RefreshCw,
 } from 'lucide-react';
-import BackToSettings from '../components/ui/BackToSettings';
 import {
   fetchChannels,
   sendSms,
@@ -116,9 +115,8 @@ export default function SettingsMessaging() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 px-6 py-8">
+    <div className="max-w-3xl space-y-6">
       <div className="flex items-center gap-3">
-        <BackToSettings />
         <div className="w-11 h-11 rounded-2xl bg-surface-secondary flex items-center justify-center">
           <MessageSquare size={20} className="text-text-tertiary" />
         </div>

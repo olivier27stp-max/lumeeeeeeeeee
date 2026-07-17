@@ -228,7 +228,7 @@ export default function DispatchMap() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/settings?tab=location')}
+            onClick={() => navigate('/settings/location')}
             className="p-1.5 rounded-lg hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors"
           >
             <ChevronLeft size={18} />

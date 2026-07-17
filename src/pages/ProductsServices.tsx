@@ -9,7 +9,6 @@ import {
   deletePredefinedService,
   PredefinedService,
 } from '../lib/servicesApi';
-import BackToSettings from '../components/ui/BackToSettings';
 
 export default function ProductsServices() {
   const [services, setServices] = useState<PredefinedService[]>([]);
@@ -122,7 +121,6 @@ export default function ProductsServices() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <BackToSettings />
           <div className="w-10 h-10 rounded-xl bg-surface-secondary flex items-center justify-center">
             <Package size={18} className="text-text-tertiary" />
           </div>

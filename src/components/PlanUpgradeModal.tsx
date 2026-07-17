@@ -250,7 +250,7 @@ export default function PlanUpgradeModal({ open, onClose, flag, requiredPlan, cu
 
   const handleUpgrade = () => {
     onClose();
-    navigate('/settings?tab=billing');
+    navigate('/settings/billing');
   };
 
   return (

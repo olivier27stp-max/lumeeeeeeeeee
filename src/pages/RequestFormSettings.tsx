@@ -28,7 +28,6 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { STORAGE_BUCKETS } from '../lib/storage';
 import FileUpload from '../components/FileUpload';
 import type { RequestForm, FormField, FormFieldType } from '../types';
-import BackToSettings from '../components/ui/BackToSettings';
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -486,7 +485,6 @@ export default function RequestFormSettings() {
     <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <BackToSettings />
         <div className="flex-1">
           <h1 className="text-[20px] font-bold text-text-primary tracking-tight">
             {t.requestForm.requestForm}

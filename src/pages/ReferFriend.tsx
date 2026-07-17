@@ -4,7 +4,6 @@ import {
   Copy,
   Check,
   Loader2,
-  ArrowLeft,
   Users,
   Clock,
   CheckCircle2,
@@ -115,7 +114,7 @@ export default function ReferFriend() {
               ? 'Le programme de parrainage est réservé aux abonnés payants. Chaque entreprise que vous parrainez et qui s\'abonne vous fait gagner un mois gratuit.'
               : 'The referral program is for paid subscribers. Every business you refer that subscribes earns you a free month.'}
           </p>
-          <button className="glass-button-primary inline-flex items-center gap-2" onClick={() => navigate('/settings?tab=billing')}>
+          <button className="glass-button-primary inline-flex items-center gap-2" onClick={() => navigate('/settings/billing')}>
             {isFr ? 'Voir les plans' : 'View plans'}
             <ExternalLink size={14} />
           </button>
@@ -133,12 +132,7 @@ export default function ReferFriend() {
           : 'Earn rewards by referring businesses to Lume CRM.'}
         icon={Gift}
         iconColor="blue"
-      >
-        <button className="glass-button inline-flex items-center gap-1.5" onClick={() => navigate('/settings')}>
-          <ArrowLeft size={14} />
-          {t.manageTeam.settings}
-        </button>
-      </PageHeader>
+      />
 
       {/* Hero banner */}
       <div className="section-card p-6 bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-700 text-white overflow-hidden relative">
