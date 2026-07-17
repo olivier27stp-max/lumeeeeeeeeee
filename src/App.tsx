@@ -108,7 +108,6 @@ import QuotePresets from './pages/QuotePresets';
 const QuoteMeasure = React.lazy(() => import('./pages/QuoteMeasure'));
 const QuoteNew = React.lazy(() => import('./pages/QuoteNew'));
 import TaxSettings from './pages/TaxSettings';
-import ReminderSettings from './pages/ReminderSettings';
 import OAuthCallback from './pages/OAuthCallback';
 import EmailOAuthCallback from './pages/EmailOAuthCallback';
 import DispatchMap from './pages/DispatchMap';
@@ -1263,7 +1262,8 @@ function AuthenticatedApp({
                       <Route path="products" element={<Gated permission="settings.update"><ProductsServices /></Gated>} />
                       <Route path="taxes" element={<Gated permission="settings.update"><TaxSettings /></Gated>} />
                       <Route path="payments" element={<Gated permission="settings.read"><PaymentSettings /></Gated>} />
-                      <Route path="reminders" element={<Gated permission="settings.update"><ReminderSettings /></Gated>} />
+                      {/* Standalone reminders settings page removed — old links land on Lume Payments */}
+                      <Route path="reminders" element={<Navigate to="/settings/payments" replace />} />
                       <Route path="messaging" element={<Gated permission="settings.read"><SettingsMessaging /></Gated>} />
                       <Route path="request-form" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_request_forms"><RequestFormSettings /></PlanFeatureGate></Gated>} />
                       <Route path="team" element={<Gated permission="team.read"><ManageTeam /></Gated>} />
