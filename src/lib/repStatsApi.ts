@@ -102,10 +102,10 @@ export interface RepPeriodStats {
   revenue: number;
   /** Count of jobs assigned to rep as salesperson, created in period */
   jobs: number;
-  /** Revenue from service-plan jobs only (job_type = 'recurring') */
-  serviceRevenue: number;
-  /** Count of service-plan jobs (job_type = 'recurring') */
-  serviceJobs: number;
+  /** Serviced revenue — revenu des jobs du rep marquées completed (job fermée) */
+  servicedRevenue: number;
+  /** Nombre de jobs du rep marquées completed */
+  servicedJobs: number;
   /** APP — appointment pins ('quote_sent') placed by rep on the sales map */
   app: number;
   /** Valeur moyenne par contrat — revenue ÷ jobs, null si aucune job */
@@ -147,7 +147,7 @@ export async function getRepPeriodStats(
   const [jobsRes, quotesRes, pinsRes, timeRes] = await Promise.all([
     supabase
       .from('jobs')
-      .select('id, status, total_amount, job_type')
+      .select('id, status, total_amount')
       .eq('org_id', orgId)
       .or(repJobCreditFilter(userId))
       .is('deleted_at', null)
@@ -181,7 +181,7 @@ export async function getRepPeriodStats(
   const pins = pinsRes.data || [];
   const times = timeRes.data || [];
 
-  const serviceJobsList = jobs.filter((j: any) => j.job_type === 'recurring');
+  const completedJobs = jobs.filter((j: any) => j.status === 'completed');
   const cancelled = jobs.filter((j: any) => j.status === 'cancelled').length;
   const quotesWon = quotes.filter((q: any) => q.status === 'approved' || q.status === 'converted').length;
   const revenue = jobs.reduce((sum, j: any) => sum + Number(j.total_amount || 0), 0);
@@ -189,8 +189,8 @@ export async function getRepPeriodStats(
   return {
     revenue,
     jobs: jobs.length,
-    serviceRevenue: serviceJobsList.reduce((sum, j: any) => sum + Number(j.total_amount || 0), 0),
-    serviceJobs: serviceJobsList.length,
+    servicedRevenue: completedJobs.reduce((sum, j: any) => sum + Number(j.total_amount || 0), 0),
+    servicedJobs: completedJobs.length,
     app: pins.filter((p: any) => p.status === 'quote_sent').length,
     avgContractValue: jobs.length > 0 ? Math.round(revenue / jobs.length) : null,
     contractClosingRate: quotes.length > 0 ? Math.round((quotesWon / quotes.length) * 100) : null,

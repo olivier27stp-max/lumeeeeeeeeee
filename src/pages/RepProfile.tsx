@@ -447,10 +447,10 @@ export default function D2DRepProfile() {
               <div className="grid grid-cols-3 gap-3">
                 <KpiCard label="Revenue" value={fmtCurrency(periodStats?.revenue ?? 0)} />
                 <KpiCard label="Jobs" value={String(periodStats?.jobs ?? 0)} />
-                <KpiCard label="Service Revenue" value={fmtCurrency(periodStats?.serviceRevenue ?? 0)} />
+                <KpiCard label="Serviced Revenue" value={fmtCurrency(periodStats?.servicedRevenue ?? 0)} sub="Jobs complétées" />
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <KpiCard label="Service Jobs" value={String(periodStats?.serviceJobs ?? 0)} />
+                <KpiCard label="Serviced Jobs" value={String(periodStats?.servicedJobs ?? 0)} sub="Jobs complétées" />
                 <KpiCard label="APP" value={String(periodStats?.app ?? 0)} sub="Pins rendez-vous" />
                 <KpiCard label="Avg Contract Value" value={periodStats?.avgContractValue != null ? fmtCurrency(periodStats.avgContractValue) : '—'} />
               </div>
