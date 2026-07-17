@@ -177,7 +177,9 @@ router.get('/leaderboard/rep/:userId/profile', async (req, res) => {
     const sc = getServiceClient();
     const { orgIds } = await resolveCompanyOrgIds(sc, auth.orgId);
 
-    const [membershipRes, memberRes, profileRes] = await Promise.all([
+    // NB : pas de profiles.created_at — la colonne n'existe pas en prod. La
+    // date de création du compte vient de l'API admin auth à la place.
+    const [membershipRes, memberRes, profileRes, authUserRes] = await Promise.all([
       sc.from('memberships').select('org_id').eq('user_id', userId).in('org_id', orgIds).limit(1),
       sc
         .from('team_members')
@@ -185,8 +187,11 @@ router.get('/leaderboard/rep/:userId/profile', async (req, res) => {
         .eq('user_id', userId)
         .in('org_id', orgIds)
         .limit(1),
-      sc.from('profiles').select('id, full_name, avatar_url, created_at').eq('id', userId).maybeSingle(),
+      sc.from('profiles').select('id, full_name, avatar_url').eq('id', userId).maybeSingle(),
+      sc.auth.admin.getUserById(userId),
     ]);
+    if (profileRes.error) console.error('[leaderboard] rep profile select failed:', profileRes.error.message);
+    if (memberRes.error) console.error('[leaderboard] rep team_member select failed:', memberRes.error.message);
 
     const membership = membershipRes.data?.[0] ?? null;
     const member = memberRes.data?.[0] ?? null;
@@ -223,6 +228,7 @@ router.get('/leaderboard/rep/:userId/profile', async (req, res) => {
       member,
       office,
       orgId: repOrgId,
+      accountCreatedAt: authUserRes.data?.user?.created_at ?? null,
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Internal server error' });

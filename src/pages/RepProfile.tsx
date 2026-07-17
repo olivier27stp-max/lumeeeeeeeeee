@@ -151,7 +151,7 @@ export default function D2DRepProfile() {
         : dbProfile?.full_name || 'Unknown';
 
       // Hire date = when the account was created
-      const hireSrc = dbMember?.created_at || dbProfile?.created_at;
+      const hireSrc = dbMember?.created_at || info.accountCreatedAt;
       const hire_date = hireSrc
         ? capitalize(new Date(hireSrc).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' }))
         : '';

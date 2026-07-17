@@ -94,7 +94,6 @@ export interface RepProfileInfo {
     id: string;
     full_name: string | null;
     avatar_url: string | null;
-    created_at: string | null;
   } | null;
   member: {
     id: string;
@@ -111,6 +110,8 @@ export interface RepProfileInfo {
   office: string;
   /** Org du rep dans la compagnie — sert à scoper ses stats. */
   orgId: string;
+  /** Date de création du compte auth (fallback pour la date d'embauche). */
+  accountCreatedAt: string | null;
 }
 
 /**
