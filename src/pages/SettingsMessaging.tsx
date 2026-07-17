@@ -27,6 +27,13 @@ import {
 import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgId } from '../lib/orgApi';
+import {
+  getAutomationRules,
+  toggleAutomationRule,
+  updateRuleSmsBody,
+  type AutomationRule,
+} from '../lib/automationRulesApi';
+import { ChevronDown, Pencil } from 'lucide-react';
 
 export default function SettingsMessaging() {
   const { language } = useTranslation();
@@ -277,6 +284,9 @@ export default function SettingsMessaging() {
         </div>
       )}
 
+      {/* ── Automatic SMS (real engine rules) ───────────────────── */}
+      {channel?.phone_number && <AutomationSmsSection isFr={isFr} />}
+
       {/* ── CASL / compliance footer ────────────────────────────── */}
       <div className="glass-card rounded-2xl p-5 space-y-2">
         <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
@@ -288,6 +298,222 @@ export default function SettingsMessaging() {
             : 'Recipients must have consented to receive SMS from your business. Always include the opt-out: "Reply STOP to unsubscribe." STOP replies are handled automatically and logged.'}
         </p>
       </div>
+    </div>
+  );
+}
+
+// ─── Automatic SMS section ──────────────────────────────────────────────
+// Surfaces the automation_rules that text clients (the engine ships ~34
+// active presets that were previously invisible anywhere in the UI).
+
+const RULE_LABELS_FR: Record<string, string> = {
+  appointment_confirmation: 'Confirmation de rendez-vous',
+  job_reminder_7d: 'Rappel de rendez-vous — 7 jours avant',
+  job_reminder_1d: 'Rappel de rendez-vous — la veille',
+  job_reminder_2h: 'Rappel de rendez-vous — 2 h avant',
+  no_show_followup: 'Suivi après rendez-vous annulé',
+  welcome_new_lead: 'Bienvenue à un nouveau lead',
+  lead_followup_1d: 'Relance de lead — 1 jour',
+  stale_lead_7d: 'Lead sans réponse — 7 jours',
+  lost_lead_reengagement: 'Réactivation de lead perdu',
+  quote_followup_1d: 'Relance de devis — 1 jour',
+  quote_followup_3d: 'Relance de devis — 3 jours',
+  quote_followup_7d: 'Relance de devis — 7 jours',
+  quote_followup_14d: 'Relance de devis — 14 jours',
+  deposit_reminder: 'Rappel de dépôt (devis approuvé)',
+  deposit_followup_2d: 'Relance de dépôt — 2 jours',
+  deposit_received: 'Confirmation de dépôt reçu',
+  invoice_sent_reminder_3d: 'Rappel de facture — 3 jours',
+  invoice_sent_reminder_7d: 'Rappel de facture — 7 jours',
+  invoice_sent_reminder_14d: 'Rappel de facture — 14 jours',
+  invoice_sent_reminder_30d: 'Rappel de facture — 30 jours',
+  payment_confirmation: 'Confirmation de paiement',
+  thank_you_after_job: 'Merci après la job',
+  post_appointment_survey: 'Mini-sondage après la job',
+  review_reminder_7d: "Rappel d'avis Google — 7 jours",
+  client_anniversary: 'Anniversaire de la job (1 an)',
+  reengagement_90d: 'Réactivation client — 90 jours',
+  seasonal_reminder_6m: 'Rappel saisonnier — 6 mois',
+};
+
+const TRIGGER_GROUPS_FR: Array<{ label: string; triggers: string[] }> = [
+  { label: 'Rendez-vous', triggers: ['appointment.created', 'appointment.cancelled'] },
+  { label: 'Devis & dépôts', triggers: ['quote.sent', 'quote.approved', 'estimate.sent'] },
+  { label: 'Factures & paiements', triggers: ['invoice.sent', 'invoice.paid'] },
+  { label: 'Leads', triggers: ['lead.created', 'lead.status_changed'] },
+  { label: 'Après la job', triggers: ['job.completed'] },
+];
+
+const SMS_VARIABLES = '[client_first_name] [client_name] [company_name] [appointment_date] [appointment_time] [appointment_address]';
+
+function humanDelay(seconds: number, isFr: boolean): string {
+  const abs = Math.abs(seconds);
+  const before = seconds < 0;
+  if (abs === 0) return isFr ? 'immédiatement' : 'immediately';
+  const days = Math.round(abs / 86400);
+  const hours = Math.round(abs / 3600);
+  const label = abs >= 86400
+    ? `${days} ${isFr ? (days > 1 ? 'jours' : 'jour') : days > 1 ? 'days' : 'day'}`
+    : `${hours} h`;
+  if (before) return isFr ? `${label} avant` : `${label} before`;
+  return isFr ? `${label} après` : `${label} after`;
+}
+
+function AutomationSmsSection({ isFr }: { isFr: boolean }) {
+  const [rules, setRules] = useState<AutomationRule[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(true);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [draftBody, setDraftBody] = useState('');
+  const [savingBody, setSavingBody] = useState(false);
+
+  useEffect(() => {
+    getAutomationRules()
+      .then((all) => setRules(all.filter((r) => (r.actions || []).some((a) => a.type === 'send_sms'))))
+      .catch(() => setRules([]))
+      .finally(() => setRulesLoading(false));
+  }, []);
+
+  const smsBody = (r: AutomationRule) =>
+    (r.actions || []).find((a) => a.type === 'send_sms')?.config?.body || '';
+
+  async function handleToggle(rule: AutomationRule) {
+    const next = !rule.is_active;
+    setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: next } : r)));
+    try {
+      await toggleAutomationRule(rule.id, next);
+    } catch {
+      setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: !next } : r)));
+    }
+  }
+
+  async function handleSaveBody(rule: AutomationRule) {
+    setSavingBody(true);
+    try {
+      await updateRuleSmsBody(rule.id, draftBody.trim());
+      setRules((prev) => prev.map((r) => (r.id === rule.id
+        ? { ...r, actions: r.actions.map((a) => (a.type === 'send_sms' ? { ...a, config: { ...a.config, body: draftBody.trim() } } : a)) }
+        : r)));
+      setOpenId(null);
+    } finally {
+      setSavingBody(false);
+    }
+  }
+
+  const activeCount = rules.filter((r) => r.is_active).length;
+
+  return (
+    <div className="glass-card rounded-2xl p-6 space-y-4">
+      <div>
+        <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+          {isFr ? 'Textos automatiques' : 'Automatic texts'}
+        </p>
+        <p className="text-[12px] text-text-tertiary mt-1">
+          {isFr
+            ? `Ce que Lume texte à vos clients, quand, et avec quels mots. ${activeCount} automatisation${activeCount > 1 ? 's' : ''} active${activeCount > 1 ? 's' : ''}.`
+            : `What Lume texts your clients, when, and with which words. ${activeCount} automation${activeCount > 1 ? 's' : ''} active.`}
+        </p>
+      </div>
+
+      {rulesLoading && (
+        <div className="flex items-center gap-2 text-sm text-text-tertiary py-3">
+          <Loader2 size={15} className="animate-spin" /> {isFr ? 'Chargement…' : 'Loading…'}
+        </div>
+      )}
+
+      {!rulesLoading && rules.length === 0 && (
+        <p className="text-[12.5px] text-text-tertiary">
+          {isFr ? 'Aucune automatisation SMS configurée pour cette organisation.' : 'No SMS automations configured for this organization.'}
+        </p>
+      )}
+
+      {!rulesLoading && TRIGGER_GROUPS_FR.map((group) => {
+        const groupRules = rules.filter((r) => group.triggers.includes(r.trigger_event));
+        if (groupRules.length === 0) return null;
+        return (
+          <div key={group.label}>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary pb-1.5">
+              {group.label}
+            </p>
+            <div className="divide-y divide-outline/30 rounded-xl border border-outline/50 overflow-hidden">
+              {groupRules.map((rule) => {
+                const isOpen = openId === rule.id;
+                const label = (isFr && rule.preset_key && RULE_LABELS_FR[rule.preset_key]) || rule.name;
+                return (
+                  <div key={rule.id} className="bg-surface-card">
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={rule.is_active}
+                        onClick={() => handleToggle(rule)}
+                        className={`relative inline-flex h-[18px] w-8 shrink-0 items-center rounded-full transition-colors ${rule.is_active ? 'bg-[#1F5F4F]' : 'bg-surface-tertiary'}`}
+                      >
+                        <span className={`inline-block h-[14px] w-[14px] transform rounded-full bg-surface-card shadow-sm transition-transform ${rule.is_active ? 'translate-x-[17px]' : 'translate-x-[2px]'}`} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isOpen) { setOpenId(null); return; }
+                          setOpenId(rule.id);
+                          setDraftBody(smsBody(rule));
+                        }}
+                        className="flex flex-1 items-center justify-between gap-2 text-left min-w-0"
+                      >
+                        <div className="min-w-0">
+                          <p className={`text-[13px] font-medium truncate ${rule.is_active ? 'text-text-primary' : 'text-text-tertiary'}`}>{label}</p>
+                          <p className="text-[11px] text-text-tertiary truncate">
+                            {humanDelay(rule.delay_seconds, isFr)} · {smsBody(rule) || (isFr ? '(aucun texte)' : '(no text)')}
+                          </p>
+                        </div>
+                        <span className="flex items-center gap-1 text-text-tertiary shrink-0">
+                          <Pencil size={11} />
+                          <ChevronDown size={13} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                        </span>
+                      </button>
+                    </div>
+                    {isOpen && (
+                      <div className="px-4 pb-4 space-y-2">
+                        <textarea
+                          value={draftBody}
+                          onChange={(e) => setDraftBody(e.target.value)}
+                          rows={3}
+                          maxLength={320}
+                          className="glass-input w-full resize-none text-[13px]"
+                        />
+                        <p className="text-[10.5px] text-text-tertiary leading-relaxed">
+                          {isFr ? 'Variables disponibles : ' : 'Available variables: '}
+                          <span className="font-mono">{SMS_VARIABLES}</span>
+                        </p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-text-tertiary">{draftBody.length} / 320</span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setOpenId(null)}
+                              className="h-8 px-3 rounded-lg border border-outline text-[12px] font-medium text-text-secondary hover:bg-surface-secondary transition"
+                            >
+                              {isFr ? 'Annuler' : 'Cancel'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveBody(rule)}
+                              disabled={savingBody || !draftBody.trim()}
+                              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-[#1F5F4F] text-white text-[12px] font-medium hover:bg-[#1A4F41] disabled:opacity-50 transition"
+                            >
+                              {savingBody && <Loader2 size={11} className="animate-spin" />}
+                              {isFr ? 'Enregistrer' : 'Save'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
