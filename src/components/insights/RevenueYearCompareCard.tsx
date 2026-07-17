@@ -4,8 +4,8 @@ import { useTranslation } from '../../i18n';
 
 function kMoney(cents: number) {
   const d = (cents || 0) / 100;
-  if (Math.abs(d) >= 1000) return `${(d / 1000).toFixed(1).replace(/\.0$/, '')} k$`;
-  return `${Math.round(d)} $`;
+  if (Math.abs(d) >= 1000) return `$${(d / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  return `$${Math.round(d)}`;
 }
 
 /** Jobber-style Revenue card: current year vs previous year, by month. */

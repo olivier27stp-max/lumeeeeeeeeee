@@ -10,15 +10,14 @@ import {
   type TaxConfig, type TaxGroup, type TaxGroupItem, type TaxPreset,
 } from '../lib/taxApi';
 
-function formatMoney(cents: number, locale: string = 'en-CA', currency: string = 'CAD') {
-  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(cents / 100);
+function formatMoney(cents: number, currency: string = 'CAD') {
+  return new Intl.NumberFormat('en-CA', { style: 'currency', currency }).format(cents / 100);
 }
 
 export default function TaxSettings() {
   const navigate = useNavigate();
   const { language } = useTranslation();
   const fr = language === 'fr';
-  const locale = fr ? 'fr-CA' : 'en-CA';
   const [loading, setLoading] = useState(true);
   const [configs, setConfigs] = useState<TaxConfig[]>([]);
   const [groups, setGroups] = useState<TaxGroup[]>([]);
@@ -356,22 +355,22 @@ export default function TaxSettings() {
               <div className="flex items-center gap-2 mb-3">
                 <DollarSign size={14} className="text-text-tertiary" />
                 <p className="text-[13px] font-semibold text-text-primary">{fr ? 'Aperçu des taxes' : 'Tax Preview'}</p>
-                <span className="text-[11px] text-text-tertiary">{fr ? 'sur une facture de 1 000 $' : 'on a $1,000 invoice'}</span>
+                <span className="text-[11px] text-text-tertiary">{fr ? 'sur une facture de $1,000' : 'on a $1,000 invoice'}</span>
               </div>
               <div className="bg-surface-secondary/50 rounded-lg p-4 space-y-1.5 text-[12px]">
                 <div className="flex justify-between">
                   <span className="text-text-secondary">{fr ? 'Sous-total' : 'Subtotal'}</span>
-                  <span className="tabular-nums font-medium text-text-primary">{formatMoney(previewSubtotal, locale, currency)}</span>
+                  <span className="tabular-nums font-medium text-text-primary">{formatMoney(previewSubtotal, currency)}</span>
                 </div>
                 {previewTaxes.map((t, i) => (
                   <div key={i} className="flex justify-between">
                     <span className="text-text-tertiary">{t.name}</span>
-                    <span className="tabular-nums text-text-secondary">{formatMoney(t.amount, locale, currency)}</span>
+                    <span className="tabular-nums text-text-secondary">{formatMoney(t.amount, currency)}</span>
                   </div>
                 ))}
                 <div className="flex justify-between pt-1.5 mt-1 border-t border-outline/50 font-semibold text-[13px]">
                   <span className="text-text-primary">{fr ? 'Total' : 'Total'}</span>
-                  <span className="tabular-nums text-text-primary">{formatMoney(previewTotal, locale, currency)}</span>
+                  <span className="tabular-nums text-text-primary">{formatMoney(previewTotal, currency)}</span>
                 </div>
               </div>
             </div>

@@ -100,7 +100,7 @@ const FEATURES: FeatureCard[] = [
       'Analyses de performance et cartes de chaleur',
     ],
     visualEn: 'Top rep this week: Sarah · 12 deals · $8,450 commission',
-    visualFr: 'Top rep cette semaine : Sarah · 12 ventes · 8 450 $ commission',
+    visualFr: 'Top rep cette semaine : Sarah · 12 ventes · $8,450 commission',
   },
   {
     flag: 'includes_courses',

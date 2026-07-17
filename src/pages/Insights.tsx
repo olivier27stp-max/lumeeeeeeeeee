@@ -72,8 +72,8 @@ function parseTab(raw: string | null): InsightsTab {
   return 'reports';
 }
 
-function fmtMoney(cents: number, locale: string = 'en-CA') {
-  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
+function fmtMoney(cents: number) {
+  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 }
 
 
@@ -516,8 +516,8 @@ export default function Insights() {
                     { label: fr ? 'Nouvelles demandes' : 'New requests', value: String(overview?.requests_count || 0), pct: cmp('requests').pct },
                     { label: fr ? 'Devis convertis' : 'Converted quotes', value: String(overview?.converted_quotes_count || 0), pct: cmp('converted_quotes').pct },
                     { label: fr ? 'Jobs ponctuels' : 'One-off jobs', value: String(overview?.new_oneoff_jobs_count || 0), pct: cmp('new_oneoff_jobs').pct },
-                    { label: fr ? 'Revenu' : 'Revenue', value: fmtMoney(overview?.revenue_cents || 0, fr ? 'fr-CA' : 'en-CA'), pct: cmp('revenue').pct },
-                    { label: fr ? 'Valeur facturée' : 'Invoiced value', value: fmtMoney(overview?.invoiced_value_cents || 0, fr ? 'fr-CA' : 'en-CA'), pct: cmp('invoiced_value').pct },
+                    { label: fr ? 'Revenu' : 'Revenue', value: fmtMoney(overview?.revenue_cents || 0), pct: cmp('revenue').pct },
+                    { label: fr ? 'Valeur facturée' : 'Invoiced value', value: fmtMoney(overview?.invoiced_value_cents || 0), pct: cmp('invoiced_value').pct },
                   ]}
                 />
               </section>
@@ -607,7 +607,7 @@ export default function Insights() {
                       <XAxis dataKey="label" tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
                       <YAxis tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
                       <Tooltip formatter={(value: number, name: string) => [
-                        new Intl.NumberFormat(language === 'fr' ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD' }).format(Number(value || 0)),
+                        new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(Number(value || 0)),
                         name === 'revenue' ? t.insights.revenue : t.insights.invoiced,
                       ]} />
                       <Legend />

@@ -55,7 +55,7 @@ const ALL_REGIONS: Record<string, TaxRegion> = {};
 [...CA_REGIONS, ...US_REGIONS].forEach((r) => { ALL_REGIONS[r.key] = r; });
 
 function money(cents: number, currency: string) {
-  return `${(cents / 100).toLocaleString('fr-CA', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} $ ${currency}`;
+  return `$${(cents / 100).toLocaleString('en-CA', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currency}`;
 }
 
 export default function CheckoutSetup({

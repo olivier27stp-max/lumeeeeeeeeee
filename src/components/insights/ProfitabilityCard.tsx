@@ -53,13 +53,12 @@ export default function ProfitabilityCard({
 }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
-  const locale = fr ? 'fr-CA' : 'en-CA';
   const qc = useQueryClient();
 
   const key = ['job-pnl', range.from, range.to];
   const q = useQuery({ queryKey: key, queryFn: () => fetchJobPnL({ from: range.from, to: range.to }), staleTime: 30_000 });
 
-  const k = (cents: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
+  const k = (cents: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
   const data = q.data;
   const rows = data?.rows || [];
   const onSaved = () => qc.invalidateQueries({ queryKey: key });

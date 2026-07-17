@@ -5,11 +5,9 @@ import React from 'react';
 import { Check, X, FileText, ReceiptText, Briefcase, MessageSquare, Loader2 } from 'lucide-react';
 import type { ProposedAction } from '../lib/agentApi';
 
-const money = (cents: number, fr: boolean) => {
+const money = (cents: number) => {
   const v = (Number(cents) || 0) / 100;
-  return fr
-    ? `${v.toLocaleString('fr-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`
-    : `$${v.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `$${v.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const ICONS: Record<ProposedAction['type'], React.ReactNode> = {
@@ -68,13 +66,13 @@ function Preview({ action, fr }: { action: ProposedAction; fr: boolean }) {
                   {qty > 1 ? `${qty}× ` : ''}
                   {it.name || it.description}
                 </span>
-                <span className="text-text-secondary tabular-nums">{money(line, fr)}</span>
+                <span className="text-text-secondary tabular-nums">{money(line)}</span>
               </div>
             );
           })}
           <div className="flex items-center justify-between px-2.5 py-1.5 text-[12.5px] font-semibold">
             <span>{fr ? 'Sous-total' : 'Subtotal'}</span>
-            <span className="tabular-nums">{money(total, fr)}</span>
+            <span className="tabular-nums">{money(total)}</span>
           </div>
         </div>
       )}

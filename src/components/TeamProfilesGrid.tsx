@@ -21,7 +21,7 @@ interface RowState {
 }
 
 function fmtCurrency(n: number): string {
-  return new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(n || 0);
+  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(n || 0);
 }
 
 export default function TeamProfilesGrid({ orgId, fr = false }: { orgId: string; fr?: boolean }) {

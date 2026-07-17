@@ -98,10 +98,8 @@ const PIPELINE_STATUS_META: Record<string, { label: string; color: string; order
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatCurrency(amount: number, fr = false): string {
-  return fr
-    ? amount.toLocaleString('fr-CA', { maximumFractionDigits: 0 }) + ' $'
-    : '$' + amount.toLocaleString('en-CA', { maximumFractionDigits: 0 });
+function formatCurrency(amount: number, _fr = false): string {
+  return '$' + amount.toLocaleString('en-CA', { maximumFractionDigits: 0 });
 }
 
 function getGreeting(fr = false): string {

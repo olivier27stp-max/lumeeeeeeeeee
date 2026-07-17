@@ -26,7 +26,6 @@ export default function ServiceMixCard({
 }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
-  const locale = fr ? 'fr-CA' : 'en-CA';
   const [active, setActive] = useState<number | null>(null);
 
   const q = useQuery({
@@ -36,7 +35,7 @@ export default function ServiceMixCard({
   });
 
   const money = (cents: number) =>
-    new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
+    new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 
   const { segs, total } = useMemo(() => {
     const data = (q.data || []).slice(0, 4);

@@ -116,7 +116,7 @@ function perfToFunnel(perf: RepPerformanceDetail): { key: string; value: number;
 const RANK_RING = ['#F59E0B', '#94A3B8', '#EA580C'];
 
 const money = (v: number) =>
-  new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(v || 0);
+  new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(v || 0);
 
 export default function D2DLeaderboard() {
   const navigate = useNavigate();

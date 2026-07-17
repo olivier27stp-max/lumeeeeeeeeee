@@ -11,7 +11,8 @@ function _currentLocale(): string { return _safeGet('lume-language') === 'fr' ? 
 function _currentCurrency(): string { return _safeGet('lume-currency') || 'CAD'; }
 
 export function formatCurrency(value: number, currency?: string) {
-  return new Intl.NumberFormat(_currentLocale(), {
+  // Always English placement ($ before the amount) regardless of language
+  return new Intl.NumberFormat('en-CA', {
     style: 'currency',
     currency: currency || _currentCurrency(),
     minimumFractionDigits: 0,

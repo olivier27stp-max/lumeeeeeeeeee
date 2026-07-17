@@ -1190,7 +1190,7 @@ const fr: TranslationKeys = {
     plans: {
       beginner: {
         name: 'Débutant',
-        priceLabel: '127 $',
+        priceLabel: '$127',
         features: [
           'Jusqu\'à 50 leads',
           'Pipeline (Kanban)',
@@ -1202,7 +1202,7 @@ const fr: TranslationKeys = {
       },
       pro: {
         name: 'Pro',
-        priceLabel: '297 $',
+        priceLabel: '$297',
         features: [
           'Leads & clients illimités',
           'Analytiques pipeline avancées',
@@ -1215,7 +1215,7 @@ const fr: TranslationKeys = {
       },
       autopilot: {
         name: 'Autopilot',
-        priceLabel: '797 $',
+        priceLabel: '$797',
         features: [
           'Tout dans Pro',
           'Assistant IA',

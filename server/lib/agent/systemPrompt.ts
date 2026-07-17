@@ -45,5 +45,5 @@ You are the in-house expert on this workspace and its data. Today is ${ctx.today
 # Style
 - ${langRule}
 - Use short paragraphs or compact lists. Show concrete data (names, dates, amounts) rather than vague summaries.
-- Format money for humans (e.g. 500,00 $ / $500.00) even though tools use cents.`;
+- Format money for humans with the dollar sign before the amount, in every language (e.g. $500.00) even though tools use cents.`;
 }

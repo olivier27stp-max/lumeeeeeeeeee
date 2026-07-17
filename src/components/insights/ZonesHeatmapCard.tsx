@@ -85,7 +85,6 @@ export default function ZonesHeatmapCard({
 }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
-  const locale = fr ? 'fr-CA' : 'en-CA';
   const dark = useIsDark();
   const ink = dark ? '250,250,250' : '23,23,23';
 
@@ -103,7 +102,7 @@ export default function ZonesHeatmapCard({
     staleTime: 60_000,
   });
 
-  const kc = (cents: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
+  const kc = (cents: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 
   const { zones, stats, maxRev, center } = useMemo(() => {
     const valid = (q.data?.pins || []).filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && !(p.latitude === 0 && p.longitude === 0));

@@ -527,8 +527,8 @@ export default function GlobalSearch() {
 
 // ── Result Row Component ──
 
-function formatMoney(cents: number, currency: string | null | undefined, fr: boolean) {
-  return new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', {
+function formatMoney(cents: number, currency: string | null | undefined) {
+  return new Intl.NumberFormat('en-CA', {
     style: 'currency',
     currency: currency || 'CAD',
     minimumFractionDigits: 2,
@@ -547,7 +547,7 @@ function entityRowText(item: SuggestionAction, fr: boolean): { main: string; con
 
   if (item.entityType === 'payment') {
     main = item.amountCents != null
-      ? `${typeLabel} – ${formatMoney(item.amountCents, item.currency, fr)}`
+      ? `${typeLabel} – ${formatMoney(item.amountCents, item.currency)}`
       : typeLabel;
   }
 
