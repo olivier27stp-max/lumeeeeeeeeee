@@ -38,6 +38,7 @@ import {
   updateMemberRole,
   removeMember,
   reactivateMember,
+  deleteMember,
   type OrgMember,
   type Invitation,
   type MemberRole,
@@ -113,6 +114,8 @@ export default function ManageTeam() {
   const [roleFilter, setRoleFilter] = useState<MemberRole | 'all'>('all');
   const [removeTarget, setRemoveTarget] = useState<OrgMember | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<OrgMember | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const isFr = language === 'fr';
   const roleDescriptions = isFr ? ROLE_DESCRIPTIONS_FR : ROLE_DESCRIPTIONS_EN;
@@ -391,6 +394,23 @@ export default function ManageTeam() {
     }
   };
 
+  const handleDeleteMember = async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    try {
+      await deleteMember(deleteTarget.user_id);
+      toast.success(isFr
+        ? `${deleteTarget.full_name || 'Membre'} supprimé définitivement`
+        : `${deleteTarget.full_name || 'Member'} permanently deleted`);
+      setDeleteTarget(null);
+      await loadTeam();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   const handleReactivate = async (member: OrgMember) => {
     try {
       await reactivateMember(member.user_id);
@@ -644,6 +664,7 @@ export default function ManageTeam() {
                 onChangeRole={() => setRoleChangeMember(member)}
                 onRemove={() => {}}
                 onReactivate={() => handleReactivate(member)}
+                onDeleteForever={() => setDeleteTarget(member)}
                 rate={rates[member.user_id] || 0}
                 onSaveRate={(c) => handleSaveRate(member, c)}
                 isSuspended
@@ -784,6 +805,41 @@ export default function ManageTeam() {
         </div>
       </Modal>
 
+      {/* Permanent delete confirmation (suspended members only) */}
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => !deleteBusy && setDeleteTarget(null)}
+        title={isFr ? 'Supprimer définitivement ?' : 'Delete permanently?'}
+        description={deleteTarget?.full_name || deleteTarget?.email || ''}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-danger/5 border border-danger/20 px-4 py-3 space-y-1.5">
+            <p className="text-[13px] font-semibold text-text-primary">
+              {isFr ? 'Action irréversible :' : 'This is irreversible:'}
+            </p>
+            <ul className="text-[12px] text-text-secondary space-y-1">
+              <li>• {isFr ? 'Le membre disparaît de l\'équipe pour de bon.' : 'The member is gone from the team for good.'}</li>
+              <li>• {isFr ? 'Ses jobs, ventes et son historique restent dans le CRM.' : 'Their jobs, sales and history stay in the CRM.'}</li>
+              <li>• {isFr ? 'Pour le faire revenir, il faudra une nouvelle invitation.' : 'Bringing them back requires a fresh invitation.'}</li>
+            </ul>
+          </div>
+          <div className="flex gap-2.5 justify-end">
+            <button className="glass-button-ghost" disabled={deleteBusy} onClick={() => setDeleteTarget(null)}>
+              {isFr ? 'Annuler' : 'Cancel'}
+            </button>
+            <button
+              className="glass-button bg-danger text-white hover:bg-danger/90 inline-flex items-center gap-2"
+              disabled={deleteBusy}
+              onClick={handleDeleteMember}
+            >
+              {deleteBusy ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+              {isFr ? 'Supprimer définitivement' : 'Delete permanently'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Change Role Modal */}
       <Modal
         open={!!roleChangeMember}
@@ -844,6 +900,7 @@ interface MemberRowProps {
   onChangeRole: () => void;
   onRemove: () => void;
   onReactivate?: () => void;
+  onDeleteForever?: () => void;
   rate: number;
   onSaveRate: (cents: number) => void;
   onSaveExperience?: (level: 'rookie' | 'experienced' | null) => void;
@@ -860,6 +917,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
   onChangeRole,
   onRemove,
   onReactivate,
+  onDeleteForever,
   rate,
   onSaveRate,
   onSaveExperience,
@@ -1056,6 +1114,15 @@ const MemberRow: React.FC<MemberRowProps> = ({
                       {isFr ? 'Réactiver l\'accès' : 'Reactivate access'}
                     </button>
                   </>
+                )}
+                {isSuspended && onDeleteForever && (
+                  <button
+                    onClick={() => { setOpenMenuId(null); onDeleteForever(); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-danger hover:bg-danger-light transition-colors"
+                  >
+                    <Trash2 size={13} />
+                    {isFr ? 'Supprimer définitivement' : 'Delete permanently'}
+                  </button>
                 )}
               </motion.div>
             )}
