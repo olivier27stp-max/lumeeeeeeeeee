@@ -30,6 +30,7 @@ import { PageHeader, Modal } from '../components/ui';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import { updateMemberRole, removeMember } from '../lib/invitationsApi';
+import MemberPermissionsEditor from '../components/team/MemberPermissionsEditor';
 import {
   type TeamRole,
   type PermissionsMap,
@@ -559,9 +560,10 @@ export default function TeamMemberDetails() {
               </div>
               <p className="text-[11px] text-text-tertiary mt-2">
                 {isFr
-                  ? 'Les permissions détaillées se gèrent par rôle dans Réglages → Rôles & Permissions.'
-                  : 'Fine-grained permissions are managed per role in Settings → Roles & Permissions.'}
+                  ? 'Le rôle donne les permissions de base (Réglages → Rôles & Permissions). Vous pouvez les ajuster individuellement ci-dessous.'
+                  : 'The role provides the base permissions (Settings → Roles & Permissions). You can adjust them individually below.'}
               </p>
+              {form.user_id && <MemberPermissionsEditor userId={form.user_id} isFr={isFr} />}
             </div>
           )}
         </div>
