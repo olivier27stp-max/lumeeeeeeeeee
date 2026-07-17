@@ -61,6 +61,14 @@ export async function refreshOnboardingLink(): Promise<{ url: string; expires_at
   });
 }
 
+/** Lien one-shot vers le dashboard Stripe Express (versements, solde, compte bancaire). */
+export async function createDashboardLink(): Promise<{ url: string }> {
+  return fetchApiJson('/api/connect/dashboard-link', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
 // ── Payment Requests ──
 
 export interface CreatePaymentRequestResponse {

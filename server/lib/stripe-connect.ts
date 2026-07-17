@@ -79,6 +79,20 @@ export async function createOnboardingLink(orgId: string, returnUrl: string, ref
   return { url: link.url, expires_at: link.expires_at };
 }
 
+/**
+ * Lien de connexion au dashboard Stripe Express du marchand (payouts, solde,
+ * compte bancaire, litiges). Valide quelques minutes, usage unique — à
+ * générer à la demande, jamais à stocker.
+ */
+export async function createDashboardLoginLink(orgId: string) {
+  const stripe = getPlatformStripe();
+  const account = await getConnectedAccount(orgId);
+  if (!account) throw new Error('No connected account found. Create one first.');
+
+  const link = await stripe.accounts.createLoginLink(account.stripe_account_id);
+  return { url: link.url };
+}
+
 export async function refreshAccountStatus(orgId: string) {
   const stripe = getPlatformStripe();
   const admin = getServiceClient();
