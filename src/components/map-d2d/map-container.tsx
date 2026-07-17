@@ -1518,22 +1518,22 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
           {/* Box 1 — Entonnoir : filtrer les pins */}
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${showFilters ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${showFilters ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
             title={fr ? 'Filtrer les pins' : 'Filter pins'}
             aria-label={fr ? 'Filtres' : 'Filters'}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
             </svg>
           </button>
           {/* Box 2 — Loupe : recherche */}
           <button
             onClick={() => setSearchModalOpen(true)}
-            className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${searchModalOpen ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${searchModalOpen ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
             title={fr ? 'Rechercher une adresse (⌘K)' : 'Search an address (⌘K)'}
             aria-label={fr ? 'Rechercher' : 'Search'}
           >
-            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
           </button>
@@ -1545,11 +1545,11 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
                 if (mode === 'draw_zone') cancelDrawing();
                 else { setMode('draw_zone'); setDrawingPoints([]); }
               }}
-              className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${mode === 'draw_zone' ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+              className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${mode === 'draw_zone' ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
               title={fr ? 'Créer une zone' : 'Create a zone'}
               aria-label={fr ? 'Créer une zone' : 'Create a zone'}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M2 5.5c1-2 4-3.2 6-2.7" strokeDasharray="1 2.6" />
                 <path d="M22 14a8 8 0 0 1-8 8" />
                 <path d="M18 11v-1a2 2 0 0 0-2-2 2 2 0 0 0-2 2" />
@@ -1563,11 +1563,11 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
           {/* Box 4 — Sélection rectangle : sélectionner des pins */}
           <button
             onClick={() => { if (mode === 'select') exitSelectMode(); else enterSelectMode(); }}
-            className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${mode === 'select' ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${mode === 'select' ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
             title={fr ? (mode === 'select' ? 'Annuler la sélection' : 'Sélectionner des pins') : (mode === 'select' ? 'Cancel selection' : 'Select pins')}
             aria-label={fr ? 'Sélectionner' : 'Select'}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 3a2 2 0 0 0-2 2" /><path d="M19 3a2 2 0 0 1 2 2" /><path d="M21 19a2 2 0 0 1-2 2" /><path d="M5 21a2 2 0 0 1-2-2" />
               <path d="M9 3h1" /><path d="M9 21h1" /><path d="M14 3h1" /><path d="M14 21h1" /><path d="M3 9v1" /><path d="M3 14v1" /><path d="M21 9v1" /><path d="M21 14v1" />
             </svg>
@@ -1576,11 +1576,11 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
           {/* Box 5 — Plan plié : bascule plan / satellite */}
           <button
             onClick={toggleSatellite}
-            className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${satellite ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${satellite ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
             title={fr ? (satellite ? 'Passer en vue plan' : 'Passer en vue satellite') : (satellite ? 'Switch to map view' : 'Switch to satellite view')}
             aria-label={fr ? 'Changer le style de carte' : 'Toggle map style'}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" />
               <path d="M15 5.764v15" /><path d="M9 3.236v15" />
             </svg>
