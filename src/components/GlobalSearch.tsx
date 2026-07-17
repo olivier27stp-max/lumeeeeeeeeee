@@ -525,12 +525,16 @@ export default function GlobalSearch() {
 
 // ── Result Row Component ──
 
-// Two levels only: main line (name/number) + secondary line (type · context).
-function entitySecondaryLine(item: SuggestionAction, fr: boolean): string {
+// One line per result: "Title (Client)". Bare numbers get their type as a
+// prefix ("658" → "Invoice #658"); clients show their name alone.
+function entityRowText(item: SuggestionAction, fr: boolean): { main: string; context: string | null } {
   const typeLabel = item.entityType ? ENTITY_TYPE_LABELS[item.entityType][fr ? 'fr' : 'en'] : '';
+  let main = item.label;
+  const bareNumber = main.trim().match(/^#?(\d+)$/);
+  if (bareNumber && typeLabel) main = `${typeLabel} #${bareNumber[1]}`;
+
   if (item.entityType === 'client' || item.entityType === 'lead') {
-    // Clients read best with their contact info (email/phone) as context
-    return item.subtitle && item.subtitle !== item.label ? item.subtitle : typeLabel;
+    return { main, context: null };
   }
   const context =
     item.clientName && item.clientName !== item.label
@@ -538,7 +542,7 @@ function entitySecondaryLine(item: SuggestionAction, fr: boolean): string {
       : item.subtitle && item.subtitle !== item.label
         ? item.subtitle
         : null;
-  return context ? `${typeLabel} · ${context}` : typeLabel;
+  return { main, context };
 }
 
 function SearchResultRow({
@@ -570,7 +574,9 @@ function SearchResultRow({
           ? (quickAction?.icon || Zap)
           : Search;
 
-  const secondary = item.kind === 'entity' ? entitySecondaryLine(item, fr) : item.subtitle || null;
+  const { main, context } = item.kind === 'entity'
+    ? entityRowText(item, fr)
+    : { main: item.label, context: null };
 
   return (
     <button
@@ -587,19 +593,15 @@ function SearchResultRow({
     >
       <div className="flex items-center gap-3.5">
         {/* Bare icon — no chip, no halo; entity sections keep their identity color */}
-        <Icon size={16} strokeWidth={2.5} className={cn('shrink-0', entityIconClass(item.entityType || quickAction?.entity))} aria-hidden />
+        <Icon size={17} strokeWidth={2.5} className={cn('shrink-0', entityIconClass(item.entityType || quickAction?.entity))} aria-hidden />
 
-        {/* Content: main + secondary */}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-extrabold text-text-primary">
-            {item.kind === 'entity' ? highlightText(item.label, query) : item.label}
-          </p>
-          {secondary ? (
-            <p className="mt-0.5 truncate text-[12.5px] font-normal text-text-secondary">
-              {item.kind === 'entity' ? highlightText(secondary, query) : secondary}
-            </p>
+        {/* One line: "Title (Client)" — wraps to 2 lines only when too long */}
+        <p className="min-w-0 flex-1 text-[15px] font-extrabold leading-snug text-text-primary line-clamp-2">
+          {item.kind === 'entity' ? highlightText(main, query) : main}
+          {context ? (
+            <span className="font-semibold text-text-secondary"> ({highlightText(context, query)})</span>
           ) : null}
-        </div>
+        </p>
       </div>
     </button>
   );
