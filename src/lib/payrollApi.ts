@@ -120,6 +120,22 @@ export function unmarkPeriodPaid(userId: string, ref?: string) {
   return authedFetch('/api/payroll/unmark-paid', { method: 'POST', body: JSON.stringify({ user_id: userId, ref }) });
 }
 
+export interface PayHistoryEntry {
+  period_start: string;
+  period_end: string;
+  hours: number;
+  gross_cents: number;
+  commission_cents: number;
+  adjustments_cents: number;
+  total_cents: number;
+  note: string | null;
+  paid_at: string;
+}
+
+export function getPayHistory(userId: string): Promise<{ payments: PayHistoryEntry[]; migration_missing: boolean }> {
+  return authedFetch(`/api/payroll/history?user_id=${encodeURIComponent(userId)}`);
+}
+
 /** Download the QuickBooks-friendly CSV for the period containing `ref`. */
 export async function downloadPayrollCsv(ref?: string): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();

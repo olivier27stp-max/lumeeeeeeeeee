@@ -375,6 +375,33 @@ router.post('/payroll/unmark-paid', async (req, res) => {
   }
 });
 
+// GET /api/payroll/history?user_id=... — paid periods for one employee (admin).
+router.get('/payroll/history', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  try {
+    const sc = getServiceClient();
+    const isAdmin = await isOrgAdminOrOwner(sc, auth.user.id, auth.orgId);
+    if (!isAdmin) return res.status(403).json({ error: 'Admin role required.' });
+
+    const userId = String(req.query.user_id || '').trim();
+    if (!userId) return res.status(400).json({ error: 'user_id is required.' });
+
+    const { data, error } = await sc
+      .from('payroll_payments')
+      .select('period_start, period_end, hours, gross_cents, commission_cents, adjustments_cents, total_cents, note, paid_at')
+      .eq('org_id', auth.orgId)
+      .eq('user_id', userId)
+      .order('period_start', { ascending: false })
+      .limit(52);
+    // Table ships behind a migration — return empty rather than erroring.
+    if (error) return res.json({ payments: [], migration_missing: true });
+    res.json({ payments: data || [], migration_missing: false });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Failed to load pay history.', '[payroll]');
+  }
+});
+
 // GET /api/payroll/export?ref=YYYY-MM-DD — QuickBooks-friendly CSV of the period.
 router.get('/payroll/export', async (req, res) => {
   const auth = await requireAuthedClient(req, res);
