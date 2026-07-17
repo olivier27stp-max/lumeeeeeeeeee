@@ -84,7 +84,7 @@ export async function upsertLeadPinForClient(
     // 1. Existing house at the same normalized address
     const { data: byAddress } = await admin
       .from('field_house_profiles')
-      .select('id, client_id')
+      .select('id, client_id, lat')
       .eq('org_id', input.orgId)
       .eq('address_normalized', addressNorm)
       .is('deleted_at', null)
@@ -92,6 +92,9 @@ export async function upsertLeadPinForClient(
 
     let houseId: string | null = byAddress?.id ?? null;
     let existingClientId: string | null = byAddress?.client_id ?? null;
+    // House created without coords (e.g. by the trg_clients_ensure_field_pin
+    // DB trigger, which cannot geocode): fill them in during the merge below.
+    const needsCoords = !!byAddress && byAddress.lat == null;
     let lat: number | null = null;
     let lng: number | null = null;
     let geocodePending = false;
@@ -141,15 +144,20 @@ export async function upsertLeadPinForClient(
 
     if (houseId) {
       // Merge: mark the existing house as a fresh lead
-      await admin
-        .from('field_house_profiles')
-        .update({
-          current_status: 'lead',
-          client_id: existingClientId || input.clientId,
-          last_activity_at: now,
-          updated_at: now,
-        })
-        .eq('id', houseId);
+      const patch: Record<string, unknown> = {
+        current_status: 'lead',
+        client_id: existingClientId || input.clientId,
+        last_activity_at: now,
+        updated_at: now,
+      };
+      if (needsCoords) {
+        const geo = await geocodeWithFallback(address);
+        if (geo) {
+          patch.lat = geo.latitude;
+          patch.lng = geo.longitude;
+        }
+      }
+      await admin.from('field_house_profiles').update(patch).eq('id', houseId);
     } else {
       const { data: house, error: hErr } = await admin
         .from('field_house_profiles')
