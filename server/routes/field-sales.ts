@@ -224,17 +224,6 @@ router.post('/houses', async (req: Request, res: Response) => {
   try {
     const addressNorm = String(address).toLowerCase().trim();
 
-    // Duplicate check: any house within 50 m — merge instead of reject
-    const { data: nearby } = await admin
-      .from('field_house_profiles')
-      .select('id, address, lat, lng, client_id')
-      .eq('org_id', auth.orgId)
-      .is('deleted_at', null);
-
-    const duplicate = (nearby ?? []).find(
-      (h: any) => haversineMetres(lat, lng, h.lat, h.lng) <= 50
-    );
-
     // Auto-create client only when full customer info is provided AND status is CRM-linked
     const clientCreationStatuses = ['lead', 'sale', 'quote_sent'];
     let clientId: string | null = null;
@@ -267,39 +256,68 @@ router.post('/houses', async (req: Request, res: Response) => {
           email: customer_email || null,
           phone: customer_phone || null,
           address,
+          latitude: lat,
+          longitude: lng,
           status: 'lead',
         }).select('id').single();
         clientId = newClient?.id ?? null;
       }
     }
 
-    if (duplicate) {
-      // Merge into existing pin instead of rejecting
+    // Duplicate check — runs AFTER the client insert on purpose: the clients
+    // AFTER INSERT trigger (20260743000000) creates a house for the same
+    // address. Match by normalized address in addition to the 50 m radius,
+    // because trigger/backfill houses can still be waiting for geocoding
+    // (lat/lng null) and would slip past the distance check.
+    const { data: nearby } = await admin
+      .from('field_house_profiles')
+      .select('id, address, address_normalized, lat, lng, client_id, metadata')
+      .eq('org_id', auth.orgId)
+      .is('deleted_at', null);
+
+    const duplicate = (nearby ?? []).find(
+      (h: any) =>
+        h.address_normalized === addressNorm ||
+        (h.lat != null && h.lng != null && haversineMetres(lat, lng, h.lat, h.lng) <= 50)
+    );
+
+    // Merge into an existing house instead of rejecting — used for the
+    // duplicate above and as the 23505 fallback when an insert races us.
+    const mergeIntoExisting = async (existing: any) => {
       const updates: Record<string, any> = { updated_at: new Date().toISOString() };
       if (status) updates.current_status = status;
-      if (clientId && !duplicate.client_id) updates.client_id = clientId;
+      if (clientId && !existing.client_id) updates.client_id = clientId;
       if (assigned_user_id) updates.assigned_user_id = assigned_user_id;
+      // The dropped pin has real coordinates; houses created by the clients
+      // trigger or the backfill may not be geocoded yet.
+      if (existing.lat == null || existing.lng == null) {
+        updates.lat = lat;
+        updates.lng = lng;
+        updates.metadata = { ...(existing.metadata || {}), geocode_status: 'resolved' };
+      }
       updates.last_activity_at = new Date().toISOString();
 
-      await admin.from('field_house_profiles').update(updates).eq('id', duplicate.id);
+      await admin.from('field_house_profiles').update(updates).eq('id', existing.id);
 
       // Update pin visual
       const pinStatus = status || 'unknown';
       await admin.from('field_pins')
         .update({ status: pinStatus, pin_color: STATUS_COLORS[pinStatus] || '#9CA3AF', has_note: !!note_text, updated_at: new Date().toISOString() })
-        .eq('house_id', duplicate.id);
+        .eq('house_id', existing.id);
 
       // Add merge event
       await admin.from('field_house_events').insert({
-        org_id: auth.orgId, house_id: duplicate.id, user_id: auth.user.id,
+        org_id: auth.orgId, house_id: existing.id, user_id: auth.user.id,
         event_type: status || 'note',
         note_text: note_text || `Pin updated${customer_name ? ` — ${customer_name}` : ''}`,
         metadata: { merged: true, customer_name, customer_phone, customer_email },
       });
 
-      const { data: merged } = await admin.from('field_house_profiles').select('*').eq('id', duplicate.id).single();
+      const { data: merged } = await admin.from('field_house_profiles').select('*').eq('id', existing.id).single();
       return res.status(200).json({ ...merged, merged: true, client_id: clientId });
-    }
+    };
+
+    if (duplicate) return mergeIntoExisting(duplicate);
 
     const { data: house, error: hErr } = await admin
       .from('field_house_profiles')
@@ -320,7 +338,21 @@ router.post('/houses', async (req: Request, res: Response) => {
       .select()
       .single();
 
-    if (hErr) return sendSafeError(res, hErr, 'Field sales operation failed.', '[field-sales]');
+    if (hErr) {
+      // Unique (org_id, address_normalized): a concurrent insert (another rep
+      // or the clients trigger) beat us — merge into that house instead.
+      if ((hErr as any).code === '23505') {
+        const { data: existing } = await admin
+          .from('field_house_profiles')
+          .select('id, address, address_normalized, lat, lng, client_id, metadata')
+          .eq('org_id', auth.orgId)
+          .eq('address_normalized', addressNorm)
+          .is('deleted_at', null)
+          .maybeSingle();
+        if (existing) return mergeIntoExisting(existing);
+      }
+      return sendSafeError(res, hErr, 'Field sales operation failed.', '[field-sales]');
+    }
 
     // Create initial pin
     const pinStatus = status || 'unknown';

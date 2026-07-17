@@ -113,15 +113,19 @@ export async function autoCreateOrMergePin(
     input.status ??
     (entity_type === 'job' ? 'sale' : entity_type === 'quote' ? 'lead' : 'lead');
 
-  // 1. Check for existing house within 50m
+  // 1. Check for existing house: same normalized address (unique per org —
+  //    covers houses created by the clients auto-pin trigger/backfill that are
+  //    still waiting for geocoding, lat/lng null) or within 50m
   const { data: nearby } = await admin
     .from('field_house_profiles')
-    .select('id, lat, lng, client_id, lead_id, quote_id, job_id, territory_id')
+    .select('id, address_normalized, lat, lng, client_id, lead_id, quote_id, job_id, territory_id, metadata')
     .eq('org_id', org_id)
     .is('deleted_at', null);
 
   let existingHouse = (nearby ?? []).find(
-    (h: any) => haversineMetres(lat, lng, h.lat, h.lng) <= 50
+    (h: any) =>
+      h.address_normalized === addressNorm ||
+      (h.lat != null && h.lng != null && haversineMetres(lat, lng, h.lat, h.lng) <= 50)
   );
 
   let isNew = false;
@@ -148,6 +152,13 @@ export async function autoCreateOrMergePin(
     // Reflect the latest lifecycle status on the existing house (drives pin colour).
     updates.current_status = resolvedStatus;
     updates.last_activity_at = now;
+
+    // We have real coordinates; trigger/backfill houses may not be geocoded yet.
+    if (existingHouse.lat == null || existingHouse.lng == null) {
+      updates.lat = lat;
+      updates.lng = lng;
+      updates.metadata = { ...((existingHouse as any).metadata || {}), geocode_status: 'resolved' };
+    }
 
     await admin.from('field_house_profiles').update(updates).eq('id', houseId);
   } else {
@@ -199,8 +210,34 @@ export async function autoCreateOrMergePin(
       .select('id')
       .single();
 
-    if (error || !house) throw new Error(`Failed to create house: ${error?.message}`);
-    houseId = house.id;
+    if (error && (error as any).code === '23505') {
+      // Unique (org_id, address_normalized): a concurrent insert beat us —
+      // merge our links into that house instead of failing.
+      const { data: raced } = await admin
+        .from('field_house_profiles')
+        .select('id, territory_id')
+        .eq('org_id', org_id)
+        .eq('address_normalized', addressNorm)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (!raced) throw new Error(`Failed to create house: ${error.message}`);
+      isNew = false;
+      houseId = raced.id;
+      territoryId = raced.territory_id;
+      await admin.from('field_house_profiles').update({
+        current_status: resolvedStatus,
+        last_activity_at: now,
+        updated_at: now,
+        ...(houseData.client_id ? { client_id: houseData.client_id } : {}),
+        ...(houseData.lead_id ? { lead_id: houseData.lead_id } : {}),
+        ...(houseData.quote_id ? { quote_id: houseData.quote_id } : {}),
+        ...(houseData.job_id ? { job_id: houseData.job_id } : {}),
+      }).eq('id', houseId);
+    } else if (error || !house) {
+      throw new Error(`Failed to create house: ${error?.message}`);
+    } else {
+      houseId = house.id;
+    }
   }
 
   // 2. Upsert pin
