@@ -1461,10 +1461,6 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   // Render
   // ---------------------------------------------------------------------------
   const statuses = Object.entries(PIN_STATUS_CONFIG) as [PinStatus, (typeof PIN_STATUS_CONFIG)[PinStatus]][];
-  const totalPins = markersRef.current.size;
-  const counts: Record<PinStatus, number> = { closed_won: 0, follow_up: 0, appointment: 0, no_answer: 0, rejected: 0, other: 0 };
-  markersRef.current.forEach(({ pin }) => { counts[pin.status]++; });
-  const totalZones = zonesRef.current.length;
 
   const dateLabels: Record<DateFilter, string> = fr
     ? { today: "Aujourd'hui", yesterday: 'Hier', this_month: 'Ce mois', this_year: 'Cette année', all: 'Tout' }
@@ -1522,22 +1518,22 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
           {/* Box 1 — Entonnoir : filtrer les pins */}
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${showFilters ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${showFilters ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
             title={fr ? 'Filtrer les pins' : 'Filter pins'}
             aria-label={fr ? 'Filtres' : 'Filters'}
           >
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
             </svg>
           </button>
           {/* Box 2 — Loupe : recherche */}
           <button
             onClick={() => setSearchModalOpen(true)}
-            className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${searchModalOpen ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${searchModalOpen ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
             title={fr ? 'Rechercher une adresse (⌘K)' : 'Search an address (⌘K)'}
             aria-label={fr ? 'Rechercher' : 'Search'}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
           </button>
@@ -1549,11 +1545,11 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
                 if (mode === 'draw_zone') cancelDrawing();
                 else { setMode('draw_zone'); setDrawingPoints([]); }
               }}
-              className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${mode === 'draw_zone' ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+              className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${mode === 'draw_zone' ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
               title={fr ? 'Créer une zone' : 'Create a zone'}
               aria-label={fr ? 'Créer une zone' : 'Create a zone'}
             >
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M2 5.5c1-2 4-3.2 6-2.7" strokeDasharray="1 2.6" />
                 <path d="M22 14a8 8 0 0 1-8 8" />
                 <path d="M18 11v-1a2 2 0 0 0-2-2 2 2 0 0 0-2 2" />
@@ -1567,11 +1563,11 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
           {/* Box 4 — Plan plié : bascule plan / satellite */}
           <button
             onClick={toggleSatellite}
-            className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${satellite ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${satellite ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
             title={fr ? (satellite ? 'Passer en vue plan' : 'Passer en vue satellite') : (satellite ? 'Switch to map view' : 'Switch to satellite view')}
             aria-label={fr ? 'Changer le style de carte' : 'Toggle map style'}
           >
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" />
               <path d="M15 5.764v15" /><path d="M9 3.236v15" />
             </svg>
@@ -1875,32 +1871,9 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
           </div>
 
           {/* ================================================================ */}
-          {/* TOP RIGHT — Filter button + stats                                */}
+          {/* TOP RIGHT — Filter panel                                         */}
           {/* ================================================================ */}
           <div className="pointer-events-auto flex items-center gap-2">
-            {/* Pin stats */}
-            {totalPins > 0 && (
-              <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/60 px-4 py-2.5 shadow-xl backdrop-blur-xl">
-                {statuses.map(([key, cfg]) => {
-                  if (!counts[key]) return null;
-                  return (
-                    <div key={key} className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: cfg.color }} />
-                      <span className="text-[12px] font-bold tabular-nums text-white/80">{counts[key]}</span>
-                    </div>
-                  );
-                })}
-                <div className="h-4 w-px bg-white/10" />
-                <span className="text-[12px] font-semibold text-white/50">{totalPins} pin{totalPins > 1 ? 's' : ''}</span>
-                {totalZones > 0 && (
-                  <>
-                    <div className="h-4 w-px bg-white/10" />
-                    <span className="text-[12px] font-semibold text-indigo-300/70">{totalZones} zone{totalZones > 1 ? 's' : ''}</span>
-                  </>
-                )}
-              </div>
-            )}
-
             {/* FILTER PANEL — ouvert par la box entonnoir de la barre droite */}
             <div className="relative self-stretch">
               {/* FILTER PANEL */}
