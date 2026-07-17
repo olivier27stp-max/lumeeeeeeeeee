@@ -12,6 +12,9 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import express from 'express';
 import { requireAuthedClient, getServiceClient } from './supabase';
+// Défauts de rôle partagés avec le client (fichier pur, sans dépendance
+// navigateur) — UNE seule source de vérité pour les presets.
+import { ROLE_PRESETS } from '../../src/lib/permissions';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -35,6 +38,7 @@ const DEPRECATED_ROLE_MAP: Record<string, TeamRole> = {
   manager: 'admin',
   support: 'sales_rep',
   viewer: 'sales_rep',
+  member: 'sales_rep',
 };
 
 function normalizeRole(role: string): TeamRole {
@@ -209,8 +213,13 @@ export function hasPermission(ctx: UserContext, key: string): boolean {
     return true;
   }
 
-  // For other roles, if no override exists, deny by default
-  return ctx.permissions[key] === true;
+  // Pas d'override → retomber sur les défauts du rôle (mêmes presets que le
+  // client). Avant : deny par défaut → une org qui n'avait jamais touché la
+  // page Rôles (aucun role_templates) donnait des maps vides aux nouveaux
+  // membres, et le serveur refusait TOUT pendant que le client affichait
+  // l'interface complète.
+  const preset = ROLE_PRESETS[ctx.role as keyof typeof ROLE_PRESETS];
+  return preset?.[key] === true;
 }
 
 // ── Scope check ─────────────────────────────────────────────────────
