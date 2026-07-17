@@ -192,8 +192,9 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   // --- Edit modal ---
   const [editingPin, setEditingPin] = useState<LeadPinData | null>(null);
   // "Log prospecting pin" action modal. Two modes:
-  //  - isNew=true: the user clicked a HOUSE with no pin yet → choosing an
-  //    outcome creates the pin automatically with the right status.
+  //  - isNew=true: a draft pin with no DB row yet → choosing an outcome
+  //    creates the pin automatically with the right status. (No longer
+  //    reachable from a map click — empty-map clicks are intentionally inert.)
   //  - isNew=false: clicked an existing pin → choosing an outcome updates it.
   const [actionPin, setActionPin] = useState<LeadPinData | null>(null);
   const [actionIsNew, setActionIsNew] = useState(false);
@@ -728,7 +729,9 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
         container: containerRef.current!,
         style: loadSavedSatellite() ? SATELLITE_STYLE : STREETS_STYLE,
         center, zoom: startZoom, maxZoom: 22, minZoom: 1, antialias: true, attributionControl: false,
-        doubleClickZoom: true,
+        // Disabled: default double-click zooms a full level. We handle dblclick
+        // ourselves below for a lighter zoom-in (view mode only).
+        doubleClickZoom: false,
       });
       // Assign the ref IMMEDIATELY (not in the async 'load' handler). Otherwise,
       // under StrictMode's mount→unmount→remount, the cleanup runs before 'load'
@@ -817,7 +820,9 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
             return;
           }
 
-          // View mode — pin click first, then zone click.
+          // View mode — pin click only. Clicking empty map does nothing
+          // (no visit modal, no pin placement — pins are created via the
+          // add-pin button).
           if (containerRef.current?.dataset.mapMode === 'view') {
             // Find the nearest pin to the click point (screen space). This is
             // the reliable path: the map's own click always fires, regardless
@@ -832,32 +837,23 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
             });
             if (nearest && nearestDist <= HIT_RADIUS_PX) {
               window.dispatchEvent(new CustomEvent('d2d:open-pin-modal', { detail: { pin: nearest, isNew: false } }));
-              return;
             }
-
-            // Clicks on live-rep markers or the GPS dot are NOT house visits —
-            // ignore them instead of opening the visit-log modal.
-            let nearOther = false;
-            repMarkersRef.current.forEach((m) => {
-              const p = map.project(m.getLngLat());
-              if (Math.hypot(p.x - e.point.x, p.y - e.point.y) <= HIT_RADIUS_PX) nearOther = true;
-            });
-            if (gpsMarkerRef.current) {
-              const p = map.project(gpsMarkerRef.current.getLngLat());
-              if (Math.hypot(p.x - e.point.x, p.y - e.point.y) <= HIT_RADIUS_PX) nearOther = true;
-            }
-            if (nearOther) return;
-
-            // No pin here → the rep clicked a HOUSE: open the visit-log modal.
-            // Choosing an outcome in the modal creates the pin automatically.
-            const { lng, lat } = e.lngLat;
-            const draft: LeadPinData = {
-              id: crypto.randomUUID(), lat, lng, status: 'other',
-              name: 'Nouveau lead', phone: '', email: '',
-              address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, note: '',
-            };
-            window.dispatchEvent(new CustomEvent('d2d:open-pin-modal', { detail: { pin: draft, isNew: true } }));
           }
+        });
+
+        // Double-click on empty map — slight zoom in, centered on the click.
+        // Lighter than the default doubleClickZoom (disabled in map options),
+        // and only in view mode so drawing/add-pin flows are unaffected.
+        map.on('dblclick', (e) => {
+          if (containerRef.current?.dataset.mapMode !== 'view') return;
+          const HIT_RADIUS_PX = 22;
+          let onPin = false;
+          markersRef.current.forEach(({ pin }) => {
+            const p = map.project([pin.lng, pin.lat]);
+            if (Math.hypot(p.x - e.point.x, p.y - e.point.y) <= HIT_RADIUS_PX) onPin = true;
+          });
+          if (onPin) return;
+          map.easeTo({ zoom: map.getZoom() + 0.5, around: e.lngLat, duration: 350 });
         });
       });
 
