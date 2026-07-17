@@ -98,6 +98,14 @@ export function deleteCommissionRule(id: string): Promise<{ ok: true }> {
   return apiFetch(`/commissions/rules/${id}`, { method: 'DELETE' });
 }
 
+/** Move a rep onto ONE plan (rule_id null = default plan only). */
+export function assignMemberToRule(userId: string, ruleId: string | null): Promise<{ ok: true; rule_id: string | null }> {
+  return apiFetch('/commissions/rules/assign-member', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, rule_id: ruleId }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
