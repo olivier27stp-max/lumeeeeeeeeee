@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { validate, passwordSchema } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, companyOrgIds } from '../lib/supabase';
+import { ROLE_PRESETS } from '../../src/lib/permissions';
 import { getBaseUrl } from '../lib/config';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { extractIP } from '../lib/security';
@@ -50,7 +51,11 @@ async function resolveInvitePermissions(
     .eq('slug', role)
     .eq('is_active', true)
     .maybeSingle();
-  return (data?.permissions as Record<string, boolean>) || {};
+  // Sans personnalisation (org qui n'a jamais touché la page Rôles), on
+  // matérialise les défauts du rôle au lieu d'une map vide — sinon le
+  // serveur refusait tout au nouveau membre (deny par défaut).
+  return (data?.permissions as Record<string, boolean>)
+    || { ...(ROLE_PRESETS[role as keyof typeof ROLE_PRESETS] || {}) };
 }
 
 /**
