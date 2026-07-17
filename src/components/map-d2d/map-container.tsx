@@ -176,20 +176,8 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
   const [showReps, setShowReps] = useState(true);
   const repMarkersRef = useRef(new Map<string, mapboxgl.Marker>());
 
-  // --- Map style (plan / satellite) + boussole ---
-  const [mapStyleSat, setMapStyleSat] = useState(false);
+  // --- Boussole ---
   const [compassBearing, setCompassBearing] = useState(0);
-
-  function toggleMapStyle() {
-    const map = mapRef.current;
-    if (!map) return;
-    if (mode === 'draw_zone') cancelDrawing();
-    const next = !mapStyleSat;
-    setMapStyleSat(next);
-    map.setStyle(next ? 'mapbox://styles/mapbox/satellite-streets-v12' : 'mapbox://styles/mapbox/streets-v12');
-    // setStyle wipes custom sources/layers — re-draw zones once the new style is in
-    map.once('style.load', () => renderZonesOnMap());
-  }
 
   // --- Select mode refs ---
   const selectBoxRef = useRef<HTMLDivElement>(null);
@@ -1578,9 +1566,9 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
 
           {/* Box 4 — Plan plié : bascule plan / satellite */}
           <button
-            onClick={toggleMapStyle}
-            className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${mapStyleSat ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
-            title={fr ? (mapStyleSat ? 'Passer en vue plan' : 'Passer en vue satellite') : (mapStyleSat ? 'Switch to map view' : 'Switch to satellite view')}
+            onClick={toggleSatellite}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-lg transition-all hover:scale-105 ${satellite ? 'bg-red-600 text-white shadow-red-600/40' : 'bg-white text-red-600 shadow-black/30 hover:bg-red-50'}`}
+            title={fr ? (satellite ? 'Passer en vue plan' : 'Passer en vue satellite') : (satellite ? 'Switch to map view' : 'Switch to satellite view')}
             aria-label={fr ? 'Changer le style de carte' : 'Toggle map style'}
           >
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1712,19 +1700,6 @@ export function MapContainer({ onPinClosedWon, onPinAppointment, onOpenClient, i
           </div>
         );
       })()}
-
-      {/* Plan / satellite base-style toggle */}
-      {!showTokenMsg && (
-        <button
-          onClick={toggleSatellite}
-          className={`pointer-events-auto absolute bottom-[118px] right-3 z-10 flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-white/10 shadow-xl backdrop-blur-xl transition-all ${satellite ? 'bg-indigo-500/80 text-white hover:bg-indigo-400' : 'bg-black/70 text-white/60 hover:bg-white/15 hover:text-white'}`}
-          title={satellite ? (fr ? 'Vue plan' : 'Map view') : (fr ? 'Vue satellite' : 'Satellite view')}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" />
-          </svg>
-        </button>
-      )}
 
       {/* Custom GPS re-center button (replaces Mapbox GeolocateControl to avoid duplicate dot) */}
       {!showTokenMsg && (
