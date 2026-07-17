@@ -10,10 +10,8 @@ import {
   type RepDealJob,
   type RepPinKind,
 } from '../lib/repStatsApi';
-import { getCommissionEntries } from '../lib/commissionsApi';
 import { getRepProfileInfo } from '../lib/leaderboardApi';
 import { supabase } from '../lib/supabase';
-import type { FsCommissionEntry } from '../types';
 import { PIN_STATUS_CONFIG } from '../components/map-d2d/lead-pin';
 import { toast } from 'sonner';
 import {
@@ -108,7 +106,6 @@ export default function D2DRepProfile() {
   const [repOrgId, setRepOrgId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [commissions, setCommissions] = useState<FsCommissionEntry[]>([]);
   const [deals, setDeals] = useState<RepDealJob[]>([]);
   const [pinCounts, setPinCounts] = useState<RepPinCounts | null>(null);
 
@@ -184,15 +181,13 @@ export default function D2DRepProfile() {
         if (!cancelled) setCurrentUserId(session.session?.user?.id ?? null);
 
         const { result: data, orgId } = await fetchFromApi(paramId);
-        const [commissionEntries, dealJobs, pins] = await Promise.all([
-          getCommissionEntries({ userId: paramId }).catch(() => [] as Awaited<ReturnType<typeof getCommissionEntries>>),
+        const [dealJobs, pins] = await Promise.all([
           getRepDealJobs(paramId, orgId).catch(() => [] as RepDealJob[]),
           getRepPinCounts(paramId, orgId).catch(() => null),
         ]);
         if (!cancelled) {
           setProfile(data);
           setRepOrgId(orgId);
-          setCommissions(commissionEntries);
           setDeals(dealJobs);
           setPinCounts(pins);
           setLoading(false);
@@ -466,8 +461,8 @@ export default function D2DRepProfile() {
               </div>
             </div>
 
-            {/* ── For Deals — jobs where the rep is the assigned salesperson ── */}
-            <CardPanel title={`For Deals (${deals.length})`}>
+            {/* ── Deals — jobs where the rep is the assigned salesperson ── */}
+            <CardPanel title={`Deals (${deals.length})`}>
               {deals.length === 0 ? (
                 <p className="text-sm text-text-tertiary text-center py-6">Aucune job assignée à ce rep pour le moment.</p>
               ) : (
@@ -502,44 +497,6 @@ export default function D2DRepProfile() {
               )}
             </CardPanel>
 
-            {/* ── Commission history ── */}
-            <CardPanel title={`Historique commissions (${commissions.length})`}>
-              {commissions.length === 0 ? (
-                <p className="text-sm text-text-tertiary text-center py-6">Aucune commission enregistrée.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-outline">
-                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Description</th>
-                        <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Base</th>
-                        <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Commission</th>
-                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Statut</th>
-                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {commissions.slice(0, 30).map((c) => (
-                        <tr key={c.id} className="border-b border-outline/50 last:border-0">
-                          <td className="px-2 py-2 text-text-primary truncate max-w-[180px]">{c.description ?? c.lead_id ?? '—'}</td>
-                          <td className="px-2 py-2 text-right tabular-nums text-text-secondary">${(c.base_amount || 0).toLocaleString('en-US')}</td>
-                          <td className="px-2 py-2 text-right tabular-nums text-text-primary font-semibold">${(c.amount || 0).toLocaleString('en-US')}</td>
-                          <td className="px-2 py-2">
-                            <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-semibold capitalize ${
-                              c.status === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' :
-                              c.status === 'approved' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400' :
-                              c.status === 'pending' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400' :
-                              'bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300'
-                            }`}>{c.status}</span>
-                          </td>
-                          <td className="px-2 py-2 text-text-tertiary text-[12px]">{new Date(c.created_at).toLocaleDateString('fr-CA')}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardPanel>
           </div>
         </div>
       </div>
