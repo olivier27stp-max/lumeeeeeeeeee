@@ -3,11 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '../components/d2d/card';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
-import { getLeaderboard, getRepProfileInfo, setRepExperience, getOffices, type Office, type LeaderboardRange } from '../lib/leaderboardApi';
+import { getLeaderboard, getRepProfileInfo, getOffices, type Office, type LeaderboardRange } from '../lib/leaderboardApi';
 import { getRepPeriodStats, type RepPeriodStats } from '../lib/repStatsApi';
 import { useCompany } from '../contexts/CompanyContext';
-import { usePermissions } from '../hooks/usePermissions';
-import { toast } from 'sonner';
 import type { LeaderboardEntry } from '../types';
 import { Calendar, ChevronDown, X, User, Loader2, Search, Trophy } from 'lucide-react';
 
@@ -116,8 +114,6 @@ export default function D2DLeaderboard() {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const { currentOrgId } = useCompany();
-  const { role } = usePermissions();
-  const isAdmin = role === 'owner' || role === 'admin';
   // Date / période sélectionnée — toutes les stats de la page suivent cette fenêtre.
   const [range, setRange] = useState<LeaderboardRange>(() => ({ from: todayIso(), to: todayIso() }));
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -156,24 +152,11 @@ export default function D2DLeaderboard() {
       .finally(() => { if (!cancelledRef?.current) setLoading(false); });
   }, [range.from, range.to, effectiveScope, effectiveOrgId, category]);
 
-  const reload = useCallback(() => fetchBoard(), [fetchBoard]);
-
   useEffect(() => {
     const ref = { current: false };
     fetchBoard(ref);
     return () => { ref.current = true; };
   }, [fetchBoard]);
-
-  // Admin: tag a rep rookie/experienced, then refresh.
-  const tagRep = useCallback(async (userId: string, level: 'rookie' | 'experienced' | null) => {
-    try {
-      await setRepExperience(userId, level);
-      toast.success(fr ? 'Catégorie mise à jour' : 'Category updated');
-      reload();
-    } catch (e: any) {
-      toast.error(e?.message || (fr ? 'Échec' : 'Failed'));
-    }
-  }, [reload, fr]);
 
   // Stats Rep Hub de la rangée dépliée — org du rep résolue côté serveur
   // (scope 'all offices' : le rep peut appartenir à un autre bureau).
@@ -215,8 +198,9 @@ export default function D2DLeaderboard() {
           <h2 className="text-lg font-semibold text-text-primary">{fr ? 'Classement' : 'Rankings'}</h2>
           <p className="mt-1 text-sm text-text-tertiary">{fr ? 'Classement de l\'équipe' : 'Team ranking'}</p>
         </div>
-        {/* Scope toggle — hidden when a specific office is selected (redundant). */}
-        {!officeId && (
+        {/* Scope toggle — seulement si la compagnie a 2+ offices, et caché
+            quand un office précis est sélectionné (redondant). */}
+        {offices.length > 1 && !officeId && (
           <div className="flex items-center rounded-lg border border-border-subtle overflow-hidden">
             {(['mine', 'all'] as const).map((s) => (
               <button
@@ -470,35 +454,6 @@ export default function D2DLeaderboard() {
                                 </div>
                               ))}
                             </div>
-
-                            {/* Admin: classify this rep (vivait dans l'ancien drawer) */}
-                            {isAdmin && (
-                              <div className="mt-3">
-                                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                                  {fr ? 'Catégorie du rep' : 'Rep category'}
-                                </p>
-                                <div className="flex gap-1.5">
-                                  {([
-                                    ['rookie', fr ? '1re année' : 'First year'],
-                                    ['experienced', fr ? 'Expérimenté' : 'Experienced'],
-                                    [null, fr ? 'Aucune' : 'None'],
-                                  ] as [('rookie' | 'experienced' | null), string][]).map(([lvl, label]) => (
-                                    <button
-                                      key={String(lvl)}
-                                      onClick={() => tagRep(rep.userId, lvl)}
-                                      className={cn(
-                                        'flex-1 rounded-md border px-2 py-1.5 text-xs font-semibold transition-colors',
-                                        rep.experienceLevel === lvl
-                                          ? 'border-text-primary bg-text-primary text-surface'
-                                          : 'border-border-subtle bg-white text-text-primary hover:bg-surface-elevated',
-                                      )}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
 
                             <Link
                               to={`/reps/${rep.userId}`}
