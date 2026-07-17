@@ -313,7 +313,6 @@ export default function D2DRepProfile() {
 
   const p = profile;
   const canEditContact = currentUserId === p.id && !!p.memberRowId;
-  const singleDay = range.from === range.to;
 
   return (
     <div className="min-h-[calc(100vh-3rem)] bg-surface dark:bg-[#0B0F14]">
@@ -395,13 +394,8 @@ export default function D2DRepProfile() {
       {/* ── Content ── */}
       <div className="mx-auto max-w-6xl px-8 pb-10">
 
-        {/* Period header — pleine largeur au-dessus des boxes */}
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <p className="text-[19px] font-extrabold text-text-primary tracking-tight truncate">
-            {singleDay ? fmtFullDate(range.from) : `Du ${fmtFullDate(range.from).toLowerCase()} au ${fmtFullDate(range.to).toLowerCase()}`}
-          </p>
-          <DateRangeBox range={range} onChange={(from, to) => setRange({ from, to })} />
-        </div>
+        {/* Date / period selector — même boxe que le leaderboard, pleine largeur */}
+        <PeriodBar range={range} onChange={(from, to) => setRange({ from, to })} />
 
         <div className="grid grid-cols-12 gap-5">
 
@@ -617,72 +611,85 @@ function EditableInfoRow({ icon: Icon, label, value, type, placeholder, canEdit,
   );
 }
 
-/** Small horizontal date box — click to pick a single date or a period */
-function DateRangeBox({ range, onChange }: {
+/**
+ * Barre de date/période pleine largeur — même boxe que le leaderboard :
+ * icône + libellé à gauche, bouton « Changer » qui ouvre le picker Du/Au.
+ */
+function PeriodBar({ range, onChange }: {
   range: { from: string; to: string };
   onChange: (from: string, to: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [draftFrom, setDraftFrom] = useState(range.from);
-  const [draftTo, setDraftTo] = useState(range.from === range.to ? '' : range.to);
+  const [draft, setDraft] = useState(range);
 
-  function toggle() {
-    if (!open) {
-      setDraftFrom(range.from);
-      setDraftTo(range.from === range.to ? '' : range.to);
-    }
-    setOpen(!open);
-  }
-
-  function apply() {
-    const from = draftFrom || todayStr();
-    let to = draftTo || from;
-    if (to < from) to = from;
-    onChange(from, to);
-    setOpen(false);
-  }
-
-  function resetToday() {
-    const t = todayStr();
-    onChange(t, t);
-    setOpen(false);
-  }
+  const label = range.from === range.to
+    ? fmtFullDate(range.from)
+    : `${fmtShortDate(range.from)} – ${fmtShortDate(range.to)}`;
 
   return (
-    <div className="relative shrink-0">
-      <button
-        onClick={toggle}
-        className="flex items-center gap-2 rounded-xl border border-outline bg-surface-elevated px-3.5 py-2 text-[12.5px] font-semibold text-text-primary transition-colors hover:bg-surface-secondary dark:bg-[#111519] dark:border-[rgba(255,255,255,0.06)] dark:hover:bg-[rgba(255,255,255,0.04)]"
-      >
-        <Calendar size={14} className="text-text-tertiary" />
-        {range.from === range.to ? fmtShortDate(range.from) : `${fmtShortDate(range.from)} — ${fmtShortDate(range.to)}`}
-      </button>
+    <div className="relative mb-5">
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-white px-4 py-2.5 dark:bg-[#111519] dark:border-[rgba(255,255,255,0.06)]">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Calendar size={16} className="shrink-0 text-text-muted" />
+          <p className="truncate text-sm font-semibold text-text-primary">{label}</p>
+        </div>
+        <button
+          onClick={() => { setDraft(range); setOpen((o) => !o); }}
+          className="shrink-0 rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-elevated dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.08)] dark:hover:bg-[rgba(255,255,255,0.08)]"
+        >
+          Changer
+        </button>
+      </div>
 
       {open && (
         <>
-          {/* click-away backdrop */}
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-2 w-64 rounded-2xl border border-outline bg-surface-elevated p-4 shadow-xl dark:bg-[#111519] dark:border-[rgba(255,255,255,0.08)]">
-            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-text-tertiary">Date</p>
-            <input
-              type="date"
-              value={draftFrom}
-              onChange={(e) => setDraftFrom(e.target.value)}
-              className="mb-3 w-full rounded-lg border border-outline bg-surface px-2.5 py-1.5 text-[13px] font-medium text-text-primary outline-none focus:border-text-tertiary dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.1)]"
-            />
-            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-text-tertiary">Fin de période (optionnel)</p>
-            <input
-              type="date"
-              value={draftTo}
-              min={draftFrom || undefined}
-              onChange={(e) => setDraftTo(e.target.value)}
-              className="mb-4 w-full rounded-lg border border-outline bg-surface px-2.5 py-1.5 text-[13px] font-medium text-text-primary outline-none focus:border-text-tertiary dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.1)]"
-            />
-            <div className="flex items-center justify-between gap-2">
-              <button onClick={resetToday} className="rounded-lg px-3 py-1.5 text-[12px] font-semibold text-text-tertiary transition-colors hover:text-text-primary">
+          <div className="absolute right-0 top-[calc(100%+8px)] z-20 w-72 rounded-2xl border border-border-subtle bg-white p-4 shadow-xl dark:bg-[#111519] dark:border-[rgba(255,255,255,0.08)]">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+              Date ou période
+            </p>
+            <div className="space-y-2.5">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-text-secondary">Du</span>
+                <input
+                  type="date"
+                  value={draft.from}
+                  max={todayStr()}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (!v) return;
+                    setDraft((d) => ({ from: v, to: v > d.to ? v : d.to }));
+                  }}
+                  className="w-full rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary outline-none dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.1)]"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-text-secondary">Au</span>
+                <input
+                  type="date"
+                  value={draft.to}
+                  min={draft.from}
+                  max={todayStr()}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (!v) return;
+                    setDraft((d) => ({ from: v < d.from ? v : d.from, to: v }));
+                  }}
+                  className="w-full rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary outline-none dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.1)]"
+                />
+              </label>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                onClick={() => { const t = todayStr(); setDraft({ from: t, to: t }); }}
+                className="flex-1 rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-elevated dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.08)] dark:hover:bg-[rgba(255,255,255,0.08)]"
+              >
                 Aujourd'hui
               </button>
-              <button onClick={apply} className="rounded-lg bg-text-primary px-4 py-1.5 text-[12px] font-bold text-surface transition-opacity hover:opacity-90">
+              <button
+                onClick={() => { onChange(draft.from, draft.to); setOpen(false); }}
+                className="flex-1 rounded-lg bg-text-primary px-3 py-1.5 text-xs font-semibold text-surface transition-opacity hover:opacity-90"
+              >
                 Appliquer
               </button>
             </div>
