@@ -61,7 +61,7 @@ import BillingSettings from './pages/settings/BillingSettings';
 import LocationSettings from './pages/settings/LocationSettings';
 import ArchivesPanel from './components/ArchivesPanel';
 import SupportPanel from './components/SupportPanel';
-import PayrollSettingsPanel from './components/payroll/PayrollSettingsPanel';
+import PayrollPage from './pages/settings/PayrollPage';
 import Auth from './pages/Auth';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
@@ -1268,7 +1268,7 @@ function AuthenticatedApp({
                       <Route path="request-form" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_request_forms"><RequestFormSettings /></PlanFeatureGate></Gated>} />
                       <Route path="team" element={<Gated permission="team.read"><ManageTeam /></Gated>} />
                       <Route path="roles" element={<Gated permission="users.update_role"><SettingsRoles /></Gated>} />
-                      <Route path="payroll" element={<Gated permission="settings.read"><div className="max-w-2xl"><PayrollSettingsPanel /></div></Gated>} />
+                      <Route path="payroll" element={<Gated permission="settings.read"><PayrollPage /></Gated>} />
                       <Route path="location" element={<Gated permission="settings.read"><LocationSettings /></Gated>} />
                       <Route path="archives" element={<Gated permission="settings.read"><div className="max-w-2xl"><ArchivesPanel /></div></Gated>} />
                       <Route path="marketplace" element={<Gated permission="integrations.read"><PlanFeatureGate flag="includes_marketplace"><AppMarketplace /></PlanFeatureGate></Gated>} />
