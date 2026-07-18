@@ -13,7 +13,12 @@ const CATEGORIES: { value: SupportCategory; en: string; fr: string }[] = [
   { value: 'other',    en: 'Other',           fr: 'Autre' },
 ];
 
-export default function SupportPanel({ onSent }: { onSent?: () => void } = {}) {
+/**
+ * `bare` strips the card chrome and the title block. Used when the panel is
+ * already inside a titled container (the support drawer), where repeating the
+ * heading and nesting a card inside a card reads as a rendering bug.
+ */
+export default function SupportPanel({ onSent, bare = false }: { onSent?: () => void; bare?: boolean } = {}) {
   const { language } = useTranslation();
   const isFr = language === 'fr';
 
@@ -43,22 +48,30 @@ export default function SupportPanel({ onSent }: { onSent?: () => void } = {}) {
   }
 
   return (
-    <div className="glass-card rounded-2xl p-6 space-y-5">
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-          <LifeBuoy size={18} className="text-primary" />
+    <div className={cn(bare ? 'space-y-5' : 'glass-card rounded-2xl p-6 space-y-5')}>
+      {bare ? (
+        <p className="text-[12.5px] text-text-tertiary leading-relaxed">
+          {isFr
+            ? 'Décrivez votre problème. Les demandes sont priorisées selon votre forfait.'
+            : 'Tell us what’s going on. Requests are prioritized based on your plan.'}
+        </p>
+      ) : (
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <LifeBuoy size={18} className="text-primary" />
+          </div>
+          <div>
+            <h3 className="text-[15px] font-bold text-text-primary">
+              {isFr ? 'Contacter le support' : 'Contact support'}
+            </h3>
+            <p className="text-[12px] text-text-tertiary mt-0.5 leading-relaxed">
+              {isFr
+                ? 'Décrivez votre problème. Les demandes sont priorisées selon votre forfait.'
+                : 'Tell us what’s going on. Requests are prioritized based on your plan.'}
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 className="text-[15px] font-bold text-text-primary">
-            {isFr ? 'Contacter le support' : 'Contact support'}
-          </h3>
-          <p className="text-[12px] text-text-tertiary mt-0.5 leading-relaxed">
-            {isFr
-              ? 'Décrivez votre problème. Les demandes sont priorisées selon votre forfait.'
-              : 'Tell us what’s going on. Requests are prioritized based on your plan.'}
-          </p>
-        </div>
-      </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex flex-wrap gap-2">
