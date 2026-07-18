@@ -85,13 +85,13 @@ const fallbackRepStats = [
   },
 ];
 
-const PIPELINE_STATUS_META: Record<string, { label: string; color: string; order: number }> = {
-  lead: { label: 'Leads', color: '#3B82F6', order: 1 },
-  callback: { label: 'Callbacks', color: '#F59E0B', order: 2 },
-  quote_sent: { label: 'Quotes Sent', color: '#8B5CF6', order: 3 },
-  sale: { label: 'Sales', color: '#10B981', order: 4 },
-  not_interested: { label: 'Not Interested', color: '#6B7280', order: 5 },
-  no_answer: { label: 'No Answer', color: '#9CA3AF', order: 6 },
+const PIPELINE_STATUS_META: Record<string, { label: string; label_fr: string; color: string; order: number }> = {
+  lead: { label: 'Leads', label_fr: 'Leads', color: '#3B82F6', order: 1 },
+  callback: { label: 'Callbacks', label_fr: 'Rappels', color: '#F59E0B', order: 2 },
+  quote_sent: { label: 'Quotes Sent', label_fr: 'Devis envoyés', color: '#8B5CF6', order: 3 },
+  sale: { label: 'Sales', label_fr: 'Ventes', color: '#10B981', order: 4 },
+  not_interested: { label: 'Not Interested', label_fr: 'Pas intéressé', color: '#6B7280', order: 5 },
+  no_answer: { label: 'No Answer', label_fr: 'Sans réponse', color: '#9CA3AF', order: 6 },
 };
 
 // ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
           const stages = Object.entries(counts)
             .filter(([s]) => PIPELINE_STATUS_META[s])
             .map(([s, count]) => ({
-              name: PIPELINE_STATUS_META[s].label,
+              name: fr ? PIPELINE_STATUS_META[s].label_fr : PIPELINE_STATUS_META[s].label,
               color: PIPELINE_STATUS_META[s].color,
               value: String(count),
               count,
@@ -241,7 +241,7 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
 
     fetchData();
     return () => { cancelled = true; };
-  }, [userId]);
+  }, [userId, fr]);
 
   if (loading) {
     return <LoadingState />;
@@ -340,13 +340,13 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Trophy className="h-3.5 w-3.5 text-gold" />
-              Recent Wins
+              {fr ? 'Ventes récentes' : 'Recent Wins'}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {recentWins.length === 0 && (
-                <p className="text-[13px] text-text-muted py-4 text-center">No wins yet today</p>
+                <p className="text-[13px] text-text-muted py-4 text-center">{fr ? "Aucune vente aujourd'hui" : 'No wins yet today'}</p>
               )}
               {recentWins.map((win, i) => (
                 <div
@@ -387,7 +387,7 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
           <CardContent>
             <div className="space-y-2">
               {pipelineStages.length === 0 && (
-                <p className="text-[13px] text-text-muted py-4 text-center">No pipeline data yet</p>
+                <p className="text-[13px] text-text-muted py-4 text-center">{fr ? 'Aucune donnée de pipeline' : 'No pipeline data yet'}</p>
               )}
               {pipelineStages.map((stage, i) => (
                 <div
@@ -400,7 +400,7 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
                   />
                   <div className="flex-1">
                     <p className="text-[13px] font-medium text-text-primary">{stage.name}</p>
-                    <p className="text-[10px] text-text-muted">{stage.count} leads</p>
+                    <p className="text-[10px] text-text-muted">{stage.count} {fr ? 'leads' : 'leads'}</p>
                   </div>
                   <p className="text-[13px] font-semibold text-text-primary">{stage.value}</p>
                 </div>
@@ -418,6 +418,8 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
 // ---------------------------------------------------------------------------
 
 function RepDashboard({ userId }: { userId: string | null }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
   const [stats, setStats] = useState<RepPerformanceDetail | null>(null);
@@ -489,7 +491,7 @@ function RepDashboard({ userId }: { userId: string | null }) {
             const timeStr = `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
             return {
               time: timeStr,
-              title: ev.job?.title || 'Job',
+              title: ev.job?.title || (fr ? 'Job' : 'Job'),
               status: ev.status === 'completed' ? 'completed' : 'scheduled',
             };
           }));
@@ -508,7 +510,7 @@ function RepDashboard({ userId }: { userId: string | null }) {
 
     fetchData();
     return () => { cancelled = true; };
-  }, [userId]);
+  }, [userId, fr]);
 
   if (loading) {
     return <LoadingState />;
@@ -519,31 +521,31 @@ function RepDashboard({ userId }: { userId: string | null }) {
     : [
         {
           icon: <DoorOpen className="h-4 w-4" strokeWidth={2.5} />,
-          label: 'Doors Knocked',
+          label: fr ? 'Portes cognées' : 'Doors Knocked',
           value: String(stats.doors_knocked),
           change: { value: '', direction: 'up' as const },
         },
         {
           icon: <CheckCircle2 className="h-4 w-4" strokeWidth={2.5} />,
-          label: 'Closes',
+          label: fr ? 'Ventes' : 'Closes',
           value: String(stats.closes),
           change: { value: '', direction: 'up' as const },
         },
         {
           icon: <Wallet className="h-4 w-4" strokeWidth={2.5} />,
-          label: 'Revenue',
+          label: fr ? 'Revenus' : 'Revenue',
           value: formatCurrency(stats.revenue),
           change: { value: '', direction: 'up' as const },
         },
         {
           icon: <TrendingUp className="h-4 w-4" strokeWidth={2.5} />,
-          label: 'Conversion',
+          label: fr ? 'Conversion' : 'Conversion',
           value: `${Math.round(stats.conversion_rate)}%`,
-          subtitle: `${stats.quotes_sent} quotes sent`,
+          subtitle: fr ? `${stats.quotes_sent} devis envoyés` : `${stats.quotes_sent} quotes sent`,
         },
       ];
 
-  const displayName = userName || 'there';
+  const displayName = userName || (fr ? 'là' : 'there');
   const rankDisplay = rank ?? '—';
 
   return (
@@ -551,14 +553,18 @@ function RepDashboard({ userId }: { userId: string | null }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-text-primary">Welcome back, {displayName}</h2>
+          <h2 className="text-lg font-semibold text-text-primary">{fr ? 'Bon retour' : 'Welcome back'}, {displayName}</h2>
           <p className="mt-0.5 text-xs text-text-tertiary">
-            You are ranked <span className="font-medium text-text-primary">#{rankDisplay}</span> today. Keep pushing!
+            {fr ? (
+              <>Vous êtes classé <span className="font-medium text-text-primary">#{rankDisplay}</span> aujourd'hui. Continuez!</>
+            ) : (
+              <>You are ranked <span className="font-medium text-text-primary">#{rankDisplay}</span> today. Keep pushing!</>
+            )}
           </p>
         </div>
         <Badge variant={hasActiveSession ? 'success' : 'secondary'} className="px-2 py-0.5 text-[11px]">
           <Zap className="mr-1 h-3 w-3" />
-          {hasActiveSession ? 'Session Active' : 'No Session'}
+          {hasActiveSession ? (fr ? 'Session active' : 'Session Active') : (fr ? 'Aucune session' : 'No Session')}
         </Badge>
       </div>
 
@@ -575,13 +581,13 @@ function RepDashboard({ userId }: { userId: string | null }) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-3.5 w-3.5 text-text-secondary" />
-              Today's Schedule
+              {fr ? "Horaire d'aujourd'hui" : "Today's Schedule"}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {todaySchedule.length === 0 && (
-                <p className="text-[13px] text-text-muted py-4 text-center">No jobs scheduled today</p>
+                <p className="text-[13px] text-text-muted py-4 text-center">{fr ? "Aucune job planifiée aujourd'hui" : 'No jobs scheduled today'}</p>
               )}
               {todaySchedule.map((item, i) => (
                 <div
@@ -601,7 +607,7 @@ function RepDashboard({ userId }: { userId: string | null }) {
                     <p className="text-[11px] text-text-muted">{item.time}</p>
                   </div>
                   {item.status === 'completed' && (
-                    <Badge variant="success" className="text-[10px]">Done</Badge>
+                    <Badge variant="success" className="text-[10px]">{fr ? 'Terminé' : 'Done'}</Badge>
                   )}
                 </div>
               ))}
@@ -614,17 +620,17 @@ function RepDashboard({ userId }: { userId: string | null }) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Trophy className="h-3.5 w-3.5 text-gold" />
-              Active Challenges
+              {fr ? 'Défis actifs' : 'Active Challenges'}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Trophy className="h-8 w-8 text-text-muted/30 mb-3" />
               <p className="text-[13px] font-medium text-text-secondary">
-                No active challenges
+                {fr ? 'Aucun défi actif' : 'No active challenges'}
               </p>
               <p className="text-[11px] text-text-muted mt-1">
-                Challenges will appear here when configured by your manager.
+                {fr ? 'Les défis apparaîtront ici lorsque configurés par votre gestionnaire.' : 'Challenges will appear here when configured by your manager.'}
               </p>
             </div>
           </CardContent>

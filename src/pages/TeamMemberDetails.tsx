@@ -455,7 +455,7 @@ export default function TeamMemberDetails() {
             </h4>
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.companySettings.street1}</label>
-              <input type="text" value={form.street1} onChange={(e) => update('street1', e.target.value)} className="glass-input w-full mt-1" placeholder="123 Main St" />
+              <input type="text" value={form.street1} onChange={(e) => update('street1', e.target.value)} className="glass-input w-full mt-1" placeholder={isFr ? '123 rue Principale' : '123 Main St'} />
             </div>
             <div>
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.companySettings.street2}</label>

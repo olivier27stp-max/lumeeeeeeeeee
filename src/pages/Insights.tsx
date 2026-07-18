@@ -198,6 +198,8 @@ function LeadFunnelCard({ title, hint, stages }: { title: string; hint: string; 
 
 /* ── Jobber-style top team members table ── */
 function TopTeamCard({ title, hint, teams, loading }: { title: string; hint: string; teams: TeamPerformance[]; loading?: boolean }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const rows = [...teams].sort((a, b) => b.revenue_cents - a.revenue_cents).slice(0, 5);
   return (
     <div className="bg-surface-card border border-border rounded-xl flex flex-col overflow-hidden">
@@ -213,9 +215,9 @@ function TopTeamCard({ title, hint, teams, loading }: { title: string; hint: str
         <table className="w-full text-[13px] border-collapse">
           <thead>
             <tr className="text-[10.5px] uppercase tracking-wide text-text-tertiary">
-              <th className="text-left font-bold px-5 py-2.5 bg-surface-secondary border-b border-border">Équipe</th>
+              <th className="text-left font-bold px-5 py-2.5 bg-surface-secondary border-b border-border">{fr ? 'Équipe' : 'Team'}</th>
               <th className="text-right font-bold px-5 py-2.5 bg-surface-secondary border-b border-border">Jobs</th>
-              <th className="text-right font-bold px-5 py-2.5 bg-surface-secondary border-b border-border">Valeur totale</th>
+              <th className="text-right font-bold px-5 py-2.5 bg-surface-secondary border-b border-border">{fr ? 'Valeur totale' : 'Total value'}</th>
             </tr>
           </thead>
           <tbody>
@@ -418,7 +420,7 @@ export default function Insights() {
           <input type="date" value={from} onChange={(e) => updateParam('from', e.target.value)} className="h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary outline-none" />
           <input type="date" value={to} onChange={(e) => updateParam('to', e.target.value)} className="h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary outline-none" />
           <button onClick={exportCsv} className="inline-flex items-center gap-2 h-9 px-4 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">
-            <Download size={14} /> Export
+            <Download size={14} /> {fr ? 'Exporter' : 'Export'}
           </button>
         </div>
       </div>
@@ -471,10 +473,10 @@ export default function Insights() {
                     financeSummaryCategories.length > 0
                       ? financeSummaryCategories
                       : [
-                          { name: 'Paid Invoices', value: 48, pct: 48 },
-                          { name: 'Pending', value: 32, pct: 32 },
-                          { name: 'Drafts', value: 13, pct: 13 },
-                          { name: 'Overdue', value: 7, pct: 7 },
+                          { name: fr ? 'Factures payées' : 'Paid Invoices', value: 48, pct: 48 },
+                          { name: fr ? 'En attente' : 'Pending', value: 32, pct: 32 },
+                          { name: fr ? 'Brouillons' : 'Drafts', value: 13, pct: 13 },
+                          { name: fr ? 'En retard' : 'Overdue', value: 7, pct: 7 },
                         ]
                   }
                   totalCents={overview?.invoiced_value_cents || 0}
@@ -616,13 +618,13 @@ export default function Insights() {
                         const matchedSeries = revenueSeries.find((rs) => new Date(`${rs.bucket_start}T00:00:00`).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', { month: 'short', year: '2-digit' }) === entry.label);
                         if (!matchedSeries) return;
                         openDrilldown(
-                          `Invoices — ${entry.label}`,
-                          'Click a bar to see invoice details for that period',
+                          `${fr ? 'Factures' : 'Invoices'} — ${entry.label}`,
+                          fr ? 'Cliquez sur une barre pour voir le détail des factures de cette période' : 'Click a bar to see invoice details for that period',
                           [
-                            { key: 'invoice_number', label: 'Invoice #' },
-                            { key: 'status', label: 'Status', render: (v: string) => <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', v === 'paid' ? 'bg-emerald-100 text-emerald-700' : v === 'sent' ? 'bg-surface-secondary text-text-secondary' : 'bg-surface-secondary text-text-tertiary')}>{v}</span> },
-                            { key: 'total_cents', label: 'Amount', align: 'right' as const, render: (v: number) => fmtMoney(v) },
-                            { key: 'issued_at', label: 'Issued', render: (v: string) => v ? new Date(v).toLocaleDateString() : '--' },
+                            { key: 'invoice_number', label: fr ? 'Facture nº' : 'Invoice #' },
+                            { key: 'status', label: fr ? 'Statut' : 'Status', render: (v: string) => <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', v === 'paid' ? 'bg-emerald-100 text-emerald-700' : v === 'sent' ? 'bg-surface-secondary text-text-secondary' : 'bg-surface-secondary text-text-tertiary')}>{v}</span> },
+                            { key: 'total_cents', label: fr ? 'Montant' : 'Amount', align: 'right' as const, render: (v: number) => fmtMoney(v) },
+                            { key: 'issued_at', label: fr ? 'Émise' : 'Issued', render: (v: string) => v ? new Date(v).toLocaleDateString() : '--' },
                           ],
                           () => drilldownRevenueByMonth({ month: matchedSeries.bucket_start }),
                         );
@@ -636,9 +638,13 @@ export default function Insights() {
 
               {/* ── CHART 2: Jobs by team ── */}
               <div className="rounded-2xl bg-surface-card border border-border shadow-card p-5">
-                <p className="text-[16px] font-semibold text-text-primary mb-1">{t.insights.jobsByTeam || 'Jobs by Team'}</p>
+                <p className="text-[16px] font-semibold text-text-primary mb-1">{t.insights.jobsByTeam || (fr ? 'Jobs par équipe' : 'Jobs by Team')}</p>
                 <p className="text-[12px] text-text-tertiary mb-4">
-                  {jobsSummary ? `${jobsSummary.totalJobs} total · ${jobsSummary.scheduledJobs} scheduled · ${jobsSummary.unscheduledJobs} unscheduled` : 'Loading...'}
+                  {jobsSummary
+                    ? (fr
+                        ? `${jobsSummary.totalJobs} au total · ${jobsSummary.scheduledJobs} planifiées · ${jobsSummary.unscheduledJobs} non planifiées`
+                        : `${jobsSummary.totalJobs} total · ${jobsSummary.scheduledJobs} scheduled · ${jobsSummary.unscheduledJobs} unscheduled`)
+                    : (fr ? 'Chargement...' : 'Loading...')}
                 </p>
                 {(jobsSummary?.byTeam || []).length > 0 ? (
                   <div className="h-[280px]">
@@ -651,12 +657,12 @@ export default function Insights() {
                         <Bar dataKey="count" radius={[0, 4, 4, 0]} onClick={(entry: any) => {
                           const teamId = entry?.teamId || 'unassigned';
                           openDrilldown(
-                            `Jobs — ${entry?.name || 'Team'}`, `${from} to ${to}`,
+                            `Jobs — ${entry?.name || (fr ? 'Équipe' : 'Team')}`, `${from} ${fr ? 'à' : 'to'} ${to}`,
                             [
-                              { key: 'title', label: 'Job Title' },
+                              { key: 'title', label: fr ? 'Titre de la job' : 'Job Title' },
                               { key: 'client_name', label: 'Client' },
-                              { key: 'status', label: 'Status', render: (v: string) => <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-bold uppercase text-text-secondary">{v}</span> },
-                              { key: 'total_cents', label: 'Value', align: 'right' as const, render: (v: number) => v ? fmtMoney(v) : '--' },
+                              { key: 'status', label: fr ? 'Statut' : 'Status', render: (v: string) => <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-bold uppercase text-text-secondary">{v}</span> },
+                              { key: 'total_cents', label: fr ? 'Valeur' : 'Value', align: 'right' as const, render: (v: number) => v ? fmtMoney(v) : '--' },
                             ],
                             () => drilldownJobsByTeam({ teamId, from, to }),
                           );
@@ -669,7 +675,7 @@ export default function Insights() {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="py-10 text-center text-[13px] text-text-tertiary">No job data available.</div>
+                  <div className="py-10 text-center text-[13px] text-text-tertiary">{fr ? 'Aucune donnée de job disponible.' : 'No job data available.'}</div>
                 )}
               </div>
 

@@ -156,11 +156,11 @@ export default function D2DMap() {
       });
       // Map the pin ID to the house ID for future operations
       setPinHouseMap(prev => { const next = new Map(prev); next.set(pin.id, result.id); return next; });
-      toast.success('Pin sauvegardé');
+      toast.success(fr ? 'Pin sauvegardé' : 'Pin saved');
     } catch (err: any) {
-      toast.error(err?.message || 'Erreur de sauvegarde du pin');
+      toast.error(err?.message || (fr ? 'Erreur de sauvegarde du pin' : 'Failed to save pin'));
     }
-  }, []);
+  }, [fr]);
 
   const handlePinDeleted = useCallback(async (pinId: string, opts?: { deleteClientId?: string | null }) => {
     const houseId = pinHouseMap.get(pinId);
@@ -175,12 +175,12 @@ export default function D2DMap() {
     if (opts?.deleteClientId) {
       try {
         await softDeleteClient(opts.deleteClientId);
-        toast.success('Client supprimé');
+        toast.success(fr ? 'Client supprimé' : 'Client deleted');
       } catch (err: any) {
-        toast.error(err?.message || 'Erreur lors de la suppression du client');
+        toast.error(err?.message || (fr ? 'Erreur lors de la suppression du client' : 'Failed to delete client'));
       }
     }
-  }, [pinHouseMap]);
+  }, [pinHouseMap, fr]);
 
   const handlePinUpdated = useCallback(async (pin: LeadPinData) => {
     const houseId = pinHouseMap.get(pin.id);
@@ -214,10 +214,10 @@ export default function D2DMap() {
           linkHouseToEntity(houseId, { entity_type: 'job', entity_id: job.id }).catch(() => {});
           setPinLinkUpdates((prev) => ({ ...prev, [pin.id]: { ...prev[pin.id], job_id: job.id } }));
         }
-        toast.success('Job créée à partir du pin');
+        toast.success(fr ? 'Job créée à partir du pin' : 'Job created from pin');
       },
     });
-  }, [openJobModal, pinHouseMap]);
+  }, [openJobModal, pinHouseMap, fr]);
 
   // Pin Vendu → Job creation form
   const handlePinClosedWon = useCallback((pin: LeadPinData) => {
@@ -252,8 +252,8 @@ export default function D2DMap() {
       clientId = (data?.client_id as string) || (data?.lead_id as string) || null;
     }
     if (clientId) navigate(`/clients/${clientId}`);
-    else toast.error('Aucune fiche client liée.');
-  }, [navigate]);
+    else toast.error(fr ? 'Aucune fiche client liée.' : 'No linked client record.');
+  }, [navigate, fr]);
 
   const handleQuoteCreated = useCallback((detail: any) => {
     // Link the pin/house to the created quote
@@ -264,12 +264,12 @@ export default function D2DMap() {
       }
       const pinId = pendingQuotePin.id;
       setPinLinkUpdates((prev) => ({ ...prev, [pinId]: { ...prev[pinId], quote_id: detail.id } }));
-      toast.success('Devis créé à partir du pin');
+      toast.success(fr ? 'Devis créé à partir du pin' : 'Quote created from pin');
     }
     setShowQuoteModal(false);
     setPendingQuotePin(null);
     setQuoteLead(null);
-  }, [pendingQuotePin, pinHouseMap]);
+  }, [pendingQuotePin, pinHouseMap, fr]);
 
   const handleQuoteClose = useCallback(() => {
     setShowQuoteModal(false);
@@ -280,7 +280,7 @@ export default function D2DMap() {
   if (loading) {
     return (
       <div className="h-[calc(100vh-3rem)] flex items-center justify-center bg-[#080b10]">
-        <div className="text-white/40 text-sm">Chargement de la carte...</div>
+        <div className="text-white/40 text-sm">{fr ? 'Chargement de la carte...' : 'Loading map...'}</div>
       </div>
     );
   }
