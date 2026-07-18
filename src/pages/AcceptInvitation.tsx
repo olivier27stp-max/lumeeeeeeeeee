@@ -18,10 +18,12 @@ export default function AcceptInvitation() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+
   useEffect(() => {
     if (!token) {
       setState('error');
-      setErrorMessage('Invalid invitation link.');
+      setErrorMessage(isFr ? "Lien d'invitation invalide." : 'Invalid invitation link.');
       return;
     }
 
@@ -34,17 +36,17 @@ export default function AcceptInvitation() {
         setState('form');
       } catch (err: any) {
         setState('error');
-        setErrorMessage(err.message || 'This invitation is invalid or has expired.');
+        setErrorMessage(err.message || (isFr ? 'Cette invitation est invalide ou a expiré.' : 'This invitation is invalid or has expired.'));
       }
     })();
   }, [token]);
 
   // Password policy checks (mirror server-side validation)
   const passwordErrors: string[] = [];
-  if (password && password.length < 10) passwordErrors.push('Min. 10 characters');
+  if (password && password.length < 10) passwordErrors.push(isFr ? 'Min. 10 caractères' : 'Min. 10 characters');
   if (password && (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)))
-    passwordErrors.push('Uppercase, lowercase & number required');
-  if (password && !/[^a-zA-Z0-9]/.test(password)) passwordErrors.push('Special character required');
+    passwordErrors.push(isFr ? 'Majuscule, minuscule et chiffre requis' : 'Uppercase, lowercase & number required');
+  if (password && !/[^a-zA-Z0-9]/.test(password)) passwordErrors.push(isFr ? 'Caractère spécial requis' : 'Special character required');
   const passwordValid = password.length >= 10
     && /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password)
     && /[^a-zA-Z0-9]/.test(password);
@@ -60,7 +62,7 @@ export default function AcceptInvitation() {
       await acceptInvitation(token!, password, fullName.trim());
       setState('success');
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to accept invitation.');
+      setErrorMessage(err.message || (isFr ? "Échec de l'acceptation de l'invitation." : 'Failed to accept invitation.'));
       setState('error');
     } finally {
       setSubmitting(false);
@@ -68,9 +70,9 @@ export default function AcceptInvitation() {
   };
 
   const roleLabels: Record<string, string> = {
-    admin: 'Admin',
-    sales_rep: 'Sales Rep',
-    technician: 'Technician',
+    admin: isFr ? 'Administrateur' : 'Admin',
+    sales_rep: isFr ? 'Représentant' : 'Sales Rep',
+    technician: isFr ? 'Technicien' : 'Technician',
   };
 
   return (
@@ -85,7 +87,7 @@ export default function AcceptInvitation() {
         {state === 'loading' && (
           <div className="section-card p-8 text-center">
             <Loader2 size={24} className="animate-spin text-primary mx-auto mb-3" />
-            <p className="text-[13px] text-text-secondary">Verifying invitation...</p>
+            <p className="text-[13px] text-text-secondary">{isFr ? "Vérification de l'invitation..." : 'Verifying invitation...'}</p>
           </div>
         )}
 
@@ -95,13 +97,13 @@ export default function AcceptInvitation() {
             <div className="w-12 h-12 rounded-full bg-danger/10 flex items-center justify-center mx-auto">
               <AlertTriangle size={20} className="text-danger" />
             </div>
-            <h2 className="text-[16px] font-bold text-text-primary">Invitation Error</h2>
+            <h2 className="text-[16px] font-bold text-text-primary">{isFr ? "Erreur d'invitation" : 'Invitation Error'}</h2>
             <p className="text-[13px] text-text-secondary">{errorMessage}</p>
             <button
               onClick={() => navigate('/')}
               className="glass-button-primary inline-flex items-center gap-1.5 text-[12px]"
             >
-              Go to Lume CRM
+              {isFr ? 'Aller à Lume CRM' : 'Go to Lume CRM'}
             </button>
           </div>
         )}
@@ -113,16 +115,16 @@ export default function AcceptInvitation() {
               <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
                 <Users size={20} className="text-primary" />
               </div>
-              <h2 className="text-[18px] font-bold text-text-primary">Join {orgName}</h2>
+              <h2 className="text-[18px] font-bold text-text-primary">{isFr ? `Rejoindre ${orgName}` : `Join ${orgName}`}</h2>
               <p className="text-[13px] text-text-secondary">
-                You've been invited to join as <span className="font-semibold text-text-primary">{roleLabels[role] || role}</span>
+                {isFr ? 'Vous avez été invité à rejoindre en tant que ' : "You've been invited to join as "}<span className="font-semibold text-text-primary">{roleLabels[role] || role}</span>
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Email (read-only) */}
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Email</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Courriel' : 'Email'}</label>
                 <input
                   type="email"
                   value={email}
@@ -133,7 +135,7 @@ export default function AcceptInvitation() {
 
               {/* Full Name */}
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Full Name *</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Nom complet *' : 'Full Name *'}</label>
                 <div className="relative mt-1">
                   <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                   <input
@@ -141,7 +143,7 @@ export default function AcceptInvitation() {
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className="glass-input w-full !pl-9"
-                    placeholder="John Doe"
+                    placeholder={isFr ? 'Jean Tremblay' : 'John Doe'}
                     required
                     autoFocus
                   />
@@ -150,7 +152,7 @@ export default function AcceptInvitation() {
 
               {/* Password */}
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Password *</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Mot de passe *' : 'Password *'}</label>
                 <div className="relative mt-1">
                   <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                   <input
@@ -158,7 +160,7 @@ export default function AcceptInvitation() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="glass-input w-full !pl-9"
-                    placeholder="Min. 10 characters"
+                    placeholder={isFr ? 'Min. 10 caractères' : 'Min. 10 characters'}
                     required
                     minLength={10}
                   />
@@ -174,7 +176,7 @@ export default function AcceptInvitation() {
 
               {/* Confirm Password */}
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Confirm Password *</label>
+                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Confirmer le mot de passe *' : 'Confirm Password *'}</label>
                 <div className="relative mt-1">
                   <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                   <input
@@ -185,12 +187,12 @@ export default function AcceptInvitation() {
                       'glass-input w-full !pl-9',
                       confirmPassword && password !== confirmPassword && '!border-danger'
                     )}
-                    placeholder="Re-enter password"
+                    placeholder={isFr ? 'Ressaisir le mot de passe' : 'Re-enter password'}
                     required
                   />
                 </div>
                 {confirmPassword && password !== confirmPassword && (
-                  <p className="text-[11px] text-danger mt-1">Passwords do not match.</p>
+                  <p className="text-[11px] text-danger mt-1">{isFr ? 'Les mots de passe ne correspondent pas.' : 'Passwords do not match.'}</p>
                 )}
               </div>
 
@@ -200,9 +202,9 @@ export default function AcceptInvitation() {
                 className="glass-button-primary w-full !py-3 !text-[13px] inline-flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {submitting ? (
-                  <><Loader2 size={14} className="animate-spin" /> Creating account...</>
+                  <><Loader2 size={14} className="animate-spin" /> {isFr ? 'Création du compte...' : 'Creating account...'}</>
                 ) : (
-                  <><Check size={14} /> Accept & Join</>
+                  <><Check size={14} /> {isFr ? 'Accepter et rejoindre' : 'Accept & Join'}</>
                 )}
               </button>
             </form>
@@ -215,15 +217,15 @@ export default function AcceptInvitation() {
             <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center mx-auto">
               <Check size={20} className="text-success" />
             </div>
-            <h2 className="text-[16px] font-bold text-text-primary">Welcome to {orgName}!</h2>
+            <h2 className="text-[16px] font-bold text-text-primary">{isFr ? `Bienvenue chez ${orgName}!` : `Welcome to ${orgName}!`}</h2>
             <p className="text-[13px] text-text-secondary">
-              Your account has been created. You can now sign in to Lume CRM.
+              {isFr ? 'Votre compte a été créé. Vous pouvez maintenant vous connecter à Lume CRM.' : 'Your account has been created. You can now sign in to Lume CRM.'}
             </p>
             <button
               onClick={() => navigate('/')}
               className="glass-button-primary inline-flex items-center gap-1.5 text-[12px]"
             >
-              Sign In
+              {isFr ? 'Se connecter' : 'Sign In'}
             </button>
           </div>
         )}

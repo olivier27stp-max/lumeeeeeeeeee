@@ -14,6 +14,8 @@ const TOTAL_STEPS = 3;
 export default function D2DOnboarding() {
   const navigate = useNavigate();
 
+  const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -119,10 +121,17 @@ export default function D2DOnboarding() {
 
       navigate('/dashboard');
     } catch {
-      setError('An error occurred. Please try again.');
+      setError(isFr ? "Une erreur s'est produite. Veuillez réessayer." : 'An error occurred. Please try again.');
       setIsLoading(false);
     }
   }
+
+  const roleLabels: Record<UserRole, string> = {
+    owner: isFr ? 'Propriétaire' : 'Owner',
+    admin: isFr ? 'Administrateur' : 'Admin',
+    team_leader: isFr ? "Chef d'équipe" : 'Team Leader',
+    sales_rep: isFr ? 'Représentant' : 'Sales Rep',
+  };
 
   const roles: { value: UserRole; icon: React.ReactNode }[] = [
     { value: 'owner', icon: <Briefcase className="h-4 w-4" /> },
@@ -137,8 +146,8 @@ export default function D2DOnboarding() {
         {/* Logo */}
         <div className="mb-6 flex flex-col items-center">
           <div className="h-9 w-9 rounded-lg bg-text-primary flex items-center justify-center text-surface font-bold text-sm">L</div>
-          <h1 className="mt-4 text-lg font-semibold text-text-primary">Complete Your Profile</h1>
-          <p className="mt-1 text-sm text-text-tertiary">Tell us about yourself to get started</p>
+          <h1 className="mt-4 text-lg font-semibold text-text-primary">{isFr ? 'Complétez votre profil' : 'Complete Your Profile'}</h1>
+          <p className="mt-1 text-sm text-text-tertiary">{isFr ? 'Parlez-nous de vous pour commencer' : 'Tell us about yourself to get started'}</p>
         </div>
 
         {/* Progress */}
@@ -153,7 +162,7 @@ export default function D2DOnboarding() {
           ))}
         </div>
         <p className="mb-4 text-center text-[11px] text-text-muted">
-          Step {step} of {TOTAL_STEPS}
+          {isFr ? `Étape ${step} sur ${TOTAL_STEPS}` : `Step ${step} of ${TOTAL_STEPS}`}
         </p>
 
         {/* Card */}
@@ -185,12 +194,12 @@ export default function D2DOnboarding() {
                   </div>
                 </button>
                 <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarSelect} />
-                <p className="mt-2 text-[10px] text-text-muted">Cliquez pour ajouter une photo</p>
+                <p className="mt-2 text-[10px] text-text-muted">{isFr ? 'Cliquez pour ajouter une photo' : 'Click to add a photo'}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-medium text-text-secondary">First Name</label>
+                  <label className="block text-sm font-medium text-text-secondary">{isFr ? 'Prénom' : 'First Name'}</label>
                   <Input
                     placeholder="Jean"
                     value={firstName}
@@ -199,7 +208,7 @@ export default function D2DOnboarding() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-medium text-text-secondary">Last Name</label>
+                  <label className="block text-sm font-medium text-text-secondary">{isFr ? 'Nom' : 'Last Name'}</label>
                   <Input
                     placeholder="Dupont"
                     value={lastName}
@@ -210,7 +219,7 @@ export default function D2DOnboarding() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-text-secondary">Phone</label>
+                <label className="block text-sm font-medium text-text-secondary">{isFr ? 'Téléphone' : 'Phone'}</label>
                 <Input
                   type="tel"
                   placeholder="819-555-0100"
@@ -226,7 +235,7 @@ export default function D2DOnboarding() {
           {step === 2 && (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-text-secondary">Company Name</label>
+                <label className="block text-sm font-medium text-text-secondary">{isFr ? "Nom de l'entreprise" : 'Company Name'}</label>
                 <Input
                   placeholder="Clostra Inc."
                   value={companyName}
@@ -236,7 +245,7 @@ export default function D2DOnboarding() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-text-secondary">Role</label>
+                <label className="block text-sm font-medium text-text-secondary">{isFr ? 'Rôle' : 'Role'}</label>
                 <div className="grid grid-cols-2 gap-2">
                   {roles.map((r) => (
                     <button
@@ -252,7 +261,7 @@ export default function D2DOnboarding() {
                     >
                       {r.icon}
                       <span className="text-[12px] font-medium">
-                        {r.value}
+                        {roleLabels[r.value]}
                       </span>
                       {role === r.value && <Check className="ml-auto h-3.5 w-3.5" />}
                     </button>
@@ -266,11 +275,11 @@ export default function D2DOnboarding() {
           {step === 3 && (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-text-secondary">Bio</label>
+                <label className="block text-sm font-medium text-text-secondary">{isFr ? 'Bio' : 'Bio'}</label>
                 <textarea
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
-                  placeholder="Tell us about yourself..."
+                  placeholder={isFr ? 'Parlez-nous de vous...' : 'Tell us about yourself...'}
                   rows={4}
                   className="w-full rounded-lg border border-border-subtle bg-white px-3 py-2 text-sm text-text-primary placeholder:text-text-muted transition-colors hover:border-border focus:border-outline-strong focus:outline-none focus:ring-2 focus:ring-outline/30 resize-none"
                 />
@@ -278,7 +287,7 @@ export default function D2DOnboarding() {
 
               {/* Preview */}
               <div className="rounded-lg border border-border-subtle bg-surface-elevated p-4">
-                <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-text-muted">Apercu du profil</p>
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-text-muted">{isFr ? 'Aperçu du profil' : 'Profile preview'}</p>
                 <div className="flex items-center gap-3">
                   <Avatar
                     name={`${firstName} ${lastName}`}
@@ -288,7 +297,7 @@ export default function D2DOnboarding() {
                   />
                   <div>
                     <p className="text-[13px] font-semibold text-text-primary">{firstName} {lastName}</p>
-                    <p className="text-[11px] text-text-muted">{role} &middot; {companyName}</p>
+                    <p className="text-[11px] text-text-muted">{roleLabels[role]} &middot; {companyName}</p>
                     <p className="text-[11px] text-text-tertiary">{phone}</p>
                   </div>
                 </div>
@@ -307,7 +316,7 @@ export default function D2DOnboarding() {
                 className="flex-1"
                 onClick={() => setStep(step - 1)}
               >
-                Retour
+                {isFr ? 'Retour' : 'Back'}
               </Button>
             )}
             <Button
@@ -316,7 +325,7 @@ export default function D2DOnboarding() {
               isLoading={isLoading}
               onClick={handleNext}
             >
-              {step === TOTAL_STEPS ? 'Finish Setup' : 'Continue'}
+              {step === TOTAL_STEPS ? (isFr ? 'Terminer' : 'Finish Setup') : (isFr ? 'Continuer' : 'Continue')}
             </Button>
           </div>
         </div>
