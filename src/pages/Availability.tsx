@@ -62,7 +62,8 @@ const TEAM_COLORS = [
 /* ── Main Component ──────────────────────────────────────────── */
 
 export default function Availability() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const isFr = language === 'fr';
   const qc = useQueryClient();
 
   // ── State ──
@@ -609,7 +610,7 @@ export default function Availability() {
                   value={teamForm.name}
                   onChange={(e) => setTeamForm((f) => ({ ...f, name: e.target.value }))}
                   className="glass-input mt-1 w-full"
-                  placeholder="e.g. Installation Team"
+                  placeholder={isFr ? "ex. Équipe d'installation" : 'e.g. Installation Team'}
                   autoFocus
                 />
               </div>
@@ -619,7 +620,7 @@ export default function Availability() {
                   value={teamForm.description || ''}
                   onChange={(e) => setTeamForm((f) => ({ ...f, description: e.target.value }))}
                   className="glass-input mt-1 w-full"
-                  placeholder="Optional description..."
+                  placeholder={isFr ? 'Description optionnelle…' : 'Optional description...'}
                 />
               </div>
               <div>
@@ -748,7 +749,7 @@ export default function Availability() {
                   value={slotNotes}
                   onChange={(e) => setSlotNotes(e.target.value)}
                   className="glass-input mt-1 w-full"
-                  placeholder="Optional..."
+                  placeholder={isFr ? 'Optionnel…' : 'Optional...'}
                 />
               </div>
             </div>

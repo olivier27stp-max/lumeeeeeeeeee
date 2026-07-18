@@ -7,6 +7,10 @@ import { useParams } from 'react-router-dom';
 import { FileText, DollarSign, CheckCircle2, Clock, ExternalLink } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
+// Public page — a client may open it without any app language context, so we
+// fall back to the browser locale to decide French vs English.
+const isFr = (typeof navigator !== 'undefined' && (navigator.language || 'fr') || 'fr').toLowerCase().startsWith('fr');
+
 interface PortalData {
   client: { id: string; first_name: string; last_name: string; company: string | null; display_as_company?: boolean; email: string | null };
   company: { company_name: string; company_logo_url: string | null; company_phone: string | null };
@@ -48,12 +52,12 @@ interface PortalData {
 }
 
 function formatMoney(cents: number): string {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(cents / 100);
+  return new Intl.NumberFormat(isFr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD' }).format(cents / 100);
 }
 
 function formatDate(d: string | null): string {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
+  return new Date(d).toLocaleDateString(isFr ? 'fr-CA' : 'en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 const statusColors: Record<string, string> = {
@@ -82,7 +86,7 @@ const statusColors: Record<string, string> = {
   archived: 'bg-gray-100 text-gray-500',
 };
 
-const statusLabels: Record<string, string> = {
+const statusLabelsEn: Record<string, string> = {
   paid: 'Paid', sent: 'Sent', sent_not_due: 'Sent', draft: 'Draft', partial: 'Partial',
   past_due: 'Past Due', void: 'Void', completed: 'Completed', pending: 'Pending',
   in_progress: 'In Progress', scheduled: 'Scheduled', late: 'Late',
@@ -92,6 +96,19 @@ const statusLabels: Record<string, string> = {
   awaiting_response: 'Awaiting Response', changes_requested: 'Changes Requested',
   converted: 'Converted', archived: 'Archived',
 };
+
+const statusLabelsFr: Record<string, string> = {
+  paid: 'Payée', sent: 'Envoyée', sent_not_due: 'Envoyée', draft: 'Brouillon', partial: 'Partielle',
+  past_due: 'En retard', void: 'Annulée', completed: 'Terminé', pending: 'En attente',
+  in_progress: 'En cours', scheduled: 'Planifié', late: 'En retard',
+  unscheduled: 'Non planifié', action_required: 'Action requise',
+  requires_invoicing: 'À facturer', cancelled: 'Annulé',
+  approved: 'Approuvée', declined: 'Refusée', expired: 'Expirée',
+  awaiting_response: 'En attente de réponse', changes_requested: 'Modifications demandées',
+  converted: 'Convertie', archived: 'Archivée',
+};
+
+const statusLabels: Record<string, string> = isFr ? statusLabelsFr : statusLabelsEn;
 
 function deriveInvoiceStatus(inv: { status: string; balance_cents: number; due_date: string | null }): string {
   const dueDate = inv.due_date ? new Date(`${inv.due_date}T00:00:00`) : null;
@@ -126,11 +143,13 @@ export default function ClientPortal() {
     (async () => {
       try {
         const res = await fetch(`/api/portal/${token}`);
-        if (!res.ok) throw new Error(res.status === 404 ? 'Portal not found' : 'Failed to load');
+        if (!res.ok) throw new Error(res.status === 404
+          ? (isFr ? 'Portail introuvable' : 'Portal not found')
+          : (isFr ? 'Échec du chargement' : 'Failed to load'));
         const json = await res.json();
         setData(json);
       } catch (err: any) {
-        setError(err?.message || 'Failed to load portal');
+        setError(err?.message || (isFr ? 'Échec du chargement du portail' : 'Failed to load portal'));
       } finally {
         setLoading(false);
       }
@@ -149,8 +168,8 @@ export default function ClientPortal() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
         <div className="text-center">
-          <p className="text-lg font-semibold text-gray-800 mb-2">Portal unavailable</p>
-          <p className="text-sm text-gray-500">{error || 'This link may have expired.'}</p>
+          <p className="text-lg font-semibold text-gray-800 mb-2">{isFr ? 'Portail indisponible' : 'Portal unavailable'}</p>
+          <p className="text-sm text-gray-500">{error || (isFr ? 'Ce lien est peut-être expiré.' : 'This link may have expired.')}</p>
         </div>
       </div>
     );
@@ -193,10 +212,12 @@ export default function ClientPortal() {
         {/* Welcome */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            Hello {clientName}
+            {isFr ? 'Bonjour' : 'Hello'} {clientName}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Here's an overview of your account with {data.company.company_name}.
+            {isFr
+              ? `Voici un aperçu de votre compte avec ${data.company.company_name}.`
+              : `Here's an overview of your account with ${data.company.company_name}.`}
           </p>
         </div>
 
@@ -204,19 +225,19 @@ export default function ClientPortal() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center gap-2 text-gray-500 text-xs font-medium uppercase mb-2">
-              <DollarSign size={13} /> Balance
+              <DollarSign size={13} /> {isFr ? 'Solde' : 'Balance'}
             </div>
             <p className="text-2xl font-bold text-gray-900">{formatMoney(totalOwed)}</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center gap-2 text-gray-500 text-xs font-medium uppercase mb-2">
-              <FileText size={13} /> Invoices
+              <FileText size={13} /> {isFr ? 'Factures' : 'Invoices'}
             </div>
             <p className="text-2xl font-bold text-gray-900">{data.invoices.length}</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center gap-2 text-gray-500 text-xs font-medium uppercase mb-2">
-              <CheckCircle2 size={13} /> Paid
+              <CheckCircle2 size={13} /> {isFr ? 'Payées' : 'Paid'}
             </div>
             <p className="text-2xl font-bold text-gray-900">{paidInvoices}</p>
           </div>
@@ -225,10 +246,10 @@ export default function ClientPortal() {
         {/* Invoices */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900">Invoices & Quotes</h2>
+            <h2 className="text-sm font-semibold text-gray-900">{isFr ? 'Factures et soumissions' : 'Invoices & Quotes'}</h2>
           </div>
           {data.invoices.length === 0 ? (
-            <p className="px-5 py-8 text-center text-sm text-gray-400">No invoices yet.</p>
+            <p className="px-5 py-8 text-center text-sm text-gray-400">{isFr ? 'Aucune facture pour le moment.' : 'No invoices yet.'}</p>
           ) : (
             <div className="divide-y divide-gray-100">
               {data.invoices.map((inv) => (
@@ -237,10 +258,12 @@ export default function ClientPortal() {
                     <FileText size={16} className="text-gray-400" />
                     <div>
                       <p className="text-sm font-medium text-gray-900">
-                        #{inv.invoice_number} — {inv.subject || 'Invoice'}
+                        #{inv.invoice_number} — {inv.subject || (isFr ? 'Facture' : 'Invoice')}
                       </p>
                       <p className="text-xs text-gray-400">
-                        {inv.due_date ? `Due ${formatDate(inv.due_date)}` : 'No due date'}
+                        {inv.due_date
+                          ? (isFr ? `Échéance ${formatDate(inv.due_date)}` : `Due ${formatDate(inv.due_date)}`)
+                          : (isFr ? "Aucune date d'échéance" : 'No due date')}
                       </p>
                     </div>
                   </div>
@@ -254,7 +277,7 @@ export default function ClientPortal() {
                         href={`/quote/${inv.view_token}`}
                         className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
                       >
-                        Pay <ExternalLink size={11} />
+                        {isFr ? 'Payer' : 'Pay'} <ExternalLink size={11} />
                       </a>
                     )}
                   </div>
@@ -268,7 +291,7 @@ export default function ClientPortal() {
         {data.quotes && data.quotes.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">Quotes</h2>
+              <h2 className="text-sm font-semibold text-gray-900">{isFr ? 'Soumissions' : 'Quotes'}</h2>
             </div>
             <div className="divide-y divide-gray-100">
               {data.quotes.map((q) => (
@@ -277,16 +300,18 @@ export default function ClientPortal() {
                     <FileText size={16} className="text-gray-400" />
                     <div>
                       <p className="text-sm font-medium text-gray-900">
-                        #{q.quote_number} — {q.title || 'Quote'}
+                        #{q.quote_number} — {q.title || (isFr ? 'Soumission' : 'Quote')}
                       </p>
                       <p className="text-xs text-gray-400">
-                        {q.valid_until ? `Valid until ${formatDate(q.valid_until)}` : 'No expiry'}
+                        {q.valid_until
+                          ? (isFr ? `Valide jusqu'au ${formatDate(q.valid_until)}` : `Valid until ${formatDate(q.valid_until)}`)
+                          : (isFr ? "Aucune expiration" : 'No expiry')}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[q.status] || 'bg-gray-100 text-gray-600'}`}>
-                      {q.status.replace('_', ' ')}
+                      {statusLabels[q.status] || q.status.replace('_', ' ')}
                     </span>
                     <span className="text-sm font-bold text-gray-900 tabular-nums">{formatMoney(q.total_cents)}</span>
                     {/* Approved/converted quotes stay viewable — the signed quote is the job's contract. */}
@@ -295,7 +320,7 @@ export default function ClientPortal() {
                         href={`/quote/${q.view_token}`}
                         className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
                       >
-                        View <ExternalLink size={11} />
+                        {isFr ? 'Voir' : 'View'} <ExternalLink size={11} />
                       </a>
                     )}
                   </div>
@@ -309,7 +334,7 @@ export default function ClientPortal() {
         {data.contracts && data.contracts.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">Contracts</h2>
+              <h2 className="text-sm font-semibold text-gray-900">{isFr ? 'Contrats' : 'Contracts'}</h2>
             </div>
             <div className="divide-y divide-gray-100">
               {data.contracts.map((c) => {
@@ -320,13 +345,15 @@ export default function ClientPortal() {
                     <div className="flex items-center gap-3">
                       <FileText size={16} className="text-gray-400" />
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{job?.title || 'Contract'}</p>
+                        <p className="text-sm font-medium text-gray-900">{job?.title || (isFr ? 'Contrat' : 'Contract')}</p>
                         <p className="text-xs text-gray-400">
                           {c.status === 'signed'
-                            ? `Signed${c.signed_at ? ` on ${formatDate(c.signed_at)}` : ''}`
+                            ? (isFr
+                                ? `Signé${c.signed_at ? ` le ${formatDate(c.signed_at)}` : ''}`
+                                : `Signed${c.signed_at ? ` on ${formatDate(c.signed_at)}` : ''}`)
                             : pendingSignature
-                              ? 'Signature required'
-                              : 'Awaiting review'}
+                              ? (isFr ? 'Signature requise' : 'Signature required')
+                              : (isFr ? 'En attente de révision' : 'Awaiting review')}
                         </p>
                       </div>
                     </div>
@@ -334,14 +361,18 @@ export default function ClientPortal() {
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                         c.status === 'signed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
                       }`}>
-                        {c.status === 'signed' ? 'Signed' : pendingSignature ? 'Pending signature' : 'Sent'}
+                        {c.status === 'signed'
+                          ? (isFr ? 'Signé' : 'Signed')
+                          : pendingSignature
+                            ? (isFr ? 'Signature en attente' : 'Pending signature')
+                            : (isFr ? 'Envoyé' : 'Sent')}
                       </span>
                       {c.view_token && (
                         <a
                           href={`/contract/${c.view_token}`}
                           className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
                         >
-                          {pendingSignature ? 'View & sign' : 'View'} <ExternalLink size={11} />
+                          {pendingSignature ? (isFr ? 'Voir et signer' : 'View & sign') : (isFr ? 'Voir' : 'View')} <ExternalLink size={11} />
                         </a>
                       )}
                     </div>
@@ -356,7 +387,7 @@ export default function ClientPortal() {
         {data.jobs.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">Your Jobs</h2>
+              <h2 className="text-sm font-semibold text-gray-900">{isFr ? 'Vos travaux' : 'Your Jobs'}</h2>
             </div>
             <div className="divide-y divide-gray-100">
               {data.jobs.map((job) => (
@@ -382,7 +413,7 @@ export default function ClientPortal() {
         {/* Footer */}
         <div className="text-center py-4">
           <p className="text-xs text-gray-400">
-            Powered by <strong>Lume</strong> — {data.company.company_name}
+            {isFr ? 'Propulsé par' : 'Powered by'} <strong>Lume</strong> — {data.company.company_name}
           </p>
         </div>
       </main>

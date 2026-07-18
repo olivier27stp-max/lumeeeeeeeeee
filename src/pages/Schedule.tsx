@@ -55,6 +55,14 @@ function _dfLocale(): Locale {
 }
 const _LOC = { get locale() { return _dfLocale(); } };
 
+// Module-level FR check for subcomponents that render outside the translation
+// hook (DragEventCard, MonthView, AgendaView, MiniCal) — same source as _dfLocale.
+function _isFr(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('lume-language') === 'fr';
+  } catch { return false; }
+}
+
 function buildRange(date: Date, view: CalendarUiView) {
   if (view === 'day') return { start: startOfDay(date), end: addDays(startOfDay(date), 1) };
   if (view === 'month') return { start: startOfMonth(date), end: addMonths(startOfMonth(date), 1) };
@@ -374,7 +382,7 @@ function MonthView({ date, events, tcMap, onDayClick, onEventClick }: {
   return (
     <div className="flex h-full flex-col">
       <div className="grid grid-cols-7 border-b-[1.5px] border-border">
-        {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d) => (
+        {(_isFr() ? ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'] : ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']).map((d) => (
           <div key={d} className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{d}</div>
         ))}
       </div>
@@ -404,7 +412,7 @@ function MonthView({ date, events, tcMap, onDayClick, onEventClick }: {
                     </div>
                   );
                 })}
-                {dayEvs.length > 3 && <div className="px-1.5 text-[10px] font-semibold text-primary">+ {dayEvs.length - 3} more</div>}
+                {dayEvs.length > 3 && <div className="px-1.5 text-[10px] font-semibold text-primary">+ {dayEvs.length - 3} {_isFr() ? 'de plus' : 'more'}</div>}
               </div>
             </div>
           );
@@ -421,7 +429,8 @@ function AgendaView({ events, overlaps, tcMap, teams, onEventClick, onSlotClick 
   events: ScheduleEventRecord[]; overlaps: Record<string, number>; tcMap: Map<string, string>;
   teams: TeamRecord[]; onEventClick: (jobId: string) => void; onSlotClick: (s: Date, e: Date) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const isFr = language === 'fr';
   const sorted = useMemo(() => [...events].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()), [events]);
   const grouped = useMemo(() => {
     const m = new Map<string, ScheduleEventRecord[]>();
@@ -432,7 +441,7 @@ function AgendaView({ events, overlaps, tcMap, teams, onEventClick, onSlotClick 
   if (!sorted.length) return (
     <div className="flex flex-col items-center justify-center py-24 text-text-tertiary">
       <CalendarDays size={40} className="mb-4 opacity-30" />
-      <p className="text-sm font-medium">No scheduled events this period</p>
+      <p className="text-sm font-medium">{isFr ? 'Aucun événement planifié cette période' : 'No scheduled events this period'}</p>
     </div>
   );
 
@@ -448,7 +457,7 @@ function AgendaView({ events, overlaps, tcMap, teams, onEventClick, onSlotClick 
                 {format(d, 'd MMM', _LOC).toUpperCase()}, {format(d, 'EEEE', _LOC).toUpperCase()}
               </span>
               <div className="h-px flex-1 bg-border" />
-              {today && <span className="rounded-md bg-primary px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">Today</span>}
+              {today && <span className="rounded-md bg-primary px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">{t.schedule.today}</span>}
               <button onClick={() => { const sl = new Date(dk + 'T09:00:00'); onSlotClick(sl, addHours(sl, 2)); }}
                 className="rounded-md p-1 text-text-tertiary hover:bg-surface-tertiary hover:text-text-secondary opacity-0 transition-opacity [div:hover>&]:opacity-100">
                 <Plus size={14} />
@@ -523,7 +532,7 @@ function MiniCal({ date, onSelect }: { date: Date; onSelect: (d: Date) => void }
         </div>
       </div>
       <div className="grid grid-cols-7 text-center text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-        {['Su','Mo','Tu','We','Th','Fr','Sa'].map((d) => <div key={d} className="py-1">{d}</div>)}
+        {(_isFr() ? ['Di','Lu','Ma','Me','Je','Ve','Sa'] : ['Su','Mo','Tu','We','Th','Fr','Sa']).map((d, i) => <div key={i} className="py-1">{d}</div>)}
       </div>
       <div className="grid grid-cols-7 text-center">
         {days.map((day, i) => {
@@ -639,9 +648,9 @@ function ScheduleContent() {
       try {
         const result = await rescheduleMut.mutateAsync({ eventId, startAt, endAt, teamId, timezone: DEFAULT_TIMEZONE });
         if (result.overlaps > 0) toast.warning(t.schedule.overlapping);
-        else toast.success('Event moved');
+        else toast.success(t.schedule.eventRescheduled);
       } catch (err: any) {
-        toast.error(err?.message || 'Failed to reschedule');
+        toast.error(err?.message || t.schedule.couldNotReschedule);
         throw err;
       }
     },
@@ -659,9 +668,9 @@ function ScheduleContent() {
       try {
         const result = await rescheduleMut.mutateAsync({ eventId, startAt, endAt, timezone: DEFAULT_TIMEZONE });
         if (result.overlaps > 0) toast.warning(t.schedule.overlapping);
-        else toast.success('Duration updated');
+        else toast.success(t.schedule.eventUpdated);
       } catch (err: any) {
-        toast.error(err?.message || 'Failed to resize');
+        toast.error(err?.message || t.schedule.couldNotResize);
         throw err;
       }
     },
@@ -950,7 +959,7 @@ function ScheduleContent() {
               const proceed = window.confirm(
                 (t.routing?.confirmApply || 'This will reschedule {n} jobs for {rep}. Proceed?')
                   .replace('{n}', String(dayJobs.length))
-                  .replace('{rep}', team?.name || 'team'),
+                  .replace('{rep}', team?.name || (language === 'fr' ? 'équipe' : 'team')),
               );
               if (!proceed) return;
               try {
@@ -963,7 +972,9 @@ function ScheduleContent() {
                 const departAt = Number.isFinite(earliest) ? new Date(earliest) : dayStart;
                 const result = await optimizeRoute({ job_ids: dayJobs, depart_at: departAt.toISOString() });
                 if (result.skipped.length) {
-                  toast.warning(`${result.skipped.length} job(s) skipped (missing coords).`);
+                  toast.warning(language === 'fr'
+                    ? `${result.skipped.length} job(s) ignoré(s) (coordonnées manquantes).`
+                    : `${result.skipped.length} job(s) skipped (missing coords).`);
                 }
                 await applyOptimizedSchedule(result.ordered_jobs, departAt);
                 toast.success(
@@ -971,7 +982,7 @@ function ScheduleContent() {
                 );
                 refresh();
               } catch (e: any) {
-                toast.error(e?.message || 'Optimization failed.');
+                toast.error(e?.message || (language === 'fr' ? "Échec de l'optimisation." : 'Optimization failed.'));
               }
             }}
             className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-[5px] text-[13px] font-medium text-text-primary hover:bg-surface-secondary transition-colors"
