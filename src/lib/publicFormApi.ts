@@ -36,6 +36,8 @@ export interface PublicFormSubmission {
   notes?: string | null;
   /** Public URLs of photos already uploaded via `uploadPublicFormPhoto`. */
   photos?: string[];
+  /** Honeypot anti-bot — toujours vide/undefined pour un humain. */
+  website?: string;
 }
 
 export async function fetchPublicForm(apiKey: string): Promise<PublicForm> {

@@ -27,6 +27,7 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { STORAGE_BUCKETS } from '../lib/storage';
 import FileUpload from '../components/FileUpload';
+import Modal from '../components/ui/Modal';
 import type { RequestForm, FormField, FormFieldType } from '../types';
 
 // ── Constants ──────────────────────────────────────────────
@@ -335,9 +336,14 @@ export default function RequestFormSettings() {
   const [activeSection, setActiveSection] = useState<'builder' | 'embed' | 'preview' | 'submissions'>('builder');
 
   // Form fields
-  const [title, setTitle] = useState('Service Request');
+  // Défauts localisés — un client FR partait avec des textes anglais.
+  const defaultTitle = language === 'fr' ? 'Demande de service' : 'Service Request';
+  const defaultSuccess = language === 'fr'
+    ? 'Merci ! Nous vous reviendrons sous peu.'
+    : 'Thank you! We will get back to you shortly.';
+  const [title, setTitle] = useState(defaultTitle);
   const [description, setDescription] = useState('');
-  const [successMessage, setSuccessMessage] = useState('Thank you! We will get back to you shortly.');
+  const [successMessage, setSuccessMessage] = useState(defaultSuccess);
   const [enabled, setEnabled] = useState(true);
   const [logoUrl, setLogoUrl] = useState('');
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
@@ -347,6 +353,8 @@ export default function RequestFormSettings() {
   const [notifyInApp, setNotifyInApp] = useState(true);
   const [apiKey, setApiKey] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
+  const [showRegenModal, setShowRegenModal] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   // Load form
   useEffect(() => {
@@ -424,14 +432,17 @@ export default function RequestFormSettings() {
     }
   }, [title, description, successMessage, enabled, logoUrl, customFields, notifyEmail, notifyInApp]);
 
-  // Regenerate API key
+  // Regenerate API key (confirmé via modal — l'ancien embed cesse de marcher)
   const handleRegenKey = async () => {
-    if (!confirm(isFr ? 'Regénérer la clé API ? L\'ancien code embed cessera de fonctionner.' : 'Regenerate API key? The old embed code will stop working.')) return;
+    setRegenerating(true);
     try {
       const newKey = await regenerateApiKey();
       setApiKey(newKey);
+      setShowRegenModal(false);
     } catch (err) {
       console.error('Failed to regenerate key:', err);
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -886,7 +897,7 @@ export default function RequestFormSettings() {
                       {copied === 'apiKey' ? <ClipboardCheck size={14} className="text-green-600" /> : <Copy size={14} />}
                     </button>
                     <button
-                      onClick={handleRegenKey}
+                      onClick={() => setShowRegenModal(true)}
                       className="glass-button p-2"
                       title={t.requestForm.regenerate}
                     >
@@ -956,6 +967,35 @@ export default function RequestFormSettings() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Confirmation de régénération de clé (remplace le confirm() natif) */}
+      <Modal
+        open={showRegenModal}
+        onClose={() => !regenerating && setShowRegenModal(false)}
+        title={isFr ? 'Régénérer la clé API ?' : 'Regenerate API key?'}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-[13px] text-text-secondary">
+            {isFr
+              ? 'Le code d\'intégration actuel (script et iframe) cessera immédiatement de fonctionner. Vous devrez recopier le nouveau code sur votre site web.'
+              : 'The current embed code (script and iframe) will stop working immediately. You\'ll need to re-copy the new code onto your website.'}
+          </p>
+          <div className="flex justify-end gap-2.5">
+            <button className="glass-button-ghost" disabled={regenerating} onClick={() => setShowRegenModal(false)}>
+              {isFr ? 'Annuler' : 'Cancel'}
+            </button>
+            <button
+              className="glass-button bg-danger text-white hover:bg-danger/90 inline-flex items-center gap-2"
+              disabled={regenerating}
+              onClick={handleRegenKey}
+            >
+              {regenerating ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              {isFr ? 'Régénérer' : 'Regenerate'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

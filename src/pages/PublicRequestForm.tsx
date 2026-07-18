@@ -48,6 +48,9 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
   const [notes, setNotes] = useState('');
   const [responses, setResponses] = useState<Record<string, unknown>>({});
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  // Honeypot anti-bot : champ caché, jamais rempli par un humain. Le serveur
+  // rejette silencieusement toute soumission où il est non vide.
+  const [website, setWebsite] = useState('');
 
   const handlePhotos = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -133,6 +136,7 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
       custom_responses: responses,
       notes: notes.trim() || null,
       photos: photos.filter((p) => p.url).map((p) => p.url as string),
+      website: website || undefined, // honeypot (vide pour un humain)
     };
 
     setSubmitting(true);
@@ -193,6 +197,18 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Honeypot anti-bot : invisible + hors flux + non focusable. Un humain
+            ne le voit jamais ; un bot qui remplit tout le remplit → rejet. */}
+        <input
+          type="text"
+          name="website"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          value={website}
+          onChange={(e) => setWebsite(e.target.value)}
+          style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, opacity: 0 }}
+        />
         {/* Contact */}
         <Section title={tr.contactDetails}>
           <div className="grid grid-cols-2 gap-3">
