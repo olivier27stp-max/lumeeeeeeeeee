@@ -147,8 +147,8 @@ export default function ReferFriend() {
           </div>
           <p className="text-[13px] text-white/80 max-w-lg leading-relaxed">
             {isFr
-              ? 'Partagez votre lien de parrainage avec d\'autres entreprises de service. Chaque fois qu\'une entreprise s\'abonne, votre prochain mois est gratuit — cumulable à l\'infini.'
-              : 'Share your referral link with other service businesses. Every time a business subscribes, your next month is free — stack as many as you want.'}
+              ? 'Partagez votre lien de parrainage avec d\'autres entreprises de service. L\'entreprise que vous parrainez obtient son premier mois gratuit, et vous recevez un crédit d\'un mois sur votre prochaine facture — cumulable à l\'infini.'
+              : 'Share your referral link with other service businesses. The business you refer gets their first month free, and you get a one-month credit on your next invoice — stack as many as you want.'}
           </p>
         </div>
       </div>
@@ -240,8 +240,8 @@ export default function ReferFriend() {
               step: '3',
               title: isFr ? 'Vous gagnez un mois' : 'You earn a month',
               desc: isFr
-                ? 'Pour chaque entreprise parrainée qui s\'abonne, votre prochain mois est gratuit. Cumulable à l\'infini.'
-                : 'For every referred business that subscribes, your next month is free. Stack as many as you want.',
+                ? 'Un crédit d\'un mois est appliqué automatiquement à votre prochaine facture. Cumulable à l\'infini.'
+                : 'A one-month credit is applied automatically to your next invoice. Stack as many as you want.',
             },
           ].map((item) => (
             <div key={item.step} className="flex gap-3">
@@ -296,8 +296,12 @@ export default function ReferFriend() {
                         {new Date(ref.created_at).toLocaleDateString(t.dashboard.enus, { month: 'short', day: 'numeric', year: 'numeric' })}
                       </td>
                       <td className="py-3 text-[12px] font-semibold">
-                        {['subscribed', 'reward_pending', 'rewarded'].includes(ref.status) ? (
+                        {ref.status === 'rewarded' ? (
                           <span className="text-success">{isFr ? '1 mois gratuit' : '1 free month'}</span>
+                        ) : ['subscribed', 'reward_pending'].includes(ref.status) ? (
+                          // Converted but the credit hasn't landed yet — don't
+                          // claim it's granted; say it's on the way.
+                          <span className="text-warning">{isFr ? '1 mois — en traitement' : '1 month — processing'}</span>
                         ) : (
                           <span className="text-text-tertiary">-</span>
                         )}

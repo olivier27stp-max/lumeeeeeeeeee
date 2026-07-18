@@ -92,7 +92,12 @@ export function useSettingsNav(): NavGroup[] {
       items: [
         { path: '/settings/archives', label: (t.settings as any).archives || 'Archives', icon: Archive },
         { path: '/settings/marketplace', label: 'Marketplace', icon: Store },
-        { path: '/settings/referrals', label: t.referFriend.referAFriend, icon: Gift },
+        // Parrainage masqué au public: la récompense (crédit Stripe au parrain)
+        // n'a pas encore été validée par un vrai paiement de bout en bout. Visible
+        // pour le propriétaire de la plateforme afin de pouvoir la tester.
+        ...(isPlatformOwner
+          ? [{ path: '/settings/referrals', label: t.referFriend.referAFriend, icon: Gift }]
+          : []),
         { path: '/settings/support', label: 'Support', icon: LifeBuoy },
       ],
     },
