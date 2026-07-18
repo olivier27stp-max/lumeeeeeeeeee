@@ -169,7 +169,9 @@ export default function QuoteNew() {
   const [introContent, setIntroContent] = useState('');
   const [disclaimerEnabled, setDisclaimerEnabled] = useState(true);
   const [contractDisclaimer, setContractDisclaimer] = useState(
-    'Ce devis est valable pour les 30 prochains jours, apres quoi les valeurs peuvent etre sujettes a modification.'
+    fr
+      ? 'Ce devis est valable pour les 30 prochains jours, apres quoi les valeurs peuvent etre sujettes a modification.'
+      : 'This quote is valid for the next 30 days, after which values may be subject to change.'
   );
   const [clientMessageEnabled, setClientMessageEnabled] = useState(false);
   const [clientMessage, setClientMessage] = useState('');

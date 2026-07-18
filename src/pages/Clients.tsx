@@ -676,11 +676,11 @@ export default function Clients() {
         <div className="flex items-center gap-2">
           <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
             className="h-9 px-4 bg-surface-card border border-[var(--color-outline)] rounded-md text-[14px] text-[var(--color-text-primary)] font-normal disabled:opacity-40 disabled:cursor-default hover:bg-[var(--color-surface-secondary)] transition-colors cursor-pointer">
-            Previous
+            {fr ? 'Précédent' : 'Previous'}
           </button>
           <button disabled={page >= pageCount} onClick={() => setPage(p => Math.min(pageCount, p + 1))}
             className="h-9 px-4 bg-surface-card border border-[var(--color-outline)] rounded-md text-[14px] text-[var(--color-text-primary)] font-normal disabled:opacity-40 disabled:cursor-default hover:bg-[var(--color-surface-secondary)] transition-colors cursor-pointer">
-            Next
+            {fr ? 'Suivant' : 'Next'}
           </button>
         </div>
       </div>
@@ -879,7 +879,7 @@ function ClientForm({
           <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.status}</label>
           <select value={form.status} onChange={(e) => patch('status', e.target.value)} className="glass-input w-full mt-1.5">
             <option value="active">{t.clients.statusActive}</option>
-            <option value="lead">Lead</option>
+            <option value="lead">{t.clients.statusLead}</option>
             <option value="inactive">{t.clients.statusInactive}</option>
           </select>
         </div>
