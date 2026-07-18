@@ -12,7 +12,6 @@ import {
   Wallet,
   Archive,
   FileText,
-  Gift,
   MessageSquare,
   Calendar as CalendarIcon,
   LifeBuoy,
@@ -24,7 +23,6 @@ import { motion } from 'motion/react';
 import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
-import { usePlatformOwner } from '../../hooks/usePlatformOwner';
 
 // ─── Settings navigation (persistent sidebar) ─────────────────────
 // Organized by user intent: Mon compte / Entreprise / Ventes & paiements /
@@ -45,7 +43,6 @@ interface NavGroup {
 export function useSettingsNav(): NavGroup[] {
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
-  const isPlatformOwner = usePlatformOwner();
 
   return [
     {
@@ -92,21 +89,15 @@ export function useSettingsNav(): NavGroup[] {
       items: [
         { path: '/settings/archives', label: (t.settings as any).archives || 'Archives', icon: Archive },
         { path: '/settings/marketplace', label: 'Marketplace', icon: Store },
-        // Parrainage masqué au public: la récompense (crédit Stripe au parrain)
-        // n'a pas encore été validée par un vrai paiement de bout en bout. Visible
-        // pour le propriétaire de la plateforme afin de pouvoir la tester.
-        ...(isPlatformOwner
-          ? [{ path: '/settings/referrals', label: t.referFriend.referAFriend, icon: Gift }]
-          : []),
+        // Parrainage retiré du menu: la récompense (crédit Stripe au parrain)
+        // n'a pas été validée par un vrai paiement de bout en bout. Masqué pour
+        // tout le monde, propriétaire inclus. Réactivation: REFERRALS_ENABLED.
         { path: '/settings/support', label: 'Support', icon: LifeBuoy },
       ],
     },
-    ...(isPlatformOwner ? [{
-      heading: isFr ? 'Plateforme' : 'Platform',
-      items: [
-        { path: '/platform-admin', label: 'Platform Admin', icon: Shield, external: true },
-      ],
-    }] : []),
+    // Le groupe « Plateforme » (lien Platform Admin) a été retiré des réglages
+    // sur demande de Rafba. La page /platform-admin reste accessible par URL
+    // directe (elle a son propre gate propriétaire-de-plateforme).
   ];
 }
 
@@ -131,7 +122,8 @@ const LEGACY_TAB_TO_PATH: Record<string, string> = {
   payroll: 'payroll',
   location: 'location',
   archives: 'archives',
-  referrals: 'referrals',
+  // `referrals` retiré: la route n'existe plus tant que le parrainage est
+  // désactivé — un vieux lien ?tab=referrals tomberait sur une route morte.
   support: 'support',
 };
 
