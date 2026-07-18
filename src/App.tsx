@@ -60,7 +60,7 @@ import ProfileSettings from './pages/settings/ProfileSettings';
 import BillingSettings from './pages/settings/BillingSettings';
 import LocationSettings from './pages/settings/LocationSettings';
 import ArchivesPanel from './components/ArchivesPanel';
-import SupportPanel from './components/SupportPanel';
+import SupportPage from './components/SupportPage';
 import PayrollPage from './pages/settings/PayrollPage';
 import Auth from './pages/Auth';
 import Privacy from './pages/Privacy';
@@ -1274,7 +1274,7 @@ function AuthenticatedApp({
                           Stripe au parrain) n'est pas validée par un vrai paiement.
                           Fermée pour tout le monde, propriétaire inclus. L'API
                           renvoie 404 de son côté. Réactivation: REFERRALS_ENABLED. */}
-                      <Route path="support" element={<Gated permission="settings.read"><div className="max-w-2xl"><SupportPanel /></div></Gated>} />
+                      <Route path="support" element={<Gated permission="settings.read"><SupportPage /></Gated>} />
                     </Route>
                     <Route path="/account/privacy" element={<PageWrapper><PrivacyCenter /></PageWrapper>} />
                     <Route path="/privacy" element={<Privacy />} />
