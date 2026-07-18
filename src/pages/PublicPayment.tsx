@@ -6,8 +6,11 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { fetchPublicPaymentData, createPublicPaymentIntent } from '../lib/connectApi';
 import type { PublicPaymentData, CreatePublicPaymentIntentResponse } from '../lib/connectApi';
 
+// ── Language detection (public page — no auth context) ──
+const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+
 function formatMoney(cents: number, currency = 'CAD') {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(isFr ? 'fr-CA' : 'en-US', {
     style: 'currency',
     currency,
     minimumFractionDigits: 2,
@@ -26,7 +29,7 @@ export default function PublicPayment() {
 
   useEffect(() => {
     if (!token) {
-      setError('Invalid payment link.');
+      setError(isFr ? 'Lien de paiement invalide.' : 'Invalid payment link.');
       setLoading(false);
       return;
     }
@@ -51,7 +54,7 @@ export default function PublicPayment() {
           setStripePromise(loadStripe(intent.publishable_key));
         }
       } catch (err: any) {
-        setError(err?.message || 'Failed to load payment page.');
+        setError(err?.message || (isFr ? 'Échec du chargement de la page de paiement.' : 'Failed to load payment page.'));
       } finally {
         setLoading(false);
       }
@@ -77,7 +80,7 @@ export default function PublicPayment() {
       <PublicPageShell>
         <div className="text-center py-12">
           <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3" />
-          <h2 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">Payment Unavailable</h2>
+          <h2 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">{isFr ? 'Paiement indisponible' : 'Payment Unavailable'}</h2>
           <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">{error}</p>
         </div>
       </PublicPageShell>
@@ -90,9 +93,9 @@ export default function PublicPayment() {
       <PublicPageShell business={paymentData.business}>
         <div className="text-center py-12">
           <CheckCircle2 size={48} className="mx-auto text-green-500 mb-4" />
-          <h2 className="text-xl font-bold text-neutral-800 dark:text-neutral-100">Payment Complete</h2>
+          <h2 className="text-xl font-bold text-neutral-800 dark:text-neutral-100">{isFr ? 'Paiement complété' : 'Payment Complete'}</h2>
           <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-            This invoice has already been paid. Thank you!
+            {isFr ? 'Cette facture a déjà été payée. Merci !' : 'This invoice has already been paid. Thank you!'}
           </p>
           {paymentData.amount_cents > 0 && (
             <p className="mt-3 text-lg font-semibold text-neutral-700 dark:text-neutral-200">
@@ -110,9 +113,9 @@ export default function PublicPayment() {
       <PublicPageShell>
         <div className="text-center py-12">
           <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3" />
-          <h2 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">Unable to Load Payment</h2>
+          <h2 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">{isFr ? 'Impossible de charger le paiement' : 'Unable to Load Payment'}</h2>
           <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-            Please try again or contact the business directly.
+            {isFr ? 'Veuillez réessayer ou contacter directement l’entreprise.' : 'Please try again or contact the business directly.'}
           </p>
         </div>
       </PublicPageShell>
@@ -125,14 +128,14 @@ export default function PublicPayment() {
       <div className="mb-6">
         {paymentData.client && (
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            Payment for {paymentData.client.name}
+            {isFr ? 'Paiement pour' : 'Payment for'} {paymentData.client.name}
           </p>
         )}
         {paymentData.invoice && (
           <div className="mt-3 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-neutral-600 dark:text-neutral-300">
-                Invoice {paymentData.invoice.invoice_number}
+                {isFr ? 'Facture' : 'Invoice'} {paymentData.invoice.invoice_number}
               </span>
               {paymentData.invoice.subject && (
                 <span className="text-xs text-neutral-400">{paymentData.invoice.subject}</span>
@@ -158,7 +161,7 @@ export default function PublicPayment() {
 
             <div className="border-t border-neutral-200 dark:border-neutral-600 mt-3 pt-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-neutral-800 dark:text-neutral-100">Amount Due</span>
+                <span className="text-sm font-bold text-neutral-800 dark:text-neutral-100">{isFr ? 'Montant dû' : 'Amount Due'}</span>
                 <span className="text-xl font-bold text-neutral-900 dark:text-neutral-50">
                   {formatMoney(paymentData.amount_cents, paymentData.currency)}
                 </span>
@@ -214,7 +217,7 @@ function CheckoutForm({ amountCents, currency, publicToken }: {
 
     const { error: submitError } = await elements.submit();
     if (submitError) {
-      setError(submitError.message || 'Validation error.');
+      setError(submitError.message || (isFr ? 'Erreur de validation.' : 'Validation error.'));
       setProcessing(false);
       return;
     }
@@ -228,7 +231,7 @@ function CheckoutForm({ amountCents, currency, publicToken }: {
     });
 
     if (confirmError) {
-      setError(confirmError.message || 'Payment failed. Please try again.');
+      setError(confirmError.message || (isFr ? 'Le paiement a échoué. Veuillez réessayer.' : 'Payment failed. Please try again.'));
       setProcessing(false);
       return;
     }
@@ -242,9 +245,9 @@ function CheckoutForm({ amountCents, currency, publicToken }: {
     return (
       <div className="text-center py-8">
         <CheckCircle2 size={48} className="mx-auto text-green-500 mb-4" />
-        <h3 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">Payment Successful!</h3>
+        <h3 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">{isFr ? 'Paiement réussi !' : 'Payment Successful!'}</h3>
         <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-          Thank you for your payment of {formatMoney(amountCents, currency)}.
+          {isFr ? `Merci pour votre paiement de ${formatMoney(amountCents, currency)}.` : `Thank you for your payment of ${formatMoney(amountCents, currency)}.`}
         </p>
       </div>
     );
@@ -270,19 +273,19 @@ function CheckoutForm({ amountCents, currency, publicToken }: {
         {processing ? (
           <>
             <Loader2 size={16} className="animate-spin" />
-            Processing...
+            {isFr ? 'Traitement…' : 'Processing...'}
           </>
         ) : (
           <>
             <Lock size={16} />
-            Pay {formatMoney(amountCents, currency)}
+            {isFr ? 'Payer' : 'Pay'} {formatMoney(amountCents, currency)}
           </>
         )}
       </button>
 
       <div className="flex items-center justify-center gap-1.5 text-xs text-neutral-400">
         <ShieldCheck size={12} />
-        <span>Secured by Stripe. Your card details are encrypted.</span>
+        <span>{isFr ? 'Sécurisé par Stripe. Vos informations de carte sont chiffrées.' : 'Secured by Stripe. Your card details are encrypted.'}</span>
       </div>
     </form>
   );
@@ -307,7 +310,7 @@ function PublicPageShell({ children, business }: {
             </div>
           )}
           <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">
-            {business?.name || 'Payment'}
+            {business?.name || (isFr ? 'Paiement' : 'Payment')}
           </span>
         </div>
       </header>
@@ -322,7 +325,7 @@ function PublicPageShell({ children, business }: {
       {/* Footer */}
       <footer className="border-t border-neutral-200 dark:border-neutral-700 bg-surface-card dark:bg-neutral-800 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between text-xs text-neutral-400">
-          <span>Powered by Lume</span>
+          <span>{isFr ? 'Propulsé par Lume' : 'Powered by Lume'}</span>
           {business?.email && <a href={`mailto:${business.email}`} className="hover:underline">{business.email}</a>}
         </div>
       </footer>
