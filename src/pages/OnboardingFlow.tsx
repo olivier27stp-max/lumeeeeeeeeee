@@ -264,7 +264,7 @@ export default function OnboardingFlow() {
   // ─── Signup (step 1) ───
   const handleCreateAccount = async () => {
     if (user) { goNext(); return; }
-    if (!email || !password) { toast.error('Email and password required'); return; }
+    if (!email || !password) { toast.error(isFr ? 'Courriel et mot de passe requis' : 'Email and password required'); return; }
     if (password.length < 10) { setSignupError(isFr ? '10+ caractères requis' : '10+ characters required'); return; }
     setSignupLoading(true); setSignupError('');
     try {
@@ -313,7 +313,7 @@ export default function OnboardingFlow() {
 
   // ─── Save onboarding + subscribe (step 8) ───
   const handleCheckout = async (_paymentMethodId?: string) => {
-    if (!plan) { toast.error('No plan selected'); setProcessing(false); return; }
+    if (!plan) { toast.error(isFr ? 'Aucun plan sélectionné' : 'No plan selected'); setProcessing(false); return; }
     setProcessing(true);
 
     let token = '';
@@ -321,7 +321,7 @@ export default function OnboardingFlow() {
       const { data: { session } } = await supabase.auth.getSession();
       token = session?.access_token || '';
       if (!token) { toast.error(isFr ? 'Créez un compte d\'abord' : 'Create an account first'); setProcessing(false); return; }
-    } catch { toast.error('Session error'); setProcessing(false); return; }
+    } catch { toast.error(isFr ? 'Erreur de session' : 'Session error'); setProcessing(false); return; }
 
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
@@ -346,7 +346,7 @@ export default function OnboardingFlow() {
           setProcessing(false);
           return;
         }
-        toast.error(d.error || 'Subscription failed');
+        toast.error(d.error || (isFr ? "Échec de l'abonnement" : 'Subscription failed'));
         setProcessing(false);
         return;
       }
@@ -358,7 +358,7 @@ export default function OnboardingFlow() {
       window.location.href = '/';
       return;
     } catch (err: any) {
-      toast.error(err.message || 'Network error');
+      toast.error(err.message || (isFr ? 'Erreur réseau' : 'Network error'));
       setProcessing(false);
     }
   };
@@ -453,7 +453,7 @@ export default function OnboardingFlow() {
                       <input value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://..." className="onb-input" />
                     </Field>
                   </div>
-                  <NavButtons onBack={goBack} onNext={goNext} disabled={!companyName.trim()} />
+                  <NavButtons onBack={goBack} onNext={goNext} disabled={!companyName.trim()} isFr={isFr} />
                 </div>
               )}
 
@@ -472,7 +472,7 @@ export default function OnboardingFlow() {
                       <ChipGroup options={[isFr ? 'Moins de 1 an' : 'Less than 1 year', '1-2', '3-5', '6-10', '10+']} value={yearsInBusiness} onChange={setYearsInBusiness} />
                     </div>
                   </div>
-                  <NavButtons onBack={goBack} onNext={goNext} />
+                  <NavButtons onBack={goBack} onNext={goNext} isFr={isFr} />
                 </div>
               )}
 
@@ -485,7 +485,7 @@ export default function OnboardingFlow() {
                     options={['$0 - $50K', '$50K - $150K', '$150K - $500K', '$500K - $1M', '$1M+', isFr ? 'Je préfère ne pas dire' : 'I prefer not to say']}
                     value={estimatedRevenue} onChange={setEstimatedRevenue}
                   />
-                  <NavButtons onBack={goBack} onNext={goNext} />
+                  <NavButtons onBack={goBack} onNext={goNext} isFr={isFr} />
                 </div>
               )}
 
@@ -508,7 +508,7 @@ export default function OnboardingFlow() {
                       </button>
                     ))}
                   </div>
-                  <NavButtons onBack={goBack} onNext={goNext} />
+                  <NavButtons onBack={goBack} onNext={goNext} isFr={isFr} />
                 </div>
               )}
 
@@ -520,7 +520,7 @@ export default function OnboardingFlow() {
                   <Field label="">
                     <input value={heardFrom} onChange={e => setHeardFrom(e.target.value)} placeholder={isFr ? 'Ex: Google, référence, réseaux sociaux...' : 'e.g. Google, referral, social media...'} className="onb-input" />
                   </Field>
-                  <NavButtons onBack={goBack} onNext={goNext} nextLabel={isFr ? 'Continuer' : 'Get Started'} />
+                  <NavButtons onBack={goBack} onNext={goNext} nextLabel={isFr ? 'Continuer' : 'Get Started'} isFr={isFr} />
                 </div>
               )}
 
@@ -616,7 +616,7 @@ export default function OnboardingFlow() {
                     })}
                   </div>
 
-                  <NavButtons onBack={goBack} onNext={goNext} nextLabel={isFr ? 'Continuer au paiement' : 'Continue to Checkout'} />
+                  <NavButtons onBack={goBack} onNext={goNext} nextLabel={isFr ? 'Continuer au paiement' : 'Continue to Checkout'} isFr={isFr} />
                 </div>
               )}
 
@@ -666,7 +666,7 @@ export default function OnboardingFlow() {
             <div className="relative z-10 flex flex-col justify-end p-12">
               {panel.quote && (
                 <>
-                  <p className="text-xs text-white/50 font-semibold uppercase tracking-widest mb-3">Did you know...</p>
+                  <p className="text-xs text-white/50 font-semibold uppercase tracking-widest mb-3">{isFr ? 'Le saviez-vous...' : 'Did you know...'}</p>
                   <p className="text-xl md:text-2xl font-bold text-white leading-snug">{panel.quote}</p>
                   {panel.author && <p className="text-sm text-white/60 mt-3 font-medium">{panel.author}</p>}
                 </>
@@ -744,7 +744,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
       }
 
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) { toast.error('Not logged in'); setRedirecting(false); return; }
+      if (!session?.access_token) { toast.error(isFr ? 'Non connecté' : 'Not logged in'); setRedirecting(false); return; }
 
       const res = await fetch('/api/billing/create-checkout-session', {
         method: 'POST',
@@ -752,7 +752,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
         body: JSON.stringify({ plan_slug: plan.slug, interval, currency, promo_code: promoCode || undefined, referral_code: referralCode || undefined }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create checkout session');
+      if (!res.ok) throw new Error(data.error || (isFr ? 'Échec de la création de la session de paiement' : 'Failed to create checkout session'));
 
       if (!isAllowedStripeRedirect(data.url)) {
         toast.error(isFr ? 'URL de paiement invalide — réessayez' : 'Invalid checkout URL — please try again');
@@ -761,7 +761,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
       }
       window.location.href = data.url;
     } catch (err: any) {
-      toast.error(err.message || 'Error');
+      toast.error(err.message || (isFr ? 'Erreur' : 'Error'));
       setRedirecting(false);
     }
   };
@@ -993,7 +993,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
                       toast.error(isFr ? 'Vérifiez votre email d\'abord' : 'Verify your email first');
                       return;
                     }
-                    alert('Error: ' + (d.error || 'Failed'));
+                    alert((isFr ? 'Erreur : ' : 'Error: ') + (d.error || (isFr ? 'Échec' : 'Failed')));
                     return;
                   }
                   if (!isAllowedStripeRedirect(d.url)) {
@@ -1001,7 +1001,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
                     return;
                   }
                   window.location.href = d.url;
-                } catch (e: any) { alert('Error: ' + e.message); }
+                } catch (e: any) { alert((isFr ? 'Erreur : ' : 'Error: ') + e.message); }
               }}
                 disabled={emailVerified === false}
                 className="w-full py-4 rounded-xl bg-[#1F5F4F] text-white text-base font-bold hover:bg-[#174a3d] transition-colors flex items-center justify-center gap-2 shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
@@ -1048,11 +1048,11 @@ function Field({ label, required, children }: { label: string; required?: boolea
   );
 }
 
-function NavButtons({ onBack, onNext, disabled, nextLabel }: { onBack: () => void; onNext: () => void; disabled?: boolean; nextLabel?: string }) {
+function NavButtons({ onBack, onNext, disabled, nextLabel, isFr }: { onBack: () => void; onNext: () => void; disabled?: boolean; nextLabel?: string; isFr?: boolean }) {
   return (
     <div className="flex items-center gap-3 mt-8">
-      <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-800 transition-colors flex items-center gap-1"><ArrowLeft size={14} /> Back</button>
-      <button onClick={onNext} disabled={disabled} className="onb-btn">{nextLabel || 'Next'} <ArrowRight size={16} /></button>
+      <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-800 transition-colors flex items-center gap-1"><ArrowLeft size={14} /> {isFr ? 'Retour' : 'Back'}</button>
+      <button onClick={onNext} disabled={disabled} className="onb-btn">{nextLabel || (isFr ? 'Suivant' : 'Next')} <ArrowRight size={16} /></button>
     </div>
   );
 }

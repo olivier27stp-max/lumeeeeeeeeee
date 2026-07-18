@@ -82,17 +82,19 @@ export default function CheckoutSetup({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+
   const region = ALL_REGIONS[taxKey];
   const cur = (currency || 'CAD').toUpperCase();
-  const intervalLabel = interval === 'yearly' ? 'Renouvellement annuel' : 'Renouvellement mensuel';
+  const intervalLabel = interval === 'yearly' ? (isFr ? 'Renouvellement annuel' : 'Annual renewal') : (isFr ? 'Renouvellement mensuel' : 'Monthly renewal');
   const amountLabel = amountCents != null ? money(amountCents, cur) : '';
-  const perLabel = interval === 'yearly' ? `${cur} / an` : `${cur} / mois`;
+  const perLabel = interval === 'yearly' ? (isFr ? `${cur} / an` : `${cur} / yr`) : (isFr ? `${cur} / mois` : `${cur} / mo`);
 
   async function handleSubmit() {
     setError('');
-    if (password.length < 10) { setError('Ton mot de passe doit faire au moins 10 caractères.'); return; }
-    if (!companyName.trim()) { setError("Le nom de l'entreprise est requis."); return; }
-    if (!phone.trim()) { setError('Le téléphone est requis.'); return; }
+    if (password.length < 10) { setError(isFr ? 'Ton mot de passe doit faire au moins 10 caractères.' : 'Your password must be at least 10 characters.'); return; }
+    if (!companyName.trim()) { setError(isFr ? "Le nom de l'entreprise est requis." : 'Company name is required.'); return; }
+    if (!phone.trim()) { setError(isFr ? 'Le téléphone est requis.' : 'Phone number is required.'); return; }
     setBusy(true);
 
     // ── Critical: password + sign-in. If either fails, stop and show why. ──
@@ -104,7 +106,7 @@ export default function CheckoutSetup({
       if (siErr) throw new Error(siErr.message);
       try { localStorage.setItem('lume-active-org', orgId); } catch { /* ignore */ }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Impossible de créer ton accès. Réessaie.');
+      setError(e instanceof Error ? e.message : (isFr ? 'Impossible de créer ton accès. Réessaie.' : 'Could not create your access. Please try again.'));
       setBusy(false);
       return;
     }
@@ -146,20 +148,20 @@ export default function CheckoutSetup({
           <img className="cs-logo" src="/lume-logo-v2.png" alt="Lume" />
           <span className="cs-paid">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-            Paiement confirmé
+            {isFr ? 'Paiement confirmé' : 'Payment confirmed'}
           </span>
         </div>
 
         <div className="cs-head">
-          <h1>Configure ton compte.</h1>
-          <p>Une dernière étape avant d'être prêt à travailler — et à te faire payer.</p>
+          <h1>{isFr ? 'Configure ton compte.' : 'Set up your account.'}</h1>
+          <p>{isFr ? "Une dernière étape avant d'être prêt à travailler — et à te faire payer." : "One last step before you're ready to work — and to get paid."}</p>
         </div>
 
         {(planName || amountLabel) && (
           <div className="cs-order">
             <div className="cs-l">
               <span className="cs-tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg></span>
-              <div><div className="cs-plan">{planName ? `Forfait ${planName}` : 'Ton abonnement'}</div><div className="cs-sub">{intervalLabel} · annulable en tout temps</div></div>
+              <div><div className="cs-plan">{planName ? (isFr ? `Forfait ${planName}` : `${planName} plan`) : (isFr ? 'Ton abonnement' : 'Your subscription')}</div><div className="cs-sub">{intervalLabel} · {isFr ? 'annulable en tout temps' : 'cancel anytime'}</div></div>
             </div>
             {amountLabel && <div className="cs-amt">{amountLabel}<small>{perLabel}</small></div>}
           </div>
@@ -167,30 +169,30 @@ export default function CheckoutSetup({
 
         {/* 1 — access */}
         <div className="cs-card">
-          <div className="cs-ch"><span className="cs-n">01</span><h2>Ton accès</h2></div>
+          <div className="cs-ch"><span className="cs-n">01</span><h2>{isFr ? 'Ton accès' : 'Your access'}</h2></div>
           <div className="cs-fields">
-            <div><label>Courriel</label><div className="cs-field"><input type="email" value={email} readOnly /></div></div>
+            <div><label>{isFr ? 'Courriel' : 'Email'}</label><div className="cs-field"><input type="email" value={email} readOnly /></div></div>
             <div>
-              <label>Mot de passe <span className="cs-req">*</span></label>
+              <label>{isFr ? 'Mot de passe' : 'Password'} <span className="cs-req">*</span></label>
               <div className="cs-field">
-                <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="10 caractères minimum" />
-                <button type="button" className="cs-eye" onClick={() => setShowPw((v) => !v)}>{showPw ? 'Cacher' : 'Voir'}</button>
+                <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={isFr ? '10 caractères minimum' : 'Minimum 10 characters'} />
+                <button type="button" className="cs-eye" onClick={() => setShowPw((v) => !v)}>{showPw ? (isFr ? 'Cacher' : 'Hide') : (isFr ? 'Voir' : 'Show')}</button>
               </div>
-              <div className="cs-hint">Minimum 10 caractères.</div>
+              <div className="cs-hint">{isFr ? 'Minimum 10 caractères.' : 'Minimum 10 characters.'}</div>
             </div>
           </div>
         </div>
 
         {/* 2 — company */}
         <div className="cs-card">
-          <div className="cs-ch"><span className="cs-n">02</span><h2>Ton entreprise</h2><span className="cs-tail">sur tes devis &amp; factures</span></div>
+          <div className="cs-ch"><span className="cs-n">02</span><h2>{isFr ? 'Ton entreprise' : 'Your company'}</h2><span className="cs-tail">{isFr ? 'sur tes devis & factures' : 'on your quotes & invoices'}</span></div>
           <div className="cs-fields">
-            <div><label>Nom de l'entreprise <span className="cs-req">*</span></label><div className="cs-field"><input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Rénovations Jean Tremblay" /></div></div>
+            <div><label>{isFr ? "Nom de l'entreprise" : 'Company name'} <span className="cs-req">*</span></label><div className="cs-field"><input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder={isFr ? 'Rénovations Jean Tremblay' : 'Jean Tremblay Renovations'} /></div></div>
             <div className="cs-row2">
-              <div><label>Téléphone <span className="cs-req">*</span></label><div className="cs-field"><input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(514) 555-0199" /></div></div>
-              <div><label>Courriel entreprise</label><div className="cs-field"><input value={companyEmail} onChange={(e) => setCompanyEmail(e.target.value)} placeholder="info@..." /></div></div>
+              <div><label>{isFr ? 'Téléphone' : 'Phone'} <span className="cs-req">*</span></label><div className="cs-field"><input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(514) 555-0199" /></div></div>
+              <div><label>{isFr ? 'Courriel entreprise' : 'Company email'}</label><div className="cs-field"><input value={companyEmail} onChange={(e) => setCompanyEmail(e.target.value)} placeholder="info@..." /></div></div>
             </div>
-            <div><label>Adresse</label>
+            <div><label>{isFr ? 'Adresse' : 'Address'}</label>
               <div className="cs-field cs-addr">
                 <AddressAutocomplete
                   value={address}
@@ -201,17 +203,17 @@ export default function CheckoutSetup({
                     if (a.city) setCity(a.city);
                     if (a.postal_code) setPostal(a.postal_code);
                   }}
-                  placeholder="1234 rue Sainte-Catherine"
+                  placeholder={isFr ? '1234 rue Sainte-Catherine' : '1234 Sainte-Catherine St'}
                   hideStatusHint
                 />
               </div>
             </div>
             <div className="cs-row2">
-              <div><label>Ville</label><div className="cs-field"><input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Montréal" /></div></div>
-              <div><label>Code postal</label><div className="cs-field"><input value={postal} onChange={(e) => setPostal(e.target.value)} placeholder="H2X 1K4" /></div></div>
+              <div><label>{isFr ? 'Ville' : 'City'}</label><div className="cs-field"><input value={city} onChange={(e) => setCity(e.target.value)} placeholder={isFr ? 'Montréal' : 'Montreal'} /></div></div>
+              <div><label>{isFr ? 'Code postal' : 'Postal code'}</label><div className="cs-field"><input value={postal} onChange={(e) => setPostal(e.target.value)} placeholder="H2X 1K4" /></div></div>
             </div>
             <div>
-              <label>Logo <span className="cs-opt">— optionnel</span></label>
+              <label>Logo <span className="cs-opt">{isFr ? '— optionnel' : '— optional'}</span></label>
               <div className="cs-logo-up">
                 <div className="cs-logo-box">
                   {logoFile
@@ -219,7 +221,7 @@ export default function CheckoutSetup({
                     : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></svg>}
                 </div>
                 <label className="cs-ghost">
-                  {logoFile ? 'Changer le logo' : 'Téléverser un logo'}
+                  {logoFile ? (isFr ? 'Changer le logo' : 'Change logo') : (isFr ? 'Téléverser un logo' : 'Upload a logo')}
                   <input type="file" accept="image/*" hidden onChange={(e) => setLogoFile(e.target.files?.[0] || null)} />
                 </label>
               </div>
@@ -229,36 +231,36 @@ export default function CheckoutSetup({
 
         {/* 3 — payments + taxes */}
         <div className="cs-card">
-          <div className="cs-ch"><span className="cs-n">03</span><h2>Encaisser tes clients</h2></div>
+          <div className="cs-ch"><span className="cs-n">03</span><h2>{isFr ? 'Encaisser tes clients' : 'Get paid by your clients'}</h2></div>
           <div className="cs-lp">
             <div className="cs-lp-top">
               <span className="cs-lp-badge"><img src="/favicon-mascot-v2.png" alt="" /></span>
-              <div><b>Lume Payments</b><span>Dépôts directs dans ton compte</span></div>
+              <div><b>Lume Payments</b><span>{isFr ? 'Dépôts directs dans ton compte' : 'Direct deposits to your account'}</span></div>
             </div>
             <div className="cs-lp-body">
-              <p>Envoie des factures payables en ligne — carte de crédit, Apple Pay — et reçois l'argent directement dans ton compte bancaire. Activation sécurisée en ~3 minutes.</p>
+              <p>{isFr ? "Envoie des factures payables en ligne — carte de crédit, Apple Pay — et reçois l'argent directement dans ton compte bancaire. Activation sécurisée en ~3 minutes." : 'Send invoices payable online — credit card, Apple Pay — and receive the money directly in your bank account. Secure setup in ~3 minutes.'}</p>
               <label className="cs-toggle">
                 <input type="checkbox" checked={activatePayments} onChange={(e) => setActivatePayments(e.target.checked)} />
-                <span>Configurer Lume Payments juste après (connexion bancaire)</span>
+                <span>{isFr ? 'Configurer Lume Payments juste après (connexion bancaire)' : 'Set up Lume Payments right after (bank connection)'}</span>
               </label>
               <div className="cs-powered">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="10" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-                Traitement bancaire sécurisé · vérification d'identité chiffrée
+                {isFr ? "Traitement bancaire sécurisé · vérification d'identité chiffrée" : 'Secure bank processing · encrypted identity verification'}
               </div>
             </div>
           </div>
 
           <div className="cs-tax">
-            <label>Taxes à facturer à tes clients</label>
+            <label>{isFr ? 'Taxes à facturer à tes clients' : 'Taxes to charge your clients'}</label>
             <div className="cs-field">
               <select value={taxKey} onChange={(e) => setTaxKey(e.target.value)}>
                 <optgroup label="Canada">
                   {CA_REGIONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
                 </optgroup>
-                <optgroup label="États-Unis (taxe d'État)">
+                <optgroup label={isFr ? "États-Unis (taxe d'État)" : 'United States (state tax)'}>
                   {US_REGIONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
                 </optgroup>
-                <option value="LATER">Je configure plus tard</option>
+                <option value="LATER">{isFr ? 'Je configure plus tard' : "I'll set this up later"}</option>
               </select>
             </div>
             {region && (
@@ -268,19 +270,19 @@ export default function CheckoutSetup({
                 <span className="cs-chip">{region.total}</span>
               </div>
             )}
-            {region?.us && <div className="cs-tax-us">Aux États-Unis, des taxes locales (comté / ville) peuvent s'ajouter au taux d'État — ajustable dans Réglages.</div>}
+            {region?.us && <div className="cs-tax-us">{isFr ? "Aux États-Unis, des taxes locales (comté / ville) peuvent s'ajouter au taux d'État — ajustable dans Réglages." : 'In the US, local taxes (county / city) may be added to the state rate — adjustable in Settings.'}</div>}
           </div>
         </div>
 
         {error && <div className="cs-error">{error}</div>}
 
         <button className="cs-go" onClick={handleSubmit} disabled={busy}>
-          {busy ? 'Configuration…' : 'Terminer et accéder à Lume'}
+          {busy ? (isFr ? 'Configuration…' : 'Setting up…') : (isFr ? 'Terminer et accéder à Lume' : 'Finish and access Lume')}
           {!busy && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>}
         </button>
         <div className="cs-receipt">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
-          Un reçu a été envoyé à {email}
+          {isFr ? `Un reçu a été envoyé à ${email}` : `A receipt has been sent to ${email}`}
         </div>
       </div>
     </div>
