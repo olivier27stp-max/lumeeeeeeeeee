@@ -1271,7 +1271,13 @@ function AuthenticatedApp({
                       <Route path="location" element={<Gated permission="settings.read"><LocationSettings /></Gated>} />
                       <Route path="archives" element={<Gated permission="settings.read"><div className="max-w-2xl"><ArchivesPanel /></div></Gated>} />
                       <Route path="marketplace" element={<Gated permission="integrations.read"><PlanFeatureGate flag="includes_marketplace"><AppMarketplace /></PlanFeatureGate></Gated>} />
-                      <Route path="referrals" element={<Gated permission="settings.read"><ReferFriend /></Gated>} />
+                      {/* Parrainage: masqué tant que la récompense (crédit Stripe
+                          au parrain) n'est pas validée par un vrai paiement. La
+                          route elle-même est fermée, pas seulement le menu, sinon
+                          l'URL directe resterait accessible. */}
+                      {isPlatformOwner && (
+                        <Route path="referrals" element={<Gated permission="settings.read"><ReferFriend /></Gated>} />
+                      )}
                       <Route path="support" element={<Gated permission="settings.read"><div className="max-w-2xl"><SupportPanel /></div></Gated>} />
                     </Route>
                     <Route path="/account/privacy" element={<PageWrapper><PrivacyCenter /></PageWrapper>} />

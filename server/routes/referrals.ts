@@ -1,8 +1,24 @@
 import { Router } from 'express';
 import crypto from 'crypto';
+import Stripe from 'stripe';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
-import { getBaseUrl } from '../lib/config';
+import { getBaseUrl, platformOwnerId } from '../lib/config';
+
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+
+// ── Programme de parrainage: désactivé pour le public ──
+// La récompense du parrain est un crédit Stripe qui n'a pas encore été validé
+// par un vrai paiement de bout en bout. Tant que ce n'est pas prouvé, on ne
+// distribue pas de codes: un code partagé promet un mois gratuit qu'on ne sait
+// pas encore livrer. Le propriétaire de la plateforme garde l'accès pour tester.
+// Pour rouvrir sans redéployer: REFERRALS_ENABLED=true sur Railway.
+const referralsPubliclyEnabled = process.env.REFERRALS_ENABLED === 'true';
+
+/** True si l'appelant peut utiliser le programme (public activé, ou propriétaire). */
+function referralsAllowedFor(userId: string): boolean {
+  return referralsPubliclyEnabled || (!!platformOwnerId && userId === platformOwnerId);
+}
 
 const router = Router();
 router.use(maxBodySize());
@@ -14,6 +30,10 @@ router.get('/referrals/me', async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
+
+    if (!referralsAllowedFor(auth.user.id)) {
+      return res.status(404).json({ error: 'Not found.' });
+    }
 
     const admin = getServiceClient();
 
@@ -81,8 +101,24 @@ router.get('/referrals/me', async (req, res) => {
       }
     }
 
+    // Make sure this referrer has a Stripe customer BEFORE anyone uses their
+    // code. The reward is a Stripe balance credit, so an org without a customer
+    // could not be paid. Doing it here (rather than only at credit time) means
+    // every org that owns a live code is creditable. Non-blocking: the link is
+    // still returned if Stripe is down — the credit path re-attempts this.
+    try {
+      const { ensureStripeCustomerForOrg } = await import('../lib/referral-rewards');
+      await ensureStripeCustomerForOrg(admin, stripe, auth.orgId);
+    } catch (err: any) {
+      console.error('[referrals/me] ensure Stripe customer failed:', err?.message);
+    }
+
     const baseUrl = getBaseUrl();
-    const referralLink = `${baseUrl}/register?ref=${code}`;
+    // Point at the public pricing page — the real funnel is Book a Demo, not
+    // self-serve checkout. BookDemoForm reads ?ref= (sessionStorage 'lume_ref')
+    // and includes the code in the demo request email, so sales can put it in
+    // the Stripe Payment Link's metadata. /checkout is a legacy dead end.
+    const referralLink = `${baseUrl}/pricing?ref=${code}`;
 
     return res.json({ code, referral_link: referralLink });
   } catch (err: any) {
@@ -97,6 +133,10 @@ router.get('/referrals/history', async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
+
+    if (!referralsAllowedFor(auth.user.id)) {
+      return res.status(404).json({ error: 'Not found.' });
+    }
 
     const admin = getServiceClient();
 
@@ -138,6 +178,11 @@ router.get('/referrals/history', async (req, res) => {
 
 router.post('/referrals/track', async (req, res) => {
   try {
+    // Route publique: fermée tant que le programme n'est pas activé, sinon un
+    // lien déjà partagé continuerait d'enregistrer des parrainages qu'on ne
+    // récompenserait pas.
+    if (!referralsPubliclyEnabled) return res.status(404).json({ error: 'Not found.' });
+
     const { code, email } = req.body;
     if (!code) return res.status(400).json({ error: 'Referral code is required.' });
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email format.' });
@@ -187,6 +232,10 @@ router.post('/referrals/track', async (req, res) => {
 
 router.get('/referrals/validate/:code', async (req, res) => {
   try {
+    // Fermée avec le reste du programme: un code ne doit pas se déclarer
+    // "valide" à un visiteur si aucune récompense ne sera versée.
+    if (!referralsPubliclyEnabled) return res.status(404).json({ valid: false, error: 'Not found.' });
+
     const { code } = req.params;
     const admin = getServiceClient();
 

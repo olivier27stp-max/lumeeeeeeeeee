@@ -1,14 +1,37 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { motion } from 'motion/react';
-import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Check, X } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Check, X, Gift } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { trackReferral, validateReferralCode } from '../lib/referralsApi';
 
 export default function Register() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+
+  // Referral code from the shared link (/register?ref=CODE). The signup →
+  // email-confirm → login round-trip drops query params, so persist it under the
+  // same key OnboardingFlow reads at checkout.
+  const urlRef = params.get('ref') || '';
+  const [referralCode, setReferralCode] = useState(() => {
+    if (urlRef) { try { localStorage.setItem('lume_referral_code', urlRef); } catch { /* ignore */ } }
+    try { return urlRef || localStorage.getItem('lume_referral_code') || ''; } catch { return urlRef; }
+  });
+
+  // Confirm the code is real before showing the "first month free" banner.
+  useEffect(() => {
+    if (!referralCode) return;
+    validateReferralCode(referralCode).then(valid => {
+      if (!valid) {
+        setReferralCode('');
+        try { localStorage.removeItem('lume_referral_code'); } catch { /* ignore */ }
+      }
+    }).catch(() => { /* keep the code; checkout re-validates server-side */ });
+  }, [referralCode]);
+
   const [loading, setLoading] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -78,6 +101,14 @@ export default function Register() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Registration failed.');
+
+      // Record the signup against the referral code so it shows up in the
+      // referrer's history as `signed_up`. Non-blocking: the reward itself is
+      // granted at payment time by the Stripe webhook, not here.
+      if (referralCode) {
+        trackReferral(referralCode, email).catch(() => { /* non-blocking */ });
+      }
+
       setEmailSent(true);
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -191,6 +222,25 @@ export default function Register() {
             <h1 className="text-3xl font-extralight tracking-widest">LUME</h1>
             <p className="text-gray-500 font-light text-sm">{t.register.subtitle}</p>
           </div>
+
+          {/* Referral banner — first month free for the referred friend */}
+          {referralCode && (
+            <div className="mb-5 rounded-2xl border-2 border-[#3FAF97] bg-[#3FAF97]/5 p-4 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#3FAF97] flex items-center justify-center shrink-0">
+                <Gift size={16} className="text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  {language === 'fr' ? 'Vous avez été parrainé' : 'You were referred'}
+                </p>
+                <p className="text-xs text-gray-600 mt-0.5 leading-relaxed">
+                  {language === 'fr'
+                    ? `Code ${referralCode} — votre premier mois sera gratuit lors de votre abonnement.`
+                    : `Code ${referralCode} — your first month is free when you subscribe.`}
+                </p>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSignUp} className="space-y-4">
             {/* Full Name */}

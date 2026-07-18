@@ -1479,6 +1479,11 @@ async function handleCheckoutSessionCompleted(
   const interval = (meta.interval || 'monthly') as 'monthly' | 'yearly';
   const currency = (meta.currency || 'CAD').toUpperCase();
   const promoCode = meta.promo_code || null;
+  // Referral code arrives either from the app-driven checkout (set automatically)
+  // or typed by hand into a Stripe Payment Link's metadata after a demo. Accept a
+  // few spellings and normalize, since the hand-entered path is typo-prone.
+  const rawReferral = meta.referral_code || meta.referralCode || meta.ref || '';
+  const referralCode = rawReferral.trim().toUpperCase() || null;
 
   if (!userEmail || !planId) {
     console.error('[webhook/checkout] Missing email or plan_id in session metadata');
@@ -1580,6 +1585,7 @@ async function handleCheckoutSessionCompleted(
       currency,
       amount_cents: amountCents,
       promo_code: promoCode,
+      referral_code: referralCode,
       current_period_start: now.toISOString(),
       current_period_end: periodEnd.toISOString(),
       stripe_checkout_session_id: sessionId,
@@ -1663,6 +1669,30 @@ async function handleCheckoutSessionCompleted(
     // Unique constraint = already processed concurrently — safe to ignore
     if (dedupErr?.code === '23505') return;
     console.error('[webhook/checkout] Failed to record processed session:', dedupErr.message);
+  }
+
+  // ── 9b. Referral reward: the referrer earns a free month ──
+  // Runs AFTER the idempotency record so a replayed webhook returns early above
+  // and can never double-credit. awardReferrerReward is itself idempotent per
+  // (code, referred org) and rejects self-referral. Never blocks activation.
+  if (referralCode) {
+    try {
+      const { awardReferrerReward } = await import('../lib/referral-rewards');
+      const result = await awardReferrerReward({
+        admin,
+        stripe: stripeWebhookClient,
+        referralCode,
+        referredOrgId: orgId,
+        referredUserId: userId,
+        referredEmail: userEmail,
+        now,
+      });
+      if (!result.awarded) {
+        console.log(`[webhook/checkout] Referral ${referralCode} not rewarded: ${result.reason}`);
+      }
+    } catch (err: any) {
+      console.error('[webhook/checkout] Referral reward error (non-blocking):', err?.message);
+    }
   }
 
   // ── 10. Auto-provision Twilio SMS number (non-blocking) ──

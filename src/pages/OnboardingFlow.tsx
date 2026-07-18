@@ -640,6 +640,7 @@ export default function OnboardingFlow() {
                   setPromoCode={setPromoCode}
                   promoValid={promoValid}
                   setPromoValid={setPromoValid}
+                  referralCode={referralCode}
                   email={email}
                   setEmail={setEmail}
                   password={password}
@@ -718,11 +719,12 @@ export default function OnboardingFlow() {
 
 // ─── Checkout Step (uses Stripe Elements) ───
 
-function CheckoutStep({ plan, planName, interval, setInterval, currency, price, discountedPrice, promoCode, setPromoCode, promoValid, setPromoValid, email, setEmail, password, companyName, processing, isFr, onBack, onCheckout, emailVerified, resendingVerification, onResendVerification }: {
+function CheckoutStep({ plan, planName, interval, setInterval, currency, price, discountedPrice, promoCode, setPromoCode, promoValid, setPromoValid, referralCode, email, setEmail, password, companyName, processing, isFr, onBack, onCheckout, emailVerified, resendingVerification, onResendVerification }: {
   plan: Plan; planName: string; interval: 'monthly' | 'yearly'; setInterval: (v: 'monthly' | 'yearly') => void;
   currency: string; price: number; discountedPrice: number;
   promoCode: string; setPromoCode: (v: string) => void;
   promoValid: any; setPromoValid: (v: any) => void;
+  referralCode: string;
   email: string; setEmail: (v: string) => void;
   password: string; companyName: string;
   processing: boolean; isFr: boolean; onBack: () => void; onCheckout: (pmId?: string) => Promise<void> | void;
@@ -747,7 +749,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
       const res = await fetch('/api/billing/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ plan_slug: plan.slug, interval, currency, promo_code: promoCode || undefined }),
+        body: JSON.stringify({ plan_slug: plan.slug, interval, currency, promo_code: promoCode || undefined, referral_code: referralCode || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create checkout session');
@@ -819,6 +821,27 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
               })}
             </div>
           </div>
+
+          {/* Referral code — first month free for the referred friend */}
+          {referralCode && (
+            <div className="bg-[#3FAF97]/5 rounded-2xl border-2 border-[#3FAF97] p-6">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#3FAF97] flex items-center justify-center shrink-0">
+                  <Check size={16} className="text-white" strokeWidth={3} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-900">
+                    {isFr ? 'Code de parrainage appliqué' : 'Referral code applied'}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                    {isFr
+                      ? `Grâce au code ${referralCode}, votre premier mois est gratuit. Votre parrain reçoit lui aussi un mois gratuit.`
+                      : `Thanks to code ${referralCode}, your first month is free. Your referrer also earns a free month.`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Promo code */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6">
@@ -962,7 +985,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
                   // Redirect to Stripe Checkout — subscription activated by webhook only
                   const r = await fetch('/api/billing/create-checkout-session', {
                     method: 'POST', headers: hdrs,
-                    body: JSON.stringify({ ...userInfo, plan_slug: plan.slug, interval, currency, promo_code: promoCode || undefined }),
+                    body: JSON.stringify({ ...userInfo, plan_slug: plan.slug, interval, currency, promo_code: promoCode || undefined, referral_code: referralCode || undefined }),
                   });
                   const d = await r.json();
                   if (!r.ok) {

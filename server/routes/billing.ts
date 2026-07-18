@@ -1503,7 +1503,7 @@ router.post('/billing/create-checkout-session', async (req, res) => {
     }
 
     const admin = getServiceClient();
-    const { plan_slug, interval, currency, promo_code, email, full_name, company_name } = req.body;
+    const { plan_slug, interval, currency, promo_code, referral_code, email, full_name, company_name } = req.body;
 
     if (!email) return res.status(400).json({ error: 'Email is required.' });
 
@@ -1545,6 +1545,18 @@ router.post('/billing/create-checkout-session', async (req, res) => {
       ? (currency === 'USD' ? 'yearly_price_usd' : 'yearly_price_cad')
       : (currency === 'USD' ? 'monthly_price_usd' : 'monthly_price_cad');
     const amountCents = plan[priceField] || 0;
+
+    // ── Validate the referral code (if any) ──
+    // The friend (code user) gets their first month free via a one-time coupon.
+    // We only confirm the code EXISTS here; self-referral is rejected in the
+    // webhook, where the buyer's real org is known. An invalid code is ignored
+    // (no discount) rather than blocking the whole checkout.
+    let validReferralCode: string | null = null;
+    if (referral_code) {
+      const { lookupReferralCode } = await import('../lib/referral-rewards');
+      const referral = await lookupReferralCode(admin, referral_code);
+      if (referral) validReferralCode = referral.code;
+    }
 
     // Discounts applied to the Checkout Session (populated with the intro coupon below).
     const discounts: any[] = [];
@@ -1619,7 +1631,50 @@ router.post('/billing/create-checkout-session', async (req, res) => {
       introCouponId = coupon.id;
       await admin.from('plans').update({ [introCouponField]: introCouponId }).eq('id', plan.id);
     }
-    if (introCouponId) discounts.push({ coupon: introCouponId });
+
+    // ── Referral: the friend gets their first month free ──
+    // Stripe allows only ONE coupon per subscription, so a valid referral code
+    // takes precedence over the intro coupon (the friend's first-month-free is
+    // the stronger offer). The referrer's own reward is handled separately in
+    // the webhook (Stripe customer balance credit), independent of this coupon.
+    if (validReferralCode) {
+      // A one-time coupon covering the full first invoice. For monthly that's one
+      // free month; for yearly it still discounts a single month's worth (we don't
+      // give a free year). amount_off is capped at the amount being charged.
+      const monthlyField = currency === 'USD' ? 'monthly_price_usd' : 'monthly_price_cad';
+      const oneMonthCents = plan[monthlyField] || amountCents;
+      const referralCouponAmount = Math.min(oneMonthCents, amountCents);
+      try {
+        // Reuse a single shared coupon per (plan, interval, currency) instead of
+        // minting one per checkout — otherwise the Stripe dashboard fills up with
+        // thousands of identical one-off coupons. Mirrors the intro-coupon pattern:
+        // look it up by deterministic id, create only on first use.
+        const referralCouponId =
+          `lume-referral-${plan.slug}-${interval}-${currency}-${referralCouponAmount}`.toLowerCase();
+        let referralCoupon: Stripe.Coupon | null = null;
+        try {
+          referralCoupon = await stripe.coupons.retrieve(referralCouponId);
+        } catch {
+          referralCoupon = await stripe.coupons.create({
+            id: referralCouponId,
+            name: `Lume referral — first month free`,
+            currency: (currency || 'CAD').toLowerCase(),
+            amount_off: referralCouponAmount,
+            duration: 'once',
+            metadata: { plan_id: plan.id, interval, currency, type: 'referral_friend' },
+          });
+        }
+        // Referral coupon replaces the intro coupon (one coupon per sub).
+        discounts.length = 0;
+        discounts.push({ coupon: referralCoupon.id });
+      } catch (err: any) {
+        console.error('[billing/create-checkout-session] referral coupon create failed:', err?.message);
+        // Fall back to the intro coupon below.
+        if (introCouponId) discounts.push({ coupon: introCouponId });
+      }
+    } else if (introCouponId) {
+      discounts.push({ coupon: introCouponId });
+    }
 
     // Create Stripe Checkout Session — uses the persistent Price ID, no duplicates.
     // The intro discount (if any) is applied via the Stripe Coupon in `discounts`.
@@ -1645,6 +1700,7 @@ router.post('/billing/create-checkout-session', async (req, res) => {
         interval,
         currency,
         promo_code: promo_code || '',
+        referral_code: validReferralCode || '',
       },
       success_url: `${frontendUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${frontendUrl}/checkout?plan=${plan_slug}&interval=${interval}`,
