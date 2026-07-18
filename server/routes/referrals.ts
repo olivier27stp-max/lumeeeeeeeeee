@@ -3,22 +3,18 @@ import crypto from 'crypto';
 import Stripe from 'stripe';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
-import { getBaseUrl, platformOwnerId } from '../lib/config';
+import { getBaseUrl } from '../lib/config';
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
-// ── Programme de parrainage: désactivé pour le public ──
+// ── Programme de parrainage: entièrement désactivé ──
 // La récompense du parrain est un crédit Stripe qui n'a pas encore été validé
 // par un vrai paiement de bout en bout. Tant que ce n'est pas prouvé, on ne
 // distribue pas de codes: un code partagé promet un mois gratuit qu'on ne sait
-// pas encore livrer. Le propriétaire de la plateforme garde l'accès pour tester.
+// pas encore livrer. Fermé pour TOUT LE MONDE, propriétaire inclus — un accès
+// résiduel donnerait l'impression que la fonctionnalité est en ligne.
 // Pour rouvrir sans redéployer: REFERRALS_ENABLED=true sur Railway.
 const referralsPubliclyEnabled = process.env.REFERRALS_ENABLED === 'true';
-
-/** True si l'appelant peut utiliser le programme (public activé, ou propriétaire). */
-function referralsAllowedFor(userId: string): boolean {
-  return referralsPubliclyEnabled || (!!platformOwnerId && userId === platformOwnerId);
-}
 
 const router = Router();
 router.use(maxBodySize());
@@ -31,7 +27,7 @@ router.get('/referrals/me', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
 
-    if (!referralsAllowedFor(auth.user.id)) {
+    if (!referralsPubliclyEnabled) {
       return res.status(404).json({ error: 'Not found.' });
     }
 
@@ -134,7 +130,7 @@ router.get('/referrals/history', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
 
-    if (!referralsAllowedFor(auth.user.id)) {
+    if (!referralsPubliclyEnabled) {
       return res.status(404).json({ error: 'Not found.' });
     }
 
