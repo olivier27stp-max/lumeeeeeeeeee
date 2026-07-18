@@ -13,7 +13,7 @@ import SupportPanel from './SupportPanel';
  * so they must stay short and point at a real page in the app.
  */
 
-interface Article {
+export interface Article {
   id: string;
   /** Route the answer refers to; the drawer offers to navigate there. */
   path?: string;
@@ -25,7 +25,7 @@ interface Article {
   tags: string;
 }
 
-const ARTICLES: Article[] = [
+export const ARTICLES: Article[] = [
   {
     id: 'quote-to-invoice',
     path: '/quotes',
