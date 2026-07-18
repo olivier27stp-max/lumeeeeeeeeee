@@ -118,7 +118,6 @@ import Register from './pages/Register';
 import AccessBlocked from './pages/AccessBlocked';
 import VerifyEmail from './pages/VerifyEmail';
 import VerifyEmailGate from './components/auth/VerifyEmailGate';
-import ReferFriend from './pages/ReferFriend';
 import MrLumePage from './features/agent/components/MrLumeChat';
 import Messages from './pages/Messages';
 import TasksPage from './pages/Tasks';
@@ -1271,13 +1270,10 @@ function AuthenticatedApp({
                       <Route path="location" element={<Gated permission="settings.read"><LocationSettings /></Gated>} />
                       <Route path="archives" element={<Gated permission="settings.read"><div className="max-w-2xl"><ArchivesPanel /></div></Gated>} />
                       <Route path="marketplace" element={<Gated permission="integrations.read"><PlanFeatureGate flag="includes_marketplace"><AppMarketplace /></PlanFeatureGate></Gated>} />
-                      {/* Parrainage: masqué tant que la récompense (crédit Stripe
-                          au parrain) n'est pas validée par un vrai paiement. La
-                          route elle-même est fermée, pas seulement le menu, sinon
-                          l'URL directe resterait accessible. */}
-                      {isPlatformOwner && (
-                        <Route path="referrals" element={<Gated permission="settings.read"><ReferFriend /></Gated>} />
-                      )}
+                      {/* Parrainage: route retirée tant que la récompense (crédit
+                          Stripe au parrain) n'est pas validée par un vrai paiement.
+                          Fermée pour tout le monde, propriétaire inclus. L'API
+                          renvoie 404 de son côté. Réactivation: REFERRALS_ENABLED. */}
                       <Route path="support" element={<Gated permission="settings.read"><div className="max-w-2xl"><SupportPanel /></div></Gated>} />
                     </Route>
                     <Route path="/account/privacy" element={<PageWrapper><PrivacyCenter /></PageWrapper>} />
