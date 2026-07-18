@@ -328,7 +328,7 @@ export default function InvoiceEdit() {
         navigate(`/invoices/${id}/edit`, { replace: true });
       }
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to save');
+      toast.error(err?.message || (language === 'fr' ? "Échec de l'enregistrement" : 'Failed to save'));
     } finally {
       setSaving(false);
     }
@@ -337,11 +337,11 @@ export default function InvoiceEdit() {
   // ── Send ──
   async function handleSend() {
     if (!draftId) {
-      toast.error('Please save the invoice first');
+      toast.error(language === 'fr' ? "Veuillez d'abord enregistrer la facture" : 'Please save the invoice first');
       return;
     }
     if (!clientEmail) {
-      toast.error('Client has no email address');
+      toast.error(language === 'fr' ? "Le client n'a pas d'adresse courriel" : 'Client has no email address');
       return;
     }
     setSending(true);
@@ -358,7 +358,7 @@ export default function InvoiceEdit() {
       guard.release();
       navigate(`/invoices/${draftId}`);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to send');
+      toast.error(err?.message || (language === 'fr' ? "Échec de l'envoi" : 'Failed to send'));
     } finally {
       setSending(false);
     }
@@ -372,7 +372,7 @@ export default function InvoiceEdit() {
         invoice: {
           id: draftId || '',
           client_id: clientId,
-          client_name: clientName || 'Client Name',
+          client_name: clientName || (language === 'fr' ? 'Nom du client' : 'Client Name'),
           invoice_number: detailQuery.data?.invoice?.invoice_number || (language === 'fr' ? 'Généré automatiquement' : 'Auto-generated'),
           status: detailQuery.data?.invoice?.status || 'draft',
           currency: 'CAD',
@@ -445,7 +445,7 @@ export default function InvoiceEdit() {
             />
           </div>
           <div className="mt-3 max-h-[60vh] space-y-2 overflow-y-auto">
-            {clientsQuery.isLoading && <p className="text-sm text-text-secondary">Loading...</p>}
+            {clientsQuery.isLoading && <p className="text-sm text-text-secondary">{language === 'fr' ? 'Chargement...' : 'Loading...'}</p>}
             {(clientsQuery.data?.items || []).map((c) => (
               <button
                 key={c.id}
@@ -458,11 +458,11 @@ export default function InvoiceEdit() {
                 className="w-full rounded-xl border border-outline-subtle bg-surface px-4 py-3 text-left transition hover:bg-surface-secondary"
               >
                 <p className="text-sm font-semibold text-text-primary">{c.name}</p>
-                <p className="text-xs text-text-secondary">{(!c.email || c.email.startsWith('enc:')) ? 'No email' : c.email}</p>
+                <p className="text-xs text-text-secondary">{(!c.email || c.email.startsWith('enc:')) ? (language === 'fr' ? 'Aucun courriel' : 'No email') : c.email}</p>
               </button>
             ))}
             {!clientsQuery.isLoading && (clientsQuery.data?.items || []).length === 0 && (
-              <p className="py-4 text-center text-sm text-text-tertiary">No clients found</p>
+              <p className="py-4 text-center text-sm text-text-tertiary">{language === 'fr' ? 'Aucun client trouvé' : 'No clients found'}</p>
             )}
           </div>
         </div>
@@ -485,7 +485,7 @@ export default function InvoiceEdit() {
           </button>
           <div>
             <h1 className="text-sm font-bold text-text-primary">
-              {isNew ? (t.invoiceEdit.newInvoice) : detailQuery.data?.invoice?.invoice_number || 'Edit Invoice'}
+              {isNew ? (t.invoiceEdit.newInvoice) : detailQuery.data?.invoice?.invoice_number || (language === 'fr' ? 'Modifier la facture' : 'Edit Invoice')}
             </h1>
             <p className="text-xs text-text-secondary">{clientName}</p>
           </div>
@@ -583,7 +583,7 @@ export default function InvoiceEdit() {
                       checked={line.included}
                       onChange={() => updateLine(line.id, { included: !line.included })}
                       className="h-4 w-4 shrink-0 rounded cursor-pointer accent-primary"
-                      title={line.included ? 'Exclude from invoice' : 'Include in invoice'}
+                      title={line.included ? (language === 'fr' ? 'Exclure de la facture' : 'Exclude from invoice') : (language === 'fr' ? 'Inclure dans la facture' : 'Include in invoice')}
                     />
                     <input
                       value={line.description}
@@ -598,7 +598,7 @@ export default function InvoiceEdit() {
                     step={0.01}
                     value={line.qty}
                     onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) || 0 })}
-                    placeholder="Qty"
+                    placeholder={language === 'fr' ? 'Qté' : 'Qty'}
                     className="glass-input col-span-2 text-sm"
                   />
                   <input
@@ -607,7 +607,7 @@ export default function InvoiceEdit() {
                     step={0.01}
                     value={line.unitPrice}
                     onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value) || 0 })}
-                    placeholder="Price"
+                    placeholder={language === 'fr' ? 'Prix' : 'Price'}
                     className="glass-input col-span-2 text-sm"
                   />
                   <div className={cn('col-span-2 flex items-center justify-end text-sm font-medium', line.included ? 'text-text-primary' : 'text-text-tertiary line-through')}>
