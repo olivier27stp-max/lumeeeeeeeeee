@@ -92,16 +92,35 @@ const SCORE_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 const EVENT_TYPES = [
-  { value: 'knock', label: 'Knock' },
-  { value: 'no_answer', label: 'No Answer' },
-  { value: 'lead', label: 'Lead' },
-  { value: 'quote_sent', label: 'Quote Sent' },
-  { value: 'sale', label: 'Sale' },
-  { value: 'callback', label: 'Callback' },
-  { value: 'note', label: 'Note' },
-  { value: 'revisit', label: 'Revisit' },
-  { value: 'do_not_knock', label: 'Do Not Knock' },
+  { value: 'knock', label: 'Knock', label_fr: 'Cognée' },
+  { value: 'no_answer', label: 'No Answer', label_fr: 'Pas de réponse' },
+  { value: 'lead', label: 'Lead', label_fr: 'Prospect' },
+  { value: 'quote_sent', label: 'Quote Sent', label_fr: 'Devis envoyé' },
+  { value: 'sale', label: 'Sale', label_fr: 'Vente' },
+  { value: 'callback', label: 'Callback', label_fr: 'Rappel' },
+  { value: 'note', label: 'Note', label_fr: 'Note' },
+  { value: 'revisit', label: 'Revisit', label_fr: 'Revisite' },
+  { value: 'do_not_knock', label: 'Do Not Knock', label_fr: 'Ne pas cogner' },
 ];
+
+function eventTypeLabel(eventType: string, lang: string): string {
+  const et = EVENT_TYPES.find((e) => e.value === eventType);
+  if (et) return lang === 'fr' ? et.label_fr : et.label;
+  return statusLabel(eventType, lang);
+}
+
+const COMPARE_METRIC_LABEL_FR: Record<string, string> = {
+  knocks: 'cognées',
+  leads: 'prospects',
+  sales: 'ventes',
+  callbacks: 'rappels',
+  no_answers: 'pas de réponse',
+};
+
+function compareMetricLabel(key: string, lang: string): string {
+  if (lang === 'fr') return COMPARE_METRIC_LABEL_FR[key] ?? key.replace('_', ' ');
+  return key.replace('_', ' ');
+}
 
 // ── Pin icon factory ──────────────────────────────────────────
 function createPinIcon(status: string, hasNote: boolean, dark = true): L.DivIcon {
@@ -229,11 +248,11 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
     const requiresClientInfo = ['lead', 'sale', 'quote_sent'].includes(status);
     if (requiresClientInfo) {
       if (!customerName.trim()) {
-        toast.error('Customer name is required for a lead/sale/quote');
+        toast.error(language === 'fr' ? 'Le nom du client est requis pour un prospect/vente/devis' : 'Customer name is required for a lead/sale/quote');
         return;
       }
       if (!customerPhone.trim() && !customerEmail.trim()) {
-        toast.error('Phone or email is required to create a client');
+        toast.error(language === 'fr' ? 'Un téléphone ou un courriel est requis pour créer un client' : 'Phone or email is required to create a client');
         return;
       }
     }
@@ -249,7 +268,7 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
         ...(customerEmail ? { customer_email: customerEmail } as any : {}),
       });
 
-      toast.success('Pin created');
+      toast.success(language === 'fr' ? 'Pin créé' : 'Pin created');
       onCreated(result);
 
       // Status-driven CRM flow continuation
@@ -263,7 +282,7 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
         onClose();
       }
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to create pin');
+      toast.error(err?.message || (language === 'fr' ? 'Échec de la création du pin' : 'Failed to create pin'));
       setSubmitting(false);
     }
   };
@@ -651,17 +670,18 @@ function TimelineEvent({ event, isLast, onDelete }: { event: FieldHouseEvent; is
   const [confirming, setConfirming] = useState(false);
   const cfg = STATUS_CONFIG[event.event_type] || STATUS_CONFIG.unknown;
   const Icon = cfg.icon;
+  const isFr = language === 'fr';
   const timeAgo = useMemo(() => {
     const diff = Date.now() - new Date(event.created_at).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Just now';
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1) return isFr ? "À l'instant" : 'Just now';
+    if (mins < 60) return isFr ? `Il y a ${mins} min` : `${mins}m ago`;
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
+    if (hours < 24) return isFr ? `Il y a ${hours} h` : `${hours}h ago`;
     const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return new Date(event.created_at).toLocaleDateString();
-  }, [event.created_at]);
+    if (days < 7) return isFr ? `Il y a ${days} j` : `${days}d ago`;
+    return new Date(event.created_at).toLocaleDateString(isFr ? 'fr-CA' : 'en-US');
+  }, [event.created_at, isFr]);
 
   return (
     <div className="flex gap-3">
@@ -678,7 +698,7 @@ function TimelineEvent({ event, isLast, onDelete }: { event: FieldHouseEvent; is
       <div className={cn('group flex-1 pb-4 min-w-0', !isLast && 'border-b border-outline/30 mb-1')}>
         <div className="flex items-start justify-between gap-2">
           <div>
-            <span className="text-[12px] font-semibold text-text-primary">{cfg.label}</span>
+            <span className="text-[12px] font-semibold text-text-primary">{eventTypeLabel(event.event_type, language)}</span>
             <span className="text-[10px] text-text-tertiary ml-2">{timeAgo}</span>
           </div>
           {onDelete && !confirming && (
@@ -706,7 +726,7 @@ function TimelineEvent({ event, isLast, onDelete }: { event: FieldHouseEvent; is
         )}
         {event.note_voice_url && (
           <div className="mt-1.5 flex items-center gap-2 text-[11px] text-primary">
-            <Mic size={12} /> Voice note
+            <Mic size={12} /> {isFr ? 'Note vocale' : 'Voice note'}
           </div>
         )}
         {(event as any).ai_summary && (
@@ -760,7 +780,7 @@ function AddEventForm({ houseId, onSuccess }: { houseId: string; onSuccess: () =
             <button key={et.value} onClick={() => setEventType(et.value)}
               className={cn('px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors border',
                 eventType === et.value ? 'border-primary bg-primary/10 text-primary' : 'border-outline text-text-tertiary hover:text-text-secondary')}>
-              {et.label}
+              {language === 'fr' ? et.label_fr : et.label}
             </button>
           ))}
         </div>
@@ -823,11 +843,11 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
       await updateHouse(house.id, {
         metadata: { ...meta, customer_name: editName.trim(), customer_phone: editPhone.trim(), customer_email: editEmail.trim() },
       });
-      toast.success('Contact info updated');
+      toast.success(language === 'fr' ? 'Coordonnées mises à jour' : 'Contact info updated');
       setEditingContact(false);
       onRefresh();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to update');
+      toast.error(err?.message || (language === 'fr' ? 'Échec de la mise à jour' : 'Failed to update'));
     }
     setSavingContact(false);
   };
@@ -844,10 +864,10 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
       await deleteHouse(house.id);
       // Invalidate pin cache so deleted pin doesn't come back from localStorage
       try { localStorage.removeItem('lume:field-pins'); } catch {}
-      toast.success('Pin deleted');
+      toast.success(language === 'fr' ? 'Pin supprimé' : 'Pin deleted');
       onDeleted();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to delete');
+      toast.error(err?.message || (language === 'fr' ? 'Échec de la suppression' : 'Failed to delete'));
     }
     setDeleting(false);
   };
@@ -858,10 +878,10 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
     try {
       await createFieldHouseEvent(house.id, { event_type: 'note', note_text: noteText.trim() });
       setNoteText('');
-      toast.success('Note saved');
+      toast.success(language === 'fr' ? 'Note enregistrée' : 'Note saved');
       onRefresh();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed');
+      toast.error(err?.message || (language === 'fr' ? 'Échec' : 'Failed'));
     }
     setSavingNote(false);
   };
@@ -898,18 +918,18 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
 
   // Quick status buttons — 1 tap to change status
   const quickStatuses = [
-    { key: 'knock', label: 'Knocked', event: 'knock' },
-    { key: 'no_answer', label: 'No Answer', event: 'no_answer' },
-    { key: 'lead', label: 'Interested', event: 'lead' },
-    { key: 'not_interested', label: 'Not Int.', event: 'not_interested' },
-    { key: 'callback', label: 'Callback', event: 'callback' },
-    { key: 'sale', label: 'Sale', event: 'sale' },
+    { key: 'knock', label: language === 'fr' ? 'Cognée' : 'Knocked', event: 'knock' },
+    { key: 'no_answer', label: language === 'fr' ? 'Pas de réponse' : 'No Answer', event: 'no_answer' },
+    { key: 'lead', label: language === 'fr' ? 'Intéressé' : 'Interested', event: 'lead' },
+    { key: 'not_interested', label: language === 'fr' ? 'Pas intér.' : 'Not Int.', event: 'not_interested' },
+    { key: 'callback', label: language === 'fr' ? 'Rappel' : 'Callback', event: 'callback' },
+    { key: 'sale', label: language === 'fr' ? 'Vente' : 'Sale', event: 'sale' },
   ];
 
   const handleQuickStatus = async (eventType: string) => {
     try {
       await createFieldHouseEvent(house.id, { event_type: eventType });
-      toast.success(`Status: ${eventType}`);
+      toast.success(`${language === 'fr' ? 'Statut' : 'Status'}: ${eventTypeLabel(eventType, language)}`);
       onRefresh();
       // If sale/won → continue to real job creation flow
       if (eventType === 'sale') {
@@ -917,7 +937,7 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
         onOpenJob(house.address, (house as any).client_id);
       }
     } catch (err: any) {
-      toast.error(err?.message || 'Failed');
+      toast.error(err?.message || (language === 'fr' ? 'Échec' : 'Failed'));
     }
   };
 
@@ -936,7 +956,7 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
             <h2 className="text-[14px] font-bold text-text-primary leading-tight">{house.address}</h2>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <span className={cn('px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider text-white', statusCfg.bgClass)}>
-                {statusCfg.label}
+                {statusLabel(house.current_status, language)}
               </span>
               <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold border" style={{
                 color: reknockScore > 60 ? '#22c55e' : reknockScore > 30 ? '#f59e0b' : '#6b7280',
@@ -1157,7 +1177,7 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
                 </button>
                 <button onClick={() => setShowDelete(false)}
                   className="px-4 py-1.5 rounded-lg border border-outline text-text-tertiary text-[10px]">
-                  Cancel
+                  {language === 'fr' ? 'Annuler' : 'Cancel'}
                 </button>
               </div>
             </div>
@@ -1299,7 +1319,7 @@ export default function FieldSales() {
       const data = await getAITerritoryRecommendations();
       setAiRecommendations(data);
     } catch (err: any) {
-      toast.error('Failed to load AI recommendations');
+      toast.error(fr ? 'Échec du chargement des recommandations IA' : 'Failed to load AI recommendations');
     }
     setAiLoading(false);
   }, [showAIPanel]);
@@ -1531,7 +1551,7 @@ export default function FieldSales() {
       setShowAssignPanel(true);
       if (recs.length === 0) toast.info(fr ? 'Tout est bien couvert!' : 'Everything looks well covered!');
     } catch (err: any) {
-      toast.error(err?.message || 'Analysis failed');
+      toast.error(err?.message || (fr ? "Échec de l'analyse" : 'Analysis failed'));
     }
     setAssignLoading(false);
   }, [pins, territories, fr]);
@@ -1542,24 +1562,24 @@ export default function FieldSales() {
       const { jsPDF } = await import('jspdf');
       const doc = new jsPDF();
       doc.setFontSize(18);
-      doc.text('Field Sales Report', 14, 22);
+      doc.text(fr ? 'Rapport de vente terrain' : 'Field Sales Report', 14, 22);
       doc.setFontSize(10);
-      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 30);
+      doc.text(`${fr ? 'Généré le' : 'Generated'}: ${new Date().toLocaleDateString(fr ? 'fr-CA' : 'en-US')}`, 14, 30);
 
       // Stats summary
       doc.setFontSize(12);
-      doc.text('Summary', 14, 42);
+      doc.text(fr ? 'Sommaire' : 'Summary', 14, 42);
       doc.setFontSize(10);
-      doc.text(`Knocks: ${stats.knocks}`, 14, 50);
-      doc.text(`Leads: ${stats.leads}`, 14, 56);
-      doc.text(`Sales: ${stats.sales}`, 14, 62);
-      doc.text(`Conversion Rate: ${stats.conversion}%`, 14, 68);
-      doc.text(`Total Pins: ${pins.length}`, 14, 74);
+      doc.text(`${fr ? 'Cognées' : 'Knocks'}: ${stats.knocks}`, 14, 50);
+      doc.text(`${fr ? 'Prospects' : 'Leads'}: ${stats.leads}`, 14, 56);
+      doc.text(`${fr ? 'Ventes' : 'Sales'}: ${stats.sales}`, 14, 62);
+      doc.text(`${fr ? 'Taux de conversion' : 'Conversion Rate'}: ${stats.conversion}%`, 14, 68);
+      doc.text(`${fr ? 'Total des pins' : 'Total Pins'}: ${pins.length}`, 14, 74);
 
       // Territory breakdown
       if (territories.length > 0) {
         doc.setFontSize(12);
-        doc.text('Territories', 14, 88);
+        doc.text(fr ? 'Territoires' : 'Territories', 14, 88);
         doc.setFontSize(10);
         territories.forEach((t, i) => {
           const y = 96 + i * 6;
@@ -1575,18 +1595,18 @@ export default function FieldSales() {
       let yPos = 96 + territories.length * 6 + 14;
       if (yPos > 250) { doc.addPage(); yPos = 22; }
       doc.setFontSize(12);
-      doc.text('Pin Status Breakdown', 14, yPos);
+      doc.text(fr ? 'Répartition des statuts de pins' : 'Pin Status Breakdown', 14, yPos);
       doc.setFontSize(10);
       Object.entries(statusBreakdown).forEach(([status, count], i) => {
-        doc.text(`${status}: ${count}`, 14, yPos + 8 + i * 6);
+        doc.text(`${statusLabel(status, language)}: ${count}`, 14, yPos + 8 + i * 6);
       });
 
       doc.save('field-sales-report.pdf');
       toast.success(fr ? 'Rapport exporté' : 'Report exported');
     } catch (err: any) {
-      toast.error(err?.message || 'Export failed');
+      toast.error(err?.message || (fr ? "Échec de l'exportation" : 'Export failed'));
     }
-  }, [stats, pins, territories, fr]);
+  }, [stats, pins, territories, fr, language]);
 
   // Select house — close other panels to prevent overlap
   const handlePinClick = useCallback(async (houseId: string) => {
@@ -1595,9 +1615,9 @@ export default function FieldSales() {
       setSelectedTerritory(null);
       setSelectedHouse(detail);
     } catch (err: any) {
-      toast.error('Failed to load house details');
+      toast.error(fr ? 'Échec du chargement des détails de la maison' : 'Failed to load house details');
     }
-  }, []);
+  }, [fr]);
 
   // Refresh house after event
   const refreshHouse = useCallback(async () => {
@@ -1626,13 +1646,13 @@ export default function FieldSales() {
 
   // Save territory polygon — opens setup panel
   const saveTerritory = useCallback(() => {
-    if (territoryPoints.length < 3) { toast.error('Need at least 3 points'); return; }
+    if (territoryPoints.length < 3) { toast.error(fr ? 'Au moins 3 points requis' : 'Need at least 3 points'); return; }
     const coords = territoryPoints.map((p) => [p.lng, p.lat]);
     coords.push(coords[0]); // close polygon
     setPendingTerritoryCoords(coords);
     setShowTerritorySetup(true);
     setMode('view');
-  }, [territoryPoints]);
+  }, [territoryPoints, fr]);
 
   // Final save after setup panel
   const handleTerritorySave = useCallback(async (data: { name: string; color: string; assigned_rep_id: string | null; is_exclusive: boolean; notes: string }) => {
@@ -1643,37 +1663,37 @@ export default function FieldSales() {
         geojson: { type: 'Polygon', coordinates: [pendingTerritoryCoords] },
       });
       // Update with rep assignment + settings via PUT
-      toast.success('Territory created');
+      toast.success(fr ? 'Territoire créé' : 'Territory created');
       setShowTerritorySetup(false);
       setTerritoryPoints([]);
       setPendingTerritoryCoords([]);
       loadTerritories();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to create territory');
+      toast.error(err?.message || (fr ? 'Échec de la création du territoire' : 'Failed to create territory'));
     }
-  }, [pendingTerritoryCoords, loadTerritories]);
+  }, [pendingTerritoryCoords, loadTerritories, fr]);
 
   // Delete territory
   const handleDeleteTerritory = useCallback(async (id: string) => {
     try {
       const { deleteTerritory } = await import('../lib/fieldSalesApi');
       await deleteTerritory(id);
-      toast.success('Territory deleted');
+      toast.success(fr ? 'Territoire supprimé' : 'Territory deleted');
       setSelectedTerritory(null);
       loadTerritories();
-    } catch (err: any) { toast.error(err?.message || 'Failed'); }
-  }, [loadTerritories]);
+    } catch (err: any) { toast.error(err?.message || (fr ? 'Échec' : 'Failed')); }
+  }, [loadTerritories, fr]);
 
   // Update territory
   const handleUpdateTerritory = useCallback(async (id: string, data: any) => {
     try {
       const { updateTerritory } = await import('../lib/fieldSalesApi');
       await updateTerritory(id, { name: data.name, color: data.color });
-      toast.success('Territory updated');
+      toast.success(fr ? 'Territoire mis à jour' : 'Territory updated');
       setSelectedTerritory(null);
       loadTerritories();
-    } catch (err: any) { toast.error(err?.message || 'Failed'); }
-  }, [loadTerritories]);
+    } catch (err: any) { toast.error(err?.message || (fr ? 'Échec' : 'Failed')); }
+  }, [loadTerritories, fr]);
 
   // Filter pins
   const filteredPins = useMemo(() => {
@@ -1916,10 +1936,10 @@ export default function FieldSales() {
       {/* ── FLOATING STATS (bottom left) ── */}
       <div className="absolute bottom-4 left-4 flex items-center gap-3 bg-surface/85 backdrop-blur-xl border border-outline rounded-xl px-4 py-2.5 shadow-xl pointer-events-auto">
         {[
-          { label: 'Knocks', value: stats.knocks, color: '#6b7280' },
-          { label: 'Leads', value: stats.leads, color: '#3b82f6' },
-          { label: 'Sales', value: stats.sales, color: '#22c55e' },
-          { label: 'Rate', value: `${stats.conversion}%`, color: '#f59e0b' },
+          { label: fr ? 'Cognées' : 'Knocks', value: stats.knocks, color: '#6b7280' },
+          { label: fr ? 'Prospects' : 'Leads', value: stats.leads, color: '#3b82f6' },
+          { label: fr ? 'Ventes' : 'Sales', value: stats.sales, color: '#22c55e' },
+          { label: fr ? 'Taux' : 'Rate', value: `${stats.conversion}%`, color: '#f59e0b' },
         ].map((s) => (
           <div key={s.label} className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full" style={{ background: s.color }} />
@@ -1939,11 +1959,11 @@ export default function FieldSales() {
           </div>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: 'Knocks', value: territoryStats.totals?.knocks ?? 0, color: '#6b7280' },
-              { label: 'Leads', value: territoryStats.totals?.leads ?? 0, color: '#3b82f6' },
-              { label: 'Sales', value: territoryStats.totals?.sales ?? 0, color: '#22c55e' },
-              { label: 'Callbacks', value: territoryStats.totals?.callbacks ?? 0, color: '#f59e0b' },
-              { label: 'No Answer', value: territoryStats.totals?.no_answers ?? 0, color: '#9ca3af' },
+              { label: fr ? 'Cognées' : 'Knocks', value: territoryStats.totals?.knocks ?? 0, color: '#6b7280' },
+              { label: fr ? 'Prospects' : 'Leads', value: territoryStats.totals?.leads ?? 0, color: '#3b82f6' },
+              { label: fr ? 'Ventes' : 'Sales', value: territoryStats.totals?.sales ?? 0, color: '#22c55e' },
+              { label: fr ? 'Rappels' : 'Callbacks', value: territoryStats.totals?.callbacks ?? 0, color: '#f59e0b' },
+              { label: fr ? 'Pas de réponse' : 'No Answer', value: territoryStats.totals?.no_answers ?? 0, color: '#9ca3af' },
               { label: 'Conversion', value: `${territoryStats.conversion_rate ?? 0}%`, color: '#64748b' },
             ].map((s) => (
               <div key={s.label} className="flex items-center gap-1.5">
@@ -1959,7 +1979,7 @@ export default function FieldSales() {
               <div className="flex gap-1 flex-wrap">
                 {Object.entries((territoryStats as any).status_counts).map(([status, count]) => (
                   <span key={status} className="text-[9px] px-1.5 py-0.5 rounded-md border border-outline text-text-secondary">
-                    {status}: <span className="font-bold">{count as number}</span>
+                    {statusLabel(status, language)}: <span className="font-bold">{count as number}</span>
                   </span>
                 ))}
               </div>
@@ -2002,7 +2022,7 @@ export default function FieldSales() {
                 return (
                   <React.Fragment key={key}>
                     <div className={cn('text-right', better === 0 ? 'text-green-400 font-bold' : 'text-text-secondary')}>{v0}</div>
-                    <div className="text-center text-text-tertiary capitalize text-[9px]">{key.replace('_', ' ')}</div>
+                    <div className="text-center text-text-tertiary capitalize text-[9px]">{compareMetricLabel(key, language)}</div>
                     <div className={cn(better === 1 ? 'text-green-400 font-bold' : 'text-text-secondary')}>{v1}</div>
                   </React.Fragment>
                 );
@@ -2019,7 +2039,7 @@ export default function FieldSales() {
       {geoAlerts.length > 0 && (
         <div className="absolute top-16 right-4 bg-surface/95 backdrop-blur-xl border border-outline rounded-xl shadow-2xl pointer-events-auto w-[260px] max-h-[200px] overflow-y-auto">
           <div className="px-3 py-2 border-b border-outline flex items-center justify-between">
-            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1"><AlertCircle size={11} /> Alerts ({geoAlerts.length})</span>
+            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1"><AlertCircle size={11} /> {fr ? 'Alertes' : 'Alerts'} ({geoAlerts.length})</span>
             <button onClick={() => setGeoAlerts([])} className="text-text-tertiary hover:text-text-secondary"><X size={11} /></button>
           </div>
           {geoAlerts.map((a) => (
@@ -2101,7 +2121,7 @@ export default function FieldSales() {
           {Object.entries(STATUS_CONFIG).filter(([k]) => k !== 'unknown').map(([key, cfg]) => (
             <div key={key} className="flex items-center gap-1.5">
               <div className="w-1.5 h-1.5 rounded-full" style={{ background: cfg.color }} />
-              <span className="text-[9px] text-text-tertiary">{cfg.label}</span>
+              <span className="text-[9px] text-text-tertiary">{statusLabel(key, language)}</span>
             </div>
           ))}
         </div>
@@ -2157,21 +2177,23 @@ export default function FieldSales() {
             className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[600] bg-surface/95 backdrop-blur-md border border-outline rounded-xl px-5 py-3 shadow-2xl flex items-center gap-3">
             <div className={cn('w-2 h-2 rounded-full animate-pulse', mode === 'pin' ? 'bg-blue-400' : 'bg-indigo-400')} />
             <span className="text-[12px] font-semibold text-text-primary">
-              {mode === 'pin' ? 'Click on the map to place a pin' : `Drawing territory — ${territoryPoints.length} point${territoryPoints.length !== 1 ? 's' : ''}`}
+              {mode === 'pin'
+                ? (fr ? 'Cliquez sur la carte pour placer un pin' : 'Click on the map to place a pin')
+                : (fr ? `Tracé du territoire — ${territoryPoints.length} point${territoryPoints.length !== 1 ? 's' : ''}` : `Drawing territory — ${territoryPoints.length} point${territoryPoints.length !== 1 ? 's' : ''}`)}
             </span>
             {mode === 'territory' && territoryPoints.length >= 3 && (
               <button onClick={saveTerritory} className="px-3 py-1 rounded-lg bg-white text-black text-xs font-medium hover:bg-white/90 transition-colors">
-                Save Territory
+                {fr ? 'Enregistrer le territoire' : 'Save Territory'}
               </button>
             )}
             {mode === 'territory' && territoryPoints.length > 0 && (
               <button onClick={() => setTerritoryPoints((p) => p.slice(0, -1))} className="px-3 py-1 rounded-lg border border-outline text-text-tertiary text-[11px] font-medium hover:text-text-secondary">
-                Undo
+                {fr ? 'Annuler' : 'Undo'}
               </button>
             )}
             <button onClick={() => { setMode('view'); setTerritoryPoints([]); setPendingPinLatlng(null); }}
               className="px-3 py-1 rounded-lg border border-outline text-text-tertiary text-[11px] font-medium hover:text-text-secondary">
-              Exit
+              {fr ? 'Quitter' : 'Exit'}
             </button>
           </motion.div>
         )}
@@ -2229,7 +2251,7 @@ export default function FieldSales() {
                   <p className="text-[11px] text-text-tertiary">{t.explanation}</p>
                   <div className="flex items-center gap-3 mt-2 text-[10px] text-text-tertiary">
                     <span>{t.total_pins} pins</span>
-                    <span>{t.active_leads} leads</span>
+                    <span>{t.active_leads} {fr ? 'prospects' : 'leads'}</span>
                     <span>{t.close_rate}% {fr ? 'conclus' : 'close'}</span>
                     {t.fatigue_score > 50 && <span className="text-amber-400">{fr ? 'Sursollicité' : 'Fatigued'}</span>}
                   </div>
@@ -2327,14 +2349,14 @@ export default function FieldSales() {
         isOpen={showQuoteModal}
         onClose={() => setShowQuoteModal(false)}
         createLeadInline
-        onCreated={() => { setShowQuoteModal(false); loadPins(); loadStats(); toast.success('Quote created'); }}
+        onCreated={() => { setShowQuoteModal(false); loadPins(); loadStats(); toast.success(fr ? 'Devis créé' : 'Quote created'); }}
       />
     )}
     {showInvoiceModal && (
       <CreateInvoiceModal
         isOpen={showInvoiceModal}
         onClose={() => setShowInvoiceModal(false)}
-        onCreated={() => { setShowInvoiceModal(false); loadPins(); loadStats(); toast.success('Invoice created'); }}
+        onCreated={() => { setShowInvoiceModal(false); loadPins(); loadStats(); toast.success(fr ? 'Facture créée' : 'Invoice created'); }}
       />
     )}
     </>

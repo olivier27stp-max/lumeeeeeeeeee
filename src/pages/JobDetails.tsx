@@ -306,9 +306,9 @@ export default function JobDetails() {
           const orgId = await getCurrentOrgIdOrThrow();
           await supabase.from('jobs').update({ attachments: updated, updated_at: new Date().toISOString() }).eq('id', job.id).eq('org_id', orgId);
           setJob((prev) => prev ? { ...prev, attachments: updated } : prev);
-          toast.success(`${file.name} uploaded`);
+          toast.success(language === 'fr' ? `${file.name} téléversé` : `${file.name} uploaded`);
         } catch (err: any) {
-          toast.error(err?.message || `Failed to upload ${file.name}`);
+          toast.error(err?.message || (language === 'fr' ? `Échec du téléversement de ${file.name}` : `Failed to upload ${file.name}`));
         }
       }
     },
@@ -340,7 +340,7 @@ export default function JobDetails() {
         updateRecentLabel(`/jobs/${id}`, `#${jobData.job_number} ${jobData.title || ''}`);
         setLineItems(items);
       })
-      .catch((err) => setError(err.message || 'Failed to load job'))
+      .catch((err) => setError(err.message || (language === 'fr' ? 'Échec du chargement du job' : 'Failed to load job')))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -500,7 +500,7 @@ export default function JobDetails() {
           invoice_number: r.invoice_number || null,
           status: r.status || 'draft',
           due_date: r.due_date || null,
-          subject: r.subject || 'For Services Rendered',
+          subject: r.subject || (language === 'fr' ? 'Pour services rendus' : 'For Services Rendered'),
           total_cents: Number(r.total_cents || 0),
           balance_cents: Number(r.balance_cents ?? r.total_cents ?? 0),
           billing_milestone_id: r.billing_milestone_id || null,
@@ -509,7 +509,7 @@ export default function JobDetails() {
     } catch (err: any) {
       console.warn('Failed to load invoices:', err?.message);
     }
-  }, [id]);
+  }, [id, language]);
 
   useEffect(() => {
     void loadInvoices();
@@ -733,13 +733,15 @@ export default function JobDetails() {
     if (!job) return;
     if (isClosing) return; // prevent double-click race
     const confirmMsg = t.jobDetails?.markCompletedPrompt
-      || 'Mark this job as completed? This locks the job for edits (except via admin action).';
+      || (language === 'fr'
+        ? 'Marquer ce job comme complété ? Cela verrouille le job (sauf action admin).'
+        : 'Mark this job as completed? This locks the job for edits (except via admin action).');
     if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) return;
     setIsClosing(true);
     try {
       const updated = await updateJob(job.id, { status: 'completed' });
       setJob(updated);
-      toast.success('Job marked as completed');
+      toast.success(language === 'fr' ? 'Job marqué comme complété' : 'Job marked as completed');
       setMoreActionsOpen(false);
 
       // Auto-propose invoice creation if no invoice exists
@@ -747,14 +749,14 @@ export default function JobDetails() {
       if (invoices.length === 0 && !job.billing_split) {
         const shouldCreate = window.confirm(
           t.jobDetails?.createInvoicePrompt
-            || 'Job completed! Would you like to create an invoice now?'
+            || (language === 'fr' ? 'Job complété ! Voulez-vous créer une facture maintenant ?' : 'Job completed! Would you like to create an invoice now?')
         );
         if (shouldCreate) {
           handleCreateInvoice();
         }
       }
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to close job');
+      toast.error(err?.message || (language === 'fr' ? 'Échec de la fermeture du job' : 'Failed to close job'));
     } finally {
       setIsClosing(false);
     }
@@ -766,21 +768,21 @@ export default function JobDetails() {
       // Split jobs are billed through the payment schedule, not a single full invoice
       setInvoiceTab('billing');
       setMoreActionsOpen(false);
-      toast.info(t.jobDetails?.splitUsesSchedule || 'This job uses a payment schedule — create invoices from the billing schedule.');
+      toast.info(t.jobDetails?.splitUsesSchedule || (language === 'fr' ? 'Ce job utilise un échéancier de paiement — créez les factures depuis l\'échéancier de facturation.' : 'This job uses a payment schedule — create invoices from the billing schedule.'));
       return;
     }
     setIsCreatingInvoice(true);
     try {
       const result = await createInvoiceFromJob({ jobId: job.id, sendNow: false });
       const invoiceId = String(result.invoice_id || result.invoice?.id || '').trim();
-      if (!invoiceId) throw new Error('Invoice created but ID is missing.');
+      if (!invoiceId) throw new Error(language === 'fr' ? "Facture créée mais l'identifiant est manquant." : 'Invoice created but ID is missing.');
       queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
       queryClient.invalidateQueries({ queryKey: ['jobsTable'] });
-      toast.success(result.already_exists ? 'Invoice already exists' : 'Invoice draft created');
+      toast.success(result.already_exists ? (language === 'fr' ? 'La facture existe déjà' : 'Invoice already exists') : (language === 'fr' ? 'Brouillon de facture créé' : 'Invoice draft created'));
       setMoreActionsOpen(false);
       navigate(result.already_exists ? `/invoices/${invoiceId}` : `/invoices/${invoiceId}/edit`);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to create invoice');
+      toast.error(err?.message || (language === 'fr' ? 'Échec de la création de la facture' : 'Failed to create invoice'));
     } finally {
       setIsCreatingInvoice(false);
     }
@@ -809,7 +811,7 @@ export default function JobDetails() {
           {
             id: null,
             key: crypto.randomUUID(),
-            label: t.jobDetails?.deposit || 'Deposit',
+            label: t.jobDetails?.deposit || (language === 'fr' ? 'Dépôt' : 'Deposit'),
             percent: 50,
             amount_cents: deposit,
             due_date: isoDatePlusDays(0),
@@ -817,7 +819,7 @@ export default function JobDetails() {
           {
             id: null,
             key: crypto.randomUUID(),
-            label: t.jobDetails?.finalPayment || 'Final payment',
+            label: t.jobDetails?.finalPayment || (language === 'fr' ? 'Paiement final' : 'Final payment'),
             percent: 50,
             amount_cents: displayTotalCents - deposit,
             due_date: isoDatePlusDays(30),
@@ -826,7 +828,7 @@ export default function JobDetails() {
         setScheduleDirty(true);
       }
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to update billing mode');
+      toast.error(err?.message || (language === 'fr' ? 'Échec de la mise à jour du mode de facturation' : 'Failed to update billing mode'));
     } finally {
       setTogglingSplit(false);
     }
@@ -891,9 +893,9 @@ export default function JobDetails() {
       );
       setMilestones(saved.map(toMilestoneRowUI));
       setScheduleDirty(false);
-      toast.success(t.jobDetails?.scheduleSaved || 'Payment schedule saved.');
+      toast.success(t.jobDetails?.scheduleSaved || (language === 'fr' ? 'Échéancier de paiement enregistré.' : 'Payment schedule saved.'));
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to save payment schedule');
+      toast.error(err?.message || (language === 'fr' ? "Échec de l'enregistrement de l'échéancier" : 'Failed to save payment schedule'));
     } finally {
       setSavingSchedule(false);
     }
@@ -908,15 +910,15 @@ export default function JobDetails() {
       queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
       toast.success(
         result.already_exists
-          ? (t.jobDetails?.milestoneInvoiceExists || 'An invoice already exists for this payment.')
-          : (t.jobDetails?.milestoneInvoiceCreated || 'Invoice created for this payment.'),
+          ? (t.jobDetails?.milestoneInvoiceExists || (language === 'fr' ? 'Une facture existe déjà pour ce paiement.' : 'An invoice already exists for this payment.'))
+          : (t.jobDetails?.milestoneInvoiceCreated || (language === 'fr' ? 'Facture créée pour ce paiement.' : 'Invoice created for this payment.')),
         invoiceId
-          ? { action: { label: t.jobDetails?.viewInvoiceAction || 'View invoice', onClick: () => navigate(`/invoices/${invoiceId}`) } }
+          ? { action: { label: t.jobDetails?.viewInvoiceAction || (language === 'fr' ? 'Voir la facture' : 'View invoice'), onClick: () => navigate(`/invoices/${invoiceId}`) } }
           : undefined,
       );
       await loadInvoices();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to create invoice');
+      toast.error(err?.message || (language === 'fr' ? 'Échec de la création de la facture' : 'Failed to create invoice'));
     } finally {
       setCreatingMilestoneId(null);
     }
@@ -956,12 +958,12 @@ export default function JobDetails() {
         {/* Drop zone overlay */}
         {isDragging && (
           <div className="absolute inset-0 z-50 bg-primary/10 border-2 border-dashed border-primary rounded-xl flex items-center justify-center pointer-events-none">
-            <p className="text-primary font-semibold text-lg">Drop files here</p>
+            <p className="text-primary font-semibold text-lg">{language === 'fr' ? 'Déposez les fichiers ici' : 'Drop files here'}</p>
           </div>
         )}
         {/* ═══ BREADCRUMB ═══ */}
         <nav className="flex items-center gap-1.5 text-[12px] print:hidden">
-          <button onClick={() => navigate('/jobs')} className="text-text-tertiary hover:text-text-primary transition-colors">Jobs</button>
+          <button onClick={() => navigate('/jobs')} className="text-text-tertiary hover:text-text-primary transition-colors">{language === 'fr' ? 'Jobs' : 'Jobs'}</button>
           <span className="text-text-tertiary">/</span>
           {job.client_name && (
             <>
@@ -977,7 +979,7 @@ export default function JobDetails() {
           icon={<Briefcase size={18} strokeWidth={2} />}
           iconTileClass="text-entity-job"
           status={job.status}
-          statusExtra={isToday ? <span className="badge-neutral text-[11px]">Today</span> : null}
+          statusExtra={isToday ? <span className="badge-neutral text-[11px]">{language === 'fr' ? "Aujourd'hui" : 'Today'}</span> : null}
           title={job.title || job.client_name || 'Job'}
           number={
             <EntityNumberEditor
@@ -987,7 +989,7 @@ export default function JobDetails() {
               onSaved={(n) => setJob((prev) => (prev ? { ...prev, job_number: n } : prev))}
             />
           }
-          client={{ id: job.client_id, name: job.client_name || 'Unassigned' }}
+          client={{ id: job.client_id, name: job.client_name || (language === 'fr' ? 'Non assigné' : 'Unassigned') }}
           address={job.property_address}
           phone={clientInfo?.phone}
           email={clientInfo?.email}
@@ -1011,7 +1013,7 @@ export default function JobDetails() {
               <MessageSquare size={14} /> {language === 'fr' ? 'Texter le client' : 'Text Client'}
             </button>
             <button onClick={handleEdit} className="glass-button inline-flex items-center gap-1.5">
-              <Edit3 size={14} /> Edit
+              <Edit3 size={14} /> {language === 'fr' ? 'Modifier' : 'Edit'}
             </button>
 
             {/* 1-click Complete & Invoice — primary CTA when job is active */}
@@ -1028,16 +1030,16 @@ export default function JobDetails() {
                       const result = await createInvoiceFromJob({ jobId: job.id, sendNow: false });
                       const invoiceId = String(result.invoice_id || result.invoice?.id || '').trim();
                       if (invoiceId) {
-                        toast.success('Job completed & invoice created', {
-                          action: { label: 'View Invoice', onClick: () => navigate(`/invoices/${invoiceId}`) },
+                        toast.success(language === 'fr' ? 'Job complété et facture créée' : 'Job completed & invoice created', {
+                          action: { label: language === 'fr' ? 'Voir la facture' : 'View Invoice', onClick: () => navigate(`/invoices/${invoiceId}`) },
                         });
                         navigate(`/invoices/${invoiceId}/edit`);
                         return;
                       }
                     }
-                    toast.success('Job completed');
+                    toast.success(language === 'fr' ? 'Job complété' : 'Job completed');
                   } catch (err: any) {
-                    toast.error(err?.message || 'Failed');
+                    toast.error(err?.message || (language === 'fr' ? 'Échec' : 'Failed'));
                   } finally {
                     setIsClosing(false);
                   }
@@ -1045,7 +1047,7 @@ export default function JobDetails() {
                 disabled={isClosing}
                 className="px-3 py-1.5 rounded-lg bg-primary text-white text-[12px] font-semibold hover:opacity-90 transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                <CheckCircle2 size={13} /> {isClosing ? 'Processing...' : (canSeeInvoices ? 'Complete & Invoice' : 'Complete')}
+                <CheckCircle2 size={13} /> {isClosing ? (language === 'fr' ? 'Traitement...' : 'Processing...') : (canSeeInvoices ? (language === 'fr' ? 'Compléter et facturer' : 'Complete & Invoice') : (language === 'fr' ? 'Compléter' : 'Complete'))}
               </button>
             )}
 
@@ -1061,27 +1063,27 @@ export default function JobDetails() {
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setMoreActionsOpen(false)} />
                   <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border border-outline bg-surface shadow-lg py-1">
-                    <DropdownItem icon={<CheckCircle2 size={13} />} label={isClosing ? 'Closing...' : 'Close Job'} onClick={handleCloseJob} disabled={isClosing} />
+                    <DropdownItem icon={<CheckCircle2 size={13} />} label={isClosing ? (language === 'fr' ? 'Fermeture...' : 'Closing...') : (language === 'fr' ? 'Fermer le job' : 'Close Job')} onClick={handleCloseJob} disabled={isClosing} />
                     <DropdownItem icon={<MessageSquare size={13} />} label={language === 'fr' ? 'Envoyer une confirmation' : 'Send Confirmation'} onClick={() => { setConfirmPrompt('manual'); setMoreActionsOpen(false); }} />
-                    <DropdownItem icon={<Send size={13} />} label="Send Follow-up" onClick={() => { setEmailMode('followup'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
-                    <DropdownItem icon={<Mail size={13} />} label="Send Email" onClick={() => { setEmailMode('generic'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
+                    <DropdownItem icon={<Send size={13} />} label={language === 'fr' ? 'Envoyer un suivi' : 'Send Follow-up'} onClick={() => { setEmailMode('followup'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
+                    <DropdownItem icon={<Mail size={13} />} label={language === 'fr' ? 'Envoyer un courriel' : 'Send Email'} onClick={() => { setEmailMode('generic'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
                     <div className="border-t border-border my-1" />
-                    {canSeeInvoices && <DropdownItem icon={<FileText size={13} className="text-entity-invoice" />} label={isCreatingInvoice ? 'Creating...' : 'Create Invoice'} onClick={handleCreateInvoice} disabled={isCreatingInvoice} />}
-                    <DropdownItem icon={<Copy size={13} />} label="Clone Job" onClick={() => {
+                    {canSeeInvoices && <DropdownItem icon={<FileText size={13} className="text-entity-invoice" />} label={isCreatingInvoice ? (language === 'fr' ? 'Création...' : 'Creating...') : (language === 'fr' ? 'Créer une facture' : 'Create Invoice')} onClick={handleCreateInvoice} disabled={isCreatingInvoice} />}
+                    <DropdownItem icon={<Copy size={13} />} label={language === 'fr' ? 'Dupliquer le job' : 'Clone Job'} onClick={() => {
                       setMoreActionsOpen(false);
                       openJobModal({
                         initialValues: {
-                          title: `${job.title} (copy)`,
+                          title: `${job.title} ${language === 'fr' ? '(copie)' : '(copy)'}`,
                           client_id: job.client_id || null,
                           property_address: job.property_address || null,
                           description: (job as any).description || null,
                           line_items: lineItems.map(li => ({ name: (li as any).name || (li as any).description || '', qty: li.qty, unit_price_cents: li.unit_price_cents })),
                         },
-                        onCreated: () => { toast.success('Job cloned', { action: { label: 'View', onClick: () => navigate('/jobs') } }); },
+                        onCreated: () => { toast.success(language === 'fr' ? 'Job dupliqué' : 'Job cloned', { action: { label: language === 'fr' ? 'Voir' : 'View', onClick: () => navigate('/jobs') } }); },
                       });
                     }} />
-                    <DropdownItem icon={<Download size={13} />} label="Download PDF" onClick={handleDownloadPdf} />
-                    <DropdownItem icon={<Printer size={13} />} label="Print" onClick={handlePrint} />
+                    <DropdownItem icon={<Download size={13} />} label={language === 'fr' ? 'Télécharger le PDF' : 'Download PDF'} onClick={handleDownloadPdf} />
+                    <DropdownItem icon={<Printer size={13} />} label={language === 'fr' ? 'Imprimer' : 'Print'} onClick={handlePrint} />
                   </div>
                 </>
               )}
@@ -1099,10 +1101,10 @@ export default function JobDetails() {
             // milestone clears).
             const billable = invoices.filter((inv) => inv.status !== 'void');
             const steps = [
-              { label: 'Scheduled', done: job.status === 'scheduled' || job.status === 'in_progress' || job.status === 'completed' },
-              { label: 'Completed', done: job.status === 'completed' },
-              { label: 'Invoiced', done: billable.length > 0 },
-              { label: 'Paid', done: billable.length > 0 && billable.every((inv) => inv.status === 'paid') },
+              { label: 'Scheduled', labelFr: 'Planifié', done: job.status === 'scheduled' || job.status === 'in_progress' || job.status === 'completed' },
+              { label: 'Completed', labelFr: 'Complété', done: job.status === 'completed' },
+              { label: 'Invoiced', labelFr: 'Facturé', done: billable.length > 0 },
+              { label: 'Paid', labelFr: 'Payé', done: billable.length > 0 && billable.every((inv) => inv.status === 'paid') },
             ];
             return steps.map((step, i) => {
               const onClick =
@@ -1122,7 +1124,7 @@ export default function JobDetails() {
                     </div>
                     <span className={cn('text-[9px] font-medium whitespace-nowrap', step.done ? 'text-text-primary' : 'text-text-tertiary',
                       onClick && 'cursor-pointer hover:underline')}
-                      onClick={onClick}>{step.label}</span>
+                      onClick={onClick}>{language === 'fr' ? step.labelFr : step.label}</span>
                   </div>
                 </React.Fragment>
               );
@@ -1142,7 +1144,7 @@ export default function JobDetails() {
               {isToday && (
                 <span className="inline-flex items-center gap-1 text-xs font-medium text-text-primary">
                   <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                  Today
+                  {language === 'fr' ? "Aujourd'hui" : 'Today'}
                 </span>
               )}
               {job.scheduled_at && (
@@ -1159,14 +1161,14 @@ export default function JobDetails() {
           {/* Job details (client name, address and contact now live in the hub header) */}
           <div>
             <div className="p-5">
-              <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">Job details</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">{language === 'fr' ? 'Détails du job' : 'Job details'}</p>
               <div className="space-y-0">
-                <JobDetailRow label="Job type" value={job.job_type || 'One-off job'} />
-                <JobDetailRow label="Starts on" value={job.scheduled_at ? formatDate(job.scheduled_at) : '—'} />
-                <JobDetailRow label="Ends on" value={job.end_at ? formatDate(job.end_at) : (job.scheduled_at ? formatDate(job.scheduled_at) : '—')} />
-                <JobDetailRow label="Billing frequency" value={(job as any).requires_invoicing === false ? 'No invoicing' : 'Upon job completion'} />
-                <JobDetailRow label="Deposit" value={(job as any).deposit_required ? `${(job as any).deposit_type === 'percentage' ? `${(job as any).deposit_value}%` : `$${(job as any).deposit_value}`}` : 'None'} />
-                <JobDetailRow label="Salesperson" value={(job as any).salesperson_name || (job as any).salesperson?.full_name || '—'} isLast />
+                <JobDetailRow label={language === 'fr' ? 'Type de job' : 'Job type'} value={job.job_type || (language === 'fr' ? 'Job unique' : 'One-off job')} />
+                <JobDetailRow label={language === 'fr' ? 'Débute le' : 'Starts on'} value={job.scheduled_at ? formatDate(job.scheduled_at) : '—'} />
+                <JobDetailRow label={language === 'fr' ? 'Se termine le' : 'Ends on'} value={job.end_at ? formatDate(job.end_at) : (job.scheduled_at ? formatDate(job.scheduled_at) : '—')} />
+                <JobDetailRow label={language === 'fr' ? 'Fréquence de facturation' : 'Billing frequency'} value={(job as any).requires_invoicing === false ? (language === 'fr' ? 'Sans facturation' : 'No invoicing') : (language === 'fr' ? 'À la fin du job' : 'Upon job completion')} />
+                <JobDetailRow label={language === 'fr' ? 'Dépôt' : 'Deposit'} value={(job as any).deposit_required ? `${(job as any).deposit_type === 'percentage' ? `${(job as any).deposit_value}%` : `$${(job as any).deposit_value}`}` : (language === 'fr' ? 'Aucun' : 'None')} />
+                <JobDetailRow label={language === 'fr' ? 'Vendeur' : 'Salesperson'} value={(job as any).salesperson_name || (job as any).salesperson?.full_name || '—'} isLast />
               </div>
             </div>
           </div>
@@ -1181,7 +1183,7 @@ export default function JobDetails() {
               onClick={() => setShowProfitability(!showProfitability)}
               className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-text-secondary hover:text-text-primary transition-colors"
             >
-              {showProfitability ? 'Hide' : 'Show'} Profitability
+              {language === 'fr' ? (showProfitability ? 'Masquer la rentabilité' : 'Afficher la rentabilité') : `${showProfitability ? 'Hide' : 'Show'} Profitability`}
               {showProfitability ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
             </button>
 
@@ -1197,20 +1199,20 @@ export default function JobDetails() {
                     {/* Margin */}
                     <div>
                       <p className="text-[28px] font-bold text-text-primary leading-none">{profitMargin}%</p>
-                      <p className="text-[11px] text-text-tertiary mt-1">Profit margin</p>
+                      <p className="text-[11px] text-text-tertiary mt-1">{language === 'fr' ? 'Marge de profit' : 'Profit margin'}</p>
                     </div>
 
                     {/* Breakdown */}
                     <div className="flex flex-wrap items-center gap-3 text-[13px]">
-                      <ProfitBlock label="Total price" value={formatCents(displayTotalCents)} />
+                      <ProfitBlock label={language === 'fr' ? 'Prix total' : 'Total price'} value={formatCents(displayTotalCents)} />
                       <span className="text-text-tertiary font-medium">−</span>
-                      <ProfitBlock label="Line Item Cost" value={formatCents(lineItemCostCents)} color="text-text-secondary" />
+                      <ProfitBlock label={language === 'fr' ? 'Coût des articles' : 'Line Item Cost'} value={formatCents(lineItemCostCents)} color="text-text-secondary" />
                       <span className="text-text-tertiary font-medium">−</span>
-                      <ProfitBlock label="Labour" value="$0.00" color="text-text-secondary" />
+                      <ProfitBlock label={language === 'fr' ? "Main-d'œuvre" : 'Labour'} value="$0.00" color="text-text-secondary" />
                       <span className="text-text-tertiary font-medium">−</span>
-                      <ProfitBlock label="Expenses" value="$0.00" color="text-text-tertiary" />
+                      <ProfitBlock label={language === 'fr' ? 'Dépenses' : 'Expenses'} value="$0.00" color="text-text-tertiary" />
                       <span className="text-text-tertiary font-medium">=</span>
-                      <ProfitBlock label="Profit" value={formatCents(profitCents)} color="text-text-primary" />
+                      <ProfitBlock label={language === 'fr' ? 'Profit' : 'Profit'} value={formatCents(profitCents)} color="text-text-primary" />
                     </div>
 
                     {/* Mini donut */}
@@ -1232,25 +1234,25 @@ export default function JobDetails() {
               <div className="icon-tile icon-tile-sm text-entity-job">
                 <Briefcase size={13} strokeWidth={2} />
               </div>
-              Line Items
+              {language === 'fr' ? 'Articles' : 'Line Items'}
             </h2>
             <button onClick={handleEdit} className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1 print:hidden">
-              <Plus size={12} /> New Line Item
+              <Plus size={12} /> {language === 'fr' ? 'Nouvel article' : 'New Line Item'}
             </button>
           </div>
 
           <div className="p-5">
             {lineItems.length === 0 ? (
-              <p className="text-[13px] text-text-tertiary py-4 text-center">No line items</p>
+              <p className="text-[13px] text-text-tertiary py-4 text-center">{language === 'fr' ? 'Aucun article' : 'No line items'}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-border">
-                      <th className="px-0 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">Product / Service</th>
-                      <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-center w-24">Quantity</th>
-                      {canSeeMargins && <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">Cost</th>}
-                      {canSeePricing && <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">Price</th>}
+                      <th className="px-0 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">{language === 'fr' ? 'Produit / Service' : 'Product / Service'}</th>
+                      <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-center w-24">{language === 'fr' ? 'Quantité' : 'Quantity'}</th>
+                      {canSeeMargins && <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">{language === 'fr' ? 'Coût' : 'Cost'}</th>}
+                      {canSeePricing && <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">{language === 'fr' ? 'Prix' : 'Price'}</th>}
                       {canSeePricing && <th className="px-0 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right w-28">Total</th>}
                     </tr>
                   </thead>
@@ -1279,7 +1281,7 @@ export default function JobDetails() {
               <div className="border-t border-border pt-4 mt-2 flex justify-end">
                 <div className="w-60 space-y-1.5">
                   <div className="flex justify-between text-[13px]">
-                    <span className="text-text-secondary">Subtotal</span>
+                    <span className="text-text-secondary">{language === 'fr' ? 'Sous-total' : 'Subtotal'}</span>
                     <span className="text-text-primary tabular-nums font-semibold">{formatCents(displaySubtotalCents)}</span>
                   </div>
                   {enabledTaxes.map((tax) => {
@@ -1308,7 +1310,7 @@ export default function JobDetails() {
               <div className="icon-tile icon-tile-sm icon-tile-blue">
                 <Calendar size={13} strokeWidth={2} />
               </div>
-              Visits
+              {language === 'fr' ? 'Visites' : 'Visits'}
             </h2>
             <button onClick={() => setShowAddVisit(true)} className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1 print:hidden">
               {language === 'fr' ? 'Nouvelle visite' : 'New Visit'}
@@ -1320,7 +1322,7 @@ export default function JobDetails() {
                 <span className="text-[13px] font-semibold text-text-primary">
                   {formatDate(job.scheduled_at)}
                 </span>
-                <span className="text-[12px] text-text-tertiary">Not assigned yet</span>
+                <span className="text-[12px] text-text-tertiary">{language === 'fr' ? 'Pas encore assignée' : 'Not assigned yet'}</span>
               </div>
             ) : visits.length > 0 ? (
               <div className="space-y-2">
@@ -1347,7 +1349,7 @@ export default function JobDetails() {
                             'text-[13px] font-semibold truncate',
                             isCompleted ? 'text-text-tertiary line-through' : 'text-text-primary'
                           )}>
-                            {visit.start_at ? formatDate(visit.start_at) : 'Unscheduled'}
+                            {visit.start_at ? formatDate(visit.start_at) : (language === 'fr' ? 'Non planifiée' : 'Unscheduled')}
                           </span>
                           {isCompleted && (
                             <span className="text-[10px] font-bold uppercase tracking-wide text-success bg-success/10 border border-success/30 rounded-full px-2 py-0.5 shrink-0">
@@ -1700,7 +1702,7 @@ export default function JobDetails() {
               <div className="icon-tile icon-tile-sm text-entity-invoice">
                 <ReceiptText size={13} strokeWidth={2} />
               </div>
-              Invoices
+              {language === 'fr' ? 'Factures' : 'Invoices'}
             </h2>
           </div>
 
@@ -1718,7 +1720,7 @@ export default function JobDetails() {
                       : 'border-transparent text-text-tertiary hover:text-text-secondary',
                   )}
                 >
-                  {tab}
+                  {tab === 'billing' ? (language === 'fr' ? 'Facturation' : 'Billing') : (language === 'fr' ? 'Rappels' : 'Reminders')}
                 </button>
               ))}
             </div>
@@ -1732,19 +1734,19 @@ export default function JobDetails() {
                   <span className={cn('w-4 h-4 rounded border inline-flex items-center justify-center transition-colors', job.billing_split ? 'bg-primary border-primary text-white' : 'border-outline bg-surface-secondary')}>
                     {job.billing_split && <span className="text-[9px]">✓</span>}
                   </span>
-                  {t.modals?.splitInvoices || 'Split into multiple invoices with a payment schedule'}
+                  {t.modals?.splitInvoices || (language === 'fr' ? 'Diviser en plusieurs factures avec un échéancier de paiement' : 'Split into multiple invoices with a payment schedule')}
                 </label>
 
                 {job.billing_split && (
                   <div className="mb-5 rounded-lg border border-outline-subtle bg-surface-secondary/40 p-4 space-y-3 print:hidden">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <p className="text-[12px] font-semibold text-text-primary">{t.jobDetails?.paymentSchedule || 'Payment schedule'}</p>
-                        <p className="text-[11px] text-text-tertiary mt-0.5">{t.jobDetails?.paymentScheduleHint || 'Split the job total into scheduled payments, each billed with its own invoice.'}</p>
+                        <p className="text-[12px] font-semibold text-text-primary">{t.jobDetails?.paymentSchedule || (language === 'fr' ? 'Échéancier de paiement' : 'Payment schedule')}</p>
+                        <p className="text-[11px] text-text-tertiary mt-0.5">{t.jobDetails?.paymentScheduleHint || (language === 'fr' ? 'Divisez le total du job en paiements planifiés, chacun facturé séparément.' : 'Split the job total into scheduled payments, each billed with its own invoice.')}</p>
                       </div>
                       {canSeePricing && (
                         <p className={cn('text-[11px] font-semibold tabular-nums', scheduledTotalCents === displayTotalCents ? 'text-text-tertiary' : 'text-amber-600')}>
-                          {t.jobDetails?.scheduledTotal || 'Scheduled'}: {formatCents(scheduledTotalCents)} / {formatCents(displayTotalCents)}
+                          {t.jobDetails?.scheduledTotal || (language === 'fr' ? 'Planifié' : 'Scheduled')}: {formatCents(scheduledTotalCents)} / {formatCents(displayTotalCents)}
                         </p>
                       )}
                     </div>
@@ -1760,7 +1762,7 @@ export default function JobDetails() {
                               value={m.label}
                               disabled={locked}
                               onChange={(e) => updateMilestone(m.key, { label: e.target.value })}
-                              placeholder={`${t.jobDetails?.payment || 'Payment'} ${idx + 1}`}
+                              placeholder={`${t.jobDetails?.payment || (language === 'fr' ? 'Paiement' : 'Payment')} ${idx + 1}`}
                               className="flex-1 min-w-[120px] rounded-lg border border-outline bg-surface px-2.5 py-1.5 text-[12px] text-text-primary disabled:opacity-60"
                             />
                             <div className="relative">
@@ -1807,15 +1809,15 @@ export default function JobDetails() {
                                 <button
                                   onClick={() => handleCreateMilestoneInvoice(m)}
                                   disabled={scheduleDirty || !m.id || m.amount_cents <= 0 || creatingMilestoneId === m.id}
-                                  title={scheduleDirty ? (t.jobDetails?.scheduleUnsavedHint || 'Save the schedule before creating invoices.') : undefined}
+                                  title={scheduleDirty ? (t.jobDetails?.scheduleUnsavedHint || (language === 'fr' ? "Enregistrez l'échéancier avant de créer des factures." : 'Save the schedule before creating invoices.')) : undefined}
                                   className="glass-button !text-[12px] !px-2.5 !py-1 disabled:opacity-50"
                                 >
-                                  {creatingMilestoneId === m.id ? '...' : (t.jobDetails?.createMilestoneInvoice || 'Create invoice')}
+                                  {creatingMilestoneId === m.id ? '...' : (t.jobDetails?.createMilestoneInvoice || (language === 'fr' ? 'Créer une facture' : 'Create invoice'))}
                                 </button>
                                 <button
                                   onClick={() => handleRemoveMilestone(m.key)}
                                   className="p-1 text-text-tertiary hover:text-red-500 transition-colors"
-                                  aria-label="Remove payment"
+                                  aria-label={language === 'fr' ? 'Retirer le paiement' : 'Remove payment'}
                                 >
                                   <X size={13} />
                                 </button>
@@ -1828,7 +1830,7 @@ export default function JobDetails() {
 
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       <button onClick={handleAddMilestone} className="glass-button !text-[12px] !px-2.5 !py-1 inline-flex items-center gap-1">
-                        <Plus size={12} /> {t.jobDetails?.addPayment || 'Add payment'}
+                        <Plus size={12} /> {t.jobDetails?.addPayment || (language === 'fr' ? 'Ajouter un paiement' : 'Add payment')}
                       </button>
                       {scheduleDirty && (
                         <>
@@ -1837,9 +1839,9 @@ export default function JobDetails() {
                             disabled={savingSchedule}
                             className="bg-primary text-primary-foreground rounded-lg px-3 py-1 text-[12px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
                           >
-                            {savingSchedule ? '...' : (t.jobDetails?.saveSchedule || 'Save schedule')}
+                            {savingSchedule ? '...' : (t.jobDetails?.saveSchedule || (language === 'fr' ? "Enregistrer l'échéancier" : 'Save schedule'))}
                           </button>
-                          <span className="text-[11px] text-text-tertiary">{t.jobDetails?.scheduleUnsavedHint || 'Save the schedule before creating invoices.'}</span>
+                          <span className="text-[11px] text-text-tertiary">{t.jobDetails?.scheduleUnsavedHint || (language === 'fr' ? "Enregistrez l'échéancier avant de créer des factures." : 'Save the schedule before creating invoices.')}</span>
                         </>
                       )}
                     </div>
@@ -1850,11 +1852,11 @@ export default function JobDetails() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="px-0 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">Invoice</th>
-                        <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">Due Date</th>
-                        <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">Status</th>
-                        <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">Subject</th>
-                        <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right">Balance</th>
+                        <th className="px-0 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">{language === 'fr' ? 'Facture' : 'Invoice'}</th>
+                        <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">{language === 'fr' ? "Échéance" : 'Due Date'}</th>
+                        <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">{language === 'fr' ? 'Statut' : 'Status'}</th>
+                        <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary">{language === 'fr' ? 'Objet' : 'Subject'}</th>
+                        <th className="px-3 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right">{language === 'fr' ? 'Solde' : 'Balance'}</th>
                         <th className="px-0 py-2.5 text-xs font-medium uppercase tracking-wider text-text-tertiary text-right">Total</th>
                       </tr>
                     </thead>
@@ -1867,12 +1869,12 @@ export default function JobDetails() {
                               disabled={isCreatingInvoice}
                               className="glass-button !text-[12px] !px-2.5 !py-1"
                             >
-                              {isCreatingInvoice ? 'Creating...' : 'Create'}
+                              {isCreatingInvoice ? (language === 'fr' ? 'Création...' : 'Creating...') : (language === 'fr' ? 'Créer' : 'Create')}
                             </button>
                           </td>
                           <td className="px-3 py-3 text-[13px] text-text-tertiary">—</td>
                           <td className="px-3 py-3"><StatusBadge status="Upcoming" /></td>
-                          <td className="px-3 py-3 text-[13px] text-text-secondary">For Services Rendered</td>
+                          <td className="px-3 py-3 text-[13px] text-text-secondary">{language === 'fr' ? 'Pour services rendus' : 'For Services Rendered'}</td>
                           <td className="px-3 py-3 text-[13px] text-text-primary text-right tabular-nums">{formatCents(displayTotalCents)}</td>
                           <td className="py-3 text-[13px] text-text-primary text-right tabular-nums">{formatCents(displayTotalCents)}</td>
                         </tr>
@@ -1909,14 +1911,14 @@ export default function JobDetails() {
                   <div className="h-4 w-1/2 bg-surface-secondary rounded animate-pulse" />
                 </div>
               ) : !reminderSettings ? (
-                <p className="text-[13px] text-text-tertiary py-4 text-center">No reminders configured</p>
+                <p className="text-[13px] text-text-tertiary py-4 text-center">{language === 'fr' ? 'Aucun rappel configuré' : 'No reminders configured'}</p>
               ) : (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 text-[13px] text-text-secondary">
                     <span className={cn('w-2 h-2 rounded-full shrink-0', reminderSettings.enabled ? 'bg-emerald-500' : 'bg-outline')} />
                     {reminderSettings.enabled
-                      ? (t.jobDetails?.remindersActive || 'Automatic payment reminders are enabled for overdue invoices.')
-                      : (t.jobDetails?.remindersDisabled || 'Automatic payment reminders are disabled for your organization.')}
+                      ? (t.jobDetails?.remindersActive || (language === 'fr' ? 'Les rappels de paiement automatiques sont activés pour les factures en retard.' : 'Automatic payment reminders are enabled for overdue invoices.'))
+                      : (t.jobDetails?.remindersDisabled || (language === 'fr' ? 'Les rappels de paiement automatiques sont désactivés pour votre organisation.' : 'Automatic payment reminders are disabled for your organization.'))}
                   </div>
 
                   {reminderSettings.enabled && (reminderSettings.schedule || []).length > 0 && (
@@ -1928,8 +1930,8 @@ export default function JobDetails() {
                           </span>
                           {entry.days_after_due}{' '}
                           {entry.days_after_due === 1
-                            ? (t.jobDetails?.reminderDayAfterDue || 'day after due date')
-                            : (t.jobDetails?.reminderDaysAfterDue || 'days after due date')}
+                            ? (t.jobDetails?.reminderDayAfterDue || (language === 'fr' ? "jour après l'échéance" : 'day after due date'))
+                            : (t.jobDetails?.reminderDaysAfterDue || (language === 'fr' ? "jours après l'échéance" : 'days after due date'))}
                         </li>
                       ))}
                     </ul>
@@ -1937,11 +1939,11 @@ export default function JobDetails() {
 
                   <div>
                     <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-[0.05em] mb-2">
-                      {t.jobDetails?.sentReminders || 'Reminders sent for this job'}
+                      {t.jobDetails?.sentReminders || (language === 'fr' ? 'Rappels envoyés pour ce job' : 'Reminders sent for this job')}
                     </p>
                     {jobReminderLog.length === 0 ? (
                       <p className="text-[13px] text-text-tertiary">
-                        {t.jobDetails?.noRemindersSentYet || "No reminders sent yet for this job's invoices."}
+                        {t.jobDetails?.noRemindersSentYet || (language === 'fr' ? "Aucun rappel envoyé pour les factures de ce job." : "No reminders sent yet for this job's invoices.")}
                       </p>
                     ) : (
                       <ul className="space-y-1.5">
@@ -2003,14 +2005,14 @@ export default function JobDetails() {
         <div className="rounded-xl border border-outline bg-surface overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
             <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-              Recurring Schedule
+              {language === 'fr' ? 'Horaire récurrent' : 'Recurring Schedule'}
             </h2>
             {!recurrence && !showRecurrenceSetup && (
               <button
                 onClick={() => setShowRecurrenceSetup(true)}
                 className="glass-button !text-[12px] !px-2.5 !py-1 print:hidden"
               >
-                Make Recurring
+                {language === 'fr' ? 'Rendre récurrent' : 'Make Recurring'}
               </button>
             )}
           </div>
@@ -2019,33 +2021,35 @@ export default function JobDetails() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-[13px] font-semibold text-text-primary capitalize">
-                    {recurrence.frequency === 'biweekly' ? 'Every 2 weeks' : recurrence.frequency}
+                    {recurrence.frequency === 'biweekly'
+                      ? (language === 'fr' ? 'Aux 2 semaines' : 'Every 2 weeks')
+                      : (language === 'fr' ? recFreqLabelFr(recurrence.frequency) : recurrence.frequency)}
                   </p>
                   <p className="text-[12px] text-text-tertiary">
-                    Since {new Date(recurrence.start_date).toLocaleDateString()} — {recurrence.occurrences_created} created
-                    {recurrence.end_date ? ` — ends ${new Date(recurrence.end_date).toLocaleDateString()}` : ''}
+                    {language === 'fr' ? 'Depuis' : 'Since'} {new Date(recurrence.start_date).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-US')} — {recurrence.occurrences_created} {language === 'fr' ? 'créées' : 'created'}
+                    {recurrence.end_date ? ` — ${language === 'fr' ? 'se termine le' : 'ends'} ${new Date(recurrence.end_date).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-US')}` : ''}
                   </p>
                 </div>
                 <button
                   onClick={async () => {
                     await deactivateRecurrenceRule(recurrence.id);
                     setRecurrence(null);
-                    toast.success('Recurrence stopped');
+                    toast.success(language === 'fr' ? 'Récurrence arrêtée' : 'Recurrence stopped');
                   }}
                   className="glass-button !text-[12px] text-danger hover:bg-danger-light"
                 >
-                  Stop
+                  {language === 'fr' ? 'Arrêter' : 'Stop'}
                 </button>
               </div>
             ) : showRecurrenceSetup ? (
               <div className="space-y-3">
                 <div>
-                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Frequency</label>
+                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Fréquence' : 'Frequency'}</label>
                   <select value={recFreq} onChange={(e) => setRecFreq(e.target.value as RecurrenceFrequency)} className="glass-input w-full mt-1">
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="biweekly">Every 2 weeks</option>
-                    <option value="monthly">Monthly</option>
+                    <option value="daily">{language === 'fr' ? 'Quotidien' : 'Daily'}</option>
+                    <option value="weekly">{language === 'fr' ? 'Hebdomadaire' : 'Weekly'}</option>
+                    <option value="biweekly">{language === 'fr' ? 'Aux 2 semaines' : 'Every 2 weeks'}</option>
+                    <option value="monthly">{language === 'fr' ? 'Mensuel' : 'Monthly'}</option>
                   </select>
                 </div>
                 <div className="flex gap-2">
@@ -2062,22 +2066,22 @@ export default function JobDetails() {
                         });
                         setRecurrence(rule);
                         setShowRecurrenceSetup(false);
-                        toast.success('Recurrence activated');
+                        toast.success(language === 'fr' ? 'Récurrence activée' : 'Recurrence activated');
                       } catch (err: any) {
-                        toast.error(err?.message || 'Failed to create recurrence');
+                        toast.error(err?.message || (language === 'fr' ? 'Échec de la création de la récurrence' : 'Failed to create recurrence'));
                       } finally {
                         setRecSaving(false);
                       }
                     }}
                     className="glass-button-primary !text-[12px]"
                   >
-                    {recSaving ? 'Saving...' : 'Activate'}
+                    {recSaving ? (language === 'fr' ? 'Enregistrement...' : 'Saving...') : (language === 'fr' ? 'Activer' : 'Activate')}
                   </button>
-                  <button onClick={() => setShowRecurrenceSetup(false)} className="glass-button !text-[12px]">Cancel</button>
+                  <button onClick={() => setShowRecurrenceSetup(false)} className="glass-button !text-[12px]">{language === 'fr' ? 'Annuler' : 'Cancel'}</button>
                 </div>
               </div>
             ) : (
-              <p className="text-[13px] text-text-tertiary">This is a one-time job.</p>
+              <p className="text-[13px] text-text-tertiary">{language === 'fr' ? "Il s'agit d'un job unique." : 'This is a one-time job.'}</p>
             )}
           </div>
         </div>
@@ -2086,7 +2090,7 @@ export default function JobDetails() {
         {job.attachments && job.attachments.length > 0 && (
           <div className="rounded-xl border border-outline bg-surface overflow-hidden">
             <div className="px-5 py-3.5 border-b border-outline-subtle">
-              <h2 className="text-[13px] font-semibold text-text-primary">Attachments</h2>
+              <h2 className="text-[13px] font-semibold text-text-primary">{language === 'fr' ? 'Pièces jointes' : 'Attachments'}</h2>
             </div>
             <div className="p-5 space-y-2">
               {job.attachments.map((file) => (
@@ -2179,7 +2183,7 @@ export default function JobDetails() {
           <ModalOverlay onClose={() => setShowSmsModal(false)} size="xl">
             <SendSmsModal
               phone={clientInfo?.phone}
-              defaultBody={`Confirmation rendez-vous ${clientInfo?.company || job.title}.\n\nLocation: ${job.property_address || 'TBD'}\nDate: ${job.scheduled_at ? formatDate(job.scheduled_at) : 'TBD'}`}
+              defaultBody={`Confirmation rendez-vous ${clientInfo?.company || job.title}.\n\n${language === 'fr' ? 'Emplacement' : 'Location'}: ${job.property_address || 'TBD'}\nDate: ${job.scheduled_at ? formatDate(job.scheduled_at) : 'TBD'}`}
               clientId={job.client_id}
               jobId={job.id}
               clientName={job.client_name || undefined}
@@ -2200,8 +2204,8 @@ export default function JobDetails() {
           <ModalOverlay onClose={() => setShowEmailModal(false)} size="2xl">
             <SendEmailModal
               email={clientInfo?.email}
-              defaultSubject={emailMode === 'confirmation' ? `Confirmation rendez-vous ${clientInfo?.company || job.title}` : emailMode === 'followup' ? `Follow-up — ${job.title}` : `Regarding ${job.title}`}
-              defaultBody={emailMode === 'confirmation' ? `Bonjour ${job.client_name || 'there'},\n\nMerci d'avoir fait affaire avec nous !\n\nLocation: ${job.property_address || 'TBD'}\nDate: ${job.scheduled_at ? formatDate(job.scheduled_at) : 'TBD'}\n\nCordialement,\n\n${clientInfo?.company || ''}` : emailMode === 'followup' ? `Hi ${job.client_name || 'there'},\n\nJust following up on "${job.title}". Please let us know if you have any questions.\n\nThank you!` : `Hi ${job.client_name || 'there'},\n\n`}
+              defaultSubject={emailMode === 'confirmation' ? `Confirmation rendez-vous ${clientInfo?.company || job.title}` : emailMode === 'followup' ? (language === 'fr' ? `Suivi — ${job.title}` : `Follow-up — ${job.title}`) : (language === 'fr' ? `Concernant ${job.title}` : `Regarding ${job.title}`)}
+              defaultBody={emailMode === 'confirmation' ? `Bonjour ${job.client_name || (language === 'fr' ? '' : 'there')},\n\nMerci d'avoir fait affaire avec nous !\n\n${language === 'fr' ? 'Emplacement' : 'Location'}: ${job.property_address || 'TBD'}\nDate: ${job.scheduled_at ? formatDate(job.scheduled_at) : 'TBD'}\n\nCordialement,\n\n${clientInfo?.company || ''}` : emailMode === 'followup' ? (language === 'fr' ? `Bonjour ${job.client_name || ''},\n\nNous faisons un suivi concernant « ${job.title} ». N'hésitez pas à nous contacter pour toute question.\n\nMerci !` : `Hi ${job.client_name || 'there'},\n\nJust following up on "${job.title}". Please let us know if you have any questions.\n\nThank you!`) : `Bonjour ${job.client_name || (language === 'fr' ? '' : 'there')},\n\n`}
               clientId={job.client_id}
               jobId={job.id}
               clientName={job.client_name || undefined}
@@ -2482,6 +2486,16 @@ export default function JobDetails() {
 }
 
 // ─── Local Helpers ───────────────────────────────────────────────────
+
+function recFreqLabelFr(freq: string): string {
+  switch (freq) {
+    case 'daily': return 'Quotidien';
+    case 'weekly': return 'Hebdomadaire';
+    case 'biweekly': return 'Aux 2 semaines';
+    case 'monthly': return 'Mensuel';
+    default: return freq;
+  }
+}
 
 function JobDetailRow({ label, value, isLast }: { label: string; value: string; isLast?: boolean }) {
   return (

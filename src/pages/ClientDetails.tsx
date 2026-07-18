@@ -136,15 +136,15 @@ function buildGoogleMapsDirectionsUrl(client: ClientRecord): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`;
 }
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, isFr = false): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return isFr ? "À l'instant" : 'Just now';
+  if (mins < 60) return isFr ? `Il y a ${mins} min` : `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return isFr ? `Il y a ${hrs} h` : `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d ago`;
+  if (days < 30) return isFr ? `Il y a ${days} j` : `${days}d ago`;
   return formatDate(dateStr);
 }
 
@@ -153,8 +153,8 @@ function formatTime(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
 }
 
-function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text).then(() => toast.success('Copied!')).catch(() => {});
+function copyToClipboard(text: string, isFr = false) {
+  navigator.clipboard.writeText(text).then(() => toast.success(isFr ? 'Copié !' : 'Copied!')).catch(() => {});
 }
 
 // ─── Tabs ────────────────────────────────────────────────────────────
@@ -230,9 +230,9 @@ export default function ClientDetails() {
           const path = `clients/${client.id}/${crypto.randomUUID()}.${ext}`;
           const { error: err } = await supabase.storage.from('attachments').upload(path, file, { upsert: false });
           if (err) throw err;
-          toast.success(`${file.name} uploaded`);
+          toast.success(language === 'fr' ? `${file.name} téléversé` : `${file.name} uploaded`);
         } catch (err: any) {
-          toast.error(err?.message || `Failed to upload ${file.name}`);
+          toast.error(err?.message || (language === 'fr' ? `Échec du téléversement de ${file.name}` : `Failed to upload ${file.name}`));
         }
       }
     },
@@ -273,7 +273,7 @@ export default function ClientDetails() {
       ]);
 
       if (!clientData) {
-        setError('Client not found.');
+        setError(language === 'fr' ? 'Client introuvable.' : 'Client not found.');
         setLoading(false);
         return;
       }
@@ -317,7 +317,7 @@ export default function ClientDetails() {
           .order('start_at', { ascending: true });
         setScheduleEvents((eventData || []).map((e: any) => ({
           ...e,
-          title: e.job?.title || 'Event',
+          title: e.job?.title || (language === 'fr' ? 'Événement' : 'Event'),
           job_title: e.job?.title || null,
         })) as ScheduleEvent[]);
       } else {
@@ -349,7 +349,7 @@ export default function ClientDetails() {
         setTags([]);
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to load client data.');
+      setError(err?.message || (language === 'fr' ? 'Échec du chargement des données du client.' : 'Failed to load client data.'));
     } finally {
       setLoading(false);
     }
@@ -362,10 +362,10 @@ export default function ClientDetails() {
     try {
       const orgId = await getCurrentOrgIdOrThrow();
       await supabase.from('clients').update({ notes }).eq('id', client.id).eq('org_id', orgId);
-      toast.success('Notes saved');
+      toast.success(language === 'fr' ? 'Notes enregistrées' : 'Notes saved');
       setNotesEdited(false);
     } catch {
-      toast.error('Failed to save notes');
+      toast.error(language === 'fr' ? "Échec de l'enregistrement des notes" : 'Failed to save notes');
     } finally {
       setNotesSaving(false);
     }
@@ -374,7 +374,7 @@ export default function ClientDetails() {
   // ─── Actions ─────────────────────────────────────────────────────
   const handleArchive = async () => {
     if (!client) return;
-    const displayName = [client.first_name, client.last_name].filter(Boolean).join(' ') || client.company || 'this client';
+    const displayName = [client.first_name, client.last_name].filter(Boolean).join(' ') || client.company || (language === 'fr' ? 'ce client' : 'this client');
     const msg = language === 'fr'
       ? `Archiver ${displayName} ? Ses jobs, factures et devis existants restent visibles.`
       : `Archive ${displayName}? Existing jobs, invoices and quotes remain visible.`;
@@ -413,7 +413,7 @@ export default function ClientDetails() {
   const handleEraseData = async () => {
     setShowActionMenu(false);
     if (!client) return;
-    const displayName = [client.first_name, client.last_name].filter(Boolean).join(' ') || client.company || 'this client';
+    const displayName = [client.first_name, client.last_name].filter(Boolean).join(' ') || client.company || (language === 'fr' ? 'ce client' : 'this client');
     const msg = language === 'fr'
       ? `Supprimer les données personnelles de ${displayName} ? Cette action anonymise le client de façon permanente (les factures sont conservées pour la loi fiscale). Irréversible.`
       : `Erase ${displayName}'s personal data? This permanently anonymizes the client (invoices are kept for tax law). Irreversible.`;
@@ -512,7 +512,7 @@ export default function ClientDetails() {
           <ArrowLeft size={14} /> {t.clients.title}
         </button>
         <div className="section-card p-12 text-center">
-          <p className="text-[15px] text-text-secondary">{error || 'Client not found.'}</p>
+          <p className="text-[15px] text-text-secondary">{error || (isFr ? 'Client introuvable.' : 'Client not found.')}</p>
         </div>
       </div>
     );
@@ -577,7 +577,7 @@ export default function ClientDetails() {
           <button
             onClick={() => navigate(`/calendar?date=${new Date(job.scheduled_at!).toISOString().slice(0, 10)}&view=day`)}
             className="p-1.5 rounded-md text-text-tertiary hover:text-primary hover:bg-primary/10 transition-colors"
-            title="View in calendar"
+            title={isFr ? 'Voir au calendrier' : 'View in calendar'}
           >
             <Calendar size={14} />
           </button>
@@ -755,7 +755,7 @@ export default function ClientDetails() {
                 <span className="flex items-center gap-1.5 font-medium text-text-primary min-w-0">
                   <a href={`tel:${client.phone}`} className="md:hidden hover:text-primary transition-colors">{displayPhone(client.phone)}</a>
                   <span className="hidden md:inline">{displayPhone(client.phone)}</span>
-                  <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
+                  <button onClick={() => copyToClipboard(client.phone!, isFr)} className="text-text-tertiary hover:text-text-primary transition-colors" title={isFr ? 'Copier' : 'Copy'}>
                     <Copy size={11} />
                   </button>
                 </span>
@@ -768,7 +768,7 @@ export default function ClientDetails() {
               {client.email ? (
                 <span className="flex items-center gap-1.5 font-medium text-text-primary min-w-0">
                   <a href={`mailto:${client.email}`} className="truncate hover:text-primary transition-colors">{displayEmail(client.email)}</a>
-                  <button onClick={() => copyToClipboard(client.email!)} className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0" title="Copy">
+                  <button onClick={() => copyToClipboard(client.email!, isFr)} className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0" title={isFr ? 'Copier' : 'Copy'}>
                     <Copy size={11} />
                   </button>
                 </span>
@@ -932,12 +932,12 @@ export default function ClientDetails() {
                           <div className="flex items-center gap-2">
                             {inv.invoice_number && <span className="text-[11px] font-bold text-text-tertiary">#{inv.invoice_number}</span>}
                             <p className="text-[13px] font-semibold text-text-primary group-hover:text-primary transition-colors">
-                              {inv.subject || 'Invoice'}
+                              {inv.subject || (isFr ? 'Facture' : 'Invoice')}
                             </p>
                             <StatusBadge status={getInvoiceRowUiStatus(inv as any)} />
                           </div>
                           <span className="text-[12px] text-text-tertiary">
-                            {inv.due_date ? `Due ${formatDate(inv.due_date)}` : formatDate(inv.created_at)}
+                            {inv.due_date ? (isFr ? `Échéance ${formatDate(inv.due_date)}` : `Due ${formatDate(inv.due_date)}`) : formatDate(inv.created_at)}
                           </span>
                         </div>
                       </div>
@@ -947,7 +947,7 @@ export default function ClientDetails() {
                         </p>
                         {inv.balance_cents > 0 && (
                           <p className="text-[11px] text-warning font-medium tabular-nums">
-                            {formatCurrency(Math.round(inv.balance_cents) / 100)} due
+                            {isFr ? `${formatCurrency(Math.round(inv.balance_cents) / 100)} dû` : `${formatCurrency(Math.round(inv.balance_cents) / 100)} due`}
                           </p>
                         )}
                       </div>
@@ -964,7 +964,7 @@ export default function ClientDetails() {
                       onClick={() => setIsQuoteCreateOpen(true)}
                       className="inline-flex items-center gap-1 h-7 px-2.5 bg-primary text-white rounded-md text-[12px] font-medium hover:bg-primary-hover transition-colors text-[12px] inline-flex items-center gap-1 px-2.5 py-1"
                     >
-                      <Plus size={12} /> New Quote
+                      <Plus size={12} /> {isFr ? 'Nouveau devis' : 'New Quote'}
                     </button>
                   </div>
                   {realQuotes.length === 0 ? (
@@ -986,7 +986,7 @@ export default function ClientDetails() {
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] font-bold text-text-tertiary">#{q.quote_number}</span>
                             <p className="text-[13px] font-semibold text-text-primary group-hover:text-primary transition-colors">
-                              {q.title || 'Quote'}
+                              {q.title || (isFr ? 'Devis' : 'Quote')}
                             </p>
                             <StatusBadge status={q.status} />
                           </div>
@@ -1129,7 +1129,7 @@ export default function ClientDetails() {
                   <div className="flex items-center gap-2 pl-5">
                     <a href={`tel:${client.phone}`} className="md:hidden text-[13px] font-medium text-text-primary hover:text-primary transition-colors">{displayPhone(client.phone)}</a>
                     <span className="hidden md:inline text-[13px] font-medium text-text-primary">{displayPhone(client.phone)}</span>
-                    <button onClick={() => copyToClipboard(client.phone!)} className="text-text-tertiary hover:text-text-primary transition-colors" title="Copy">
+                    <button onClick={() => copyToClipboard(client.phone!, isFr)} className="text-text-tertiary hover:text-text-primary transition-colors" title={isFr ? 'Copier' : 'Copy'}>
                       <Copy size={11} />
                     </button>
                   </div>
@@ -1146,7 +1146,7 @@ export default function ClientDetails() {
                 {client.email ? (
                   <div className="flex items-center gap-2 pl-5 min-w-0">
                     <a href={`mailto:${client.email}`} className="text-[13px] font-medium text-text-primary hover:text-primary transition-colors truncate">{displayEmail(client.email)}</a>
-                    <button onClick={() => copyToClipboard(client.email!)} className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0" title="Copy">
+                    <button onClick={() => copyToClipboard(client.email!, isFr)} className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0" title={isFr ? 'Copier' : 'Copy'}>
                       <Copy size={11} />
                     </button>
                   </div>
@@ -1348,7 +1348,7 @@ export default function ClientDetails() {
                       >
                         <div>
                           <p className="text-[13px] font-medium text-text-primary">
-                            Invoice {(item.data as InvoiceRecord).invoice_number ? `#${(item.data as InvoiceRecord).invoice_number}` : ''}
+                            {isFr ? 'Facture' : 'Invoice'} {(item.data as InvoiceRecord).invoice_number ? `#${(item.data as InvoiceRecord).invoice_number}` : ''}
                           </p>
                           <p className="text-[11px] text-text-tertiary">{formatDate(item.date)}</p>
                         </div>
@@ -1366,7 +1366,7 @@ export default function ClientDetails() {
                       >
                         <div>
                           <p className="text-[13px] font-medium text-text-primary flex items-center gap-1.5">
-                            <DollarSign size={12} className="text-success" /> Payment
+                            <DollarSign size={12} className="text-success" /> {isFr ? 'Paiement' : 'Payment'}
                             {(item.data as PaymentRecord).method && (
                               <span className="text-[11px] text-text-tertiary font-normal">({(item.data as PaymentRecord).method})</span>
                             )}
