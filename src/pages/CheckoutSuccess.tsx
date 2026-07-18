@@ -6,6 +6,9 @@ import { confirmCheckout, type CheckoutStatus } from '../lib/billingApi';
 import { fetchChannels } from '../lib/communicationsApi';
 import CheckoutSetup from './CheckoutSetup';
 
+// ── Language detection (public page — no auth context guaranteed) ──
+const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+
 /**
  * CheckoutSuccess — Polls for webhook-confirmed subscription status.
  *
@@ -30,7 +33,7 @@ export default function CheckoutSuccess() {
     const sessionId = params.get('session_id');
     if (!sessionId) {
       setStatus('error');
-      setErrorMsg('Missing session ID');
+      setErrorMsg(isFr ? 'Identifiant de session manquant' : 'Missing session ID');
       return;
     }
 
@@ -168,13 +171,13 @@ export default function CheckoutSuccess() {
         {status === 'polling' && (
           <>
             <Loader2 className="mx-auto animate-spin text-[#1F5F4F] mb-4" size={40} />
-            <h1 className="text-xl font-bold text-gray-900">Confirming your payment...</h1>
+            <h1 className="text-xl font-bold text-gray-900">{isFr ? 'Confirmation de votre paiement…' : 'Confirming your payment...'}</h1>
             <p className="text-sm text-gray-500 mt-2">
-              Please wait while we verify your payment and set up your account.
+              {isFr ? 'Veuillez patienter pendant que nous vérifions votre paiement et configurons votre compte.' : 'Please wait while we verify your payment and set up your account.'}
             </p>
             <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-400">
               <div className="w-2 h-2 rounded-full bg-[#3FAF97] animate-pulse" />
-              Verifying with Stripe...
+              {isFr ? 'Vérification avec Stripe…' : 'Verifying with Stripe...'}
             </div>
           </>
         )}
@@ -182,28 +185,28 @@ export default function CheckoutSuccess() {
         {status === 'success' && (
           <>
             <CheckCircle2 className="mx-auto text-[#3FAF97] mb-4" size={48} />
-            <h1 className="text-xl font-bold text-gray-900">Payment successful!</h1>
+            <h1 className="text-xl font-bold text-gray-900">{isFr ? 'Paiement réussi !' : 'Payment successful!'}</h1>
             <p className="text-sm text-gray-500 mt-2">
-              Your account is ready. Redirecting to your dashboard...
+              {isFr ? 'Votre compte est prêt. Redirection vers votre tableau de bord…' : 'Your account is ready. Redirecting to your dashboard...'}
             </p>
             {userEmail && (
               <div className="mt-4 flex items-center justify-center gap-2 text-sm text-gray-500 bg-gray-50 rounded-lg px-4 py-3">
                 <Mail size={16} className="text-gray-400 shrink-0" />
-                <span>A receipt has been sent to <strong className="text-gray-700">{userEmail}</strong></span>
+                <span>{isFr ? <>Un reçu a été envoyé à <strong className="text-gray-700">{userEmail}</strong></> : <>A receipt has been sent to <strong className="text-gray-700">{userEmail}</strong></>}</span>
               </div>
             )}
             {smsNumber && (
               <div className="mt-3 flex items-center justify-center gap-2 text-sm text-[#1F5F4F] bg-[#E8F4F0] rounded-lg px-4 py-3">
                 <MessageSquare size={16} className="shrink-0" />
                 <span>
-                  Your SMS number: <strong>{smsNumber}</strong>
+                  {isFr ? <>Votre numéro SMS : <strong>{smsNumber}</strong></> : <>Your SMS number: <strong>{smsNumber}</strong></>}
                 </span>
               </div>
             )}
             {!smsNumber && smsPending && (
               <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-4 py-3">
                 <Loader2 size={14} className="animate-spin shrink-0" />
-                <span>Setting up your dedicated SMS number...</span>
+                <span>{isFr ? 'Configuration de votre numéro SMS dédié…' : 'Setting up your dedicated SMS number...'}</span>
               </div>
             )}
           </>
@@ -214,15 +217,15 @@ export default function CheckoutSuccess() {
             <div className="mx-auto w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4">
               <span className="text-red-600 text-xl font-bold">!</span>
             </div>
-            <h1 className="text-xl font-bold text-gray-900">Something went wrong</h1>
+            <h1 className="text-xl font-bold text-gray-900">{isFr ? 'Une erreur est survenue' : 'Something went wrong'}</h1>
             <p className="text-sm text-gray-500 mt-2">
-              {errorMsg || 'Your payment could not be confirmed. Please contact support.'}
+              {errorMsg || (isFr ? 'Votre paiement n’a pas pu être confirmé. Veuillez contacter le soutien.' : 'Your payment could not be confirmed. Please contact support.')}
             </p>
             <button
               onClick={() => navigate('/checkout')}
               className="mt-4 px-6 py-2 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800"
             >
-              Try again
+              {isFr ? 'Réessayer' : 'Try again'}
             </button>
           </>
         )}

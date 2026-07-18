@@ -7,6 +7,9 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Star } from 'lucide-react';
 
+// ── Language detection (public page — no auth context) ──
+const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+
 interface SurveyData {
   token: string;
   submitted: boolean;
@@ -49,7 +52,7 @@ export default function SatisfactionSurvey() {
           }
         }
       })
-      .catch(() => setError('Unable to load survey.'))
+      .catch(() => setError(isFr ? 'Impossible de charger le sondage.' : 'Unable to load survey.'))
       .finally(() => setLoading(false));
   }, [token]);
 
@@ -64,7 +67,7 @@ export default function SatisfactionSurvey() {
         body: JSON.stringify({ rating, feedback: feedback.trim() || null }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to submit.');
+      if (!response.ok) throw new Error(data.error || (isFr ? 'Échec de l’envoi.' : 'Failed to submit.'));
 
       setSubmitted(true);
       setResult(data);
@@ -87,7 +90,7 @@ export default function SatisfactionSurvey() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Oops</h1>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">{isFr ? 'Oups' : 'Oops'}</h1>
           <p className="text-gray-600">{error}</p>
         </div>
       </div>
@@ -114,7 +117,7 @@ export default function SatisfactionSurvey() {
           {result.redirect_to_review && result.google_review_url && (
             <div className="mt-6">
               <p className="text-gray-600 mb-4">
-                Would you mind sharing your experience on Google? It helps us a lot!
+                {isFr ? 'Accepteriez-vous de partager votre expérience sur Google ? Ça nous aide beaucoup !' : 'Would you mind sharing your experience on Google? It helps us a lot!'}
               </p>
               <a
                 href={result.google_review_url}
@@ -123,14 +126,14 @@ export default function SatisfactionSurvey() {
                 className="inline-flex items-center gap-2 px-6 py-3 bg-neutral-900 text-white font-semibold rounded-xl hover:bg-neutral-800 transition-colors"
               >
                 <Star size={18} className="fill-white" />
-                Leave a Google Review
+                {isFr ? 'Laisser un avis Google' : 'Leave a Google Review'}
               </a>
             </div>
           )}
 
           {!result.redirect_to_review && (
             <p className="text-gray-500 mt-4 text-sm">
-              We appreciate your honesty. Our team will be in touch soon.
+              {isFr ? 'Merci pour votre franchise. Notre équipe vous contactera bientôt.' : 'We appreciate your honesty. Our team will be in touch soon.'}
             </p>
           )}
         </div>
@@ -142,8 +145,8 @@ export default function SatisfactionSurvey() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Thank you!</h1>
-          <p className="text-gray-600">Your feedback has already been recorded.</p>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">{isFr ? 'Merci !' : 'Thank you!'}</h1>
+          <p className="text-gray-600">{isFr ? 'Vos commentaires ont déjà été enregistrés.' : 'Your feedback has already been recorded.'}</p>
         </div>
       </div>
     );
@@ -155,16 +158,18 @@ export default function SatisfactionSurvey() {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            {survey?.company_name || 'Your experience'}
+            {survey?.company_name || (isFr ? 'Votre expérience' : 'Your experience')}
           </h1>
           {survey?.client_name && (
             <p className="text-gray-600">
-              Hi {survey.client_name.split(' ')[0]}, how was your experience?
+              {isFr
+                ? `Bonjour ${survey.client_name.split(' ')[0]}, comment s’est passée votre expérience ?`
+                : `Hi ${survey.client_name.split(' ')[0]}, how was your experience?`}
             </p>
           )}
           {survey?.job_name && (
             <p className="text-sm text-gray-500 mt-1">
-              Regarding: <strong>{survey.job_name}</strong>
+              {isFr ? 'Concernant :' : 'Regarding:'} <strong>{survey.job_name}</strong>
             </p>
           )}
         </div>
@@ -194,7 +199,9 @@ export default function SatisfactionSurvey() {
 
         {rating > 0 && (
           <p className="text-center text-sm text-gray-500 mb-6">
-            {rating >= 4 ? 'Glad to hear it!' : rating >= 3 ? 'Thanks for your feedback.' : 'We\'re sorry to hear that.'}
+            {isFr
+              ? (rating >= 4 ? 'Ravis de l’entendre !' : rating >= 3 ? 'Merci pour vos commentaires.' : 'Nous sommes désolés de l’apprendre.')
+              : (rating >= 4 ? 'Glad to hear it!' : rating >= 3 ? 'Thanks for your feedback.' : 'We\'re sorry to hear that.')}
           </p>
         )}
 
@@ -203,7 +210,7 @@ export default function SatisfactionSurvey() {
           <textarea
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            placeholder="Any comments? (optional)"
+            placeholder={isFr ? 'Des commentaires ? (facultatif)' : 'Any comments? (optional)'}
             className="w-full rounded-xl border border-gray-200 p-3 text-sm text-gray-900 placeholder-gray-400 focus:border-neutral-400 focus:ring-1 focus:ring-neutral-400 resize-none"
             rows={3}
           />
@@ -216,7 +223,7 @@ export default function SatisfactionSurvey() {
           disabled={rating === 0 || submitting}
           className="w-full py-3 bg-neutral-900 text-white font-semibold rounded-xl hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {submitting ? 'Submitting...' : 'Submit Feedback'}
+          {submitting ? (isFr ? 'Envoi…' : 'Submitting...') : (isFr ? 'Envoyer mes commentaires' : 'Submit Feedback')}
         </button>
       </div>
     </div>
