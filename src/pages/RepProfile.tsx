@@ -14,6 +14,7 @@ import { getRepProfileInfo } from '../lib/leaderboardApi';
 import { supabase } from '../lib/supabase';
 import { PIN_STATUS_CONFIG } from '../components/map-d2d/lead-pin';
 import { toast } from 'sonner';
+import { useTranslation } from '../i18n';
 import {
   Phone,
   Mail,
@@ -54,18 +55,18 @@ function todayStr(): string {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
 }
 
-/** "Mercredi 16 juillet 2026" */
-function fmtFullDate(d: string): string {
+/** "Mercredi 16 juillet 2026" / "Wednesday, July 16, 2026" */
+function fmtFullDate(d: string, isFr = true): string {
   return capitalize(
-    new Date(`${d}T00:00:00`).toLocaleDateString('fr-CA', {
+    new Date(`${d}T00:00:00`).toLocaleDateString(isFr ? 'fr-CA' : 'en-CA', {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
     })
   );
 }
 
-/** "16 juil. 2026" */
-function fmtShortDate(d: string): string {
-  return new Date(`${d}T00:00:00`).toLocaleDateString('fr-CA', {
+/** "16 juil. 2026" / "Jul 16, 2026" */
+function fmtShortDate(d: string, isFr = true): string {
+  return new Date(`${d}T00:00:00`).toLocaleDateString(isFr ? 'fr-CA' : 'en-CA', {
     day: 'numeric', month: 'short', year: 'numeric',
   });
 }
@@ -101,6 +102,8 @@ interface ProfileData {
 export default function D2DRepProfile() {
   const { id, memberId } = useParams<{ id: string; memberId: string }>();
   const navigate = useNavigate();
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
   const paramId = id || memberId || '';
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -139,25 +142,25 @@ export default function D2DRepProfile() {
       // Build name from available sources
       const name = dbMember
         ? `${dbMember.first_name || ''} ${dbMember.last_name || ''}`.trim()
-        : dbProfile?.full_name || 'Unknown';
+        : dbProfile?.full_name || (isFr ? 'Inconnu' : 'Unknown');
 
       // Hire date = when the account was created
       const hireSrc = dbMember?.created_at || info.accountCreatedAt;
       const hire_date = hireSrc
-        ? capitalize(new Date(hireSrc).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' }))
+        ? capitalize(new Date(hireSrc).toLocaleDateString(isFr ? 'fr-CA' : 'en-CA', { day: 'numeric', month: 'long', year: 'numeric' }))
         : '';
 
       const result: ProfileData = {
         id: userId,
         name,
-        role: dbMember?.role || 'Membre',
+        role: dbMember?.role || (isFr ? 'Membre' : 'Member'),
         tagline: '',
         avatar_url: dbMember?.avatar_url || dbProfile?.avatar_url || null,
         banner_url: null,
         phone: dbMember?.phone || '',
         email: dbMember?.email || '',
         office,
-        department: 'Sales',
+        department: isFr ? 'Ventes' : 'Sales',
         hire_date,
         memberRowId: dbMember?.id || null,
       };
@@ -199,7 +202,7 @@ export default function D2DRepProfile() {
 
     load();
     return () => { cancelled = true; };
-  }, [paramId]);
+  }, [paramId, isFr]);
 
   // Period data — stats, pins et jobs suivent tous la date/période sélectionnée
   useEffect(() => {
@@ -231,7 +234,7 @@ export default function D2DRepProfile() {
   // Rep-editable contact info (email / phone) — saved on team_members
   async function saveContactField(field: 'email' | 'phone', value: string) {
     if (!profile?.memberRowId) {
-      toast.error('Profil équipe introuvable — impossible de sauvegarder.');
+      toast.error(isFr ? 'Profil équipe introuvable — impossible de sauvegarder.' : 'Team profile not found — unable to save.');
       throw new Error('No team_members row');
     }
     const { error } = await supabase
@@ -239,21 +242,21 @@ export default function D2DRepProfile() {
       .update({ [field]: value, updated_at: new Date().toISOString() })
       .eq('id', profile.memberRowId);
     if (error) {
-      toast.error('Erreur de sauvegarde.');
+      toast.error(isFr ? 'Erreur de sauvegarde.' : 'Save error.');
       throw error;
     }
     setProfile((prev) => (prev ? { ...prev, [field]: value } : prev));
-    toast.success(field === 'email' ? 'Email mis à jour' : 'Numéro mis à jour');
+    toast.success(field === 'email' ? (isFr ? 'Email mis à jour' : 'Email updated') : (isFr ? 'Numéro mis à jour' : 'Number updated'));
   }
 
   // ── Not found ──
   if (!loading && !profile) {
     return (
       <div className="min-h-[calc(100vh-3rem)] bg-surface dark:bg-[#0B0F14] flex flex-col items-center justify-center">
-        <p className="text-lg font-semibold text-text-primary">Profil introuvable</p>
-        <p className="mt-1 text-sm text-text-muted">Ce rep n'existe pas ou les données ne sont pas disponibles.</p>
+        <p className="text-lg font-semibold text-text-primary">{isFr ? 'Profil introuvable' : 'Profile not found'}</p>
+        <p className="mt-1 text-sm text-text-muted">{isFr ? "Ce représentant n'existe pas ou les données ne sont pas disponibles." : 'This rep does not exist or the data is not available.'}</p>
         <button onClick={() => navigate(-1)} className="mt-4 rounded-lg bg-text-primary px-4 py-2 text-sm font-semibold text-surface hover:opacity-90">
-          Retour
+          {isFr ? 'Retour' : 'Back'}
         </button>
       </div>
     );
@@ -336,7 +339,7 @@ export default function D2DRepProfile() {
           style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}
         >
           <ArrowLeft size={14} />
-          Back
+          {isFr ? 'Retour' : 'Back'}
         </button>
       </div>
 
@@ -365,26 +368,26 @@ export default function D2DRepProfile() {
 
           {/* Info card */}
           <div className="flex-1 min-w-0 rounded-2xl border border-outline bg-surface-elevated dark:bg-[#111519] dark:border-[rgba(255,255,255,0.06)] p-5">
-            <h3 className="mb-4 text-[13px] font-bold text-text-primary">Details</h3>
+            <h3 className="mb-4 text-[13px] font-bold text-text-primary">{isFr ? 'Détails' : 'Details'}</h3>
             <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-              <InfoRow icon={Building2} label="Office" value={p.office || '—'} />
-              <InfoRow icon={Briefcase} label="Department" value={p.department} />
-              <InfoRow icon={Calendar} label="Hire Date" value={p.hire_date || '—'} />
+              <InfoRow icon={Building2} label={isFr ? 'Bureau' : 'Office'} value={p.office || '—'} />
+              <InfoRow icon={Briefcase} label={isFr ? 'Département' : 'Department'} value={p.department} />
+              <InfoRow icon={Calendar} label={isFr ? "Date d'embauche" : 'Hire Date'} value={p.hire_date || '—'} />
               <EditableInfoRow
                 icon={Mail}
-                label="Email"
+                label={isFr ? 'Courriel' : 'Email'}
                 value={p.email}
                 type="email"
-                placeholder="Ajouter un email"
+                placeholder={isFr ? 'Ajouter un courriel' : 'Add an email'}
                 canEdit={canEditContact}
                 onSave={(v) => saveContactField('email', v)}
               />
               <EditableInfoRow
                 icon={Phone}
-                label="Phone Number"
+                label={isFr ? 'Numéro de téléphone' : 'Phone Number'}
                 value={p.phone}
                 type="tel"
-                placeholder="Ajouter un numéro"
+                placeholder={isFr ? 'Ajouter un numéro' : 'Add a number'}
                 canEdit={canEditContact}
                 onSave={(v) => saveContactField('phone', v)}
               />
@@ -407,12 +410,12 @@ export default function D2DRepProfile() {
           <div className={`col-span-4 space-y-5 transition-opacity ${statsLoading ? 'opacity-50' : ''}`}>
 
             {/* Terrain — portes cognées / conversations / ventes, dérivé des pins de la période */}
-            <CardPanel title="Terrain">
+            <CardPanel title={isFr ? 'Terrain' : 'Field'}>
               {/* Milieu plus large : « Conversations » est le libellé le plus long */}
               <div className="grid grid-cols-[1fr_1.4fr_1fr]">
-                <TerrainCell icon={DoorOpen} value={pinCounts?.total ?? 0} label="Portes" first />
-                <TerrainCell icon={MessagesSquare} value={(pinCounts?.total ?? 0) - (pinCounts?.byKind.no_answer ?? 0)} label="Conversations" />
-                <TerrainCell icon={TrendingUp} value={pinCounts?.byKind.closed_won ?? 0} label="Ventes" />
+                <TerrainCell icon={DoorOpen} value={pinCounts?.total ?? 0} label={isFr ? 'Portes' : 'Doors'} first />
+                <TerrainCell icon={MessagesSquare} value={(pinCounts?.total ?? 0) - (pinCounts?.byKind.no_answer ?? 0)} label={isFr ? 'Conversations' : 'Conversations'} />
+                <TerrainCell icon={TrendingUp} value={pinCounts?.byKind.closed_won ?? 0} label={isFr ? 'Ventes' : 'Sales'} />
               </div>
             </CardPanel>
 
@@ -444,29 +447,29 @@ export default function D2DRepProfile() {
 
             {/* KPI grid — the 8 period stats */}
             <div className="grid grid-cols-3 gap-3">
-              <KpiCard label="Revenue" value={fmtCurrency(periodStats?.revenue ?? 0)} />
-              <KpiCard label="Jobs" value={String(periodStats?.jobs ?? 0)} />
-              <KpiCard label="Serviced Revenue" value={fmtCurrency(periodStats?.servicedRevenue ?? 0)} />
-              <KpiCard label="Serviced Jobs" value={String(periodStats?.servicedJobs ?? 0)} />
-              <KpiCard label="Avg Contract Value" value={periodStats?.avgContractValue != null ? fmtCurrency(periodStats.avgContractValue) : '—'} />
-              <KpiCard label="Closing Rate" value={periodStats?.contractClosingRate != null ? `${periodStats.contractClosingRate}%` : '—'} />
-              <KpiCard label="Cancel Rate" value={periodStats?.cancelRate != null ? `${periodStats.cancelRate}%` : '—'} />
-              <KpiCard label="Days Worked" value={String(periodStats?.daysWorked ?? 0)} />
+              <KpiCard label={isFr ? 'Revenu' : 'Revenue'} value={fmtCurrency(periodStats?.revenue ?? 0)} />
+              <KpiCard label={isFr ? 'Jobs' : 'Jobs'} value={String(periodStats?.jobs ?? 0)} />
+              <KpiCard label={isFr ? 'Revenu desservi' : 'Serviced Revenue'} value={fmtCurrency(periodStats?.servicedRevenue ?? 0)} />
+              <KpiCard label={isFr ? 'Jobs desservies' : 'Serviced Jobs'} value={String(periodStats?.servicedJobs ?? 0)} />
+              <KpiCard label={isFr ? 'Valeur moyenne du contrat' : 'Avg Contract Value'} value={periodStats?.avgContractValue != null ? fmtCurrency(periodStats.avgContractValue) : '—'} />
+              <KpiCard label={isFr ? 'Taux de conclusion' : 'Closing Rate'} value={periodStats?.contractClosingRate != null ? `${periodStats.contractClosingRate}%` : '—'} />
+              <KpiCard label={isFr ? "Taux d'annulation" : 'Cancel Rate'} value={periodStats?.cancelRate != null ? `${periodStats.cancelRate}%` : '—'} />
+              <KpiCard label={isFr ? 'Jours travaillés' : 'Days Worked'} value={String(periodStats?.daysWorked ?? 0)} />
             </div>
 
             {/* ── Jobs — jobs créditées au rep durant la période ── */}
             <CardPanel title={`Jobs (${repJobs.length})`}>
               {repJobs.length === 0 ? (
-                <p className="text-sm text-text-tertiary text-center py-6">Aucune job pour ce rep dans cette période.</p>
+                <p className="text-sm text-text-tertiary text-center py-6">{isFr ? 'Aucune job pour ce représentant dans cette période.' : 'No jobs for this rep in this period.'}</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-outline">
                         <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">#</th>
-                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Titre</th>
-                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Statut</th>
-                        <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Valeur</th>
+                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{isFr ? 'Titre' : 'Title'}</th>
+                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{isFr ? 'Statut' : 'Status'}</th>
+                        <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{isFr ? 'Valeur' : 'Value'}</th>
                         <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Date</th>
                       </tr>
                     </thead>
@@ -561,6 +564,8 @@ function EditableInfoRow({ icon: Icon, label, value, type, placeholder, canEdit,
   canEdit: boolean;
   onSave: (value: string) => Promise<void>;
 }) {
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
@@ -615,7 +620,7 @@ function EditableInfoRow({ icon: Icon, label, value, type, placeholder, canEdit,
           <button
             onClick={() => { setDraft(value); setEditing(true); }}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors dark:hover:bg-[rgba(255,255,255,0.06)]"
-            title="Modifier"
+            title={isFr ? 'Modifier' : 'Edit'}
           >
             <Pencil size={13} />
           </button>
@@ -635,12 +640,14 @@ function PeriodBar({ range, onChange }: {
   range: { from: string; to: string };
   onChange: (from: string, to: string) => void;
 }) {
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(range);
 
   const label = range.from === range.to
-    ? fmtFullDate(range.from)
-    : `${fmtShortDate(range.from)} – ${fmtShortDate(range.to)}`;
+    ? fmtFullDate(range.from, isFr)
+    : `${fmtShortDate(range.from, isFr)} – ${fmtShortDate(range.to, isFr)}`;
 
   return (
     <div className="relative mb-5">
@@ -653,7 +660,7 @@ function PeriodBar({ range, onChange }: {
           onClick={() => { setDraft(range); setOpen((o) => !o); }}
           className="shrink-0 rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-elevated dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.08)] dark:hover:bg-[rgba(255,255,255,0.08)]"
         >
-          Changer
+          {isFr ? 'Changer' : 'Change'}
         </button>
       </div>
 
@@ -662,11 +669,11 @@ function PeriodBar({ range, onChange }: {
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-[calc(100%+8px)] z-20 w-72 rounded-2xl border border-border-subtle bg-white p-4 shadow-xl dark:bg-[#111519] dark:border-[rgba(255,255,255,0.08)]">
             <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-              Date ou période
+              {isFr ? 'Date ou période' : 'Date or period'}
             </p>
             <div className="space-y-2.5">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-text-secondary">Du</span>
+                <span className="mb-1 block text-xs font-medium text-text-secondary">{isFr ? 'Du' : 'From'}</span>
                 <input
                   type="date"
                   value={draft.from}
@@ -680,7 +687,7 @@ function PeriodBar({ range, onChange }: {
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-text-secondary">Au</span>
+                <span className="mb-1 block text-xs font-medium text-text-secondary">{isFr ? 'Au' : 'To'}</span>
                 <input
                   type="date"
                   value={draft.to}
@@ -700,13 +707,13 @@ function PeriodBar({ range, onChange }: {
                 onClick={() => { const t = todayStr(); setDraft({ from: t, to: t }); }}
                 className="flex-1 rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-elevated dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.08)] dark:hover:bg-[rgba(255,255,255,0.08)]"
               >
-                Aujourd'hui
+                {isFr ? "Aujourd'hui" : 'Today'}
               </button>
               <button
                 onClick={() => { onChange(draft.from, draft.to); setOpen(false); }}
                 className="flex-1 rounded-lg bg-text-primary px-3 py-1.5 text-xs font-semibold text-surface transition-opacity hover:opacity-90"
               >
-                Appliquer
+                {isFr ? 'Appliquer' : 'Apply'}
               </button>
             </div>
           </div>

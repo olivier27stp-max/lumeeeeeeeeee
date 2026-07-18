@@ -46,6 +46,7 @@ export default function QuoteDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t, language } = useTranslation();
+  const isFr = language === 'fr';
   const { permissions } = usePermissions();
   const canMeasure = hasPermission(permissions, 'quotes.update');
   const [detail, setDetail] = useState<QuoteDetail | null>(null);
@@ -125,7 +126,7 @@ export default function QuoteDetails() {
 
   const { quote, line_items, sections, lead, client } = detail;
   const entity = client || lead;
-  const entityName = entity ? (clientDisplayName(entity as any) || 'Unknown') : 'Unknown';
+  const entityName = entity ? (clientDisplayName(entity as any) || (isFr ? 'Inconnu' : 'Unknown')) : (isFr ? 'Inconnu' : 'Unknown');
   const entityEmail = entity?.email || null;
   const entityPhone = entity?.phone || null;
   const entityAddress = (entity as any)?.address || null;
@@ -134,7 +135,7 @@ export default function QuoteDetails() {
 
   async function act(fn: () => Promise<void>) {
     setBusy(true);
-    try { await fn(); } catch (e: any) { toast.error(e?.message || 'Error'); }
+    try { await fn(); } catch (e: any) { toast.error(e?.message || (isFr ? 'Erreur' : 'Error')); }
     finally { setBusy(false); setMoreOpen(false); setEditing(null); }
   }
 
@@ -204,7 +205,7 @@ export default function QuoteDetails() {
       setEditDirty(false);
       await loadQuote();
     } catch (e: any) {
-      toast.error(e?.message || 'Save failed');
+      toast.error(e?.message || (isFr ? "Échec de l'enregistrement" : 'Save failed'));
     } finally {
       setBusy(false);
     }
@@ -245,7 +246,7 @@ export default function QuoteDetails() {
             </span>
           ) : (
             <span className="group inline-flex items-center gap-2">
-              {quote.title || `Quote for ${entityName}`}
+              {quote.title || (isFr ? `Soumission pour ${entityName}` : `Quote for ${entityName}`)}
               <button onClick={() => startEdit('title')} className="p-1 text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-text-primary transition-all"><Pencil size={15} /></button>
             </span>
           )}
@@ -265,7 +266,7 @@ export default function QuoteDetails() {
           <>
           <button onClick={() => navigate(`/quotes/${id}/measure`)}
             className="glass-button px-3 py-2 text-[13px] font-medium flex items-center gap-1.5">
-            <Ruler size={15} /> Mesure
+            <Ruler size={15} /> {isFr ? 'Mesure' : 'Measure'}
           </button>
           <div className="relative">
             <button onClick={() => setMoreOpen(!moreOpen)} disabled={busy}
@@ -276,38 +277,38 @@ export default function QuoteDetails() {
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setMoreOpen(false)} />
                 <div className="absolute right-0 top-full mt-1 w-52 bg-surface border border-outline rounded-xl shadow-xl z-40 py-1 text-[13px]">
-                  <button onClick={() => act(async () => { const { jobId } = await convertQuoteToJob(quote.id); toast.success('Converted'); navigate(`/jobs/${jobId}`); })}
+                  <button onClick={() => act(async () => { const { jobId } = await convertQuoteToJob(quote.id); toast.success(isFr ? 'Convertie' : 'Converted'); navigate(`/jobs/${jobId}`); })}
                     disabled={quote.status !== 'approved' || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
-                    <Briefcase size={14} className="text-entity-job" /> Convert to Job</button>
+                    <Briefcase size={14} className="text-entity-job" /> {isFr ? 'Convertir en job' : 'Convert to Job'}</button>
                   {['approved', 'awaiting_response', 'changes_requested', 'draft'].includes(quote.status) && (
-                    <button onClick={() => act(async () => { const { invoiceId } = await convertQuoteToInvoice(quote.id); toast.success('Invoice created'); navigate(`/invoices/${invoiceId}`); })}
+                    <button onClick={() => act(async () => { const { invoiceId } = await convertQuoteToInvoice(quote.id); toast.success(isFr ? 'Facture créée' : 'Invoice created'); navigate(`/invoices/${invoiceId}`); })}
                       disabled={quote.status === 'converted' || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
-                      <FileText size={14} className="text-entity-invoice" /> Convert to Invoice</button>
+                      <FileText size={14} className="text-entity-invoice" /> {isFr ? 'Convertir en facture' : 'Convert to Invoice'}</button>
                   )}
-                  <button onClick={() => act(async () => { const d = await duplicateQuote(quote.id); toast.success('Duplicated'); navigate(`/quotes/${d.quote.id}`); })}
+                  <button onClick={() => act(async () => { const d = await duplicateQuote(quote.id); toast.success(isFr ? 'Dupliquée' : 'Duplicated'); navigate(`/quotes/${d.quote.id}`); })}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
-                    <Copy size={14} /> Create Similar Quote</button>
+                    <Copy size={14} /> {isFr ? 'Créer une soumission similaire' : 'Create Similar Quote'}</button>
                   <button onClick={() => navigate(`/quotes/${id}/measure`)}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
-                    <Ruler size={14} /> Mesure</button>
+                    <Ruler size={14} /> {isFr ? 'Mesure' : 'Measure'}</button>
                   <div className="border-t border-outline my-1" />
-                  <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">Send as...</p>
+                  <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{isFr ? 'Envoyer par...' : 'Send as...'}</p>
                   <button onClick={() => {
                     const target = entityEmail || '';
                     if (!target) return;
-                    if (typeof window !== 'undefined' && !window.confirm(`Send quote to ${target}?`)) return;
-                    act(async () => { await sendQuoteEmail(quote.id); toast.success('Email sent'); loadQuote(); });
+                    if (typeof window !== 'undefined' && !window.confirm(isFr ? `Envoyer la soumission à ${target}?` : `Send quote to ${target}?`)) return;
+                    act(async () => { await sendQuoteEmail(quote.id); toast.success(isFr ? 'Courriel envoyé' : 'Email sent'); loadQuote(); });
                   }}
                     disabled={!entityEmail || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
-                    <Mail size={14} /> Email</button>
+                    <Mail size={14} /> {isFr ? 'Courriel' : 'Email'}</button>
                   <div className="border-t border-outline my-1" />
-                  <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">Mark as...</p>
-                  <button onClick={() => act(async () => { await updateQuoteStatus(quote.id, 'awaiting_response'); toast.success('Awaiting Response'); loadQuote(); })}
+                  <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{isFr ? 'Marquer comme...' : 'Mark as...'}</p>
+                  <button onClick={() => act(async () => { await updateQuoteStatus(quote.id, 'awaiting_response'); toast.success(isFr ? 'En attente de réponse' : 'Awaiting Response'); loadQuote(); })}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
-                    <Clock size={14} /> Awaiting Response</button>
-                  <button onClick={() => act(async () => { await updateQuoteStatus(quote.id, 'approved'); toast.success('Approved'); loadQuote(); })}
+                    <Clock size={14} /> {isFr ? 'En attente de réponse' : 'Awaiting Response'}</button>
+                  <button onClick={() => act(async () => { await updateQuoteStatus(quote.id, 'approved'); toast.success(isFr ? 'Approuvée' : 'Approved'); loadQuote(); })}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
-                    <CheckCircle2 size={14} /> Approved</button>
+                    <CheckCircle2 size={14} /> {isFr ? 'Approuvée' : 'Approved'}</button>
                   {quote.status === 'archived' ? (
                     <button onClick={() => act(async () => { await unarchiveQuote(quote.id); toast.success(language === 'fr' ? 'Devis désarchivé' : 'Quote unarchived'); loadQuote(); })}
                       className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
@@ -320,14 +321,14 @@ export default function QuoteDetails() {
                   <div className="border-t border-outline my-1" />
                   <button onClick={() => { window.open(`/quote/${quote.view_token}`, '_blank'); setMoreOpen(false); }}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
-                    <Eye size={14} /> Preview as Client</button>
+                    <Eye size={14} /> {isFr ? 'Aperçu côté client' : 'Preview as Client'}</button>
                   <button onClick={() => { downloadQuotePdf(detail!); setMoreOpen(false); }}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
-                    <Printer size={14} /> Print or Save PDF</button>
+                    <Printer size={14} /> {isFr ? 'Imprimer ou enregistrer en PDF' : 'Print or Save PDF'}</button>
                   <div className="border-t border-outline my-1" />
-                  <button onClick={() => act(async () => { if (!confirm('Delete?')) return; await deleteQuote(quote.id); toast.success('Deleted'); navigate('/quotes'); })}
+                  <button onClick={() => act(async () => { if (!confirm(isFr ? 'Supprimer?' : 'Delete?')) return; await deleteQuote(quote.id); toast.success(isFr ? 'Supprimée' : 'Deleted'); navigate('/quotes'); })}
                     className="w-full px-4 py-2 text-left hover:bg-danger-light text-danger flex items-center gap-2.5">
-                    <Trash2 size={14} /> Delete</button>
+                    <Trash2 size={14} /> {isFr ? 'Supprimer' : 'Delete'}</button>
                 </div>
               </>
             )}
@@ -441,11 +442,11 @@ export default function QuoteDetails() {
                     </div>
                     <div className="col-span-2">
                       <input value={item.quantity} onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], quantity: e.target.value }; setEditLineItems(u); }}
-                        className={cn(inputCls, 'py-1.5 text-center')} placeholder="Qty" />
+                        className={cn(inputCls, 'py-1.5 text-center')} placeholder={isFr ? 'Qté' : 'Qty'} />
                     </div>
                     <div className="col-span-2">
                       <input value={item.unit_price} onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], unit_price: e.target.value }; setEditLineItems(u); }}
-                        className={cn(inputCls, 'py-1.5 text-right')} placeholder="Price" />
+                        className={cn(inputCls, 'py-1.5 text-right')} placeholder={isFr ? 'Prix' : 'Price'} />
                     </div>
                     <div className="col-span-2 text-right text-sm font-medium text-text-primary pt-2">
                       {formatQuoteMoney(Math.round((parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0) * 100))}
@@ -481,7 +482,7 @@ export default function QuoteDetails() {
                       <tr key={item.id} className={item.is_optional ? 'opacity-60' : ''}>
                         <td className="px-5 py-3">
                           <span className="font-medium text-text-primary">{item.name}</span>
-                          {item.is_optional && <span className="ml-2 text-[10px] text-text-tertiary uppercase">Optional</span>}
+                          {item.is_optional && <span className="ml-2 text-[10px] text-text-tertiary uppercase">{isFr ? 'Optionnel' : 'Optional'}</span>}
                           {item.description && <p className="text-[12px] text-text-tertiary mt-0.5">{item.description}</p>}
                         </td>
                         <td className="px-5 py-3 text-center text-primary font-medium">{item.quantity}</td>
@@ -493,7 +494,7 @@ export default function QuoteDetails() {
                 </table>
                 <div className="bg-surface-secondary border-t border-outline px-5 py-3 space-y-1.5">
                   <div className="flex justify-between text-[13px]"><span className="text-text-secondary">{language === 'fr' ? 'Sous-total' : 'Subtotal'}</span><span className="text-text-primary">{formatQuoteMoney(quote.subtotal_cents)}</span></div>
-                  {quote.discount_cents > 0 && <div className="flex justify-between text-[13px]"><span className="text-text-secondary">Discount</span><span className="text-danger">-{formatQuoteMoney(quote.discount_cents)}</span></div>}
+                  {quote.discount_cents > 0 && <div className="flex justify-between text-[13px]"><span className="text-text-secondary">{isFr ? 'Rabais' : 'Discount'}</span><span className="text-danger">-{formatQuoteMoney(quote.discount_cents)}</span></div>}
                   <div className="flex justify-between text-[13px]"><span className="text-text-secondary">{(quote.tax_rate_label === 'No tax' && language === 'fr') ? 'Aucune taxe' : (quote.tax_rate_label || (language === 'fr' ? 'Taxe' : 'Tax'))}</span><span className="text-text-primary">{formatQuoteMoney(quote.tax_cents)}</span></div>
                   <div className="flex justify-between text-[15px] font-bold border-t border-outline pt-2"><span className="text-text-primary">Total</span><span className="text-text-primary">{formatQuoteMoney(quote.total_cents)}</span></div>
                 </div>
@@ -533,7 +534,7 @@ export default function QuoteDetails() {
                 </label>
                 <label className="flex items-center gap-2 text-[13px] text-text-secondary cursor-pointer">
                   <input type="checkbox" checked={editDepositRequired} onChange={e => setEditDepositRequired(e.target.checked)} className="rounded" />
-                  Deposit required
+                  {isFr ? 'Dépôt requis' : 'Deposit required'}
                 </label>
               </div>
             ) : (
@@ -547,7 +548,7 @@ export default function QuoteDetails() {
                 </div>
                 {quote.deposit_required && quote.deposit_value > 0 && (
                   <div className="flex items-center justify-between text-[13px]">
-                    <span className="text-text-secondary">Deposit</span>
+                    <span className="text-text-secondary">{isFr ? 'Dépôt' : 'Deposit'}</span>
                     <span className="font-semibold text-text-primary">{quote.deposit_type === 'percentage' ? `${quote.deposit_value}%` : formatQuoteMoney(quote.deposit_value * 100)}</span>
                   </div>
                 )}
@@ -564,7 +565,7 @@ export default function QuoteDetails() {
             </div>
             {editing === 'notes' ? (
               <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)}
-                className={cn(inputCls, 'min-h-[100px]')} autoFocus placeholder="Notes visible on the quote..." />
+                className={cn(inputCls, 'min-h-[100px]')} autoFocus placeholder={isFr ? 'Notes visibles sur la soumission...' : 'Notes visible on the quote...'} />
             ) : quote.notes ? (
               <p className="text-[13px] text-text-secondary whitespace-pre-wrap">{quote.notes}</p>
             ) : (

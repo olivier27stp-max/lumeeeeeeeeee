@@ -25,6 +25,7 @@ import {
   reverseCommission,
 } from '../lib/commissionsApi';
 import type { FsCommissionEntry } from '../types';
+import { useTranslation } from '../i18n';
 
 type AdminTab = 'overview' | 'reps' | 'my' | 'rates';
 
@@ -40,12 +41,14 @@ type AdminTab = 'overview' | 'reps' | 'my' | 'rates';
  */
 export default function Commissions() {
   const { currentRole, loading } = useCompany();
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-6 w-6 animate-spin text-text-muted" />
-        <span className="ml-2 text-sm text-text-muted">Loading…</span>
+        <span className="ml-2 text-sm text-text-muted">{isFr ? 'Chargement…' : 'Loading…'}</span>
       </div>
     );
   }
@@ -64,8 +67,8 @@ export default function Commissions() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-text-primary">My Commissions</h1>
-            <p className="text-xs text-text-tertiary">Your closes, commission earnings and next payouts</p>
+            <h1 className="text-xl font-semibold text-text-primary">{isFr ? 'Mes commissions' : 'My Commissions'}</h1>
+            <p className="text-xs text-text-tertiary">{isFr ? 'Vos ventes conclues, commissions gagnées et prochains versements' : 'Your closes, commission earnings and next payouts'}</p>
           </div>
         </div>
         <PayrollSummaryCard metric="deals" />
@@ -83,17 +86,21 @@ export default function Commissions() {
 // ──────────────────────────────────────────────────────────────────────
 
 function AccessDenied() {
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
       <div className="rounded-full bg-error/10 p-3">
         <ShieldOff className="h-8 w-8 text-error" />
       </div>
-      <h2 className="mt-4 text-lg font-semibold text-text-primary">Access denied</h2>
+      <h2 className="mt-4 text-lg font-semibold text-text-primary">{isFr ? 'Accès refusé' : 'Access denied'}</h2>
       <p className="mt-1 max-w-sm text-sm text-text-muted">
-        You don't have permission to view commissions. Contact an owner or admin if you believe this is a mistake.
+        {isFr
+          ? "Vous n'avez pas la permission de consulter les commissions. Contactez un propriétaire ou un admin si vous croyez qu'il s'agit d'une erreur."
+          : "You don't have permission to view commissions. Contact an owner or admin if you believe this is a mistake."}
       </p>
       <Link to="/" className="mt-6">
-        <Button variant="outline" size="sm">Back to dashboard</Button>
+        <Button variant="outline" size="sm">{isFr ? 'Retour au tableau de bord' : 'Back to dashboard'}</Button>
       </Link>
     </div>
   );
@@ -104,6 +111,8 @@ function AccessDenied() {
 // ──────────────────────────────────────────────────────────────────────
 
 function AdminCommissionsLayout() {
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
   const [tab, setTab] = useState<AdminTab>('overview');
   const [drilldownRep, setDrilldownRep] = useState<{ id: string; name: string } | null>(null);
   const [profileMap, setProfileMap] = useState<Record<string, string>>({});
@@ -121,7 +130,9 @@ function AdminCommissionsLayout() {
         <div>
           <h1 className="text-xl font-semibold text-text-primary">Commissions</h1>
           <p className="text-xs text-text-tertiary">
-            Overview of deals, commissions and payouts across all reps
+            {isFr
+              ? 'Vue d\'ensemble des ventes, commissions et versements pour tous les représentants'
+              : 'Overview of deals, commissions and payouts across all reps'}
           </p>
         </div>
       </div>
@@ -129,10 +140,10 @@ function AdminCommissionsLayout() {
       {/* Tabs */}
       <div className="flex items-center gap-2">
         {([
-          { key: 'overview' as AdminTab, label: 'Overview' },
-          { key: 'reps' as AdminTab,     label: 'Reps' },
-          { key: 'my' as AdminTab,       label: 'My commissions' },
-          { key: 'rates' as AdminTab,    label: 'Rates' },
+          { key: 'overview' as AdminTab, label: isFr ? 'Vue d\'ensemble' : 'Overview' },
+          { key: 'reps' as AdminTab,     label: isFr ? 'Représentants' : 'Reps' },
+          { key: 'my' as AdminTab,       label: isFr ? 'Mes commissions' : 'My commissions' },
+          { key: 'rates' as AdminTab,    label: isFr ? 'Taux' : 'Rates' },
         ]).map((t) => (
           <button
             key={t.key}
@@ -163,12 +174,12 @@ function AdminCommissionsLayout() {
             onClick={() => setDrilldownRep(null)}
             className="inline-flex items-center gap-1 text-sm font-medium text-text-secondary hover:text-text-primary"
           >
-            <ChevronLeft className="h-4 w-4" /> Back to reps
+            <ChevronLeft className="h-4 w-4" /> {isFr ? 'Retour aux représentants' : 'Back to reps'}
           </button>
           <PersonalCommissionView
             userId={drilldownRep.id}
-            title={`${drilldownRep.name}'s commissions`}
-            subtitle="Read-only drilldown — same view your rep sees"
+            title={isFr ? `Commissions de ${drilldownRep.name}` : `${drilldownRep.name}'s commissions`}
+            subtitle={isFr ? 'Vue en lecture seule — identique à ce que voit votre représentant' : 'Read-only drilldown — same view your rep sees'}
           />
         </div>
       )}
@@ -177,8 +188,8 @@ function AdminCommissionsLayout() {
         <div className="space-y-6">
           <PayrollSummaryCard metric="deals" />
           <PersonalCommissionView
-            title="My commissions"
-            subtitle="Your own commissions, if any"
+            title={isFr ? 'Mes commissions' : 'My commissions'}
+            subtitle={isFr ? 'Vos propres commissions, le cas échéant' : 'Your own commissions, if any'}
           />
         </div>
       )}
@@ -205,6 +216,8 @@ function defaultRange() {
 }
 
 function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
   const [filters, setFilters] = useState<CommissionFiltersValue>(() => {
     const { from, to } = defaultRange();
     return { status: 'all', from, to };
@@ -238,11 +251,11 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
         }
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to load commissions');
+      setError(err?.message || (isFr ? 'Échec du chargement des commissions' : 'Failed to load commissions'));
     } finally {
       setLoading(false);
     }
-  }, [filters.repId, filters.status, filters.from, filters.to, onProfileMap]);
+  }, [filters.repId, filters.status, filters.from, filters.to, onProfileMap, isFr]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -288,7 +301,7 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
 
           <Card>
             <CardHeader>
-              <CardTitle>All entries</CardTitle>
+              <CardTitle>{isFr ? 'Toutes les entrées' : 'All entries'}</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <CommissionTable
@@ -314,6 +327,8 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
 // ──────────────────────────────────────────────────────────────────────
 
 function RatesPanel() {
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [rules, setRules] = useState<FsCommissionRule[]>([]);
   const [busy, setBusy] = useState(true);
@@ -346,7 +361,7 @@ function RatesPanel() {
   async function handleSave(userId: string) {
     const pct = parseFloat(draftPct);
     if (isNaN(pct) || pct < 0 || pct > 100) {
-      alert('Invalid percentage (0-100)');
+      alert(isFr ? 'Pourcentage invalide (0-100)' : 'Invalid percentage (0-100)');
       return;
     }
     setSavingId(userId);
@@ -367,7 +382,7 @@ function RatesPanel() {
       setDraftPct('');
       await reload();
     } catch (err: any) {
-      alert(err?.message || 'Save failed');
+      alert(err?.message || (isFr ? "Échec de l'enregistrement" : 'Save failed'));
     } finally {
       setSavingId(null);
     }
@@ -384,16 +399,16 @@ function RatesPanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Commission rates per rep</CardTitle>
+        <CardTitle>{isFr ? 'Taux de commission par représentant' : 'Commission rates per rep'}</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border-subtle">
-                <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">Member</th>
-                <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">Role</th>
-                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">Current rate</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{isFr ? 'Membre' : 'Member'}</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{isFr ? 'Rôle' : 'Role'}</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{isFr ? 'Taux actuel' : 'Current rate'}</th>
                 <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">Action</th>
               </tr>
             </thead>
@@ -431,15 +446,15 @@ function RatesPanel() {
                       {isEditing ? (
                         <div className="flex justify-end gap-1.5">
                           <Button size="sm" disabled={isSaving} onClick={() => handleSave(m.user_id)}>
-                            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : (isFr ? 'Enregistrer' : 'Save')}
                           </Button>
                           <Button size="sm" variant="outline" disabled={isSaving} onClick={() => { setEditingId(null); setDraftPct(''); }}>
-                            Cancel
+                            {isFr ? 'Annuler' : 'Cancel'}
                           </Button>
                         </div>
                       ) : (
                         <Button size="sm" variant="outline" onClick={() => { setEditingId(m.user_id); setDraftPct(pct != null ? String(pct) : ''); }}>
-                          Edit
+                          {isFr ? 'Modifier' : 'Edit'}
                         </Button>
                       )}
                     </td>
@@ -447,7 +462,7 @@ function RatesPanel() {
                 );
               })}
               {members.length === 0 && (
-                <tr><td colSpan={4} className="px-5 py-8 text-center text-sm text-text-muted">No members.</td></tr>
+                <tr><td colSpan={4} className="px-5 py-8 text-center text-sm text-text-muted">{isFr ? 'Aucun membre.' : 'No members.'}</td></tr>
               )}
             </tbody>
           </table>

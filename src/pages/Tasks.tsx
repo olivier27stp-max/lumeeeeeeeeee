@@ -69,10 +69,12 @@ const TYPE_STYLES: Record<string, string> = {
 
 // ── Status badge ──
 function TaskStatusBadge({ status }: { status: TaskStatus }) {
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
   const styles = status === 'done'
     ? 'badge-success'
     : 'badge-neutral';
-  const label = status === 'done' ? 'Done' : 'Open';
+  const label = status === 'done' ? (isFr ? 'Terminée' : 'Done') : (isFr ? 'Ouverte' : 'Open');
   return (
     <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-[2px] text-[12px] font-medium leading-[18px]', styles)}>
       <span className="w-[5px] h-[5px] rounded-full bg-current shrink-0 opacity-80" />
@@ -83,10 +85,12 @@ function TaskStatusBadge({ status }: { status: TaskStatus }) {
 
 // ── Priority badge ──
 function TaskPriorityBadge({ priority }: { priority: TaskPriority }) {
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
   const config: Record<TaskPriority, { icon: typeof ArrowUp; label: string; cls: string }> = {
-    high:   { icon: ArrowUp,   label: 'High',   cls: 'badge-danger' },
-    medium: { icon: Minus,     label: 'Medium', cls: 'badge-warning' },
-    low:    { icon: ArrowDown, label: 'Low',    cls: 'badge-info' },
+    high:   { icon: ArrowUp,   label: isFr ? 'Haute'   : 'High',   cls: 'badge-danger' },
+    medium: { icon: Minus,     label: isFr ? 'Moyenne' : 'Medium', cls: 'badge-warning' },
+    low:    { icon: ArrowDown, label: isFr ? 'Basse'   : 'Low',    cls: 'badge-info' },
   };
   const c = config[priority];
   return (
@@ -177,6 +181,8 @@ function RowActions({ task, onEdit, onViewDetails, onDuplicate, onToggleStatus, 
   onToggleStatus: () => void;
   onDelete: () => void;
 }) {
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -190,16 +196,16 @@ function RowActions({ task, onEdit, onViewDetails, onDuplicate, onToggleStatus, 
   }, [open]);
 
   const items = [
-    { id: 'view', label: 'View details', icon: Eye, action: onViewDetails },
-    { id: 'edit', label: 'Edit', icon: Pencil, action: onEdit },
-    { id: 'duplicate', label: 'Duplicate', icon: Copy, action: onDuplicate },
+    { id: 'view', label: isFr ? 'Voir les détails' : 'View details', icon: Eye, action: onViewDetails },
+    { id: 'edit', label: isFr ? 'Modifier' : 'Edit', icon: Pencil, action: onEdit },
+    { id: 'duplicate', label: isFr ? 'Dupliquer' : 'Duplicate', icon: Copy, action: onDuplicate },
     {
       id: 'toggle',
-      label: task.status === 'open' ? 'Mark as done' : 'Mark as open',
+      label: task.status === 'open' ? (isFr ? 'Marquer comme terminée' : 'Mark as done') : (isFr ? 'Marquer comme ouverte' : 'Mark as open'),
       icon: task.status === 'open' ? CheckCircle2 : Circle,
       action: onToggleStatus,
     },
-    { id: 'delete', label: 'Delete', icon: Trash2, action: onDelete, danger: true },
+    { id: 'delete', label: isFr ? 'Supprimer' : 'Delete', icon: Trash2, action: onDelete, danger: true },
   ];
 
   return (
@@ -237,8 +243,16 @@ function RowActions({ task, onEdit, onViewDetails, onDuplicate, onToggleStatus, 
 
 // ── Bulk priority picker ──
 function BulkPriorityPicker({ onSelect }: { onSelect: (p: TaskPriority) => void }) {
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  const priorityLabels: Record<TaskPriority, string> = {
+    low: isFr ? 'Basse' : 'Low',
+    medium: isFr ? 'Moyenne' : 'Medium',
+    high: isFr ? 'Haute' : 'High',
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -256,7 +270,7 @@ function BulkPriorityPicker({ onSelect }: { onSelect: (p: TaskPriority) => void 
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium hover:bg-surface-card/10 text-white/80 transition-colors"
       >
         <ArrowUp size={13} />
-        Priority
+        {isFr ? 'Priorité' : 'Priority'}
       </button>
       {open && (
         <div className="absolute bottom-full left-0 mb-2 w-32 bg-surface-elevated border border-outline rounded-md shadow-dropdown z-50 py-1">
@@ -264,9 +278,9 @@ function BulkPriorityPicker({ onSelect }: { onSelect: (p: TaskPriority) => void 
             <button
               key={p}
               onClick={() => { onSelect(p); setOpen(false); }}
-              className="w-full text-left px-3 py-1.5 text-[13px] text-text-secondary hover:bg-surface-secondary capitalize"
+              className="w-full text-left px-3 py-1.5 text-[13px] text-text-secondary hover:bg-surface-secondary"
             >
-              {p}
+              {priorityLabels[p]}
             </button>
           ))}
         </div>
@@ -281,6 +295,7 @@ function BulkPriorityPicker({ onSelect }: { onSelect: (p: TaskPriority) => void 
 
 export default function Tasks() {
   const { t, language } = useTranslation();
+  const isFr = language === 'fr';
   const queryClient = useQueryClient();
 
   // ── State ──
@@ -366,12 +381,12 @@ export default function Tasks() {
   const handleCreate = async (input: TaskCreateInput) => {
     try {
       await createTask(input);
-      toast.success('Task created');
+      toast.success(isFr ? 'Tâche créée' : 'Task created');
       refresh();
       setModalOpen(false);
     } catch (err: any) {
       console.error('Create task error:', err);
-      toast.error(err?.message || 'Failed to create task');
+      toast.error(err?.message || (isFr ? 'Échec de la création de la tâche' : 'Failed to create task'));
       throw err; // re-throw so modal knows it failed
     }
   };
@@ -379,12 +394,12 @@ export default function Tasks() {
   const handleUpdate = async (id: string, input: TaskUpdateInput) => {
     try {
       await updateTask(id, input);
-      toast.success('Task updated');
+      toast.success(isFr ? 'Tâche mise à jour' : 'Task updated');
       refresh();
       setEditingTask(null);
     } catch (err: any) {
       console.error('Update task error:', err);
-      toast.error(err?.message || 'Failed to update task');
+      toast.error(err?.message || (isFr ? 'Échec de la mise à jour de la tâche' : 'Failed to update task'));
       throw err;
     }
   };
@@ -393,30 +408,30 @@ export default function Tasks() {
     try {
       const newStatus: TaskStatus = task.status === 'open' ? 'done' : 'open';
       await updateTask(task.id, { status: newStatus });
-      toast.success(newStatus === 'done' ? 'Task completed' : 'Task reopened');
+      toast.success(newStatus === 'done' ? (isFr ? 'Tâche terminée' : 'Task completed') : (isFr ? 'Tâche rouverte' : 'Task reopened'));
       refresh();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to update task');
+      toast.error(err?.message || (isFr ? 'Échec de la mise à jour de la tâche' : 'Failed to update task'));
     }
   };
 
   const handleDuplicate = async (task: TaskRow) => {
     try {
       await duplicateTask(task.id);
-      toast.success('Task duplicated');
+      toast.success(isFr ? 'Tâche dupliquée' : 'Task duplicated');
       refresh();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to duplicate task');
+      toast.error(err?.message || (isFr ? 'Échec de la duplication de la tâche' : 'Failed to duplicate task'));
     }
   };
 
   const handleDelete = async (task: TaskRow) => {
     try {
       await deleteTask(task.id);
-      toast.success('Task deleted');
+      toast.success(isFr ? 'Tâche supprimée' : 'Task deleted');
       refresh();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to delete task');
+      toast.error(err?.message || (isFr ? 'Échec de la suppression de la tâche' : 'Failed to delete task'));
     }
   };
 
@@ -426,18 +441,18 @@ export default function Tasks() {
     try {
       if (actionId === 'mark_open') {
         await bulkUpdateTaskStatus(ids, 'open');
-        toast.success(`${ids.length} task(s) marked as open`);
+        toast.success(isFr ? `${ids.length} tâche(s) marquée(s) comme ouverte(s)` : `${ids.length} task(s) marked as open`);
       } else if (actionId === 'mark_done') {
         await bulkUpdateTaskStatus(ids, 'done');
-        toast.success(`${ids.length} task(s) completed`);
+        toast.success(isFr ? `${ids.length} tâche(s) terminée(s)` : `${ids.length} task(s) completed`);
       } else if (actionId === 'delete') {
         await bulkDeleteTasks(ids);
-        toast.success(`${ids.length} task(s) deleted`);
+        toast.success(isFr ? `${ids.length} tâche(s) supprimée(s)` : `${ids.length} task(s) deleted`);
       }
       setSelected(new Set());
       refresh();
     } catch {
-      toast.error('Action failed');
+      toast.error(isFr ? "Échec de l'action" : 'Action failed');
     }
   };
 
@@ -445,39 +460,39 @@ export default function Tasks() {
     const ids = Array.from(selected);
     try {
       await bulkUpdateTaskPriority(ids, priority);
-      toast.success(`Priority updated for ${ids.length} task(s)`);
+      toast.success(isFr ? `Priorité mise à jour pour ${ids.length} tâche(s)` : `Priority updated for ${ids.length} task(s)`);
       setSelected(new Set());
       refresh();
     } catch {
-      toast.error('Action failed');
+      toast.error(isFr ? "Échec de l'action" : 'Action failed');
     }
   };
 
   const bulkActions: BulkAction[] = [
-    { id: 'mark_open', label: 'Mark Open', icon: Circle },
-    { id: 'mark_done', label: 'Mark Done', icon: CheckCircle2 },
-    { id: 'delete', label: 'Delete', icon: Trash2, variant: 'danger' },
+    { id: 'mark_open', label: isFr ? 'Marquer ouverte' : 'Mark Open', icon: Circle },
+    { id: 'mark_done', label: isFr ? 'Marquer terminée' : 'Mark Done', icon: CheckCircle2 },
+    { id: 'delete', label: isFr ? 'Supprimer' : 'Delete', icon: Trash2, variant: 'danger' },
   ];
 
   // ── Columns ──
   const columns = [
-    { key: 'public_id', label: 'Task', sortable: true },
-    { key: 'type', label: 'Type', sortable: false },
-    { key: 'title', label: 'Title', sortable: true },
-    { key: 'status', label: 'Status', sortable: true },
-    { key: 'priority', label: 'Priority', sortable: true },
+    { key: 'public_id', label: isFr ? 'Tâche' : 'Task', sortable: true },
+    { key: 'type', label: isFr ? 'Type' : 'Type', sortable: false },
+    { key: 'title', label: isFr ? 'Titre' : 'Title', sortable: true },
+    { key: 'status', label: isFr ? 'Statut' : 'Status', sortable: true },
+    { key: 'priority', label: isFr ? 'Priorité' : 'Priority', sortable: true },
   ];
 
   return (
     <>
       {/* ── HEADER ── */}
       <div className="flex items-center justify-between">
-        <h1 className="text-[28px] font-bold text-text-primary leading-tight">Tasks{!loading && <span className="ml-2 text-[15px] font-normal text-text-tertiary tabular-nums">{total}</span>}</h1>
+        <h1 className="text-[28px] font-bold text-text-primary leading-tight">{isFr ? 'Tâches' : 'Tasks'}{!loading && <span className="ml-2 text-[15px] font-normal text-text-tertiary tabular-nums">{total}</span>}</h1>
         <button
           onClick={() => setModalOpen(true)}
           className="inline-flex items-center gap-2 h-10 px-5 bg-[#d8d0c2] text-[#000] hover:bg-[#cabfad] rounded-md text-[14px] font-medium active:scale-[0.98] transition-all"
         >
-          Add Task
+          {isFr ? 'Ajouter une tâche' : 'Add Task'}
         </button>
       </div>
 
@@ -488,29 +503,29 @@ export default function Tasks() {
           <input
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
-            placeholder="Filter tasks..."
+            placeholder={isFr ? 'Filtrer les tâches...' : 'Filter tasks...'}
             className="h-9 w-[200px] pl-9 pr-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary focus:border-text-tertiary transition-all"
           />
         </div>
         <FilterDropdown
-          label="Status"
+          label={isFr ? 'Statut' : 'Status'}
           value={statusFilter}
           onChange={v => setStatusFilter(v as TaskStatusFilter)}
           options={[
-            { value: 'all', label: 'All' },
-            { value: 'open', label: 'Open' },
-            { value: 'done', label: 'Done' },
+            { value: 'all', label: isFr ? 'Tous' : 'All' },
+            { value: 'open', label: isFr ? 'Ouverte' : 'Open' },
+            { value: 'done', label: isFr ? 'Terminée' : 'Done' },
           ]}
         />
         <FilterDropdown
-          label="Priority"
+          label={isFr ? 'Priorité' : 'Priority'}
           value={priorityFilter}
           onChange={v => setPriorityFilter(v as TaskPriorityFilter)}
           options={[
-            { value: 'all', label: 'All' },
-            { value: 'low', label: 'Low' },
-            { value: 'medium', label: 'Medium' },
-            { value: 'high', label: 'High' },
+            { value: 'all', label: isFr ? 'Toutes' : 'All' },
+            { value: 'low', label: isFr ? 'Basse' : 'Low' },
+            { value: 'medium', label: isFr ? 'Moyenne' : 'Medium' },
+            { value: 'high', label: isFr ? 'Haute' : 'High' },
           ]}
         />
       </div>
@@ -567,11 +582,11 @@ export default function Tasks() {
                 <CheckCircle2 size={22} className="text-text-tertiary" strokeWidth={1.5} />
               </div>
               <div className="text-text-tertiary">
-                <div className="text-[14px] font-medium mb-1 text-text-primary">No tasks found</div>
+                <div className="text-[14px] font-medium mb-1 text-text-primary">{isFr ? 'Aucune tâche trouvée' : 'No tasks found'}</div>
                 <div className="text-[13px]">
                   {debouncedQ || statusFilter !== 'all' || priorityFilter !== 'all'
-                    ? 'Try adjusting your filters or search query.'
-                    : 'Create your first task to get started.'}
+                    ? (isFr ? 'Essayez d\'ajuster vos filtres ou votre recherche.' : 'Try adjusting your filters or search query.')
+                    : (isFr ? 'Créez votre première tâche pour commencer.' : 'Create your first task to get started.')}
                 </div>
               </div>
               {!(debouncedQ || statusFilter !== 'all' || priorityFilter !== 'all') && (
@@ -580,7 +595,7 @@ export default function Tasks() {
                   className="inline-flex items-center gap-2 h-9 px-4 bg-primary text-white rounded-md text-[13px] font-medium hover:bg-primary-hover active:scale-[0.98] transition-all mt-1"
                 >
                   <CirclePlus size={14} strokeWidth={1.5} />
-                  Add Task
+                  {isFr ? 'Ajouter une tâche' : 'Add Task'}
                 </button>
               )}
             </div>
@@ -616,7 +631,7 @@ export default function Tasks() {
                     {row.due_date && (
                       <span className="text-[12px] text-text-tertiary mt-0.5 flex items-center gap-1">
                         <Calendar size={11} />
-                        {new Date(row.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {new Date(row.due_date).toLocaleDateString(isFr ? 'fr-CA' : 'en-US', { month: 'short', day: 'numeric' })}
                       </span>
                     )}
                   </div>
@@ -631,14 +646,14 @@ export default function Tasks() {
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditingTask(row); }}
                     className="p-1.5 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
-                    title="Edit"
+                    title={isFr ? 'Modifier' : 'Edit'}
                   >
                     <Pencil size={14} />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDelete(row); }}
                     className="p-1.5 rounded text-text-tertiary hover:text-danger hover:bg-danger/10 transition-colors"
-                    title="Delete"
+                    title={isFr ? 'Supprimer' : 'Delete'}
                   >
                     <Trash2 size={14} />
                   </button>
