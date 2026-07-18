@@ -663,9 +663,11 @@ export default function CompanySettings() {
             page Localisation GPS (/settings/location), avec le roster des
             consentements — tout le volet GPS au même endroit. */}
 
-        {/* Save bar */}
+        {/* Save bar — sticky, z-30 pour rester au-dessus de la carte
+            SetupChecklist (z-40 mais repliée en pastille sur mobile, cf.
+            SetupChecklist). */}
         <div className={cn(
-          'sticky bottom-4 z-10 flex items-center justify-between gap-3 rounded-xl border px-4 py-3 backdrop-blur',
+          'sticky bottom-4 z-30 flex items-center justify-between gap-3 rounded-xl border px-4 py-3 backdrop-blur',
           dirty
             ? 'border-amber-300 bg-amber-50/95 dark:border-amber-700 dark:bg-amber-900/40'
             : 'border-outline bg-surface-card/90'

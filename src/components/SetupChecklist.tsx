@@ -30,7 +30,11 @@ export default function SetupChecklist() {
   const navigate = useNavigate();
 
   const [status, setStatus] = useState<Status | null>(null);
-  const [expanded, setExpanded] = useState(true);
+  // Repliée par défaut sur mobile (juste l'en-tête, ~44px) pour ne pas couvrir
+  // le contenu / les save bars ; dépliée sur desktop où la place existe.
+  const [expanded, setExpanded] = useState(() => {
+    try { return window.matchMedia('(min-width: 1024px)').matches; } catch { return true; }
+  });
   const [celebrated, setCelebrated] = useState(false);
   const [dismissed, setDismissed] = useState(() => {
     try { return localStorage.getItem(DISMISS_KEY) === 'true'; } catch { return false; }
@@ -150,8 +154,18 @@ export default function SetupChecklist() {
   };
 
   // Don't render until we have status + not dismissed + not server-completed
-  if (dismissed || !status || status.setup_completed) return null;
-  if (total === 0) return null;
+  const hidden = dismissed || !status || !!status?.setup_completed || total === 0;
+
+  // Signale au SupportFAB si la carte occupe le coin bas-droit, pour qu'il se
+  // décale au-dessus au lieu de chevaucher (dispatché à chaque changement).
+  useEffect(() => {
+    try {
+      localStorage.setItem('lume-setup-checklist-visible', hidden ? 'false' : 'true');
+      window.dispatchEvent(new CustomEvent('lume:setup-visibility', { detail: { visible: !hidden } }));
+    } catch { /* localStorage indispo */ }
+  }, [hidden]);
+
+  if (hidden) return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-40 w-[300px] max-w-[calc(100vw-2rem)] pointer-events-auto">
