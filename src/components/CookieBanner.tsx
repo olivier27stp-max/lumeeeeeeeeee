@@ -52,6 +52,9 @@ export function CookieBanner() {
     <div
       role="dialog"
       aria-label={t.cookies.title}
+      // Repère stable pour les éléments flottants (bouton d'aide) qui doivent
+      // se décaler au-dessus de cette barre plutôt que d'être recouverts.
+      data-cookie-banner=""
       style={{ zIndex: Z.cookieBanner }}
       className="fixed bottom-0 left-0 right-0 border-t border-outline bg-surface shadow-2xl"
     >

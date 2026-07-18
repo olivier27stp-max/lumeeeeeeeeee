@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Search, X, ChevronDown, LifeBuoy, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
+import { Z } from '../lib/zIndex';
 import { useTranslation } from '../i18n';
 import SupportPanel from './SupportPanel';
 
@@ -196,7 +197,8 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[2px]"
+            style={{ zIndex: Z.supportDrawerBackdrop }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-[2px]"
             onClick={onClose}
           />
 
@@ -208,7 +210,8 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', stiffness: 320, damping: 34 }}
-            className="fixed top-0 right-0 bottom-0 z-[61] w-full sm:w-[420px] bg-surface-elevated border-l border-outline shadow-2xl flex flex-col"
+            style={{ zIndex: Z.supportDrawer }}
+            className="fixed top-0 right-0 bottom-0 w-full sm:w-[420px] bg-surface-elevated border-l border-outline shadow-2xl flex flex-col"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-outline-subtle shrink-0">
