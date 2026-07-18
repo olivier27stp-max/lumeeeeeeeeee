@@ -385,6 +385,15 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     if (!form.enabled) return res.status(403).json({ error: 'Form is currently disabled.' });
 
     const body = req.body;
+
+    // Honeypot : un humain ne voit pas le champ `website` (caché en CSS), donc
+    // il reste vide. Rempli = bot → on renvoie un faux succès (200) pour ne pas
+    // lui apprendre qu'il a été détecté, mais on n'enregistre RIEN.
+    if (body.website && String(body.website).trim() !== '') {
+      console.warn('[public/form] honeypot triggered — submission ignored', { formId: form.id });
+      return res.json({ ok: true, spam_filtered: true });
+    }
+
     const orgId = form.org_id;
 
     // ── Resolve a VALID actor (auth.users id) for created_by ──

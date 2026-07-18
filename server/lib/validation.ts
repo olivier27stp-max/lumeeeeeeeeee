@@ -351,6 +351,10 @@ export const publicFormSubmissionSchema = z.object({
   custom_responses: z.record(z.string(), z.any()).optional().default({}),
   notes: optionalString,
   photos: z.array(z.string().url()).max(20, 'Too many photos (max 20).').optional().default([]),
+  // Honeypot anti-bot : champ caché en CSS, invisible pour un humain. Un bot
+  // qui remplit tous les champs le remplira aussi → soumission rejetée
+  // silencieusement (voir la route). Toujours vide pour un vrai visiteur.
+  website: optionalString,
 });
 
 // ─── AI / Agent ─────────────────────────────────────────────────
