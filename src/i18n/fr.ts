@@ -885,6 +885,8 @@ const fr: TranslationKeys = {
     fieldDescription: 'Description',
     fieldNone: 'Aucun',
     vehicleNumbers: 'Numéros de véhicule',
+    placeholderTeam: 'Équipe {n}',
+    placeholderTruck: 'Camion {n}',
     noVisitsToday: 'Aucune visite planifiée ce jour.',
     noActiveTeams: 'Aucune équipe active.',
     noActiveTeamsHint: 'Créez des équipes pour répartir les visites par véhicule.',

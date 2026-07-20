@@ -34,7 +34,12 @@ interface DailyRow {
   key: string;
   teamId: string | null;
   team: TeamRecord | null;
+  /** Ligne d'exemple affichée quand aucune équipe ni visite n'existe (1-based). */
+  placeholderIndex?: number;
 }
+
+/** Nombre de lignes d'exemple quand la journée est entièrement vide. */
+const PLACEHOLDER_ROW_COUNT = 5;
 
 interface DailyDispatchViewProps {
   date: Date;
@@ -120,7 +125,16 @@ export default function DailyDispatchView({
     if (unassignedMode || unassigned.length > 0) {
       list.push({ key: '__unassigned__', teamId: null, team: null });
     }
-    const layouts = list.map((row) => assignLanes(row.teamId ? byTeam.get(row.teamId) || [] : unassigned));
+    // Journée entièrement vide (aucune équipe, aucune visite) : la grille
+    // reste complètement dessinée, avec des lignes d'exemple à gauche —
+    // même structure, mêmes dimensions, prête à recevoir des jobs.
+    if (list.length === 0) {
+      for (let i = 1; i <= PLACEHOLDER_ROW_COUNT; i++) {
+        list.push({ key: `__placeholder-${i}__`, teamId: null, team: null, placeholderIndex: i });
+      }
+    }
+    const layouts = list.map((row) =>
+      assignLanes(row.placeholderIndex ? [] : row.teamId ? byTeam.get(row.teamId) || [] : unassigned));
     const heights = layouts.map((l) => rowHeightForLanes(l.laneCount));
     return { rows: list, rowLayouts: layouts, rowHeights: heights };
   }, [effEvents, rowTeams, unassignedMode]);
@@ -409,9 +423,15 @@ export default function DailyDispatchView({
             {rows.map((row, ri) => {
               const layout = rowLayouts[ri];
               const teamColor = row.team && isHexColor(row.team.color_hex) ? row.team.color_hex : FALLBACK_TEAM_COLOR;
-              const primaryText = fieldText(prefs.primary, row);
-              const secondaryRaw = prefs.secondary === prefs.primary ? null : fieldText(prefs.secondary, row);
-              const secondaryAsEyebrow = prefs.secondary === 'teamName' || prefs.secondary === 'vehicle';
+              const primaryText = row.placeholderIndex
+                ? t.schedule.placeholderTruck.replace('{n}', String(row.placeholderIndex).padStart(2, '0'))
+                : fieldText(prefs.primary, row);
+              const secondaryRaw = row.placeholderIndex
+                ? t.schedule.placeholderTeam.replace('{n}', String(row.placeholderIndex))
+                : prefs.secondary === prefs.primary ? null : fieldText(prefs.secondary, row);
+              const secondaryAsEyebrow = row.placeholderIndex
+                ? true
+                : prefs.secondary === 'teamName' || prefs.secondary === 'vehicle';
               return (
                 <div key={row.key} className="flex border-b border-border/70" style={{ height: rowHeights[ri] }}>
                   {/* Colonne fixe de gauche (sticky horizontalement) */}
@@ -524,21 +544,6 @@ export default function DailyDispatchView({
         </div>
       </div>
 
-      {/* État vide minimal — par-dessus la grille, sans bloquer les clics.
-          Sans équipe active, la timeline complète reste affichée (en-tête des
-          heures, grille, ligne « maintenant ») — seules les lignes manquent. */}
-      {effEvents.length === 0 && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-0.5 rounded-xl border border-border bg-surface px-4 py-2 shadow-sm">
-            <span className="text-[11.5px] font-medium text-text-tertiary">
-              {rows.length === 0 ? t.schedule.noActiveTeams : t.schedule.noVisitsToday}
-            </span>
-            {rows.length === 0 && (
-              <span className="text-[10.5px] text-text-tertiary/80">{t.schedule.noActiveTeamsHint}</span>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

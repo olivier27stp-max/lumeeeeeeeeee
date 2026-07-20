@@ -886,6 +886,8 @@ const en = {
     fieldDescription: 'Description',
     fieldNone: 'None',
     vehicleNumbers: 'Vehicle numbers',
+    placeholderTeam: 'Team {n}',
+    placeholderTruck: 'Truck {n}',
     noVisitsToday: 'No visits scheduled for this day.',
     noActiveTeams: 'No active teams.',
     noActiveTeamsHint: 'Create teams to dispatch visits by vehicle.',
