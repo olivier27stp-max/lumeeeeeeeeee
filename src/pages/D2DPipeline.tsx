@@ -443,7 +443,7 @@ export default function D2DPipeline() {
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-outline">
         <div>
-          <h1 className="text-[18px] font-bold text-text-primary">Pipeline D2D</h1>
+          <h1 className="text-[18px] font-bold text-text-primary">Pipeline</h1>
           <p className="text-[12px] text-text-muted mt-0.5">
             {totalDeals} {fr ? (totalDeals !== 1 ? 'deals' : 'deal') : (totalDeals !== 1 ? 'deals' : 'deal')} · {formatCurrency(totalValue * 100, 'CAD')}
           </p>
