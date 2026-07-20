@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { listQuotePresets } from '../../lib/quotePresetsApi';
+import { presetGradient } from '../../lib/presetPalette';
 import type { QuotePreset } from '../../types';
 
 interface PresetSelectModalProps {
@@ -16,33 +17,8 @@ interface PresetSelectModalProps {
   onClose: () => void;
 }
 
-/**
- * Palette de 15 dégradés doux (sage / beige / tons terreux) assignés aux
- * presets sans image de couverture. Au-delà de 15 presets, on recycle les
- * mêmes couleurs (index % 15).
- */
-const PRESET_GRADIENTS: Array<[string, string]> = [
-  ['#b8c4b0', '#d8d0c2'], // sauge → sable
-  ['#aeb9c4', '#d0d6dc'], // bleu-gris → brume
-  ['#cfc2a5', '#e4dcc9'], // blé → crème
-  ['#c4a99b', '#ddcdc2'], // argile → lin
-  ['#a8b8a2', '#ccd6c8'], // mousse → céladon
-  ['#b3b0c4', '#d5d3dd'], // lavande ardoise → lilas pâle
-  ['#a9bfbc', '#cfdcda'], // eucalyptus → écume
-  ['#c4b0b4', '#ddd0d3'], // vieux rose → poudre
-  ['#b5b89f', '#d6d7c5'], // olive → tilleul
-  ['#a4b1c2', '#c9d2dd'], // denim délavé → ciel gris
-  ['#c0b3a4', '#ded5ca'], // taupe chaud → grège
-  ['#adc0b3', '#d1ddd5'], // menthe grise → jade pâle
-  ['#bcaab8', '#d9ced7'], // mauve → rose cendré
-  ['#b8b8b4', '#d8d8d4'], // pierre → galet
-  ['#c9b8a0', '#e2d6c4'], // caramel doux → avoine
-];
-
-function presetGradient(index: number): string {
-  const [from, to] = PRESET_GRADIENTS[index % PRESET_GRADIENTS.length];
-  return `linear-gradient(120deg, ${from}, ${to})`;
-}
+// La palette des 15 dégradés vit dans lib/presetPalette.ts (partagée avec la
+// vue Jour du calendrier Dispatch — même source de vérité).
 
 const BLANK_ID = '__blank__';
 

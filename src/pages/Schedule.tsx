@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../i18n';
 import CalendarMapModal from '../components/CalendarMapModal';
 import AddVisitModal from '../components/AddVisitModal';
+import DailyDispatchView from '../components/dispatch-daily/DailyDispatchView';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarControllerProvider, CalendarUiView, useCalendarController } from '../contexts/CalendarController';
 import { useJobModalController } from '../contexts/JobModalController';
@@ -700,6 +701,30 @@ function ScheduleContent() {
     dnd.updateDragPosition(e.clientY, rect.top, colIndex);
   }, [dnd, view]);
 
+  // Vue Jour (timeline horizontale) — mêmes mutations que le DnD de la vue
+  // Semaine, exposées en callbacks pour le drag/resize horizontal dédié.
+  const handleDailyReschedule = useCallback(async (eventId: string, startAt: string, endAt: string, teamId: string | null) => {
+    try {
+      const result = await rescheduleMut.mutateAsync({ eventId, startAt, endAt, teamId, timezone: DEFAULT_TIMEZONE });
+      if (result.overlaps > 0) toast.warning(t.schedule.overlapping);
+      else toast.success(t.schedule.eventRescheduled);
+    } catch (err: any) {
+      toast.error(err?.message || t.schedule.couldNotReschedule);
+      throw err;
+    }
+  }, [rescheduleMut, t]);
+
+  const handleDailyResize = useCallback(async (eventId: string, startAt: string, endAt: string) => {
+    try {
+      const result = await rescheduleMut.mutateAsync({ eventId, startAt, endAt, timezone: DEFAULT_TIMEZONE });
+      if (result.overlaps > 0) toast.warning(t.schedule.overlapping);
+      else toast.success(t.schedule.eventUpdated);
+    } catch (err: any) {
+      toast.error(err?.message || t.schedule.couldNotResize);
+      throw err;
+    }
+  }, [rescheduleMut, t]);
+
   const handleGridPointerUp = useCallback((e: React.PointerEvent, columns: Date[]) => {
     if (!dnd.dragState.active) return;
 
@@ -811,7 +836,6 @@ function ScheduleContent() {
     const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   }, [selectedDate]);
-  const dayColumns = useMemo(() => [selectedDate], [selectedDate]);
 
   const viewOpts: { id: CalendarUiView; label: string; icon: React.ReactNode }[] = [
     { id: 'month', label: t.schedule.month, icon: <CalendarDays size={14} /> },
@@ -845,6 +869,11 @@ function ScheduleContent() {
       <header className="relative z-50 flex items-center gap-2 border-b border-border bg-surface px-4 py-2.5 lg:px-6">
         <button onClick={goPrev} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors"><ChevronLeft size={18} /></button>
         <button onClick={goNext} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors"><ChevronRight size={18} /></button>
+        {view === 'day' && !isSameDay(selectedDate, new Date()) && (
+          <button onClick={goToday} className="rounded-lg border border-border px-2.5 py-[5px] text-[12px] font-medium text-text-secondary hover:bg-surface-secondary transition-colors">
+            {t.schedule.today}
+          </button>
+        )}
         <div className="relative">
           <button onClick={() => setCalPop(!calPop)} className="flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-surface-secondary transition-colors">
             <h1 className="text-[17px] font-bold text-text-primary">{label}</h1>
@@ -1003,7 +1032,20 @@ function ScheduleContent() {
           ) : view === 'week' ? (
             <TimeGrid columns={weekColumns} events={filtered} tcMap={tcMap} onSlotClick={(s) => openAddVisit(s)} onEventClick={openExisting} {...timeGridDndProps} />
           ) : view === 'day' ? (
-            <TimeGrid columns={dayColumns} events={filtered} tcMap={tcMap} onSlotClick={(s) => openAddVisit(s)} onEventClick={openExisting} {...timeGridDndProps} />
+            <DailyDispatchView
+              date={selectedDate}
+              events={filtered}
+              teams={teams}
+              visibleTeamIds={effTeams}
+              orgId={orgId || null}
+              unassignedMode={unassignedMode}
+              isError={evQ.isError}
+              onEventClick={openExisting}
+              onSlotClick={(s) => openAddVisit(s)}
+              onReschedule={handleDailyReschedule}
+              onResize={handleDailyResize}
+              externalDnd={dnd}
+            />
           ) : view === 'agenda' ? (
             <div className="h-full overflow-y-auto"><AgendaView events={filtered} overlaps={overlaps} tcMap={tcMap} teams={teams} onEventClick={openExisting} onSlotClick={(s, e) => openAddVisit(s, e)} /></div>
           ) : null}
