@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { cn, formatCurrency } from '../lib/utils';
-import { GripVertical, X, Filter, ChevronDown, User, UserCheck, Phone, Mail, RefreshCw } from 'lucide-react';
+import { GripVertical, X, Filter, ChevronDown, User, UserCheck, Phone, Mail, RefreshCw, Target, Clock, FileText, Award, Ban, type LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -169,6 +169,22 @@ function DealCard({ deal, onStatusChange, onSelect }: {
   );
 }
 
+// ── Pipeline-only column identity ──
+// D2D_STAGE_CONFIG colors are shared with the Vente Map, so the muted kanban
+// palette lives here: soft tint + border + empty-state per stage.
+const STAGE_VISUALS: Record<D2DStage, {
+  soft: string;
+  emptyIcon: LucideIcon;
+  emptyHintFr: string;
+  emptyHint: string;
+}> = {
+  new_lead:    { soft: '#8A9B7D', emptyIcon: Target,   emptyHintFr: 'Les nouveaux leads apparaîtront ici.',   emptyHint: 'New leads will appear here.' },
+  must_recall: { soft: '#B39C77', emptyIcon: Clock,    emptyHintFr: 'Les leads à rappeler apparaîtront ici.', emptyHint: 'Leads to recall will appear here.' },
+  quote_sent:  { soft: '#7E8CA0', emptyIcon: FileText, emptyHintFr: 'Les devis envoyés apparaîtront ici.',    emptyHint: 'Sent quotes will appear here.' },
+  closed_won:  { soft: '#6FA287', emptyIcon: Award,    emptyHintFr: 'Les deals gagnés apparaîtront ici.',     emptyHint: 'Won deals will appear here.' },
+  closed_lost: { soft: '#B08A8A', emptyIcon: Ban,      emptyHintFr: 'Les deals perdus apparaîtront ici.',     emptyHint: 'Lost deals will appear here.' },
+};
+
 // ── Stage Column ──
 
 function StageColumn({ stage, deals, onStatusChange, onSelect }: {
@@ -177,31 +193,41 @@ function StageColumn({ stage, deals, onStatusChange, onSelect }: {
   onSelect: (deal: PipelineDeal) => void;
 }) {
   const config = D2D_STAGE_CONFIG[stage];
+  const visuals = STAGE_VISUALS[stage];
+  const EmptyIcon = visuals.emptyIcon;
   const { language } = useTranslation();
   const fr = language === 'fr';
   const totalValue = deals.reduce((sum, d) => sum + d.value, 0);
 
   return (
-    <div className="flex flex-col w-[272px] shrink-0">
-      <div className="px-3 py-2.5 rounded-t-xl border border-b-0 border-outline bg-surface-secondary">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: config.color }} />
-            <span className="text-[12px] font-bold text-text-primary">{fr ? config.labelFr : config.label}</span>
-            <span className="text-[10px] font-bold text-text-muted bg-surface-tertiary px-1.5 py-0.5 rounded-full">{deals.length}</span>
-          </div>
-          {totalValue > 0 && (
-            <span className="text-[10px] font-semibold text-text-muted tabular-nums">{formatCurrency(totalValue * 100, 'CAD')}</span>
-          )}
+    <div className="flex flex-col w-[280px] shrink-0">
+      <div
+        className="px-4 py-3 rounded-t-xl border border-b-0"
+        style={{ borderColor: visuals.soft + '40', background: visuals.soft + '08' }}
+      >
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full shrink-0" style={{ background: visuals.soft }} />
+          <span className="text-[12.5px] font-semibold text-text-primary tracking-tight truncate">{fr ? config.labelFr : config.label}</span>
+          <span className="text-[11px] font-medium text-text-muted tabular-nums">{deals.length}</span>
         </div>
+        {deals.length > 0 && (
+          <p className="text-[11px] font-medium text-text-muted tabular-nums mt-0.5 pl-4">{formatCurrency(totalValue * 100, 'CAD')}</p>
+        )}
       </div>
       <SortableContext items={deals.map(d => d.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex-1 space-y-2 p-2 rounded-b-xl border border-t-0 border-outline bg-surface-sunken min-h-[120px] overflow-y-auto max-h-[calc(100vh-14rem)]">
+        <div
+          className="pipeline-scroll flex-1 space-y-2.5 p-3 rounded-b-xl border border-t-0 min-h-[120px] overflow-y-auto max-h-[calc(100vh-14rem)]"
+          style={{ borderColor: visuals.soft + '40', background: visuals.soft + '08' }}
+        >
           {deals.map((deal) => (
             <DealCard key={deal.id} deal={deal} onStatusChange={onStatusChange} onSelect={onSelect} />
           ))}
           {deals.length === 0 && (
-            <p className="text-center text-[11px] text-text-muted py-8">Aucun deal</p>
+            <div className="flex flex-col items-center justify-center text-center py-10 px-4">
+              <EmptyIcon size={34} strokeWidth={1.25} className="text-text-tertiary" />
+              <p className="text-[12px] font-semibold text-text-secondary mt-3">{fr ? 'Aucun deal' : 'No deals'}</p>
+              <p className="text-[11px] text-text-muted mt-1 leading-relaxed">{fr ? visuals.emptyHintFr : visuals.emptyHint}</p>
+            </div>
           )}
         </div>
       </SortableContext>
@@ -440,6 +466,14 @@ export default function D2DPipeline() {
 
   return (
     <div className="h-[calc(100vh-3rem)] flex flex-col bg-surface">
+      {/* Scoped scrollbar styling — this page only, no shared CSS touched */}
+      <style>{`
+        .pipeline-scroll { scrollbar-width: thin; scrollbar-color: var(--color-outline) transparent; }
+        .pipeline-scroll::-webkit-scrollbar { height: 8px; width: 6px; }
+        .pipeline-scroll::-webkit-scrollbar-track { background: transparent; }
+        .pipeline-scroll::-webkit-scrollbar-thumb { background: var(--color-outline); border-radius: 999px; }
+        .pipeline-scroll::-webkit-scrollbar-thumb:hover { background: var(--color-outline-strong); }
+      `}</style>
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-outline">
         <div>
@@ -497,9 +531,9 @@ export default function D2DPipeline() {
       {/* Body: Kanban + Detail panel */}
       <div className="flex-1 flex overflow-hidden">
         {/* Kanban board */}
-        <div className="flex-1 overflow-x-auto p-4">
+        <div className="pipeline-scroll flex-1 overflow-x-auto p-5">
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="flex gap-4 min-w-max">
+            <div className="flex gap-5 min-w-max">
               {D2D_STAGES.map((stage) => (
                 <StageColumn key={stage} stage={stage} deals={dealsByStage[stage]} onStatusChange={handleStatusChange} onSelect={setSelectedDeal} />
               ))}
