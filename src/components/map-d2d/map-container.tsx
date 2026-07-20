@@ -11,6 +11,7 @@ import {
   popupStatusDotId,
 } from './lead-pin';
 import { type ZoneData, getZoneColor } from './zone-types';
+import { PinClusterManager, type ClusterSourcePoint } from './pin-cluster';
 import { getRepAvatar } from '../../lib/constants/avatars';
 import { useTranslation } from '../../i18n';
 
@@ -178,6 +179,17 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
   const [showReps, setShowReps] = useState(true);
   const repMarkersRef = useRef(new Map<string, mapboxgl.Marker>());
 
+  // --- Clustering (regroupement progressif au dézoom) ---
+  const clusterMgrRef = useRef<PinClusterManager | null>(null);
+  // Pins couverts par un cluster au zoom courant — masqués par applyPinVisibility
+  const clusteredIdsRef = useRef<Set<string>>(new Set());
+  // Répliques stables pour les callbacks hors-React (événements carte)
+  const activeFiltersRef = useRef(activeFilters);
+  activeFiltersRef.current = activeFilters;
+  const applyPinVisibilityRef = useRef<() => void>(() => {});
+  applyPinVisibilityRef.current = () => applyPinVisibility();
+  const clusterRebuildQueuedRef = useRef(false);
+
   // --- Boussole ---
   const [compassBearing, setCompassBearing] = useState(0);
 
@@ -294,10 +306,11 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
   function getNavPins(status: PinStatus): LeadPinData[] {
     const center = mapRef.current?.getCenter();
     const pins: LeadPinData[] = [];
-    markersRef.current.forEach(({ pin, marker }) => {
-      if (pin.status === status && marker.getElement().style.display !== 'none') {
-        pins.push(pin);
-      }
+    // Basé sur les filtres plutôt que sur le display : un pin regroupé dans un
+    // cluster reste navigable — le vol (zoom ≥ 17) le fera réapparaître.
+    if (!activeFilters.has(status)) return pins;
+    markersRef.current.forEach(({ pin }) => {
+      if (pin.status === status) pins.push(pin);
     });
     if (center) {
       pins.sort((a, b) => {
@@ -419,10 +432,12 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
   // Pin visibility — applies status + date + rep filters
   // ---------------------------------------------------------------------------
   function applyPinVisibility(filters?: Set<PinStatus>) {
-    const f = filters ?? activeFilters;
+    const f = filters ?? activeFiltersRef.current;
     const notesOn = containerRef.current?.dataset.showNotes === 'true';
     markersRef.current.forEach(({ pin, marker, noteMarker }) => {
-      let visible = f.has(pin.status);
+      // Un pin couvert par un cluster est temporairement masqué — ses données,
+      // son statut et ses interactions restent intacts.
+      let visible = f.has(pin.status) && !clusteredIdsRef.current.has(pin.id);
       if (visible && pinDateFilter !== 'all') {
         // pins don't have created_at in the current schema, always show for date filter
       }
@@ -430,6 +445,30 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
       if (noteMarker) {
         noteMarker.getElement().style.display = (visible && notesOn) ? '' : 'none';
       }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Clustering — l'index n'est reconstruit que sur mutation des pins/filtres
+  // ---------------------------------------------------------------------------
+  function rebuildClusters(filters?: Set<PinStatus>) {
+    const mgr = clusterMgrRef.current;
+    if (!mgr) return;
+    const f = filters ?? activeFiltersRef.current;
+    const pts: ClusterSourcePoint[] = [];
+    markersRef.current.forEach(({ pin }) => {
+      if (f.has(pin.status)) pts.push({ id: pin.id, lng: pin.lng, lat: pin.lat });
+    });
+    mgr.setData(pts);
+  }
+
+  /** Reconstruction déduplicée en microtâche — placePin en boucle reste O(n). */
+  function scheduleClusterRebuild() {
+    if (clusterRebuildQueuedRef.current) return;
+    clusterRebuildQueuedRef.current = true;
+    queueMicrotask(() => {
+      clusterRebuildQueuedRef.current = false;
+      rebuildClusters();
     });
   }
 
@@ -536,7 +575,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
       if (containerRef.current) containerRef.current.dataset.showNotes = String(next);
       markersRef.current.forEach(({ pin, noteMarker }) => {
         if (!noteMarker) return;
-        const visible = activeFilters.has(pin.status) && next;
+        const visible = activeFilters.has(pin.status) && !clusteredIdsRef.current.has(pin.id) && next;
         noteMarker.getElement().style.display = visible ? '' : 'none';
       });
       return next;
@@ -547,7 +586,9 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
     setActiveFilters((prev) => {
       const next = new Set(prev);
       if (next.has(status)) next.delete(status); else next.add(status);
+      activeFiltersRef.current = next;
       applyPinVisibility(next);
+      rebuildClusters(next);
       return next;
     });
   }
@@ -558,6 +599,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
     rec.marker.remove();
     if (rec.noteMarker) rec.noteMarker.remove();
     markersRef.current.delete(id);
+    scheduleClusterRebuild();
     bump();
     // Notify parent to delete from DB
     onPinDeletedRef.current?.(id, opts);
@@ -706,6 +748,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
       marker.getElement().style.display = 'none';
       if (noteMarker) noteMarker.getElement().style.display = 'none';
     }
+    scheduleClusterRebuild();
     bump();
     savePins();
   }
@@ -833,13 +876,22 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
           // (no visit modal, no pin placement — pins are created via the
           // add-pin button).
           if (containerRef.current?.dataset.mapMode === 'view') {
+            // Clic/tap sur un cluster → zoom d'exploration vers son contenu.
+            // Jamais de sélection de client, jamais de popup.
+            const clusterHit = clusterMgrRef.current?.findClusterAt(e.point);
+            if (clusterHit) {
+              clusterMgrRef.current!.zoomToCluster(clusterHit);
+              return;
+            }
             // Find the nearest pin to the click point (screen space). This is
             // the reliable path: the map's own click always fires, regardless
             // of marker z-index / canvas stacking that can eat DOM clicks.
             let nearest: LeadPinData | null = null;
             let nearestDist = Infinity;
             const HIT_RADIUS_PX = 22;
-            markersRef.current.forEach(({ pin }) => {
+            markersRef.current.forEach(({ pin, marker }) => {
+              // Pins masqués (regroupés dans un cluster ou filtrés) : inertes.
+              if (marker.getElement().style.display === 'none') return;
               const p = map.project([pin.lng, pin.lat]);
               const d = Math.hypot(p.x - e.point.x, p.y - e.point.y);
               if (d < nearestDist) { nearestDist = d; nearest = pin; }
@@ -855,9 +907,12 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
         // and only in view mode so drawing/add-pin flows are unaffected.
         map.on('dblclick', (e) => {
           if (containerRef.current?.dataset.mapMode !== 'view') return;
+          // Sur un cluster, le clic simple gère déjà le zoom d'exploration.
+          if (clusterMgrRef.current?.findClusterAt(e.point)) return;
           const HIT_RADIUS_PX = 22;
           let onPin = false;
-          markersRef.current.forEach(({ pin }) => {
+          markersRef.current.forEach(({ pin, marker }) => {
+            if (marker.getElement().style.display === 'none') return;
             const p = map.project([pin.lng, pin.lat]);
             if (Math.hypot(p.x - e.point.x, p.y - e.point.y) <= HIT_RADIUS_PX) onPin = true;
           });
@@ -1046,6 +1101,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
     if (gpsMarkerRef.current) tracked.add(gpsMarkerRef.current.getElement());
     repMarkersRef.current.forEach((m) => tracked.add(m.getElement()));
     drawingMarkersRef.current.forEach((m) => tracked.add(m.getElement()));
+    clusterMgrRef.current?.trackedElements().forEach((el) => tracked.add(el));
     map.getContainer().querySelectorAll('.mapboxgl-marker').forEach((node) => {
       const el = node as HTMLElement;
       if (!tracked.has(el)) el.remove();
@@ -1055,7 +1111,40 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
     (initialPins ?? []).forEach((pin) => {
       if (!markersRef.current.has(pin.id)) placePin(map, pin);
     });
+
+    // Réconciliation terminée → index de clustering à jour en un seul rebuild.
+    rebuildClusters();
   }, [initialPins, mapReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clustering progressif — le gestionnaire vit tant que la carte existe.
+  // Il rapporte quels pins sont couverts par un cluster ; la visibilité est
+  // appliquée ici, au même endroit que les filtres (un seul écrivain).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    const mgr = new PinClusterManager(map, {
+      label: (n) => (fr ? `${n} emplacements regroupés` : `${n} grouped locations`),
+      onChange: (clustered, reveals) => {
+        clusteredIdsRef.current = clustered;
+        applyPinVisibilityRef.current();
+        // Divergence : les pins révélés par un split partent du centre de
+        // leur cluster parent vers leur position réelle.
+        reveals.forEach((from, id) => {
+          const rec = markersRef.current.get(id);
+          if (rec && rec.marker.getElement().style.display !== 'none') {
+            mgr.animatePinReveal(rec.marker, from);
+          }
+        });
+      },
+    });
+    clusterMgrRef.current = mgr;
+    rebuildClusters();
+    return () => {
+      if (clusterMgrRef.current === mgr) clusterMgrRef.current = null;
+      clusteredIdsRef.current = new Set();
+      mgr.destroy();
+    };
+  }, [mapReady, fr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Follow deep-link focus changes once the map is up (covers the case where
   // the URL's lat/lng change while the map page is already mounted).
@@ -1873,7 +1962,9 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                         const allActive = allStatuses.every((s) => activeFilters.has(s));
                         const next = new Set(allActive ? [] as PinStatus[] : allStatuses);
                         setActiveFilters(next);
+                        activeFiltersRef.current = next;
                         applyPinVisibility(next);
+                        rebuildClusters(next);
                       }}
                       className="text-[9px] font-medium text-white/40 hover:text-white/70 transition-colors"
                     >
