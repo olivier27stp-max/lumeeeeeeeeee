@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { isSameDay } from 'date-fns';
-import { AlertTriangle, Users } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import type { ScheduleEventRecord } from '../../lib/scheduleApi';
@@ -372,16 +372,6 @@ export default function DailyDispatchView({
       </div>
     );
   }
-  if (rows.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-text-tertiary">
-        <Users size={28} className="opacity-40" />
-        <p className="text-sm font-medium">{t.schedule.noActiveTeams}</p>
-        <p className="text-xs">{t.schedule.noActiveTeamsHint}</p>
-      </div>
-    );
-  }
-
   return (
     <div className="relative h-full min-h-0" data-dispatch-daily>
       <div
@@ -534,12 +524,19 @@ export default function DailyDispatchView({
         </div>
       </div>
 
-      {/* État vide minimal — par-dessus la grille, sans bloquer les clics */}
+      {/* État vide minimal — par-dessus la grille, sans bloquer les clics.
+          Sans équipe active, la timeline complète reste affichée (en-tête des
+          heures, grille, ligne « maintenant ») — seules les lignes manquent. */}
       {effEvents.length === 0 && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-[11.5px] font-medium text-text-tertiary shadow-sm">
-            {t.schedule.noVisitsToday}
-          </span>
+          <div className="flex flex-col items-center gap-0.5 rounded-xl border border-border bg-surface px-4 py-2 shadow-sm">
+            <span className="text-[11.5px] font-medium text-text-tertiary">
+              {rows.length === 0 ? t.schedule.noActiveTeams : t.schedule.noVisitsToday}
+            </span>
+            {rows.length === 0 && (
+              <span className="text-[10.5px] text-text-tertiary/80">{t.schedule.noActiveTeamsHint}</span>
+            )}
+          </div>
         </div>
       )}
     </div>
