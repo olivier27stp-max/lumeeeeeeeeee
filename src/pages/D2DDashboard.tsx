@@ -326,7 +326,7 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
             className="cursor-pointer transition-shadow hover:shadow-md rounded-xl"
             onClick={() => {
               if (stat.label === 'Active Reps' || stat.label === 'Représentants actifs') navigate('/field-sales');
-              else if (stat.label === 'Pipeline Value' || stat.label === 'Valeur du pipeline') navigate('/d2d-pipeline');
+              else if (stat.label === 'Pipeline Value' || stat.label === 'Valeur du pipeline') navigate('/pipeline');
             }}
           >
             <StatCard {...stat} />
@@ -376,7 +376,7 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
         {/* Pipeline overview -- clickable -> pipeline page */}
         <Card
           className="cursor-pointer transition-shadow hover:shadow-md"
-          onClick={() => navigate('/d2d-pipeline')}
+          onClick={() => navigate('/pipeline')}
         >
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

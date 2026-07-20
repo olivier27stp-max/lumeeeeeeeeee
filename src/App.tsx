@@ -689,7 +689,7 @@ function AuthenticatedApp({
   // underlying request notifications as read).
   useEffect(() => {
     if (location.pathname === '/requests') markNavAsRead('requests');
-    else if (location.pathname === '/d2d-pipeline') markNavAsRead('d2d-pipeline');
+    else if (location.pathname === '/pipeline') markNavAsRead('d2d-pipeline');
   }, [location.pathname, markNavAsRead]);
   // Current plan — used to hide locked features from sidebar
   const { currentPlan } = useCurrentPlan();
@@ -805,7 +805,7 @@ function AuthenticatedApp({
       items: venteModule.isEnabled
         ? [
             { id: 'field-sales', label: t.nav.venteMap, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
-            { id: 'd2d-pipeline', label: t.nav.ventePipeline, icon: GitBranch, path: '/d2d-pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
+            { id: 'd2d-pipeline', label: t.nav.ventePipeline, icon: GitBranch, path: '/pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
             { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'financial.view_reports', requiredPlanFlag: 'includes_d2d' },
             { id: 'commissions', label: t.nav.commissions, icon: Wallet, path: '/commissions', tileColor: 'blue', requiredPermission: 'commissions.read', requiredPlanFlag: 'includes_d2d' },
           ]
@@ -1218,7 +1218,6 @@ function AuthenticatedApp({
                     <Route path="/day" element={<Gated permission="settings.read"><PageWrapper><CrmWorkspace /></PageWrapper></Gated>} />
                     <Route path="/messages" element={<Gated permission="messages.read"><PlanFeatureGate flag="includes_sms"><PageWrapper><Messages /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/leads" element={<Navigate to="/quotes" replace />} />
-                    <Route path="/pipeline" element={<Navigate to="/lume-agent" replace />} />
                     <Route path="/clients" element={<Gated permission="clients.read"><div className="px-8 py-6"><Clients /></div></Gated>} />
                     <Route path="/clients/new" element={<Gated permission="clients.create"><NewClient /></Gated>} />
                     {/* Edit reuses the Clients list page, which opens its edit drawer from the :id route param */}
@@ -1298,7 +1297,9 @@ function AuthenticatedApp({
                     <Route path="/field-sales" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DMap /></ModuleGate></PlanFeatureGate></Gated>} />
                     {/* Dashboard page removed for all roles — redirect to Sales Map */}
                     <Route path="/d2d-dashboard" element={<Navigate to="/field-sales" replace />} />
-                    <Route path="/d2d-pipeline" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DPipeline /></ModuleGate></PlanFeatureGate></Gated>} />
+                    <Route path="/pipeline" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DPipeline /></ModuleGate></PlanFeatureGate></Gated>} />
+                    {/* Legacy URL — keep old bookmarks/links working */}
+                    <Route path="/d2d-pipeline" element={<Navigate to="/pipeline" replace />} />
                     <Route path="/leaderboard" element={<Gated permission="reports.read"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Leaderboard /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
                     {/* Commissions: role-based dashboard from main — not restricted to the Vente module/plan flag */}
                     <Route path="/commissions" element={<Gated permission="commissions.read"><PageWrapper><Commissions /></PageWrapper></Gated>} />
