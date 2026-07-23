@@ -1,39 +1,26 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowRight, Check } from 'lucide-react';
-
-const PRODUCT = [
-  { label: 'Pipeline', href: '/features#pipeline' },
-  { label: 'D2D Map', href: '/features#d2d-map' },
-  { label: 'Leaderboard', href: '/features#leaderboard' },
-  { label: 'AI Assistant', href: '/features#ai-voice' },
-  { label: 'Automations', href: '/features#automation' },
-  { label: 'Scheduling', href: '/features#scheduling' },
-  { label: 'Google Reviews', href: '/features#reviews' },
-];
-
-const SOLUTIONS_LINKS = [
-  { label: 'Owners', href: '/solutions#owners' },
-  { label: 'Sales Teams', href: '/solutions#sales' },
-  { label: 'Field Teams', href: '/solutions#field' },
-  { label: 'Dispatchers', href: '/solutions#dispatch' },
-];
-
-const INDUSTRIES_LINKS = [
-  { label: 'Window Cleaning', href: '/industries#window-cleaning' },
-  { label: 'Pressure Washing', href: '/industries#pressure-washing' },
-  { label: 'Roofing', href: '/industries#roofing' },
-  { label: 'Renovation', href: '/industries#renovation' },
-  { label: 'All Industries', href: '/industries' },
-];
-
-const COMPANY = [
-  { label: 'Contact', href: '/contact' },
-];
+import { useTranslation } from '../../i18n';
 
 type FormState = 'idle' | 'submitting' | 'sent' | 'error';
 
 export default function Footer() {
+  const { t } = useTranslation();
+  const f = t.marketingSite.footer;
+  const PRODUCT = [
+    { label: f.product.pipeline, href: '/features#pipeline' },
+    { label: f.product.d2dMap, href: '/features#d2d-map' },
+    { label: f.product.leaderboard, href: '/features#leaderboard' },
+    { label: f.product.aiAssistant, href: '/features#ai-voice' },
+    { label: f.product.automations, href: '/features#automation' },
+    { label: f.product.scheduling, href: '/features#scheduling' },
+    { label: f.product.googleReviews, href: '/features#reviews' },
+  ];
+  const COMPANY = [
+    { label: f.company.contact, href: '/contact' },
+  ];
+
   const { pathname } = useLocation();
   const isContact = pathname === '/contact';
   const [form, setForm] = useState({ full_name: '', email: '', phone: '', company: '', message: '' });
@@ -54,13 +41,13 @@ export default function Footer() {
         body: JSON.stringify({ ...form, source: 'landing' }),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({ error: 'Submission failed.' }));
-        throw new Error(body.error || 'Submission failed.');
+        const body = await res.json().catch(() => ({ error: f.submissionFailed }));
+        throw new Error(body.error || f.submissionFailed);
       }
       setState('sent');
     } catch (err: any) {
       setState('error');
-      setErrMsg(err?.message || 'Something went wrong — please try again.');
+      setErrMsg(err?.message || f.genericError);
     }
   }
 
@@ -71,7 +58,7 @@ export default function Footer() {
         <div className="max-w-5xl mx-auto px-6 py-16">
           {/* Title above everything */}
           <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white text-center mb-10">
-            See Lume in action
+            {f.demoTitle}
           </h2>
 
           <div className="flex flex-col md:flex-row gap-10 items-start">
@@ -82,16 +69,16 @@ export default function Footer() {
                   <div className="w-12 h-12 rounded-full bg-[#3FAF97]/15 flex items-center justify-center">
                     <Check size={24} className="text-[#3FAF97]" />
                   </div>
-                  <p className="text-lg font-bold text-[#111]">Request sent!</p>
-                  <p className="text-sm text-[#555]">Our team will reach out within 24 hours.</p>
+                  <p className="text-lg font-bold text-[#111]">{f.requestSent}</p>
+                  <p className="text-sm text-[#555]">{f.requestSentDesc}</p>
                 </div>
               ) : (
                 <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate={false}>
-                  <input type="text" required name="full_name" value={form.full_name} onChange={onChange('full_name')} placeholder="Full name *" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
-                  <input type="email" required name="email" value={form.email} onChange={onChange('email')} placeholder="Email *" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
-                  <input type="tel" required name="phone" value={form.phone} onChange={onChange('phone')} placeholder="Phone *" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
-                  <input type="text" required name="company" value={form.company} onChange={onChange('company')} placeholder="Company *" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
-                  <textarea rows={3} name="message" value={form.message} onChange={onChange('message')} placeholder="Message" className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors resize-none" />
+                  <input type="text" required name="full_name" value={form.full_name} onChange={onChange('full_name')} placeholder={f.fullNamePlaceholder} className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
+                  <input type="email" required name="email" value={form.email} onChange={onChange('email')} placeholder={f.emailPlaceholder} className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
+                  <input type="tel" required name="phone" value={form.phone} onChange={onChange('phone')} placeholder={f.phonePlaceholder} className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
+                  <input type="text" required name="company" value={form.company} onChange={onChange('company')} placeholder={f.companyPlaceholder} className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors" />
+                  <textarea rows={3} name="message" value={form.message} onChange={onChange('message')} placeholder={f.messagePlaceholder} className="px-4 py-3 border border-[#111] bg-white text-sm text-[#111] placeholder:text-[#111] placeholder:font-bold focus:outline-none focus:border-[#3FAF97] transition-colors resize-none" />
                   {state === 'error' && errMsg && (
                     <p className="text-xs text-red-600" role="alert">{errMsg}</p>
                   )}
@@ -100,7 +87,7 @@ export default function Footer() {
                     disabled={state === 'submitting'}
                     className="w-full flex items-center justify-center gap-2 bg-[#3FAF97] text-white px-7 py-3.5 text-sm font-medium hover:bg-[#1F5F4F] transition-colors group mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {state === 'submitting' ? 'Sending…' : 'Book demo'}
+                    {state === 'submitting' ? f.sending : f.bookDemo}
                     {state !== 'submitting' && <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />}
                   </button>
                 </form>
@@ -113,10 +100,10 @@ export default function Footer() {
               <div className="absolute inset-0 bg-black/50" />
               <div className="relative z-10 flex flex-col justify-end h-full p-8">
                 <p className="text-xl md:text-2xl font-bold text-white leading-snug">
-                  Book a free demo — we'll show you exactly how Lume fits your business in minutes.
+                  {f.imageOverlayTitle}
                 </p>
                 <p className="mt-3 text-sm text-white/70 leading-relaxed">
-                  No commitment, no pressure. Just a quick walkthrough tailored to your industry.
+                  {f.imageOverlayDesc}
                 </p>
               </div>
             </div>
@@ -133,22 +120,22 @@ export default function Footer() {
               <img src="/lume-logo-v2.png" alt="Lume" className="h-9 w-auto" />
             </Link>
             <p className="mt-3 text-xs text-text-tertiary leading-relaxed">
-              The modern operating system for residential service businesses.
+              {f.tagline}
             </p>
           </div>
 
-          <FooterCol title="Product" links={PRODUCT} />
-          <FooterCol title="Company" links={COMPANY} />
+          <FooterCol title={f.colProduct} links={PRODUCT} />
+          <FooterCol title={f.colCompany} links={COMPANY} />
         </div>
 
         {/* Bottom */}
         <div className="mt-12 pt-6 border-t border-outline flex flex-col md:flex-row items-center justify-between gap-3">
           <p className="text-xs text-text-tertiary">
-            &copy; {new Date().getFullYear()} Lume. All rights reserved.
+            &copy; {new Date().getFullYear()} Lume. {f.allRightsReserved}
           </p>
           <div className="flex gap-6 text-xs text-text-tertiary">
-            <Link to="/privacy" className="hover:text-text-primary transition-colors">Privacy</Link>
-            <Link to="/terms" className="hover:text-text-primary transition-colors">Terms</Link>
+            <Link to="/privacy" className="hover:text-text-primary transition-colors">{f.privacy}</Link>
+            <Link to="/terms" className="hover:text-text-primary transition-colors">{f.terms}</Link>
           </div>
         </div>
       </div>

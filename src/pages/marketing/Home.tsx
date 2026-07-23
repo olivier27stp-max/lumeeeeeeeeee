@@ -3,9 +3,12 @@ import { motion } from 'motion/react';
 import { ArrowRight, Star } from 'lucide-react';
 import { useState } from 'react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
+import { useTranslation } from '../../i18n';
 
 /* ─── HERO + DEVICES SIDE BY SIDE ─── */
 function Hero({ onBookDemo }: { onBookDemo: () => void }) {
+  const { t } = useTranslation();
+  const h = t.marketingSite.hero;
   return (
     <section className="relative pt-28 pb-16 md:pt-36 md:pb-24 px-6 overflow-hidden">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
@@ -15,20 +18,20 @@ function Hero({ onBookDemo }: { onBookDemo: () => void }) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
-            className="text-[clamp(1.75rem,4vw,3.5rem)] font-extrabold tracking-[-0.03em] leading-[1.12] text-text-primary whitespace-nowrap"
+            className="text-[clamp(1.75rem,4vw,3.5rem)] font-extrabold tracking-[-0.03em] leading-[1.12] text-text-primary"
           >
-            <span>Stop managing{' '}
+            <span>{h.titleStopManaging}{' '}
               <span className="relative inline-block">
-                manually,
+                {h.titleManually}
                 <svg className="absolute -bottom-1 left-0 w-full text-red-500" height="6" viewBox="0 0 120 8" fill="none" preserveAspectRatio="none">
                   <path d="M2 5.5C12 2.5 22 7 32 4S52 1 62 4.5S82 7.5 92 4S112 2 118 5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" fill="none" />
                 </svg>
               </span>
             </span>
             <br />
-            <span>start scaling{' '}
+            <span>{h.titleStartScaling}{' '}
               <span className="relative inline-block">
-                automatically
+                {h.titleAutomatically}
                 <svg className="absolute -bottom-1 left-0 w-full text-[#3FAF97]" height="6" viewBox="0 0 120 8" fill="none" preserveAspectRatio="none">
                   <path d="M2 5.5C12 2.5 22 7 32 4S52 1 62 4.5S82 7.5 92 4S112 2 118 5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" fill="none" />
                 </svg>
@@ -46,7 +49,7 @@ function Hero({ onBookDemo }: { onBookDemo: () => void }) {
               onClick={onBookDemo}
               className="inline-flex items-center gap-2 bg-[#3FAF97] text-white px-7 py-3.5 rounded-xl text-sm font-bold hover:bg-[#1F5F4F] transition-colors group"
             >
-              Book a demo
+              {h.bookDemo}
               <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
             </button>
           </motion.div>
@@ -243,6 +246,7 @@ function TrustLogo({ children }: { children: React.ReactNode }) {
 }
 
 function TrustSection() {
+  const { t } = useTranslation();
   return (
     <section className="py-16 md:py-20 px-6">
       <div className="max-w-7xl mx-auto">
@@ -252,7 +256,7 @@ function TrustSection() {
           viewport={{ once: true }}
           className="text-center text-base md:text-lg uppercase tracking-[0.15em] font-semibold text-black mb-12"
         >
-          Trusted by customers nationwide
+          {t.marketingSite.trust.heading}
         </motion.p>
         <motion.div
           initial={{ opacity: 0 }}
@@ -325,6 +329,8 @@ function TrustSection() {
 
 /* ─── TESTIMONIAL ─── */
 function Testimonial() {
+  const { t } = useTranslation();
+  const ts = t.marketingSite.testimonial;
   return (
     <section className="py-20 md:py-28 px-6">
       <motion.div
@@ -342,12 +348,12 @@ function Testimonial() {
 
         {/* Quote */}
         <blockquote className="text-xl md:text-2xl lg:text-3xl font-bold tracking-tight leading-[1.2] text-text-primary">
-          "We saved the equivalent of a full-time secretary salary using Lume CRM"
+          {ts.quote}
         </blockquote>
 
         {/* Attribution */}
         <p className="mt-6 text-sm font-semibold text-text-secondary">
-          Vision Lavage
+          {ts.author}
         </p>
       </motion.div>
     </section>
@@ -355,15 +361,18 @@ function Testimonial() {
 }
 
 /* ─── INDUSTRIES GRID ─── */
-const SERVICES = [
-  { name: 'HVAC', img: '/industries/hvac.png' },
-  { name: 'Window Cleaning', img: '/industries/window.jpg' },
-  { name: 'Excavation', img: '/industries/excavation.png' },
-  { name: 'Landscaping', img: '/industries/landscaping.png' },
-  { name: 'Power Washing', img: '/industries/powerwash.jpg' },
+const SERVICE_IMAGES = [
+  { key: 'hvac' as const, img: '/industries/hvac.png' },
+  { key: 'windowCleaning' as const, img: '/industries/window.jpg' },
+  { key: 'excavation' as const, img: '/industries/excavation.png' },
+  { key: 'landscaping' as const, img: '/industries/landscaping.png' },
+  { key: 'powerWashing' as const, img: '/industries/powerwash.jpg' },
 ];
 
 function IndustriesGrid() {
+  const { t } = useTranslation();
+  const ig = t.marketingSite.industriesGrid;
+  const SERVICES = SERVICE_IMAGES.map(s => ({ name: ig.services[s.key], img: s.img }));
   return (
     <section className="py-20 md:py-28 px-6 bg-text-primary">
       <div className="max-w-7xl mx-auto">
@@ -373,7 +382,7 @@ function IndustriesGrid() {
           viewport={{ once: true }}
           className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight leading-[1.1] text-white text-center mb-14"
         >
-          Built for Home Service Business
+          {ig.heading}
         </motion.h2>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-5">
@@ -409,7 +418,7 @@ function IndustriesGrid() {
             to="/industries"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-white/60 hover:text-white transition-colors"
           >
-            See every industry <ArrowRight size={14} />
+            {ig.seeEvery} <ArrowRight size={14} />
           </Link>
         </div>
       </div>
@@ -420,6 +429,8 @@ function IndustriesGrid() {
 
 /* ─── FEATURE BLOCKS ─── */
 function FeatureBlocks() {
+  const { t } = useTranslation();
+  const f = t.marketingSite.features;
   return (
     <section className="py-24 md:py-32 px-6 bg-text-primary">
       <div className="max-w-7xl mx-auto space-y-28 md:space-y-36">
@@ -436,7 +447,7 @@ function FeatureBlocks() {
             backgroundClip: 'text',
           }}
         >
-          What sets Lume apart
+          {f.sectionHeading}
           <svg className="mx-auto mt-3 w-48 md:w-64" height="10" viewBox="0 0 200 10" fill="none" preserveAspectRatio="none">
             <defs>
               <linearGradient id="waveGrad" x1="0" y1="0" x2="200" y2="0" gradientUnits="userSpaceOnUse">
@@ -550,10 +561,10 @@ function FeatureBlocks() {
           {/* Text */}
           <div className="flex-1 text-center lg:text-left">
             <h2 className="text-3xl md:text-4xl lg:text-[2.75rem] font-extrabold tracking-tight leading-[1.1] text-white">
-              Every D2D team's favorite feature
+              {f.d2d.heading}
             </h2>
             <ul className="mt-6 space-y-3 max-w-xl mx-auto lg:mx-0">
-              {['See every pin on the map', 'Track your sales reps location in real time', 'Assign territories for your knockers'].map((item) => (
+              {f.d2d.bullets.map((item) => (
                 <li key={item} className="flex items-center gap-3 text-base font-bold text-white">
                   <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0" style={{ border: '2px solid #ffffff' }}>
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
@@ -592,10 +603,10 @@ function FeatureBlocks() {
           {/* Text */}
           <div className="flex-1 text-center lg:text-left">
             <h2 className="text-3xl md:text-4xl lg:text-[2.75rem] font-extrabold tracking-tight leading-[1.1] text-white">
-              Run your entire business by voice
+              {f.voice.heading}
             </h2>
             <ul className="mt-6 space-y-3 max-w-xl mx-auto lg:mx-0">
-              {['Create jobs by voice', 'Send quotes instantly', 'Automated follow-ups', 'Zero manual data entry'].map((item) => (
+              {f.voice.bullets.map((item) => (
                 <li key={item} className="flex items-center gap-3 text-base font-bold text-white">
                   <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0" style={{ border: '2px solid #ffffff' }}>
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
@@ -730,10 +741,10 @@ function FeatureBlocks() {
           {/* Text */}
           <div className="flex-1 text-center lg:text-left">
             <h2 className="text-3xl md:text-4xl lg:text-[2.75rem] font-extrabold tracking-tight leading-[1.1] text-white">
-              Still managing your sales in spreadsheets?
+              {f.pipeline.heading}
             </h2>
             <ul className="mt-6 space-y-3 max-w-xl mx-auto lg:mx-0">
-              {['Real-time KPI tracking', 'Visual sales pipeline', 'Automated follow-ups'].map((item) => (
+              {f.pipeline.bullets.map((item) => (
                 <li key={item} className="flex items-center gap-3 text-base font-bold text-white">
                   <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0" style={{ border: '2px solid #ffffff' }}>
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
@@ -835,6 +846,8 @@ function FeatureBlocks() {
 
 /* ─── MIDDLE CTA ─── */
 function MiddleCTA({ onBookDemo }: { onBookDemo: () => void }) {
+  const { t } = useTranslation();
+  const c = t.marketingSite.middleCta;
   return (
     <section className="py-24 md:py-32 px-6">
       <motion.div
@@ -844,17 +857,17 @@ function MiddleCTA({ onBookDemo }: { onBookDemo: () => void }) {
         className="max-w-3xl mx-auto text-center"
       >
         <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.1] text-text-primary">
-          Ready to scale your business?
+          {c.heading}
         </h2>
         <p className="mt-4 text-lg text-text-tertiary font-light">
-          Join hundreds of service companies already using Lume to automate their operations.
+          {c.desc}
         </p>
         <div className="mt-8">
           <button
             onClick={onBookDemo}
             className="inline-flex items-center gap-2 bg-text-primary text-surface px-8 py-4 rounded-xl text-sm font-bold hover:opacity-85 transition-opacity group"
           >
-            Book a demo
+            {c.bookDemo}
             <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
           </button>
         </div>

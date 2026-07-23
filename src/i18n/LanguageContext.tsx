@@ -19,11 +19,12 @@ const LanguageContext = createContext<LanguageContextValue>({
 });
 
 function getInitialLanguage(): Language {
+  // French is the default language across the app (Québec Law 25 — services
+  // offered in Québec must be available in French by default). A visitor only
+  // sees English if they have explicitly chosen it (stored preference) or if
+  // their browser lists English *before* any French locale.
   const stored = localStorage.getItem('lume-language');
   if (stored === 'fr' || stored === 'en') return stored;
-  // Honor the browser's full ordered language list (Chrome/Safari/Firefox…),
-  // not just the primary one — a user whose first choice is English but who
-  // also lists French still lands on the language they actually read first.
   const browserLangs = navigator.languages?.length
     ? navigator.languages
     : [navigator.language || ''];
@@ -31,7 +32,8 @@ function getInitialLanguage(): Language {
     if (lang.toLowerCase().startsWith('fr')) return 'fr';
     if (lang.toLowerCase().startsWith('en')) return 'en';
   }
-  return 'en';
+  // No explicit preference and no recognized locale → French by default.
+  return 'fr';
 }
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {

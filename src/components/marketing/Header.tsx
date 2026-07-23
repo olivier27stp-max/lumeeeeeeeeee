@@ -9,35 +9,41 @@ import {
   Fence, HardHat, Hammer, Building2,
 } from 'lucide-react';
 import BookDemoForm from './BookDemoForm';
-
-const FEATURES = [
-  { icon: Kanban, label: 'Visual Pipeline', desc: 'Track every opportunity at a glance', href: '/features#pipeline' },
-  { icon: FileText, label: 'Request Forms', desc: 'Capture leads automatically', href: '/features#request-form' },
-  { icon: Map, label: 'D2D Map', desc: 'Plan your territories', href: '/features#d2d-map' },
-  { icon: Trophy, label: 'Leaderboard', desc: 'Motivate your team', href: '/features#leaderboard' },
-  { icon: Mic, label: 'AI Voice Assistant', desc: 'Speak it, Lume does it', href: '/features#ai-voice' },
-  { icon: BellRing, label: 'Quote Notifications', desc: 'Know when a quote is opened', href: '/features#notifications' },
-  { icon: Star, label: 'Google Reviews', desc: 'Generate more 5-star reviews', href: '/features#reviews' },
-  { icon: Calendar, label: 'Scheduling', desc: 'Smart dispatch & calendar', href: '/features#scheduling' },
-  { icon: Zap, label: 'Automations', desc: 'Eliminate repetitive tasks', href: '/features#automation' },
-  { icon: Users, label: 'Team Performance', desc: 'Full visibility on every rep', href: '/features#team' },
-];
-
-const INDUSTRIES_ITEMS = [
-  { icon: Droplets, label: 'Window Cleaning', href: '/industries#window-cleaning' },
-  { icon: Home, label: 'Gutter Cleaning', href: '/industries#gutter-cleaning' },
-  { icon: ShieldCheck, label: 'Pressure Washing', href: '/industries#pressure-washing' },
-  { icon: Wrench, label: 'Roofing', href: '/industries#roofing' },
-  { icon: Car, label: 'Auto Detailing', href: '/industries#detailing' },
-  { icon: Fence, label: 'Fencing', href: '/industries#fencing' },
-  { icon: HardHat, label: 'Paving', href: '/industries#paving' },
-  { icon: Hammer, label: 'Renovation', href: '/industries#renovation' },
-  { icon: Building2, label: 'Demolition', href: '/industries#demolition' },
-];
+import { useTranslation } from '../../i18n';
 
 type MegaMenu = 'features' | 'industries' | null;
 
 export default function Header() {
+  const { t, language, setLanguage } = useTranslation();
+  const m = t.marketingSite;
+
+  const FEATURES = [
+    { icon: Kanban, label: m.featureItems.pipeline.label, desc: m.featureItems.pipeline.desc, href: '/features#pipeline' },
+    { icon: FileText, label: m.featureItems.requestForms.label, desc: m.featureItems.requestForms.desc, href: '/features#request-form' },
+    { icon: Map, label: m.featureItems.d2dMap.label, desc: m.featureItems.d2dMap.desc, href: '/features#d2d-map' },
+    { icon: Trophy, label: m.featureItems.leaderboard.label, desc: m.featureItems.leaderboard.desc, href: '/features#leaderboard' },
+    { icon: Mic, label: m.featureItems.aiVoice.label, desc: m.featureItems.aiVoice.desc, href: '/features#ai-voice' },
+    { icon: BellRing, label: m.featureItems.notifications.label, desc: m.featureItems.notifications.desc, href: '/features#notifications' },
+    { icon: Star, label: m.featureItems.reviews.label, desc: m.featureItems.reviews.desc, href: '/features#reviews' },
+    { icon: Calendar, label: m.featureItems.scheduling.label, desc: m.featureItems.scheduling.desc, href: '/features#scheduling' },
+    { icon: Zap, label: m.featureItems.automation.label, desc: m.featureItems.automation.desc, href: '/features#automation' },
+    { icon: Users, label: m.featureItems.team.label, desc: m.featureItems.team.desc, href: '/features#team' },
+  ];
+
+  const INDUSTRIES_ITEMS = [
+    { icon: Droplets, label: m.industryItems.windowCleaning, href: '/industries#window-cleaning' },
+    { icon: Home, label: m.industryItems.gutterCleaning, href: '/industries#gutter-cleaning' },
+    { icon: ShieldCheck, label: m.industryItems.pressureWashing, href: '/industries#pressure-washing' },
+    { icon: Wrench, label: m.industryItems.roofing, href: '/industries#roofing' },
+    { icon: Car, label: m.industryItems.detailing, href: '/industries#detailing' },
+    { icon: Fence, label: m.industryItems.fencing, href: '/industries#fencing' },
+    { icon: HardHat, label: m.industryItems.paving, href: '/industries#paving' },
+    { icon: Hammer, label: m.industryItems.renovation, href: '/industries#renovation' },
+    { icon: Building2, label: m.industryItems.demolition, href: '/industries#demolition' },
+  ];
+
+  const toggleLanguage = () => setLanguage(language === 'fr' ? 'en' : 'fr');
+
   const [mobileOpen, setMobileOpen] = useState(false);
   const [megaMenu, setMegaMenu] = useState<MegaMenu>(null);
   const [scrolled, setScrolled] = useState(false);
@@ -114,25 +120,33 @@ export default function Header() {
 
         {/* Desktop Nav */}
         <div className="hidden lg:flex items-center gap-1 ml-8">
-          <NavDropdown label="Features" active={megaMenu === 'features'} onClick={() => toggleMega('features')} />
-          <NavLink to="/industries" label="Industries" />
-          <NavLink to="/pricing" label="Pricing" />
-          <NavLink to="/contact" label="Contact" />
+          <NavDropdown label={m.nav.features} active={megaMenu === 'features'} onClick={() => toggleMega('features')} />
+          <NavLink to="/industries" label={m.nav.industries} />
+          <NavLink to="/pricing" label={m.nav.pricing} />
+          <NavLink to="/contact" label={m.nav.contact} />
         </div>
 
         {/* Desktop CTA */}
         <div className="hidden lg:flex items-center gap-3 pr-6">
+          <button
+            onClick={toggleLanguage}
+            className="text-sm font-bold text-black hover:opacity-60 transition-colors"
+            aria-label={m.langToggleFull}
+            title={m.langToggleFull}
+          >
+            {m.langToggle}
+          </button>
           <Link
             to="/auth"
             className="text-sm font-bold text-black hover:opacity-60 transition-colors"
           >
-            Login
+            {m.nav.login}
           </Link>
           <button
             onClick={() => setDemoOpen(true)}
             className="inline-flex items-center gap-2 bg-[#3FAF97] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#1F5F4F] transition-colors group"
           >
-            Book a demo
+            {m.nav.bookDemo}
             <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
           </button>
         </div>
@@ -161,7 +175,7 @@ export default function Header() {
                 onClick={() => setMegaMenu(null)}
                 className="inline-flex items-center gap-1.5 text-sm font-medium text-[#3FAF97] hover:text-[#1F5F4F] transition-colors"
               >
-                View all features <ArrowRight size={14} />
+                {m.nav.viewAllFeatures} <ArrowRight size={14} />
               </Link>
             </div>
           </MegaPanel>
@@ -187,7 +201,7 @@ export default function Header() {
                 onClick={() => setMegaMenu(null)}
                 className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary-hover transition-colors"
               >
-                View all industries <ArrowRight size={14} />
+                {m.nav.viewAllIndustries} <ArrowRight size={14} />
               </Link>
             </div>
           </MegaPanel>
@@ -204,22 +218,28 @@ export default function Header() {
             className="lg:hidden bg-surface border-t border-outline overflow-hidden"
           >
             <div className="px-6 py-4 space-y-1">
-              <MobileLink to="/features" label="Features" />
-              <MobileLink to="/industries" label="Industries" />
-              <MobileLink to="/pricing" label="Pricing" />
-              <MobileLink to="/contact" label="Contact" />
+              <MobileLink to="/features" label={m.nav.features} />
+              <MobileLink to="/industries" label={m.nav.industries} />
+              <MobileLink to="/pricing" label={m.nav.pricing} />
+              <MobileLink to="/contact" label={m.nav.contact} />
               <div className="pt-4 space-y-2">
+                <button
+                  onClick={toggleLanguage}
+                  className="block w-full text-center text-sm font-bold text-text-secondary hover:text-text-primary py-2"
+                >
+                  {m.langToggleFull}
+                </button>
                 <Link
                   to="/auth"
                   className="block w-full text-center text-sm font-medium text-text-secondary hover:text-text-primary py-2"
                 >
-                  Login
+                  {m.nav.login}
                 </Link>
                 <button
                   onClick={() => { setMobileOpen(false); setDemoOpen(true); }}
                   className="block w-full text-center bg-[#3FAF97] text-white px-5 py-3 rounded-lg text-sm font-medium hover:bg-[#1F5F4F] transition-colors"
                 >
-                  Book a demo
+                  {m.nav.bookDemo}
                 </button>
               </div>
             </div>
