@@ -29,7 +29,7 @@ if (!CONFIRM) {
   process.exit(1);
 }
 
-const DEFAULT_BASE = 'https://lumeeeeeeeeee-production.up.railway.app';
+const DEFAULT_BASE = 'https://lumecrm.net';
 const base = process.argv.find((a) => a.startsWith('http')) || process.env.PUBLIC_URL || DEFAULT_BASE;
 const url = `${base.replace(/\/$/, '')}/api/webhooks/stripe`;
 

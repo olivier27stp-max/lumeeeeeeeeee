@@ -105,6 +105,21 @@ app.set('trust proxy', 1);
 // Do not advertise Express — small reconnaissance signal removed.
 app.disable('x-powered-by');
 
+// ── Canonical host redirect ──
+// The site moved to lumecrm.net (2026-07-23) but the old Railway subdomain
+// still resolves and would otherwise serve a second copy of the app (stale
+// bookmarks, split sessions). Browser traffic gets a permanent redirect.
+// /api is exempt on purpose: webhook senders (Stripe, Twilio) don't follow
+// redirects, so anything still pointed at the old host must keep working.
+const CANONICAL_HOST = 'lumecrm.net';
+const LEGACY_HOSTS = new Set(['lumeeeeeeeeee-production.up.railway.app']);
+app.use((req, res, next) => {
+  if (LEGACY_HOSTS.has(req.hostname) && !req.path.startsWith('/api')) {
+    return res.redirect(301, `https://${CANONICAL_HOST}${req.originalUrl}`);
+  }
+  next();
+});
+
 // ── Sentry (no-op if SENTRY_DSN not set) ──
 initSentry(app);
 
