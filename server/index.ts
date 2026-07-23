@@ -111,8 +111,13 @@ app.disable('x-powered-by');
 // bookmarks, split sessions). Browser traffic gets a permanent redirect.
 // /api is exempt on purpose: webhook senders (Stripe, Twilio) don't follow
 // redirects, so anything still pointed at the old host must keep working.
+// www.lumecrm.net is also folded into the apex — one canonical origin keeps
+// the Supabase/Google allowlists and localStorage sessions on a single host.
 const CANONICAL_HOST = 'lumecrm.net';
-const LEGACY_HOSTS = new Set(['lumeeeeeeeeee-production.up.railway.app']);
+const LEGACY_HOSTS = new Set([
+  'lumeeeeeeeeee-production.up.railway.app',
+  'www.lumecrm.net',
+]);
 app.use((req, res, next) => {
   if (LEGACY_HOSTS.has(req.hostname) && !req.path.startsWith('/api')) {
     return res.redirect(301, `https://${CANONICAL_HOST}${req.originalUrl}`);
