@@ -22,7 +22,6 @@ import {
 import { getServiceClient } from '../lib/supabase';
 import { syncGmailInbox } from '../lib/email/sync/gmail';
 import { sendGmail } from '../lib/email/send/gmail';
-import { applyGmailThreadAction } from '../lib/email/actions/gmail';
 import { getValidAccessToken } from '../lib/email/accountService';
 
 const router = Router();
@@ -273,40 +272,6 @@ router.post('/email/send', async (req, res) => {
     res.json({ ok: true, id: result.id });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to send email' });
-  }
-});
-
-// ── Thread action: read / unread / archive / trash ───────────
-router.post('/email/threads/:threadId/action', async (req, res) => {
-  try {
-    const ctx = await requireAuthedClient(req, res);
-    if (!ctx) return;
-
-    const action = String(req.body?.action || '');
-    if (!['read', 'unread', 'archive', 'trash'].includes(action)) {
-      res.status(400).json({ error: 'Invalid action' });
-      return;
-    }
-
-    const db = getServiceClient();
-    const { data: thread } = await db
-      .from('email_threads')
-      .select('id, account_id')
-      .eq('id', req.params.threadId)
-      .eq('user_id', ctx.user.id) // ownership
-      .maybeSingle();
-    if (!thread) { res.status(404).json({ error: 'Thread not found' }); return; }
-
-    const account = await ownedAccount(ctx.user.id, thread.account_id);
-    if (!account || account.provider !== 'gmail') {
-      res.status(400).json({ error: 'Only Gmail actions are available yet' });
-      return;
-    }
-
-    await applyGmailThreadAction(thread.account_id, thread.id, action as 'read' | 'unread' | 'archive' | 'trash');
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Action failed' });
   }
 });
 

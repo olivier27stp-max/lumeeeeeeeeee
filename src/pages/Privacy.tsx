@@ -25,9 +25,10 @@ const SECTIONS = {
     { id: 'transferts', label: '7. Transferts internationaux' },
     { id: 'securite', label: '8. Sécurité' },
     { id: 'cookies', label: '9. Cookies et traceurs' },
-    { id: 'mineurs', label: '10. Protection des mineurs' },
-    { id: 'modifications', label: '11. Modifications de cette politique' },
-    { id: 'contact', label: '12. Nous contacter' },
+    { id: 'google-gmail', label: '10. Intégration Google / Gmail' },
+    { id: 'mineurs', label: '11. Protection des mineurs' },
+    { id: 'modifications', label: '12. Modifications de cette politique' },
+    { id: 'contact', label: '13. Nous contacter' },
   ],
   en: [
     { id: 'qui-sommes-nous', label: '1. Who we are' },
@@ -39,9 +40,10 @@ const SECTIONS = {
     { id: 'transferts', label: '7. International transfers' },
     { id: 'securite', label: '8. Security' },
     { id: 'cookies', label: '9. Cookies & trackers' },
-    { id: 'mineurs', label: '10. Protection of minors' },
-    { id: 'modifications', label: '11. Changes to this policy' },
-    { id: 'contact', label: '12. Contact us' },
+    { id: 'google-gmail', label: '10. Google / Gmail integration' },
+    { id: 'mineurs', label: '11. Protection of minors' },
+    { id: 'modifications', label: '12. Changes to this policy' },
+    { id: 'contact', label: '13. Contact us' },
   ],
 } as const;
 
@@ -301,7 +303,72 @@ export default function Privacy() {
             </p>
           </Section>
 
-          <Section id="mineurs" title={sections[9].label}>
+          <Section id="google-gmail" title={sections[9].label}>
+            <p>
+              {fr
+                ? "Si vous choisissez de connecter votre boîte Gmail à Lume CRM (fonction facultative « Boîte de réception »), nous accédons à certaines données de votre compte Google via les API de Google. Cette section décrit précisément ce à quoi nous accédons et ce que nous en faisons."
+                : 'If you choose to connect your Gmail mailbox to Lume CRM (the optional "Inbox" feature), we access certain data from your Google account through Google APIs. This section describes exactly what we access and how we use it.'}
+            </p>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-3">
+              <p className="font-medium text-gray-800">
+                {fr ? "Autorisations Google demandées" : 'Google permissions requested'}
+              </p>
+              <ul className="space-y-2 list-none pl-0">
+                {(fr
+                  ? [
+                      ['Lecture des courriels (gmail.readonly)', "afficher vos fils de discussion, messages et pièces jointes à l'intérieur de Lume."],
+                      ['Envoi de courriels (gmail.send)', 'envoyer, répondre et transférer des courriels depuis votre adresse, à votre demande.'],
+                      ['Adresse du compte (userinfo.email)', "identifier la boîte connectée et l'afficher dans l'application."],
+                    ]
+                  : [
+                      ['Read email (gmail.readonly)', 'display your threads, messages and attachments inside Lume.'],
+                      ['Send email (gmail.send)', 'send, reply and forward emails from your address, at your request.'],
+                      ['Account address (userinfo.email)', 'identify the connected mailbox and show it in the app.'],
+                    ]
+                ).map(([k, v]) => (
+                  <li key={k} className="flex gap-3">
+                    <Mail className="text-gray-400 shrink-0 mt-0.5" size={18} />
+                    <span><strong className="font-medium text-gray-800">{k}</strong> — {v}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-sm text-gray-500 pt-1">
+                {fr
+                  ? "Nous demandons uniquement un accès en lecture — Lume ne modifie pas, n'archive pas et ne supprime pas les messages dans votre boîte Gmail."
+                  : 'We request read-only access — Lume does not modify, archive or delete messages in your Gmail mailbox.'}
+              </p>
+            </div>
+
+            <p>
+              <strong className="font-medium text-gray-800">
+                {fr ? 'Utilisation limitée (Google API Services User Data Policy). ' : 'Limited Use (Google API Services User Data Policy). '}
+              </strong>
+              {fr
+                ? "L'utilisation que fait Lume des informations reçues des API Google respecte la Politique relative aux données utilisateur des services API de Google, y compris ses exigences d'utilisation limitée. Concrètement : nous n'utilisons vos données Gmail que pour vous fournir la fonction Boîte de réception ; nous ne les transférons à personne, sauf pour vous fournir le service, si la loi l'exige, ou avec votre consentement ; nous ne les utilisons pas à des fins publicitaires ; et nous ne permettons à aucun humain de les lire, sauf avec votre accord explicite, pour la sécurité, ou lorsque la loi l'exige. Vos données Gmail ne servent jamais à entraîner des modèles d'intelligence artificielle."
+                : "Lume's use of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. In practice: we use your Gmail data only to provide the Inbox feature; we do not transfer it to anyone except to provide the service, when required by law, or with your consent; we do not use it for advertising; and we do not allow humans to read it, except with your explicit consent, for security purposes, or where required by law. Your Gmail data is never used to train artificial-intelligence models."}
+            </p>
+
+            <p>
+              <strong className="font-medium text-gray-800">{fr ? 'Conservation et suppression. ' : 'Retention and deletion. '}</strong>
+              {fr
+                ? "Les courriels synchronisés sont stockés de façon chiffrée dans notre base de données afin d'accélérer l'affichage. Lorsque vous déconnectez la boîte, nous révoquons les jetons d'accès et supprimons les messages synchronisés associés à ce compte."
+                : 'Synced emails are stored encrypted in our database to speed up display. When you disconnect the mailbox, we revoke the access tokens and delete the synced messages tied to that account.'}
+            </p>
+
+            <p>
+              <strong className="font-medium text-gray-800">{fr ? 'Révoquer l\'accès. ' : 'Revoking access. '}</strong>
+              {fr ? (
+                <>Vous pouvez déconnecter votre boîte à tout moment depuis Lume (Messages → gérer les boîtes), ou révoquer l'accès directement depuis votre compte Google à{' '}
+                  <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="text-black underline hover:text-gray-600">myaccount.google.com/permissions</a>.</>
+              ) : (
+                <>You can disconnect your mailbox at any time from Lume (Messages → manage mailboxes), or revoke access directly from your Google account at{' '}
+                  <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="text-black underline hover:text-gray-600">myaccount.google.com/permissions</a>.</>
+              )}
+            </p>
+          </Section>
+
+          <Section id="mineurs" title={sections[10].label}>
             <p>
               {fr
                 ? "Lume CRM est un outil professionnel destiné aux entreprises. Le service n'est pas destiné aux personnes de moins de 16 ans et nous ne collectons pas sciemment de renseignements personnels les concernant. Si vous pensez qu'un mineur nous a transmis des données, contactez-nous afin que nous les supprimions."
@@ -309,7 +376,7 @@ export default function Privacy() {
             </p>
           </Section>
 
-          <Section id="modifications" title={sections[10].label}>
+          <Section id="modifications" title={sections[11].label}>
             <div className="flex gap-3 rounded-xl border border-gray-200 bg-white p-5">
               <Clock className="text-gray-400 shrink-0 mt-0.5" size={20} />
               <p className="text-gray-600 font-light text-[15px] leading-relaxed">
@@ -322,7 +389,7 @@ export default function Privacy() {
             </div>
           </Section>
 
-          <Section id="contact" title={sections[11].label}>
+          <Section id="contact" title={sections[12].label}>
             <div className="rounded-xl border border-gray-200 bg-white p-6 space-y-4">
               <div>
                 <p className="font-medium text-gray-900">William Hébert</p>

@@ -198,13 +198,27 @@ export async function getValidAccessToken(accountId: string): Promise<string | n
     }
   }
 
+  const markReconnectRequired = async (reason: string) => {
+    await db
+      .from('email_accounts')
+      .update({ status: 'reconnect_required', last_error: reason })
+      .eq('id', accountId);
+  };
+
   const provider = getEmailProvider(record.provider);
-  if (!provider || !record.encrypted_refresh_token) return null;
+  if (!provider) return null;
+  if (!record.encrypted_refresh_token) {
+    await markReconnectRequired('No refresh token stored — please reconnect the mailbox.');
+    return null;
+  }
 
   let refreshToken: string;
   try {
     refreshToken = decryptSecret(record.encrypted_refresh_token);
   } catch {
+    // Encryption key changed since the token was stored — it can never be
+    // decrypted again; only a reconnect can fix it.
+    await markReconnectRequired('Stored token could not be decrypted — please reconnect the mailbox.');
     return null;
   }
 
