@@ -11,7 +11,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Mail, Plus, Loader2, CheckCircle2, AlertCircle, Trash2, RefreshCw,
   Search, Paperclip, ArrowLeft, ChevronLeft, Settings2,
-  Reply, ReplyAll, Forward, Send, X, Archive, MailOpen, Trash, Inbox, SendHorizontal,
+  Reply, ReplyAll, Forward, Send, X, Trash, Inbox, SendHorizontal,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import DOMPurify from 'dompurify';
@@ -19,7 +19,7 @@ import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import {
   listEmailAccounts, connectMailbox, disconnectMailbox,
-  syncMailbox, fetchThreads, fetchThread, sendEmail, threadAction, downloadAttachment,
+  syncMailbox, fetchThreads, fetchThread, sendEmail, downloadAttachment,
   type EmailAccount, type EmailProviderSlug,
   type EmailThread, type EmailMessage, type EmailFolder,
 } from '../../lib/emailInboxApi';
@@ -331,6 +331,9 @@ export default function EmailInbox() {
       if (!silent) toast.success(language === 'fr' ? `${n} email(s) synchronisé(s)` : `${n} email(s) synced`);
     } catch (err: any) {
       if (!silent) toast.error(err?.message || 'Sync échouée');
+      // The server may have flagged the account (reconnect_required) —
+      // refresh so the banner shows up even on silent background syncs.
+      void loadAccounts();
     } finally {
       setSyncing(false);
     }
@@ -394,28 +397,6 @@ export default function EmailInbox() {
   const closeCompose = () => {
     setComposeMode(null);
     setComposeTo(''); setComposeCc(''); setComposeSubject(''); setComposeBody('');
-  };
-
-  const doThreadAction = async (action: 'read' | 'unread' | 'archive' | 'trash') => {
-    if (!selectedThreadId) return;
-    try {
-      await threadAction(selectedThreadId, action);
-      if (action === 'archive' || action === 'trash') {
-        // Remove from the list and close the reading pane.
-        setThreads((prev) => prev.filter((t) => t.id !== selectedThreadId));
-        setSelectedThreadId(null);
-        toast.success(action === 'archive'
-          ? (language === 'fr' ? 'Archivé' : 'Archived')
-          : (language === 'fr' ? 'Supprimé' : 'Deleted'));
-      } else {
-        const read = action === 'read';
-        setThreads((prev) => prev.map((t) => (t.id === selectedThreadId ? { ...t, is_read: read } : t)));
-        if (action === 'unread') { setSelectedThreadId(null); }
-        toast.success(read ? (language === 'fr' ? 'Marqué comme lu' : 'Marked read') : (language === 'fr' ? 'Marqué non lu' : 'Marked unread'));
-      }
-    } catch (err: any) {
-      toast.error(err?.message || 'Action échouée');
-    }
   };
 
   const parseEmails = (s: string) => s.split(',').map((e) => e.trim()).filter(Boolean);
@@ -533,6 +514,22 @@ export default function EmailInbox() {
           </button>
         </div>
 
+        {/* Reconnect banner — the mailbox token is dead, sync is stopped. */}
+        {activeAccount && activeAccount.status !== 'connected' && (
+          <div className="mx-3 mb-2 px-3 py-2.5 rounded-lg bg-danger/10 border border-danger/30 flex items-center gap-2">
+            <AlertCircle size={15} className="text-danger shrink-0" />
+            <span className="text-[12px] text-text-primary flex-1">
+              {language === 'fr'
+                ? 'La connexion à cette boîte a expiré — les nouveaux courriels ne rentrent plus.'
+                : 'This mailbox connection expired — new emails are no longer syncing.'}
+            </span>
+            <button onClick={() => handleConnect(activeAccount.provider)} disabled={connecting !== null}
+              className="px-2.5 py-1 rounded-md bg-danger text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-50 shrink-0">
+              {language === 'fr' ? 'Reconnecter' : 'Reconnect'}
+            </button>
+          </div>
+        )}
+
         {/* Folder selector */}
         <div className="px-3 pb-2 flex gap-1">
           {([
@@ -621,20 +618,6 @@ export default function EmailInbox() {
                 <ArrowLeft size={18} />
               </button>
               <h3 className="text-[16px] font-bold text-text-primary truncate flex-1">{threadSubject}</h3>
-              <div className="flex items-center gap-1 shrink-0">
-                <button onClick={() => doThreadAction('unread')} title={language === 'fr' ? 'Marquer non lu' : 'Mark unread'}
-                  className="w-8 h-8 grid place-items-center rounded-lg hover:bg-surface-secondary text-text-secondary">
-                  <MailOpen size={16} />
-                </button>
-                <button onClick={() => doThreadAction('archive')} title={language === 'fr' ? 'Archiver' : 'Archive'}
-                  className="w-8 h-8 grid place-items-center rounded-lg hover:bg-surface-secondary text-text-secondary">
-                  <Archive size={16} />
-                </button>
-                <button onClick={() => doThreadAction('trash')} title={language === 'fr' ? 'Supprimer' : 'Delete'}
-                  className="w-8 h-8 grid place-items-center rounded-lg hover:bg-surface-secondary text-text-secondary hover:text-danger">
-                  <Trash size={16} />
-                </button>
-              </div>
             </div>
 
             {/* Messages */}

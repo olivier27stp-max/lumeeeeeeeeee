@@ -36,10 +36,16 @@ function renderWith(client: any) {
 const SWITCH = () => container.querySelector('button[role="switch"]') as HTMLButtonElement;
 
 describe('BillingAddressSection', () => {
+  // The billing address field is rendered by <AddressAutocomplete>, which uses
+  // an <input> (not a <textarea>). Query the address input specifically so the
+  // component's own search/autocomplete inputs don't collide.
+  const ADDR_INPUT = () =>
+    container.querySelector('input[placeholder*="Principale"], input[placeholder*="Main"]') as HTMLInputElement | null;
+
   it('hides the billing input while "same as service" is on', () => {
     renderWith({ id: 'c1', billing_same_as_service: true, billing_address: null });
     expect(SWITCH().getAttribute('aria-checked')).toBe('true');
-    expect(container.querySelector('textarea')).toBeNull();
+    expect(ADDR_INPUT()).toBeNull();
   });
 
   it('turning it off persists the flag and reveals the billing input', async () => {
@@ -49,14 +55,14 @@ describe('BillingAddressSection', () => {
     });
     expect(updateClientMock).toHaveBeenCalledWith('c1', { billing_same_as_service: false });
     expect(SWITCH().getAttribute('aria-checked')).toBe('false');
-    expect(container.querySelector('textarea')).not.toBeNull();
+    expect(ADDR_INPUT()).not.toBeNull();
     await act(async () => {});
   });
 
   it('shows the existing billing address when already different', () => {
     renderWith({ id: 'c1', billing_same_as_service: false, billing_address: '99 Billing St' });
-    const ta = container.querySelector('textarea') as HTMLTextAreaElement;
+    const ta = ADDR_INPUT();
     expect(ta).not.toBeNull();
-    expect(ta.value).toBe('99 Billing St');
+    expect(ta!.value).toBe('99 Billing St');
   });
 });

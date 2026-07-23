@@ -13,13 +13,23 @@ const getLeaderboardMock = vi.fn(async (..._args: any[]) => [] as any[]);
 vi.mock('../src/lib/leaderboardApi', () => ({
   getLeaderboard: (...args: any[]) => getLeaderboardMock(...args),
   getRepPerformance: vi.fn(async () => ({ performance: {}, badges: [] })),
+  // Leaderboard.tsx loads the office list on mount; the mock must provide it
+  // or the component's effect throws ("No getOffices export …"). The scope
+  // toggle only renders when the company has 2+ offices, so return two.
+  getOffices: vi.fn(async () => ({
+    offices: [
+      { id: '11111111-1111-1111-1111-111111111111', name: 'Bureau A' },
+      { id: '22222222-2222-2222-2222-222222222222', name: 'Bureau B' },
+    ],
+    activeOrgId: '11111111-1111-1111-1111-111111111111',
+  })),
 }));
+
+const ORG = '11111111-1111-1111-1111-111111111111';
 
 import Leaderboard from '../src/pages/Leaderboard';
 import { CompanyContext } from '../src/contexts/CompanyContext';
 import type { CompanyContextValue } from '../src/contexts/CompanyContext';
-
-const ORG = '11111111-1111-1111-1111-111111111111';
 
 const ctx = {
   current: { orgId: ORG, companyName: 'Bureau A' },

@@ -2,12 +2,15 @@
    Email Provider — Gmail (Gmail API + Google OAuth 2.0)
 
    Scopes requested:
-   - gmail.modify  → read + modify (mark read, archive, labels) [RESTRICTED]
-   - gmail.send    → send mail
+   - gmail.readonly → read messages (list/sync inbox, sent, trash) [SENSITIVE]
+   - gmail.send     → send mail
    - userinfo.email → resolve the mailbox address
    Requires GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET.
-   NOTE: gmail.modify is a RESTRICTED scope — Google OAuth verification
-   (CASA) is required before non-test users can connect. See PLAN.
+   NOTE: we deliberately avoid the RESTRICTED gmail.modify scope so that
+   Google OAuth verification does NOT require a third-party CASA security
+   audit. readonly + send are SENSITIVE scopes (standard verification only).
+   Trade-off: the mailbox is read-only in the provider — no mark-read /
+   archive / trash write-back to Gmail (those actions were removed).
    ═══════════════════════════════════════════════════════════════ */
 
 import type {
@@ -21,7 +24,7 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
 
 const SCOPES = [
-  'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/userinfo.email',
   'openid',
