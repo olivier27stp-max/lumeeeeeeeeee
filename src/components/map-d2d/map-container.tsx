@@ -2497,11 +2497,12 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                 <select
                   value={selectedZone.assigned_to || ''}
                   onChange={(e) => reassignZone(selectedZone.id, e.target.value)}
-                  className="w-full cursor-pointer rounded-lg border border-white/[0.08] bg-neutral-900 px-3 py-2 text-[12.5px] text-neutral-100 outline-none transition-colors hover:border-white/20 focus:border-white/30"
+                  style={{ colorScheme: 'dark', backgroundColor: '#171717', color: '#f5f5f5' }}
+                  className="w-full cursor-pointer rounded-lg border border-white/[0.08] px-3 py-2 text-[12.5px] outline-none transition-colors hover:border-white/20 focus:border-white/30"
                 >
-                  <option value="" className="bg-neutral-900 text-neutral-100">{fr ? 'Non assigné' : 'Unassigned'}</option>
+                  <option value="" style={{ backgroundColor: '#171717', color: '#f5f5f5' }}>{fr ? 'Non assigné' : 'Unassigned'}</option>
                   {SALES_REPS.map((rep) => (
-                    <option key={rep.id} value={rep.id} className="bg-neutral-900 text-neutral-100">{rep.name}</option>
+                    <option key={rep.id} value={rep.id} style={{ backgroundColor: '#171717', color: '#f5f5f5' }}>{rep.name}</option>
                   ))}
                 </select>
               </div>
