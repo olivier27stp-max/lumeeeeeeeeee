@@ -39,6 +39,17 @@ function Hero({ onBookDemo }: { onBookDemo: () => void }) {
             </span>
           </motion.h1>
 
+          {/* Nomme le produit et décrit son objectif — requis par la validation
+              du branding Google OAuth. */}
+          <motion.p
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="mt-6 max-w-xl mx-auto lg:mx-0 text-[15px] md:text-[17px] leading-relaxed text-text-secondary"
+          >
+            {h.subtitle}
+          </motion.p>
+
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}

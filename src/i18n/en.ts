@@ -3695,6 +3695,11 @@ const en = {
       titleManually: 'manually,',
       titleStartScaling: 'start scaling',
       titleAutomatically: 'automatically',
+      // States the product name and purpose explicitly: required by Google
+      // OAuth brand verification (the homepage must explain what the app does
+      // and carry the same name as the consent screen).
+      subtitle:
+        'Lume CRM is an all-in-one management platform for residential service businesses. Manage your clients, quotes, invoices, scheduling and email in one place.',
       bookDemo: 'Book a demo',
     },
     trust: {
