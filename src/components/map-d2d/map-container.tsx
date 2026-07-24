@@ -2128,7 +2128,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                   }}
                 >
                   <svg
-                    width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+                    width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
                     dangerouslySetInnerHTML={{ __html: cfg.iconPaths }}
                   />
                 </span>

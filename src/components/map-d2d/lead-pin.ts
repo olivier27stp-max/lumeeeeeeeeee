@@ -56,7 +56,9 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     gradientFrom: '#4ADE80',
     gradientTo: '#16A34A',
     label: 'Vendu ✓',
-    iconPaths: '<polyline points="20 6 9 17 4 12"/>',
+    // Crochet décalé de +0.5 en y : la polyline Lucide (y 6→17) est plus haute
+    // que le centre du viewBox, ce qui faisait flotter l'icône dans le pin.
+    iconPaths: '<polyline points="20 6.5 9 17.5 4 12.5"/>',
   },
   lead: {
     color: '#A855F7',
@@ -85,7 +87,9 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     gradientFrom: '#FDE047',
     gradientTo: '#CA8A04',
     label: 'Aucune réponse',
-    iconPaths: '<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><circle cx="12" cy="17" r=".5"/>',
+    // « ? » agrandi de 30 % et recentré sur (12,12) — le glyphe Lucide nu
+    // (sans son cercle) était minuscule et optiquement hors centre.
+    iconPaths: '<path d="M8.32 7.78a3.9 3.9 0 0 1 7.58 1.3c0 2.6-3.9 3.9-3.9 3.9"/><circle cx="12.1" cy="18.2" r=".5"/>',
   },
   rejected: {
     color: '#EF4444',
@@ -130,7 +134,7 @@ export function createLeadPinElement(status: PinStatus): HTMLDivElement {
     'line-height:0',
   ].join(';'));
 
-  el.innerHTML = svgIcon(cfg.iconPaths, 12, true);
+  el.innerHTML = svgIcon(cfg.iconPaths, 14, true);
 
   setTimeout(() => {
     el.addEventListener('mouseenter', () => {
@@ -255,7 +259,7 @@ export function createLeadPinPopupHTML(
   const statusDots = (Object.keys(PIN_STATUS_CONFIG) as PinStatus[]).map((st) => {
     const c = PIN_STATUS_CONFIG[st];
     const active = st === pin.status;
-    return `<button type="button" id="${popupStatusDotId(pin.id, st)}" class="ppsd" title="${c.label}" aria-label="${c.label}" aria-pressed="${active}" style="width:30px;height:30px;border-radius:50%;flex:none;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;background:linear-gradient(135deg,${c.gradientFrom},${c.gradientTo});border:2px solid ${active ? '#fff' : 'transparent'};${active ? `box-shadow:0 0 0 2px ${c.color},0 4px 10px rgba(20,25,50,.18);transform:scale(1.08);opacity:1;` : 'opacity:.4;'}">${svgIcon(c.iconPaths, 12, true)}</button>`;
+    return `<button type="button" id="${popupStatusDotId(pin.id, st)}" class="ppsd" title="${c.label}" aria-label="${c.label}" aria-pressed="${active}" style="width:30px;height:30px;border-radius:50%;flex:none;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;background:linear-gradient(135deg,${c.gradientFrom},${c.gradientTo});border:2px solid ${active ? '#fff' : 'transparent'};${active ? `box-shadow:0 0 0 2px ${c.color},0 4px 10px rgba(20,25,50,.18);transform:scale(1.08);opacity:1;` : 'opacity:.4;'}">${svgIcon(c.iconPaths, 14, true)}</button>`;
   }).join('');
 
   // Bloc client — le pin appartient au client ; la carte ouvre son hub.
