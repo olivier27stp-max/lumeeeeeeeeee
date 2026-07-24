@@ -525,12 +525,14 @@ app.post('/api/workflows/execute-action', workflowActionLimiter, async (req, res
   }
 });
 
-/* ── Contenu de repli par route, pour les robots sans JavaScript ──
-   index.html embarque un bloc de repli dans #root (React le vide au montage).
-   Ce bloc décrit la page d'accueil ; servi tel quel sur /privacy et /terms, un
-   robot qui n'exécute pas JS y lirait l'accueil au lieu du document légal — le
-   validateur de branding OAuth de Google verifie justement ces deux URLs.
-   On remplace donc le <main> du repli par un resume propre a la route.        */
+/* ── Résumé initial par route ──
+   index.html porte un résumé de la page d'accueil dans #root, remplacé par
+   l'application au chargement. Comme cette application est monopage, toutes les
+   routes reçoivent ce même document : sans traitement, /privacy et /terms
+   afficheraient le résumé de l'accueil avant chargement, et les clients HTTP qui
+   n'exécutent pas de script (moteurs d'indexation, aperçus de lien, lecteurs
+   hors ligne) n'y verraient jamais le contenu légal. On substitue donc au <main>
+   un résumé fidèle à la route demandée.                                        */
 const CRAWLER_FALLBACKS: Record<string, string> = {
   '/privacy': `<h1 style="font-size:2rem;margin:0 0 1rem">Politique de confidentialité — Lume CRM</h1>
         <p style="margin:0 0 1rem">Cette politique explique quelles données personnelles Lume CRM collecte, pourquoi, comment elles sont protégées et quels sont vos droits (Loi 25, LPRPDE, RGPD).</p>
@@ -545,6 +547,68 @@ const CRAWLER_FALLBACKS: Record<string, string> = {
         <p style="margin:0 0 1rem"><strong>Terms of Service (English).</strong> By creating an account or using Lume CRM (the "Service"), you agree to these Terms. If you are accepting on behalf of an organization, you represent that you have authority to bind that organization.</p>
         <p style="margin:0"><a href="/">Accueil / Home</a> · <a href="/privacy">Politique de confidentialité / Privacy Policy</a></p>`,
 };
+
+/* ── /about — présentation du produit, servie en HTML complet ──
+   Page autonome (aucun script requis) décrivant Lume CRM, ses fonctionnalités
+   et son usage des données Google. Sert de page de présentation officielle
+   référencée depuis l'écran de consentement OAuth.                            */
+const ABOUT_PAGE = `<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lume CRM — Logiciel de gestion pour les entreprises de services résidentiels</title>
+<meta name="description" content="Lume CRM est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.">
+<style>
+  body{max-width:46rem;margin:0 auto;padding:3rem 1.5rem;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.65;color:#1a1a1a;background:#fff}
+  h1{font-size:2.25rem;margin:0 0 .5rem}
+  h2{font-size:1.25rem;margin:2.5rem 0 .75rem}
+  p{margin:0 0 1rem}
+  ul{margin:0 0 1rem;padding-left:1.25rem}
+  li{margin:.25rem 0}
+  a{color:#1a56db}
+  .lead{font-size:1.15rem}
+  footer{margin-top:3rem;padding-top:1.5rem;border-top:1px solid #e5e5e5;font-size:.9rem}
+</style>
+</head>
+<body>
+<h1>Lume CRM</h1>
+<p class="lead">Lume CRM est un logiciel de gestion tout-en-un conçu pour les entreprises de services résidentiels : lavage de vitres, toiture, paysagement, CVAC, excavation, pavage et autres métiers de services à domicile.</p>
+
+<h2>À quoi sert Lume CRM</h2>
+<p>Lume CRM réunit dans une seule application les outils dont une entreprise de services a besoin au quotidien :</p>
+<ul>
+  <li><strong>Clients et prospects</strong> — fiches, historique, suivi des relances.</li>
+  <li><strong>Soumissions et factures</strong> — création, envoi, suivi des paiements.</li>
+  <li><strong>Planification</strong> — calendrier des travaux, assignation des équipes, itinéraires.</li>
+  <li><strong>Boîte de réception</strong> — consulter et répondre aux courriels professionnels sans quitter le dossier client.</li>
+  <li><strong>Automatisations</strong> — rappels de rendez-vous, relances de soumissions, demandes d'avis.</li>
+</ul>
+
+<h2>Utilisation des données Google</h2>
+<p>La connexion d'un compte Google est <strong>facultative</strong> et sert uniquement à la fonction Boîte de réception. Lorsqu'un utilisateur choisit de connecter sa boîte Gmail, Lume CRM demande trois autorisations :</p>
+<ul>
+  <li><code>gmail.readonly</code> — afficher ses conversations, messages et pièces jointes dans Lume CRM.</li>
+  <li><code>gmail.send</code> — envoyer, répondre et transférer des courriels depuis sa propre adresse, à sa demande explicite.</li>
+  <li><code>userinfo.email</code> — identifier la boîte connectée et l'afficher dans l'application.</li>
+</ul>
+<p>Lume CRM ne supprime, ne modifie, n'archive et ne marque comme lu aucun message. L'utilisation des informations obtenues via les API Google est conforme à la <em>Google API Services User Data Policy</em>, y compris ses exigences relatives à la <em>Limited Use</em>. Ces données ne sont jamais utilisées à des fins publicitaires, ne sont jamais vendues et ne servent jamais à entraîner des modèles d'intelligence artificielle.</p>
+
+<h2>About Lume CRM (English)</h2>
+<p>Lume CRM is an all-in-one management platform for residential service businesses (window cleaning, roofing, landscaping, HVAC, excavation and similar trades). It lets owners manage clients and leads, create quotes and invoices, schedule jobs and crews, track payments, and read and reply to their business email — all in one place.</p>
+<p>Connecting a Google account is optional and powers the Inbox feature only. Lume CRM requests <code>gmail.readonly</code>, <code>gmail.send</code> and <code>userinfo.email</code>; it never modifies, archives or deletes messages. Its use of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. Google data is never used for advertising, never sold, and never used to train artificial-intelligence models.</p>
+
+<footer>
+<p><strong>Lume CRM</strong> — exploité par William Hébert, Québec, Canada — <a href="mailto:willhebert30@gmail.com">willhebert30@gmail.com</a></p>
+<p><a href="/">Application</a> · <a href="/privacy">Politique de confidentialité</a> · <a href="/terms">Conditions d'utilisation</a> · <a href="/pricing">Tarifs</a></p>
+</footer>
+</body>
+</html>`;
+
+app.get('/about', (_req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
+  res.type('html').send(ABOUT_PAGE);
+});
 
 // SPA fallback — serve index.html fresh from disk every time.
 // Reading once at boot caused stale HTML referencing old hashed assets
