@@ -441,7 +441,10 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
       if (visible && pinDateFilter !== 'all') {
         // pins don't have created_at in the current schema, always show for date filter
       }
-      marker.getElement().style.display = visible ? '' : 'none';
+      // 'flex', pas '' : le style inline du pin (createLeadPinElement) centre
+      // l'icône via display:flex — '' le retomberait en block et l'icône se
+      // collerait en haut à gauche du rond après un passage masqué→visible.
+      marker.getElement().style.display = visible ? 'flex' : 'none';
       if (noteMarker) {
         noteMarker.getElement().style.display = (visible && notesOn) ? '' : 'none';
       }
