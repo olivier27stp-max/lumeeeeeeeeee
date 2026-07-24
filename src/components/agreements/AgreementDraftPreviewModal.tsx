@@ -24,6 +24,8 @@ export interface AgreementDraftPreviewData {
   /** Quote discount — taxes are computed on the discounted base, like the quote page. */
   discountCents?: number;
   discountPercent?: number | null;
+  /** 12-month calendar of service-plan jobs — shown on the contract when present. */
+  servicePlan?: { year: number; visits: Array<{ month: number; date: string }> } | null;
 }
 
 interface AgreementDraftPreviewModalProps {
@@ -91,6 +93,7 @@ export default function AgreementDraftPreviewModal({
       discount: discountCents > 0 ? { amount_cents: discountCents, percent: data.discountPercent ?? null } : null,
       taxLines,
       totalCents: taxBaseCents + taxLines.reduce((sum, tx) => sum + tx.amount_cents, 0),
+      servicePlan: data.servicePlan ?? null,
       signature: null,
     };
   }, [company, data, requireSignature, terms, logoUrl]);

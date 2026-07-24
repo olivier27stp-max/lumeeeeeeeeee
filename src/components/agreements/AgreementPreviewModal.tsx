@@ -5,6 +5,7 @@ import { useTranslation } from '../../i18n';
 import type { Job } from '../../types';
 import type { JobLineItem } from '../../lib/jobsApi';
 import type { JobAgreement } from '../../lib/jobAgreementsApi';
+import type { ServiceContract } from '../../lib/serviceContractsApi';
 import { sendAgreementEmail } from '../../lib/jobAgreementsApi';
 import { buildAgreementDocData, getAgreementCompanyBranding, type AgreementCompanyBranding } from '../../lib/agreementDoc';
 import { downloadAgreementPdf } from '../../lib/generateAgreementPdf';
@@ -19,6 +20,8 @@ interface AgreementPreviewModalProps {
   clientName: string | null;
   clientEmail: string | null;
   clientPhone: string | null;
+  /** Service-plan calendar of the job — shown on the contract when present. */
+  serviceContract?: ServiceContract | null;
   /** Called after a successful email send (status moves to `sent`). */
   onSent?: () => void;
 }
@@ -33,6 +36,7 @@ export default function AgreementPreviewModal({
   clientName,
   clientEmail,
   clientPhone,
+  serviceContract,
   onSent,
 }: AgreementPreviewModalProps) {
   const { language } = useTranslation();
@@ -49,8 +53,8 @@ export default function AgreementPreviewModal({
 
   const docData = useMemo(() => {
     if (!company) return null;
-    return buildAgreementDocData({ agreement, job, lineItems, company, clientName, clientEmail, clientPhone });
-  }, [company, agreement, job, lineItems, clientName, clientEmail, clientPhone]);
+    return buildAgreementDocData({ agreement, job, lineItems, company, clientName, clientEmail, clientPhone, serviceContract });
+  }, [company, agreement, job, lineItems, clientName, clientEmail, clientPhone, serviceContract]);
 
   if (!open) return null;
 

@@ -352,6 +352,16 @@ export default function NewJobModal({
   const [serviceYear, setServiceYear] = useState(new Date().getFullYear());
   const [serviceMonthDates, setServiceMonthDates] = useState<Record<number, string>>({});
   const [createContract, setCreateContract] = useState(false);
+  // Per-visit customization of the service plan. Both boxes are checked by
+  // default ("apply to all visits"); unchecking one lets each planned month
+  // carry its own time window / its own products & services.
+  const [applyTimesToAllVisits, setApplyTimesToAllVisits] = useState(true);
+  const [applyItemsToAllVisits, setApplyItemsToAllVisits] = useState(true);
+  const [serviceVisitTimes, setServiceVisitTimes] = useState<Record<number, { startTime: string; endTime: string }>>({});
+  const [serviceVisitItems, setServiceVisitItems] = useState<Record<number, LineItemForm[]>>({});
+  // Month whose list the catalog picker is currently feeding (null = the
+  // job-level list used when items apply to all visits).
+  const [pickerMonth, setPickerMonth] = useState<number | null>(null);
   // Written agreement (job contract) — optional, created after the job insert
   const [createAgreement, setCreateAgreement] = useState(false);
   const [agreementRequireSignature, setAgreementRequireSignature] = useState(true);
@@ -837,10 +847,14 @@ export default function NewJobModal({
       }),
     taxLines: taxLines.filter((tx) => tx.enabled && tx.rate > 0).map((tx) => ({ label: tx.label, rate: tx.rate })),
     subtotalCents: effectiveSubtotalCents,
+    servicePlan: isServicePlan && selectedServiceMonths.length > 0
+      ? { year: serviceYear, visits: selectedServiceMonths.map((month) => ({ month, date: serviceMonthDates[month] })) }
+      : null,
   }), [
     jobNumber, nextJobNumber, isCreatingNewClient, newClientFirst, newClientLast, newClientCompany,
     newClientEmail, newClientPhone, selectedClient, addressLine1, addressLine2, addressCity,
     addressProvince, addressPostalCode, prefilledAddress, lineItems, taxLines, effectiveSubtotalCents,
+    isServicePlan, selectedServiceMonths, serviceMonthDates, serviceYear,
   ]);
 
   const resetForm = () => {

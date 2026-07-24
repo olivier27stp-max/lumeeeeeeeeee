@@ -10,6 +10,12 @@ const LUME_LOGO_URL = '/lume-logo.png';
  * server endpoint (/api/agreements/public/:token). When the agreement is
  * signed this always comes from the frozen `snapshot`.
  */
+/** 12-month service-plan calendar (jobs.job_type = 'recurring') mirrored on the contract. */
+export interface AgreementServicePlan {
+  year: number;
+  visits: Array<{ month: number; date: string }>;
+}
+
 export interface AgreementDocData {
   agreementNumber: string;
   createdAt: string | null;
@@ -35,6 +41,7 @@ export interface AgreementDocData {
   taxLines: Array<{ label: string; rate: number; amount_cents: number }>;
   totalCents: number;
   signature: { signerName: string; signatureData: string; signedAt: string | null } | null;
+  servicePlan?: AgreementServicePlan | null;
 }
 
 function fmtDate(iso: string | null | undefined, language: 'en' | 'fr'): string {
@@ -44,6 +51,20 @@ function fmtDate(iso: string | null | undefined, language: 'en' | 'fr'): string 
   return d.toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+const MONTH_ABBR: Record<'en' | 'fr', string[]> = {
+  en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+  fr: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'],
+};
+
+/** "YYYY-MM-DD" → "15 avr" / "Apr 15", parsed from the parts (no timezone drift). */
+function fmtVisitDate(date: string, language: 'en' | 'fr'): string {
+  const m = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return date;
+  const abbr = MONTH_ABBR[language][Number(m[2]) - 1] || '';
+  const day = Number(m[3]);
+  return language === 'fr' ? `${day} ${abbr.toLowerCase()}` : `${abbr} ${day}`;
+}
+
 /**
  * The contract paper itself — shared by the authenticated preview modal and
  * the public /contract/:token signature page (same layout as the quote doc).
@@ -51,6 +72,9 @@ function fmtDate(iso: string | null | undefined, language: 'en' | 'fr'): string 
 export default function AgreementDocument({ data, language }: { data: AgreementDocData; language: 'en' | 'fr' }) {
   const fr = language === 'fr';
   const logoUrl = data.logoUrl || LUME_LOGO_URL;
+  const plan = data.servicePlan && data.servicePlan.visits.length > 0 ? data.servicePlan : null;
+  const planByMonth: Record<number, string> = {};
+  if (plan) for (const v of plan.visits) planByMonth[v.month] = v.date;
 
   return (
     <div className="agreement-doc bg-white rounded-lg border border-[#e5e5e5] shadow-sm overflow-hidden text-left">
@@ -114,6 +138,39 @@ export default function AgreementDocument({ data, language }: { data: AgreementD
       </div>
 
       <div className="border-t border-[#eee]" />
+
+      {/* ── SERVICE PLAN: 12-month calendar, planned months selected ── */}
+      {plan && (
+        <>
+          <div className="px-8 py-5">
+            <div className="flex items-baseline justify-between mb-2.5">
+              <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em]">
+                {(fr ? 'Plan de service — ' : 'Service plan — ') + plan.year}
+              </p>
+              <p className="text-[11px] font-medium text-[#999]">
+                {plan.visits.length} {fr ? (plan.visits.length > 1 ? 'visites' : 'visite') : (plan.visits.length > 1 ? 'visits' : 'visit')}
+              </p>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {MONTH_ABBR[language].map((label, i) => {
+                const date = planByMonth[i + 1];
+                return (
+                  <div
+                    key={label}
+                    className={`rounded-lg px-2.5 py-2 border ${date ? 'border-[#111] bg-[#fafafa]' : 'border-[#e5e7eb]'}`}
+                  >
+                    <p className={`text-[9px] font-semibold uppercase tracking-wider ${date ? 'text-[#111]' : 'text-[#d1d5db]'}`}>{label}</p>
+                    <p className={`text-[11px] mt-0.5 font-medium tabular-nums ${date ? 'text-[#111]' : 'text-[#e5e7eb]'}`}>
+                      {date ? fmtVisitDate(date, language) : '—'}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="border-t border-[#eee]" />
+        </>
+      )}
 
       {/* ── SERVICES TABLE ── */}
       <div className="px-8 py-6">

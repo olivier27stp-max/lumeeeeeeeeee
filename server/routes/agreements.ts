@@ -53,6 +53,8 @@ interface ComposedAgreementDoc {
   total_cents: number;
   client_name: string | null;
   property_address: string | null;
+  /** 12-month calendar of service-plan jobs (jobs.job_type = 'recurring'). */
+  service_plan?: { year: number; visits: Array<{ month: number; date: string }> } | null;
 }
 
 /**
@@ -107,6 +109,23 @@ async function composeLiveDoc(admin: any, agreement: any): Promise<ComposedAgree
     if (c) clientName = `${c.first_name || ''} ${c.last_name || ''}`.trim() || null;
   }
 
+  // Service-plan jobs: mirror the 12-month calendar on the contract.
+  let servicePlan: ComposedAgreementDoc['service_plan'] = null;
+  const { data: sc } = await admin
+    .from('service_contracts')
+    .select('year, visits')
+    .eq('job_id', agreement.job_id)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (sc && Array.isArray(sc.visits)) {
+    const visits = sc.visits
+      .map((v: any) => ({ month: Number(v?.month), date: String(v?.date || '') }))
+      .filter((v: { month: number; date: string }) => v.month >= 1 && v.month <= 12 && Boolean(v.date));
+    if (visits.length > 0) servicePlan = { year: Number(sc.year), visits };
+  }
+
   return {
     items,
     subtotal_cents: subtotalCents,
@@ -114,6 +133,7 @@ async function composeLiveDoc(admin: any, agreement: any): Promise<ComposedAgree
     total_cents: totalCents,
     client_name: clientName,
     property_address: job?.property_address || null,
+    service_plan: servicePlan,
   };
 }
 

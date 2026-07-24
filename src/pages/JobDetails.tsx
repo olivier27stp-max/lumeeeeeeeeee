@@ -2464,6 +2464,9 @@ export default function JobDetails() {
               .map((it) => ({ name: it.name, qty: it.qty, unit_price_cents: it.unit_price_cents, total_cents: it.total_cents })),
             taxLines: enabledTaxes.map((tx) => ({ label: tx.label, rate: tx.rate })),
             subtotalCents: displaySubtotalCents,
+            servicePlan: contract && contract.visits.length > 0
+              ? { year: contract.year, visits: contract.visits }
+              : null,
           }}
         />
       )}
@@ -2478,6 +2481,7 @@ export default function JobDetails() {
           clientName={job.client_name || null}
           clientEmail={clientInfo?.email || null}
           clientPhone={clientInfo?.phone || null}
+          serviceContract={contract}
           onSent={reloadAgreement}
         />
       )}

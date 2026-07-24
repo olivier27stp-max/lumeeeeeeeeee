@@ -56,8 +56,10 @@ export function buildAgreementDocData(params: {
   clientName: string | null;
   clientEmail: string | null;
   clientPhone: string | null;
+  /** 12-month calendar of service-plan jobs — shown on the contract when present. */
+  serviceContract?: { year: number; visits: Array<{ month: number; date: string }> } | null;
 }): AgreementDocData {
-  const { agreement, job, lineItems, company, clientName, clientEmail, clientPhone } = params;
+  const { agreement, job, lineItems, company, clientName, clientEmail, clientPhone, serviceContract } = params;
 
   let items: AgreementDocData['items'];
   let subtotalCents: number;
@@ -66,6 +68,7 @@ export function buildAgreementDocData(params: {
   let totalCents: number;
   let propertyAddress: string | null;
   let docClientName = clientName;
+  let servicePlan: AgreementDocData['servicePlan'] = null;
 
   if (agreement.snapshot) {
     const snap = agreement.snapshot;
@@ -78,6 +81,7 @@ export function buildAgreementDocData(params: {
     totalCents = snap.total_cents || 0;
     propertyAddress = snap.property_address ?? (job.property_address || null);
     docClientName = snap.client_name ?? clientName;
+    servicePlan = snap.service_plan ?? null;
   } else {
     items = lineItems
       .filter((it) => it.included)
@@ -92,6 +96,9 @@ export function buildAgreementDocData(params: {
     }));
     totalCents = subtotalCents + taxLines.reduce((sum, tx) => sum + tx.amount_cents, 0);
     propertyAddress = job.property_address || null;
+    servicePlan = serviceContract && serviceContract.visits.length > 0
+      ? { year: serviceContract.year, visits: serviceContract.visits }
+      : null;
   }
 
   return {
@@ -117,6 +124,7 @@ export function buildAgreementDocData(params: {
     discount,
     taxLines,
     totalCents,
+    servicePlan,
     signature: agreement.signature_data && agreement.signer_name
       ? { signerName: agreement.signer_name, signatureData: agreement.signature_data, signedAt: agreement.signed_at }
       : null,

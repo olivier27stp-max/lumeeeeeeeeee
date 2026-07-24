@@ -34,6 +34,7 @@ interface PublicAgreementData {
     total_cents: number;
     client_name: string | null;
     property_address: string | null;
+    service_plan?: { year: number; visits: Array<{ month: number; date: string }> } | null;
   };
 }
 
@@ -219,6 +220,7 @@ export default function ContractView() {
       : null,
     taxLines: data.doc.tax_lines,
     totalCents: data.doc.total_cents,
+    servicePlan: data.doc.service_plan ?? null,
     signature: data.agreement.signature_data && data.agreement.signer_name
       ? { signerName: data.agreement.signer_name, signatureData: data.agreement.signature_data, signedAt: data.agreement.signed_at }
       : null,

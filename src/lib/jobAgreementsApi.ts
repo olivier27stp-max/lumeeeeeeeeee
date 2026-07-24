@@ -41,6 +41,8 @@ export interface AgreementSnapshot {
   total_cents: number;
   client_name?: string | null;
   property_address?: string | null;
+  /** 12-month calendar of service-plan jobs — frozen with the rest of the document. */
+  service_plan?: { year: number; visits: Array<{ month: number; date: string }> } | null;
 }
 
 export interface JobAgreement {

@@ -13,6 +13,18 @@ function fmtDate(iso: string | null | undefined): string {
   return d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+const MONTH_ABBR_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_ABBR_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+
+/** "YYYY-MM-DD" → "15 avr" / "Apr 15", parsed from the parts (no timezone drift). */
+function fmtVisitShort(date: string): string {
+  const m = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return date;
+  const abbr = (isFr() ? MONTH_ABBR_FR : MONTH_ABBR_EN)[Number(m[2]) - 1] || '';
+  const day = Number(m[3]);
+  return isFr() ? `${day} ${abbr.toLowerCase()}` : `${abbr} ${day}`;
+}
+
 /** Same layout as the quote/invoice PDFs, adapted to the contract document. */
 export function downloadAgreementPdf(data: AgreementDocData): void {
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
@@ -99,6 +111,56 @@ export function downloadAgreementPdf(data: AgreementDocData): void {
   doc.setDrawColor(238, 238, 238);
   doc.line(marginL, y, pageW - marginR, y);
   y += 16;
+
+  // ── SERVICE PLAN: 12-month grid, planned months selected ──
+  if (data.servicePlan && data.servicePlan.visits.length > 0) {
+    const plan = data.servicePlan;
+    const planByMonth: Record<number, string> = {};
+    for (const v of plan.visits) planByMonth[v.month] = v.date;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...lightGray);
+    doc.text(`${L('SERVICE PLAN', 'PLAN DE SERVICE')} — ${plan.year}`, marginL, y);
+    doc.text(
+      `${plan.visits.length} ${plan.visits.length > 1 ? L('VISITS', 'VISITES') : L('VISIT', 'VISITE')}`,
+      pageW - marginR, y, { align: 'right' },
+    );
+    y += 8;
+
+    const gap = 6;
+    const boxW = (contentW - gap * 3) / 4;
+    const boxH = 26;
+    const abbrs = isFr() ? MONTH_ABBR_FR : MONTH_ABBR_EN;
+    for (let i = 0; i < 12; i++) {
+      const x = marginL + (i % 4) * (boxW + gap);
+      const boxY = y + Math.floor(i / 4) * (boxH + gap);
+      const date = planByMonth[i + 1];
+      if (date) {
+        doc.setFillColor(250, 250, 250);
+        doc.setDrawColor(...black);
+      } else {
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(229, 231, 235);
+      }
+      doc.setLineWidth(0.75);
+      doc.roundedRect(x, boxY, boxW, boxH, 4, 4, 'FD');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      if (date) doc.setTextColor(...black); else doc.setTextColor(209, 213, 219);
+      doc.text(abbrs[i].toUpperCase(), x + 7, boxY + 10);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      if (date) doc.setTextColor(...black); else doc.setTextColor(229, 231, 235);
+      doc.text(date ? fmtVisitShort(date) : '—', x + 7, boxY + 20);
+    }
+    y += 3 * boxH + 2 * gap + 16;
+
+    doc.setDrawColor(238, 238, 238);
+    doc.setLineWidth(0.5);
+    doc.line(marginL, y - 8, pageW - marginR, y - 8);
+    y += 8;
+  }
 
   // ── SERVICES TABLE ──
   const colX = {
