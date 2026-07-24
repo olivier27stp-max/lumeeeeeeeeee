@@ -80,6 +80,10 @@ export function useLiveLocationTracking(
  * buttons instead of `supabase.auth.signOut()` directly: it runs while auth is
  * still valid so the RLS-protected "mark offline" write succeeds, removing the
  * user's live pin from the maps immediately rather than waiting for it to go stale.
+ *
+ * Ends by sending the browser to the marketing home page: without it the URL stays
+ * on the app route the user just left (e.g. /jobs), which the public router only
+ * matches with its catch-all — showing "Page not found" instead of the homepage.
  */
 export async function endTrackingAndSignOut(): Promise<void> {
   try {
@@ -95,4 +99,5 @@ export async function endTrackingAndSignOut(): Promise<void> {
     // Never block logout on a tracking-cleanup failure.
   }
   await supabase.auth.signOut();
+  window.location.href = '/';
 }
