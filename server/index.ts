@@ -2,6 +2,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -524,12 +525,52 @@ app.post('/api/workflows/execute-action', workflowActionLimiter, async (req, res
   }
 });
 
+/* ── Contenu de repli par route, pour les robots sans JavaScript ──
+   index.html embarque un bloc de repli dans #root (React le vide au montage).
+   Ce bloc décrit la page d'accueil ; servi tel quel sur /privacy et /terms, un
+   robot qui n'exécute pas JS y lirait l'accueil au lieu du document légal — le
+   validateur de branding OAuth de Google verifie justement ces deux URLs.
+   On remplace donc le <main> du repli par un resume propre a la route.        */
+const CRAWLER_FALLBACKS: Record<string, string> = {
+  '/privacy': `<h1 style="font-size:2rem;margin:0 0 1rem">Politique de confidentialité — Lume CRM</h1>
+        <p style="margin:0 0 1rem">Cette politique explique quelles données personnelles Lume CRM collecte, pourquoi, comment elles sont protégées et quels sont vos droits (Loi 25, LPRPDE, RGPD).</p>
+        <p style="margin:0 0 1rem"><strong>Intégration Google / Gmail.</strong> La connexion d'un compte Google est facultative. Lume CRM demande uniquement les autorisations <code>gmail.readonly</code> (afficher vos conversations, messages et pièces jointes dans la Boîte de réception), <code>gmail.send</code> (envoyer ou répondre à un courriel lorsque vous le demandez) et <code>userinfo.email</code> (identifier la boîte connectée). Lume CRM ne supprime, ne modifie, n'archive et ne marque comme lu aucun message.</p>
+        <p style="margin:0 0 1rem"><strong>Limited Use.</strong> L'utilisation par Lume CRM des informations obtenues via les API Google est conforme à la Google API Services User Data Policy, y compris ses exigences relatives à la Limited Use. Ces données ne sont jamais utilisées à des fins publicitaires, ne sont jamais vendues et ne servent jamais à entraîner des modèles d'intelligence artificielle.</p>
+        <p style="margin:0 0 1rem"><strong>Conservation et révocation.</strong> À la déconnexion du compte Google, les jetons OAuth sont révoqués immédiatement et les données synchronisées sont supprimées sous 30 jours. L'accès peut être révoqué à tout moment depuis <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
+        <p style="margin:0 0 1rem"><strong>Privacy Policy (English).</strong> This policy explains what personal data Lume CRM collects, why, how it is protected, and your rights. Google integration is optional; Lume CRM requests only <code>gmail.readonly</code>, <code>gmail.send</code> and <code>userinfo.email</code>, never modifies or deletes messages, adheres to the Google API Services User Data Policy including the Limited Use requirements, and never uses Google data for advertising or to train AI models.</p>
+        <p style="margin:0"><a href="/">Accueil / Home</a> · <a href="/terms">Conditions d'utilisation / Terms of Service</a></p>`,
+  '/terms': `<h1 style="font-size:2rem;margin:0 0 1rem">Conditions d'utilisation — Lume CRM</h1>
+        <p style="margin:0 0 1rem">En créant un compte ou en utilisant Lume CRM (le « Service »), vous acceptez les présentes conditions. Si vous les acceptez au nom d'une organisation, vous déclarez avoir le pouvoir de l'engager.</p>
+        <p style="margin:0 0 1rem">Lume CRM est un logiciel de gestion pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.</p>
+        <p style="margin:0 0 1rem"><strong>Terms of Service (English).</strong> By creating an account or using Lume CRM (the "Service"), you agree to these Terms. If you are accepting on behalf of an organization, you represent that you have authority to bind that organization.</p>
+        <p style="margin:0"><a href="/">Accueil / Home</a> · <a href="/privacy">Politique de confidentialité / Privacy Policy</a></p>`,
+};
+
 // SPA fallback — serve index.html fresh from disk every time.
 // Reading once at boot caused stale HTML referencing old hashed assets
 // after a redeploy (dist/ rewritten but template in memory).
 app.get('*', (_req, res, next) => {
   if (_req.path.startsWith('/api')) return next();
   res.set('Cache-Control', 'no-store, must-revalidate');
+
+  const routeFallback = CRAWLER_FALLBACKS[_req.path.replace(/\/+$/, '') || '/'];
+  if (routeFallback) {
+    try {
+      const html = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
+      // Remplace le contenu du <main> de repli (celui de l'accueil) par le
+      // resume de cette route. React vide #root au montage : invisible pour
+      // les visiteurs reels.
+      const swapped = html.replace(
+        /(<main[^>]*>)[\s\S]*?(<\/main>)/,
+        (_m, open: string, close: string) => `${open}${routeFallback}${close}`,
+      );
+      res.type('html').send(swapped);
+      return;
+    } catch {
+      /* si la lecture echoue, on retombe sur le sendFile standard */
+    }
+  }
+
   res.sendFile(path.join(distPath, 'index.html'));
 });
 // Health check endpoint
