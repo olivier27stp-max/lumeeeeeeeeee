@@ -119,8 +119,15 @@ function pointInPolygon(lng: number, lat: number, poly: [number, number][]): boo
 export interface ZoneStats {
   total: number;
   byStatus: Record<PinStatus, number>;
-  conversionRate: number; // % de pins Vendu sur le total
-  repCount: number;
+  conversionRate: number;   // % Vendu sur le total de portes
+  contactRate: number;      // % de portes ayant eu une interaction (hors "no_answer")
+  contacted: number;        // portes avec réponse
+  noAnswer: number;         // portes sans réponse
+  sales: number;            // pins Vendu
+  leads: number;            // pins Lead
+  appointments: number;     // pins RDV / devis envoyé
+  pipeline: number;         // leads + rdv (opportunités ouvertes)
+  repCount: number;         // reps distincts ayant posé un pin
 }
 
 function matchesDateFilter(dateStr: string, filter: DateFilter): boolean {
@@ -1540,8 +1547,18 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
       byStatus[pin.status] = (byStatus[pin.status] ?? 0) + 1;
       if (pin.assigned_user_id) reps.add(pin.assigned_user_id);
     });
-    const conversionRate = total > 0 ? Math.round((byStatus.closed_won / total) * 100) : 0;
-    return { total, byStatus, conversionRate, repCount: reps.size };
+    const sales = byStatus.closed_won;
+    const leads = byStatus.lead;
+    const appointments = byStatus.appointment;
+    const noAnswer = byStatus.no_answer;
+    const contacted = total - noAnswer;
+    const pipeline = leads + appointments;
+    const conversionRate = total > 0 ? Math.round((sales / total) * 100) : 0;
+    const contactRate = total > 0 ? Math.round((contacted / total) * 100) : 0;
+    return {
+      total, byStatus, conversionRate, contactRate, contacted, noAnswer,
+      sales, leads, appointments, pipeline, repCount: reps.size,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -2367,96 +2384,140 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
       {/* ================================================================== */}
       {/* Zone detail panel                                                  */}
       {/* ================================================================== */}
-      {selectedZone && (
-        <div className="absolute bottom-4 left-4 z-30 w-[300px] rounded-2xl border border-white/10 bg-black/85 p-5 shadow-2xl backdrop-blur-xl">
-          <div className="flex items-start justify-between">
-            <div>
+      {selectedZone && (() => {
+        const stats = computeZoneStats(selectedZone);
+        const STATUS_ORDER: PinStatus[] = ['closed_won', 'lead', 'appointment', 'follow_up', 'no_answer', 'rejected', 'other'];
+        const maxStatus = Math.max(1, ...STATUS_ORDER.map((st) => stats.byStatus[st]));
+        return (
+        <div className="absolute bottom-4 left-4 z-30 w-[312px] overflow-hidden rounded-2xl border border-white/[0.08] bg-neutral-950/95 shadow-2xl shadow-black/50 backdrop-blur-xl">
+          {/* En-tête */}
+          <div className="flex items-start justify-between gap-3 border-b border-white/[0.06] px-4 pb-3.5 pt-4">
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: selectedZone.color }} />
-                <h3 className="text-[14px] font-semibold text-white">{selectedZone.name}</h3>
+                <span className="h-2.5 w-2.5 flex-none rounded-full ring-2 ring-white/10" style={{ backgroundColor: selectedZone.color }} />
+                <h3 className="truncate text-[14px] font-semibold tracking-tight text-white">{selectedZone.name}</h3>
               </div>
-              <p className="mt-1.5 text-[11px] text-white/40">
-                {fr ? 'Assigné à' : 'Assigned to'}: <span className="text-white/60">{selectedZone.assigned_to_name || (fr ? 'Non assigné' : 'Unassigned')}</span>
-              </p>
-              <p className="mt-1 text-[11px] text-white/30">
-                {fr ? 'Créé le' : 'Created'} {new Date(selectedZone.created_at).toLocaleDateString(fr ? 'fr-CA' : 'en-US')}
+              <p className="mt-1 text-[11px] text-neutral-500">
+                {new Date(selectedZone.created_at).toLocaleDateString(fr ? 'fr-CA' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
               </p>
             </div>
-            <button onClick={() => setSelectedZone(null)} className="rounded-lg p-1 text-white/30 transition-colors hover:bg-white/10 hover:text-white/60">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            <button onClick={() => setSelectedZone(null)} className="-mr-1 -mt-1 flex-none rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-200">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           </div>
 
-          {/* Stats de la zone — pins tombant dans le polygone */}
-          {(() => {
-            const stats = computeZoneStats(selectedZone);
-            const STATUS_ORDER: PinStatus[] = ['closed_won', 'lead', 'appointment', 'follow_up', 'no_answer', 'rejected', 'other'];
-            return (
-              <div className="mt-4">
-                {/* Ligne de résumé : total · conversion · reps */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg bg-white/5 px-2 py-2 text-center">
-                    <div className="text-[16px] font-semibold text-white">{stats.total}</div>
-                    <div className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/35">{fr ? 'Portes' : 'Doors'}</div>
-                  </div>
-                  <div className="rounded-lg bg-white/5 px-2 py-2 text-center">
-                    <div className="text-[16px] font-semibold text-emerald-400">{stats.conversionRate}%</div>
-                    <div className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/35">{fr ? 'Conv.' : 'Conv.'}</div>
-                  </div>
-                  <div className="rounded-lg bg-white/5 px-2 py-2 text-center">
-                    <div className="text-[16px] font-semibold text-white">{stats.repCount}</div>
-                    <div className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/35">{fr ? 'Reps' : 'Reps'}</div>
-                  </div>
-                </div>
-
-                {/* Répartition par statut */}
-                {stats.total > 0 ? (
-                  <div className="mt-3 space-y-1.5">
-                    {STATUS_ORDER.filter((st) => stats.byStatus[st] > 0).map((st) => {
-                      const cfg = PIN_STATUS_CONFIG[st];
-                      const pct = Math.round((stats.byStatus[st] / stats.total) * 100);
-                      return (
-                        <div key={st} className="flex items-center gap-2">
-                          <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ backgroundColor: cfg.color }} />
-                          <span className="flex-1 truncate text-[11px] text-white/55">{cfg.label}</span>
-                          <span className="text-[11px] font-medium text-white/80">{stats.byStatus[st]}</span>
-                          <span className="w-8 text-right text-[10px] text-white/30">{pct}%</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="mt-3 text-[11px] text-white/30">{fr ? 'Aucun pin dans cette zone' : 'No pins in this zone'}</p>
-                )}
+          <div className="px-4 py-4">
+            {/* KPIs principaux */}
+            <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl bg-white/[0.06]">
+              <div className="bg-neutral-950 px-2.5 py-3 text-center">
+                <div className="text-[19px] font-semibold leading-none tracking-tight text-white tabular-nums">{stats.total}</div>
+                <div className="mt-1.5 text-[9px] font-medium uppercase tracking-[0.08em] text-neutral-500">{fr ? 'Portes' : 'Doors'}</div>
               </div>
-            );
-          })()}
-
-          {canAssignZone(CURRENT_USER.role) && (
-            <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Assigné à' : 'Assigned to'}</label>
-              <select
-                value={selectedZone.assigned_to || ''}
-                onChange={(e) => reassignZone(selectedZone.id, e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white outline-none focus:border-indigo-500/50"
-              >
-                <option value="" className="bg-[#0c0c14]">{fr ? 'Non assigné' : 'Unassigned'}</option>
-                {SALES_REPS.map((rep) => (
-                  <option key={rep.id} value={rep.id} className="bg-[#0c0c14]">{rep.name}</option>
-                ))}
-              </select>
+              <div className="bg-neutral-950 px-2.5 py-3 text-center">
+                <div className="text-[19px] font-semibold leading-none tracking-tight text-white tabular-nums">{stats.sales}</div>
+                <div className="mt-1.5 text-[9px] font-medium uppercase tracking-[0.08em] text-neutral-500">{fr ? 'Ventes' : 'Sales'}</div>
+              </div>
+              <div className="bg-neutral-950 px-2.5 py-3 text-center">
+                <div className="text-[19px] font-semibold leading-none tracking-tight text-white tabular-nums">{stats.pipeline}</div>
+                <div className="mt-1.5 text-[9px] font-medium uppercase tracking-[0.08em] text-neutral-500">{fr ? 'Pipeline' : 'Pipeline'}</div>
+              </div>
             </div>
-          )}
 
-          {canDeleteZone(CURRENT_USER.role, selectedZone) && (
-            <button onClick={() => deleteZone(selectedZone.id)}
-              className="mt-4 w-full rounded-lg border border-red-500/20 bg-red-500/10 py-2 text-[12px] font-medium text-red-400 transition-all hover:bg-red-500/20"
-            >
-              {fr ? 'Supprimer la zone' : 'Delete zone'}
-            </button>
-          )}
+            {/* Taux — conversion + contact, en barres neutres */}
+            <div className="mt-3.5 space-y-3">
+              <div>
+                <div className="mb-1 flex items-baseline justify-between">
+                  <span className="text-[11px] text-neutral-400">{fr ? 'Taux de conversion' : 'Conversion rate'}</span>
+                  <span className="text-[12px] font-semibold text-white tabular-nums">{stats.conversionRate}%</span>
+                </div>
+                <div className="h-1 overflow-hidden rounded-full bg-white/[0.08]">
+                  <div className="h-full rounded-full bg-white transition-all" style={{ width: `${Math.min(100, stats.conversionRate)}%` }} />
+                </div>
+              </div>
+              <div>
+                <div className="mb-1 flex items-baseline justify-between">
+                  <span className="text-[11px] text-neutral-400">{fr ? 'Taux de contact' : 'Contact rate'}</span>
+                  <span className="text-[12px] font-semibold text-white tabular-nums">{stats.contactRate}%</span>
+                </div>
+                <div className="h-1 overflow-hidden rounded-full bg-white/[0.08]">
+                  <div className="h-full rounded-full bg-white/45 transition-all" style={{ width: `${Math.min(100, stats.contactRate)}%` }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Secondaire : contactées / sans réponse / reps */}
+            <div className="mt-3.5 grid grid-cols-3 gap-2 border-t border-white/[0.06] pt-3.5">
+              <div>
+                <div className="text-[13px] font-semibold text-white tabular-nums">{stats.contacted}</div>
+                <div className="mt-0.5 text-[9.5px] text-neutral-500">{fr ? 'Contactées' : 'Contacted'}</div>
+              </div>
+              <div>
+                <div className="text-[13px] font-semibold text-white tabular-nums">{stats.noAnswer}</div>
+                <div className="mt-0.5 text-[9.5px] text-neutral-500">{fr ? 'Sans réponse' : 'No answer'}</div>
+              </div>
+              <div>
+                <div className="text-[13px] font-semibold text-white tabular-nums">{stats.repCount}</div>
+                <div className="mt-0.5 text-[9.5px] text-neutral-500">{fr ? 'Reps' : 'Reps'}</div>
+              </div>
+            </div>
+
+            {/* Répartition par statut */}
+            <div className="mt-3.5 border-t border-white/[0.06] pt-3.5">
+              <div className="mb-2 text-[9.5px] font-medium uppercase tracking-[0.08em] text-neutral-500">{fr ? 'Répartition' : 'Breakdown'}</div>
+              {stats.total > 0 ? (
+                <div className="space-y-2">
+                  {STATUS_ORDER.filter((st) => stats.byStatus[st] > 0).map((st) => {
+                    const cfg = PIN_STATUS_CONFIG[st];
+                    const n = stats.byStatus[st];
+                    const pct = Math.round((n / stats.total) * 100);
+                    return (
+                      <div key={st}>
+                        <div className="mb-1 flex items-center gap-2">
+                          <span className="h-2 w-2 flex-none rounded-full" style={{ backgroundColor: cfg.color }} />
+                          <span className="flex-1 truncate text-[11px] text-neutral-300">{cfg.label}</span>
+                          <span className="text-[11px] font-medium text-white tabular-nums">{n}</span>
+                          <span className="w-8 text-right text-[10px] text-neutral-500 tabular-nums">{pct}%</span>
+                        </div>
+                        <div className="h-[3px] overflow-hidden rounded-full bg-white/[0.06]">
+                          <div className="h-full rounded-full bg-white/30" style={{ width: `${(n / maxStatus) * 100}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-[11px] text-neutral-500">{fr ? 'Aucun pin dans cette zone' : 'No pins in this zone'}</p>
+              )}
+            </div>
+
+            {/* Assignation */}
+            {canAssignZone(CURRENT_USER.role) && (
+              <div className="mt-3.5 border-t border-white/[0.06] pt-3.5">
+                <label className="mb-1.5 block text-[9.5px] font-medium uppercase tracking-[0.08em] text-neutral-500">{fr ? 'Assigné à' : 'Assigned to'}</label>
+                <select
+                  value={selectedZone.assigned_to || ''}
+                  onChange={(e) => reassignZone(selectedZone.id, e.target.value)}
+                  className="w-full cursor-pointer rounded-lg border border-white/[0.08] bg-neutral-900 px-3 py-2 text-[12.5px] text-neutral-100 outline-none transition-colors hover:border-white/20 focus:border-white/30"
+                >
+                  <option value="" className="bg-neutral-900 text-neutral-100">{fr ? 'Non assigné' : 'Unassigned'}</option>
+                  {SALES_REPS.map((rep) => (
+                    <option key={rep.id} value={rep.id} className="bg-neutral-900 text-neutral-100">{rep.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {canDeleteZone(CURRENT_USER.role, selectedZone) && (
+              <button onClick={() => deleteZone(selectedZone.id)}
+                className="mt-3.5 w-full rounded-lg border border-white/[0.08] py-2 text-[11.5px] font-medium text-neutral-400 transition-colors hover:border-red-500/30 hover:bg-red-500/[0.08] hover:text-red-400"
+              >
+                {fr ? 'Supprimer la zone' : 'Delete zone'}
+              </button>
+            )}
+          </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ================================================================== */}
       {/* "Log prospecting pin" action modal — opens when a pin is clicked    */}
