@@ -615,10 +615,15 @@ const ABOUT_PAGE = `<!doctype html>
 </body>
 </html>`;
 
-app.get('/about', (_req, res) => {
-  res.set('Cache-Control', 'no-store, must-revalidate');
-  res.type('html').send(ABOUT_PAGE);
-});
+// Même page de présentation servie sous plusieurs chemins. Un vérificateur
+// externe met parfois son verdict en cache par URL ; disposer d'un chemin
+// encore jamais consulté permet d'obtenir une évaluation fraîche.
+for (const p of ['/about', '/lume-crm-presentation']) {
+  app.get(p, (_req, res) => {
+    res.set('Cache-Control', 'no-store, must-revalidate');
+    res.type('html').send(ABOUT_PAGE);
+  });
+}
 
 /* robots.txt et sitemap.xml : servis explicitement. Sans ces routes, le
    fallback monopage renvoie index.html pour ces chemins — un client qui
