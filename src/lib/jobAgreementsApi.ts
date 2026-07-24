@@ -205,6 +205,21 @@ export async function sendAgreementEmail(agreementId: string): Promise<void> {
   if (!res.ok) throw new Error(payload?.error || 'Failed to send agreement email.');
 }
 
+/** Text the agreement (public link) to the job's client by SMS via the server. */
+export async function sendAgreementSms(agreementId: string): Promise<void> {
+  const { data: session } = await supabase.auth.getSession();
+  const token = session.session?.access_token;
+  if (!token) throw new Error('Not authenticated.');
+
+  const res = await fetch('/api/agreements/send-sms', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agreementId }),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload?.error || 'Failed to send agreement SMS.');
+}
+
 /** Tax registration numbers (e.g. TPS/TVQ) shown in the contract header. */
 export async function getTaxRegistrationLines(): Promise<string[]> {
   try {

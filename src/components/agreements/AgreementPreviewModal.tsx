@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, ExternalLink, Link as LinkIcon, Loader2, Mail, X } from 'lucide-react';
+import { Download, ExternalLink, Link as LinkIcon, Loader2, Mail, MessageSquare, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../../i18n';
 import type { Job } from '../../types';
 import type { JobLineItem } from '../../lib/jobsApi';
 import type { JobAgreement } from '../../lib/jobAgreementsApi';
 import type { ServiceContract } from '../../lib/serviceContractsApi';
-import { sendAgreementEmail } from '../../lib/jobAgreementsApi';
+import { sendAgreementEmail, sendAgreementSms } from '../../lib/jobAgreementsApi';
 import { buildAgreementDocData, getAgreementCompanyBranding, type AgreementCompanyBranding } from '../../lib/agreementDoc';
 import { downloadAgreementPdf } from '../../lib/generateAgreementPdf';
 import AgreementDocument from './AgreementDocument';
@@ -43,6 +43,7 @@ export default function AgreementPreviewModal({
   const fr = language === 'fr';
   const [company, setCompany] = useState<AgreementCompanyBranding | null>(null);
   const [sending, setSending] = useState(false);
+  const [sendingSms, setSendingSms] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -69,6 +70,20 @@ export default function AgreementPreviewModal({
       toast.error(err?.message || (fr ? "Échec de l'envoi du contrat." : 'Failed to send the contract.'));
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleSendSms = async () => {
+    setSendingSms(true);
+    try {
+      await sendAgreementSms(agreement.id);
+      toast.success(fr ? 'Contrat envoyé par SMS.' : 'Contract sent by SMS.');
+      onSent?.();
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.message || (fr ? "Échec de l'envoi du SMS." : 'Failed to send the SMS.'));
+    } finally {
+      setSendingSms(false);
     }
   };
 
@@ -138,9 +153,17 @@ export default function AgreementPreviewModal({
             </button>
           )}
           <button
+            onClick={handleSendSms}
+            disabled={sendingSms}
+            className="ml-auto glass-button !py-2.5 !px-4 inline-flex items-center gap-2 text-[13px] disabled:opacity-50"
+          >
+            {sendingSms ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
+            {fr ? 'Envoyer par SMS' : 'Send by SMS'}
+          </button>
+          <button
             onClick={handleSend}
             disabled={sending}
-            className="ml-auto bg-primary text-white rounded-lg py-2.5 px-5 text-[13px] font-semibold inline-flex items-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="bg-primary text-white rounded-lg py-2.5 px-5 text-[13px] font-semibold inline-flex items-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {sending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
             {fr ? 'Envoyer par courriel' : 'Send by email'}

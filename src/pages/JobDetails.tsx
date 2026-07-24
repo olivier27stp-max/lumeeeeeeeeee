@@ -659,6 +659,7 @@ export default function JobDetails() {
         clientName: job.client_name || null,
         clientEmail: clientInfo?.email || null,
         clientPhone: clientInfo?.phone || null,
+        serviceContract: contract,
       });
       downloadAgreementPdf(docData);
     } catch (err: any) {

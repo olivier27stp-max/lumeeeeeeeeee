@@ -15,6 +15,8 @@ function fmtDate(iso: string | null | undefined): string {
 
 const MONTH_ABBR_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTH_ABBR_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+const MONTH_FULL_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MONTH_FULL_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 
 /** "YYYY-MM-DD" → "15 avr" / "Apr 15", parsed from the parts (no timezone drift). */
 function fmtVisitShort(date: string): string {
@@ -23,6 +25,14 @@ function fmtVisitShort(date: string): string {
   const abbr = (isFr() ? MONTH_ABBR_FR : MONTH_ABBR_EN)[Number(m[2]) - 1] || '';
   const day = Number(m[3]);
   return isFr() ? `${day} ${abbr.toLowerCase()}` : `${abbr} ${day}`;
+}
+
+/** "YYYY-MM-DD" → "mercredi 12 août 2026" (local date parts, no timezone drift). */
+function fmtVisitFull(date: string): string {
+  const m = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return date;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.toLocaleDateString(isFr() ? 'fr-CA' : 'en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 /** Same layout as the quote/invoice PDFs, adapted to the contract document. */
@@ -154,12 +164,37 @@ export function downloadAgreementPdf(data: AgreementDocData): void {
       if (date) doc.setTextColor(...black); else doc.setTextColor(229, 231, 235);
       doc.text(date ? fmtVisitShort(date) : '—', x + 7, boxY + 20);
     }
-    y += 3 * boxH + 2 * gap + 16;
+    y += 3 * boxH + 2 * gap + 18;
+
+    // Visits with their full dates, below the grid
+    const sortedVisits = [...plan.visits].sort((a, b) => a.date.localeCompare(b.date));
+    const monthNames = isFr() ? MONTH_FULL_FR : MONTH_FULL_EN;
+    doc.setLineWidth(0.5);
+    for (let i = 0; i < sortedVisits.length; i++) {
+      if (y > pageH - 60) {
+        doc.addPage();
+        y = 50;
+      }
+      const v = sortedVisits[i];
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(34, 34, 34);
+      doc.text(`${L('Visit', 'Visite')} ${i + 1} · ${monthNames[v.month - 1] || ''}`, marginL, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(85, 85, 85);
+      doc.text(fmtVisitFull(v.date), pageW - marginR, y, { align: 'right' });
+      y += 6;
+      if (i < sortedVisits.length - 1) {
+        doc.setDrawColor(240, 240, 240);
+        doc.line(marginL, y, pageW - marginR, y);
+      }
+      y += 10;
+    }
 
     doc.setDrawColor(238, 238, 238);
     doc.setLineWidth(0.5);
-    doc.line(marginL, y - 8, pageW - marginR, y - 8);
-    y += 8;
+    doc.line(marginL, y - 6, pageW - marginR, y - 6);
+    y += 10;
   }
 
   // ── SERVICES TABLE ──

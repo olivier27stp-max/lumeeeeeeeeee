@@ -5,6 +5,8 @@ import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { resolvePublicBaseUrl } from '../lib/helpers';
 import { sendSafeError } from '../lib/error-handler';
 import { getCompanySettings, buildEmailLayout, senderFor } from './emails';
+import { twilioClient } from '../lib/config';
+import { getOrgSmsFromNumber, SmsNumberNotProvisionedError } from '../lib/twilioProvisioning';
 
 const router = Router();
 
@@ -135,6 +137,32 @@ async function composeLiveDoc(admin: any, agreement: any): Promise<ComposedAgree
     property_address: job?.property_address || null,
     service_plan: servicePlan,
   };
+}
+
+/**
+ * Next planned visit of a service-plan job (first date >= today), formatted
+ * in French for the client-facing confirmation messages (email/SMS) — null
+ * when the job has no service plan or all its visits are past.
+ */
+async function getNextVisitDateFr(admin: any, jobId: string | null): Promise<string | null> {
+  if (!jobId) return null;
+  const { data: sc } = await admin
+    .from('service_contracts')
+    .select('visits')
+    .eq('job_id', jobId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!sc || !Array.isArray(sc.visits)) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const next = sc.visits
+    .map((v: any) => String(v?.date || '').slice(0, 10))
+    .filter((d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= today)
+    .sort()[0];
+  if (!next) return null;
+  const [y, m, d] = next.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('fr-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -396,6 +424,7 @@ router.post('/emails/send-agreement', async (req, res) => {
     const viewUrl = `${baseUrl}/contract/${agreement.view_token}`;
     const number = `CTR-${refNumber}`.replace(/-$/, '');
     const requireSig = agreement.require_signature !== false;
+    const nextVisitDate = await getNextVisitDateFr(admin, agreement.job_id);
 
     const bodyHtml = `
 <h2 style="margin:0 0 8px;font-size:20px;color:#1a1a2e;">Contrat ${number}</h2>
@@ -405,6 +434,7 @@ router.post('/emails/send-agreement', async (req, res) => {
     ? 'Voici votre contrat. Vous pouvez le consulter et le signer en ligne ci-dessous.'
     : 'Voici votre contrat. Vous pouvez le consulter ci-dessous.'}
 </p>
+${nextVisitDate ? `<p style="margin:0 0 16px;color:#374151;"><strong>Prochaine visite : ${nextVisitDate}.</strong></p>` : ''}
 ${refTitle ? `<p style="margin:0 0 16px;color:#6b7280;font-size:13px;">${String(refTitle).replace(/</g, '&lt;')}</p>` : ''}
 <div style="text-align:center;margin-bottom:16px;">
   <a href="${viewUrl}" style="display:inline-block;padding:12px 32px;background-color:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">
@@ -432,6 +462,119 @@ ${refTitle ? `<p style="margin:0 0 16px;color:#6b7280;font-size:13px;">${String(
     return res.json({ ok: true, emailId: emailResult?.messageId || null });
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to send agreement email.', '[emails/send-agreement]');
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// AUTHED: Text the agreement (public link) to the job's client
+// ══════════════════════════════════════════════════════════════
+
+const sendAgreementSmsSchema = z.object({
+  agreementId: z.string().uuid('Invalid agreementId.'),
+});
+
+router.post('/agreements/send-sms', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const { client, orgId } = auth;
+
+    const parsed = sendAgreementSmsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid request body.' });
+    const { agreementId } = parsed.data;
+
+    if (!twilioClient) return res.status(503).json({ error: 'SMS is not configured.' });
+
+    const member = await isOrgMember(client, auth.user.id, orgId);
+    if (!member) return res.status(403).json({ error: 'Forbidden.' });
+
+    const admin = getServiceClient();
+    // Tenant guard — never send another org's contract from their Twilio number.
+    const { data: agreement, error: aErr } = await admin
+      .from('job_agreements')
+      .select('id, org_id, job_id, client_id, status, require_signature, view_token')
+      .eq('id', agreementId)
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (aErr || !agreement) return res.status(404).json({ error: 'Agreement not found.' });
+    // Agreements are job-only — legacy quote-linked rows are read-only history.
+    if (!agreement.job_id) {
+      return res.status(400).json({ error: 'This agreement is no longer active. The signed quote itself is the approved contract.' });
+    }
+
+    const { data: job } = await admin
+      .from('jobs')
+      .select('job_number, client_id')
+      .eq('id', agreement.job_id)
+      .maybeSingle();
+    const clientId = agreement.client_id || job?.client_id;
+    if (!clientId) return res.status(400).json({ error: 'No client on this agreement.' });
+
+    const { data: clientData } = await admin
+      .from('clients')
+      .select('first_name, last_name, phone')
+      .eq('id', clientId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (!clientData?.phone) return res.status(400).json({ error: 'Client has no phone number.' });
+
+    // Format phone to E.164 for Twilio (same normalization as quotes/send-sms)
+    let formattedPhone = String(clientData.phone).replace(/[\s\-().]/g, '');
+    if (!formattedPhone.startsWith('+')) {
+      if (formattedPhone.length === 10) formattedPhone = '+1' + formattedPhone;
+      else if (formattedPhone.length === 11 && formattedPhone.startsWith('1')) formattedPhone = '+' + formattedPhone;
+      else formattedPhone = '+1' + formattedPhone;
+    }
+
+    const { data: company } = await admin
+      .from('company_settings')
+      .select('company_name')
+      .eq('org_id', agreement.org_id)
+      .maybeSingle();
+    const companyName = company?.company_name || 'Notre entreprise';
+    const baseUrl = resolvePublicBaseUrl(req);
+    const viewUrl = `${baseUrl}/contract/${agreement.view_token}`;
+    const number = `CTR-${job?.job_number ? String(job.job_number) : agreement.id.slice(0, 6)}`;
+    const requireSig = agreement.require_signature !== false;
+    const nextVisitDate = await getNextVisitDateFr(admin, agreement.job_id);
+
+    const smsBody =
+      `${companyName} — voici votre contrat ${number}` +
+      (requireSig ? ', à consulter et signer en ligne : ' : ' : ') +
+      viewUrl +
+      (nextVisitDate ? ` Prochaine visite : ${nextVisitDate}.` : '');
+
+    let fromNumber: string;
+    try {
+      fromNumber = await getOrgSmsFromNumber(agreement.org_id);
+    } catch (e) {
+      if (e instanceof SmsNumberNotProvisionedError) {
+        return res.status(409).json({
+          error: 'Your organization does not have an SMS number yet. Provision one in Settings → Messaging.',
+          code: 'sms_not_provisioned',
+        });
+      }
+      throw e;
+    }
+
+    await twilioClient.messages.create({
+      body: smsBody,
+      from: fromNumber,
+      to: formattedPhone,
+    });
+
+    // draft → sent (a signed agreement stays signed)
+    if (agreement.status !== 'signed') {
+      await admin
+        .from('job_agreements')
+        .update({ status: 'sent', sent_at: new Date().toISOString() })
+        .eq('id', agreement.id);
+    }
+
+    return res.json({ ok: true, channel: 'sms', recipient: clientData.phone });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to send agreement SMS.', '[agreements/send-sms]');
   }
 });
 

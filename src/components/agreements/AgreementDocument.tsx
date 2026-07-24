@@ -56,6 +56,19 @@ const MONTH_ABBR: Record<'en' | 'fr', string[]> = {
   fr: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'],
 };
 
+const MONTH_FULL: Record<'en' | 'fr', string[]> = {
+  en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+  fr: ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'],
+};
+
+/** "YYYY-MM-DD" → "mercredi 12 août 2026" (local date parts, no timezone drift). */
+function fmtVisitFullDate(date: string, language: 'en' | 'fr'): string {
+  const m = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return date;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+
 /** "YYYY-MM-DD" → "15 avr" / "Apr 15", parsed from the parts (no timezone drift). */
 function fmtVisitDate(date: string, language: 'en' | 'fr'): string {
   const m = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -166,6 +179,21 @@ export default function AgreementDocument({ data, language }: { data: AgreementD
                   </div>
                 );
               })}
+            </div>
+            <div className="mt-4">
+              {[...plan.visits].sort((a, b) => a.date.localeCompare(b.date)).map((v, idx) => (
+                <div
+                  key={`${v.month}-${v.date}`}
+                  className="flex items-center justify-between gap-3 py-2 text-[12px] border-b border-[#f0f0f0] last:border-b-0"
+                >
+                  <span className="font-medium text-[#222]">
+                    {(fr ? 'Visite' : 'Visit') + ' ' + (idx + 1)}
+                    <span className="text-[#bbb]"> · </span>
+                    {MONTH_FULL[language][v.month - 1] || ''}
+                  </span>
+                  <span className="text-[#555] tabular-nums">{fmtVisitFullDate(v.date, language)}</span>
+                </div>
+              ))}
             </div>
           </div>
           <div className="border-t border-[#eee]" />
