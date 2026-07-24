@@ -8,11 +8,23 @@ import { getCurrentOrgIdOrThrow } from './orgApi';
  * regular schedule_events; the contract only mirrors the plan. See migration
  * `20260712000000_service_contracts.sql`.
  */
+export interface ServiceContractVisitItem {
+  name: string;
+  qty: number;
+  unit_price_cents: number;
+}
+
 export interface ServiceContractVisit {
   /** 1..12 */
   month: number;
   /** YYYY-MM-DD */
   date: string;
+  /** HH:mm — only set when the plan's hours are personalized per visit */
+  start_time?: string;
+  /** HH:mm — only set when the plan's hours are personalized per visit */
+  end_time?: string;
+  /** Only set when the plan's products/services are personalized per visit */
+  items?: ServiceContractVisitItem[];
 }
 
 export interface ServiceContract {
@@ -45,7 +57,23 @@ function mapContract(raw: any): ServiceContract {
     year: Number(raw.year),
     visits: Array.isArray(raw.visits)
       ? raw.visits
-          .map((v: any) => ({ month: Number(v?.month), date: String(v?.date || '') }))
+          .map((v: any): ServiceContractVisit => ({
+            month: Number(v?.month),
+            date: String(v?.date || ''),
+            ...(v?.start_time ? { start_time: String(v.start_time) } : {}),
+            ...(v?.end_time ? { end_time: String(v.end_time) } : {}),
+            ...(Array.isArray(v?.items)
+              ? {
+                  items: v.items
+                    .map((it: any): ServiceContractVisitItem => ({
+                      name: String(it?.name || ''),
+                      qty: Number(it?.qty) || 1,
+                      unit_price_cents: Number(it?.unit_price_cents) || 0,
+                    }))
+                    .filter((it: ServiceContractVisitItem) => it.name),
+                }
+              : {}),
+          }))
           .filter((v: ServiceContractVisit) => v.month >= 1 && v.month <= 12 && v.date)
       : [],
     status: raw.status || 'active',
