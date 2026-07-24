@@ -6,14 +6,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Lume CRM — Logiciel de gestion pour les entreprises de services résidentiels</title>
     <meta name="description" content="Lume CRM est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification, courriels et automatisations au même endroit." />
-    <meta property="og:title" content="Lume — CRM pour services résidentiels" />
-    <meta property="og:description" content="Le système d'exploitation moderne pour les entreprises de services résidentiels. Pipeline, vente, leaderboard, IA vocale, avis Google — tout en un." />
+    <meta property="og:title" content="Lume CRM — Logiciel de gestion pour les entreprises de services résidentiels" />
+    <meta property="og:description" content="Lume CRM est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification, courriels et automatisations au même endroit." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="keywords" content="CRM services résidentiels, field service CRM, home service CRM, CRM lavage vitres, CRM toiture, CRM porte-à-porte, logiciel services terrain" />
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      Contenu de repli rendu AVANT que React ne monte. React vide #root au
+      montage, donc les vrais visiteurs ne le voient jamais — mais les robots
+      qui n'exécutent pas JavaScript (dont le validateur de branding OAuth de
+      Google) lisent ce texte. Sans lui, ils ne voient qu'un <div> vide et
+      concluent que la page n'explique pas l'objectif de l'application.
+      Garder le nom « Lume CRM » identique à celui de l'écran de consentement.
+    -->
+    <div id="root">
+      <main style="max-width:44rem;margin:0 auto;padding:3rem 1.5rem;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.6;color:#1a1a1a">
+        <h1 style="font-size:2rem;margin:0 0 1rem">Lume CRM</h1>
+        <p style="font-size:1.125rem;margin:0 0 1rem">
+          Lume CRM est un logiciel de gestion tout-en-un pour les entreprises de
+          services résidentiels (lavage de vitres, toiture, paysagement, CVAC,
+          excavation et autres métiers de services).
+        </p>
+        <p style="margin:0 0 1rem">
+          Lume CRM permet aux propriétaires d'entreprise de gérer leurs clients et
+          prospects, de créer des soumissions et des factures, de planifier les
+          travaux et les équipes, de suivre les paiements et de consulter et
+          répondre à leurs courriels professionnels — le tout au même endroit.
+        </p>
+        <p style="margin:0 0 1.5rem">
+          <strong>Lume CRM</strong> is an all-in-one management platform for
+          residential service businesses. It lets owners manage clients and leads,
+          create quotes and invoices, schedule jobs and crews, track payments, and
+          read and reply to their business email — all in one place.
+        </p>
+        <p style="margin:0">
+          <a href="/privacy">Politique de confidentialité / Privacy Policy</a> ·
+          <a href="/terms">Conditions d'utilisation / Terms of Service</a> ·
+          <a href="/pricing">Tarifs / Pricing</a>
+        </p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
