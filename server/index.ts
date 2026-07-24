@@ -559,17 +559,7 @@ const ABOUT_PAGE = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Lume CRM — Logiciel de gestion pour les entreprises de services résidentiels</title>
 <meta name="description" content="Lume CRM est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.">
-<style>
-  body{max-width:46rem;margin:0 auto;padding:3rem 1.5rem;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.65;color:#1a1a1a;background:#fff}
-  h1{font-size:2.25rem;margin:0 0 .5rem}
-  h2{font-size:1.25rem;margin:2.5rem 0 .75rem}
-  p{margin:0 0 1rem}
-  ul{margin:0 0 1rem;padding-left:1.25rem}
-  li{margin:.25rem 0}
-  a{color:#1a56db}
-  .lead{font-size:1.15rem}
-  footer{margin-top:3rem;padding-top:1.5rem;border-top:1px solid #e5e5e5;font-size:.9rem}
-</style>
+<link rel="canonical" href="https://lumecrm.net/about">
 </head>
 <body>
 <h1>Lume CRM</h1>
@@ -602,12 +592,33 @@ const ABOUT_PAGE = `<!doctype html>
 <p><strong>Lume CRM</strong> — exploité par William Hébert, Québec, Canada — <a href="mailto:willhebert30@gmail.com">willhebert30@gmail.com</a></p>
 <p><a href="/">Application</a> · <a href="/privacy">Politique de confidentialité</a> · <a href="/terms">Conditions d'utilisation</a> · <a href="/pricing">Tarifs</a></p>
 </footer>
+<style>
+  body{max-width:46rem;margin:0 auto;padding:3rem 1.5rem;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.65;color:#1a1a1a;background:#fff}
+  h1{font-size:2.25rem;margin:0 0 .5rem}
+  h2{font-size:1.25rem;margin:2.5rem 0 .75rem}
+  p{margin:0 0 1rem}
+  ul{margin:0 0 1rem;padding-left:1.25rem}
+  li{margin:.25rem 0}
+  a{color:#1a56db}
+  .lead{font-size:1.15rem}
+  footer{margin-top:3rem;padding-top:1.5rem;border-top:1px solid #e5e5e5;font-size:.9rem}
+</style>
 </body>
 </html>`;
 
 app.get('/about', (_req, res) => {
   res.set('Cache-Control', 'no-store, must-revalidate');
   res.type('html').send(ABOUT_PAGE);
+});
+
+/* robots.txt et sitemap.xml : servis explicitement. Sans ces routes, le
+   fallback monopage renvoie index.html pour ces chemins — un client qui
+   demande robots.txt recevrait du HTML, réponse invalide qui peut faire
+   abandonner l'exploration du site.                                          */
+app.get('/robots.txt', (_req, res) => {
+  res.type('text/plain').send(
+    'User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: https://lumecrm.net/sitemap.xml\n',
+  );
 });
 
 // SPA fallback — serve index.html fresh from disk every time.
