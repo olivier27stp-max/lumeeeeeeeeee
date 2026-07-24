@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, Phone, Shield, Clock, Globe, Database } from 'lucide-react';
+import { Mail, Shield, Clock, Globe, Database } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { CURRENT_PRIVACY_POLICY_VERSION } from '../lib/consentApi';
 import { LEGAL_LABELS, SUBPROCESSORS, RETENTION } from '../content/legal';
@@ -10,9 +10,8 @@ import { LEGAL_LABELS, SUBPROCESSORS, RETENTION } from '../content/legal';
  * ⚠️ Template content — must be reviewed by legal counsel before production use.
  */
 
-const LAST_UPDATED = '2026-04-21';
+const LAST_UPDATED = '2026-07-23';
 const DPO_EMAIL = 'willhebert30@gmail.com';
-const INCIDENT_PHONE = '+1 819-817-9526';
 
 const SECTIONS = {
   fr: [
@@ -110,9 +109,9 @@ export default function Privacy() {
             {fr ? (
               <>
                 <p>
-                  Lume CRM est exploité par <strong className="font-medium text-gray-800">William Hébert</strong> (entreprise
-                  individuelle / propriétaire unique), établi au Québec, Canada. Nous sommes le responsable du traitement de
-                  vos renseignements personnels au sens de la Loi 25.
+                  Lume CRM est exploité par <strong className="font-medium text-gray-800">William Hébert</strong>, propriétaire
+                  de Lume CRM, établi au Québec, Canada. Lume CRM agit à titre de responsable du traitement des renseignements
+                  personnels conformément à la Loi 25.
                 </p>
                 <p>
                   Notre responsable de la protection des renseignements personnels (RPRP / DPO) peut être joint à l'adresse{' '}
@@ -335,9 +334,39 @@ export default function Privacy() {
               </ul>
               <p className="text-sm text-gray-500 pt-1">
                 {fr
-                  ? "Nous demandons uniquement un accès en lecture — Lume ne modifie pas, n'archive pas et ne supprime pas les messages dans votre boîte Gmail."
-                  : 'We request read-only access — Lume does not modify, archive or delete messages in your Gmail mailbox.'}
+                  ? "La connexion d'un compte Google est entièrement facultative. Nous n'accédons qu'aux données nécessaires aux fonctionnalités que vous activez."
+                  : 'Connecting a Google account is entirely optional. We only access the data required by the features you enable.'}
               </p>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-3">
+              <p className="font-medium text-gray-800">
+                {fr ? 'Ce que nous ne faisons jamais' : 'What we never do'}
+              </p>
+              <ul className="space-y-2 list-disc pl-5 marker:text-gray-300">
+                {(fr
+                  ? [
+                      'nous ne supprimons aucun courriel Gmail ;',
+                      'nous ne modifions aucun courriel existant ;',
+                      "nous n'archivons aucun message ;",
+                      'nous ne marquons aucun message comme lu ou non lu ;',
+                      "nous n'utilisons jamais vos données Gmail à des fins publicitaires ;",
+                      'nous ne vendons jamais vos données ;',
+                      "nous ne partageons jamais vos données Gmail avec des tiers, sauf lorsque cela est nécessaire au fonctionnement du service, lorsque la loi l'exige, ou avec votre consentement.",
+                    ]
+                  : [
+                      'we never delete any Gmail message;',
+                      'we never modify any existing email;',
+                      'we never archive any message;',
+                      'we never mark messages as read or unread;',
+                      'we never use your Gmail data for advertising;',
+                      'we never sell your data;',
+                      'we never share your Gmail data with third parties, except where required to operate the service, where required by law, or with your consent.',
+                    ]
+                ).map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
             </div>
 
             <p>
@@ -352,8 +381,8 @@ export default function Privacy() {
             <p>
               <strong className="font-medium text-gray-800">{fr ? 'Conservation et suppression. ' : 'Retention and deletion. '}</strong>
               {fr
-                ? "Les courriels synchronisés sont stockés de façon chiffrée dans notre base de données afin d'accélérer l'affichage. Lorsque vous déconnectez la boîte, nous révoquons les jetons d'accès et supprimons les messages synchronisés associés à ce compte."
-                : 'Synced emails are stored encrypted in our database to speed up display. When you disconnect the mailbox, we revoke the access tokens and delete the synced messages tied to that account.'}
+                ? "Les courriels synchronisés peuvent être stockés temporairement de façon chiffrée afin d'améliorer les performances de l'application. Lorsque vous déconnectez votre compte Google ou supprimez votre compte Lume CRM, les jetons OAuth sont immédiatement révoqués et les données synchronisées provenant de Google sont supprimées dans un délai maximal de 30 jours, sauf obligation légale contraire."
+                : 'Synced emails may be stored temporarily, encrypted, to improve application performance. When you disconnect your Google account or delete your Lume CRM account, OAuth tokens are revoked immediately and synced Google data is deleted within 30 days at most, unless a legal obligation requires otherwise.'}
             </p>
 
             <p>
@@ -403,14 +432,6 @@ export default function Privacy() {
                   <Mail size={16} className="text-gray-400" />
                   {DPO_EMAIL}
                 </a>
-                <a href={`tel:${INCIDENT_PHONE.replace(/[\s-]/g, '')}`} className="md:hidden flex items-center gap-2 text-sm text-gray-700 hover:text-black transition-colors">
-                  <Phone size={16} className="text-gray-400" />
-                  {fr ? 'Astreinte incidents 24/7 : ' : '24/7 incident hotline: '}{INCIDENT_PHONE}
-                </a>
-                <span className="hidden md:flex items-center gap-2 text-sm text-gray-700">
-                  <Phone size={16} className="text-gray-400" />
-                  {fr ? 'Astreinte incidents 24/7 : ' : '24/7 incident hotline: '}{INCIDENT_PHONE}
-                </span>
               </div>
             </div>
           </Section>
