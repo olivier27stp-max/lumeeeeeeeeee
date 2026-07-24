@@ -30,7 +30,7 @@ const STORAGE_KEY = 'lume.cookieConsent.v1';
 
 // Current live version of the cookie policy. Bump when policy text changes
 // → triggers re-consent on next visit.
-export const CURRENT_COOKIE_POLICY_VERSION = 'cookie-policy-2026-04-21';
+export const CURRENT_COOKIE_POLICY_VERSION = 'cookie-policy-2026-07-23';
 export const CURRENT_PRIVACY_POLICY_VERSION = 'privacy-policy-2026-07-23';
 export const CURRENT_TOS_VERSION = 'tos-2026-04-21';
 
