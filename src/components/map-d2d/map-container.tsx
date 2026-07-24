@@ -14,6 +14,34 @@ import { type ZoneData, getZoneColor } from './zone-types';
 import { PinClusterManager, type ClusterSourcePoint } from './pin-cluster';
 import { getRepAvatar } from '../../lib/constants/avatars';
 import { useTranslation } from '../../i18n';
+import { listTerritories, createTerritory, updateTerritory, deleteTerritory } from '../../lib/fieldSalesApi';
+import { toast } from 'sonner';
+
+// field_territories row → ZoneData used by the map. Server returns the raw DB
+// row (polygon_geojson / assigned_user_id), not the aspirational FieldTerritory
+// TS shape — same casting FieldSales.tsx already relies on.
+function territoryToZone(ter: any, index: number): ZoneData | null {
+  const geo = ter?.polygon_geojson || ter?.geojson;
+  const ring: [number, number][] | undefined = geo?.coordinates?.[0];
+  if (!ring || ring.length < 3) return null;
+  // Drop the GeoJSON closing vertex (first === last) — the drawing/rendering
+  // code closes rings itself.
+  const coords = ring.slice();
+  if (coords.length > 1) {
+    const a = coords[0], b = coords[coords.length - 1];
+    if (a[0] === b[0] && a[1] === b[1]) coords.pop();
+  }
+  return {
+    id: ter.id,
+    name: ter.name || `Zone ${index + 1}`,
+    created_by: ter.created_by || '',
+    assigned_to: ter.assigned_user_id ?? null,
+    assigned_to_name: ter.assigned_user_name ?? null,
+    coordinates: coords as [number, number][],
+    color: ter.color || getZoneColor(index),
+    created_at: ter.created_at || new Date().toISOString(),
+  };
+}
 
 // LocalStorage caching removed — was causing ghost pins (deleted pins reappearing).
 // Pins and zones are loaded fresh from the API on each page load.
@@ -72,6 +100,27 @@ function canDeleteZone(role: UserRole, zone: ZoneData) {
   if (ROLE_CAN_DELETE_ANY_ZONE.includes(role)) return true;
   if (role === 'team_manager' && zone.created_by === CURRENT_USER.id) return true;
   return false;
+}
+
+// Ray-casting point-in-polygon test. `poly` is a list of [lng, lat] vertices
+// (open or closed ring both work). Used to know which pins fall inside a zone.
+function pointInPolygon(lng: number, lat: number, poly: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1];
+    const xj = poly[j][0], yj = poly[j][1];
+    const intersect = (yi > lat) !== (yj > lat)
+      && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+export interface ZoneStats {
+  total: number;
+  byStatus: Record<PinStatus, number>;
+  conversionRate: number; // % de pins Vendu sur le total
+  repCount: number;
 }
 
 function matchesDateFilter(dateStr: string, filter: DateFilter): boolean {
@@ -901,6 +950,16 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
             });
             if (nearest && nearestDist <= HIT_RADIUS_PX) {
               window.dispatchEvent(new CustomEvent('d2d:open-pin-modal', { detail: { pin: nearest, isNew: false } }));
+              return;
+            }
+            // Aucun pin proche : un clic sur une zone ouvre son panneau (stats +
+            // assignation). L'index du layer (zone-fill-<i>) mappe zonesRef.
+            const zoneFeat = map.queryRenderedFeatures(e.point)
+              .find((f) => f.layer?.id?.startsWith('zone-fill-'));
+            if (zoneFeat) {
+              const idx = Number.parseInt(String(zoneFeat.layer!.id).replace('zone-fill-', ''), 10);
+              const zone = zonesRef.current[idx];
+              if (zone) setSelectedZone(zone);
             }
           }
         });
@@ -1168,6 +1227,28 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
     return () => { map.off('rotate', onRotate); };
   }, [mapReady]);
 
+  // Charge les zones (field_territories) depuis l'API dès que la carte est
+  // prête. Les zones sont désormais persistées côté serveur — elles survivent
+  // au reload, contrairement à l'ancien stockage mémoire seul.
+  useEffect(() => {
+    if (!mapReady) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await listTerritories();
+        if (cancelled) return;
+        zonesRef.current = (rows as any[])
+          .map((ter, i) => territoryToZone(ter, i))
+          .filter((z): z is ZoneData => z !== null);
+        renderZonesOnMap();
+        bump();
+      } catch (err: any) {
+        console.error('[map-container] Failed to load zones:', err?.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mapReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Debounced street search via Mapbox geocoding
   useEffect(() => {
     if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
@@ -1360,19 +1441,30 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
     setZoneAssignInput('');
   }
 
-  function confirmZone() {
+  async function confirmZone() {
+    const color = getZoneColor(zonesRef.current.length);
+    const name = zoneNameInput || `Zone ${zonesRef.current.length + 1}`;
+    const coordinates = drawingPoints;
+    // Close the ring for GeoJSON (first === last vertex).
+    const ring = [...coordinates];
+    if (ring.length > 0 && (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1])) {
+      ring.push(ring[0]);
+    }
+
+    // Optimistic local zone so the polygon appears instantly. The DB id
+    // replaces the temp id once the create resolves.
+    const tempId = crypto.randomUUID();
     const zone: ZoneData = {
-      id: crypto.randomUUID(),
-      name: zoneNameInput || `Zone ${zonesRef.current.length + 1}`,
+      id: tempId,
+      name,
       created_by: CURRENT_USER.id,
       assigned_to: zoneAssignInput || null,
       assigned_to_name: SALES_REPS.find((r) => r.id === zoneAssignInput)?.name || null,
-      coordinates: drawingPoints,
-      color: getZoneColor(zonesRef.current.length),
+      coordinates,
+      color,
       created_at: new Date().toISOString(),
     };
     zonesRef.current.push(zone);
-    saveZones();
     clearDrawingPreview();
     setDrawingPoints([]);
     setMode('view');
@@ -1381,14 +1473,43 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
     setZoneAssignInput('');
     renderZonesOnMap();
     bump();
+
+    // Persist to field_territories so the zone survives a reload.
+    try {
+      const created = await createTerritory({
+        name,
+        color,
+        geojson: { type: 'Polygon', coordinates: [ring] },
+        // Server reads `assigned_user_id` (singular); keep the typed array too.
+        assigned_user_ids: zoneAssignInput ? [zoneAssignInput] : [],
+        ...(zoneAssignInput ? { assigned_user_id: zoneAssignInput } as any : {}),
+      });
+      const newId = (created as any)?.id;
+      if (newId) {
+        zonesRef.current = zonesRef.current.map((z) => (z.id === tempId ? { ...z, id: newId } : z));
+        renderZonesOnMap();
+        bump();
+      }
+    } catch (err: any) {
+      // Rollback the optimistic zone on failure.
+      zonesRef.current = zonesRef.current.filter((z) => z.id !== tempId);
+      renderZonesOnMap();
+      bump();
+      toast.error(err?.message || (fr ? 'Échec de la sauvegarde de la zone' : 'Failed to save zone'));
+    }
   }
 
   function deleteZone(zoneId: string) {
+    const removed = zonesRef.current.find((z) => z.id === zoneId);
     zonesRef.current = zonesRef.current.filter((z) => z.id !== zoneId);
-    saveZones();
     renderZonesOnMap();
     setSelectedZone(null);
     bump();
+    // Persist deletion (soft delete). Restore locally if the server rejects.
+    deleteTerritory(zoneId).catch((err: any) => {
+      if (removed) { zonesRef.current.push(removed); renderZonesOnMap(); bump(); }
+      toast.error(err?.message || (fr ? 'Échec de la suppression de la zone' : 'Failed to delete zone'));
+    });
   }
 
   function reassignZone(zoneId: string, repId: string) {
@@ -1396,9 +1517,31 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
     zonesRef.current = zonesRef.current.map((z) =>
       z.id === zoneId ? { ...z, assigned_to: repId || null, assigned_to_name: rep?.name || null } : z
     );
-    saveZones();
     setSelectedZone(zonesRef.current.find((z) => z.id === zoneId) || null);
     bump();
+    // Persist reassignment.
+    updateTerritory(zoneId, { assigned_user_ids: repId ? [repId] : [], assigned_user_id: repId || null } as any).catch((err: any) => {
+      toast.error(err?.message || (fr ? 'Échec de la réassignation' : 'Failed to reassign zone'));
+    });
+  }
+
+  // Stats des pins tombant à l'intérieur d'une zone (ray-casting). Recalculé à
+  // chaque rendu du panneau — le nombre de pins est petit (quelques centaines).
+  function computeZoneStats(zone: ZoneData): ZoneStats {
+    const byStatus = {
+      closed_won: 0, lead: 0, follow_up: 0, appointment: 0,
+      no_answer: 0, rejected: 0, other: 0,
+    } as Record<PinStatus, number>;
+    const reps = new Set<string>();
+    let total = 0;
+    markersRef.current.forEach(({ pin }) => {
+      if (!pointInPolygon(pin.lng, pin.lat, zone.coordinates)) return;
+      total++;
+      byStatus[pin.status] = (byStatus[pin.status] ?? 0) + 1;
+      if (pin.assigned_user_id) reps.add(pin.assigned_user_id);
+    });
+    const conversionRate = total > 0 ? Math.round((byStatus.closed_won / total) * 100) : 0;
+    return { total, byStatus, conversionRate, repCount: reps.size };
   }
 
   // ---------------------------------------------------------------------------
@@ -2243,6 +2386,51 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           </div>
+
+          {/* Stats de la zone — pins tombant dans le polygone */}
+          {(() => {
+            const stats = computeZoneStats(selectedZone);
+            const STATUS_ORDER: PinStatus[] = ['closed_won', 'lead', 'appointment', 'follow_up', 'no_answer', 'rejected', 'other'];
+            return (
+              <div className="mt-4">
+                {/* Ligne de résumé : total · conversion · reps */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-lg bg-white/5 px-2 py-2 text-center">
+                    <div className="text-[16px] font-semibold text-white">{stats.total}</div>
+                    <div className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/35">{fr ? 'Portes' : 'Doors'}</div>
+                  </div>
+                  <div className="rounded-lg bg-white/5 px-2 py-2 text-center">
+                    <div className="text-[16px] font-semibold text-emerald-400">{stats.conversionRate}%</div>
+                    <div className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/35">{fr ? 'Conv.' : 'Conv.'}</div>
+                  </div>
+                  <div className="rounded-lg bg-white/5 px-2 py-2 text-center">
+                    <div className="text-[16px] font-semibold text-white">{stats.repCount}</div>
+                    <div className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/35">{fr ? 'Reps' : 'Reps'}</div>
+                  </div>
+                </div>
+
+                {/* Répartition par statut */}
+                {stats.total > 0 ? (
+                  <div className="mt-3 space-y-1.5">
+                    {STATUS_ORDER.filter((st) => stats.byStatus[st] > 0).map((st) => {
+                      const cfg = PIN_STATUS_CONFIG[st];
+                      const pct = Math.round((stats.byStatus[st] / stats.total) * 100);
+                      return (
+                        <div key={st} className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ backgroundColor: cfg.color }} />
+                          <span className="flex-1 truncate text-[11px] text-white/55">{cfg.label}</span>
+                          <span className="text-[11px] font-medium text-white/80">{stats.byStatus[st]}</span>
+                          <span className="w-8 text-right text-[10px] text-white/30">{pct}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-[11px] text-white/30">{fr ? 'Aucun pin dans cette zone' : 'No pins in this zone'}</p>
+                )}
+              </div>
+            );
+          })()}
 
           {canAssignZone(CURRENT_USER.role) && (
             <div className="mt-4">
