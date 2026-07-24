@@ -557,9 +557,18 @@ const ABOUT_PAGE = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Lume CRM — Logiciel de gestion pour les entreprises de services résidentiels</title>
+<title>Lume CRM</title>
+<meta name="application-name" content="Lume CRM">
 <meta name="description" content="Lume CRM est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.">
+<meta property="og:site_name" content="Lume CRM">
+<meta property="og:title" content="Lume CRM">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lumecrm.net/about">
+<meta property="og:description" content="Lume CRM est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.">
 <link rel="canonical" href="https://lumecrm.net/about">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Lume CRM","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://lumecrm.net/","description":"Lume CRM est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.","publisher":{"@type":"Organization","name":"Lume CRM"}}
+</script>
 </head>
 <body>
 <h1>Lume CRM</h1>
@@ -628,13 +637,21 @@ app.get('*', (_req, res, next) => {
   if (_req.path.startsWith('/api')) return next();
   res.set('Cache-Control', 'no-store, must-revalidate');
 
+  /* Une requête pour un fichier (extension connue) qui n'a pas été servie par
+     express.static n'existe pas : renvoyer index.html avec un 200 en ferait un
+     « soft 404 », que les moteurs d'indexation pénalisent au niveau du domaine.
+     Les chemins sans extension restent traités par le routeur de l'application. */
+  if (/\.(txt|xml|json|js|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|eot|pdf|zip|mp4|webm)$/i.test(_req.path)) {
+    res.status(404).type('text/plain').send('Not Found');
+    return;
+  }
+
   const routeFallback = CRAWLER_FALLBACKS[_req.path.replace(/\/+$/, '') || '/'];
   if (routeFallback) {
     try {
       const html = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
-      // Remplace le contenu du <main> de repli (celui de l'accueil) par le
-      // resume de cette route. React vide #root au montage : invisible pour
-      // les visiteurs reels.
+      // Substitue au résumé de l'accueil celui de la route demandée ; le tout
+      // est remplacé par l'application au chargement.
       const swapped = html.replace(
         /(<main[^>]*>)[\s\S]*?(<\/main>)/,
         (_m, open: string, close: string) => `${open}${routeFallback}${close}`,
