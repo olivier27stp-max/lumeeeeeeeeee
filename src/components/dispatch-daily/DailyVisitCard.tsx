@@ -5,10 +5,10 @@ import { shortAddress } from './dailyGeometry';
 
 /**
  * Carte de visite de la vue Jour : fond blanc (jeton `bg-surface`), bordure
- * pâle, rayon discret, ombre très légère, sidebar verticale colorée (palette
- * des presets de devis) collée au bord gauche — la couleur ne remplit jamais
- * la carte. Le contenu se dégrade proprement sur les cartes étroites
- * (ellipsis, lignes retirées, tooltip natif complet).
+ * pâle, rayon discret, ombre très légère, sidebar verticale colorée collée au
+ * bord gauche (couleur d'accent de la rangée — palette des presets de devis)
+ * — la couleur ne remplit jamais la carte. Le contenu se dégrade proprement
+ * sur les cartes étroites (ellipsis, lignes retirées, tooltip natif complet).
  */
 export interface DailyVisitCardProps {
   ev: ScheduleEventRecord;

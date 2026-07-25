@@ -7,7 +7,7 @@ import type { ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
 import type { useCalendarDnd } from '../../hooks/useCalendarDnd';
 import { FALLBACK_TEAM_COLOR, isHexColor } from '../../lib/colorUtils';
-import { presetColorForKey } from '../../lib/presetPalette';
+import { presetColorAt } from '../../lib/presetPalette';
 import {
   DispatchDailyPrefs, loadDispatchDailyPrefs, saveDispatchDailyPrefs, vehicleNumberForTeam,
 } from '../../lib/dispatchDailyPrefs';
@@ -23,7 +23,9 @@ import {
 /**
  * Vue Jour du calendrier Dispatch — timeline horizontale.
  * Heures en haut, ressources (équipes / véhicules) à gauche, visites en
- * cartes blanches avec sidebar colorée (palette des presets de devis).
+ * cartes blanches avec sidebar colorée. Chaque rangée a sa couleur d'accent
+ * (palette des presets de devis, cyclée par index de rangée % 15) partagée
+ * entre la cellule ressource et toutes les cartes de la rangée.
  * Composant DÉDIÉ à la vue Jour : les vues Semaine / Mois / Agenda gardent
  * leurs composants existants (TimeGrid, MonthView, AgendaView) intacts.
  */
@@ -423,6 +425,9 @@ export default function DailyDispatchView({
             {rows.map((row, ri) => {
               const layout = rowLayouts[ri];
               const teamColor = row.team && isHexColor(row.team.color_hex) ? row.team.color_hex : FALLBACK_TEAM_COLOR;
+              // Couleur d'accent de la rangée : position dans la vue, cyclée
+              // sur la palette (index % 15) — partagée cellule + cartes.
+              const rowColor = presetColorAt(ri);
               const primaryText = row.placeholderIndex
                 ? t.schedule.placeholderTruck.replace('{n}', String(row.placeholderIndex).padStart(2, '0'))
                 : fieldText(prefs.primary, row);
@@ -439,6 +444,7 @@ export default function DailyDispatchView({
                     className="sticky left-0 z-20 flex shrink-0 flex-col justify-center gap-0.5 border-r border-border bg-surface px-3"
                     style={{ width: RESOURCE_COL_PX }}
                   >
+                    <span aria-hidden className="absolute inset-y-0 left-0 w-[3px]" style={{ backgroundColor: rowColor }} />
                     {secondaryRaw && secondaryAsEyebrow && (
                       <span className="truncate text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
                         {secondaryRaw}
@@ -489,7 +495,7 @@ export default function DailyDispatchView({
                         <DailyVisitCard
                           key={p.ev.id}
                           ev={p.ev}
-                          color={presetColorForKey(p.ev.job_id || p.ev.id)}
+                          color={rowColor}
                           left={minutesToX(p.startMin, range.startMin) + CARD_GAP_X_PX}
                           top={laneTop(p.lane)}
                           width={width}
