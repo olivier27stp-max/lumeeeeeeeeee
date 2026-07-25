@@ -18,6 +18,7 @@ import { useTranslation } from '../i18n';
 import CalendarMapModal from '../components/CalendarMapModal';
 import AddVisitModal from '../components/AddVisitModal';
 import DailyDispatchView from '../components/dispatch-daily/DailyDispatchView';
+import AgendaRoutePanel, { type RouteJob } from '../components/schedule/AgendaRoutePanel';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarControllerProvider, CalendarUiView, useCalendarController } from '../contexts/CalendarController';
 import { useJobModalController } from '../contexts/JobModalController';
@@ -426,10 +427,12 @@ function MonthView({ date, events, tcMap, onDayClick, onEventClick }: {
 /* ════════════════════════════════════════════════════════════════
    CUSTOM AGENDA VIEW (unchanged — no drag in agenda view)
    ════════════════════════════════════════════════════════════════ */
-function AgendaView({ events, overlaps, tcMap, teams, onEventClick, onSlotClick }: {
+function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventClick, onSlotClick }: {
   events: ScheduleEventRecord[]; overlaps: Record<string, number>; tcMap: Map<string, string>;
-  teams: TeamRecord[]; onEventClick: (jobId: string) => void; onSlotClick: (s: Date, e: Date) => void;
+  teams: TeamRecord[]; selectedTeamIds: string[]; onEventClick: (jobId: string) => void; onSlotClick: (s: Date, e: Date) => void;
 }) {
+  // The route panel is only meaningful for a single team (one crew = one trip).
+  const singleTeamRoute = selectedTeamIds.length === 1;
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
   const sorted = useMemo(() => [...events].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()), [events]);
@@ -465,6 +468,22 @@ function AgendaView({ events, overlaps, tcMap, teams, onEventClick, onSlotClick 
               </button>
             </div>
             <div className="space-y-2 px-6 pb-4 lg:px-8">
+              {singleTeamRoute && (() => {
+                const routeJobs: RouteJob[] = dayEvs.map((ev) => {
+                  const tid = ev.team_id || ev.job?.team_id || null;
+                  return {
+                    id: ev.id,
+                    jobId: ev.job_id || null,
+                    title: ev.job?.title || 'Job',
+                    address: ev.job?.property_address || null,
+                    lat: ev.job?.latitude ?? null,
+                    lng: ev.job?.longitude ?? null,
+                    startAt: ev.start_at,
+                    teamColor: (tid ? tcMap.get(tid) : null) || FALLBACK_TEAM_COLOR,
+                  };
+                });
+                return <AgendaRoutePanel jobs={routeJobs} onJobClick={onEventClick} />;
+              })()}
               {dayEvs.map((ev) => {
                 const tid = ev.team_id || ev.job?.team_id || null;
                 const c = tid ? tcMap.get(tid) || FALLBACK_TEAM_COLOR : FALLBACK_TEAM_COLOR;
@@ -1047,7 +1066,7 @@ function ScheduleContent() {
               externalDnd={dnd}
             />
           ) : view === 'agenda' ? (
-            <div className="h-full overflow-y-auto"><AgendaView events={filtered} overlaps={overlaps} tcMap={tcMap} teams={teams} onEventClick={openExisting} onSlotClick={(s, e) => openAddVisit(s, e)} /></div>
+            <div className="h-full overflow-y-auto"><AgendaView events={filtered} overlaps={overlaps} tcMap={tcMap} teams={teams} selectedTeamIds={selectedTeamIds} onEventClick={openExisting} onSlotClick={(s, e) => openAddVisit(s, e)} /></div>
           ) : null}
         </div>
 
