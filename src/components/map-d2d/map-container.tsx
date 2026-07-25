@@ -14,7 +14,7 @@ import { type ZoneData, getZoneColor } from './zone-types';
 import { PinClusterManager, type ClusterSourcePoint } from './pin-cluster';
 import { getRepAvatar } from '../../lib/constants/avatars';
 import { useTranslation } from '../../i18n';
-import { listTerritories, createTerritory, updateTerritory, deleteTerritory } from '../../lib/fieldSalesApi';
+import { listTerritories, createTerritory, updateTerritory, deleteTerritory, listReps } from '../../lib/fieldSalesApi';
 import { toast } from 'sonner';
 
 // field_territories row → ZoneData used by the map. Server returns the raw DB
@@ -91,8 +91,6 @@ const CURRENT_USER = {
   name: '',
   role: 'owner' as UserRole,
 };
-
-const SALES_REPS: { id: string; name: string }[] = [];
 
 function canCreateZone(role: UserRole) { return ROLE_CAN_CREATE_ZONE.includes(role); }
 function canAssignZone(role: UserRole) { return ROLE_CAN_ASSIGN_ZONE.includes(role); }
@@ -234,6 +232,25 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
   const [filterByRep, setFilterByRep] = useState<string>('all');
   const [showReps, setShowReps] = useState(true);
   const repMarkersRef = useRef(new Map<string, mapboxgl.Marker>());
+
+  // Reps de l'org (field_sales_reps) — alimente les menus « Assigné à » et le
+  // filtre par rep. La valeur d'option est le user_id (= assigned_user_id des
+  // zones et des pins), pas l'id de ligne field_sales_reps.
+  const [salesReps, setSalesReps] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    listReps()
+      .then((reps) => {
+        if (cancelled) return;
+        setSalesReps(
+          reps
+            .filter((r) => r.is_active && r.user_id)
+            .map((r) => ({ id: r.user_id, name: r.display_name || (fr ? 'Sans nom' : 'Unnamed') })),
+        );
+      })
+      .catch((err: any) => console.error('[map-container] Failed to load reps:', err?.message));
+    return () => { cancelled = true; };
+  }, [fr]);
 
   // --- Clustering (regroupement progressif au dézoom) ---
   const clusterMgrRef = useRef<PinClusterManager | null>(null);
@@ -1466,7 +1483,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
       name,
       created_by: CURRENT_USER.id,
       assigned_to: zoneAssignInput || null,
-      assigned_to_name: SALES_REPS.find((r) => r.id === zoneAssignInput)?.name || null,
+      assigned_to_name: salesReps.find((r) => r.id === zoneAssignInput)?.name || null,
       coordinates,
       color,
       created_at: new Date().toISOString(),
@@ -1520,7 +1537,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
   }
 
   function reassignZone(zoneId: string, repId: string) {
-    const rep = SALES_REPS.find((r) => r.id === repId);
+    const rep = salesReps.find((r) => r.id === repId);
     zonesRef.current = zonesRef.current.map((z) =>
       z.id === zoneId ? { ...z, assigned_to: repId || null, assigned_to_name: rep?.name || null } : z
     );
@@ -1534,6 +1551,9 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
 
   // Stats des pins tombant à l'intérieur d'une zone (ray-casting). Recalculé à
   // chaque rendu du panneau — le nombre de pins est petit (quelques centaines).
+  // Les stats reflètent CE QUI EST AFFICHÉ : elles respectent les filtres de
+  // statut (activeFilters) et le filtre par rep (filterByRep) actifs sur la
+  // carte, pour rester cohérentes avec les pins visibles.
   function computeZoneStats(zone: ZoneData): ZoneStats {
     const byStatus = {
       closed_won: 0, lead: 0, follow_up: 0, appointment: 0,
@@ -1542,6 +1562,9 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
     const reps = new Set<string>();
     let total = 0;
     markersRef.current.forEach(({ pin }) => {
+      // Respecte les filtres actifs de la carte.
+      if (!activeFilters.has(pin.status)) return;
+      if (filterByRep !== 'all' && pin.assigned_user_id !== filterByRep) return;
       if (!pointInPolygon(pin.lng, pin.lat, zone.coordinates)) return;
       total++;
       byStatus[pin.status] = (byStatus[pin.status] ?? 0) + 1;
@@ -2238,10 +2261,11 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                     <select
                       value={filterByRep}
                       onChange={(e) => setFilterByRep(e.target.value)}
-                      className="w-full rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[12px] text-white outline-none"
+                      style={{ colorScheme: 'dark', backgroundColor: '#171717', color: '#f5f5f5' }}
+                      className="w-full rounded-lg border border-white/10 px-2.5 py-1.5 text-[12px] outline-none"
                     >
-                      <option value="all">{fr ? 'Tous' : 'All'}</option>
-                      {SALES_REPS.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      <option value="all" style={{ backgroundColor: '#171717', color: '#f5f5f5' }}>{fr ? 'Tous' : 'All'}</option>
+                      {salesReps.map((r) => <option key={r.id} value={r.id} style={{ backgroundColor: '#171717', color: '#f5f5f5' }}>{r.name}</option>)}
                     </select>
                   </div>
 
@@ -2359,12 +2383,11 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
               <div className="mt-4">
                 <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Assigner à un représentant' : 'Assign to a rep'}</label>
                 <select value={zoneAssignInput} onChange={(e) => setZoneAssignInput(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white outline-none focus:border-indigo-500/50"
-                  /* neutralise le fond blanc du typebar global (mode clair) */
-                  style={{ backgroundColor: 'rgba(255,255,255,.05)' }}
+                  className="w-full rounded-lg border border-white/10 px-3 py-2 text-[13px] outline-none focus:border-white/30"
+                  style={{ colorScheme: 'dark', backgroundColor: '#171717', color: '#f5f5f5' }}
                 >
-                  <option value="">{fr ? 'Non assigné' : 'Unassigned'}</option>
-                  {SALES_REPS.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  <option value="" style={{ backgroundColor: '#171717', color: '#f5f5f5' }}>{fr ? 'Non assigné' : 'Unassigned'}</option>
+                  {salesReps.map((r) => <option key={r.id} value={r.id} style={{ backgroundColor: '#171717', color: '#f5f5f5' }}>{r.name}</option>)}
                 </select>
               </div>
             )}
@@ -2501,7 +2524,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                   className="w-full cursor-pointer rounded-lg border border-white/[0.08] px-3 py-2 text-[12.5px] outline-none transition-colors hover:border-white/20 focus:border-white/30"
                 >
                   <option value="" style={{ backgroundColor: '#171717', color: '#f5f5f5' }}>{fr ? 'Non assigné' : 'Unassigned'}</option>
-                  {SALES_REPS.map((rep) => (
+                  {salesReps.map((rep) => (
                     <option key={rep.id} value={rep.id} style={{ backgroundColor: '#171717', color: '#f5f5f5' }}>{rep.name}</option>
                   ))}
                 </select>
