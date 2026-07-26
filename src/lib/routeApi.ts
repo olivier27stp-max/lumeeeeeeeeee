@@ -78,6 +78,39 @@ function nearestNeighbourOrder(stops: RouteStop[]): RouteStop[] {
   return ordered;
 }
 
+/** Total straight-line length of an ordered chain (metres). */
+function chainLength(order: RouteStop[]): number {
+  let sum = 0;
+  for (let i = 1; i < order.length; i++) sum += haversineM(order[i - 1], order[i]);
+  return sum;
+}
+
+/** Nearest-neighbour started from a specific index. */
+function nnFrom(stops: RouteStop[], startIdx: number): RouteStop[] {
+  const remaining = stops.slice();
+  const ordered: RouteStop[] = [remaining.splice(startIdx, 1)[0]];
+  while (remaining.length) {
+    const last = ordered[ordered.length - 1];
+    let bestIdx = 0, bestDist = Infinity;
+    remaining.forEach((s, i) => { const d = haversineM(last, s); if (d < bestDist) { bestDist = d; bestIdx = i; } });
+    ordered.push(remaining.splice(bestIdx, 1)[0]);
+  }
+  return ordered;
+}
+
+/** Try nearest-neighbour from every start; keep the shortest chain. */
+function bestNearestNeighbour(stops: RouteStop[]): RouteStop[] {
+  if (stops.length <= 2) return [...stops];
+  let best: RouteStop[] | null = null;
+  let bestLen = Infinity;
+  for (let i = 0; i < stops.length; i++) {
+    const chain = nnFrom(stops, i);
+    const len = chainLength(chain);
+    if (len < bestLen) { bestLen = len; best = chain; }
+  }
+  return best!;
+}
+
 function coordString(stops: RouteStop[]): string {
   return stops.map((s) => `${s.lng},${s.lat}`).join(';');
 }
@@ -132,22 +165,28 @@ export async function getRoute(stops: RouteStop[]): Promise<RouteResult> {
 
 /**
  * Shortest-order trip through the stops. Uses the Mapbox Optimization API
- * (keeps the first stop as the start), falling back to a local
- * nearest-neighbour order + Directions geometry when the optimizer is
- * unavailable. Never throws — always returns a usable result.
+ * (a real TSP solver over the road network) to minimise total driving time —
+ * i.e. the least back-tracking. Falls back to a local nearest-neighbour order +
+ * Directions geometry when the optimizer is unavailable. Never throws.
+ *
+ * `anchorFirst`: keep stops[0] as the fixed start (use when it's a real origin,
+ * e.g. the dispatcher's current position). When false, Mapbox is free to pick
+ * the best starting stop — which removes back-tracking that a forced start
+ * would otherwise cause.
  */
-export async function getOptimizedRoute(stops: RouteStop[]): Promise<RouteResult> {
+export async function getOptimizedRoute(stops: RouteStop[], anchorFirst = false): Promise<RouteResult> {
   const capped = stops.slice(0, MAX_STOPS);
   if (capped.length < 3) {
     // Nothing to optimize — the visiting order is forced.
     try { return { ...(await getRoute(capped)), optimized: false }; }
-    catch { return fallbackLocal(capped); }
+    catch { return fallbackLocal(capped, anchorFirst); }
   }
 
   try {
+    const source = anchorFirst ? 'first' : 'any';
     const url =
       `https://api.mapbox.com/optimized-trips/v1/mapbox/driving/${coordString(capped)}` +
-      `?source=first&roundtrip=false&geometries=geojson&overview=full&access_token=${token()}`;
+      `?source=${source}&roundtrip=false&geometries=geojson&overview=full&access_token=${token()}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Optimization API ${res.status}`);
     const data = await res.json();
@@ -171,13 +210,18 @@ export async function getOptimizedRoute(stops: RouteStop[]): Promise<RouteResult
       optimized: true,
     };
   } catch {
-    return fallbackLocal(capped);
+    return fallbackLocal(capped, anchorFirst);
   }
 }
 
-/** Local fallback: nearest-neighbour order, then real geometry via Directions. */
-async function fallbackLocal(stops: RouteStop[]): Promise<RouteResult> {
-  const ordered = nearestNeighbourOrder(stops);
+/**
+ * Local fallback: nearest-neighbour order, then real geometry via Directions.
+ * When not anchored, try starting the greedy chain from EACH stop and keep the
+ * shortest total — a cheap way to avoid the classic nearest-neighbour trap of a
+ * bad first pick sending the route back and forth.
+ */
+async function fallbackLocal(stops: RouteStop[], anchorFirst = false): Promise<RouteResult> {
+  const ordered = anchorFirst ? nearestNeighbourOrder(stops) : bestNearestNeighbour(stops);
   try {
     const r = await getRoute(ordered);
     return { ...r, optimized: true };

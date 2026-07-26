@@ -6,7 +6,7 @@ import { useTranslation } from '../../i18n';
 import { formatCurrency } from '../../lib/utils';
 import UnifiedAvatar from '../ui/UnifiedAvatar';
 import {
-  getOptimizedRoute, formatDistance, formatDuration,
+  getRoute, getOptimizedRoute, formatDistance, formatDuration,
   type RouteStop, type RouteResult,
 } from '../../lib/routeApi';
 
@@ -68,6 +68,8 @@ interface TeamRoute {
   ungeocoded: RouteJob[];
   revenueCents: number;    // sum of the trip's job totals
   done: number;            // completed stops
+  savedSeconds: number;    // drive time saved vs the chronological order (≥0)
+  savedMeters: number;     // distance saved vs the chronological order (≥0)
 }
 
 /**
@@ -142,18 +144,29 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
 
         let route: RouteResult | null = null;
         let orderedJobs: RouteJob[] = geocoded;
+        let savedSeconds = 0, savedMeters = 0;
 
         if (geocoded.length >= 2) {
-          // Prepend the start point as a virtual stop so the optimizer anchors
-          // the trip there, then drop it from the visible order.
           const START = '__start__';
-          const stops: RouteStop[] = [];
-          if (startPoint) stops.push({ id: START, lat: startPoint.lat, lng: startPoint.lng });
-          geocoded.forEach((j) => stops.push({ id: j.id, lat: j.lat!, lng: j.lng! }));
-          const r = await getOptimizedRoute(stops);
+          const mk = (list: RouteJob[]): RouteStop[] => {
+            const s: RouteStop[] = [];
+            if (startPoint) s.push({ id: START, lat: startPoint.lat, lng: startPoint.lng });
+            list.forEach((j) => s.push({ id: j.id, lat: j.lat!, lng: j.lng! }));
+            return s;
+          };
+          // Optimized order (anchor only when there's a real origin).
+          const [r, chrono] = await Promise.all([
+            getOptimizedRoute(mk(geocoded), !!startPoint),
+            // Chronological baseline = jobs in planned-time order (already sorted).
+            geocoded.length >= 2 ? getRoute(mk(geocoded)).catch(() => null) : Promise.resolve(null),
+          ]);
           const order = r.order.filter((id) => id !== START);
           orderedJobs = order.map((id) => byId.get(id)).filter(Boolean) as RouteJob[];
           route = r;
+          if (chrono) {
+            savedSeconds = Math.max(0, chrono.totalDurationS - r.totalDurationS);
+            savedMeters = Math.max(0, chrono.totalDistanceM - r.totalDistanceM);
+          }
         }
 
         // Cascading ETA from the first stop's planned time + drive + on-site time.
@@ -171,7 +184,7 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
 
         const revenueCents = t.jobs.reduce((sum, j) => sum + (j.revenueCents || 0), 0);
         const done = t.jobs.filter((j) => DONE_STATUSES.has(j.status)).length;
-        return { teamId: t.key, teamName: t.name, color: t.color, jobs: orderedJobs, route, etas, ungeocoded, revenueCents, done };
+        return { teamId: t.key, teamName: t.name, color: t.color, jobs: orderedJobs, route, etas, ungeocoded, revenueCents, done, savedSeconds, savedMeters };
       }));
       if (!cancelled) { setRoutes(computed); setLoading(false); }
     })();
@@ -315,6 +328,17 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
                       </a>
                     )}
                   </div>
+
+                  {/* Economy vs the chronological (by-time) order — proves the
+                      optimization saves driving. Only shown when it actually does. */}
+                  {r.savedSeconds >= 60 && (
+                    <div className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-success-light px-2 py-0.5 text-[10.5px] font-semibold text-success">
+                      <Sparkles size={10} />
+                      {fr
+                        ? `Économie ${formatDuration(r.savedSeconds, fr)}${r.savedMeters >= 300 ? ` · ${formatDistance(r.savedMeters, fr)}` : ''} vs par heure`
+                        : `Saves ${formatDuration(r.savedSeconds, fr)}${r.savedMeters >= 300 ? ` · ${formatDistance(r.savedMeters, fr)}` : ''} vs by-time`}
+                    </div>
+                  )}
                 </div>
 
                 {/* stops */}
