@@ -7,10 +7,11 @@ import {
   getPayrollPreview,
 } from '../../lib/commissionsApi';
 import type { FsCommissionEntry, CommissionPayrollPreview } from '../../types';
-import CommissionStatsCards, { type CommissionStat } from './CommissionStatsCards';
 import CommissionFilters, { type CommissionFiltersValue } from './CommissionFilters';
 import CommissionTable from './CommissionTable';
 import UpcomingPayouts from './UpcomingPayouts';
+import { CommissionHero, KpiCard, fmtMoney } from './CommissionCharts';
+import { useTranslation } from '../../i18n';
 
 interface Props {
   /**
@@ -23,10 +24,6 @@ interface Props {
   title?: string;
   /** Subtitle override. */
   subtitle?: string;
-}
-
-function fmtMoney(n: number) {
-  return '$' + Number(n || 0).toLocaleString('en-US');
 }
 
 function defaultRange() {
@@ -46,6 +43,8 @@ export default function PersonalCommissionView({
   title = 'My Commissions',
   subtitle = 'Your closes, commission, and next payouts',
 }: Props) {
+  const { language } = useTranslation();
+  const isFr = language === 'fr';
   const [filters, setFilters] = useState<CommissionFiltersValue>(() => {
     const { from, to } = defaultRange();
     return { status: 'all', from, to };
@@ -92,20 +91,31 @@ export default function PersonalCommissionView({
 
   useEffect(() => { void load(); }, [load]);
 
-  const stats: CommissionStat[] = useMemo(() => {
-    const totalEarned = entries?.reduce((s, e) => s + Number(e.amount || 0), 0) ?? 0;
+  const dash = useMemo(() => {
+    const list = entries ?? [];
+    const total = list.reduce((s, e) => s + Number(e.amount || 0), 0);
     const pending = payroll?.pending ?? 0;
     const paid = payroll?.paid ?? 0;
-    const next = entries
-      ?.filter((e) => e.status === 'approved')
-      .reduce((s, e) => s + Number(e.amount || 0), 0) ?? 0;
-    return [
-      { label: 'Total earned',  value: fmtMoney(totalEarned), subtitle: 'This period' },
-      { label: 'Pending',       value: fmtMoney(pending),     subtitle: 'Awaiting approval' },
-      { label: 'Paid',          value: fmtMoney(paid),        subtitle: 'This period' },
-      { label: 'Next payout',   value: fmtMoney(next),        subtitle: 'Approved, awaiting payout' },
-    ];
-  }, [entries, payroll]);
+    const next = list.filter((e) => e.status === 'approved').reduce((s, e) => s + Number(e.amount || 0), 0);
+
+    // Cumulative earnings over the range.
+    const from = new Date(filters.from + 'T00:00:00');
+    const to = new Date(filters.to + 'T00:00:00');
+    const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
+    const buckets = new Array(days).fill(0);
+    for (const e of list) {
+      const d = new Date(e.triggered_at || e.created_at);
+      const idx = Math.floor((d.getTime() - from.getTime()) / 86_400_000);
+      if (idx >= 0 && idx < days) buckets[idx] += Number(e.amount || 0);
+    }
+    let run = 0;
+    const series = buckets.map((v) => (run += v));
+    const step = Math.max(1, Math.floor(days / 6));
+    const xLabels: string[] = [];
+    for (let i = 0; i < days; i += step) xLabels.push(String(new Date(from.getTime() + i * 86_400_000).getDate()));
+
+    return { total, pending, paid, next, series, xLabels, deals: list.length };
+  }, [entries, payroll, filters.from, filters.to]);
 
   return (
     <div className="space-y-6">
@@ -131,11 +141,25 @@ export default function PersonalCommissionView({
 
       {!loading && !error && (
         <>
-          <CommissionStatsCards cards={stats} columns={4} />
+          <CommissionHero
+            label={isFr ? 'Commissions gagnées' : 'Commission earned'}
+            value={dash.total}
+            deltaPct={null}
+            series={dash.series}
+            xLabels={dash.xLabels}
+            note={isFr ? `${dash.deals} vente(s) sur la période` : `${dash.deals} deal(s) this period`}
+          />
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KpiCard label={isFr ? 'En attente' : 'Pending'} value={fmtMoney(dash.pending)} money note={isFr ? "d'approbation" : 'approval'} />
+            <KpiCard label={isFr ? 'Versé' : 'Paid'} value={fmtMoney(dash.paid)} money note={isFr ? 'sur la période' : 'this period'} />
+            <KpiCard label={isFr ? 'Prochain versement' : 'Next payout'} value={fmtMoney(dash.next)} money note={isFr ? 'approuvé' : 'approved'} />
+            <KpiCard label={isFr ? 'Ventes conclues' : 'Deals closed'} value={String(dash.deals)} note={isFr ? 'sur la période' : 'this period'} />
+          </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>Recent closes</CardTitle>
+              <CardTitle>{isFr ? 'Ventes récentes' : 'Recent closes'}</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <CommissionTable
