@@ -492,7 +492,10 @@ function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventCl
                 });
                 return <AgendaRoutePanel jobs={routeJobs} onJobClick={onEventClick} />;
               })()}
-              {dayEvs.map((ev) => {
+              {/* Liste détaillée des jobs — affichée seulement en repli, quand le
+                  panneau Trajet n'est pas montré. Sinon elle ferait doublon avec
+                  la liste (déjà à droite dans le panneau). */}
+              {!showRoute && dayEvs.map((ev) => {
                 const tid = ev.team_id || ev.job?.team_id || null;
                 const c = tid ? tcMap.get(tid) || FALLBACK_TEAM_COLOR : FALLBACK_TEAM_COLOR;
                 const team = tid ? teams.find((t) => t.id === tid) : null;

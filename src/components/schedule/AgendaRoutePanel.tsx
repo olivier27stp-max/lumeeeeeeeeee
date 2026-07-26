@@ -171,13 +171,14 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
         </div>
       </div>
 
-      {/* Split: map + side list */}
+      {/* Split: map + side list — takes most of the viewport height so the map
+          dominates instead of sitting in an empty page. */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.85fr_1fr]">
-        <div className="relative min-h-[300px] border-b border-border lg:min-h-[520px] lg:border-b-0 lg:border-r">
+        <div className="relative min-h-[320px] border-b border-border lg:min-h-[calc(100vh-16rem)] lg:border-b-0 lg:border-r">
           <RouteMap routes={routes} />
         </div>
 
-        <div className="max-h-[520px] overflow-y-auto">
+        <div className="overflow-y-auto lg:max-h-[calc(100vh-16rem)]">
           {routes.map((r, ti) => (
             <div key={r.teamId} className={ti > 0 ? 'border-t-[6px] border-surface-secondary' : ''}>
               {/* team header — name + revenue (who made cash) */}
@@ -306,8 +307,11 @@ function RouteMap({ routes }: { routes: TeamRoute[] }) {
       attributionControl: false,
     });
     mapRef.current = map;
-    map.on('load', () => setReady(true));
-    return () => { map.remove(); mapRef.current = null; setReady(false); };
+    map.on('load', () => { map.resize(); setReady(true); });
+    // Keep the canvas in sync when the container grows (viewport-height layout).
+    const ro = new ResizeObserver(() => map.resize());
+    ro.observe(container);
+    return () => { ro.disconnect(); map.remove(); mapRef.current = null; setReady(false); };
   }, []);
 
   useEffect(() => {
