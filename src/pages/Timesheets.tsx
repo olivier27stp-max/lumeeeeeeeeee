@@ -6,8 +6,7 @@ import {
   MoreHorizontal, ArrowUpDown, Search, CirclePlus, Plus, Trash2, RefreshCw, Ban,
   Play, Square, Pause as PauseIcon,
 } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Tooltip, useMap } from 'react-leaflet';
-import L from 'leaflet';
+import TimesheetLiveMap from '../components/timesheets/TimesheetLiveMap';
 import { motion, AnimatePresence } from 'motion/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '../lib/utils';
@@ -20,7 +19,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import PermissionGate from '../components/PermissionGate';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import {
-  listTeams, createTeam, updateTeam, softDeleteTeam,
+  listTeams, createTeam, updateTeam, softDeleteTeam, listTeamAssignments,
   type TeamRecord, type TeamInput,
 } from '../lib/teamsApi';
 import {
@@ -33,6 +32,7 @@ import {
   type AvailabilityRecord,
 } from '../lib/availabilityApi';
 import { punchIn as apiPunchIn, punchOut as apiPunchOut, startBreak as apiStartBreak, endBreak as apiEndBreak } from '../lib/timesheetsApi';
+import { fetchTeamList } from '../lib/invitationsApi';
 import { useGpsTracker } from '../hooks/useGpsTracker';
 import TechnicianTimesheetTable from '../components/timesheets/TechnicianTimesheetTable';
 
@@ -202,24 +202,6 @@ function avFormatTime(time: string): string { return time.slice(0, 5); }
 // MAP HELPERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Satellite tiles (Esri) — same basemap as the Field Sales / calendar map.
-const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-const SAT_LABELS_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}';
-const SAT_ATTR = '&copy; Esri, Maxar, Earthstar Geographics';
-
-function repMarkerIcon(name: string, color: string, status: string): L.DivIcon {
-  const dot = status === 'active' ? '#22c55e' : status === 'idle' ? '#f59e0b' : '#6b7280';
-  return L.divIcon({
-    html: `<div style="width:34px;height:34px;border-radius:50%;background:${color || '#3b82f6'};border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;position:relative">${(name || '?')[0]}<div style="position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;background:${dot};border:2px solid white"></div></div>`,
-    className: 'ts-rep-marker', iconSize: [34, 34], iconAnchor: [17, 17],
-  });
-}
-function FlyTo({ lat, lng }: { lat: number; lng: number }) {
-  const map = useMap();
-  useEffect(() => { map.flyTo([lat, lng], 14, { duration: 0.8 }); }, [lat, lng, map]);
-  return null;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // SMALL SHARED UI
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -315,9 +297,9 @@ export default function Timesheets() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   const [entries, setEntries] = useState<TimeEntry[]>([]);
-  const [employees, setEmployees] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEmployee, setSelectedEmployee] = useState('all');
+  const [selectedTeamId, setSelectedTeamId] = useState('all');
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -380,12 +362,49 @@ export default function Timesheets() {
         breaks: Array.isArray(e.breaks) ? e.breaks : [], notes: e.notes || null,
       }));
       setEntries(mapped);
-      const empMap = new Map<string, string>();
-      mapped.forEach(e => empMap.set(e.employee_id, e.employee_name));
-      setEmployees(Array.from(empMap.entries()).map(([id, name]) => ({ id, name })));
     }
     setLoading(false);
   }, []);
+
+  // Liste d'employés = membres réels de l'org (memberships + profiles), pas les
+  // noms dédupliqués des pointages : ceux-ci font apparaître des employés
+  // fantômes issus de vieilles saisies. `team_id` vient du même rattachement
+  // que celui affiché dans l'onglet Disponibilité — source unique.
+  const membersQuery = useQuery({
+    queryKey: ['org-members', currentOrgId],
+    queryFn: fetchTeamList,
+    enabled: !!currentOrgId,
+  });
+
+  // Appartenances multiples : un employé peut être dans plusieurs équipes
+  // (ex. Pelouse l'été, Déneigement l'hiver). `memberships.team_id` ne porte
+  // que l'équipe d'attache — celle qui gouverne le RBAC — donc les filtres
+  // lisent team_assignments. Repli silencieux sur team_id tant que la
+  // migration 20260726130000 n'est pas appliquée.
+  const assignmentsQuery = useQuery({
+    queryKey: ['team-assignments', currentOrgId],
+    queryFn: listTeamAssignments,
+    enabled: !!currentOrgId,
+    retry: false,
+  });
+
+  const employees = useMemo(() => {
+    const members = membersQuery.data?.members ?? [];
+    const assignments = assignmentsQuery.data;
+    const byUser = new Map<string, string[]>();
+    for (const a of assignments ?? []) {
+      const list = byUser.get(a.user_id);
+      if (list) list.push(a.team_id); else byUser.set(a.user_id, [a.team_id]);
+    }
+    return members
+      .map(m => ({
+        id: m.user_id,
+        name: m.full_name?.trim() || m.email || (fr ? 'Sans nom' : 'Unnamed'),
+        // Sans table d'assignations, on retombe sur l'équipe d'attache seule.
+        team_ids: byUser.get(m.user_id) ?? (m.team_id ? [m.team_id] : []),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [membersQuery.data, assignmentsQuery.data, fr]);
 
   // ── Punch timer state (must be declared before real-time channel) ──
   const [myActiveEntry, setMyActiveEntry] = useState<{ id: string; punch_in_at: string; status: string; breaks: Array<{ start: string; end: string }> } | null>(null);
@@ -460,15 +479,31 @@ export default function Timesheets() {
     return `${months[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
   }, [currentDate, viewMode, months, days]);
 
+  // Employés visibles dans le sélecteur : restreints à l'équipe choisie.
+  const employeesInTeam = useMemo(() => (
+    selectedTeamId === 'all' ? employees : employees.filter(e => e.team_ids.includes(selectedTeamId))
+  ), [employees, selectedTeamId]);
+
+  // Si l'employé sélectionné n'appartient pas à la nouvelle équipe, on retombe
+  // sur « tous » plutôt que d'afficher un tableau vide sans explication.
+  useEffect(() => {
+    if (selectedEmployee === 'all') return;
+    if (!employeesInTeam.some(e => e.id === selectedEmployee)) setSelectedEmployee('all');
+  }, [employeesInTeam, selectedEmployee]);
+
   // ── Filtered entries ──
   const viewEntries = useMemo(() => {
     let pool = entries;
+    if (selectedTeamId !== 'all') {
+      const ids = new Set(employeesInTeam.map(e => e.id));
+      pool = pool.filter(e => ids.has(e.employee_id));
+    }
     if (selectedEmployee !== 'all') pool = pool.filter(e => e.employee_id === selectedEmployee);
     if (viewMode === 'day') { const ds = currentDate.toISOString().slice(0, 10); return pool.filter(e => e.date === ds); }
     if (viewMode === 'week') { const wk = new Set(getWeekDates(currentDate)); return pool.filter(e => wk.has(e.date)); }
     const y = currentDate.getFullYear(), mo = currentDate.getMonth();
     return pool.filter(e => { const d = new Date(e.date); return d.getFullYear() === y && d.getMonth() === mo; });
-  }, [entries, selectedEmployee, currentDate, viewMode]);
+  }, [entries, selectedEmployee, selectedTeamId, employeesInTeam, currentDate, viewMode]);
 
   const rows: EmployeeRow[] = useMemo(() => {
     return viewEntries.map(entry => {
@@ -487,7 +522,7 @@ export default function Timesheets() {
   }, [rows, tableSearch, statusFilter]);
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const pagedRows = useMemo(() => { const s = (page - 1) * PAGE_SIZE; return filteredRows.slice(s, s + PAGE_SIZE); }, [filteredRows, page]);
-  useEffect(() => { setPage(1); }, [tableSearch, statusFilter, viewMode, currentDate, selectedEmployee]);
+  useEffect(() => { setPage(1); }, [tableSearch, statusFilter, viewMode, currentDate, selectedEmployee, selectedTeamId]);
 
   const alerts = useMemo(() => {
     const a: Array<{ text: string; type: string }> = [];
@@ -613,7 +648,9 @@ export default function Timesheets() {
   // DISPONIBILITÉS DATA
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const teamsQuery = useQuery({ queryKey: ['teams'], queryFn: listTeams });
+  // Clé scopée sur l'org : listTeams filtre désormais par org_id, sans ça le
+  // cache resservirait les équipes de l'office précédent après un changement.
+  const teamsQuery = useQuery({ queryKey: ['teams', currentOrgId], queryFn: listTeams });
   const teams = teamsQuery.data || [];
   if (!avSelectedTeamId && teams.length > 0) setAvSelectedTeamId(teams[0].id);
 
@@ -722,10 +759,17 @@ export default function Timesheets() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2.5">
             <div className="inline-flex items-center gap-1.5 rounded-md border border-outline bg-surface px-3 py-[7px]">
+              <Users size={14} className="text-text-tertiary" />
+              <select value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)} className="bg-transparent text-[13px] font-medium text-text-primary focus:outline-none cursor-pointer">
+                <option value="all">{fr ? 'Toutes les équipes' : 'All teams'}</option>
+                {(teamsQuery.data ?? []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+            <div className="inline-flex items-center gap-1.5 rounded-md border border-outline bg-surface px-3 py-[7px]">
               <User size={14} className="text-text-tertiary" />
               <select value={selectedEmployee} onChange={e => setSelectedEmployee(e.target.value)} className="bg-transparent text-[13px] font-medium text-text-primary focus:outline-none cursor-pointer">
                 <option value="all">{fr ? 'Tous les employés' : 'All employees'}</option>
-                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                {employeesInTeam.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
               </select>
             </div>
             {alerts.map((a, i) => (
@@ -830,17 +874,12 @@ export default function Timesheets() {
                 <p className="text-[13px] text-text-tertiary mt-1">{fr ? 'Les positions apparaîtront ici lorsque les employés seront actifs' : 'Positions will appear when employees are active'}</p>
               </div>
             )}
-            <MapContainer center={[45.5017, -73.5673]} zoom={11} className="h-full w-full" style={{ background: '#f0f0f0' }} zoomControl={false}>
-              <TileLayer url={SAT_URL} attribution={SAT_ATTR} maxZoom={19} />
-              <TileLayer url={SAT_LABELS_URL} attribution="" maxZoom={19} />
-              {flyTarget && <FlyTo lat={flyTarget.lat} lng={flyTarget.lng} />}
-              {liveReps.map(rep => (
-                <Marker key={rep.user_id} position={[rep.latitude, rep.longitude]} icon={repMarkerIcon(rep.user_name || '?', rep.team_color || '#3b82f6', rep.tracking_status)}
-                  eventHandlers={{ click: () => { setSelectedRep(rep); setFlyTarget({ lat: rep.latitude, lng: rep.longitude }); } }}>
-                  <Tooltip direction="top" offset={[0, -20]}><div style={{ fontSize: 11 }}><div style={{ fontWeight: 700 }}>{rep.user_name || 'Unknown'}</div><div style={{ fontSize: 9, color: '#9ca3af' }}>{rep.tracking_status === 'active' ? (fr ? 'En service' : 'Working') : rep.tracking_status === 'idle' ? (fr ? 'En pause' : 'Idle') : (fr ? 'Hors ligne' : 'Offline')}</div></div></Tooltip>
-                </Marker>
-              ))}
-            </MapContainer>
+            <TimesheetLiveMap
+              reps={liveReps}
+              flyTo={flyTarget}
+              fr={fr}
+              onSelect={(rep) => { setSelectedRep(rep); setFlyTarget({ lat: rep.latitude, lng: rep.longitude }); }}
+            />
             <AnimatePresence>
               {selectedRep && (
                 <motion.div initial={{ x: 400, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 400, opacity: 0 }}
