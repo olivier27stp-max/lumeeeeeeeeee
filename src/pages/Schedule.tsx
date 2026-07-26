@@ -104,6 +104,48 @@ function eventsForDay(events: ScheduleEventRecord[], day: Date) {
   return events.filter((e) => e.start_at.startsWith(dStr));
 }
 
+/**
+ * Lay out a single day's events into side-by-side columns when they overlap in
+ * time. Returns, per event id, its column index and the number of columns in
+ * its overlap cluster, so cards at the same hour sit next to each other instead
+ * of stacking on top of one another.
+ */
+function layoutDayEvents(dayEvs: ScheduleEventRecord[]): Record<string, { col: number; cols: number }> {
+  const out: Record<string, { col: number; cols: number }> = {};
+  const items = dayEvs
+    .map((e) => ({ id: e.id, start: new Date(e.start_at).getTime(), end: new Date(e.end_at).getTime() }))
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  let cluster: typeof items = [];
+  let clusterEnd = -Infinity;
+
+  const flush = () => {
+    if (!cluster.length) return;
+    // Greedy column assignment within the cluster.
+    const colEnds: number[] = []; // end time occupying each column
+    const assign: Record<string, number> = {};
+    for (const it of cluster) {
+      let placed = -1;
+      for (let c = 0; c < colEnds.length; c++) {
+        if (it.start >= colEnds[c]) { colEnds[c] = it.end; placed = c; break; }
+      }
+      if (placed < 0) { colEnds.push(it.end); placed = colEnds.length - 1; }
+      assign[it.id] = placed;
+    }
+    const cols = colEnds.length;
+    for (const it of cluster) out[it.id] = { col: assign[it.id], cols };
+    cluster = [];
+  };
+
+  for (const it of items) {
+    if (cluster.length && it.start >= clusterEnd) flush();
+    cluster.push(it);
+    clusterEnd = Math.max(clusterEnd, it.end);
+  }
+  flush();
+  return out;
+}
+
 /* ════════════════════════════════════════════════════════════════
    DRAGGABLE EVENT CARD (used in Week/Day time grids)
    ════════════════════════════════════════════════════════════════ */
@@ -303,6 +345,8 @@ function TimeGrid({
             {columns.map((d, ci) => {
               const dayEvs = eventsForDay(events, d);
               const colWidth = isMultiCol ? `calc(100% / ${columns.length})` : '100%';
+              // Side-by-side layout for events overlapping in time.
+              const lay = layoutDayEvents(dayEvs);
               return dayEvs.map((rawEv) => {
                 const ev = applyOptimistic(rawEv);
                 const s = new Date(ev.start_at), e = new Date(ev.end_at);
@@ -315,6 +359,17 @@ function TimeGrid({
                 const dragging = isDragging(ev.id);
                 const previewDur = dragging && dragState.previewDuration ? dragState.previewDuration : null;
 
+                // Split the day column into N sub-columns for overlapping events.
+                const { col, cols } = lay[ev.id] || { col: 0, cols: 1 };
+                const GAP = 2; // px between overlapping cards
+                // Width of one day column: full width in single-col, else 100%/n.
+                const dayCol = isMultiCol ? `(100% / ${columns.length})` : '100%';
+                const base = isMultiCol ? `${ci} * ${dayCol}` : '0px';
+                // Each sub-column is (dayCol - side padding) / cols wide.
+                const inner = `((${dayCol} - 6px) / ${cols})`;
+                const left = `calc(${base} + 2px + ${col} * ${inner})`;
+                const width = `calc(${inner} - ${GAP}px)`;
+
                 return (
                   <DragEventCard
                     key={ev.id}
@@ -322,12 +377,7 @@ function TimeGrid({
                     color={c}
                     isDragging={dragging}
                     previewDuration={previewDur}
-                    style={{
-                      left: isMultiCol ? `calc(${ci} * ${colWidth} + 2px)` : '4px',
-                      width: isMultiCol ? `calc(${colWidth} - 4px)` : 'calc(100% - 8px)',
-                      top,
-                      height: Math.max(height, 20),
-                    }}
+                    style={{ left, width, top, height: Math.max(height, 20) }}
                     onEventClick={onEventClick}
                     onDragStart={(e) => gridRef.current && onEventDragStart(ev, e, gridRef.current)}
                     onResizeStart={(e) => onResizeStart(ev, e)}
