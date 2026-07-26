@@ -555,8 +555,12 @@ function RouteMap({
         drop.appendChild(img);
         el.appendChild(idx);
         el.appendChild(drop);
-        el.addEventListener('click', (e) => { e.stopPropagation(); onSelectRef.current(j.id); });
-        el.addEventListener('dblclick', (e) => { e.stopPropagation(); if (j.jobId) onJobClickRef.current?.(j.jobId); });
+        // Clic sur le pin → ouvre directement les infos de la job (+ highlight).
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          onSelectRef.current(j.id);
+          if (j.jobId) onJobClickRef.current?.(j.jobId);
+        });
         const m = new mapboxgl.Marker({ element: el, anchor: 'bottom' }).setLngLat([j.lng!, j.lat!]).addTo(map);
         markersRef.current.set(j.id, { marker: m, el });
         bounds.extend([j.lng!, j.lat!]);
