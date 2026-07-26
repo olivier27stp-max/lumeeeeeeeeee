@@ -90,6 +90,8 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
   const [locating, setLocating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const flyToRef = useRef<((lng: number, lat: number) => void) | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
   // Ask for the dispatcher's position once when they pick "my location".
   function chooseStart(mode: StartMode) {
@@ -97,8 +99,8 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
       if (!navigator.geolocation) return;
       setLocating(true);
       navigator.geolocation.getCurrentPosition(
-        (p) => { setMyPos({ lat: p.coords.latitude, lng: p.coords.longitude }); setStartMode('me'); setLocating(false); },
-        () => { setLocating(false); }, // permission denied → stay on 'first'
+        (p) => { if (!mountedRef.current) return; setMyPos({ lat: p.coords.latitude, lng: p.coords.longitude }); setStartMode('me'); setLocating(false); },
+        () => { if (mountedRef.current) setLocating(false); }, // permission denied → stay on 'first'
         { enableHighAccuracy: true, timeout: 10000 },
       );
       return;
@@ -169,6 +171,11 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
           }
         }
 
+        // Geocoded jobs dropped by the optimizer's stop cap (Mapbox ≤ 12): they
+        // must not vanish silently — surface them in the excluded note.
+        const routedIds = new Set(orderedJobs.map((j) => j.id));
+        const overCap = geocoded.filter((j) => !routedIds.has(j.id));
+
         // Cascading ETA from the first stop's planned time + drive + on-site time.
         const legOffset = startPoint ? 1 : 0; // legs[0] is start→stop1 when anchored
         const etas: (Date | null)[] = [];
@@ -184,7 +191,7 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
 
         const revenueCents = t.jobs.reduce((sum, j) => sum + (j.revenueCents || 0), 0);
         const done = t.jobs.filter((j) => DONE_STATUSES.has(j.status)).length;
-        return { teamId: t.key, teamName: t.name, color: t.color, jobs: orderedJobs, route, etas, ungeocoded, revenueCents, done, savedSeconds, savedMeters };
+        return { teamId: t.key, teamName: t.name, color: t.color, jobs: orderedJobs, route, etas, ungeocoded: [...ungeocoded, ...overCap], revenueCents, done, savedSeconds, savedMeters };
       }));
       if (!cancelled) { setRoutes(computed); setLoading(false); }
     })();
@@ -363,8 +370,8 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
                 {r.ungeocoded.length > 0 && (
                   <p className="mx-4 mb-3 border-t border-border-light pt-2 text-[10.5px] text-text-tertiary">
                     {fr
-                      ? `${r.ungeocoded.length} job(s) non géolocalisé(s) — exclus du trajet`
-                      : `${r.ungeocoded.length} job(s) not geolocated — excluded from the route`}
+                      ? `${r.ungeocoded.length} job(s) exclus du trajet (non géolocalisés ou au-delà de 12 arrêts)`
+                      : `${r.ungeocoded.length} job(s) excluded from the route (not geolocated or beyond 12 stops)`}
                   </p>
                 )}
               </div>

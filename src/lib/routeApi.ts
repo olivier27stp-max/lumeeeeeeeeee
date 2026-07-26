@@ -221,10 +221,15 @@ export async function getOptimizedRoute(stops: RouteStop[], anchorFirst = false)
  * bad first pick sending the route back and forth.
  */
 async function fallbackLocal(stops: RouteStop[], anchorFirst = false): Promise<RouteResult> {
-  const ordered = anchorFirst ? nearestNeighbourOrder(stops) : bestNearestNeighbour(stops);
+  const candidate = anchorFirst ? nearestNeighbourOrder(stops) : bestNearestNeighbour(stops);
+  // Never return an order WORSE than the input: if the greedy chain isn't
+  // shorter (straight-line) than the given order, keep the input order so the
+  // "optimized" result is at worst equal — never a regression.
+  const ordered = chainLength(candidate) < chainLength(stops) ? candidate : stops;
+  const improved = ordered !== stops;
   try {
     const r = await getRoute(ordered);
-    return { ...r, optimized: true };
+    return { ...r, optimized: improved };
   } catch {
     // Even Directions failed — return straight-line legs so the list still works.
     const legs: RouteLeg[] = ordered.map((s, i) =>
@@ -237,7 +242,7 @@ async function fallbackLocal(stops: RouteStop[], anchorFirst = false): Promise<R
       totalDistanceM,
       totalDurationS: 0,
       geometry: ordered.map((s) => [s.lng, s.lat] as [number, number]),
-      optimized: true,
+      optimized: improved,
     };
   }
 }
