@@ -396,7 +396,13 @@ export default function Timesheets() {
       const list = byUser.get(a.user_id);
       if (list) list.push(a.team_id); else byUser.set(a.user_id, [a.team_id]);
     }
+    // Les équipes sont un découpage TERRAIN : elles concernent les techniciens,
+    // pas les sales_rep qui vendent. On garde malgré tout quiconque a déjà
+    // pointé — sinon un owner qui dépanne sur le terrain aurait des heures
+    // enregistrées mais deviendrait introuvable dans le filtre.
+    const hasPunched = new Set(entries.map(e => e.employee_id));
     return members
+      .filter(m => m.role === 'technician' || hasPunched.has(m.user_id))
       .map(m => ({
         id: m.user_id,
         name: m.full_name?.trim() || m.email || (fr ? 'Sans nom' : 'Unnamed'),
@@ -404,7 +410,7 @@ export default function Timesheets() {
         team_ids: byUser.get(m.user_id) ?? (m.team_id ? [m.team_id] : []),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [membersQuery.data, assignmentsQuery.data, fr]);
+  }, [membersQuery.data, assignmentsQuery.data, entries, fr]);
 
   // ── Punch timer state (must be declared before real-time channel) ──
   const [myActiveEntry, setMyActiveEntry] = useState<{ id: string; punch_in_at: string; status: string; breaks: Array<{ start: string; end: string }> } | null>(null);
@@ -544,6 +550,24 @@ export default function Timesheets() {
     const totalBreak = todayEntries.reduce((a, e) => a + calcBreak(e), 0);
     return { totalHours: formatH(totalMin), activeEmployees: todayEntries.length, currentlyWorking: working, onBreak, totalBreaks: formatH(totalBreak) };
   }, [entries, tick]);
+
+  // Statut carte basé sur le PUNCH, pas seulement le GPS: un technicien n'est
+  // "actif" que s'il a une entrée de temps aujourd'hui sans punch de sortie
+  // (réellement au travail). En pause (dans un break) → idle. Non punché →
+  // offline, même si son app envoie encore sa position GPS.
+  const mapReps = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    // employee_id → statut punch
+    const punchStatus = new Map<string, 'active' | 'idle'>();
+    for (const e of entries) {
+      if (e.date !== todayStr || e.punch_out) continue; // pas punché en ce moment
+      const onBreak = e.breaks.some(b => parseTime(b.start) <= nowMin && nowMin <= parseTime(b.end));
+      punchStatus.set(e.employee_id, onBreak ? 'idle' : 'active');
+    }
+    return liveReps.map(r => ({ ...r, tracking_status: punchStatus.get(r.user_id) || 'offline' }));
+  }, [liveReps, entries, tick]);
 
   const toReview = useMemo(() => {
     const items: Array<{ id: string; employee_id: string; name: string; reason: string; entry: TimeEntry }> = [];
@@ -849,9 +873,9 @@ export default function Timesheets() {
         <>
           <div className="flex items-center gap-3 flex-wrap">
             {[
-              { color: 'bg-emerald-500', label: fr ? 'Actifs' : 'Active', count: liveReps.filter(r => r.tracking_status === 'active').length },
-              { color: 'bg-amber-500', label: fr ? 'En pause' : 'Idle', count: liveReps.filter(r => r.tracking_status === 'idle').length },
-              { color: 'bg-gray-400', label: fr ? 'Hors ligne' : 'Offline', count: liveReps.filter(r => r.tracking_status !== 'active' && r.tracking_status !== 'idle').length },
+              { color: 'bg-emerald-500', label: fr ? 'Actifs' : 'Active', count: mapReps.filter(r => r.tracking_status === 'active').length },
+              { color: 'bg-amber-500', label: fr ? 'En pause' : 'Idle', count: mapReps.filter(r => r.tracking_status === 'idle').length },
+              { color: 'bg-gray-400', label: fr ? 'Hors ligne' : 'Offline', count: mapReps.filter(r => r.tracking_status !== 'active' && r.tracking_status !== 'idle').length },
             ].map((s, i) => (
               <div key={i} className="rounded-2xl bg-surface-card border border-border shadow-card px-5 py-3 flex items-center gap-3">
                 <div className={cn('w-2.5 h-2.5 rounded-full', s.color)} />
@@ -875,7 +899,7 @@ export default function Timesheets() {
               </div>
             )}
             <TimesheetLiveMap
-              reps={liveReps}
+              reps={mapReps}
               flyTo={flyTarget}
               fr={fr}
               onSelect={(rep) => { setSelectedRep(rep); setFlyTarget({ lat: rep.latitude, lng: rep.longitude }); }}
