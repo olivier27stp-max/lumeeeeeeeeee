@@ -166,6 +166,34 @@ function DragEventCard({ ev, color, style, isDragging, previewDuration, onEventC
     ? Math.max(minutesToPx(previewDuration), 20)
     : (style.height as number | undefined);
 
+  // Distinguish a real drag from a plain click. On pointer-down we watch the
+  // pointer at the WINDOW level (the grid handles the drag, so moves don't reach
+  // this card): if it travels past the threshold it was a drag → suppress the
+  // click so it only moves the job, never opens the panel. A still pointer = a
+  // real click → open the job.
+  const movedRef = useRef(false);
+
+  const beginPress = (e: React.PointerEvent) => {
+    if (e.button !== 0 || (e.target as HTMLElement).dataset.resize) return;
+    movedRef.current = false;
+    const ox = e.clientX, oy = e.clientY;
+    const THRESHOLD = 4; // px
+    const onMove = (me: PointerEvent) => {
+      if (Math.hypot(me.clientX - ox, me.clientY - oy) > THRESHOLD) {
+        movedRef.current = true;
+        cleanup();
+      }
+    };
+    const cleanup = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', cleanup);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', cleanup);
+    e.preventDefault();
+    onDragStart(e);
+  };
+
   return (
     <div
       className={cn(
@@ -181,13 +209,13 @@ function DragEventCard({ ev, color, style, isDragging, previewDuration, onEventC
         backgroundColor: toRgba(color, isDragging ? 0.08 : 0.15),
         borderLeft: `3px solid ${color}`,
       }}
-      onClick={(e) => { e.stopPropagation(); if (!isDragging) ev.job_id && onEventClick(ev.job_id); }}
-      onPointerDown={(e) => {
-        // Only left button, ignore resize handle
-        if (e.button !== 0 || (e.target as HTMLElement).dataset.resize) return;
-        e.preventDefault();
-        onDragStart(e);
+      onClick={(e) => {
+        e.stopPropagation();
+        // Only open on a genuine click (no drag movement, not mid-drag).
+        if (movedRef.current || isDragging) { movedRef.current = false; return; }
+        if (ev.job_id) onEventClick(ev.job_id);
       }}
+      onPointerDown={beginPress}
     >
       <div className="truncate text-[11px] font-semibold" style={{ color }}>{ev.job?.title || 'Job'}</div>
       <div className="truncate text-[10px] text-text-secondary">{format(s, 'h:mm a', _LOC)}{computedHeight && computedHeight > 30 ? ` – ${format(e, 'h:mm a', _LOC)}` : ''}</div>
