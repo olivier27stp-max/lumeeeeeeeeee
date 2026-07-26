@@ -29,9 +29,13 @@ function normalizeColorHex(color?: string | null) {
 }
 
 export async function listTeams(): Promise<TeamRecord[]> {
+  // Scope explicite sur l'org active : sans ça, un utilisateur multi-office voit
+  // les équipes de toutes ses orgs (on dépendait uniquement des RLS).
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('teams')
     .select('id,org_id,name,color_hex,description,is_active,created_at,updated_at,deleted_at')
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('name', { ascending: true });
 
@@ -120,4 +124,32 @@ export async function softDeleteTeam(teamId: string): Promise<void> {
     .eq('org_id', orgId);
 
   if (membersError) throw membersError;
+
+  // Appartenances multiples (N→N) : le ON DELETE CASCADE de la FK ne joue pas
+  // ici puisqu'on fait un soft delete de l'équipe, pas un DELETE.
+  const { error: assignError } = await supabase
+    .from('team_assignments')
+    .delete()
+    .eq('team_id', teamId)
+    .eq('org_id', orgId);
+
+  if (assignError) throw assignError;
+}
+
+export interface TeamAssignment {
+  user_id: string;
+  team_id: string;
+  is_primary: boolean;
+}
+
+/** Appartenances employé ⇄ équipe de l'org active (N→N). */
+export async function listTeamAssignments(): Promise<TeamAssignment[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase
+    .from('team_assignments')
+    .select('user_id,team_id,is_primary')
+    .eq('org_id', orgId);
+
+  if (error) throw error;
+  return (data || []) as TeamAssignment[];
 }
