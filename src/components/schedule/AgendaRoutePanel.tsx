@@ -1,19 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Route, Sparkles, MapPin, Car, Clock, Navigation, ExternalLink, GripVertical, CheckCircle2 } from 'lucide-react';
-import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { Route, Sparkles, MapPin, Car, Clock, Navigation, ExternalLink, CheckCircle2, Play } from 'lucide-react';
 import { useTranslation } from '../../i18n';
 import { formatCurrency } from '../../lib/utils';
 import UnifiedAvatar from '../ui/UnifiedAvatar';
 import {
-  getRoute, getOptimizedRoute, formatDistance, formatDuration,
+  getOptimizedRoute, formatDistance, formatDuration,
   type RouteStop, type RouteResult,
 } from '../../lib/routeApi';
 
@@ -23,18 +16,22 @@ function dicebearUrl(seed: string) {
 }
 
 // Google Maps directions URL with the whole trip (origin → waypoints → dest).
-// Already used elsewhere in the app (EntityHubHeader / ClientDetails).
-function googleMapsTripUrl(stops: { lat: number; lng: number }[]): string | null {
-  if (stops.length < 1) return null;
+function googleMapsTripUrl(stops: { lat: number; lng: number }[], start?: { lat: number; lng: number } | null): string | null {
+  const all = start ? [start, ...stops] : stops;
+  if (all.length < 1) return null;
   const pt = (s: { lat: number; lng: number }) => `${s.lat},${s.lng}`;
-  const origin = pt(stops[0]);
-  const destination = pt(stops[stops.length - 1]);
-  const waypoints = stops.slice(1, -1).map(pt).join('|');
+  const origin = pt(all[0]);
+  const destination = pt(all[all.length - 1]);
+  const waypoints = all.slice(1, -1).map(pt).join('|');
   const base = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
   return waypoints ? `${base}&waypoints=${encodeURIComponent(waypoints)}` : base;
 }
 
 const DONE_STATUSES = new Set(['completed', 'done', 'paid', 'closed', 'invoiced']);
+
+// Where each team's trip starts from. 'first' = the earliest stop (default);
+// 'me' = the dispatcher's current GPS position (asked once, shared by all teams).
+type StartMode = 'first' | 'me';
 
 // One job the route panel can plot.
 export interface RouteJob {
@@ -75,21 +72,39 @@ interface TeamRoute {
 
 /**
  * Route view for the Agenda: a dominant map showing every selected team's trip
- * (one colour per team) beside a side list grouped by team. Trips open already
- * optimized; each stop shows driving time + a cascading ETA. Stops can be
- * reordered by hand (drag), clicking a stop focuses its map pin, per-team
- * progress + lateness is surfaced, and each trip opens in Google Maps.
+ * (one colour per team) beside a side list grouped by team. Trips are always
+ * optimized; the user changes a route by choosing where it STARTS from (first
+ * stop vs. their current location), which re-optimizes the order — no fiddly
+ * drag & drop. Each stop shows driving time + a cascading ETA, clicking a stop
+ * focuses its map pin, per-team progress + lateness is surfaced, and each trip
+ * opens in Google Maps.
  */
 export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
   const { language } = useTranslation();
   const fr = language === 'fr';
 
-  // Manual per-team ordering (job-id list) overrides the optimized order once
-  // the user drags. Cleared for a team if its job set changes.
-  const [manualOrder, setManualOrder] = useState<Record<string, string[]>>({});
-  // Stop currently focused (shared between the list and the map).
+  const [startMode, setStartMode] = useState<StartMode>('first');
+  const [myPos, setMyPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const flyToRef = useRef<((lng: number, lat: number) => void) | null>(null);
+
+  // Ask for the dispatcher's position once when they pick "my location".
+  function chooseStart(mode: StartMode) {
+    if (mode === 'me' && !myPos) {
+      if (!navigator.geolocation) return;
+      setLocating(true);
+      navigator.geolocation.getCurrentPosition(
+        (p) => { setMyPos({ lat: p.coords.latitude, lng: p.coords.longitude }); setStartMode('me'); setLocating(false); },
+        () => { setLocating(false); }, // permission denied → stay on 'first'
+        { enableHighAccuracy: true, timeout: 10000 },
+      );
+      return;
+    }
+    setStartMode(mode);
+  }
+
+  const startPoint = startMode === 'me' ? myPos : null;
 
   // Group jobs by team (stable order: first appearance).
   const teams = useMemo(() => {
@@ -114,7 +129,7 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
     () => teams.map((t) => `${t.key}:${t.jobs.map((j) => j.id).join('-')}`).join('|'),
     [teams],
   );
-  const manualKey = useMemo(() => JSON.stringify(manualOrder), [manualOrder]);
+  const startKey = startPoint ? `${startPoint.lat},${startPoint.lng}` : 'first';
 
   useEffect(() => {
     let cancelled = false;
@@ -124,30 +139,31 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
         const geocoded = t.jobs.filter((j) => j.lat != null && j.lng != null);
         const ungeocoded = t.jobs.filter((j) => j.lat == null || j.lng == null);
         const byId = new Map(geocoded.map((j) => [j.id, j]));
-        const manual = manualOrder[t.key];
-        const manualValid = manual && manual.length === geocoded.length && manual.every((id) => byId.has(id));
 
         let route: RouteResult | null = null;
         let orderedJobs: RouteJob[] = geocoded;
 
-        if (manualValid) {
-          // Respect the hand-picked order; still fetch real geometry/legs for it.
-          orderedJobs = manual!.map((id) => byId.get(id)!).filter(Boolean);
-          const stops: RouteStop[] = orderedJobs.map((j) => ({ id: j.id, lat: j.lat!, lng: j.lng! }));
-          if (stops.length >= 2) route = await getRoute(stops);
-        } else if (geocoded.length >= 2) {
-          const stops: RouteStop[] = geocoded.map((j) => ({ id: j.id, lat: j.lat!, lng: j.lng! }));
-          route = await getOptimizedRoute(stops);
-          orderedJobs = route.order.map((id) => byId.get(id)).filter(Boolean) as RouteJob[];
+        if (geocoded.length >= 2) {
+          // Prepend the start point as a virtual stop so the optimizer anchors
+          // the trip there, then drop it from the visible order.
+          const START = '__start__';
+          const stops: RouteStop[] = [];
+          if (startPoint) stops.push({ id: START, lat: startPoint.lat, lng: startPoint.lng });
+          geocoded.forEach((j) => stops.push({ id: j.id, lat: j.lat!, lng: j.lng! }));
+          const r = await getOptimizedRoute(stops);
+          const order = r.order.filter((id) => id !== START);
+          orderedJobs = order.map((id) => byId.get(id)).filter(Boolean) as RouteJob[];
+          route = r;
         }
 
         // Cascading ETA from the first stop's planned time + drive + on-site time.
+        const legOffset = startPoint ? 1 : 0; // legs[0] is start→stop1 when anchored
         const etas: (Date | null)[] = [];
         if (orderedJobs.length) {
           let cursor = new Date(orderedJobs[0].startAt);
           etas.push(cursor);
           for (let i = 1; i < orderedJobs.length; i++) {
-            const driveS = route?.legs[i]?.durationS ?? 0;
+            const driveS = route?.legs[i + legOffset]?.durationS ?? 0;
             cursor = new Date(cursor.getTime() + (driveS + 30 * 60) * 1000);
             etas.push(cursor);
           }
@@ -160,7 +176,7 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
       if (!cancelled) { setRoutes(computed); setLoading(false); }
     })();
     return () => { cancelled = true; };
-  }, [jobsKey, manualKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [jobsKey, startKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totals = useMemo(() => {
     let dist = 0, dur = 0, trips = 0, revenueCents = 0;
@@ -170,19 +186,6 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
     }
     return { dist, dur, trips, revenueCents };
   }, [routes]);
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-
-  function handleDragEnd(teamId: string, currentIds: string[]) {
-    return (e: DragEndEvent) => {
-      const { active, over } = e;
-      if (!over || active.id === over.id) return;
-      const from = currentIds.indexOf(String(active.id));
-      const to = currentIds.indexOf(String(over.id));
-      if (from < 0 || to < 0) return;
-      setManualOrder((prev) => ({ ...prev, [teamId]: arrayMove(currentIds, from, to) }));
-    };
-  }
 
   function focusStop(j: RouteJob) {
     setSelectedId(j.id);
@@ -206,13 +209,26 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          {routes.filter((r) => r.jobs.length).map((r) => (
-            <span key={r.teamId} className="inline-flex items-center gap-1.5 rounded-pill border border-border px-2.5 py-1 text-[11px] font-semibold text-text-secondary">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: r.color }} />
-              {r.teamName}
-            </span>
-          ))}
+        {/* Start-from selector — the real way to change a route */}
+        <div className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1 text-[11px] font-medium text-text-tertiary">
+            <Play size={10} />{fr ? 'Départ' : 'Start'}
+          </span>
+          <div className="flex overflow-hidden rounded-lg border border-border">
+            <button
+              onClick={() => chooseStart('first')}
+              className={'px-2.5 py-1 text-[11px] font-semibold transition-colors ' + (startMode === 'first' ? 'bg-primary text-primary-foreground' : 'text-text-secondary hover:bg-surface-secondary')}
+            >
+              {fr ? '1er arrêt' : 'First stop'}
+            </button>
+            <button
+              onClick={() => chooseStart('me')}
+              disabled={locating}
+              className={'px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50 ' + (startMode === 'me' ? 'bg-primary text-primary-foreground' : 'text-text-secondary hover:bg-surface-secondary')}
+            >
+              {locating ? (fr ? 'Localisation…' : 'Locating…') : (fr ? 'Ma position' : 'My location')}
+            </button>
+          </div>
         </div>
 
         <div className="ml-auto flex items-center gap-3.5">
@@ -228,7 +244,7 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
       {/* Split: map + side list */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.85fr_1fr]">
         <div className="relative min-h-[320px] border-b border-border lg:min-h-[calc(100vh-16rem)] lg:border-b-0 lg:border-r">
-          <RouteMap routes={routes} selectedId={selectedId} onSelect={setSelectedId} onJobClick={onJobClick} flyToRef={flyToRef} />
+          <RouteMap routes={routes} startPoint={startPoint} selectedId={selectedId} onSelect={setSelectedId} onJobClick={onJobClick} flyToRef={flyToRef} />
           {loading && (
             <div className="pointer-events-none absolute left-3 top-3 rounded-lg border border-border bg-surface-card/90 px-2.5 py-1 text-[11px] font-medium text-text-secondary shadow-sm backdrop-blur">
               {fr ? 'Calcul du trajet…' : 'Computing route…'}
@@ -238,12 +254,14 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
 
         <div className="overflow-y-auto lg:max-h-[calc(100vh-16rem)]">
           {routes.map((r, ti) => {
-            const ids = r.jobs.map((j) => j.id);
             const late = r.jobs.reduce((n, j, i) => {
               const eta = r.etas[i];
               return n + (eta && eta.getTime() - new Date(j.startAt).getTime() > 5 * 60_000 ? 1 : 0);
             }, 0);
-            const mapsUrl = googleMapsTripUrl(r.jobs.filter((j) => j.lat != null && j.lng != null).map((j) => ({ lat: j.lat!, lng: j.lng! })));
+            const mapsUrl = googleMapsTripUrl(
+              r.jobs.filter((j) => j.lat != null && j.lng != null).map((j) => ({ lat: j.lat!, lng: j.lng! })),
+              startPoint,
+            );
             return (
               <div key={r.teamId} className={ti > 0 ? 'border-t-[6px] border-surface-secondary' : ''}>
                 {/* team header */}
@@ -299,28 +317,24 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
                   </div>
                 </div>
 
-                {/* stops — drag to reorder */}
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd(r.teamId, ids)}>
-                  <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-                    <ol className="px-1.5 pb-2">
-                      {r.jobs.map((j, i) => (
-                        <StopRow
-                          key={j.id}
-                          job={j}
-                          index={i}
-                          color={r.color}
-                          leg={i > 0 ? r.route?.legs[i] : undefined}
-                          eta={r.etas[i]}
-                          selected={selectedId === j.id}
-                          done={DONE_STATUSES.has(j.status)}
-                          fr={fr}
-                          onFocus={() => focusStop(j)}
-                          onOpen={() => j.jobId && onJobClick?.(j.jobId)}
-                        />
-                      ))}
-                    </ol>
-                  </SortableContext>
-                </DndContext>
+                {/* stops */}
+                <ol className="px-1.5 pb-2">
+                  {r.jobs.map((j, i) => (
+                    <StopRow
+                      key={j.id}
+                      job={j}
+                      index={i}
+                      color={r.color}
+                      leg={i > 0 ? r.route?.legs[i + (startPoint ? 1 : 0)] : undefined}
+                      eta={r.etas[i]}
+                      selected={selectedId === j.id}
+                      done={DONE_STATUSES.has(j.status)}
+                      fr={fr}
+                      onFocus={() => focusStop(j)}
+                      onOpen={() => j.jobId && onJobClick?.(j.jobId)}
+                    />
+                  ))}
+                </ol>
 
                 {r.ungeocoded.length > 0 && (
                   <p className="mx-4 mb-3 border-t border-border-light pt-2 text-[10.5px] text-text-tertiary">
@@ -338,7 +352,7 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
   );
 }
 
-/* ── One draggable / focusable stop row ────────────────────────────────── */
+/* ── One focusable stop row ────────────────────────────────────────────── */
 
 function StopRow({
   job, index, color, leg, eta, selected, done, fr, onFocus, onOpen,
@@ -348,16 +362,14 @@ function StopRow({
   eta: Date | null; selected: boolean; done: boolean; fr: boolean;
   onFocus: () => void; onOpen: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: job.id });
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
   const planned = new Date(job.startAt);
   const moved = eta && Math.abs(eta.getTime() - planned.getTime()) > 5 * 60_000;
   const isLate = eta && eta.getTime() - planned.getTime() > 5 * 60_000;
 
   return (
-    <li ref={setNodeRef} style={style}>
+    <li>
       {leg && (leg.distanceM > 0 || leg.durationS > 0) && (
-        <div className="ml-[46px] flex items-center gap-1.5 py-1 text-[10.5px] text-text-tertiary tabular-nums">
+        <div className="ml-[30px] flex items-center gap-1.5 py-1 text-[10.5px] text-text-tertiary tabular-nums">
           <span className="h-4 w-px bg-border" />
           <Car size={11} className="opacity-60" />
           <span>
@@ -369,16 +381,11 @@ function StopRow({
       <div
         onClick={onFocus}
         className={
-          'flex w-full cursor-pointer items-center gap-2 rounded-xl px-1.5 py-2 transition-colors ' +
+          'flex w-full cursor-pointer items-center gap-2 rounded-xl px-2 py-2 transition-colors ' +
           (selected ? 'bg-surface-secondary ring-1 ring-inset' : 'hover:bg-surface-secondary')
         }
         style={selected ? { ['--tw-ring-color' as any]: `${color}` } : undefined}
       >
-        {/* drag handle */}
-        <span {...attributes} {...listeners} onClick={(e) => e.stopPropagation()}
-          className="shrink-0 cursor-grab touch-none text-text-tertiary/50 hover:text-text-secondary active:cursor-grabbing">
-          <GripVertical size={14} />
-        </span>
         {/* step number — outside the bubble */}
         <span className="w-4 shrink-0 text-center text-[12px] font-bold text-text-secondary tabular-nums">{index + 1}</span>
         {/* client DiceBear */}
@@ -439,9 +446,10 @@ function Totals({ value, label, accent }: { value: string; label: string; accent
 /* ── Map: one colored trip per team ────────────────────────────────────── */
 
 function RouteMap({
-  routes, selectedId, onSelect, onJobClick, flyToRef,
+  routes, startPoint, selectedId, onSelect, onJobClick, flyToRef,
 }: {
   routes: TeamRoute[];
+  startPoint: { lat: number; lng: number } | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onJobClick?: (jobId: string) => void;
@@ -450,9 +458,9 @@ function RouteMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<Map<string, { marker: mapboxgl.Marker; el: HTMLDivElement }>>(new Map());
+  const startMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const [ready, setReady] = useState(false);
 
-  // keep latest callbacks without re-registering
   const onSelectRef = useRef(onSelect); onSelectRef.current = onSelect;
   const onJobClickRef = useRef(onJobClick); onJobClickRef.current = onJobClick;
 
@@ -486,6 +494,18 @@ function RouteMap({
 
     const bounds = new mapboxgl.LngLatBounds();
     let hasPoint = false;
+
+    // Start marker (dispatcher position)
+    startMarkerRef.current?.remove();
+    startMarkerRef.current = null;
+    if (startPoint) {
+      const el = document.createElement('div');
+      el.style.cssText =
+        'width:16px;height:16px;border-radius:50%;background:#171717;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);';
+      startMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: 'center' }).setLngLat([startPoint.lng, startPoint.lat]).addTo(map);
+      bounds.extend([startPoint.lng, startPoint.lat]);
+      hasPoint = true;
+    }
 
     routes.forEach((r, ri) => {
       const pts = r.jobs.filter((j) => j.lat != null && j.lng != null);
@@ -556,9 +576,9 @@ function RouteMap({
     }
 
     if (hasPoint) map.fitBounds(bounds, { padding: 44, maxZoom: 15, duration: 350 });
-  }, [routes, ready]);
+  }, [routes, startPoint, ready]);
 
-  // Highlight the selected pin (scale it up).
+  // Highlight the selected pin.
   useEffect(() => {
     markersRef.current.forEach(({ el }, id) => {
       const drop = el.lastChild as HTMLElement | null;
