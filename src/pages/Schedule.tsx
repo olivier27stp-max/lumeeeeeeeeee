@@ -101,7 +101,10 @@ const needsAtt = (e: ScheduleEventRecord) => { const s = ns(e.job?.status || e.s
 
 function eventsForDay(events: ScheduleEventRecord[], day: Date) {
   const dStr = format(day, 'yyyy-MM-dd');
-  return events.filter((e) => e.start_at.startsWith(dStr));
+  // Comparer sur la date LOCALE de l'event: start_at est en UTC, donc
+  // startsWith(prefixe UTC) rangeait les jobs du soir dans la mauvaise case
+  // (un job 21h local = lendemain 01h UTC apparaissait le mauvais jour).
+  return events.filter((e) => format(new Date(e.start_at), 'yyyy-MM-dd') === dStr);
 }
 
 /**
@@ -1260,7 +1263,7 @@ function AssignModal({ job, teams, events, tcMap, onAssign, onClose, loading, t 
   const title = 'title' in job ? job.title : (job as ScheduleEventRecord).job?.title || 'Job';
   const client = 'client_name' in job ? job.client_name : (job as ScheduleEventRecord).job?.client_name;
   const addr = 'property_address' in job ? job.property_address : (job as ScheduleEventRecord).job?.property_address;
-  const wl = useMemo(() => { const c = new Map<string, number>(); const td = format(new Date(), 'yyyy-MM-dd'); events.forEach((e) => { const tid = e.team_id || e.job?.team_id; if (tid && e.start_at.startsWith(td)) c.set(tid, (c.get(tid) || 0) + 1); }); return c; }, [events]);
+  const wl = useMemo(() => { const c = new Map<string, number>(); const td = format(new Date(), 'yyyy-MM-dd'); events.forEach((e) => { const tid = e.team_id || e.job?.team_id; if (tid && format(new Date(e.start_at), 'yyyy-MM-dd') === td) c.set(tid, (c.get(tid) || 0) + 1); }); return c; }, [events]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl">
