@@ -52,7 +52,7 @@ export default function TimesheetLiveMap<R extends LiveRep>({ reps, flyTo, onSel
     mapboxgl.accessToken = token;
     const map = new mapboxgl.Map({
       container,
-      style: 'mapbox://styles/mapbox/satellite-streets-v12', // keeps the satellite look
+      style: 'mapbox://styles/mapbox/light-v11', // plan clair neutre, comme le Trajet du calendrier
       center: [-73.5673, 45.5017],
       zoom: 11,
       attributionControl: false,
