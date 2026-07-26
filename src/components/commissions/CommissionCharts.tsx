@@ -61,7 +61,20 @@ export function AreaChart({
   const n = Math.max(series.length, 1);
   const x = (i: number) => (i / Math.max(n - 1, 1)) * W;
   const y = (v: number) => 8 + (1 - v / max) * (H - 8);
-  const toPath = (d: number[]) => d.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1)).join(' ');
+  // Courbe lissée (Catmull-Rom → Bézier) au lieu de segments en escalier.
+  const smooth = (d: number[]) => {
+    if (d.length < 2) return d.length ? `M ${x(0).toFixed(1)} ${y(d[0]).toFixed(1)}` : '';
+    const pts = d.map((v, i) => [x(i), y(v)] as const);
+    let p = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+      const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+      p += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+    }
+    return p;
+  };
+  const toPath = smooth;
   const line = toPath(series);
   const areaPath = `${line} L ${W} ${H} L 0 ${H} Z`;
   const gid = 'car' + n + (series[0] | 0);
@@ -76,8 +89,8 @@ export function AreaChart({
         <svg viewBox={`0 0 ${W} ${H + 2}`} width="100%" height={height + 10} preserveAspectRatio="none" style={{ overflow: 'visible' }}>
           <defs>
             <linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.12" />
-              <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--color-success)" stopOpacity="0.22" />
+              <stop offset="100%" stopColor="var(--color-success)" stopOpacity="0.02" />
             </linearGradient>
           </defs>
           <line x1="0" y1={y(max / 2).toFixed(1)} x2={W} y2={y(max / 2).toFixed(1)} stroke="var(--color-border-light)" />
@@ -85,8 +98,8 @@ export function AreaChart({
           {prevSeries && (
             <path d={toPath(prevSeries)} fill="none" stroke="var(--color-text-tertiary)" strokeWidth="1.6" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
           )}
-          <path d={line} fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-          <circle cx={ex.toFixed(1)} cy={ey.toFixed(1)} r="3.5" fill="var(--color-primary)" stroke="var(--color-surface-card)" strokeWidth="2" />
+          <path d={line} fill="none" stroke="var(--color-success)" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          <circle cx={ex.toFixed(1)} cy={ey.toFixed(1)} r="3.5" fill="var(--color-success)" stroke="var(--color-surface-card)" strokeWidth="2" />
         </svg>
         <div className="mt-1 flex justify-between text-[9.5px] text-text-tertiary">
           {xLabels.map((l, i) => <span key={i}>{l}</span>)}
@@ -129,8 +142,8 @@ export function RepLeaderboard({ reps, onSelect }: { reps: LeaderRep[]; onSelect
           <UnifiedAvatar id={r.userId} name={r.name} size={32} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[12.5px] font-semibold text-text-primary">{r.name}</span>
-            <span className="mt-1 block h-1.5 overflow-hidden rounded-pill bg-surface-tertiary">
-              <span className="block h-full rounded-pill bg-primary" style={{ width: `${(r.amount / max) * 100}%` }} />
+            <span className="mt-1.5 block h-1.5 overflow-hidden rounded-pill bg-surface-tertiary/60">
+              <span className="block h-full rounded-pill" style={{ width: `${(r.amount / max) * 100}%`, background: i === 0 ? 'var(--color-success)' : 'color-mix(in srgb, var(--color-success) 55%, var(--color-text-tertiary))' }} />
             </span>
           </span>
           <span className="shrink-0 text-right">

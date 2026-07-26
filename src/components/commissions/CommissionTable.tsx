@@ -1,15 +1,16 @@
 import { Link } from 'react-router-dom';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { Avatar } from '../d2d/avatar';
-import { getRepAvatar } from '../../lib/constants/avatars';
+import UnifiedAvatar from '../ui/UnifiedAvatar';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 import type { FsCommissionEntry } from '../../types';
 
+// Pastilles douces (soft) plutôt que fond plein criard, cohérent avec le reste.
 const statusStyles: Record<string, string> = {
-  pending:  'bg-warning text-white',
-  approved: 'bg-info text-white',
-  paid:     'bg-success text-white',
-  reversed: 'bg-error text-white',
+  pending:  'bg-warning/10 text-warning',
+  approved: 'bg-info/10 text-info',
+  paid:     'bg-success/10 text-success',
+  reversed: 'bg-error/10 text-error',
 };
 
 interface Props {
@@ -29,10 +30,6 @@ function fmtMoney(n: number) {
   return '$' + Number(n || 0).toLocaleString('en-US');
 }
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
 /** Read-only by default; renders admin actions only when `showActions` is true. */
 export default function CommissionTable({
   entries,
@@ -42,21 +39,30 @@ export default function CommissionTable({
   actionLoading,
   onApprove,
   onReverse,
-  emptyMessage = 'No commission entries found',
+  emptyMessage,
 }: Props) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString(fr ? 'fr-CA' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const statusLabel = (s: string) =>
+    fr
+      ? ({ pending: 'En attente', approved: 'Approuvé', paid: 'Versé', reversed: 'Reversé' }[s] ?? s)
+      : ({ pending: 'Pending', approved: 'Approved', paid: 'Paid', reversed: 'Reversed' }[s] ?? s);
+  const empty = emptyMessage ?? (fr ? 'Aucune entrée de commission' : 'No commission entries found');
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
           <tr className="border-b border-border-subtle">
-            <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">Deal</th>
+            <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{fr ? 'Vente' : 'Deal'}</th>
             {showRep && (
-              <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">Rep</th>
+              <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{fr ? 'Représentant' : 'Rep'}</th>
             )}
-            <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">Deal amount</th>
+            <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{fr ? 'Valeur vente' : 'Deal amount'}</th>
             <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">Commission</th>
-            <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">Status</th>
-            <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">Closed</th>
+            <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{fr ? 'Statut' : 'Status'}</th>
+            <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{fr ? 'Conclu le' : 'Closed'}</th>
           </tr>
         </thead>
         <tbody>
@@ -71,7 +77,7 @@ export default function CommissionTable({
                 {showRep && (
                   <td className="px-5 py-2.5">
                     <Link to={`/reps/${e.user_id}`} className="flex items-center gap-2 hover:underline">
-                      <Avatar name={repName} src={getRepAvatar(repName)} size="sm" className="!h-5 !w-5 !text-[8px]" />
+                      <UnifiedAvatar id={e.user_id} name={repName} size={20} />
                       <span className="text-sm text-text-secondary">{repName}</span>
                     </Link>
                   </td>
@@ -84,17 +90,17 @@ export default function CommissionTable({
                 <td className="px-5 py-2.5">
                   <div className="flex items-center gap-1.5">
                     <span className={cn(
-                      'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize',
+                      'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold',
                       statusStyles[e.status] ?? 'bg-surface-elevated text-text-muted'
                     )}>
-                      {e.status}
+                      {statusLabel(e.status)}
                     </span>
                     {showActions && e.status === 'pending' && onApprove && (
                       <button
                         onClick={() => onApprove(e.id)}
                         disabled={actionLoading === e.id}
                         className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium text-success hover:bg-success/10 transition-colors disabled:opacity-50"
-                        title="Approve"
+                        title={fr ? 'Approuver' : 'Approve'}
                       >
                         {actionLoading === e.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
                       </button>
@@ -104,7 +110,7 @@ export default function CommissionTable({
                         onClick={() => onReverse(e.id)}
                         disabled={actionLoading === e.id}
                         className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium text-error hover:bg-error/10 transition-colors disabled:opacity-50"
-                        title="Reverse"
+                        title={fr ? 'Annuler' : 'Reverse'}
                       >
                         <XCircle className="h-3 w-3" />
                       </button>
@@ -118,7 +124,7 @@ export default function CommissionTable({
           {entries.length === 0 && (
             <tr>
               <td colSpan={showRep ? 6 : 5} className="px-5 py-8 text-center text-sm text-text-muted">
-                {emptyMessage}
+                {empty}
               </td>
             </tr>
           )}
