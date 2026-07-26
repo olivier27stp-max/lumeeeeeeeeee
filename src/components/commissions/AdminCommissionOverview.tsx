@@ -193,7 +193,7 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
                 ].map((r) => (
                   <div key={r.l} className="flex items-center justify-between border-b border-border-light py-2.5 last:border-b-0">
                     <span className="text-[12px] text-text-secondary">{r.l}</span>
-                    <span className={'text-[14px] font-bold tabular-nums ' + (r.money ? 'text-success' : 'text-text-primary')}>{r.v}</span>
+                    <span className="text-[14px] font-bold tabular-nums text-text-primary">{r.v}</span>
                   </div>
                 ))}
               </div>

@@ -32,7 +32,7 @@ export function CommissionHero({
         {note && <span className="text-[11px] text-text-tertiary">{note}</span>}
       </div>
       <div className="px-5 pb-5">
-        <div className="text-[34px] font-extrabold leading-none tracking-tight text-success tabular-nums">{fmtMoney(value)}</div>
+        <div className="text-[34px] font-extrabold leading-none tracking-tight text-text-primary tabular-nums">{fmtMoney(value)}</div>
         {deltaPct != null && (
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
             <span className={'inline-flex items-center gap-1 rounded-pill px-2 py-0.5 font-bold tabular-nums ' + (up ? 'bg-success/10 text-success' : 'bg-error/10 text-error')}>
@@ -89,8 +89,8 @@ export function AreaChart({
         <svg viewBox={`0 0 ${W} ${H + 2}`} width="100%" height={height + 10} preserveAspectRatio="none" style={{ overflow: 'visible' }}>
           <defs>
             <linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-success)" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="var(--color-success)" stopOpacity="0.02" />
+              <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.14" />
+              <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.01" />
             </linearGradient>
           </defs>
           <line x1="0" y1={y(max / 2).toFixed(1)} x2={W} y2={y(max / 2).toFixed(1)} stroke="var(--color-border-light)" />
@@ -98,8 +98,8 @@ export function AreaChart({
           {prevSeries && (
             <path d={toPath(prevSeries)} fill="none" stroke="var(--color-text-tertiary)" strokeWidth="1.6" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
           )}
-          <path d={line} fill="none" stroke="var(--color-success)" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-          <circle cx={ex.toFixed(1)} cy={ey.toFixed(1)} r="3.5" fill="var(--color-success)" stroke="var(--color-surface-card)" strokeWidth="2" />
+          <path d={line} fill="none" stroke="var(--color-primary)" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          <circle cx={ex.toFixed(1)} cy={ey.toFixed(1)} r="3.5" fill="var(--color-primary)" stroke="var(--color-surface-card)" strokeWidth="2" />
         </svg>
         <div className="mt-1 flex justify-between text-[9.5px] text-text-tertiary">
           {xLabels.map((l, i) => <span key={i}>{l}</span>)}
@@ -143,11 +143,11 @@ export function RepLeaderboard({ reps, onSelect }: { reps: LeaderRep[]; onSelect
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[12.5px] font-semibold text-text-primary">{r.name}</span>
             <span className="mt-1.5 block h-1.5 overflow-hidden rounded-pill bg-surface-tertiary/60">
-              <span className="block h-full rounded-pill" style={{ width: `${(r.amount / max) * 100}%`, background: i === 0 ? 'var(--color-success)' : 'color-mix(in srgb, var(--color-success) 55%, var(--color-text-tertiary))' }} />
+              <span className="block h-full rounded-pill" style={{ width: `${(r.amount / max) * 100}%`, background: i === 0 ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }} />
             </span>
           </span>
           <span className="shrink-0 text-right">
-            <span className="block text-[13px] font-bold text-success tabular-nums">{fmtMoney(r.amount)}</span>
+            <span className="block text-[13px] font-bold text-text-primary tabular-nums">{fmtMoney(r.amount)}</span>
             <span className="block text-[10px] text-text-tertiary">{r.deals} {language === 'fr' ? 'ventes' : 'deals'}</span>
           </span>
         </button>
@@ -209,7 +209,7 @@ export function KpiCard({ label, value, money, trend, note }: {
   return (
     <div className="rounded-xl border border-border bg-surface-card p-4 shadow-card">
       <div className="text-[10.5px] font-semibold uppercase tracking-wider text-text-tertiary">{label}</div>
-      <div className={'mt-1.5 text-[20px] font-bold tracking-tight tabular-nums ' + (money ? 'text-success' : 'text-text-primary')}>{value}</div>
+      <div className="mt-1.5 text-[20px] font-bold tracking-tight tabular-nums text-text-primary">{value}</div>
       <div className="mt-2 flex items-center justify-between">
         {trend && <span className={'text-[10.5px] font-bold tabular-nums ' + trendCls}>{arrow} {trend.text}</span>}
         {note && <span className="text-[10.5px] text-text-tertiary">{note}</span>}
