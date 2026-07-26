@@ -431,8 +431,10 @@ function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventCl
   events: ScheduleEventRecord[]; overlaps: Record<string, number>; tcMap: Map<string, string>;
   teams: TeamRecord[]; selectedTeamIds: string[]; onEventClick: (jobId: string) => void; onSlotClick: (s: Date, e: Date) => void;
 }) {
-  // The route panel is only meaningful for a single team (one crew = one trip).
-  const singleTeamRoute = selectedTeamIds.length === 1;
+  // Show the route panel whenever teams are in play. The panel groups by team
+  // (one coloured trip per crew on a shared map) and no-ops if nothing is
+  // geocoded, so it's safe to always render it.
+  const showRoute = selectedTeamIds.length >= 1;
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
   const sorted = useMemo(() => [...events].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()), [events]);
@@ -468,9 +470,10 @@ function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventCl
               </button>
             </div>
             <div className="space-y-2 px-6 pb-4 lg:px-8">
-              {singleTeamRoute && (() => {
+              {showRoute && (() => {
                 const routeJobs: RouteJob[] = dayEvs.map((ev) => {
-                  const tid = ev.team_id || ev.job?.team_id || null;
+                  const tid = ev.team_id || ev.job?.team_id || '';
+                  const team = tid ? teams.find((tm) => tm.id === tid) : null;
                   return {
                     id: ev.id,
                     jobId: ev.job_id || null,
@@ -479,6 +482,8 @@ function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventCl
                     lat: ev.job?.latitude ?? null,
                     lng: ev.job?.longitude ?? null,
                     startAt: ev.start_at,
+                    teamId: tid,
+                    teamName: team?.name || (isFr ? 'Sans équipe' : 'No team'),
                     teamColor: (tid ? tcMap.get(tid) : null) || FALLBACK_TEAM_COLOR,
                   };
                 });
