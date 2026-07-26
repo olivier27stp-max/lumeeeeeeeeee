@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Route, Sparkles, MapPin, Car, Clock, Navigation } from 'lucide-react';
+import { Route, Sparkles, MapPin, Car, Clock, Navigation, ExternalLink, GripVertical, CheckCircle2 } from 'lucide-react';
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useTranslation } from '../../i18n';
 import { formatCurrency } from '../../lib/utils';
 import UnifiedAvatar from '../ui/UnifiedAvatar';
 import {
-  getOptimizedRoute, formatDistance, formatDuration,
+  getRoute, getOptimizedRoute, formatDistance, formatDuration,
   type RouteStop, type RouteResult,
 } from '../../lib/routeApi';
 
@@ -14,6 +21,20 @@ import {
 function dicebearUrl(seed: string) {
   return `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(seed || 'x')}&size=80&backgroundColor=f5f5f5&radius=50`;
 }
+
+// Google Maps directions URL with the whole trip (origin → waypoints → dest).
+// Already used elsewhere in the app (EntityHubHeader / ClientDetails).
+function googleMapsTripUrl(stops: { lat: number; lng: number }[]): string | null {
+  if (stops.length < 1) return null;
+  const pt = (s: { lat: number; lng: number }) => `${s.lat},${s.lng}`;
+  const origin = pt(stops[0]);
+  const destination = pt(stops[stops.length - 1]);
+  const waypoints = stops.slice(1, -1).map(pt).join('|');
+  const base = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
+  return waypoints ? `${base}&waypoints=${encodeURIComponent(waypoints)}` : base;
+}
+
+const DONE_STATUSES = new Set(['completed', 'done', 'paid', 'closed', 'invoiced']);
 
 // One job the route panel can plot.
 export interface RouteJob {
@@ -30,6 +51,7 @@ export interface RouteJob {
   clientId: string | null;   // avatar seed (same DiceBear as the rest of the CRM)
   clientName: string;
   revenueCents: number;      // job total, for "who made cash"
+  status: string;            // normalized job status (completed / in_progress / ...)
 }
 
 interface Props {
@@ -48,16 +70,26 @@ interface TeamRoute {
   etas: (Date | null)[];   // arrival estimate per stop, aligned with jobs
   ungeocoded: RouteJob[];
   revenueCents: number;    // sum of the trip's job totals
+  done: number;            // completed stops
 }
 
 /**
  * Route view for the Agenda: a dominant map showing every selected team's trip
  * (one colour per team) beside a side list grouped by team. Trips open already
- * optimized, with driving time between stops and a cascading arrival estimate.
+ * optimized; each stop shows driving time + a cascading ETA. Stops can be
+ * reordered by hand (drag), clicking a stop focuses its map pin, per-team
+ * progress + lateness is surfaced, and each trip opens in Google Maps.
  */
 export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
   const { language } = useTranslation();
   const fr = language === 'fr';
+
+  // Manual per-team ordering (job-id list) overrides the optimized order once
+  // the user drags. Cleared for a team if its job set changes.
+  const [manualOrder, setManualOrder] = useState<Record<string, string[]>>({});
+  // Stop currently focused (shared between the list and the map).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const flyToRef = useRef<((lng: number, lat: number) => void) | null>(null);
 
   // Group jobs by team (stable order: first appearance).
   const teams = useMemo(() => {
@@ -70,61 +102,66 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
     }
     return order.map((key) => {
       const list = byTeam.get(key)!;
-      // chronological within a team, so the "by time" baseline is meaningful
       list.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
       return { key, name: list[0].teamName, color: list[0].teamColor, jobs: list };
     });
   }, [jobs]);
 
   const [routes, setRoutes] = useState<TeamRoute[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Stable key: recompute only when the actual jobs/teams change.
   const jobsKey = useMemo(
     () => teams.map((t) => `${t.key}:${t.jobs.map((j) => j.id).join('-')}`).join('|'),
     [teams],
   );
+  const manualKey = useMemo(() => JSON.stringify(manualOrder), [manualOrder]);
 
-  // Trips are ALWAYS optimized — the shortest order is computed automatically,
-  // no toggle. (Display only: the calendar's scheduled times aren't rewritten.)
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
     (async () => {
       const computed = await Promise.all(teams.map(async (t): Promise<TeamRoute> => {
         const geocoded = t.jobs.filter((j) => j.lat != null && j.lng != null);
         const ungeocoded = t.jobs.filter((j) => j.lat == null || j.lng == null);
-        const stops: RouteStop[] = geocoded.map((j) => ({ id: j.id, lat: j.lat!, lng: j.lng! }));
+        const byId = new Map(geocoded.map((j) => [j.id, j]));
+        const manual = manualOrder[t.key];
+        const manualValid = manual && manual.length === geocoded.length && manual.every((id) => byId.has(id));
 
         let route: RouteResult | null = null;
-        if (stops.length >= 2) route = await getOptimizedRoute(stops);
+        let orderedJobs: RouteJob[] = geocoded;
 
-        // Order jobs to match the route.
-        const byId = new Map(geocoded.map((j) => [j.id, j]));
-        const orderedJobs = route
-          ? route.order.map((id) => byId.get(id)).filter(Boolean) as RouteJob[]
-          : geocoded;
+        if (manualValid) {
+          // Respect the hand-picked order; still fetch real geometry/legs for it.
+          orderedJobs = manual!.map((id) => byId.get(id)!).filter(Boolean);
+          const stops: RouteStop[] = orderedJobs.map((j) => ({ id: j.id, lat: j.lat!, lng: j.lng! }));
+          if (stops.length >= 2) route = await getRoute(stops);
+        } else if (geocoded.length >= 2) {
+          const stops: RouteStop[] = geocoded.map((j) => ({ id: j.id, lat: j.lat!, lng: j.lng! }));
+          route = await getOptimizedRoute(stops);
+          orderedJobs = route.order.map((id) => byId.get(id)).filter(Boolean) as RouteJob[];
+        }
 
-        // Cascading ETA: start from the first stop's planned time, then add each
-        // leg's driving duration + a fixed on-site allowance.
+        // Cascading ETA from the first stop's planned time + drive + on-site time.
         const etas: (Date | null)[] = [];
         if (orderedJobs.length) {
           let cursor = new Date(orderedJobs[0].startAt);
           etas.push(cursor);
           for (let i = 1; i < orderedJobs.length; i++) {
             const driveS = route?.legs[i]?.durationS ?? 0;
-            cursor = new Date(cursor.getTime() + (driveS + 30 * 60) * 1000); // +30 min on site
+            cursor = new Date(cursor.getTime() + (driveS + 30 * 60) * 1000);
             etas.push(cursor);
           }
         }
 
         const revenueCents = t.jobs.reduce((sum, j) => sum + (j.revenueCents || 0), 0);
-        return { teamId: t.key, teamName: t.name, color: t.color, jobs: orderedJobs, route, etas, ungeocoded, revenueCents };
+        const done = t.jobs.filter((j) => DONE_STATUSES.has(j.status)).length;
+        return { teamId: t.key, teamName: t.name, color: t.color, jobs: orderedJobs, route, etas, ungeocoded, revenueCents, done };
       }));
-      if (!cancelled) setRoutes(computed);
+      if (!cancelled) { setRoutes(computed); setLoading(false); }
     })();
     return () => { cancelled = true; };
-  }, [jobsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [jobsKey, manualKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Day totals across all teams.
   const totals = useMemo(() => {
     let dist = 0, dur = 0, trips = 0, revenueCents = 0;
     for (const r of routes) {
@@ -134,8 +171,26 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
     return { dist, dur, trips, revenueCents };
   }, [routes]);
 
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  function handleDragEnd(teamId: string, currentIds: string[]) {
+    return (e: DragEndEvent) => {
+      const { active, over } = e;
+      if (!over || active.id === over.id) return;
+      const from = currentIds.indexOf(String(active.id));
+      const to = currentIds.indexOf(String(over.id));
+      if (from < 0 || to < 0) return;
+      setManualOrder((prev) => ({ ...prev, [teamId]: arrayMove(currentIds, from, to) }));
+    };
+  }
+
+  function focusStop(j: RouteJob) {
+    setSelectedId(j.id);
+    if (j.lat != null && j.lng != null) flyToRef.current?.(j.lng, j.lat);
+  }
+
   const anyRoutable = routes.some((r) => r.jobs.length >= 2);
-  if (!anyRoutable && !routes.some((r) => r.ungeocoded.length)) return null;
+  if (!loading && !anyRoutable && !routes.some((r) => r.ungeocoded.length)) return null;
 
   return (
     <div className="mb-4 overflow-hidden rounded-2xl border border-border bg-surface-card shadow-card">
@@ -151,7 +206,6 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
           </span>
         </div>
 
-        {/* team legend */}
         <div className="flex flex-wrap items-center gap-1.5">
           {routes.filter((r) => r.jobs.length).map((r) => (
             <span key={r.teamId} className="inline-flex items-center gap-1.5 rounded-pill border border-border px-2.5 py-1 text-[11px] font-semibold text-text-secondary">
@@ -171,108 +225,205 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
         </div>
       </div>
 
-      {/* Split: map + side list — takes most of the viewport height so the map
-          dominates instead of sitting in an empty page. */}
+      {/* Split: map + side list */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.85fr_1fr]">
         <div className="relative min-h-[320px] border-b border-border lg:min-h-[calc(100vh-16rem)] lg:border-b-0 lg:border-r">
-          <RouteMap routes={routes} />
+          <RouteMap routes={routes} selectedId={selectedId} onSelect={setSelectedId} onJobClick={onJobClick} flyToRef={flyToRef} />
+          {loading && (
+            <div className="pointer-events-none absolute left-3 top-3 rounded-lg border border-border bg-surface-card/90 px-2.5 py-1 text-[11px] font-medium text-text-secondary shadow-sm backdrop-blur">
+              {fr ? 'Calcul du trajet…' : 'Computing route…'}
+            </div>
+          )}
         </div>
 
         <div className="overflow-y-auto lg:max-h-[calc(100vh-16rem)]">
-          {routes.map((r, ti) => (
-            <div key={r.teamId} className={ti > 0 ? 'border-t-[6px] border-surface-secondary' : ''}>
-              {/* team header — name + revenue (who made cash) */}
-              <div className="sticky top-0 z-[1] bg-surface-card px-4 pb-2 pt-3">
-                <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: r.color }} />
-                  <span className="text-[12.5px] font-bold text-text-primary">{r.teamName}</span>
-                  {r.revenueCents > 0 && (
-                    <span className="ml-auto text-[12px] font-extrabold text-success tabular-nums">
-                      {formatCurrency(r.revenueCents / 100)}
-                    </span>
-                  )}
-                </div>
-                {r.route && r.jobs.length >= 2 && (
-                  <div className="mt-1 flex items-center gap-2.5 text-[10.5px] text-text-tertiary tabular-nums">
-                    <span>{r.jobs.length} {fr ? 'arrêts' : 'stops'}</span>
-                    <span className="flex items-center gap-1"><Navigation size={10} />{formatDistance(r.route.totalDistanceM, fr)}</span>
-                    <span className="flex items-center gap-1"><Clock size={10} />{formatDuration(r.route.totalDurationS, fr)}</span>
+          {routes.map((r, ti) => {
+            const ids = r.jobs.map((j) => j.id);
+            const late = r.jobs.reduce((n, j, i) => {
+              const eta = r.etas[i];
+              return n + (eta && eta.getTime() - new Date(j.startAt).getTime() > 5 * 60_000 ? 1 : 0);
+            }, 0);
+            const mapsUrl = googleMapsTripUrl(r.jobs.filter((j) => j.lat != null && j.lng != null).map((j) => ({ lat: j.lat!, lng: j.lng! })));
+            return (
+              <div key={r.teamId} className={ti > 0 ? 'border-t-[6px] border-surface-secondary' : ''}>
+                {/* team header */}
+                <div className="sticky top-0 z-[1] bg-surface-card px-4 pb-2.5 pt-3">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: r.color }} />
+                    <span className="text-[12.5px] font-bold text-text-primary">{r.teamName}</span>
+                    {r.revenueCents > 0 && (
+                      <span className="ml-auto text-[12px] font-extrabold text-success tabular-nums">
+                        {formatCurrency(r.revenueCents / 100)}
+                      </span>
+                    )}
                   </div>
+
+                  {/* progress bar (done vs total) */}
+                  {r.jobs.length > 0 && (
+                    <div className="mt-2">
+                      <div className="mb-1 flex items-center justify-between text-[10px] text-text-tertiary tabular-nums">
+                        <span className="flex items-center gap-1">
+                          <CheckCircle2 size={10} className={r.done > 0 ? 'text-success' : 'opacity-50'} />
+                          {r.done}/{r.jobs.length} {fr ? 'faits' : 'done'}
+                        </span>
+                        {late > 0 && (
+                          <span className="font-semibold text-warning">
+                            {late} {fr ? 'en retard' : 'late'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="h-1 overflow-hidden rounded-full bg-surface-tertiary">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${(r.done / r.jobs.length) * 100}%`, backgroundColor: r.color }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* trip meta + open in maps */}
+                  <div className="mt-2 flex items-center gap-2.5 text-[10.5px] text-text-tertiary tabular-nums">
+                    {r.route && r.jobs.length >= 2 && (
+                      <>
+                        <span>{r.jobs.length} {fr ? 'arrêts' : 'stops'}</span>
+                        <span className="flex items-center gap-1"><Navigation size={10} />{formatDistance(r.route.totalDistanceM, fr)}</span>
+                        <span className="flex items-center gap-1"><Clock size={10} />{formatDuration(r.route.totalDurationS, fr)}</span>
+                      </>
+                    )}
+                    {mapsUrl && (
+                      <a
+                        href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10.5px] font-semibold text-text-secondary transition-colors hover:bg-surface-secondary"
+                      >
+                        <ExternalLink size={11} />{fr ? 'Ouvrir dans Maps' : 'Open in Maps'}
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* stops — drag to reorder */}
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd(r.teamId, ids)}>
+                  <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+                    <ol className="px-1.5 pb-2">
+                      {r.jobs.map((j, i) => (
+                        <StopRow
+                          key={j.id}
+                          job={j}
+                          index={i}
+                          color={r.color}
+                          leg={i > 0 ? r.route?.legs[i] : undefined}
+                          eta={r.etas[i]}
+                          selected={selectedId === j.id}
+                          done={DONE_STATUSES.has(j.status)}
+                          fr={fr}
+                          onFocus={() => focusStop(j)}
+                          onOpen={() => j.jobId && onJobClick?.(j.jobId)}
+                        />
+                      ))}
+                    </ol>
+                  </SortableContext>
+                </DndContext>
+
+                {r.ungeocoded.length > 0 && (
+                  <p className="mx-4 mb-3 border-t border-border-light pt-2 text-[10.5px] text-text-tertiary">
+                    {fr
+                      ? `${r.ungeocoded.length} job(s) non géolocalisé(s) — exclus du trajet`
+                      : `${r.ungeocoded.length} job(s) not geolocated — excluded from the route`}
+                  </p>
                 )}
               </div>
-
-              {/* stops */}
-              <ol className="px-1.5 pb-2">
-                {r.jobs.map((j, i) => {
-                  const leg = r.route?.legs[i];
-                  const eta = r.etas[i];
-                  const planned = new Date(j.startAt);
-                  const moved = eta && Math.abs(eta.getTime() - planned.getTime()) > 5 * 60_000;
-                  return (
-                    <li key={j.id}>
-                      {i > 0 && leg && (leg.distanceM > 0 || leg.durationS > 0) && (
-                        <div className="ml-[38px] flex items-center gap-1.5 py-1 text-[10.5px] text-text-tertiary tabular-nums">
-                          <span className="h-4 w-px bg-border" />
-                          <Car size={11} className="opacity-60" />
-                          <span>
-                            {formatDistance(leg.distanceM, fr)}
-                            {leg.durationS > 0 && <> · {formatDuration(leg.durationS, fr)}</>}
-                          </span>
-                        </div>
-                      )}
-                      <button
-                        onClick={() => j.jobId && onJobClick?.(j.jobId)}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-surface-secondary"
-                      >
-                        {/* step number — OUTSIDE the avatar bubble */}
-                        <span className="w-4 shrink-0 text-center text-[12px] font-bold text-text-secondary tabular-nums">{i + 1}</span>
-                        {/* client DiceBear — same avatar system as the rest of the CRM */}
-                        <span className="shrink-0 rounded-full ring-2" style={{ ['--tw-ring-color' as any]: `${r.color}55` }}>
-                          <UnifiedAvatar id={j.clientId || j.id} name={j.clientName || j.title} size={32} />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[12.5px] font-semibold text-text-primary">
-                            {j.clientName ? `${j.clientName} · ${j.title}` : j.title}
-                          </span>
-                          {j.address && (
-                            <span className="flex items-center gap-1 truncate text-[11px] text-text-tertiary">
-                              <MapPin size={10} className="shrink-0" />{j.address}
-                            </span>
-                          )}
-                        </span>
-                        <span className="flex shrink-0 items-center gap-2.5">
-                          {j.revenueCents > 0 && (
-                            <span className="text-[11.5px] font-bold text-success tabular-nums">{formatCurrency(j.revenueCents / 100)}</span>
-                          )}
-                          <span className="text-right">
-                            <span className="block text-[12px] font-bold text-text-primary tabular-nums">
-                              {(eta ?? planned).toLocaleTimeString(fr ? 'fr-CA' : 'en-US', { hour: 'numeric', minute: '2-digit' })}
-                            </span>
-                            {moved && (
-                              <span className="block text-[9.5px] text-text-tertiary tabular-nums">
-                                {fr ? 'prévu' : 'planned'} {planned.toLocaleTimeString(fr ? 'fr-CA' : 'en-US', { hour: 'numeric', minute: '2-digit' })}
-                              </span>
-                            )}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-
-              {r.ungeocoded.length > 0 && (
-                <p className="mx-4 mb-3 border-t border-border-light pt-2 text-[10.5px] text-text-tertiary">
-                  {fr
-                    ? `${r.ungeocoded.length} job(s) non géolocalisé(s) — exclus du trajet`
-                    : `${r.ungeocoded.length} job(s) not geolocated — excluded from the route`}
-                </p>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── One draggable / focusable stop row ────────────────────────────────── */
+
+function StopRow({
+  job, index, color, leg, eta, selected, done, fr, onFocus, onOpen,
+}: {
+  job: RouteJob; index: number; color: string;
+  leg: { distanceM: number; durationS: number } | undefined;
+  eta: Date | null; selected: boolean; done: boolean; fr: boolean;
+  onFocus: () => void; onOpen: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: job.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
+  const planned = new Date(job.startAt);
+  const moved = eta && Math.abs(eta.getTime() - planned.getTime()) > 5 * 60_000;
+  const isLate = eta && eta.getTime() - planned.getTime() > 5 * 60_000;
+
+  return (
+    <li ref={setNodeRef} style={style}>
+      {leg && (leg.distanceM > 0 || leg.durationS > 0) && (
+        <div className="ml-[46px] flex items-center gap-1.5 py-1 text-[10.5px] text-text-tertiary tabular-nums">
+          <span className="h-4 w-px bg-border" />
+          <Car size={11} className="opacity-60" />
+          <span>
+            {formatDistance(leg.distanceM, fr)}
+            {leg.durationS > 0 && <> · {formatDuration(leg.durationS, fr)}</>}
+          </span>
+        </div>
+      )}
+      <div
+        onClick={onFocus}
+        className={
+          'flex w-full cursor-pointer items-center gap-2 rounded-xl px-1.5 py-2 transition-colors ' +
+          (selected ? 'bg-surface-secondary ring-1 ring-inset' : 'hover:bg-surface-secondary')
+        }
+        style={selected ? { ['--tw-ring-color' as any]: `${color}` } : undefined}
+      >
+        {/* drag handle */}
+        <span {...attributes} {...listeners} onClick={(e) => e.stopPropagation()}
+          className="shrink-0 cursor-grab touch-none text-text-tertiary/50 hover:text-text-secondary active:cursor-grabbing">
+          <GripVertical size={14} />
+        </span>
+        {/* step number — outside the bubble */}
+        <span className="w-4 shrink-0 text-center text-[12px] font-bold text-text-secondary tabular-nums">{index + 1}</span>
+        {/* client DiceBear */}
+        <span className="relative shrink-0 rounded-full ring-2" style={{ ['--tw-ring-color' as any]: `${color}55` }}>
+          <UnifiedAvatar id={job.clientId || job.id} name={job.clientName || job.title} size={32} />
+          {done && (
+            <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-surface-card">
+              <CheckCircle2 size={13} className="text-success" />
+            </span>
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className={'block truncate text-[12.5px] font-semibold ' + (done ? 'text-text-tertiary line-through' : 'text-text-primary')}>
+            {job.clientName ? `${job.clientName} · ${job.title}` : job.title}
+          </span>
+          {job.address && (
+            <span className="flex items-center gap-1 truncate text-[11px] text-text-tertiary">
+              <MapPin size={10} className="shrink-0" />{job.address}
+            </span>
+          )}
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          {job.revenueCents > 0 && (
+            <span className="text-[11.5px] font-bold text-success tabular-nums">{formatCurrency(job.revenueCents / 100)}</span>
+          )}
+          <span className="text-right">
+            <span className={'block text-[12px] font-bold tabular-nums ' + (isLate ? 'text-warning' : 'text-text-primary')}>
+              {(eta ?? planned).toLocaleTimeString(fr ? 'fr-CA' : 'en-US', { hour: 'numeric', minute: '2-digit' })}
+            </span>
+            {moved && (
+              <span className="block text-[9.5px] text-text-tertiary tabular-nums">
+                {fr ? 'prévu' : 'planned'} {planned.toLocaleTimeString(fr ? 'fr-CA' : 'en-US', { hour: 'numeric', minute: '2-digit' })}
+              </span>
+            )}
+          </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onOpen(); }}
+            className="shrink-0 rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-secondary"
+            title={fr ? 'Ouvrir la job' : 'Open job'}
+          >
+            <ExternalLink size={13} />
+          </button>
+        </span>
+      </div>
+    </li>
   );
 }
 
@@ -287,11 +438,23 @@ function Totals({ value, label, accent }: { value: string; label: string; accent
 
 /* ── Map: one colored trip per team ────────────────────────────────────── */
 
-function RouteMap({ routes }: { routes: TeamRoute[] }) {
+function RouteMap({
+  routes, selectedId, onSelect, onJobClick, flyToRef,
+}: {
+  routes: TeamRoute[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  onJobClick?: (jobId: string) => void;
+  flyToRef: React.MutableRefObject<((lng: number, lat: number) => void) | null>;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const markersRef = useRef<Map<string, { marker: mapboxgl.Marker; el: HTMLDivElement }>>(new Map());
   const [ready, setReady] = useState(false);
+
+  // keep latest callbacks without re-registering
+  const onSelectRef = useRef(onSelect); onSelectRef.current = onSelect;
+  const onJobClickRef = useRef(onJobClick); onJobClickRef.current = onJobClick;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -301,25 +464,25 @@ function RouteMap({ routes }: { routes: TeamRoute[] }) {
     mapboxgl.accessToken = tk;
     const map = new mapboxgl.Map({
       container,
-      style: 'mapbox://styles/mapbox/light-v11', // neutral, matches Lume's greys
+      style: 'mapbox://styles/mapbox/light-v11',
       center: [-72.5485, 46.343],
       zoom: 10,
       attributionControl: false,
     });
     mapRef.current = map;
     map.on('load', () => { map.resize(); setReady(true); });
-    // Keep the canvas in sync when the container grows (viewport-height layout).
+    flyToRef.current = (lng, lat) => map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 14), duration: 500 });
     const ro = new ResizeObserver(() => map.resize());
     ro.observe(container);
-    return () => { ro.disconnect(); map.remove(); mapRef.current = null; setReady(false); };
-  }, []);
+    return () => { ro.disconnect(); map.remove(); mapRef.current = null; flyToRef.current = null; setReady(false); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
 
-    markersRef.current.forEach((m) => m.remove());
-    markersRef.current = [];
+    markersRef.current.forEach(({ marker }) => marker.remove());
+    markersRef.current = new Map();
 
     const bounds = new mapboxgl.LngLatBounds();
     let hasPoint = false;
@@ -329,7 +492,6 @@ function RouteMap({ routes }: { routes: TeamRoute[] }) {
       const srcId = `route-src-${ri}`;
       const lineId = `route-line-${ri}`;
 
-      // Route line (real geometry or straight fallback)
       const coords: [number, number][] =
         r.route && r.route.geometry.length >= 2
           ? r.route.geometry
@@ -352,21 +514,19 @@ function RouteMap({ routes }: { routes: TeamRoute[] }) {
         });
       }
 
-      // Pins: step number OUTSIDE the bubble, client DiceBear INSIDE the drop.
       pts.forEach((j, i) => {
         const el = document.createElement('div');
-        el.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
-        // step number chip (above)
+        el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;';
         const idx = document.createElement('div');
         idx.textContent = String(i + 1);
         idx.style.cssText =
           `font:800 10px Inter,system-ui,sans-serif;color:#171717;background:#fff;border:1px solid #e5e5e5;` +
           `border-radius:999px;padding:0 5px;line-height:15px;margin-bottom:-4px;z-index:2;box-shadow:0 1px 3px rgba(0,0,0,.15);`;
-        // teardrop with the client's DiceBear avatar
         const drop = document.createElement('div');
         drop.style.cssText =
           `width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${r.color};` +
-          `border:2.5px solid #fff;box-shadow:0 2px 7px rgba(0,0,0,.32);overflow:hidden;display:flex;align-items:center;justify-content:center;`;
+          `border:2.5px solid #fff;box-shadow:0 2px 7px rgba(0,0,0,.32);overflow:hidden;display:flex;align-items:center;justify-content:center;` +
+          `transition:transform .15s;`;
         const img = document.createElement('img');
         img.src = dicebearUrl(j.clientId || j.id);
         img.alt = '';
@@ -375,20 +535,20 @@ function RouteMap({ routes }: { routes: TeamRoute[] }) {
         drop.appendChild(img);
         el.appendChild(idx);
         el.appendChild(drop);
+        el.addEventListener('click', (e) => { e.stopPropagation(); onSelectRef.current(j.id); });
+        el.addEventListener('dblclick', (e) => { e.stopPropagation(); if (j.jobId) onJobClickRef.current?.(j.jobId); });
         const m = new mapboxgl.Marker({ element: el, anchor: 'bottom' }).setLngLat([j.lng!, j.lat!]).addTo(map);
-        markersRef.current.push(m);
+        markersRef.current.set(j.id, { marker: m, el });
         bounds.extend([j.lng!, j.lat!]);
         hasPoint = true;
       });
 
-      // Remove stale sources/layers for teams that no longer have a line
       if (coords.length < 2) {
         if (map.getLayer(lineId)) map.removeLayer(lineId);
         if (map.getSource(srcId)) map.removeSource(srcId);
       }
     });
 
-    // Clean up orphaned team layers beyond current count
     for (let ri = routes.length; ri < routes.length + 8; ri++) {
       const lineId = `route-line-${ri}`, srcId = `route-src-${ri}`;
       if (map.getLayer(lineId)) map.removeLayer(lineId);
@@ -397,6 +557,15 @@ function RouteMap({ routes }: { routes: TeamRoute[] }) {
 
     if (hasPoint) map.fitBounds(bounds, { padding: 44, maxZoom: 15, duration: 350 });
   }, [routes, ready]);
+
+  // Highlight the selected pin (scale it up).
+  useEffect(() => {
+    markersRef.current.forEach(({ el }, id) => {
+      const drop = el.lastChild as HTMLElement | null;
+      if (drop) drop.style.transform = id === selectedId ? 'rotate(-45deg) scale(1.28)' : 'rotate(-45deg)';
+      el.style.zIndex = id === selectedId ? '5' : '';
+    });
+  }, [selectedId, routes]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

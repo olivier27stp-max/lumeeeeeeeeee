@@ -488,6 +488,7 @@ function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventCl
                     clientId: ev.job?.client_id ?? null,
                     clientName: ev.job?.client_name || '',
                     revenueCents: ev.job?.total_cents ?? 0,
+                    status: ns(ev.job?.status || ev.status || ''),
                   };
                 });
                 return <AgendaRoutePanel jobs={routeJobs} onJobClick={onEventClick} />;
