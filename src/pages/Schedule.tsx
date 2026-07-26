@@ -485,6 +485,9 @@ function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventCl
                     teamId: tid,
                     teamName: team?.name || (isFr ? 'Sans équipe' : 'No team'),
                     teamColor: (tid ? tcMap.get(tid) : null) || FALLBACK_TEAM_COLOR,
+                    clientId: ev.job?.client_id ?? null,
+                    clientName: ev.job?.client_name || '',
+                    revenueCents: ev.job?.total_cents ?? 0,
                   };
                 });
                 return <AgendaRoutePanel jobs={routeJobs} onJobClick={onEventClick} />;

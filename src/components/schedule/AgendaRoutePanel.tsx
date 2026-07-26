@@ -3,10 +3,17 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Route, Sparkles, MapPin, Car, Clock, Navigation } from 'lucide-react';
 import { useTranslation } from '../../i18n';
+import { formatCurrency } from '../../lib/utils';
+import UnifiedAvatar from '../ui/UnifiedAvatar';
 import {
-  getRoute, getOptimizedRoute, formatDistance, formatDuration,
+  getOptimizedRoute, formatDistance, formatDuration,
   type RouteStop, type RouteResult,
 } from '../../lib/routeApi';
+
+// Same DiceBear endpoint/style as <UnifiedAvatar> so map pins match the CRM.
+function dicebearUrl(seed: string) {
+  return `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(seed || 'x')}&size=80&backgroundColor=f5f5f5&radius=50`;
+}
 
 // One job the route panel can plot.
 export interface RouteJob {
@@ -20,6 +27,9 @@ export interface RouteJob {
   teamId: string;      // '' when unassigned
   teamName: string;
   teamColor: string;
+  clientId: string | null;   // avatar seed (same DiceBear as the rest of the CRM)
+  clientName: string;
+  revenueCents: number;      // job total, for "who made cash"
 }
 
 interface Props {
@@ -37,6 +47,7 @@ interface TeamRoute {
   route: RouteResult | null;
   etas: (Date | null)[];   // arrival estimate per stop, aligned with jobs
   ungeocoded: RouteJob[];
+  revenueCents: number;    // sum of the trip's job totals
 }
 
 /**
@@ -65,19 +76,18 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
     });
   }, [jobs]);
 
-  const [optimized, setOptimized] = useState(true); // optimized by default
   const [routes, setRoutes] = useState<TeamRoute[]>([]);
-  const [loading, setLoading] = useState(false);
 
-  // Stable key: recompute only when the actual jobs/teams or the mode change.
+  // Stable key: recompute only when the actual jobs/teams change.
   const jobsKey = useMemo(
     () => teams.map((t) => `${t.key}:${t.jobs.map((j) => j.id).join('-')}`).join('|'),
     [teams],
   );
 
+  // Trips are ALWAYS optimized — the shortest order is computed automatically,
+  // no toggle. (Display only: the calendar's scheduled times aren't rewritten.)
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     (async () => {
       const computed = await Promise.all(teams.map(async (t): Promise<TeamRoute> => {
         const geocoded = t.jobs.filter((j) => j.lat != null && j.lng != null);
@@ -85,9 +95,7 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
         const stops: RouteStop[] = geocoded.map((j) => ({ id: j.id, lat: j.lat!, lng: j.lng! }));
 
         let route: RouteResult | null = null;
-        if (stops.length >= 2) {
-          route = optimized ? await getOptimizedRoute(stops) : await getRoute(stops);
-        }
+        if (stops.length >= 2) route = await getOptimizedRoute(stops);
 
         // Order jobs to match the route.
         const byId = new Map(geocoded.map((j) => [j.id, j]));
@@ -108,20 +116,22 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
           }
         }
 
-        return { teamId: t.key, teamName: t.name, color: t.color, jobs: orderedJobs, route, etas, ungeocoded };
+        const revenueCents = t.jobs.reduce((sum, j) => sum + (j.revenueCents || 0), 0);
+        return { teamId: t.key, teamName: t.name, color: t.color, jobs: orderedJobs, route, etas, ungeocoded, revenueCents };
       }));
-      if (!cancelled) { setRoutes(computed); setLoading(false); }
+      if (!cancelled) setRoutes(computed);
     })();
     return () => { cancelled = true; };
-  }, [jobsKey, optimized]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [jobsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Day totals across all teams.
   const totals = useMemo(() => {
-    let dist = 0, dur = 0, trips = 0;
+    let dist = 0, dur = 0, trips = 0, revenueCents = 0;
     for (const r of routes) {
       if (r.route && r.jobs.length >= 2) { dist += r.route.totalDistanceM; dur += r.route.totalDurationS; trips++; }
+      revenueCents += r.revenueCents;
     }
-    return { dist, dur, trips };
+    return { dist, dur, trips, revenueCents };
   }, [routes]);
 
   const anyRoutable = routes.some((r) => r.jobs.length >= 2);
@@ -136,6 +146,9 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
           <span className="text-[13.5px] font-bold tracking-tight text-text-primary">
             {fr ? 'Trajet du jour' : "Day's route"}
           </span>
+          <span className="inline-flex items-center gap-1 rounded-pill bg-success-light px-2 py-0.5 text-[10px] font-bold text-success">
+            <Sparkles size={10} />{fr ? 'Optimisé' : 'Optimized'}
+          </span>
         </div>
 
         {/* team legend */}
@@ -148,25 +161,13 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
           ))}
         </div>
 
-        <div className="ml-auto flex items-center gap-4">
-          <div className="flex items-center gap-3.5">
-            <Totals value={String(totals.trips)} label={fr ? 'Tournées' : 'Trips'} />
-            <Totals value={formatDistance(totals.dist, fr)} label={fr ? 'Distance' : 'Distance'} />
-            <Totals value={formatDuration(totals.dur, fr)} label={fr ? 'Conduite' : 'Drive'} />
-          </div>
-          <button
-            onClick={() => setOptimized((v) => !v)}
-            disabled={loading}
-            className={
-              'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-semibold transition-all disabled:opacity-50 ' +
-              (optimized
-                ? 'bg-primary text-primary-foreground hover:bg-primary-hover'
-                : 'border border-border text-text-secondary hover:bg-surface-secondary')
-            }
-          >
-            <Sparkles size={12} />
-            {optimized ? (fr ? 'Optimisé' : 'Optimized') : (fr ? 'Optimiser' : 'Optimize')}
-          </button>
+        <div className="ml-auto flex items-center gap-3.5">
+          <Totals value={String(totals.trips)} label={fr ? 'Tournées' : 'Trips'} />
+          <Totals value={formatDistance(totals.dist, fr)} label={fr ? 'Distance' : 'Distance'} />
+          <Totals value={formatDuration(totals.dur, fr)} label={fr ? 'Conduite' : 'Drive'} />
+          {totals.revenueCents > 0 && (
+            <Totals value={formatCurrency(totals.revenueCents / 100)} label={fr ? 'Revenu' : 'Revenue'} accent />
+          )}
         </div>
       </div>
 
@@ -179,27 +180,25 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
         <div className="max-h-[520px] overflow-y-auto">
           {routes.map((r, ti) => (
             <div key={r.teamId} className={ti > 0 ? 'border-t-[6px] border-surface-secondary' : ''}>
-              {/* team header */}
-              <div className="sticky top-0 z-[1] flex items-center gap-2 bg-surface-card px-4 pb-2 pt-3">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: r.color }} />
-                <span className="text-[12.5px] font-bold text-text-primary">{r.teamName}</span>
+              {/* team header — name + revenue (who made cash) */}
+              <div className="sticky top-0 z-[1] bg-surface-card px-4 pb-2 pt-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: r.color }} />
+                  <span className="text-[12.5px] font-bold text-text-primary">{r.teamName}</span>
+                  {r.revenueCents > 0 && (
+                    <span className="ml-auto text-[12px] font-extrabold text-success tabular-nums">
+                      {formatCurrency(r.revenueCents / 100)}
+                    </span>
+                  )}
+                </div>
                 {r.route && r.jobs.length >= 2 && (
-                  <span className="ml-auto flex items-center gap-2 text-[11px] text-text-tertiary tabular-nums">
+                  <div className="mt-1 flex items-center gap-2.5 text-[10.5px] text-text-tertiary tabular-nums">
                     <span>{r.jobs.length} {fr ? 'arrêts' : 'stops'}</span>
                     <span className="flex items-center gap-1"><Navigation size={10} />{formatDistance(r.route.totalDistanceM, fr)}</span>
                     <span className="flex items-center gap-1"><Clock size={10} />{formatDuration(r.route.totalDurationS, fr)}</span>
-                  </span>
+                  </div>
                 )}
               </div>
-
-              {optimized && r.jobs.length >= 3 && (
-                <span
-                  className="mx-4 mb-1 flex items-center gap-1 self-start rounded-pill px-2 py-0.5 text-[10px] font-bold"
-                  style={{ color: r.color, backgroundColor: `${r.color}1a` }}
-                >
-                  <Sparkles size={10} />{fr ? 'Trajet optimisé' : 'Optimized route'}
-                </span>
-              )}
 
               {/* stops */}
               <ol className="px-1.5 pb-2">
@@ -207,11 +206,11 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
                   const leg = r.route?.legs[i];
                   const eta = r.etas[i];
                   const planned = new Date(j.startAt);
-                  const moved = optimized && eta && Math.abs(eta.getTime() - planned.getTime()) > 5 * 60_000;
+                  const moved = eta && Math.abs(eta.getTime() - planned.getTime()) > 5 * 60_000;
                   return (
                     <li key={j.id}>
                       {i > 0 && leg && (leg.distanceM > 0 || leg.durationS > 0) && (
-                        <div className="ml-[30px] flex items-center gap-1.5 py-1 text-[10.5px] text-text-tertiary tabular-nums">
+                        <div className="ml-[38px] flex items-center gap-1.5 py-1 text-[10.5px] text-text-tertiary tabular-nums">
                           <span className="h-4 w-px bg-border" />
                           <Car size={11} className="opacity-60" />
                           <span>
@@ -222,31 +221,38 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
                       )}
                       <button
                         onClick={() => j.jobId && onJobClick?.(j.jobId)}
-                        className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-surface-secondary"
+                        className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-surface-secondary"
                       >
-                        <span
-                          className="flex h-[27px] w-[27px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white"
-                          style={{ backgroundColor: r.color }}
-                        >
-                          {i + 1}
+                        {/* step number — OUTSIDE the avatar bubble */}
+                        <span className="w-4 shrink-0 text-center text-[12px] font-bold text-text-secondary tabular-nums">{i + 1}</span>
+                        {/* client DiceBear — same avatar system as the rest of the CRM */}
+                        <span className="shrink-0 rounded-full ring-2" style={{ ['--tw-ring-color' as any]: `${r.color}55` }}>
+                          <UnifiedAvatar id={j.clientId || j.id} name={j.clientName || j.title} size={32} />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[12.5px] font-semibold text-text-primary">{j.title}</span>
+                          <span className="block truncate text-[12.5px] font-semibold text-text-primary">
+                            {j.clientName ? `${j.clientName} · ${j.title}` : j.title}
+                          </span>
                           {j.address && (
                             <span className="flex items-center gap-1 truncate text-[11px] text-text-tertiary">
                               <MapPin size={10} className="shrink-0" />{j.address}
                             </span>
                           )}
                         </span>
-                        <span className="shrink-0 text-right">
-                          <span className="block text-[12px] font-bold text-text-primary tabular-nums">
-                            {(eta ?? planned).toLocaleTimeString(fr ? 'fr-CA' : 'en-US', { hour: 'numeric', minute: '2-digit' })}
-                          </span>
-                          {moved && (
-                            <span className="block text-[9.5px] text-text-tertiary tabular-nums">
-                              {fr ? 'prévu' : 'planned'} {planned.toLocaleTimeString(fr ? 'fr-CA' : 'en-US', { hour: 'numeric', minute: '2-digit' })}
-                            </span>
+                        <span className="flex shrink-0 items-center gap-2.5">
+                          {j.revenueCents > 0 && (
+                            <span className="text-[11.5px] font-bold text-success tabular-nums">{formatCurrency(j.revenueCents / 100)}</span>
                           )}
+                          <span className="text-right">
+                            <span className="block text-[12px] font-bold text-text-primary tabular-nums">
+                              {(eta ?? planned).toLocaleTimeString(fr ? 'fr-CA' : 'en-US', { hour: 'numeric', minute: '2-digit' })}
+                            </span>
+                            {moved && (
+                              <span className="block text-[9.5px] text-text-tertiary tabular-nums">
+                                {fr ? 'prévu' : 'planned'} {planned.toLocaleTimeString(fr ? 'fr-CA' : 'en-US', { hour: 'numeric', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </span>
                         </span>
                       </button>
                     </li>
@@ -269,10 +275,10 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
   );
 }
 
-function Totals({ value, label }: { value: string; label: string }) {
+function Totals({ value, label, accent }: { value: string; label: string; accent?: boolean }) {
   return (
     <div className="text-right leading-tight">
-      <div className="text-[14px] font-extrabold tracking-tight text-text-primary tabular-nums">{value}</div>
+      <div className={'text-[14px] font-extrabold tracking-tight tabular-nums ' + (accent ? 'text-success' : 'text-text-primary')}>{value}</div>
       <div className="text-[8.5px] font-semibold uppercase tracking-[0.07em] text-text-tertiary">{label}</div>
     </div>
   );
@@ -342,17 +348,29 @@ function RouteMap({ routes }: { routes: TeamRoute[] }) {
         });
       }
 
-      // Numbered pins
+      // Pins: step number OUTSIDE the bubble, client DiceBear INSIDE the drop.
       pts.forEach((j, i) => {
         const el = document.createElement('div');
-        el.style.cssText =
-          `display:flex;align-items:center;justify-content:center;width:28px;height:28px;` +
-          `border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${r.color};color:#fff;` +
-          `font:700 12px Inter,system-ui,sans-serif;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);`;
-        const inner = document.createElement('span');
-        inner.style.transform = 'rotate(45deg)';
-        inner.textContent = String(i + 1);
-        el.appendChild(inner);
+        el.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+        // step number chip (above)
+        const idx = document.createElement('div');
+        idx.textContent = String(i + 1);
+        idx.style.cssText =
+          `font:800 10px Inter,system-ui,sans-serif;color:#171717;background:#fff;border:1px solid #e5e5e5;` +
+          `border-radius:999px;padding:0 5px;line-height:15px;margin-bottom:-4px;z-index:2;box-shadow:0 1px 3px rgba(0,0,0,.15);`;
+        // teardrop with the client's DiceBear avatar
+        const drop = document.createElement('div');
+        drop.style.cssText =
+          `width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${r.color};` +
+          `border:2.5px solid #fff;box-shadow:0 2px 7px rgba(0,0,0,.32);overflow:hidden;display:flex;align-items:center;justify-content:center;`;
+        const img = document.createElement('img');
+        img.src = dicebearUrl(j.clientId || j.id);
+        img.alt = '';
+        img.loading = 'lazy';
+        img.style.cssText = 'width:100%;height:100%;transform:rotate(45deg) scale(1.42);';
+        drop.appendChild(img);
+        el.appendChild(idx);
+        el.appendChild(drop);
         const m = new mapboxgl.Marker({ element: el, anchor: 'bottom' }).setLngLat([j.lng!, j.lat!]).addTo(map);
         markersRef.current.push(m);
         bounds.extend([j.lng!, j.lat!]);
