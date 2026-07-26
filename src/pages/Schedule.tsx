@@ -437,7 +437,14 @@ function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventCl
   const showRoute = selectedTeamIds.length >= 1;
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
-  const sorted = useMemo(() => [...events].sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()), [events]);
+  const sorted = useMemo(() => {
+    // Dédup par id: le filtre serveur `.or(team_id.in..,team_id.is.null)` peut
+    // renvoyer un même event deux fois → deux cartes avec la même key React,
+    // ce qui superpose/dédouble le texte.
+    const seen = new Set<string>();
+    const unique = events.filter((ev) => (seen.has(ev.id) ? false : (seen.add(ev.id), true)));
+    return unique.sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
+  }, [events]);
   const grouped = useMemo(() => {
     const m = new Map<string, ScheduleEventRecord[]>();
     sorted.forEach((ev) => { const k = format(new Date(ev.start_at), 'yyyy-MM-dd'); if (!m.has(k)) m.set(k, []); m.get(k)!.push(ev); });

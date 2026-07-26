@@ -140,7 +140,11 @@ export async function listScheduleEventsRange(params: {
   const { data, error } = await query;
   if (error) throw error;
 
-  const eventRows = data || [];
+  // Dédup par id: le `.or(team_id.in..,team_id.is.null)` ci-dessus peut faire
+  // matcher une même ligne par deux branches → doublons. Non dédupliqués, ils
+  // rendent deux cartes avec la même key React (texte superposé/dédoublé).
+  const seenIds = new Set<string>();
+  const eventRows = (data || []).filter((r: any) => (seenIds.has(r.id) ? false : (seenIds.add(r.id), true)));
   if (eventRows.length === 0) {
     eventsCache.set(key, { cachedAt: now, rows: [] });
     return [];
