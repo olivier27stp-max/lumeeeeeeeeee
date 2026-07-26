@@ -534,22 +534,22 @@ app.post('/api/workflows/execute-action', workflowActionLimiter, async (req, res
    hors ligne) n'y verraient jamais le contenu légal. On substitue donc au <main>
    un résumé fidèle à la route demandée.                                        */
 const CRAWLER_FALLBACKS: Record<string, string> = {
-  '/privacy': `<h1 style="font-size:2rem;margin:0 0 1rem">Politique de confidentialité — Lume CRM</h1>
-        <p style="margin:0 0 1rem">Cette politique explique quelles données personnelles Lume CRM collecte, pourquoi, comment elles sont protégées et quels sont vos droits (Loi 25, LPRPDE, RGPD).</p>
-        <p style="margin:0 0 1rem"><strong>Intégration Google / Gmail.</strong> La connexion d'un compte Google est facultative. Lume CRM demande uniquement les autorisations <code>gmail.readonly</code> (afficher vos conversations, messages et pièces jointes dans la Boîte de réception), <code>gmail.send</code> (envoyer ou répondre à un courriel lorsque vous le demandez) et <code>userinfo.email</code> (identifier la boîte connectée). Lume CRM ne supprime, ne modifie, n'archive et ne marque comme lu aucun message.</p>
-        <p style="margin:0 0 1rem"><strong>Limited Use.</strong> L'utilisation par Lume CRM des informations obtenues via les API Google est conforme à la Google API Services User Data Policy, y compris ses exigences relatives à la Limited Use. Ces données ne sont jamais utilisées à des fins publicitaires, ne sont jamais vendues et ne servent jamais à entraîner des modèles d'intelligence artificielle.</p>
+  '/privacy': `<h1 style="font-size:2rem;margin:0 0 1rem">Politique de confidentialité — Lume</h1>
+        <p style="margin:0 0 1rem">Cette politique explique quelles données personnelles Lume collecte, pourquoi, comment elles sont protégées et quels sont vos droits (Loi 25, LPRPDE, RGPD).</p>
+        <p style="margin:0 0 1rem"><strong>Intégration Google / Gmail.</strong> La connexion d'un compte Google est facultative. Lume demande uniquement les autorisations <code>gmail.readonly</code> (afficher vos conversations, messages et pièces jointes dans la Boîte de réception), <code>gmail.send</code> (envoyer ou répondre à un courriel lorsque vous le demandez) et <code>userinfo.email</code> (identifier la boîte connectée). Lume ne supprime, ne modifie, n'archive et ne marque comme lu aucun message.</p>
+        <p style="margin:0 0 1rem"><strong>Limited Use.</strong> L'utilisation par Lume des informations obtenues via les API Google est conforme à la Google API Services User Data Policy, y compris ses exigences relatives à la Limited Use. Ces données ne sont jamais utilisées à des fins publicitaires, ne sont jamais vendues et ne servent jamais à entraîner des modèles d'intelligence artificielle.</p>
         <p style="margin:0 0 1rem"><strong>Conservation et révocation.</strong> À la déconnexion du compte Google, les jetons OAuth sont révoqués immédiatement et les données synchronisées sont supprimées sous 30 jours. L'accès peut être révoqué à tout moment depuis <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
-        <p style="margin:0 0 1rem"><strong>Privacy Policy (English).</strong> This policy explains what personal data Lume CRM collects, why, how it is protected, and your rights. Google integration is optional; Lume CRM requests only <code>gmail.readonly</code>, <code>gmail.send</code> and <code>userinfo.email</code>, never modifies or deletes messages, adheres to the Google API Services User Data Policy including the Limited Use requirements, and never uses Google data for advertising or to train AI models.</p>
+        <p style="margin:0 0 1rem"><strong>Privacy Policy (English).</strong> This policy explains what personal data Lume collects, why, how it is protected, and your rights. Google integration is optional; Lume requests only <code>gmail.readonly</code>, <code>gmail.send</code> and <code>userinfo.email</code>, never modifies or deletes messages, adheres to the Google API Services User Data Policy including the Limited Use requirements, and never uses Google data for advertising or to train AI models.</p>
         <p style="margin:0"><a href="/">Accueil / Home</a> · <a href="/terms">Conditions d'utilisation / Terms of Service</a></p>`,
-  '/terms': `<h1 style="font-size:2rem;margin:0 0 1rem">Conditions d'utilisation — Lume CRM</h1>
-        <p style="margin:0 0 1rem">En créant un compte ou en utilisant Lume CRM (le « Service »), vous acceptez les présentes conditions. Si vous les acceptez au nom d'une organisation, vous déclarez avoir le pouvoir de l'engager.</p>
-        <p style="margin:0 0 1rem">Lume CRM est un logiciel de gestion pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.</p>
-        <p style="margin:0 0 1rem"><strong>Terms of Service (English).</strong> By creating an account or using Lume CRM (the "Service"), you agree to these Terms. If you are accepting on behalf of an organization, you represent that you have authority to bind that organization.</p>
+  '/terms': `<h1 style="font-size:2rem;margin:0 0 1rem">Conditions d'utilisation — Lume</h1>
+        <p style="margin:0 0 1rem">En créant un compte ou en utilisant Lume (le « Service »), vous acceptez les présentes conditions. Si vous les acceptez au nom d'une organisation, vous déclarez avoir le pouvoir de l'engager.</p>
+        <p style="margin:0 0 1rem">Lume est un logiciel de gestion pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.</p>
+        <p style="margin:0 0 1rem"><strong>Terms of Service (English).</strong> By creating an account or using Lume (the "Service"), you agree to these Terms. If you are accepting on behalf of an organization, you represent that you have authority to bind that organization.</p>
         <p style="margin:0"><a href="/">Accueil / Home</a> · <a href="/privacy">Politique de confidentialité / Privacy Policy</a></p>`,
 };
 
 /* ── /about — présentation du produit, servie en HTML complet ──
-   Page autonome (aucun script requis) décrivant Lume CRM, ses fonctionnalités
+   Page autonome (aucun script requis) décrivant Lume, ses fonctionnalités
    et son usage des données Google. Sert de page de présentation officielle
    référencée depuis l'écran de consentement OAuth.                            */
 const ABOUT_PAGE = `<!doctype html>
@@ -557,25 +557,25 @@ const ABOUT_PAGE = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Lume CRM</title>
-<meta name="application-name" content="Lume CRM">
-<meta name="description" content="Lume CRM est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.">
-<meta property="og:site_name" content="Lume CRM">
-<meta property="og:title" content="Lume CRM">
+<title>Lume</title>
+<meta name="application-name" content="Lume">
+<meta name="description" content="Lume est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.">
+<meta property="og:site_name" content="Lume">
+<meta property="og:title" content="Lume">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://lumecrm.net/about">
-<meta property="og:description" content="Lume CRM est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.">
+<meta property="og:description" content="Lume est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.">
 <link rel="canonical" href="https://lumecrm.net/about">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Lume CRM","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://lumecrm.net/","description":"Lume CRM est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.","publisher":{"@type":"Organization","name":"Lume CRM"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Lume","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://lumecrm.net/","description":"Lume est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.","publisher":{"@type":"Organization","name":"Lume"}}
 </script>
 </head>
 <body>
-<h1>Lume CRM</h1>
-<p class="lead">Lume CRM est un logiciel de gestion tout-en-un conçu pour les entreprises de services résidentiels : lavage de vitres, toiture, paysagement, CVAC, excavation, pavage et autres métiers de services à domicile.</p>
+<h1>Lume</h1>
+<p class="lead">Lume est un logiciel de gestion tout-en-un conçu pour les entreprises de services résidentiels : lavage de vitres, toiture, paysagement, CVAC, excavation, pavage et autres métiers de services à domicile.</p>
 
-<h2>À quoi sert Lume CRM</h2>
-<p>Lume CRM réunit dans une seule application les outils dont une entreprise de services a besoin au quotidien :</p>
+<h2>À quoi sert Lume</h2>
+<p>Lume réunit dans une seule application les outils dont une entreprise de services a besoin au quotidien :</p>
 <ul>
   <li><strong>Clients et prospects</strong> — fiches, historique, suivi des relances.</li>
   <li><strong>Soumissions et factures</strong> — création, envoi, suivi des paiements.</li>
@@ -585,20 +585,20 @@ const ABOUT_PAGE = `<!doctype html>
 </ul>
 
 <h2>Utilisation des données Google</h2>
-<p>La connexion d'un compte Google est <strong>facultative</strong> et sert uniquement à la fonction Boîte de réception. Lorsqu'un utilisateur choisit de connecter sa boîte Gmail, Lume CRM demande trois autorisations :</p>
+<p>La connexion d'un compte Google est <strong>facultative</strong> et sert uniquement à la fonction Boîte de réception. Lorsqu'un utilisateur choisit de connecter sa boîte Gmail, Lume demande trois autorisations :</p>
 <ul>
-  <li><code>gmail.readonly</code> — afficher ses conversations, messages et pièces jointes dans Lume CRM.</li>
+  <li><code>gmail.readonly</code> — afficher ses conversations, messages et pièces jointes dans Lume.</li>
   <li><code>gmail.send</code> — envoyer, répondre et transférer des courriels depuis sa propre adresse, à sa demande explicite.</li>
   <li><code>userinfo.email</code> — identifier la boîte connectée et l'afficher dans l'application.</li>
 </ul>
-<p>Lume CRM ne supprime, ne modifie, n'archive et ne marque comme lu aucun message. L'utilisation des informations obtenues via les API Google est conforme à la <em>Google API Services User Data Policy</em>, y compris ses exigences relatives à la <em>Limited Use</em>. Ces données ne sont jamais utilisées à des fins publicitaires, ne sont jamais vendues et ne servent jamais à entraîner des modèles d'intelligence artificielle.</p>
+<p>Lume ne supprime, ne modifie, n'archive et ne marque comme lu aucun message. L'utilisation des informations obtenues via les API Google est conforme à la <em>Google API Services User Data Policy</em>, y compris ses exigences relatives à la <em>Limited Use</em>. Ces données ne sont jamais utilisées à des fins publicitaires, ne sont jamais vendues et ne servent jamais à entraîner des modèles d'intelligence artificielle.</p>
 
-<h2>About Lume CRM (English)</h2>
-<p>Lume CRM is an all-in-one management platform for residential service businesses (window cleaning, roofing, landscaping, HVAC, excavation and similar trades). It lets owners manage clients and leads, create quotes and invoices, schedule jobs and crews, track payments, and read and reply to their business email — all in one place.</p>
-<p>Connecting a Google account is optional and powers the Inbox feature only. Lume CRM requests <code>gmail.readonly</code>, <code>gmail.send</code> and <code>userinfo.email</code>; it never modifies, archives or deletes messages. Its use of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. Google data is never used for advertising, never sold, and never used to train artificial-intelligence models.</p>
+<h2>About Lume (English)</h2>
+<p>Lume is an all-in-one management platform for residential service businesses (window cleaning, roofing, landscaping, HVAC, excavation and similar trades). It lets owners manage clients and leads, create quotes and invoices, schedule jobs and crews, track payments, and read and reply to their business email — all in one place.</p>
+<p>Connecting a Google account is optional and powers the Inbox feature only. Lume requests <code>gmail.readonly</code>, <code>gmail.send</code> and <code>userinfo.email</code>; it never modifies, archives or deletes messages. Its use of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. Google data is never used for advertising, never sold, and never used to train artificial-intelligence models.</p>
 
 <footer>
-<p><strong>Lume CRM</strong> — exploité par William Hébert, Québec, Canada — <a href="mailto:willhebert30@gmail.com">willhebert30@gmail.com</a></p>
+<p><strong>Lume</strong> — exploité par William Hébert, Québec, Canada — <a href="mailto:willhebert30@gmail.com">willhebert30@gmail.com</a></p>
 <p><a href="/">Application</a> · <a href="/privacy">Politique de confidentialité</a> · <a href="/terms">Conditions d'utilisation</a> · <a href="/pricing">Tarifs</a></p>
 </footer>
 <style>
