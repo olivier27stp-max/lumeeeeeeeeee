@@ -30,9 +30,12 @@ export function pxToMinutes(px: number): number {
   return px / PX_PER_MINUTE;
 }
 
-/** Convert minutes to px offset */
+/** Convert minutes to px offset.
+ * Rounded to a whole pixel: SLOT_HEIGHT_PX/60 is fractional (0.866…), so raw
+ * offsets land on sub-pixel positions, which makes the event-card text render
+ * blurry. Snapping to integer px keeps text crisp without shifting layout. */
 export function minutesToPx(minutes: number): number {
-  return minutes * PX_PER_MINUTE;
+  return Math.round(minutes * PX_PER_MINUTE);
 }
 
 // ── Drag data types ────────────────────────────────────────────────
