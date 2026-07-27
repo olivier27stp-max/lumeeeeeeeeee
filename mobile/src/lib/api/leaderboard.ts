@@ -4,6 +4,26 @@
 
 import { serverGet } from './server';
 
+export type LeaderboardPeriod = 'daily' | 'weekly' | 'monthly';
+
+export interface LeaderboardEntry {
+  rank: number;
+  user_id: string;
+  full_name: string;
+  avatar_url: string | null;
+  team_name: string | null;
+  closes: number;
+  revenue: number;
+  doors_knocked: number;
+  conversion_rate: number;
+  trend: number;
+}
+
+/** Ranked reps for a period — GET /api/leaderboard (same route as the web page). */
+export function getLeaderboard(period: LeaderboardPeriod): Promise<LeaderboardEntry[]> {
+  return serverGet<LeaderboardEntry[]>(`/leaderboard?period=${period}`);
+}
+
 export interface RepPerformanceDetail {
   doors_knocked: number;
   conversations: number;
