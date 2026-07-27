@@ -468,8 +468,17 @@ export default function D2DMap() {
     try {
       const created = await createHouseAt({ orgId, userId, lat, lng, status: house });
       refetch();
-      setPinCardNew(true);
-      setPinCard(created);
+      if (house === 'unknown') {
+        // No real outcome picked ("Autre") → ask, like the web's new-pin modal
+        setPinCardNew(true);
+        setPinCard(created);
+      } else {
+        // Status already chosen in the placement strip — don't re-ask, just
+        // chain into the CRM flow when it applies (sale → job, lead → choice)
+        if (house === 'sale' || house === 'lead' || house === 'quote_sent') {
+          crmFor(house, created.address ?? '');
+        }
+      }
     } catch (e) {
       Alert.alert(t.mobileField.pin, (e as Error).message);
     }
