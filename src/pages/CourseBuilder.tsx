@@ -43,6 +43,8 @@ function SortableLessonCard({
   lesson: CourseLesson; isActive: boolean;
   onSelect: () => void; onDelete: () => void; onDuplicate: () => void;
 }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lesson.id });
   const [menuOpen, setMenuOpen] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
@@ -86,7 +88,7 @@ function SortableLessonCard({
         <TypeIcon size={13} className="text-text-muted" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[12px] font-medium text-text-primary truncate">{lesson.title || 'Untitled'}</p>
+        <p className="text-[12px] font-medium text-text-primary truncate">{lesson.title || (fr ? 'Sans titre' : 'Untitled')}</p>
         {lesson.duration_min > 0 && <p className="text-[10px] text-text-muted">{lesson.duration_min} min</p>}
       </div>
       <div className="shrink-0">
@@ -96,9 +98,9 @@ function SortableLessonCard({
         {menuOpen && (
           <div className="fixed w-40 bg-surface-elevated border border-outline/40 rounded-xl shadow-dropdown py-1 z-[200]"
             style={{ top: menuPos.top, left: menuPos.left }} onClick={e => e.stopPropagation()}>
-            <button onClick={() => { onDuplicate(); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-primary hover:bg-surface-secondary"><Copy size={12} /> Duplicate</button>
+            <button onClick={() => { onDuplicate(); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-primary hover:bg-surface-secondary"><Copy size={12} /> {fr ? 'Dupliquer' : 'Duplicate'}</button>
             <div className="border-t border-outline/20 my-0.5" />
-            <button onClick={() => { onDelete(); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-danger hover:bg-danger-light"><Trash2 size={12} /> Delete</button>
+            <button onClick={() => { onDelete(); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-danger hover:bg-danger-light"><Trash2 size={12} /> {fr ? 'Supprimer' : 'Delete'}</button>
           </div>
         )}
       </div>
@@ -299,7 +301,7 @@ export default function CourseBuilder() {
         setTimeout(() => setSaved(false), 2000);
       }
       toast.success(fr ? 'Image mise à jour' : 'Cover image updated');
-    } catch (err: any) { toast.error(err?.message || 'Upload failed'); }
+    } catch (err: any) { toast.error(err?.message || (fr ? 'Échec du téléversement' : 'Upload failed')); }
     finally { setCoverUploading(false); isUploadingRef.current = false; }
   };
 
@@ -465,7 +467,7 @@ export default function CourseBuilder() {
       if (ext === 'pdf') setLessonContentType('pdf');
       else setLessonContentType('video');
       toast.success(fr ? 'Fichier téléchargé' : 'File uploaded');
-    } catch (err: any) { toast.error(err?.message || 'Upload failed'); }
+    } catch (err: any) { toast.error(err?.message || (fr ? 'Échec du téléversement' : 'Upload failed')); }
     finally {
       setVideoUploading(false);
       setVideoProgress(0);
@@ -489,7 +491,7 @@ export default function CourseBuilder() {
       );
       setLessonAttachments(prev => [...prev, { name: file.name, url: result.url, type: ext || 'file' }]);
       toast.success(fr ? 'Pièce jointe ajoutée' : 'Attachment added');
-    } catch (err: any) { toast.error(err?.message || 'Upload failed'); }
+    } catch (err: any) { toast.error(err?.message || (fr ? 'Échec du téléversement' : 'Upload failed')); }
     finally {
       setAttachmentUploading(false);
       setAttachmentProgress(0);
@@ -669,7 +671,7 @@ export default function CourseBuilder() {
                                 className="flex-1 bg-transparent text-[13px] font-semibold text-text-primary outline-none border-b border-primary" />
                             ) : (
                               <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleModule(mod.id)}>
-                                <p className="text-[13px] font-semibold text-text-primary truncate">{mod.title || 'Untitled'}</p>
+                                <p className="text-[13px] font-semibold text-text-primary truncate">{mod.title || (fr ? 'Sans titre' : 'Untitled')}</p>
                                 <p className="text-[10px] text-text-muted">{lessonCount} {lessonCount === 1 ? (fr ? 'leçon' : 'lesson') : (fr ? 'leçons' : 'lessons')}</p>
                               </div>
                             )}
@@ -797,7 +799,7 @@ export default function CourseBuilder() {
 
               <div>
                 <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.courseDescription}</label>
-                <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Description" rows={4}
+                <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder={fr ? 'Description' : 'Description'} rows={4}
                   className="glass-input w-full px-4 py-2.5 rounded-xl text-sm resize-none" />
               </div>
 
@@ -985,7 +987,7 @@ export default function CourseBuilder() {
                     <ArrowLeft size={11} /> {fr ? 'Retour aux détails du cours' : 'Back to course details'}
                   </button>
                   <p className="text-[11px] text-text-tertiary uppercase tracking-wide">{modules.find(m => m.lessons.some(l => l.id === activeLessonId))?.title}</p>
-                  <h2 className="text-lg font-bold text-text-primary truncate">{lessonTitle || 'Untitled'}</h2>
+                  <h2 className="text-lg font-bold text-text-primary truncate">{lessonTitle || (fr ? 'Sans titre' : 'Untitled')}</h2>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button onClick={() => { if (activeLessonId && confirm(fr ? 'Supprimer cette leçon ?' : 'Delete this lesson?')) handleDeleteLesson(activeLessonId); }}

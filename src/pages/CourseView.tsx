@@ -137,9 +137,9 @@ export default function CourseView() {
       <div className="max-w-[1400px] mx-auto px-6 lg:px-10 py-8 animate-pulse space-y-5">
         <div className="h-5 bg-surface-tertiary rounded w-40" />
         <div className="h-7 bg-surface-tertiary rounded w-64" />
-        <div className="flex gap-6">
+        <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1 aspect-video bg-surface-tertiary rounded-2xl" />
-          <div className="w-[380px] shrink-0 space-y-3">
+          <div className="w-full lg:w-[380px] shrink-0 space-y-3">
             <div className="h-4 bg-surface-tertiary rounded w-40" />
             <div className="h-3 bg-surface-tertiary rounded w-full" />
             {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-14 bg-surface-tertiary rounded-xl" />)}
@@ -181,8 +181,8 @@ export default function CourseView() {
       {/* ── Title ── */}
       <h1 className="text-[22px] font-bold text-text-primary mb-6 tracking-tight">{course.title}</h1>
 
-      {/* ── 2-Column Layout ── */}
-      <div className="flex gap-6 items-start">
+      {/* ── 2-Column Layout (empile en colonne sur mobile/tablette) ── */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
 
         {/* ─── LEFT: Video + Content ─── */}
         <div className="flex-1 min-w-0">
@@ -351,7 +351,7 @@ export default function CourseView() {
         </div>
 
         {/* ─── RIGHT SIDEBAR: Progress + Module tree ─── */}
-        <div className="w-[380px] shrink-0 space-y-5 sticky top-8">
+        <div className="w-full lg:w-[380px] shrink-0 space-y-5 lg:sticky lg:top-8">
 
           {/* ── Progress Card ── */}
           <div className="bg-surface-card rounded-2xl border border-outline/30 p-5">
@@ -512,8 +512,8 @@ export default function CourseView() {
             </div>
           </div>
 
-          {/* ── Team Progress (admin/boss only) ── */}
-          {(userRole === 'owner' || userRole === 'admin') && teamProgress.length > 0 && (
+          {/* ── Team Progress (admin/boss only) — affiché même vide ── */}
+          {(userRole === 'owner' || userRole === 'admin') && (
             <div className="bg-surface-card rounded-2xl border border-outline/30 overflow-hidden">
               <button
                 onClick={() => setShowTeamProgress(!showTeamProgress)}
@@ -538,6 +538,11 @@ export default function CourseView() {
                     className="overflow-hidden"
                   >
                     <div className="max-h-[300px] overflow-y-auto divide-y divide-outline/10">
+                      {teamProgress.length === 0 && (
+                        <div className="px-5 py-8 text-center text-[12px] text-text-muted">
+                          {fr ? "Personne n'a encore commencé ce cours." : 'No one has started this course yet.'}
+                        </div>
+                      )}
                       {teamProgress.map((member) => (
                         <div key={member.user_id} className="flex items-center gap-3 px-5 py-3">
                           {/* Avatar */}
@@ -546,13 +551,13 @@ export default function CourseView() {
                               <img src={member.avatar_url} alt="" className="w-full h-full object-cover" />
                             ) : (
                               <span className="text-[11px] font-bold text-text-muted">
-                                {member.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                {(member.full_name || '?').split(' ').map(n => n[0]).filter(Boolean).join('').slice(0, 2).toUpperCase()}
                               </span>
                             )}
                           </div>
                           {/* Name + progress */}
                           <div className="flex-1 min-w-0">
-                            <p className="text-[12px] font-semibold text-text-primary truncate">{member.full_name}</p>
+                            <p className="text-[12px] font-semibold text-text-primary truncate">{member.full_name || (fr ? 'Sans nom' : 'Unnamed')}</p>
                             <div className="flex items-center gap-2 mt-1">
                               <div className="flex-1 h-1.5 bg-surface-tertiary rounded-full overflow-hidden">
                                 <div

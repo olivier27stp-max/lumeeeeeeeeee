@@ -102,6 +102,12 @@ export default function Courses() {
   const categories = Array.from(new Set(courses.map(c => c.category).filter(Boolean)));
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
+  // Ne pas rester coincé sur une catégorie qui a disparu des résultats
+  // (sinon la liste devient vide sans échappatoire).
+  useEffect(() => {
+    if (activeCategory && !categories.includes(activeCategory)) setActiveCategory(null);
+  }, [categories, activeCategory]);
+
   const filteredCourses = activeCategory
     ? courses.filter(c => c.category === activeCategory)
     : courses;
