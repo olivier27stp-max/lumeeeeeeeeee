@@ -14,7 +14,6 @@ import PersonalCommissionView from '@/components/commissions/PersonalCommissionV
 import UnifiedAvatar from '@/components/ui/UnifiedAvatar';
 import { captureAvatar, clearMyAvatar, pickAvatar, uploadMyAvatar } from '@/lib/api/avatars';
 import { listCommissions } from '@/lib/api/commissions';
-import { getPeerPayoutsVisible } from '@/lib/api/fieldSales';
 import { EMPTY_PERFORMANCE, getRealtimeStats, getRepPerformance } from '@/lib/api/leaderboard';
 import { getMember } from '@/lib/api/org';
 import {
@@ -139,16 +138,11 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
     queryFn: () => listRepDeals(userId, String(orgId)),
     enabled: !!orgId && !!userId,
   });
-  const peerVisQ = useQuery({
-    queryKey: ['peer-payouts-visible', orgId],
-    queryFn: () => getPeerPayoutsVisible(String(orgId)),
-    enabled: !!orgId && !isSelf && !isManager,
-  });
-  const canSeePayout = isSelf || isManager || peerVisQ.data === true;
   const commQ = useQuery({
     queryKey: ['rep-comm', orgId, userId],
     queryFn: () => listCommissions(String(orgId), userId),
-    enabled: !!orgId && canSeePayout,
+    // Self/manager only — RLS returns nothing but empty rows for peers.
+    enabled: !!orgId && (isSelf || isManager),
   });
 
   const member = memberQ.data;
@@ -278,7 +272,9 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
               <KpiCard icon="scope" label={s9n.dealsClosed} value={String(stats.closes)} />
               <KpiCard icon="percent" label={s9n.conversionLabel} value={`${stats.conversion}%`} />
               <KpiCard icon="chart.bar" label={s9n.avgDealValue} value={fmtCurrency(stats.avgDealValue)} />
-              <KpiCard icon="dollarsign.circle" label={s9n.commissionLabel} value={fmtCurrency(stats.commission)} hidden={!canSeePayout} />
+              {/* Peers would only ever see $0 here (RLS blocks other reps' rows),
+                  so the card is limited to self/managers rather than lying. */}
+              <KpiCard icon="dollarsign.circle" label={s9n.commissionLabel} value={fmtCurrency(stats.commission)} hidden={!(isSelf || isManager)} />
               <KpiCard icon="doc.on.clipboard" label={s9n.activeLeads} value={String(stats.activeLeads)} />
               <KpiCard icon="checkmark.circle" label={s9n.jobsCompletedLabel} value={String(stats.jobsCompleted)} />
               <KpiCard icon="clock" label={s9n.jobsPendingLabel} value={String(stats.jobsPending)} />
@@ -361,11 +357,13 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
         ) : (
           /* ── Commissions tab — the web Commissions page for this rep ── */
           <View className="gap-4">
-            {canSeePayout ? (
+            {isSelf || isManager ? (
+              /* Always scope to the profile's user — without an explicit userId
+                 the server returns the WHOLE org for owner/admin. Peers are
+                 excluded entirely: the server would substitute the VIEWER's
+                 entries for a non-admin, which would show wrong data. */
               <>
                 {isSelf ? <PayrollSummaryCard metric="deals" /> : null}
-                {/* Always scope to the profile's user — without an explicit
-                    userId the server returns the WHOLE org for owner/admin. */}
                 <PersonalCommissionView userId={userId} />
               </>
             ) : (
