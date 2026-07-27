@@ -4,7 +4,20 @@
 
 import { serverGet } from './server';
 
-export type LeaderboardPeriod = 'daily' | 'weekly' | 'monthly';
+/** Plage de dates explicite (YYYY-MM-DD, inclusif). from === to = un seul jour. */
+export interface LeaderboardRange {
+  from: string;
+  to: string;
+}
+
+export interface LeaderboardOptions {
+  /** 'mine' = office actif uniquement ; 'all' = tous les offices de la compagnie. */
+  scope?: 'mine' | 'all';
+  /** Office actuellement sélectionné (transmis au serveur pour scoper 'mine'). */
+  orgId?: string;
+  /** Catégorie d'expérience : recrue (1re année) ou expérimenté. */
+  experience?: 'rookie' | 'experienced';
+}
 
 export interface LeaderboardEntry {
   rank: number;
@@ -12,6 +25,10 @@ export interface LeaderboardEntry {
   full_name: string;
   avatar_url: string | null;
   team_name: string | null;
+  team_id: string | null;
+  /** Nom du bureau (org) du rep — affiché seulement si la compagnie a 2+ offices. */
+  office_name: string | null;
+  experience_level: 'rookie' | 'experienced' | null;
   closes: number;
   revenue: number;
   doors_knocked: number;
@@ -19,9 +36,40 @@ export interface LeaderboardEntry {
   trend: number;
 }
 
-/** Ranked reps for a period — GET /api/leaderboard (same route as the web page). */
-export function getLeaderboard(period: LeaderboardPeriod): Promise<LeaderboardEntry[]> {
-  return serverGet<LeaderboardEntry[]>(`/leaderboard?period=${period}`);
+/** Ranked reps over a date window — GET /api/leaderboard (same route as the web page). */
+export function getLeaderboard(
+  range: LeaderboardRange,
+  opts: LeaderboardOptions = {},
+): Promise<LeaderboardEntry[]> {
+  return serverGet<LeaderboardEntry[]>(
+    `/leaderboard${qs({ from: range.from, to: range.to, scope: opts.scope, orgId: opts.orgId, experience: opts.experience })}`,
+  );
+}
+
+export interface Office {
+  id: string;
+  name: string;
+}
+
+/** List the offices (orgs) of the caller's company for the office filter. */
+export function getOffices(): Promise<{ offices: Office[]; activeOrgId: string }> {
+  return serverGet('/leaderboard/offices');
+}
+
+export interface RepProfileInfo {
+  profile: { id: string; full_name: string | null; avatar_url: string | null } | null;
+  /** Nom du bureau (office) du rep. */
+  office: string;
+  /** Org du rep dans la compagnie — sert à scoper ses stats. */
+  orgId: string;
+}
+
+/**
+ * Identité du rep — résolue côté serveur car la RLS client bloque
+ * profiles/team_members pour les reps d'un autre office.
+ */
+export function getRepProfileInfo(userId: string): Promise<RepProfileInfo> {
+  return serverGet(`/leaderboard/rep/${userId}/profile`);
 }
 
 export interface RepPerformanceDetail {
