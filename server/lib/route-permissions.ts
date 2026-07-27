@@ -131,7 +131,9 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   'PUT /api/features/:feature': 'settings.update',
 
   // ── Billing ──
-  'GET /api/billing/current': 'financial.view_payments',
+  // 'GET /api/billing/current' is NOT permission-gated: every member must be
+  // able to resolve the org's PLAN (it gates whole app areas). The route
+  // itself redacts payment details for users without financial.view_payments.
   'POST /api/billing/onboarding': 'settings.update',
   'POST /api/billing/subscribe': 'settings.update',
   'POST /api/billing/cancel': 'settings.update',
