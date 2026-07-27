@@ -38,6 +38,8 @@ export interface D2DWebMapHandle {
   clearSelection: () => void;
   /** White outline on the pin being visited by the filter panel's pin-nav (null clears) */
   navHighlight: (id: string | null) => void;
+  /** Web's compass box: reset bearing/pitch north-up */
+  resetNorth: () => void;
 }
 
 interface Props {
@@ -134,6 +136,7 @@ const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
     setSelectMode: (on) => inject(`window._setSelectMode&&window._setSelectMode(${on})`),
     clearSelection: () => inject('window._clearSelection&&window._clearSelection()'),
     navHighlight: (id) => inject(`window._navHl&&window._navHl(${JSON.stringify(id)})`),
+    resetNorth: () => inject('window._resetNorth&&window._resetNorth()'),
   }));
 
   const html = useMemo(() => {
@@ -165,6 +168,7 @@ var placing=false, drawing=false, pts=[];
 window._startPlace=function(){placing=true;map.getCanvas().style.cursor='crosshair';};
 window._stopPlace=function(){placing=false;map.getCanvas().style.cursor='';};
 window._flyTo=function(lng,lat,z){map.flyTo({center:[lng,lat],zoom:z||17,duration:800});};
+window._resetNorth=function(){map.easeTo({bearing:0,pitch:0,duration:600});};
 window._updateMe=function(lng,lat){meMarker.setLngLat([lng,lat]);};
 function ensureDraw(){
   if(map.getSource('draw'))return;
@@ -172,7 +176,7 @@ function ensureDraw(){
   map.addLayer({id:'draw-fill',type:'fill',source:'draw',paint:{'fill-color':'#6366f1','fill-opacity':0.12}});
   map.addLayer({id:'draw-line',type:'line',source:'draw',paint:{'line-color':'#6366f1','line-width':3,'line-dasharray':[2,2]}});
   map.addSource('drawpts',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
-  map.addLayer({id:'draw-pts',type:'circle',source:'drawpts',paint:{'circle-radius':6,'circle-color':'#fff','circle-stroke-color':'#6366f1','circle-stroke-width':3}});
+  map.addLayer({id:'draw-pts',type:'circle',source:'drawpts',paint:{'circle-radius':5,'circle-color':'#6366f1','circle-stroke-color':'#fff','circle-stroke-width':2}});
 }
 function updateDraw(){
   ensureDraw();
@@ -370,7 +374,7 @@ function setupLayers(){
   }
   if(!map.getSource('houses')){
     map.addSource('houses',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
-    map.addLayer({id:'houses-hit',type:'circle',source:'houses',paint:{'circle-radius':18,'circle-opacity':0.01,'circle-color':'#000'}});
+    map.addLayer({id:'houses-hit',type:'circle',source:'houses',paint:{'circle-radius':22,'circle-opacity':0.01,'circle-color':'#000'}});
   }
 }
 // Plan/satellite toggle: setStyle drops all sources/layers — re-add them once

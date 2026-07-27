@@ -3937,6 +3937,8 @@ const fr: TranslationKeys = {
     zoneDeleteConfirm: 'Supprimer cette zone ?',
     // D2D map — zone stats panel + rep assignment (web parity)
     pipeline: 'Pipeline',
+    periodLabel: 'Période',
+    repsHeader: 'Représentants',
     conversionRate: 'Taux de conversion',
     contactRate: 'Taux de contact',
     contacted: 'Contactées',
@@ -3951,6 +3953,9 @@ const fr: TranslationKeys = {
     linkedJob: 'Job liée',
     linkedQuote: 'Soumission liée',
     createJobOutcome: '+ Créer une Job',
+    recentSearches: 'Récentes',
+    gpsDeniedBanner: 'Localisation refusée — la carte ne peut pas te suivre.',
+    retryLabel: 'Réessayer',
     // D2D map — web-parity action buttons
     addPin: 'Ajouter un pin',
     selectMode: 'Sélectionner',

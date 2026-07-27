@@ -59,6 +59,16 @@ const STATUS_TO_BUCKET: Record<string, string> = {
 };
 // Web zone-stats breakdown order (map-container zone panel)
 const ZONE_BREAKDOWN_ORDER = ['closed_won', 'lead', 'appointment', 'follow_up', 'no_answer', 'rejected', 'other'];
+// SF Symbols closest to the web pin glyphs (placement toolbar replicas)
+const BUCKET_SF_ICON: Record<string, string> = {
+  closed_won: 'checkmark',
+  lead: 'scope',
+  follow_up: 'clock',
+  appointment: 'calendar',
+  no_answer: 'questionmark',
+  rejected: 'xmark',
+  other: 'circle.fill',
+};
 
 /** Ray-casting point-in-polygon on a [lng,lat] ring (web map-container 105-115). */
 function pointInPolygon(lng: number, lat: number, ring: [number, number][]): boolean {
@@ -72,6 +82,19 @@ function pointInPolygon(lng: number, lat: number, ring: [number, number][]): boo
 }
 
 type MapMode = 'view' | 'add_pin' | 'select' | 'draw_zone';
+
+/** Web's right toolbar boxes: white 44px squares, red icons, active = red bg. */
+function ToolBtn({ icon, onPress, active }: { icon: string; onPress: () => void; active?: boolean }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className={`h-11 w-11 items-center justify-center rounded-xl ${active ? 'bg-red-600' : 'bg-white'}`}
+      style={{ shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
+    >
+      <SymbolView name={icon as any} tintColor={active ? '#FFFFFF' : '#DC2626'} size={18} resizeMode="scaleAspectFit" />
+    </Pressable>
+  );
+}
 
 // Web's date filters (map-container DateFilter) — pins get 5 choices, zones 4
 type Period = 'all' | 'today' | 'yesterday' | 'month' | 'year';
@@ -140,6 +163,8 @@ export default function D2DMap() {
 
   // Web parity: tap a pin → popup card; ✎ → edit modal; tap a zone → zone panel
   const [pinCard, setPinCard] = useState<FieldHouse | null>(null);
+  // Freshly dropped pin → the modal shows the web's BIG stacked outcome buttons
+  const [pinCardNew, setPinCardNew] = useState(false);
   const [editPin, setEditPin] = useState<{
     house: FieldHouse;
     name: string;
@@ -150,10 +175,32 @@ export default function D2DMap() {
   } | null>(null);
   const [zoneCard, setZoneCard] = useState<Territory | null>(null);
 
-  // Street search (web's top-center search)
+  // Street search — full-screen spotlight opened from the toolbar loupe (web ⌘K)
+  const [searchVisible, setSearchVisible] = useState(false);
   const [searchQ, setSearchQ] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ id: string; place_name: string; center: [number, number] }>>([]);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Recent searches (web: localStorage 'lume.d2d.recent-searches', 8 max)
+  const [recentSearches, setRecentSearches] = useState<Array<{ id: string; place_name: string; center: [number, number] }>>([]);
+  useEffect(() => {
+    AsyncStorage.getItem('lume.d2d.recent-searches').then((v) => {
+      try {
+        const arr = JSON.parse(v ?? '[]');
+        if (Array.isArray(arr)) setRecentSearches(arr);
+      } catch {
+        /* ignore */
+      }
+    });
+  }, []);
+  const rememberSearch = (r: { id: string; place_name: string; center: [number, number] }) => {
+    const next = [r, ...recentSearches.filter((x) => x.id !== r.id)].slice(0, 8);
+    setRecentSearches(next);
+    AsyncStorage.setItem('lume.d2d.recent-searches', JSON.stringify(next));
+  };
+
+  // GPS-denied banner (web's amber non-blocking banner)
+  const [gpsDenied, setGpsDenied] = useState(false);
+  const [gpsBannerDismissed, setGpsBannerDismissed] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -162,6 +209,7 @@ export default function D2DMap() {
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') setGpsDenied(true);
         if (status === 'granted') {
           const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
           if (alive) {
@@ -232,18 +280,6 @@ export default function D2DMap() {
     () => (houses ?? []).filter((h) => inPeriod(h.created_at, pinPeriod)),
     [houses, pinPeriod],
   );
-
-  // Colored per-status counts for the stats pill (web's top-right stats)
-  const counts = useMemo(() => {
-    const c: Record<string, number> = {};
-    filteredHouses.forEach((h) => {
-      const b = STATUS_TO_BUCKET[h.current_status ?? ''] ?? 'other';
-      c[b] = (c[b] ?? 0) + 1;
-    });
-    return c;
-  }, [filteredHouses]);
-  const totalPins = filteredHouses.length;
-  const totalZones = zones?.length ?? 0;
 
   // Stable references — a re-render (e.g. typing in the search bar) must not
   // re-inject houses/reps into the WebView and rebuild every marker.
@@ -326,7 +362,7 @@ export default function D2DMap() {
     searchTimer.current = setTimeout(() => {
       const proximity = `&proximity=${mapCenter.lng},${mapCenter.lat}`;
       fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&language=${language}&limit=5&types=address,place,postcode,locality,neighborhood${proximity}`,
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&language=${language}&limit=6&types=address,place,postcode,locality,neighborhood${proximity}`,
       )
         .then((r) => r.json())
         .then((data) => {
@@ -335,7 +371,7 @@ export default function D2DMap() {
           );
         })
         .catch(() => setSearchResults([]));
-    }, 300);
+    }, 200);
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
@@ -400,7 +436,8 @@ export default function D2DMap() {
     mapRef.current?.cancelZoneDraw();
   };
 
-  // Place a pin at the tapped location with the selected status (web add_pin flow)
+  // Place a pin at the tapped location (web add_pin flow: drop, back to view,
+  // then the action modal opens on the NEW pin with big outcome buttons)
   const placePin = async (lat: number, lng: number) => {
     const house = selectedStatus;
     exitAddPin();
@@ -408,7 +445,8 @@ export default function D2DMap() {
     try {
       const created = await createHouseAt({ orgId, userId, lat, lng, status: house });
       refetch();
-      crmFor(house, created.address ?? '');
+      setPinCardNew(true);
+      setPinCard(created);
     } catch (e) {
       Alert.alert(t.mobileField.pin, (e as Error).message);
     }
@@ -478,7 +516,6 @@ export default function D2DMap() {
         return da - db;
       });
     if (!list.length) return;
-    setFiltersOpen(false);
     setNav({ bucket, ids: list.map((h) => h.id), index: 0 });
     goToHouse(list[0].id);
   };
@@ -515,6 +552,7 @@ export default function D2DMap() {
       note: houseNotes?.[h.id] ?? '',
     });
     setPinCard(null);
+    setPinCardNew(false);
   };
   const savePinEdit = async () => {
     if (!editPin || !orgId || !userId) return;
@@ -546,12 +584,17 @@ export default function D2DMap() {
       Alert.alert(t.mobileField.pin, (e as Error).message);
     }
   };
+  const closePinCard = () => {
+    setPinCard(null);
+    setPinCardNew(false);
+  };
+
   // Web action modal: tapping an outcome chip applies the status + CRM flow
   const applyOutcome = async (h: FieldHouse, status: HouseStatus) => {
     if (!orgId || !userId) return;
     try {
       await logHouseEvent({ orgId, houseId: h.id, userId, eventType: 'status_change', statusOverride: status });
-      setPinCard(null);
+      closePinCard();
       refetch();
       if (status === 'sale' && !h.job_id) crmFor('sale', h.address ?? '');
       else if (status === 'lead' && !h.quote_id) crmFor('lead', h.address ?? '');
@@ -570,6 +613,7 @@ export default function D2DMap() {
           try {
             await deleteFieldHouse(h.id);
             setPinCard(null);
+            setPinCardNew(false);
             refetch();
           } catch (e) {
             Alert.alert(t.mobileField.pin, (e as Error).message);
@@ -644,68 +688,8 @@ export default function D2DMap() {
         onDrawCount={setDrawCount}
       />
 
-      {/* ===== TOP — search (web top-center) + action buttons (web top-left) + stats ===== */}
-      <View className="absolute left-3 right-3" style={{ top: insets.top + 8 }}>
-        {/* Street search */}
-        <View className="flex-row items-center rounded-xl border border-white/10 bg-black/70 px-3">
-          <SymbolView name="magnifyingglass" tintColor="rgba(255,255,255,0.4)" size={15} resizeMode="scaleAspectFit" />
-          <TextInput
-            value={searchQ}
-            onChangeText={setSearchQ}
-            placeholder={t.mobileField.searchAddressPlaceholder}
-            placeholderTextColor="rgba(255,255,255,0.35)"
-            autoCorrect={false}
-            className="flex-1 px-2 py-2.5 text-[13px] text-white"
-          />
-          {searchQ ? (
-            <Pressable onPress={() => { setSearchQ(''); setSearchResults([]); }} hitSlop={8}>
-              <SymbolView name="xmark.circle.fill" tintColor="rgba(255,255,255,0.4)" size={17} resizeMode="scaleAspectFit" />
-            </Pressable>
-          ) : null}
-        </View>
-        {searchResults.length > 0 ? (
-          <View className="mt-1 overflow-hidden rounded-xl border border-white/10 bg-black/85">
-            {searchResults.map((r) => (
-              <Pressable
-                key={r.id}
-                onPress={() => {
-                  mapRef.current?.flyTo(r.center[1], r.center[0], 17);
-                  setSearchQ('');
-                  setSearchResults([]);
-                  Keyboard.dismiss();
-                }}
-                className="border-b border-white/5 px-3 py-2.5"
-              >
-                <Text className="text-[12px] text-white/80" numberOfLines={1}>{r.place_name}</Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-
-        {/* Action buttons row (same buttons as web, compact so all 4 fit) */}
-        {mode === 'view' ? (
-          <View className="mt-2 flex-row" style={{ gap: 6 }}>
-            <Pressable onPress={enterAddPin} className="flex-1 flex-row items-center justify-center gap-1 rounded-xl border border-white/10 bg-black/60 px-1.5 py-2.5">
-              <SymbolView name="plus" tintColor="rgba(255,255,255,0.8)" size={11} resizeMode="scaleAspectFit" />
-              <Text className="text-[11px] font-semibold text-white/80" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t.mobileField.addPin}</Text>
-            </Pressable>
-            <Pressable onPress={enterSelect} className="flex-1 flex-row items-center justify-center gap-1 rounded-xl border border-white/10 bg-black/60 px-1.5 py-2.5">
-              <SymbolView name="rectangle.dashed" tintColor="rgba(255,255,255,0.8)" size={11} resizeMode="scaleAspectFit" />
-              <Text className="text-[11px] font-semibold text-white/80" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t.mobileField.selectMode}</Text>
-            </Pressable>
-            {canDraw ? (
-              <Pressable onPress={enterDraw} className="flex-1 flex-row items-center justify-center gap-1 rounded-xl border border-indigo-400/20 bg-indigo-500/15 px-1.5 py-2.5">
-                <SymbolView name="hexagon" tintColor="#A5B4FC" size={11} resizeMode="scaleAspectFit" />
-                <Text className="text-[11px] font-semibold text-indigo-300" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t.mobileField.createZone}</Text>
-              </Pressable>
-            ) : null}
-            <Pressable onPress={() => setFiltersOpen(true)} className="flex-1 flex-row items-center justify-center gap-1 rounded-xl border border-white/10 bg-black/60 px-1.5 py-2.5">
-              <SymbolView name="line.3.horizontal.decrease" tintColor="rgba(255,255,255,0.8)" size={11} resizeMode="scaleAspectFit" />
-              <Text className="text-[11px] font-semibold text-white/80" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t.mobileField.filters}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
+      {/* ===== TOP-LEFT — mode banners ===== */}
+      <View className="absolute left-3 right-16" style={{ top: insets.top + 8 }}>
         {mode !== 'view' ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" className="mt-2" contentContainerStyle={{ gap: 8 }}>
           {mode === 'add_pin' ? (
@@ -743,60 +727,60 @@ export default function D2DMap() {
         </ScrollView>
         ) : null}
 
-        {/* Status selector strip while adding a pin (web's inline selector) */}
-        {mode === 'add_pin' ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2" contentContainerStyle={{ gap: 4 }}>
-            <View className="flex-row items-center gap-1 rounded-xl border border-white/10 bg-black/60 p-1">
-              {PIN_STATUSES.map((s) => {
-                const on = selectedStatus === s.house;
-                return (
-                  <Pressable
-                    key={s.house}
-                    onPress={() => setSelectedStatus(s.house)}
-                    className={`flex-row items-center gap-1.5 rounded-lg px-2.5 py-1.5 ${on ? 'bg-white/15' : ''}`}
-                  >
-                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: s.color }} />
-                    <Text className={`text-[11px] font-medium ${on ? 'text-white' : 'text-white/40'}`}>{t.mobileField[s.labelKey]}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </ScrollView>
-        ) : null}
-
-        {/* Stats pill (web's top-right stats) */}
-        {totalPins > 0 && mode === 'view' ? (
-          <View className="mt-2 flex-row items-center gap-3 self-start rounded-xl border border-white/10 bg-black/60 px-4 py-2">
-            {PIN_STATUSES.filter((s) => counts[s.bucket]).map((s) => (
-              <View key={s.bucket} className="flex-row items-center gap-1.5">
-                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.color }} />
-                <Text className="text-[12px] font-bold text-white/80">{counts[s.bucket]}</Text>
-              </View>
-            ))}
-            <View className="h-4 w-px bg-white/10" />
-            <Text className="text-[12px] font-semibold text-white/50">
-              {t.mobileField.housesZonesSummary
-                .replace('{houses}', String(totalPins))
-                .replace('{zones}', String(totalZones))}
-            </Text>
-          </View>
-        ) : null}
       </View>
+
+      {/* ===== RIGHT toolbar (web's white boxes with red icons) ===== */}
+      {mode === 'view' ? (
+        <View className="absolute right-3 items-end" style={{ top: insets.top + 8, gap: 8 }}>
+          <ToolBtn icon="mappin.and.ellipse" onPress={enterAddPin} />
+          <ToolBtn icon="line.3.horizontal.decrease" active={filtersOpen} onPress={() => setFiltersOpen(!filtersOpen)} />
+          <ToolBtn icon="magnifyingglass" active={searchVisible} onPress={() => { setSearchVisible(!searchVisible); setFiltersOpen(false); }} />
+          {canDraw ? <ToolBtn icon="hand.draw" onPress={enterDraw} /> : null}
+          <ToolBtn icon="rectangle.dashed" onPress={enterSelect} />
+          <ToolBtn icon="map" active={mapStyle === 'satellite'} onPress={toggleMapStyle} />
+          {/* Compass (web: round, white, red north needle → reset north-up) */}
+          <Pressable
+            onPress={() => mapRef.current?.resetNorth()}
+            className="h-11 w-11 items-center justify-center rounded-full bg-white"
+            style={{ shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
+          >
+            <SymbolView name="location.north.fill" tintColor="#dc2626" size={17} resizeMode="scaleAspectFit" />
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* Bottom placement toolbar while adding a pin (web's bottom strip) */}
+      {mode === 'add_pin' ? (
+        <View className="absolute left-0 right-0" style={{ bottom: insets.bottom + 16 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingHorizontal: 12 }}>
+            {PIN_STATUSES.map((s) => {
+              const on = selectedStatus === s.house;
+              return (
+                <Pressable
+                  key={s.house}
+                  onPress={() => setSelectedStatus(s.house)}
+                  className="items-center rounded-xl bg-white px-3 py-2"
+                  style={{ minWidth: 82, opacity: on ? 1 : 0.55, borderWidth: 2, borderColor: on ? s.color : 'transparent' }}
+                >
+                  <View
+                    className="h-7 w-7 items-center justify-center rounded-full"
+                    style={{ backgroundColor: s.color, borderWidth: 2, borderColor: 'rgba(255,255,255,0.92)' }}
+                  >
+                    <SymbolView name={BUCKET_SF_ICON[s.bucket] as any} tintColor="#FFFFFF" size={12} resizeMode="scaleAspectFit" />
+                  </View>
+                  <Text className="mt-1 text-[10px] font-semibold text-neutral-700">{t.mobileField[s.labelKey]}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      ) : null}
 
       {!ready ? (
         <View className="absolute inset-0 items-center justify-center bg-black/40">
           <ActivityIndicator color="#fff" />
         </View>
       ) : null}
-
-      {/* Plan/satellite toggle (web's folded-map toolbar box) */}
-      <Pressable
-        onPress={toggleMapStyle}
-        className={`absolute right-4 h-[38px] w-[38px] items-center justify-center rounded-lg border ${mapStyle === 'satellite' ? 'border-indigo-400/40 bg-indigo-500/30' : 'border-white/10 bg-black/70'}`}
-        style={{ bottom: insets.bottom + 24 + 46 }}
-      >
-        <SymbolView name="map.fill" tintColor={mapStyle === 'satellite' ? '#C7D2FE' : 'rgba(255,255,255,0.7)'} size={16} resizeMode="scaleAspectFit" />
-      </Pressable>
 
       {/* GPS re-center (web's bottom-right dark square) */}
       <Pressable
@@ -807,8 +791,82 @@ export default function D2DMap() {
         <SymbolView name="location.fill" tintColor="rgba(255,255,255,0.7)" size={17} resizeMode="scaleAspectFit" />
       </Pressable>
 
-      {/* Pin-by-pin navigation bar (web's ◀ N/total ▶ bar, floating over the map) */}
-      {nav && mode === 'view' ? (
+      {/* GPS-denied banner (web's amber non-blocking banner) */}
+      {gpsDenied && !gpsBannerDismissed && mode === 'view' ? (
+        <View className="absolute left-3 right-3 items-center" style={{ bottom: insets.bottom + 76 }}>
+          <View className="flex-row items-center gap-3 rounded-xl border border-amber-400/30 bg-amber-500/15 px-4 py-2.5">
+            <Text className="flex-1 text-[12px] text-amber-200">{t.mobileField.gpsDeniedBanner}</Text>
+            <Pressable
+              onPress={async () => {
+                const { status } = await Location.requestForegroundPermissionsAsync();
+                if (status === 'granted') {
+                  setGpsDenied(false);
+                  recenter();
+                }
+              }}
+              hitSlop={6}
+            >
+              <Text className="text-[12px] font-bold text-amber-300">{t.mobileField.retryLabel}</Text>
+            </Pressable>
+            <Pressable onPress={() => setGpsBannerDismissed(true)} hitSlop={6}>
+              <SymbolView name="xmark" tintColor="rgba(252,211,77,0.7)" size={12} resizeMode="scaleAspectFit" />
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      {/* Spotlight search overlay (web's ⌘K: dark full-screen, recents) */}
+      {searchVisible ? (
+        <View className="absolute inset-0" style={{ backgroundColor: 'rgba(12,12,20,0.95)', paddingTop: insets.top + 12 }}>
+          <View className="mx-4 flex-row items-center rounded-xl border border-white/10 bg-white/5 px-3">
+            <SymbolView name="magnifyingglass" tintColor="rgba(255,255,255,0.4)" size={16} resizeMode="scaleAspectFit" />
+            <TextInput
+              value={searchQ}
+              onChangeText={setSearchQ}
+              placeholder={t.mobileField.searchAddressPlaceholder}
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              autoCorrect={false}
+              autoFocus
+              className="flex-1 px-2 py-3 text-[15px] text-white"
+            />
+            <Pressable
+              onPress={() => {
+                setSearchVisible(false);
+                setSearchQ('');
+                setSearchResults([]);
+                Keyboard.dismiss();
+              }}
+              hitSlop={8}
+            >
+              <SymbolView name="xmark.circle.fill" tintColor="rgba(255,255,255,0.4)" size={19} resizeMode="scaleAspectFit" />
+            </Pressable>
+          </View>
+          <ScrollView keyboardShouldPersistTaps="handled" className="mt-2 px-4">
+            {searchQ.trim().length < 3 && recentSearches.length > 0 ? (
+              <Text className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">{t.mobileField.recentSearches}</Text>
+            ) : null}
+            {(searchQ.trim().length >= 3 ? searchResults : recentSearches).map((r) => (
+              <Pressable
+                key={r.id}
+                onPress={() => {
+                  rememberSearch(r);
+                  mapRef.current?.flyTo(r.center[1], r.center[0], 17);
+                  setSearchQ('');
+                  setSearchResults([]);
+                  setSearchVisible(false);
+                  Keyboard.dismiss();
+                }}
+                className="border-b border-white/5 py-3"
+              >
+                <Text className="text-[13px] text-white/80" numberOfLines={1}>{r.place_name}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      {/* Floating pin-nav bar — only when the filters panel is closed (it hosts the bar otherwise) */}
+      {nav && mode === 'view' && !filtersOpen ? (
         <View className="absolute left-3 right-3 items-center" style={{ bottom: insets.bottom + 72 }}>
           <View className="flex-row items-center gap-3 rounded-xl border border-white/10 bg-black/70 px-4 py-2.5">
             <View
@@ -860,197 +918,182 @@ export default function D2DMap() {
         </View>
       ) : null}
 
-      {/* ===== Filters — dark bottom sheet (web's filter panel) ===== */}
-      <Modal visible={filtersOpen} transparent animationType="slide" onRequestClose={() => setFiltersOpen(false)}>
-        <Pressable className="flex-1 justify-end bg-black/50" onPress={() => setFiltersOpen(false)}>
-          <Pressable
-            className="rounded-t-3xl border-t border-white/10 bg-[#0c0c14] px-5 pt-5"
-            style={{ paddingBottom: insets.bottom + 16, maxHeight: '85%' }}
-            onPress={(e) => e.stopPropagation()}
+      {/* ===== Filters — anchored 280px panel, exact web structure (map-container 2136-2289) ===== */}
+      {filtersOpen && mode === 'view' ? (
+        <>
+          <Pressable className="absolute inset-0" onPress={() => setFiltersOpen(false)} />
+          <View
+            className="absolute w-[280px] rounded-xl border border-white/10 bg-black/85 p-3"
+            style={{ top: insets.top + 8, right: 64, maxHeight: '72%' }}
           >
-            <View className="mb-4 flex-row items-center justify-between">
-              <Text className="text-[15px] font-semibold text-white">{t.mobileField.filters}</Text>
-              <Pressable onPress={() => setFiltersOpen(false)} hitSlop={10}>
-                <SymbolView name="xmark.circle.fill" tintColor="rgba(255,255,255,0.3)" size={24} resizeMode="scaleAspectFit" />
-              </Pressable>
-            </View>
             <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-
-            {/* Pins — status */}
-            <View className="mb-2 flex-row items-center justify-between">
-              <Text className="text-[10px] font-semibold uppercase tracking-wider text-white/30">{t.mobileField.pinsStatusHeader}</Text>
-              <Pressable
-                onPress={() =>
-                  setActiveBuckets(activeBuckets.size === ALL_BUCKETS.length ? new Set() : new Set(ALL_BUCKETS))
-                }
-                hitSlop={8}
-              >
-                <Text className="text-[10px] font-medium text-white/40">
-                  {activeBuckets.size === ALL_BUCKETS.length ? t.mobileField.deselectAll : t.mobileField.selectAll}
-                </Text>
-              </Pressable>
-            </View>
-            <View className="mb-4">
+              {/* 1) Pins — Statut + tout (dé)sélectionner */}
+              <View className="mb-1 flex-row items-center justify-between">
+                <Text className="text-[10px] font-semibold uppercase tracking-wider text-white/30">{t.mobileField.pinsStatusHeader}</Text>
+                <Pressable
+                  onPress={() => setActiveBuckets(activeBuckets.size === ALL_BUCKETS.length ? new Set() : new Set(ALL_BUCKETS))}
+                  hitSlop={8}
+                >
+                  <Text className="text-[9px] font-medium text-white/40">
+                    {activeBuckets.size === ALL_BUCKETS.length ? t.mobileField.deselectAll : t.mobileField.selectAll}
+                  </Text>
+                </Pressable>
+              </View>
               {PIN_STATUSES.map((s) => {
                 const on = activeBuckets.has(s.bucket);
+                const navving = nav?.bucket === s.bucket;
                 return (
                   <Pressable
                     key={s.bucket}
-                    onPress={() => toggleBucket(s.bucket)}
-                    className={`flex-row items-center gap-2.5 rounded-lg px-3 py-2 ${on ? 'bg-white/10' : ''}`}
+                    onPress={() => {
+                      // Web behavior: an ACTIVE row starts pin-nav; an inactive one turns the filter on
+                      if (on) startNav(s.bucket);
+                      else setActiveBuckets((prev) => new Set(prev).add(s.bucket));
+                    }}
+                    className="flex-row items-center gap-2 rounded-lg px-1.5 py-1.5"
+                    style={navving ? { borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' } : undefined}
                   >
                     <View
-                      className="h-4 w-4 items-center justify-center rounded border"
-                      style={{ borderColor: on ? s.color : 'rgba(255,255,255,0.15)', backgroundColor: on ? s.color : 'transparent' }}
+                      className="h-3.5 w-3.5 items-center justify-center rounded"
+                      style={{ borderWidth: 1, borderColor: on ? s.color : 'rgba(255,255,255,0.2)', backgroundColor: on ? s.color : 'transparent' }}
                     >
-                      {on ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={9} resizeMode="scaleAspectFit" /> : null}
+                      {on ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={8} resizeMode="scaleAspectFit" /> : null}
                     </View>
                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.color, opacity: on ? 1 : 0.35 }} />
-                    <Text className={`flex-1 text-[13px] font-medium ${on ? 'text-white' : 'text-white/30'}`}>
-                      {t.mobileField[s.labelKey]}
-                    </Text>
-                    {counts[s.bucket] ? <Text className="text-[11px] font-bold text-white/40">{counts[s.bucket]}</Text> : null}
-                    {counts[s.bucket] ? (
-                      <Pressable
-                        onPress={() => startNav(s.bucket)}
-                        hitSlop={8}
-                        className="rounded-md border border-white/10 bg-white/5 p-1.5"
-                      >
-                        <SymbolView name="scope" tintColor="rgba(255,255,255,0.6)" size={13} resizeMode="scaleAspectFit" />
-                      </Pressable>
+                    <Text className={`flex-1 text-[12px] ${on ? 'text-white' : 'text-white/30'}`}>{t.mobileField[s.labelKey]}</Text>
+                    {navving && nav ? (
+                      <Text className="text-[10px] font-bold text-white/50" style={{ fontVariant: ['tabular-nums'] }}>
+                        {nav.index + 1}/{nav.ids.length}
+                      </Text>
                     ) : null}
                   </Pressable>
                 );
               })}
-            </View>
 
-            {/* Pins — period (web's DateFilter) + notes toggle */}
-            <Text className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">{t.mobileField.pinsPeriodHeader}</Text>
-            <View className="mb-2 flex-row flex-wrap" style={{ gap: 6 }}>
-              {(
-                [
-                  ['today', t.mobileField.periodToday],
-                  ['yesterday', t.mobileField.periodYesterday],
-                  ['month', t.mobileField.periodThisMonth],
-                  ['year', t.mobileField.periodThisYear],
-                  ['all', t.mobileField.periodAll],
-                ] as [Period, string][]
-              ).map(([p, label]) => (
-                <Pressable
-                  key={p}
-                  onPress={() => setPinPeriod(p)}
-                  className={`rounded-full border px-3 py-1.5 ${pinPeriod === p ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
-                >
-                  <Text className={`text-[11px] font-semibold ${pinPeriod === p ? 'text-indigo-300' : 'text-white/40'}`}>{label}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <Pressable
-              onPress={() => setShowNotes(!showNotes)}
-              className={`mb-4 flex-row items-center gap-2.5 rounded-lg px-3 py-2 ${showNotes ? 'bg-white/10' : ''}`}
-            >
-              <View
-                className="h-4 w-4 items-center justify-center rounded border"
-                style={{ borderColor: showNotes ? '#EAB308' : 'rgba(255,255,255,0.15)', backgroundColor: showNotes ? '#EAB308' : 'transparent' }}
-              >
-                {showNotes ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={9} resizeMode="scaleAspectFit" /> : null}
-              </View>
-              <Text className={`text-[13px] font-medium ${showNotes ? 'text-white' : 'text-white/30'}`}>{t.mobileField.showNotesFilter}</Text>
-            </Pressable>
-
-            {/* Zones */}
-            <View className="mb-3 border-t border-white/10 pt-3">
-              <Text className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-indigo-300/50">Zones</Text>
-              <Pressable
-                onPress={() => setShowZones(!showZones)}
-                className={`flex-row items-center gap-2.5 rounded-lg px-3 py-2 ${showZones ? 'bg-white/10' : ''}`}
-              >
-                <View
-                  className="h-4 w-4 items-center justify-center rounded border"
-                  style={{ borderColor: showZones ? '#6366F1' : 'rgba(255,255,255,0.15)', backgroundColor: showZones ? '#6366F1' : 'transparent' }}
-                >
-                  {showZones ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={9} resizeMode="scaleAspectFit" /> : null}
+              {/* 2) Pin-nav bar (only while navigating, like the web) */}
+              {nav ? (
+                <View className="mt-1.5 flex-row items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5">
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: PIN_STATUSES.find((s) => s.bucket === nav.bucket)?.color ?? '#9CA3AF' }} />
+                  <Text className="flex-1 text-[11px] font-bold text-white" style={{ fontVariant: ['tabular-nums'] }}>
+                    {nav.index + 1} / {nav.ids.length}
+                  </Text>
+                  <Pressable onPress={() => navStep(-1)} hitSlop={6} className="rounded border border-white/10 px-2 py-1">
+                    <SymbolView name="chevron.left" tintColor="rgba(255,255,255,0.8)" size={11} resizeMode="scaleAspectFit" />
+                  </Pressable>
+                  <Pressable onPress={() => navStep(1)} hitSlop={6} className="rounded border border-white/10 px-2 py-1">
+                    <SymbolView name="chevron.right" tintColor="rgba(255,255,255,0.8)" size={11} resizeMode="scaleAspectFit" />
+                  </Pressable>
+                  <Pressable onPress={stopNav} hitSlop={6} className="px-1">
+                    <SymbolView name="xmark" tintColor="rgba(255,255,255,0.5)" size={11} resizeMode="scaleAspectFit" />
+                  </Pressable>
                 </View>
-                <Text className={`text-[13px] font-medium ${showZones ? 'text-white' : 'text-white/30'}`}>{t.mobileField.showZonesFilter}</Text>
-              </Pressable>
-              {showZones ? (
-                <>
-                  {/* Zones — period (web's zone DateFilter, 4 choices) */}
-                  <View className="mt-2 flex-row flex-wrap" style={{ gap: 6 }}>
-                    {(
-                      [
-                        ['today', t.mobileField.periodToday],
-                        ['month', t.mobileField.periodThisMonth],
-                        ['year', t.mobileField.periodThisYear],
-                        ['all', t.mobileField.periodAll],
-                      ] as [Period, string][]
-                    ).map(([p, label]) => (
-                      <Pressable
-                        key={p}
-                        onPress={() => setZonePeriod(p)}
-                        className={`rounded-full border px-3 py-1.5 ${zonePeriod === p ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
-                      >
-                        <Text className={`text-[11px] font-semibold ${zonePeriod === p ? 'text-indigo-300' : 'text-white/40'}`}>{label}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  {/* Zones — « Par représentant » (web's rep select, value = user_id) */}
-                  {(fieldReps ?? []).length > 0 ? (
-                    <>
-                      <Text className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">{t.mobileField.byRep}</Text>
-                      <View className="mt-1.5 flex-row flex-wrap" style={{ gap: 6 }}>
-                        <Pressable
-                          onPress={() => setZoneRepFilter(null)}
-                          className={`rounded-full border px-3 py-1.5 ${zoneRepFilter === null ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
-                        >
-                          <Text className={`text-[11px] font-semibold ${zoneRepFilter === null ? 'text-indigo-300' : 'text-white/40'}`}>
-                            {t.mobileField.allReps}
-                          </Text>
-                        </Pressable>
-                        {(fieldReps ?? []).map((r) => {
-                          const sel = zoneRepFilter === r.user_id;
-                          return (
-                            <Pressable
-                              key={r.user_id}
-                              onPress={() => setZoneRepFilter(sel ? null : r.user_id)}
-                              className={`rounded-full border px-3 py-1.5 ${sel ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
-                            >
-                              <Text className={`text-[11px] font-semibold ${sel ? 'text-indigo-300' : 'text-white/40'}`}>
-                                {r.display_name ?? '—'}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </>
-                  ) : null}
-                </>
               ) : null}
-            </View>
 
-            {/* Reps */}
-            <View className="border-t border-white/10 pt-3">
-              <Text className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-300/50">{t.mobileField.showRepsFilter}</Text>
-              <Pressable
-                onPress={() => setShowReps(!showReps)}
-                className={`flex-row items-center gap-2.5 rounded-lg px-3 py-2 ${showReps ? 'bg-white/10' : ''}`}
-              >
+              {/* 3) Afficher notes */}
+              <Pressable onPress={() => setShowNotes(!showNotes)} className="mt-1 flex-row items-center gap-2 rounded-lg px-1.5 py-1.5">
                 <View
-                  className="h-4 w-4 items-center justify-center rounded border"
-                  style={{ borderColor: showReps ? '#22C55E' : 'rgba(255,255,255,0.15)', backgroundColor: showReps ? '#22C55E' : 'transparent' }}
+                  className="h-3.5 w-3.5 items-center justify-center rounded"
+                  style={{ borderWidth: 1, borderColor: showNotes ? '#6366f1' : 'rgba(255,255,255,0.2)', backgroundColor: showNotes ? '#6366f1' : 'transparent' }}
                 >
-                  {showReps ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={9} resizeMode="scaleAspectFit" /> : null}
+                  {showNotes ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={8} resizeMode="scaleAspectFit" /> : null}
                 </View>
-                <Text className={`flex-1 text-[13px] font-medium ${showReps ? 'text-white' : 'text-white/30'}`}>{t.mobileField.showRepsFilter}</Text>
-                <Text className="text-[11px] font-medium text-emerald-400/60">
-                  {t.mobileField.repsOnline.replace('{count}', String(onlineReps.length))}
-                </Text>
+                <Text className={`text-[12px] ${showNotes ? 'text-white' : 'text-white/30'}`}>{t.mobileField.showNotesFilter}</Text>
               </Pressable>
-            </View>
+
+              {/* 4) Pins — Période */}
+              <View className="mt-2 border-t border-white/10 pt-2">
+                <Text className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/30">{t.mobileField.pinsPeriodHeader}</Text>
+                <View className="flex-row flex-wrap" style={{ gap: 4 }}>
+                  {(
+                    [
+                      ['today', t.mobileField.periodToday],
+                      ['yesterday', t.mobileField.periodYesterday],
+                      ['month', t.mobileField.periodThisMonth],
+                      ['year', t.mobileField.periodThisYear],
+                      ['all', t.mobileField.periodAll],
+                    ] as [Period, string][]
+                  ).map(([p, label]) => (
+                    <Pressable key={p} onPress={() => setPinPeriod(p)} className={`rounded-md px-2 py-1 ${pinPeriod === p ? 'bg-white/[0.12]' : 'bg-white/5'}`}>
+                      <Text className={`text-[10px] font-semibold ${pinPeriod === p ? 'text-white' : 'text-white/40'}`}>{label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* 5) Zones */}
+              <View className="mt-2 border-t border-white/10 pt-2">
+                <Text className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-indigo-300/50">Zones</Text>
+                <Pressable onPress={() => setShowZones(!showZones)} className="flex-row items-center gap-2 rounded-lg px-1.5 py-1.5">
+                  <View
+                    className="h-3.5 w-3.5 items-center justify-center rounded"
+                    style={{ borderWidth: 1, borderColor: showZones ? '#6366f1' : 'rgba(255,255,255,0.2)', backgroundColor: showZones ? '#6366f1' : 'transparent' }}
+                  >
+                    {showZones ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={8} resizeMode="scaleAspectFit" /> : null}
+                  </View>
+                  <Text className={`text-[12px] ${showZones ? 'text-white' : 'text-white/30'}`}>{t.mobileField.showZonesFilter}</Text>
+                </Pressable>
+                <Text className="mt-1 mb-1 px-1.5 text-[9px] font-semibold uppercase tracking-wider text-white/25">{t.mobileField.periodLabel}</Text>
+                <View className="flex-row flex-wrap px-1.5" style={{ gap: 4 }}>
+                  {(
+                    [
+                      ['today', t.mobileField.periodToday],
+                      ['month', t.mobileField.periodThisMonth],
+                      ['year', t.mobileField.periodThisYear],
+                      ['all', t.mobileField.periodAll],
+                    ] as [Period, string][]
+                  ).map(([p, label]) => (
+                    <Pressable key={p} onPress={() => setZonePeriod(p)} className={`rounded-md px-2 py-1 ${zonePeriod === p ? 'bg-indigo-500/20' : 'bg-white/5'}`}>
+                      <Text className={`text-[10px] font-semibold ${zonePeriod === p ? 'text-indigo-300' : 'text-white/40'}`}>{label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {(fieldReps ?? []).length > 0 ? (
+                  <>
+                    <Text className="mt-1.5 mb-1 px-1.5 text-[9px] font-semibold uppercase tracking-wider text-white/25">{t.mobileField.byRep}</Text>
+                    <View className="flex-row flex-wrap px-1.5" style={{ gap: 4 }}>
+                      <Pressable
+                        onPress={() => setZoneRepFilter(null)}
+                        className={`rounded-md px-2 py-1 ${zoneRepFilter === null ? 'bg-indigo-500/20' : 'bg-white/5'}`}
+                      >
+                        <Text className={`text-[10px] font-semibold ${zoneRepFilter === null ? 'text-indigo-300' : 'text-white/40'}`}>{t.mobileField.allReps}</Text>
+                      </Pressable>
+                      {(fieldReps ?? []).map((r) => {
+                        const sel = zoneRepFilter === r.user_id;
+                        return (
+                          <Pressable
+                            key={r.user_id}
+                            onPress={() => setZoneRepFilter(sel ? null : r.user_id)}
+                            className={`rounded-md px-2 py-1 ${sel ? 'bg-indigo-500/20' : 'bg-white/5'}`}
+                          >
+                            <Text className={`text-[10px] font-semibold ${sel ? 'text-indigo-300' : 'text-white/40'}`}>{r.display_name ?? '—'}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </>
+                ) : null}
+              </View>
+
+              {/* 6) Représentants */}
+              <View className="mt-2 border-t border-white/10 pt-2">
+                <Text className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-300/50">{t.mobileField.repsHeader}</Text>
+                <Pressable onPress={() => setShowReps(!showReps)} className="flex-row items-center gap-2 rounded-lg px-1.5 py-1.5">
+                  <View
+                    className="h-3.5 w-3.5 items-center justify-center rounded"
+                    style={{ borderWidth: 1, borderColor: showReps ? '#22c55e' : 'rgba(255,255,255,0.2)', backgroundColor: showReps ? '#22c55e' : 'transparent' }}
+                  >
+                    {showReps ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={8} resizeMode="scaleAspectFit" /> : null}
+                  </View>
+                  <Text className={`flex-1 text-[12px] ${showReps ? 'text-white' : 'text-white/30'}`}>{t.mobileField.showRepsFilter}</Text>
+                  <Text className="text-[10px] font-medium text-emerald-400/60">
+                    {t.mobileField.repsOnline.replace('{count}', String(onlineReps.length))}
+                  </Text>
+                </Pressable>
+              </View>
             </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </View>
+        </>
+      ) : null}
 
       {/* ===== New zone modal — dark (web's zone confirm) ===== */}
       <Modal visible={!!zoneCoords} transparent animationType="slide" onRequestClose={closeZone}>
@@ -1104,8 +1147,8 @@ export default function D2DMap() {
       </Modal>
 
       {/* ===== Pin action modal (web's WHITE action modal, map-container 2549-2703) ===== */}
-      <Modal visible={!!pinCard} transparent animationType="slide" onRequestClose={() => setPinCard(null)}>
-        <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setPinCard(null)}>
+      <Modal visible={!!pinCard} transparent animationType="slide" onRequestClose={closePinCard}>
+        <Pressable className="flex-1 justify-end bg-black/40" onPress={closePinCard}>
           {pinCard ? (
             <Pressable
               className="gap-3 rounded-t-3xl bg-white p-5"
@@ -1122,7 +1165,7 @@ export default function D2DMap() {
                     {t.mobileField[bucketOf(pinCard.current_status).labelKey]}
                   </Text>
                 </View>
-                <Pressable onPress={() => setPinCard(null)} hitSlop={10}>
+                <Pressable onPress={closePinCard} hitSlop={10}>
                   <SymbolView name="xmark.circle.fill" tintColor="#D4D4D4" size={24} resizeMode="scaleAspectFit" />
                 </Pressable>
               </View>
@@ -1145,30 +1188,51 @@ export default function D2DMap() {
                 {pinCard.quote_id ? <Text className="text-[11px] font-semibold text-emerald-600">✓ {t.mobileField.linkedQuote}</Text> : null}
               </View>
 
-              {/* Outcome chips — the web's 5 statuses, 2 columns */}
-              <View className="flex-row flex-wrap" style={{ gap: 8 }}>
-                {OUTCOME_BUCKETS.map((b) => {
-                  const s = PIN_STATUSES.find((x) => x.bucket === b)!;
-                  const current = bucketOf(pinCard.current_status).bucket === b;
-                  return (
-                    <Pressable
-                      key={b}
-                      onPress={() => applyOutcome(pinCard, s.house)}
-                      className="flex-row items-center justify-center gap-1.5 rounded-xl border py-2.5"
-                      style={{
-                        width: '48%',
-                        borderColor: current ? s.color : '#E5E5E5',
-                        backgroundColor: current ? `${s.color}18` : '#FAFAFA',
-                      }}
-                    >
-                      <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: s.color }} />
-                      <Text className="text-[12px] font-semibold" style={{ color: current ? s.color : '#404040' }}>
-                        {b === 'closed_won' && !pinCard.job_id ? t.mobileField.createJobOutcome : t.mobileField[s.labelKey]}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              {/* Outcomes — new pin: BIG stacked colored buttons (web); existing: chips 2-col */}
+              {pinCardNew ? (
+                <View style={{ gap: 8 }}>
+                  {OUTCOME_BUCKETS.map((b) => {
+                    const s = PIN_STATUSES.find((x) => x.bucket === b)!;
+                    return (
+                      <Pressable
+                        key={b}
+                        onPress={() => applyOutcome(pinCard, s.house)}
+                        className="flex-row items-center justify-center gap-2 rounded-xl py-3.5"
+                        style={{ backgroundColor: s.color }}
+                      >
+                        <SymbolView name={BUCKET_SF_ICON[b] as any} tintColor="#FFFFFF" size={14} resizeMode="scaleAspectFit" />
+                        <Text className="text-[14px] font-bold text-white">
+                          {b === 'closed_won' ? t.mobileField.createJobOutcome : t.mobileField[s.labelKey]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+                  {OUTCOME_BUCKETS.map((b) => {
+                    const s = PIN_STATUSES.find((x) => x.bucket === b)!;
+                    const current = bucketOf(pinCard.current_status).bucket === b;
+                    return (
+                      <Pressable
+                        key={b}
+                        onPress={() => applyOutcome(pinCard, s.house)}
+                        className="flex-row items-center justify-center gap-1.5 rounded-xl border py-2.5"
+                        style={{
+                          width: '48%',
+                          borderColor: current ? s.color : '#E5E5E5',
+                          backgroundColor: current ? `${s.color}18` : '#FAFAFA',
+                        }}
+                      >
+                        <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: s.color }} />
+                        <Text className="text-[12px] font-semibold" style={{ color: current ? s.color : '#404040' }}>
+                          {b === 'closed_won' && !pinCard.job_id ? t.mobileField.createJobOutcome : t.mobileField[s.labelKey]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
 
               {/* Secondary actions */}
               <View className="flex-row" style={{ gap: 8 }}>
@@ -1183,6 +1247,7 @@ export default function D2DMap() {
                     onPress={() => {
                       const cid = pinCard.client_id;
                       setPinCard(null);
+                      setPinCardNew(false);
                       router.push(`/(app)/clients/${cid}` as any);
                     }}
                     className="flex-1 items-center rounded-xl border border-neutral-300 bg-white py-3"
@@ -1194,6 +1259,7 @@ export default function D2DMap() {
                     onPress={() => {
                       const id = pinCard.id;
                       setPinCard(null);
+                      setPinCardNew(false);
                       router.push(`/(app)/d2d-house/${id}` as any);
                     }}
                     className="flex-1 items-center rounded-xl border border-neutral-300 bg-white py-3"
@@ -1213,6 +1279,7 @@ export default function D2DMap() {
                   onPress={() => {
                     const id = pinCard.id;
                     setPinCard(null);
+                    setPinCardNew(false);
                     router.push(`/(app)/d2d-house/${id}` as any);
                   }}
                   className="items-center py-0.5"

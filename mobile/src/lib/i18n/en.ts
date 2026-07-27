@@ -3945,6 +3945,8 @@ const en = {
     zoneDeleteConfirm: 'Delete this zone?',
     // D2D map — zone stats panel + rep assignment (web parity)
     pipeline: 'Pipeline',
+    periodLabel: 'Period',
+    repsHeader: 'Reps',
     conversionRate: 'Conversion rate',
     contactRate: 'Contact rate',
     contacted: 'Contacted',
@@ -3959,6 +3961,9 @@ const en = {
     linkedJob: 'Linked job',
     linkedQuote: 'Linked quote',
     createJobOutcome: '+ Create job',
+    recentSearches: 'Recent',
+    gpsDeniedBanner: 'Location denied — the map cannot follow you.',
+    retryLabel: 'Retry',
     // D2D map — web-parity action buttons
     addPin: 'Add a pin',
     selectMode: 'Select',
