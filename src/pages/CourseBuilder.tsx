@@ -497,46 +497,73 @@ export default function CourseBuilder() {
     }
   };
 
-  // ── Auto-save lesson (debounce 2s) ──
+  // ── Édition de leçon: source de vérité unique = les champs d'édition, tenus
+  // à jour dans un ref pour éviter deux auto-saves concurrents qui s'écrasaient.
+  const lessonDraftRef = useRef<{ id: string | null; payload: any } | null>(null);
+  lessonDraftRef.current = activeLessonId ? {
+    id: activeLessonId,
+    payload: {
+      title: lessonTitle, content_type: lessonContentType,
+      video_url: lessonVideoUrl || null, embed_url: lessonEmbedUrl || null,
+      text_content: lessonTextContent || null,
+      duration_min: Number.isFinite(lessonDuration) ? lessonDuration : 0,
+      attachments: lessonAttachments,
+    },
+  } : null;
+
+  // Persiste le brouillon d'une leçon (id + payload) et met à jour le state local.
+  const persistLessonDraft = useCallback(async (id: string, payload: any) => {
+    try {
+      await updateLesson(id, payload);
+      setModules(prev => prev.map(m => ({
+        ...m, lessons: m.lessons.map(l => (l.id === id ? { ...l, ...payload } : l)),
+      })));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+    } catch { /* silent */ }
+  }, []);
+
+  // Auto-save de la leçon courante (debounce 2s) — écrit les champs d'édition.
   const lessonAutoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!activeLessonId) return;
     if (lessonAutoSaveTimer.current) clearTimeout(lessonAutoSaveTimer.current);
-    lessonAutoSaveTimer.current = setTimeout(async () => {
-      try {
-        await updateLesson(activeLessonId, {
-          title: lessonTitle, content_type: lessonContentType,
-          video_url: lessonVideoUrl || null, embed_url: lessonEmbedUrl || null,
-          text_content: lessonTextContent || null, duration_min: lessonDuration, attachments: lessonAttachments,
-        });
-        // Update local state silently
-        setModules(prev => prev.map(m => ({
-          ...m, lessons: m.lessons.map(l => l.id === activeLessonId
-            ? { ...l, title: lessonTitle, content_type: lessonContentType, video_url: lessonVideoUrl || null, embed_url: lessonEmbedUrl || null, text_content: lessonTextContent || null, duration_min: lessonDuration, attachments: lessonAttachments }
-            : l),
-        })));
-      } catch { /* silent auto-save */ }
-    }, 2000);
+    const id = activeLessonId;
+    const payload = lessonDraftRef.current?.payload;
+    lessonAutoSaveTimer.current = setTimeout(() => { if (payload) void persistLessonDraft(id, payload); }, 2000);
     return () => { if (lessonAutoSaveTimer.current) clearTimeout(lessonAutoSaveTimer.current); };
-  }, [lessonTitle, lessonContentType, lessonVideoUrl, lessonEmbedUrl, lessonTextContent, lessonDuration, lessonAttachments, activeLessonId]);
+  }, [lessonTitle, lessonContentType, lessonVideoUrl, lessonEmbedUrl, lessonTextContent, lessonDuration, lessonAttachments, activeLessonId, persistLessonDraft]);
 
-  // ── Save lesson when switching away ──
+  // Flush la leçon SORTANTE avec ses vraies valeurs d'édition (pas `modules`,
+  // qui pouvait être périmé) au moment du changement de leçon.
   const prevLessonRef = useRef<string | null>(null);
+  const prevDraftRef = useRef<any>(null);
   useEffect(() => {
     const prevId = prevLessonRef.current;
-    if (prevId && prevId !== activeLessonId) {
-      // Fire-and-forget save of previous lesson
-      const prevLesson = modules.flatMap(m => m.lessons).find(l => l.id === prevId);
-      if (prevLesson) {
-        updateLesson(prevId, {
-          title: prevLesson.title, content_type: prevLesson.content_type,
-          video_url: prevLesson.video_url, embed_url: prevLesson.embed_url,
-          text_content: prevLesson.text_content, duration_min: prevLesson.duration_min, attachments: prevLesson.attachments,
-        }).catch(() => {});
-      }
+    if (prevId && prevId !== activeLessonId && prevDraftRef.current) {
+      if (lessonAutoSaveTimer.current) clearTimeout(lessonAutoSaveTimer.current);
+      void persistLessonDraft(prevId, prevDraftRef.current);
     }
     prevLessonRef.current = activeLessonId;
-  }, [activeLessonId]);
+  }, [activeLessonId, persistLessonDraft]);
+  // Mémorise le dernier payload de la leçon courante pour le flush au switch.
+  useEffect(() => { prevDraftRef.current = lessonDraftRef.current?.payload ?? null; });
+
+  // Flush au démontage (quitter le builder) — évite de perdre les 2 dernières s.
+  useEffect(() => () => {
+    const d = lessonDraftRef.current;
+    if (d?.id) updateLesson(d.id, d.payload).catch(() => {});
+  }, []);
+
+  // Avertit si l'utilisateur ferme l'onglet pendant qu'une sauvegarde est en
+  // attente (fenêtre de 2s du debounce), pour ne pas perdre la dernière frappe.
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (lessonAutoSaveTimer.current || autoSaveTimer.current) { e.preventDefault(); e.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   const toggleModule = (mid: string) => setExpandedModules(prev => { const n = new Set(prev); n.has(mid) ? n.delete(mid) : n.add(mid); return n; });
 
@@ -978,7 +1005,7 @@ export default function CourseBuilder() {
                 <div className="w-32">
                   <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.duration}</label>
                   <div className="relative">
-                    <input type="number" min={0} value={lessonDuration} onChange={e => setLessonDuration(Number(e.target.value))} className="glass-input w-full px-4 py-2.5 rounded-xl text-sm pr-10" />
+                    <input type="number" min={0} value={lessonDuration} onChange={e => { const n = parseInt(e.target.value, 10); setLessonDuration(Number.isFinite(n) && n >= 0 ? n : 0); }} className="glass-input w-full px-4 py-2.5 rounded-xl text-sm pr-10" />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-text-muted">min</span>
                   </div>
                 </div>
