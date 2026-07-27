@@ -729,9 +729,9 @@ export default function D2DMap() {
 
       </View>
 
-      {/* ===== RIGHT toolbar (web's white boxes with red icons) ===== */}
+      {/* ===== RIGHT toolbar (web's white boxes with red icons, vertically centered) ===== */}
       {mode === 'view' ? (
-        <View className="absolute right-3 items-end" style={{ top: insets.top + 8, gap: 8 }}>
+        <View className="absolute right-3 items-end" style={{ top: '30%', gap: 8 }}>
           <ToolBtn icon="mappin.and.ellipse" onPress={enterAddPin} />
           <ToolBtn icon="line.3.horizontal.decrease" active={filtersOpen} onPress={() => setFiltersOpen(!filtersOpen)} />
           <ToolBtn icon="magnifyingglass" active={searchVisible} onPress={() => { setSearchVisible(!searchVisible); setFiltersOpen(false); }} />
@@ -924,7 +924,7 @@ export default function D2DMap() {
           <Pressable className="absolute inset-0" onPress={() => setFiltersOpen(false)} />
           <View
             className="absolute w-[280px] rounded-xl border border-white/10 bg-black/85 p-3"
-            style={{ top: insets.top + 8, right: 64, maxHeight: '72%' }}
+            style={{ top: '30%', right: 64, maxHeight: '60%' }}
           >
             <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
               {/* 1) Pins — Statut + tout (dé)sélectionner */}
