@@ -55,6 +55,10 @@ export default function CourseView() {
   const [activeLesson, setActiveLesson] = useState<CourseLesson | null>(null);
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [markingComplete, setMarkingComplete] = useState(false);
+  // Leçons vidéo regardées jusqu'à la fin (≥95%) pendant cette session — permet
+  // de n'activer "Compléter" qu'une fois la vidéo terminée. Réinitialisé au
+  // changement de leçon.
+  const [videoWatched, setVideoWatched] = useState<Set<string>>(new Set());
   const [showMore, setShowMore] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [teamProgress, setTeamProgress] = useState<TeamMemberProgress[]>([]);
@@ -228,7 +232,22 @@ export default function CourseView() {
             /* ── Video / Embed / PDF: aspect-video container ── */
             <div className="aspect-video bg-black rounded-2xl overflow-hidden mb-5 shadow-lg relative">
               {activeLesson?.content_type === 'video' && activeLesson.video_url ? (
-                <video key={activeLesson.id} src={activeLesson.video_url} controls className="w-full h-full object-contain" />
+                <video
+                  key={activeLesson.id}
+                  src={activeLesson.video_url}
+                  controls
+                  className="w-full h-full object-contain"
+                  onEnded={() => { const lid = activeLesson.id; setVideoWatched(prev => new Set(prev).add(lid)); }}
+                  onTimeUpdate={(e) => {
+                    const v = e.currentTarget;
+                    // Marque "regardée" à ≥95% (certains lecteurs n'émettent pas
+                    // 'ended' si l'utilisateur saute la toute fin).
+                    if (v.duration > 0 && v.currentTime / v.duration >= 0.95) {
+                      const lid = activeLesson.id;
+                      setVideoWatched(prev => (prev.has(lid) ? prev : new Set(prev).add(lid)));
+                    }
+                  }}
+                />
               ) : activeLesson?.content_type === 'embed' && activeLesson.embed_url ? (
                 <iframe key={activeLesson.id} src={getEmbedUrl(activeLesson.embed_url) || ''} className="w-full h-full"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
@@ -265,17 +284,25 @@ export default function CourseView() {
           )}
 
           {/* ── Mark as complete checkbox + next lesson ── */}
-          {activeLesson && (
+          {activeLesson && (() => {
+            const isDone = completedSet.has(activeLesson.id);
+            // Pour une leçon VIDÉO native, il faut avoir regardé la vidéo (≥95%)
+            // avant de pouvoir la marquer terminée. Les autres types (embed, pdf,
+            // texte, lien) restent cliquables immédiatement (fin non détectable).
+            const isNativeVideo = activeLesson.content_type === 'video' && !!activeLesson.video_url;
+            const lockedUntilWatched = isNativeVideo && !isDone && !videoWatched.has(activeLesson.id);
+            return (
             <div className={cn(
               'flex items-center justify-between rounded-xl border px-5 py-3.5 mb-5 transition-all duration-200',
-              completedSet.has(activeLesson.id)
+              isDone
                 ? 'bg-success/8 border-success/25'
                 : 'bg-surface-card border-outline/30'
             )}>
               <button
                 onClick={handleMarkComplete}
-                disabled={markingComplete}
-                className="flex items-center gap-3 group"
+                disabled={markingComplete || lockedUntilWatched}
+                title={lockedUntilWatched ? (fr ? 'Terminez la vidéo pour compléter' : 'Finish the video to complete') : undefined}
+                className={cn('flex items-center gap-3 group', lockedUntilWatched && 'cursor-not-allowed opacity-60')}
               >
                 <div className={cn(
                   'w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all duration-200 shrink-0',
@@ -308,8 +335,14 @@ export default function CourseView() {
                   </button>
                 ) : null;
               })()}
+              {lockedUntilWatched && (
+                <span className="text-[11px] text-text-tertiary">
+                  {fr ? 'Terminez la vidéo pour compléter' : 'Finish the video to complete'}
+                </span>
+              )}
             </div>
-          )}
+            );
+          })()}
 
           {/* About This Course */}
           {course.description && (

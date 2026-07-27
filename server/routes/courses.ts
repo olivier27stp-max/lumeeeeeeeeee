@@ -1073,14 +1073,41 @@ router.get('/courses/:id/team-progress', async (req, res) => {
       .eq('course_id', courseId);
     if (progErr) throw progErr;
 
-    // Get org members
+    // Audience du cours: on ne montre la progression QUE des membres qui peuvent
+    // voir ce cours (rôle ciblé / user ciblé / assigné), pas toute l'org.
+    const { data: courseRow } = await admin
+      .from('courses')
+      .select('visibility, target_roles, target_user_ids, created_by')
+      .eq('id', courseId)
+      .maybeSingle();
+    const tRoles: string[] = Array.isArray(courseRow?.target_roles) ? courseRow!.target_roles : [];
+    const tUsers: string[] = Array.isArray(courseRow?.target_user_ids) ? courseRow!.target_user_ids : [];
+    const hasTargeting = tRoles.length > 0 || tUsers.length > 0;
+    const { data: assignRows } = hasTargeting || courseRow?.visibility === 'assigned'
+      ? await admin.from('course_assignments').select('user_id, team_id').eq('course_id', courseId)
+      : { data: [] as any[] };
+    const assignedUserIds = new Set((assignRows || []).map((a: any) => a.user_id).filter(Boolean));
+    const assignedTeamIds = new Set((assignRows || []).map((a: any) => a.team_id).filter(Boolean));
+
+    // Get org members (avec rôle + équipe pour filtrer par audience)
     const { data: members, error: memErr } = await admin
       .from('memberships')
-      .select('user_id, full_name, avatar_url')
+      .select('user_id, full_name, avatar_url, role, team_id')
       .eq('org_id', auth.orgId);
     if (memErr) throw memErr;
 
-    const result = (members || []).map((m: any) => {
+    const canSee = (m: any): boolean => {
+      if (m.role === 'owner' || m.role === 'admin') return true;
+      if (courseRow?.created_by === m.user_id) return true;
+      if (tUsers.includes(m.user_id)) return true;
+      if (tRoles.length > 0 && tRoles.includes(m.role)) return true;
+      if (!hasTargeting && (courseRow?.visibility ?? 'all') === 'all') return true;
+      if (assignedUserIds.has(m.user_id)) return true;
+      if (m.team_id && assignedTeamIds.has(m.team_id)) return true;
+      return false;
+    };
+
+    const result = (members || []).filter(canSee).map((m: any) => {
       const userRows = (progressRows || []).filter((r: any) => r.user_id === m.user_id);
       const completedCount = userRows.filter((r: any) => r.completed).length;
       const lastActivity = userRows.length > 0
