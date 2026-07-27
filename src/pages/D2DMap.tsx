@@ -159,6 +159,8 @@ export default function D2DMap() {
       toast.success(fr ? 'Pin sauvegardé' : 'Pin saved');
     } catch (err: any) {
       toast.error(err?.message || (fr ? 'Erreur de sauvegarde du pin' : 'Failed to save pin'));
+      // The optimistic marker was never saved (e.g. reserved zone) — discard it
+      window.dispatchEvent(new CustomEvent('d2d:discard-pin', { detail: { pinId: pin.id } }));
     }
   }, [fr]);
 
