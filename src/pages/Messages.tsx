@@ -274,6 +274,13 @@ export default function Messages() {
   const [showNewModal, setShowNewModal] = useState(false);
   // Channel toggle: keeps the SMS page exactly as before, adds an Email view.
   const [channel, setChannel] = useState<'sms' | 'email'>('sms');
+
+  // La boîte de réception Gmail (EmailInbox) est masquée : le scope
+  // gmail.readonly est un scope RESTREINT par Google qui exige un audit de
+  // sécurité CASA (payant, annuel). Le code reste en place et intact — pour
+  // réactiver la fonctionnalité, repasser ce flag à true (et refaire la
+  // validation des scopes Gmail côté Google Cloud Console).
+  const EMAIL_INBOX_ENABLED = false;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -478,27 +485,29 @@ export default function Messages() {
   return (
     <PermissionGate permission="automations.update">
     <>
-      {/* ── Channel selector: SMS (unchanged) · Email ── */}
-      <div className="mb-3 inline-flex bg-surface-secondary rounded-xl p-1 gap-1">
-        {(['sms', 'email'] as const).map((ch) => (
-          <button
-            key={ch}
-            onClick={() => setChannel(ch)}
-            className={cn(
-              'flex items-center gap-2 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all',
-              channel === ch
-                ? 'bg-surface text-text-primary shadow-sm'
-                : 'text-text-tertiary hover:text-text-secondary'
-            )}
-          >
-            {ch === 'sms' ? <MessageSquare size={14} /> : <Mail size={14} />}
-            {ch === 'sms' ? 'SMS' : 'Email'}
-          </button>
-        ))}
-      </div>
+      {/* ── Channel selector: SMS · Email (email masqué si EMAIL_INBOX_ENABLED=false) ── */}
+      {EMAIL_INBOX_ENABLED && (
+        <div className="mb-3 inline-flex bg-surface-secondary rounded-xl p-1 gap-1">
+          {(['sms', 'email'] as const).map((ch) => (
+            <button
+              key={ch}
+              onClick={() => setChannel(ch)}
+              className={cn(
+                'flex items-center gap-2 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all',
+                channel === ch
+                  ? 'bg-surface text-text-primary shadow-sm'
+                  : 'text-text-tertiary hover:text-text-secondary'
+              )}
+            >
+              {ch === 'sms' ? <MessageSquare size={14} /> : <Mail size={14} />}
+              {ch === 'sms' ? 'SMS' : 'Email'}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── EMAIL channel ── */}
-      {channel === 'email' && (
+      {EMAIL_INBOX_ENABLED && channel === 'email' && (
         <div className="bg-surface rounded-2xl border border-border overflow-hidden flex" style={{ height: 'calc(100vh - 220px)' }}>
           <EmailInbox />
         </div>
