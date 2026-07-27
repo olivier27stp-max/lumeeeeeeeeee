@@ -10,6 +10,7 @@ import {
   markCommissionPaid,
 } from '../../lib/commissionsApi';
 import type { FsCommissionEntry, CommissionPayrollPreview } from '../../types';
+import { fetchTeamList } from '../../lib/invitationsApi';
 import CommissionFilters, { type CommissionFiltersValue } from './CommissionFilters';
 import CommissionTable from './CommissionTable';
 import UpcomingPayouts from './UpcomingPayouts';
@@ -163,11 +164,31 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
     return { total, paid, pending, reversed, series, xLabels, leaderboard, deals: list.length, avgPerDeal, repCount: byRep.size };
   }, [entries, payroll, profileMap, filters.from, filters.to]);
 
-  // Build rep list for the filter dropdown
+  // Rep list for the filter dropdown — loaded once from the org's members, so
+  // it stays STABLE. (Deriving it from the filtered entries collapsed the list
+  // to just the selected rep, trapping the filter.)
+  const [allReps, setAllReps] = useState<{ id: string; label: string }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchTeamList()
+      .then(({ members }) => {
+        if (cancelled) return;
+        setAllReps(
+          members
+            .filter((m) => m.status === 'active' && m.user_id)
+            .map((m) => ({ id: m.user_id, label: m.full_name || m.email || m.user_id })),
+        );
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  // Fallback: if the team list is empty, derive from entries (union, not just the
+  // filtered rep) so the dropdown is never empty.
   const repOptions = useMemo(() => {
+    if (allReps.length) return allReps;
     const ids = [...new Set((entries ?? []).map((e) => e.user_id).filter(Boolean))];
     return ids.map((id) => ({ id, label: profileMap[id] ?? id }));
-  }, [entries, profileMap]);
+  }, [allReps, entries, profileMap]);
 
   return (
     <div className="space-y-6">

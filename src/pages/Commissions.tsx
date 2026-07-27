@@ -233,8 +233,22 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
   });
   const [entries, setEntries] = useState<FsCommissionEntry[] | null>(null);
   const [profileMap, setProfileMap] = useState<Record<string, string>>({});
+  const [allReps, setAllReps] = useState<{ id: string; label: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Liste stable des reps pour le filtre (membres actifs de l'org), pas dérivée
+  // des entrées filtrées — sinon on reste coincé sur le rep sélectionné.
+  useEffect(() => {
+    let cancelled = false;
+    fetchTeamList()
+      .then(({ members }) => {
+        if (cancelled) return;
+        setAllReps(members.filter((m) => m.status === 'active' && m.user_id).map((m) => ({ id: m.user_id, label: m.full_name || m.email || m.user_id })));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -290,10 +304,9 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
     } finally { setActionLoading(null); }
   };
 
-  const repOptions = (() => {
-    const ids = [...new Set((entries ?? []).map((e) => e.user_id).filter(Boolean))];
-    return ids.map((id) => ({ id, label: profileMap[id] ?? id }));
-  })();
+  const repOptions = allReps.length
+    ? allReps
+    : [...new Set((entries ?? []).map((e) => e.user_id).filter(Boolean))].map((id) => ({ id, label: profileMap[id] ?? id }));
 
   return (
     <div className="space-y-6">
