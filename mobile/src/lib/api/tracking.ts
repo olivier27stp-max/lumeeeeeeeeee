@@ -11,6 +11,9 @@ export interface LiveLocation {
   tracking_status: string;
   is_moving: boolean | null;
   user_name?: string | null;
+  team_id?: string | null;
+  team_name?: string | null;
+  team_color?: string | null;
 }
 
 export interface TrackPoint {
@@ -140,26 +143,38 @@ export async function endTrackingSession(input: {
     .eq('user_id', input.userId);
 }
 
-/** Current live positions for the org, with member names attached. */
+/** Current live positions for the org, with member names + team attached.
+ * Web parity (trackingApi.getActiveLiveLocations): only active/idle rows
+ * refreshed in the last 10 min — a rep whose app died leaves an 'active' row
+ * behind forever, which used to render as a permanent ghost marker. */
 export async function getActiveLiveLocations(orgId: string): Promise<LiveLocation[]> {
+  const freshSince = new Date(Date.now() - 10 * 60_000).toISOString();
   const { data, error } = await supabase
     .from('tracking_live_locations')
-    .select('user_id, latitude, longitude, recorded_at, tracking_status, is_moving')
-    .eq('org_id', orgId);
+    .select('user_id, latitude, longitude, recorded_at, tracking_status, is_moving, team_id')
+    .eq('org_id', orgId)
+    .in('tracking_status', ['active', 'idle'])
+    .gte('recorded_at', freshSince);
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as any[];
 
   const ids = rows.map((r) => r.user_id).filter(Boolean);
-  if (ids.length) {
-    const { data: mem } = await supabase
-      .from('memberships')
-      .select('user_id, full_name')
-      .eq('org_id', orgId)
-      .in('user_id', ids);
-    const byId = new Map((mem ?? []).map((m: any) => [m.user_id, m.full_name]));
-    rows.forEach((r) => {
-      r.user_name = byId.get(r.user_id) ?? null;
-    });
-  }
+  const teamIds = [...new Set(rows.map((r) => r.team_id).filter(Boolean))];
+  const [mem, teams] = await Promise.all([
+    ids.length
+      ? supabase.from('memberships').select('user_id, full_name').eq('org_id', orgId).in('user_id', ids)
+      : Promise.resolve({ data: [] as any[] }),
+    teamIds.length
+      ? supabase.from('teams').select('id, name, color_hex').in('id', teamIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const nameById = new Map((mem.data ?? []).map((m: any) => [m.user_id, m.full_name]));
+  const teamById = new Map((teams.data ?? []).map((tm: any) => [tm.id, tm]));
+  rows.forEach((r) => {
+    r.user_name = nameById.get(r.user_id) ?? null;
+    const tm = r.team_id ? teamById.get(r.team_id) : null;
+    r.team_name = tm?.name ?? null;
+    r.team_color = tm?.color_hex ?? null;
+  });
   return rows as LiveLocation[];
 }

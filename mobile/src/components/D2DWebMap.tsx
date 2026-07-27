@@ -24,6 +24,8 @@ export interface WebMapRep {
   latitude: number;
   longitude: number;
   tracking_status: string;
+  team_name?: string | null;
+  team_color?: string | null;
 }
 
 export interface D2DWebMapHandle {
@@ -56,6 +58,8 @@ interface Props {
   showNotes?: boolean;
   /** Base map style — 'streets' (web default) or 'satellite' (toolbar toggle) */
   mapStyle?: 'streets' | 'satellite';
+  /** Opening zoom (web: 17 with a cached GPS fix, else lower) */
+  initialZoom?: number;
   onSelectHouse: (id: string) => void;
   /** Tap on a zone polygon (empty map area) — opens the zone panel, like the web */
   onZoneTap?: (id: string) => void;
@@ -115,7 +119,7 @@ el.innerHTML='<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke
  * the map is ready, so updates never reload the WebView.
  */
 const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
-  { center, houses, zones = [], reps = [], showReps = true, showZones = true, visibleStatuses, showNotes = false, mapStyle = 'streets', onSelectHouse, onZoneTap, onPlace, onZoneDrawn, onCenterChange, onSelectionChange, onDrawCount },
+  { center, houses, zones = [], reps = [], showReps = true, showZones = true, visibleStatuses, showNotes = false, mapStyle = 'streets', initialZoom = 16, onSelectHouse, onZoneTap, onPlace, onZoneDrawn, onCenterChange, onSelectionChange, onDrawCount },
   ref,
 ) {
   const webRef = useRef<WebView>(null);
@@ -160,7 +164,7 @@ ${COLOR_JS}
 // Web parity: streets by default, satellite via the toolbar toggle
 var styleName='${initialStyleRef.current}';
 function styleUrl(n){return n==='satellite'?'mapbox://styles/mapbox/satellite-streets-v12':'mapbox://styles/mapbox/streets-v12';}
-var map=new mapboxgl.Map({container:'map',style:styleUrl(styleName),center:[${center.lng},${center.lat}],zoom:16,maxZoom:22,minZoom:1,doubleClickZoom:false});
+var map=new mapboxgl.Map({container:'map',style:styleUrl(styleName),center:[${center.lng},${center.lat}],zoom:${initialZoom},maxZoom:22,minZoom:1,doubleClickZoom:false});
 var meEl=document.createElement('div');meEl.className='me';meEl.innerHTML='<div class="p"></div><div class="c"></div>';
 var meMarker=new mapboxgl.Marker({element:meEl,anchor:'center'}).setLngLat([${center.lng},${center.lat}]).addTo(map);
 
@@ -239,32 +243,70 @@ function rebuildClusterIndex(){
   }
   renderClusters();
 }
+function makeClusterMarker(n,coord,onTap){
+  var s=clSize(n);
+  var el=document.createElement('div');
+  var inner=document.createElement('div');
+  inner.style.cssText='width:'+s+'px;height:'+s+'px;border-radius:50%;background:linear-gradient(135deg,#272c3e,#14171f);border:2px solid rgba(255,255,255,0.92);box-shadow:0 2px 6px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-family:Inter,system-ui,sans-serif;font-weight:600;color:#fff;font-size:'+clFont(n)+'px;letter-spacing:-0.01em;user-select:none;opacity:0;transform:scale(0.8);transition:opacity 150ms ease-out,transform 150ms ease-out;';
+  inner.textContent=clLabel(n);
+  el.appendChild(inner);
+  el.setAttribute('role','img');
+  el.addEventListener('click',function(ev){ev.stopPropagation();ev.preventDefault();onTap();});
+  requestAnimationFrame(function(){inner.style.opacity='1';inner.style.transform='scale(1)';});
+  var m=new mapboxgl.Marker({element:el}).setLngLat(coord).addTo(map);
+  m._inner=inner;
+  return m;
+}
+function removeClusterMarker(m){
+  if(m._inner){m._inner.style.opacity='0';m._inner.style.transform='scale(0.85)';}
+  setTimeout(function(){m.remove();},180);
+}
 function renderClusters(){
-  clusterMarkers.forEach(function(m){m.remove();});clusterMarkers=[];clusteredIds={};
+  clusterMarkers.forEach(removeClusterMarker);clusterMarkers=[];clusteredIds={};
+  var visible=allHouses.filter(function(h){return h.lat!=null&&h.lng!=null&&visibleBuckets[bucketFor(h.status)];});
   if(clusterIndex){
     var z=Math.max(0,Math.min(24,Math.floor(map.getZoom())));
     clusterIndex.getClusters([-180,-85,180,85],z).forEach(function(f){
       if(!f.properties.cluster)return;
       var n=f.properties.point_count;
       clusterIndex.getLeaves(f.properties.cluster_id,Infinity).forEach(function(l){clusteredIds[l.properties.id]=1;});
-      var s=clSize(n);
-      var el=document.createElement('div');
-      var inner=document.createElement('div');
-      inner.style.cssText='width:'+s+'px;height:'+s+'px;border-radius:50%;background:linear-gradient(135deg,#272c3e,#14171f);border:2px solid rgba(255,255,255,0.92);box-shadow:0 2px 6px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-family:Inter,system-ui,sans-serif;font-weight:600;color:#fff;font-size:'+clFont(n)+'px;letter-spacing:-0.01em;user-select:none;';
-      inner.textContent=clLabel(n);
-      el.appendChild(inner);
       (function(cid,coord){
-        el.addEventListener('click',function(ev){ev.stopPropagation();ev.preventDefault();
+        clusterMarkers.push(makeClusterMarker(n,coord,function(){
           var t;try{t=clusterIndex.getClusterExpansionZoom(cid);}catch(e){t=map.getZoom()+2;}
           t=Math.min(Math.max(t,map.getZoom()+0.5),22);
-          map.easeTo({center:coord,zoom:t,duration:600});});
+          map.easeTo({center:coord,zoom:t,duration:600});
+        }));
       })(f.properties.cluster_id,f.geometry.coordinates);
-      clusterMarkers.push(new mapboxgl.Marker({element:el}).setLngLat(f.geometry.coordinates).addTo(map));
     });
   }
+  // Past maxZoom (or no proximity cluster), pins at STRICTLY identical
+  // coordinates still group at any zoom (web pin-cluster.ts 213-223)
+  var byXY={};
+  visible.forEach(function(h){
+    if(clusteredIds[h.id])return;
+    var k='xy'+h.lng+','+h.lat;
+    (byXY[k]=byXY[k]||[]).push(h);
+  });
+  Object.keys(byXY).forEach(function(k){
+    var grp=byXY[k];
+    if(grp.length<2)return;
+    grp.forEach(function(h){clusteredIds[h.id]=1;});
+    var coord=[grp[0].lng,grp[0].lat];
+    clusterMarkers.push(makeClusterMarker(grp.length,coord,function(){
+      map.easeTo({center:coord,zoom:Math.min(map.getZoom()+2,22),duration:600});
+    }));
+  });
   applyHouseVisibility();
 }
+// Recalc at integer zoom crossings + settle (web: floor(zoom) change, moveend)
+var lastZi=null;
+map.on('zoom',function(){var zi=Math.floor(map.getZoom());if(zi!==lastZi){lastZi=zi;renderClusters();}});
 map.on('zoomend',renderClusters);
+// Web: double-click/tap in view mode zooms +0.5 around the tapped point
+map.on('dblclick',function(e){
+  if(placing||drawing||selecting)return;
+  map.easeTo({zoom:map.getZoom()+0.5,around:e.lngLat,duration:350});
+});
 
 function applyHouseVisibility(){
   // 'flex', never '' — resetting to '' drops the flex centering (web fix 9df4ebe)
@@ -332,7 +374,7 @@ window._showZones=function(b){
 var repsData=[], repsVisible=true, repMarkers={};
 function repEl(rep){
   var name=rep.user_name||'Rep';
-  var color='#6366f1';
+  var color=rep.team_color||'#6366f1';
   var dot=rep.tracking_status==='active'?'#22c55e':'#f59e0b';
   var el=document.createElement('div');
   el.style.cssText='position:relative;display:flex;flex-direction:column;align-items:center;';
@@ -346,8 +388,14 @@ function repEl(rep){
   badge.style.cssText='position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;background:'+dot+';border:2px solid white;z-index:2;';
   wrap.appendChild(pulse);wrap.appendChild(avatar);wrap.appendChild(badge);
   var label=document.createElement('div');
-  label.style.cssText='margin-top:3px;background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:1px 7px;white-space:nowrap;font-family:system-ui;font-size:9px;font-weight:700;color:white;';
+  label.style.cssText='margin-top:3px;background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:1px 7px;white-space:nowrap;font-family:system-ui;font-size:10px;font-weight:700;color:white;text-align:center;';
   label.textContent=name;
+  if(rep.team_name||rep.tracking_status){
+    var sub=document.createElement('div');
+    sub.style.cssText='font-size:8px;font-weight:400;color:rgba(255,255,255,0.5);';
+    sub.textContent=(rep.team_name?rep.team_name+' \\u00b7 ':'')+(rep.tracking_status||'');
+    label.appendChild(sub);
+  }
   el.appendChild(wrap);el.appendChild(label);
   return el;
 }

@@ -126,6 +126,22 @@ export default function D2DMap() {
   const [center, setCenter] = useState(DEFAULT);
   const [mapCenter, setMapCenter] = useState(DEFAULT);
   const [ready, setReady] = useState(false);
+  // Web parity: last GPS fix cached → instant open at zoom 17 next launch
+  const [initialZoom, setInitialZoom] = useState(16);
+  useEffect(() => {
+    AsyncStorage.getItem('d2d-last-gps').then((v) => {
+      try {
+        const c = JSON.parse(v ?? '');
+        if (c && typeof c.lat === 'number' && typeof c.lng === 'number') {
+          setInitialZoom(17);
+          setCenter(c);
+          setMapCenter(c);
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+  }, []);
 
   // Same modes as the web map-container
   const [mode, setMode] = useState<MapMode>('view');
@@ -216,6 +232,7 @@ export default function D2DMap() {
             const c = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             setCenter(c);
             setMapCenter(c);
+            AsyncStorage.setItem('d2d-last-gps', JSON.stringify(c));
           }
           // Live GPS: keep the pulsing dot moving, like the web's watchPosition
           sub = await Location.watchPositionAsync(
@@ -270,9 +287,10 @@ export default function D2DMap() {
     enabled: !!orgId && showReps,
     refetchInterval: 15_000,
   });
+  // Web parity: own position excluded (the blue GPS dot already shows it)
   const onlineReps = useMemo(
-    () => (liveReps ?? []).filter((r) => r.tracking_status !== 'offline'),
-    [liveReps],
+    () => (liveReps ?? []).filter((r) => r.tracking_status !== 'offline' && r.user_id !== userId),
+    [liveReps, userId],
   );
 
   // Pin period filter applies before everything downstream (counts, map, nav)
@@ -346,6 +364,8 @@ export default function D2DMap() {
         latitude: r.latitude,
         longitude: r.longitude,
         tracking_status: r.tracking_status,
+        team_name: r.team_name ?? null,
+        team_color: r.team_color ?? null,
       })),
     [onlineReps],
   );
@@ -667,6 +687,7 @@ export default function D2DMap() {
         visibleStatuses={visibleStatuses}
         showNotes={showNotes}
         mapStyle={mapStyle}
+        initialZoom={initialZoom}
         onSelectHouse={(id) => {
           // Web parity: tap → popup card (edit / delete / CRM / client record);
           // the full house sheet stays reachable from the card.
@@ -738,13 +759,13 @@ export default function D2DMap() {
           {canDraw ? <ToolBtn icon="hand.draw" onPress={enterDraw} /> : null}
           <ToolBtn icon="rectangle.dashed" onPress={enterSelect} />
           <ToolBtn icon="map" active={mapStyle === 'satellite'} onPress={toggleMapStyle} />
-          {/* Compass (web: round, white, red north needle → reset north-up) */}
+          {/* Compass (web: round, white, red needle → reset north-up) */}
           <Pressable
             onPress={() => mapRef.current?.resetNorth()}
             className="h-11 w-11 items-center justify-center rounded-full bg-white"
             style={{ shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
           >
-            <SymbolView name="location.north.fill" tintColor="#dc2626" size={17} resizeMode="scaleAspectFit" />
+            <SymbolView name="safari" tintColor="#dc2626" size={22} resizeMode="scaleAspectFit" />
           </Pressable>
         </View>
       ) : null}
@@ -788,7 +809,7 @@ export default function D2DMap() {
         className="absolute right-4 h-[38px] w-[38px] items-center justify-center rounded-lg border border-white/10 bg-black/70"
         style={{ bottom: insets.bottom + 24 }}
       >
-        <SymbolView name="location.fill" tintColor="rgba(255,255,255,0.7)" size={17} resizeMode="scaleAspectFit" />
+        <SymbolView name="scope" tintColor="rgba(255,255,255,0.85)" size={17} resizeMode="scaleAspectFit" />
       </Pressable>
 
       {/* GPS-denied banner (web's amber non-blocking banner) */}
@@ -1173,6 +1194,11 @@ export default function D2DMap() {
               {/* Info card (gray, like the web) */}
               <View className="gap-1.5 rounded-2xl bg-neutral-100 px-4 py-3">
                 {pinCard.address ? <Text className="text-[12px] text-neutral-600">📍 {pinCard.address}</Text> : null}
+                {pinCard.lat != null && pinCard.lng != null ? (
+                  <Text className="text-[11px] text-neutral-400" style={{ fontVariant: ['tabular-nums'] }}>
+                    {pinCard.lat.toFixed(5)}, {pinCard.lng.toFixed(5)}
+                  </Text>
+                ) : null}
                 {custOf(pinCard).phone ? (
                   <Pressable onPress={() => Linking.openURL(`tel:${custOf(pinCard).phone}`)}>
                     <Text className="text-[12px] font-medium text-indigo-600">📞 {custOf(pinCard).phone}</Text>
@@ -1356,6 +1382,9 @@ export default function D2DMap() {
                 multiline
                 className="min-h-[64px] rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-[14px] text-neutral-900"
               />
+              {editPin.house.address ? (
+                <Text className="px-1 text-[11px] text-neutral-400" numberOfLines={1}>📍 {editPin.house.address}</Text>
+              ) : null}
               <Pressable onPress={savePinEdit} className="items-center rounded-xl bg-indigo-500 py-3.5">
                 <Text className="text-base font-semibold text-white">{t.mobileField.save}</Text>
               </Pressable>
