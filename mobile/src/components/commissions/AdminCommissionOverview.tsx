@@ -44,7 +44,7 @@ export default function AdminCommissionOverview({ onSelectRep }: { onSelectRep?:
     queryFn: () => getPayrollPreview(filters.from, filters.to, filters.repId),
   });
 
-  const entries = entriesQ.data ?? [];
+  const entries = useMemo(() => entriesQ.data ?? [], [entriesQ.data]);
   const ids = useMemo(() => [...new Set(entries.map((e) => e.user_id).filter(Boolean))], [entries]);
 
   const profilesQ = useQuery({
@@ -57,7 +57,7 @@ export default function AdminCommissionOverview({ onSelectRep }: { onSelectRep?:
     },
     enabled: ids.length > 0,
   });
-  const profileMap = profilesQ.data ?? {};
+  const profileMap = useMemo(() => profilesQ.data ?? {}, [profilesQ.data]);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['commission-entries'] });

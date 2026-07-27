@@ -3,8 +3,7 @@
 // scopes entries: a rep only ever gets their own rows; owner/admin get the org.
 // The direct-Supabase reader in `./commissions` stays for lightweight summaries.
 
-import { serverGet, serverPost } from './server';
-import { supabase } from '../supabase';
+import { serverGet, serverPost, serverPut } from './server';
 
 export type CommissionEntryStatus = 'pending' | 'approved' | 'paid' | 'reversed';
 
@@ -94,29 +93,5 @@ export function createCommissionRule(data: Partial<FsCommissionRule>): Promise<F
 }
 
 export function updateCommissionRule(id: string, data: Partial<FsCommissionRule>): Promise<FsCommissionRule> {
-  // The web uses PUT; serverPost only speaks POST, so mirror the fetch inline.
   return serverPut(`/commissions/rules/${id}`, data);
-}
-
-// Minimal PUT helper mirroring serverPost (server.ts only exposes GET/POST/DELETE).
-const BASE = process.env.EXPO_PUBLIC_WEB_URL?.replace(/\/$/, '') ?? '';
-
-async function serverPut<T = any>(path: string, body: unknown): Promise<T> {
-  if (!BASE) throw new Error('Server URL not configured (EXPO_PUBLIC_WEB_URL).');
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new Error('Not signed in.');
-  const res = await fetch(`${BASE}/api${path}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
-  let json: any = null;
-  try {
-    json = await res.json();
-  } catch {
-    /* empty */
-  }
-  if (!res.ok) throw new Error(json?.error ?? `Request failed (${res.status}).`);
-  return json as T;
 }

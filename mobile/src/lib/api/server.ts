@@ -5,9 +5,24 @@
 // already holds. So features that MUST run server-side (real Twilio SMS from the
 // org's own number, SMTP email) are reachable from mobile with no extra creds.
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { ACTIVE_ORG_KEY } from '../membership';
 import { supabase } from '../supabase';
 
 const BASE = process.env.EXPO_PUBLIC_WEB_URL?.replace(/\/$/, '') ?? '';
+
+/** Active office header — the server scopes multi-office users on `x-org-id`
+ * (only honoured when the caller is a member; see requireAuthedClient). Same
+ * contract as the web, which sends its `lume-active-org` from localStorage. */
+async function orgHeader(): Promise<Record<string, string>> {
+  try {
+    const org = await AsyncStorage.getItem(ACTIVE_ORG_KEY);
+    return org ? { 'x-org-id': org } : {};
+  } catch {
+    return {};
+  }
+}
 
 export class ServerError extends Error {
   status: number;
@@ -45,7 +60,7 @@ export async function serverPost<T = any>(path: string, body: unknown): Promise<
     try {
       return await fetch(`${BASE}/api${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(await orgHeader()) },
         body: JSON.stringify(body),
       });
     } catch (e) {
@@ -78,12 +93,50 @@ export async function serverPost<T = any>(path: string, body: unknown): Promise<
   return json as T;
 }
 
+export async function serverPut<T = any>(path: string, body: unknown): Promise<T> {
+  if (!BASE) throw new ServerError('Server URL not configured (EXPO_PUBLIC_WEB_URL).', 0, 'no_base');
+
+  const doFetch = async (token: string): Promise<Response> => {
+    try {
+      return await fetch(`${BASE}/api${path}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(await orgHeader()) },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      throw new ServerError((e as Error)?.message ?? 'Network request failed.', 0, 'network');
+    }
+  };
+
+  let token = await freshToken();
+  if (!token) throw new ServerError('Not signed in.', 401, 'no_session');
+  let res = await doFetch(token);
+  if (res.status === 401) {
+    const refreshed = await freshToken(true);
+    if (refreshed && refreshed !== token) {
+      token = refreshed;
+      res = await doFetch(token);
+    }
+  }
+
+  let json: any = null;
+  try {
+    json = await res.json();
+  } catch {
+    /* empty */
+  }
+  if (!res.ok) throw new ServerError(json?.error ?? `Request failed (${res.status}).`, res.status, json?.code);
+  return json as T;
+}
+
 export async function serverGet<T = any>(path: string): Promise<T> {
   if (!BASE) throw new ServerError('Server URL not configured (EXPO_PUBLIC_WEB_URL).', 0, 'no_base');
 
   const doFetch = async (token: string): Promise<Response> => {
     try {
-      return await fetch(`${BASE}/api${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      return await fetch(`${BASE}/api${path}`, {
+        headers: { Authorization: `Bearer ${token}`, ...(await orgHeader()) },
+      });
     } catch (e) {
       throw new ServerError((e as Error)?.message ?? 'Network request failed.', 0, 'network');
     }
@@ -115,7 +168,10 @@ async function serverDelete<T = any>(path: string): Promise<T> {
 
   const doFetch = async (token: string): Promise<Response> => {
     try {
-      return await fetch(`${BASE}/api${path}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      return await fetch(`${BASE}/api${path}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}`, ...(await orgHeader()) },
+      });
     } catch (e) {
       throw new ServerError((e as Error)?.message ?? 'Network request failed.', 0, 'network');
     }

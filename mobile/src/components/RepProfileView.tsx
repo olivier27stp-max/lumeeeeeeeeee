@@ -274,12 +274,12 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
           <>
             {/* ── KPI grid — the web's 11 cards, same order ── */}
             <View className="flex-row flex-wrap gap-3">
-              <KpiCard icon="dollarsign" label={s9n.totalRevenue} value={fmtCurrency(stats.revenue)} />
-              <KpiCard icon="target" label={s9n.dealsClosed} value={String(stats.closes)} />
+              <KpiCard icon="banknote" label={s9n.totalRevenue} value={fmtCurrency(stats.revenue)} />
+              <KpiCard icon="scope" label={s9n.dealsClosed} value={String(stats.closes)} />
               <KpiCard icon="percent" label={s9n.conversionLabel} value={`${stats.conversion}%`} />
               <KpiCard icon="chart.bar" label={s9n.avgDealValue} value={fmtCurrency(stats.avgDealValue)} />
               <KpiCard icon="dollarsign.circle" label={s9n.commissionLabel} value={fmtCurrency(stats.commission)} hidden={!canSeePayout} />
-              <KpiCard icon="list.clipboard" label={s9n.activeLeads} value={String(stats.activeLeads)} />
+              <KpiCard icon="doc.on.clipboard" label={s9n.activeLeads} value={String(stats.activeLeads)} />
               <KpiCard icon="checkmark.circle" label={s9n.jobsCompletedLabel} value={String(stats.jobsCompleted)} />
               <KpiCard icon="clock" label={s9n.jobsPendingLabel} value={String(stats.jobsPending)} />
               <KpiCard icon="signature" label={s9n.contractsSigned} value={String(stats.contractsSigned)} />

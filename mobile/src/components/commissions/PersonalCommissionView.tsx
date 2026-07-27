@@ -43,7 +43,7 @@ export default function PersonalCommissionView({ userId, title, subtitle }: Prop
     queryFn: () => getPayrollPreview(filters.from, filters.to, userId),
   });
 
-  const entries = entriesQ.data ?? [];
+  const entries = useMemo(() => entriesQ.data ?? [], [entriesQ.data]);
   const loading = entriesQ.isLoading || payrollQ.isLoading;
   const error = (entriesQ.error ?? payrollQ.error) as Error | null;
 
