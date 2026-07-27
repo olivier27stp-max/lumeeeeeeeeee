@@ -20,6 +20,7 @@ import {
   type FsCommissionRule,
 } from '@/lib/api/commissionsServer';
 import { listMembers } from '@/lib/api/org';
+import { useAuth } from '@/lib/auth';
 import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
@@ -29,6 +30,7 @@ const CARD = { shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, shado
 
 export default function Commissions() {
   const { role, can } = usePermissions();
+  const { session } = useAuth();
   const { t } = useTranslation();
   const c = t.mobileCommissions;
 
@@ -52,7 +54,7 @@ export default function Commissions() {
           <Text className="text-xs text-ink-subtle">{c.mySubtitle}</Text>
         </View>
         <PayrollSummaryCard metric="deals" />
-        <PersonalCommissionView />
+        <PersonalCommissionView userId={session?.user.id} />
       </ScrollView>
     );
   }
@@ -87,6 +89,8 @@ function AccessDenied() {
 function AdminCommissionsLayout() {
   const { t } = useTranslation();
   const c = t.mobileCommissions;
+  const { session } = useAuth();
+  const me = session?.user.id ?? '';
   const [tab, setTab] = useState<AdminTab>('overview');
   const [drilldownRep, setDrilldownRep] = useState<{ id: string; name: string } | null>(null);
   const { orgId } = usePermissions();
@@ -168,7 +172,9 @@ function AdminCommissionsLayout() {
       {tab === 'my' ? (
         <View className="gap-4">
           <PayrollSummaryCard metric="deals" />
-          <PersonalCommissionView title={c.tabMy} />
+          {/* Explicit own userId — for owner/admin the server would otherwise
+              return the whole org's entries under "my commissions". */}
+          <PersonalCommissionView userId={me} title={c.tabMy} />
         </View>
       ) : null}
 

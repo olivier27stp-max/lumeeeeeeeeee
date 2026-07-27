@@ -364,7 +364,9 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
             {canSeePayout ? (
               <>
                 {isSelf ? <PayrollSummaryCard metric="deals" /> : null}
-                <PersonalCommissionView userId={isSelf ? undefined : userId} />
+                {/* Always scope to the profile's user — without an explicit
+                    userId the server returns the WHOLE org for owner/admin. */}
+                <PersonalCommissionView userId={userId} />
               </>
             ) : (
               <View className="items-center rounded-2xl bg-white py-10" style={CARD}>
