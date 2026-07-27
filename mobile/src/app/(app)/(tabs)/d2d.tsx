@@ -459,12 +459,34 @@ export default function D2DMap() {
     mapRef.current?.cancelZoneDraw();
   };
 
+  // Zone exclusivity: a zone assigned to a rep only accepts THAT rep's pins
+  // (owner/admin bypass). Mirrors the server-side check on the web.
+  const blockingZone = (lat: number, lng: number): Territory | null => {
+    if (canDraw) return null;
+    for (const z of zones ?? []) {
+      if (!z.assigned_user_id || z.assigned_user_id === userId) continue;
+      const ring = z.polygon_geojson?.coordinates?.[0] as [number, number][] | undefined;
+      if (ring && pointInPolygon(lng, lat, ring)) return z;
+    }
+    return null;
+  };
+
   // Place a pin at the tapped location (web add_pin flow: drop, back to view,
   // then the action modal opens on the NEW pin with big outcome buttons)
   const placePin = async (lat: number, lng: number) => {
     const house = selectedStatus;
     exitAddPin();
     if (!orgId || !userId) return;
+    const bz = blockingZone(lat, lng);
+    if (bz) {
+      Alert.alert(
+        t.mobileField.zoneReserved,
+        t.mobileField.zoneReservedMsg
+          .replace('{zone}', bz.name)
+          .replace('{name}', repName(bz.assigned_user_id) ?? '—'),
+      );
+      return;
+    }
     try {
       const created = await createHouseAt({ orgId, userId, lat, lng, status: house });
       refetch();

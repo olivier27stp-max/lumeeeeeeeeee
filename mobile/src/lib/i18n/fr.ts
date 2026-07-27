@@ -3954,6 +3954,8 @@ const fr: TranslationKeys = {
     linkedQuote: 'Soumission liée',
     createJobOutcome: '+ Créer une Job',
     recentSearches: 'Récentes',
+    zoneReserved: 'Zone réservée',
+    zoneReservedMsg: 'La zone « {zone} » est assignée à {name} — seul ce représentant peut y mettre des pins.',
     gpsDeniedBanner: 'Localisation refusée — la carte ne peut pas te suivre.',
     retryLabel: 'Réessayer',
     // D2D map — web-parity action buttons

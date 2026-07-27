@@ -3962,6 +3962,8 @@ const en = {
     linkedQuote: 'Linked quote',
     createJobOutcome: '+ Create job',
     recentSearches: 'Recent',
+    zoneReserved: 'Reserved zone',
+    zoneReservedMsg: 'Zone "{zone}" is assigned to {name} — only that rep can drop pins in it.',
     gpsDeniedBanner: 'Location denied — the map cannot follow you.',
     retryLabel: 'Retry',
     // D2D map — web-parity action buttons
