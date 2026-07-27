@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { useCompany } from '../contexts/CompanyContext';
 import {
   getCourse, createCourse, updateCourse, deleteCourse,
   createModule, updateModule, deleteModule, reorderModules,
@@ -113,6 +114,11 @@ export default function CourseBuilder() {
   const navigate = useNavigate();
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  const { currentOrgId } = useCompany();
+  // Préfixe org: scelle les uploads de formation par organisation (le relais
+  // serveur exige aussi ce préfixe). Sans ça, tout atterrissait dans un espace
+  // "courses/" commun à toutes les orgs.
+  const uploadPrefix = currentOrgId ? `${currentOrgId}/courses` : 'courses';
 
   // Core state
   const [courseId, setCourseId] = useState<string | null>(id || null);
@@ -283,7 +289,7 @@ export default function CourseBuilder() {
     if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
     try {
       const ext = file.name.split('.').pop();
-      const result = await uploadFile(STORAGE_BUCKETS.ATTACHMENTS, `courses/${Date.now()}.${ext}`, file);
+      const result = await uploadFile(STORAGE_BUCKETS.ATTACHMENTS, `${uploadPrefix}/${Date.now()}.${ext}`, file);
       setCoverImage(result.url);
       // Immediately save the cover image if course exists, to avoid relying on auto-save
       if (courseId) {
@@ -451,7 +457,7 @@ export default function CourseBuilder() {
       const ext = file.name.split('.').pop();
       const result = await uploadFile(
         STORAGE_BUCKETS.ATTACHMENTS,
-        `courses/videos/${Date.now()}.${ext}`,
+        `${uploadPrefix}/videos/${Date.now()}.${ext}`,
         file,
         { onProgress: (r) => setVideoProgress(Math.round(r * 100)) },
       );
@@ -477,7 +483,7 @@ export default function CourseBuilder() {
       const ext = file.name.split('.').pop();
       const result = await uploadFile(
         STORAGE_BUCKETS.ATTACHMENTS,
-        `courses/attachments/${Date.now()}.${ext}`,
+        `${uploadPrefix}/attachments/${Date.now()}.${ext}`,
         file,
         { onProgress: (r) => setAttachmentProgress(Math.round(r * 100)) },
       );

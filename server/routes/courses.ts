@@ -148,57 +148,52 @@ async function requireEditor(req: express.Request, res: express.Response, course
   return auth;
 }
 
-/** Check if user can view a course based on audience targeting */
+/**
+ * Peut-on VOIR ce cours ? Doit refuser EXACTEMENT ce que le filtre de la liste
+ * (`GET /courses`) cache — sinon un non-admin ouvrirait par URL directe un
+ * brouillon ou un cours qui ne lui est pas destiné. Cette fonction est la source
+ * de vérité unique pour l'accès en lecture (liste + détail).
+ */
 async function canViewCourse(userId: string, orgId: string, course: any): Promise<boolean> {
   const admin = getServiceClient();
 
-  // Admin/owner can see everything
   const { data: member } = await admin
     .from('memberships')
-    .select('role')
+    .select('role, team_id')
     .eq('org_id', orgId)
     .eq('user_id', userId)
     .maybeSingle();
 
   if (!member) return false;
-  if (member.role === 'owner' || member.role === 'admin') return true;
 
-  // Creator can always see their own course
+  // Admin/owner voient tout ; le créateur voit toujours son cours.
+  if (member.role === 'owner' || member.role === 'admin') return true;
   if (course.created_by === userId) return true;
 
+  // Brouillon: réservé admin/owner/créateur (déjà écartés ci-dessus).
+  if (course.status === 'draft') return false;
+
   const visibility = course.visibility || 'all';
-
-  // Check visibility mode
-  if (visibility === 'all') {
-    // If target_roles is set, filter by role
-    const targetRoles: string[] = Array.isArray(course.target_roles) ? course.target_roles : [];
-    if (targetRoles.length > 0 && !targetRoles.includes(member.role)) {
-      // Role doesn't match, but check target_user_ids
-      const targetUserIds: string[] = Array.isArray(course.target_user_ids) ? course.target_user_ids : [];
-      if (targetUserIds.length > 0 && targetUserIds.includes(userId)) return true;
-      if (targetRoles.length > 0) return false; // Has role restriction and user doesn't match
-    }
-    return true; // visibility=all and no role restriction (or role matches)
-  }
-
-  // visibility === 'assigned'
-  // Check target_user_ids
-  const targetUserIds: string[] = Array.isArray(course.target_user_ids) ? course.target_user_ids : [];
-  if (targetUserIds.includes(userId)) return true;
-
-  // Check target_roles
   const targetRoles: string[] = Array.isArray(course.target_roles) ? course.target_roles : [];
+  const targetUserIds: string[] = Array.isArray(course.target_user_ids) ? course.target_user_ids : [];
+  const hasTargeting = targetRoles.length > 0 || targetUserIds.length > 0;
+
+  // Ciblage direct (rôle ou user) — vaut pour 'all' ciblé et 'assigned'.
+  if (targetUserIds.includes(userId)) return true;
   if (targetRoles.length > 0 && targetRoles.includes(member.role)) return true;
 
-  // Check course_assignments table
-  const { data: assignment } = await admin
-    .from('course_assignments')
-    .select('id')
-    .eq('course_id', course.id)
-    .eq('user_id', userId)
-    .maybeSingle();
+  // Cours ouvert à tous, sans ciblage.
+  if (visibility === 'all' && !hasTargeting) return true;
 
-  return !!assignment;
+  // Assignations explicites (par user OU par équipe du membre).
+  const { data: assignments } = await admin
+    .from('course_assignments')
+    .select('id, user_id, team_id')
+    .eq('course_id', course.id);
+  const teamId = (member as any).team_id ?? null;
+  if ((assignments || []).some((a: any) => a.user_id === userId || (teamId && a.team_id === teamId))) return true;
+
+  return false;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -994,16 +989,48 @@ router.post('/courses/progress', async (req, res) => {
     const admin = getServiceClient();
 
     const { course_id, lesson_id, completed } = req.body;
+    if (!lesson_id) return res.status(400).json({ error: 'lesson_id is required.' });
     const now = new Date().toISOString();
+
+    // Vérifie que la leçon appartient bien à un cours de l'org du caller —
+    // sinon un user pourrait écrire de la progression cross-org avec un UUID
+    // arbitraire. La leçon est reliée au cours VIA son module (pas de course_id
+    // direct sur course_lessons). Résout le vrai course_id (pas celui du body).
+    const { data: lessonRow } = await admin
+      .from('course_lessons')
+      .select('module_id, course_modules!inner(course_id)')
+      .eq('id', lesson_id)
+      .maybeSingle();
+    const realCourseId = (lessonRow as any)?.course_modules?.course_id ?? null;
+    if (!realCourseId) return res.status(404).json({ error: 'Lesson not found.' });
+    const { data: courseRow } = await admin
+      .from('courses')
+      .select('org_id, deleted_at')
+      .eq('id', realCourseId)
+      .maybeSingle();
+    if (!courseRow || courseRow.org_id !== auth.orgId || courseRow.deleted_at) {
+      return res.status(403).json({ error: 'Lesson not in your organization.' });
+    }
+
+    // Ne jamais rétrograder: si la leçon est déjà complétée, on préserve son
+    // état (une revisite ne doit pas effacer completed_at).
+    const { data: existing } = await admin
+      .from('course_progress')
+      .select('completed, completed_at')
+      .eq('user_id', auth.user.id)
+      .eq('lesson_id', lesson_id)
+      .maybeSingle();
+    const alreadyDone = !!existing?.completed;
+    const nextCompleted = completed || alreadyDone;
 
     const { data, error } = await admin
       .from('course_progress')
       .upsert({
         user_id: auth.user.id,
-        course_id,
+        course_id: realCourseId,
         lesson_id,
-        completed: completed || false,
-        completed_at: completed ? now : null,
+        completed: nextCompleted,
+        completed_at: nextCompleted ? (existing?.completed_at || now) : null,
         last_viewed: now,
       }, { onConflict: 'user_id,lesson_id' })
       .select()
