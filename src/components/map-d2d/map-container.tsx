@@ -317,6 +317,25 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
     window.addEventListener('d2d:open-pin-modal', handler);
     return () => window.removeEventListener('d2d:open-pin-modal', handler);
   }, []);
+
+  // A pin whose server save was rejected (e.g. reserved zone) must vanish from
+  // the map without triggering a DB delete — it was never persisted.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const id = (e as CustomEvent).detail?.pinId as string | undefined;
+      if (!id) return;
+      const rec = markersRef.current.get(id);
+      if (!rec) return;
+      rec.marker.remove();
+      if (rec.noteMarker) rec.noteMarker.remove();
+      markersRef.current.delete(id);
+      scheduleClusterRebuild();
+      bump();
+    };
+    window.addEventListener('d2d:discard-pin', handler);
+    return () => window.removeEventListener('d2d:discard-pin', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editEmail, setEditEmail] = useState('');

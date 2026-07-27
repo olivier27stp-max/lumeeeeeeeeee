@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { scoreAllTerritories, scoreAllPins, getCompanyProfile } from '../lib/field-sales/scoring-engine';
@@ -21,6 +21,20 @@ const STATUS_COLORS: Record<string, string> = {
   lead: '#A855F7', quote_sent: '#a855f7', sale: '#22c55e',
   callback: '#06b6d4', do_not_knock: '#dc2626', revisit: '#06b6d4',
 };
+
+// ---------------------------------------------------------------------------
+// Helper: ray-casting point-in-polygon on a [lng,lat] ring (mirror of the
+// client's pointInPolygon in map-container). Used for zone exclusivity.
+// ---------------------------------------------------------------------------
+function pointInRing(lng: number, lat: number, ring: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
 
 // ---------------------------------------------------------------------------
 // Helper: haversine distance in metres between two lat/lng points
@@ -214,6 +228,34 @@ router.post('/houses', async (req: Request, res: Response) => {
   } = req.body;
   if (!address || lat == null || lng == null) {
     return res.status(400).json({ error: 'address, lat and lng are required' });
+  }
+
+  // Zone exclusivity: a territory assigned to a rep only accepts THAT rep's
+  // pins (owner/admin bypass). Enforced here so both web and mobile clients
+  // hitting this route are covered.
+  try {
+    const isAdmin = await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId);
+    if (!isAdmin) {
+      const { data: territories } = await admin
+        .from('field_territories')
+        .select('id, name, assigned_user_id, polygon_geojson')
+        .eq('org_id', auth.orgId)
+        .not('assigned_user_id', 'is', null)
+        .is('deleted_at', null);
+      const blocked = (territories ?? []).find((z: any) => {
+        if (!z.assigned_user_id || z.assigned_user_id === auth.user.id) return false;
+        const ring = z.polygon_geojson?.coordinates?.[0];
+        return Array.isArray(ring) && pointInRing(Number(lng), Number(lat), ring);
+      });
+      if (blocked) {
+        return res.status(403).json({
+          error: `Zone « ${blocked.name} » réservée — assignée à un autre représentant.`,
+          code: 'zone_reserved',
+        });
+      }
+    }
+  } catch {
+    /* the exclusivity check must never break pin creation on transient errors */
   }
 
   // CRM-linked statuses: customer info is optional for quick pin drops on the map.
