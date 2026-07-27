@@ -12,7 +12,7 @@ export default function Payroll() {
   const { t } = useTranslation();
   const { data, isLoading, error } = useQuery({
     queryKey: ['pay-period'],
-    queryFn: getCurrentPayPeriod,
+    queryFn: () => getCurrentPayPeriod(),
     retry: false,
   });
 

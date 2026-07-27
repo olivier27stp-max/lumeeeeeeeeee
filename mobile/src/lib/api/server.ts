@@ -38,7 +38,7 @@ async function freshToken(forceRefresh = false): Promise<string | null> {
   return session?.access_token ?? null;
 }
 
-async function serverPost<T = any>(path: string, body: unknown): Promise<T> {
+export async function serverPost<T = any>(path: string, body: unknown): Promise<T> {
   if (!BASE) throw new ServerError('Server URL not configured (EXPO_PUBLIC_WEB_URL).', 0, 'no_base');
 
   const doFetch = async (token: string): Promise<Response> => {
@@ -78,7 +78,7 @@ async function serverPost<T = any>(path: string, body: unknown): Promise<T> {
   return json as T;
 }
 
-async function serverGet<T = any>(path: string): Promise<T> {
+export async function serverGet<T = any>(path: string): Promise<T> {
   if (!BASE) throw new ServerError('Server URL not configured (EXPO_PUBLIC_WEB_URL).', 0, 'no_base');
 
   const doFetch = async (token: string): Promise<Response> => {
@@ -150,7 +150,7 @@ export async function deleteFieldHouse(houseId: string): Promise<void> {
 export interface PayPeriodSummary {
   period: { start: string; end: string; payDate?: string } & Record<string, any>;
   hours: number;
-  commission: { total: number; pending: number; approved: number; paid: number };
+  commission: { total: number; pending: number; approved: number; paid: number; count?: number };
   userId: string;
 }
 
@@ -159,8 +159,9 @@ export interface PayPeriodSummary {
  * them. Server-computed (GET /api/payroll/current-period); a tech/rep only ever
  * sees their own unless they're an admin passing a userId.
  */
-export async function getCurrentPayPeriod(): Promise<PayPeriodSummary> {
-  return serverGet<PayPeriodSummary>('/payroll/current-period');
+export async function getCurrentPayPeriod(userId?: string): Promise<PayPeriodSummary> {
+  const q = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+  return serverGet<PayPeriodSummary>(`/payroll/current-period${q}`);
 }
 
 /**
