@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
@@ -13,6 +14,7 @@ import {
   deleteTerritory,
   FieldHouse,
   HouseStatus,
+  listFieldReps,
   listHousesInBounds,
   listLastNotes,
   listTerritories,
@@ -20,7 +22,6 @@ import {
   Territory,
   updateTerritory,
 } from '@/lib/api/fieldSales';
-import { listTeams } from '@/lib/api/org';
 import { deleteFieldHouse } from '@/lib/api/server';
 import { getActiveLiveLocations } from '@/lib/api/tracking';
 import { useAuth } from '@/lib/auth';
@@ -32,26 +33,43 @@ const DEFAULT = { lat: 45.5019, lng: -73.5674 };
 const ZONE_COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#64748b', '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#78716c'];
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 
-// Exactly the web's 6 pin statuses (lead-pin.ts PIN_STATUS_CONFIG): same labels
-// and colours, each mapped to the stored HouseStatus via the web's
-// REVERSE_STATUS_MAP (src/pages/D2DMap.tsx). Keep in sync with D2DWebMap.tsx.
+// Exactly the web's 7 pin statuses (lead-pin.ts PIN_STATUS_CONFIG on current
+// main): same order, labels and colours, each mapped to the stored HouseStatus
+// via the web's REVERSE_STATUS_MAP. Keep in sync with D2DWebMap.tsx.
 const PIN_STATUSES: { bucket: string; labelKey: keyof TranslationKeys['mobileField']; color: string; house: HouseStatus }[] = [
   { bucket: 'closed_won', labelKey: 'pinClosed', color: '#22C55E', house: 'sale' },
-  { bucket: 'follow_up', labelKey: 'pinFollowUp', color: '#06B6D4', house: 'lead' },
+  { bucket: 'lead', labelKey: 'pinLead', color: '#A855F7', house: 'lead' },
+  { bucket: 'follow_up', labelKey: 'pinFollowUp', color: '#06B6D4', house: 'callback' },
   { bucket: 'appointment', labelKey: 'pinAppointment', color: '#6B7280', house: 'quote_sent' },
   { bucket: 'no_answer', labelKey: 'pinNoAnswer', color: '#EAB308', house: 'no_answer' },
   { bucket: 'rejected', labelKey: 'pinDeclined', color: '#EF4444', house: 'not_interested' },
-  { bucket: 'other', labelKey: 'pinOther', color: '#9CA3AF', house: 'unknown' },
+  { bucket: 'other', labelKey: 'pinOther', color: '#F97316', house: 'unknown' },
 ];
 const ALL_BUCKETS = PIN_STATUSES.map((s) => s.bucket);
-// DB status -> bucket (mirror of STATUS_MAP in src/pages/D2DMap.tsx / D2DWebMap COLOR_JS)
+// The web's action modal offers these 5 outcomes only (map-container 2549-2703)
+const OUTCOME_BUCKETS = ['no_answer', 'rejected', 'follow_up', 'lead', 'closed_won'];
+// DB status -> bucket (mirror of STATUS_MAP in src/pages/D2DMap.tsx, current main)
 const STATUS_TO_BUCKET: Record<string, string> = {
   sale: 'closed_won', sold: 'closed_won', closed_won: 'closed_won',
-  lead: 'follow_up', follow_up: 'follow_up', callback: 'follow_up',
+  lead: 'lead',
+  follow_up: 'follow_up', callback: 'follow_up',
   no_answer: 'no_answer',
   not_interested: 'rejected', do_not_knock: 'rejected', rejected: 'rejected',
   quote_sent: 'appointment', appointment: 'appointment',
 };
+// Web zone-stats breakdown order (map-container zone panel)
+const ZONE_BREAKDOWN_ORDER = ['closed_won', 'lead', 'appointment', 'follow_up', 'no_answer', 'rejected', 'other'];
+
+/** Ray-casting point-in-polygon on a [lng,lat] ring (web map-container 105-115). */
+function pointInPolygon(lng: number, lat: number, ring: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
 
 type MapMode = 'view' | 'add_pin' | 'select' | 'draw_zone';
 
@@ -94,7 +112,7 @@ export default function D2DMap() {
 
   const [zoneCoords, setZoneCoords] = useState<[number, number][] | null>(null);
   const [zoneName, setZoneName] = useState('');
-  const [zoneTeam, setZoneTeam] = useState<string | null>(null);
+  const [zoneRep, setZoneRep] = useState<string | null>(null);
 
   // Filters (web's filter panel, as a dark bottom sheet)
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -104,7 +122,19 @@ export default function D2DMap() {
   const [showNotes, setShowNotes] = useState(false);
   const [pinPeriod, setPinPeriod] = useState<Period>('all');
   const [zonePeriod, setZonePeriod] = useState<Period>('all');
-  const [zoneTeamFilter, setZoneTeamFilter] = useState<string | null>(null);
+  const [zoneRepFilter, setZoneRepFilter] = useState<string | null>(null);
+  // Plan/satellite (web: streets default, choice persisted)
+  const [mapStyle, setMapStyle] = useState<'streets' | 'satellite'>('streets');
+  useEffect(() => {
+    AsyncStorage.getItem('lume_d2d_map_style').then((v) => {
+      if (v === 'satellite' || v === 'streets') setMapStyle(v);
+    });
+  }, []);
+  const toggleMapStyle = () => {
+    const next = mapStyle === 'streets' ? 'satellite' : 'streets';
+    setMapStyle(next);
+    AsyncStorage.setItem('lume_d2d_map_style', next);
+  };
   // Pin-by-pin navigation (web: click an active status, then Space/Shift+Space)
   const [nav, setNav] = useState<{ bucket: string; ids: string[]; index: number } | null>(null);
 
@@ -171,12 +201,14 @@ export default function D2DMap() {
     queryFn: () => listTerritories(orgId ?? ''),
     enabled: !!orgId,
   });
-  // Teams: zone assignment (owner/admin) + the zones-by-team filter (everyone)
-  const { data: teams } = useQuery({
-    queryKey: ['teams', orgId],
-    queryFn: () => listTeams(orgId ?? ''),
+  // Sales reps (web parity: zones are assigned/filtered by rep, value = user_id)
+  const { data: fieldReps } = useQuery({
+    queryKey: ['d2d', 'fieldReps', orgId],
+    queryFn: () => listFieldReps(orgId ?? ''),
     enabled: !!orgId,
   });
+  const repName = (uid: string | null | undefined) =>
+    (fieldReps ?? []).find((r) => r.user_id === uid)?.display_name ?? null;
   // Last note per house, for the 📝 labels (web enriches /pins the same way)
   const { data: houseNotes, refetch: refetchNotes } = useQuery({
     queryKey: ['d2d', 'notes', orgId],
@@ -229,10 +261,47 @@ export default function D2DMap() {
   const mapZones = useMemo(
     () =>
       (zones ?? []).filter(
-        (z) => inPeriod(z.created_at, zonePeriod) && (!zoneTeamFilter || z.assigned_team_id === zoneTeamFilter),
+        (z) => inPeriod(z.created_at, zonePeriod) && (!zoneRepFilter || z.assigned_user_id === zoneRepFilter),
       ),
-    [zones, zonePeriod, zoneTeamFilter],
+    [zones, zonePeriod, zoneRepFilter],
   );
+
+  // Zone stats (web computeZoneStats: status filter + rep filter + ray-casting;
+  // ignores the period filter, counts clustered pins too)
+  const zoneStats = useMemo(() => {
+    if (!zoneCard?.polygon_geojson?.coordinates?.[0]) return null;
+    const ring = zoneCard.polygon_geojson.coordinates[0] as [number, number][];
+    const byStatus: Record<string, number> = {};
+    const repIds = new Set<string>();
+    let total = 0;
+    (houses ?? []).forEach((h) => {
+      if (h.lat == null || h.lng == null) return;
+      const b = STATUS_TO_BUCKET[h.current_status ?? ''] ?? 'other';
+      if (!activeBuckets.has(b)) return;
+      if (zoneRepFilter && h.assigned_user_id !== zoneRepFilter) return;
+      if (!pointInPolygon(h.lng, h.lat, ring)) return;
+      total += 1;
+      byStatus[b] = (byStatus[b] ?? 0) + 1;
+      if (h.assigned_user_id) repIds.add(h.assigned_user_id);
+    });
+    const sales = byStatus.closed_won ?? 0;
+    const leads = byStatus.lead ?? 0;
+    const appointments = byStatus.appointment ?? 0;
+    const noAnswer = byStatus.no_answer ?? 0;
+    const contacted = total - noAnswer;
+    return {
+      total,
+      byStatus,
+      sales,
+      pipeline: leads + appointments,
+      contacted,
+      noAnswer,
+      conversionRate: total > 0 ? Math.round((sales / total) * 100) : 0,
+      contactRate: total > 0 ? Math.round((contacted / total) * 100) : 0,
+      repCount: repIds.size,
+      maxByStatus: Math.max(1, ...Object.values(byStatus)),
+    };
+  }, [zoneCard, houses, activeBuckets, zoneRepFilter]);
   const mapReps = useMemo(
     () =>
       onlineReps.map((r) => ({
@@ -283,9 +352,19 @@ export default function D2DMap() {
   };
 
   const crmFor = (house: HouseStatus, address: string) => {
-    // Like the web: a close opens a job, an estimation opens a quote.
+    // Web flows (pin-crm-actions.ts): closed_won opens the job flow; a lead
+    // opens a choice (the web offers contract/quote/skip — mobile: quote/skip).
     if (house === 'sale') {
       router.push(`/(app)/jobs/new?address=${encodeURIComponent(address)}` as any);
+    } else if (house === 'lead') {
+      Alert.alert(t.mobileField.pinLead, undefined, [
+        {
+          text: t.mobileField.createQuote,
+          onPress: () =>
+            router.push(`/(app)/quotes/new?title=${encodeURIComponent(address ? `Estimation — ${address}` : '')}` as any),
+        },
+        { text: t.mobileField.skipForNow, style: 'cancel' },
+      ]);
     } else if (house === 'quote_sent') {
       router.push(`/(app)/quotes/new?title=${encodeURIComponent(address ? `Estimation — ${address}` : '')}` as any);
     }
@@ -352,7 +431,7 @@ export default function D2DMap() {
   const closeZone = () => {
     setZoneCoords(null);
     setZoneName('');
-    setZoneTeam(null);
+    setZoneRep(null);
   };
   const saveZone = async () => {
     if (!zoneCoords || !orgId || !zoneName.trim()) return;
@@ -362,7 +441,7 @@ export default function D2DMap() {
         name: zoneName.trim(),
         color: ZONE_COLORS[(zones?.length ?? 0) % ZONE_COLORS.length],
         coordinates: zoneCoords,
-        assignedTeamId: zoneTeam,
+        assignedUserId: zoneRep,
       });
       closeZone();
       refetchZones();
@@ -467,6 +546,20 @@ export default function D2DMap() {
       Alert.alert(t.mobileField.pin, (e as Error).message);
     }
   };
+  // Web action modal: tapping an outcome chip applies the status + CRM flow
+  const applyOutcome = async (h: FieldHouse, status: HouseStatus) => {
+    if (!orgId || !userId) return;
+    try {
+      await logHouseEvent({ orgId, houseId: h.id, userId, eventType: 'status_change', statusOverride: status });
+      setPinCard(null);
+      refetch();
+      if (status === 'sale' && !h.job_id) crmFor('sale', h.address ?? '');
+      else if (status === 'lead' && !h.quote_id) crmFor('lead', h.address ?? '');
+    } catch (e) {
+      Alert.alert(t.mobileField.pin, (e as Error).message);
+    }
+  };
+
   const confirmDeletePin = (h: FieldHouse) => {
     Alert.alert(t.mobileField.deletePin, t.mobileField.pinDeleteConfirm, [
       { text: t.mobileField.cancel, style: 'cancel' },
@@ -486,12 +579,12 @@ export default function D2DMap() {
     ]);
   };
 
-  // --- Zone panel (web's bottom-left zone detail) ---
-  const reassignZone = async (teamId: string | null) => {
+  // --- Zone panel (web's zone stats panel) ---
+  const reassignZone = async (repId: string | null) => {
     if (!zoneCard) return;
     try {
-      await updateTerritory(zoneCard.id, { assignedTeamId: teamId });
-      setZoneCard({ ...zoneCard, assigned_team_id: teamId });
+      await updateTerritory(zoneCard.id, { assignedUserId: repId });
+      setZoneCard({ ...zoneCard, assigned_user_id: repId });
       refetchZones();
     } catch (e) {
       Alert.alert(t.mobileField.zone, (e as Error).message);
@@ -529,6 +622,7 @@ export default function D2DMap() {
         showZones={showZones}
         visibleStatuses={visibleStatuses}
         showNotes={showNotes}
+        mapStyle={mapStyle}
         onSelectHouse={(id) => {
           // Web parity: tap → popup card (edit / delete / CRM / client record);
           // the full house sheet stays reachable from the card.
@@ -694,6 +788,15 @@ export default function D2DMap() {
           <ActivityIndicator color="#fff" />
         </View>
       ) : null}
+
+      {/* Plan/satellite toggle (web's folded-map toolbar box) */}
+      <Pressable
+        onPress={toggleMapStyle}
+        className={`absolute right-4 h-[38px] w-[38px] items-center justify-center rounded-lg border ${mapStyle === 'satellite' ? 'border-indigo-400/40 bg-indigo-500/30' : 'border-white/10 bg-black/70'}`}
+        style={{ bottom: insets.bottom + 24 + 46 }}
+      >
+        <SymbolView name="map.fill" tintColor={mapStyle === 'satellite' ? '#C7D2FE' : 'rgba(255,255,255,0.7)'} size={16} resizeMode="scaleAspectFit" />
+      </Pressable>
 
       {/* GPS re-center (web's bottom-right dark square) */}
       <Pressable
@@ -891,31 +994,35 @@ export default function D2DMap() {
                       </Pressable>
                     ))}
                   </View>
-                  {/* Zones — by team (web's per-rep select; zones are team-assigned here) */}
-                  {(teams ?? []).length > 0 ? (
-                    <View className="mt-2 flex-row flex-wrap" style={{ gap: 6 }}>
-                      <Pressable
-                        onPress={() => setZoneTeamFilter(null)}
-                        className={`rounded-full border px-3 py-1.5 ${zoneTeamFilter === null ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
-                      >
-                        <Text className={`text-[11px] font-semibold ${zoneTeamFilter === null ? 'text-indigo-300' : 'text-white/40'}`}>
-                          {t.mobileField.allTeams}
-                        </Text>
-                      </Pressable>
-                      {(teams ?? []).map((tm) => {
-                        const sel = zoneTeamFilter === tm.id;
-                        return (
-                          <Pressable
-                            key={tm.id}
-                            onPress={() => setZoneTeamFilter(sel ? null : tm.id)}
-                            className={`flex-row items-center gap-1.5 rounded-full border px-3 py-1.5 ${sel ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
-                          >
-                            {tm.color_hex ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: tm.color_hex }} /> : null}
-                            <Text className={`text-[11px] font-semibold ${sel ? 'text-indigo-300' : 'text-white/40'}`}>{tm.name}</Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
+                  {/* Zones — « Par représentant » (web's rep select, value = user_id) */}
+                  {(fieldReps ?? []).length > 0 ? (
+                    <>
+                      <Text className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">{t.mobileField.byRep}</Text>
+                      <View className="mt-1.5 flex-row flex-wrap" style={{ gap: 6 }}>
+                        <Pressable
+                          onPress={() => setZoneRepFilter(null)}
+                          className={`rounded-full border px-3 py-1.5 ${zoneRepFilter === null ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
+                        >
+                          <Text className={`text-[11px] font-semibold ${zoneRepFilter === null ? 'text-indigo-300' : 'text-white/40'}`}>
+                            {t.mobileField.allReps}
+                          </Text>
+                        </Pressable>
+                        {(fieldReps ?? []).map((r) => {
+                          const sel = zoneRepFilter === r.user_id;
+                          return (
+                            <Pressable
+                              key={r.user_id}
+                              onPress={() => setZoneRepFilter(sel ? null : r.user_id)}
+                              className={`rounded-full border px-3 py-1.5 ${sel ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
+                            >
+                              <Text className={`text-[11px] font-semibold ${sel ? 'text-indigo-300' : 'text-white/40'}`}>
+                                {r.display_name ?? '—'}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </>
                   ) : null}
                 </>
               ) : null}
@@ -961,24 +1068,23 @@ export default function D2DMap() {
               placeholderTextColor="rgba(255,255,255,0.2)"
               className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white"
             />
-            <Text className="text-[10px] font-semibold uppercase tracking-wider text-white/30">{t.mobileField.assignToTeam}</Text>
+            <Text className="text-[10px] font-semibold uppercase tracking-wider text-white/30">{t.mobileField.assignToRep}</Text>
             <View className="flex-row flex-wrap gap-2">
               <Pressable
-                onPress={() => setZoneTeam(null)}
-                className={`rounded-full border px-3.5 py-2 ${zoneTeam === null ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
+                onPress={() => setZoneRep(null)}
+                className={`rounded-full border px-3.5 py-2 ${zoneRep === null ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
               >
-                <Text className={`text-sm font-medium ${zoneTeam === null ? 'text-indigo-300' : 'text-white/50'}`}>{t.mobileField.none}</Text>
+                <Text className={`text-sm font-medium ${zoneRep === null ? 'text-indigo-300' : 'text-white/50'}`}>{t.mobileField.unassigned}</Text>
               </Pressable>
-              {(teams ?? []).map((tm) => {
-                const sel = zoneTeam === tm.id;
+              {(fieldReps ?? []).map((r) => {
+                const sel = zoneRep === r.user_id;
                 return (
                   <Pressable
-                    key={tm.id}
-                    onPress={() => setZoneTeam(tm.id)}
-                    className={`flex-row items-center gap-1.5 rounded-full border px-3.5 py-2 ${sel ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
+                    key={r.user_id}
+                    onPress={() => setZoneRep(r.user_id)}
+                    className={`rounded-full border px-3.5 py-2 ${sel ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
                   >
-                    {tm.color_hex ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tm.color_hex }} /> : null}
-                    <Text className={`text-sm font-medium ${sel ? 'text-indigo-300' : 'text-white/50'}`}>{tm.name}</Text>
+                    <Text className={`text-sm font-medium ${sel ? 'text-indigo-300' : 'text-white/50'}`}>{r.display_name ?? '—'}</Text>
                   </Pressable>
                 );
               })}
@@ -997,124 +1103,139 @@ export default function D2DMap() {
         </Pressable>
       </Modal>
 
-      {/* ===== Pin popup card (web's Mapbox popup, as a bottom card) ===== */}
+      {/* ===== Pin action modal (web's WHITE action modal, map-container 2549-2703) ===== */}
       <Modal visible={!!pinCard} transparent animationType="slide" onRequestClose={() => setPinCard(null)}>
         <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setPinCard(null)}>
           {pinCard ? (
             <Pressable
-              className="gap-3 rounded-t-3xl border-t border-white/10 bg-[#0c0c14] p-5"
+              className="gap-3 rounded-t-3xl bg-white p-5"
               style={{ paddingBottom: insets.bottom + 16 }}
               onPress={(e) => e.stopPropagation()}
             >
-              <View className="flex-row items-center justify-between">
-                <View
-                  className="flex-row items-center gap-2 rounded-full border px-3 py-1.5"
-                  style={{ borderColor: `${bucketOf(pinCard.current_status).color}66`, backgroundColor: `${bucketOf(pinCard.current_status).color}22` }}
-                >
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: bucketOf(pinCard.current_status).color }} />
+              {/* Header: name + colored status chip + close */}
+              <View className="flex-row items-center gap-2.5">
+                <Text className="flex-1 text-[16px] font-bold text-neutral-900" numberOfLines={1}>
+                  {custOf(pinCard).name || pinCard.address || t.mobileField.pin}
+                </Text>
+                <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: `${bucketOf(pinCard.current_status).color}18` }}>
                   <Text className="text-[11px] font-bold" style={{ color: bucketOf(pinCard.current_status).color }}>
                     {t.mobileField[bucketOf(pinCard.current_status).labelKey]}
                   </Text>
                 </View>
                 <Pressable onPress={() => setPinCard(null)} hitSlop={10}>
-                  <SymbolView name="xmark.circle.fill" tintColor="rgba(255,255,255,0.3)" size={24} resizeMode="scaleAspectFit" />
+                  <SymbolView name="xmark.circle.fill" tintColor="#D4D4D4" size={24} resizeMode="scaleAspectFit" />
                 </Pressable>
               </View>
-              {custOf(pinCard).name ? <Text className="text-[16px] font-bold text-white">{custOf(pinCard).name}</Text> : null}
-              {custOf(pinCard).phone ? (
-                <Pressable onPress={() => Linking.openURL(`tel:${custOf(pinCard).phone}`)}>
-                  <Text className="text-[13px] text-indigo-300">📞 {custOf(pinCard).phone}</Text>
-                </Pressable>
-              ) : null}
-              {custOf(pinCard).email ? (
-                <Pressable onPress={() => Linking.openURL(`mailto:${custOf(pinCard).email}`)}>
-                  <Text className="text-[13px] text-indigo-300">✉️ {custOf(pinCard).email}</Text>
-                </Pressable>
-              ) : null}
-              {pinCard.address ? <Text className="text-[12px] text-white/50">📍 {pinCard.address}</Text> : null}
-              {houseNotes?.[pinCard.id] ? (
-                <View className="rounded-xl border border-amber-300/20 bg-amber-300/10 px-3 py-2">
-                  <Text className="text-[12px] text-amber-200">📝 {houseNotes[pinCard.id]}</Text>
-                </View>
-              ) : null}
+
+              {/* Info card (gray, like the web) */}
+              <View className="gap-1.5 rounded-2xl bg-neutral-100 px-4 py-3">
+                {pinCard.address ? <Text className="text-[12px] text-neutral-600">📍 {pinCard.address}</Text> : null}
+                {custOf(pinCard).phone ? (
+                  <Pressable onPress={() => Linking.openURL(`tel:${custOf(pinCard).phone}`)}>
+                    <Text className="text-[12px] font-medium text-indigo-600">📞 {custOf(pinCard).phone}</Text>
+                  </Pressable>
+                ) : null}
+                {custOf(pinCard).email ? (
+                  <Pressable onPress={() => Linking.openURL(`mailto:${custOf(pinCard).email}`)}>
+                    <Text className="text-[12px] font-medium text-indigo-600">✉️ {custOf(pinCard).email}</Text>
+                  </Pressable>
+                ) : null}
+                {houseNotes?.[pinCard.id] ? <Text className="text-[12px] text-neutral-600">📝 {houseNotes[pinCard.id]}</Text> : null}
+                {pinCard.job_id ? <Text className="text-[11px] font-semibold text-emerald-600">✓ {t.mobileField.linkedJob}</Text> : null}
+                {pinCard.quote_id ? <Text className="text-[11px] font-semibold text-emerald-600">✓ {t.mobileField.linkedQuote}</Text> : null}
+              </View>
+
+              {/* Outcome chips — the web's 5 statuses, 2 columns */}
+              <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+                {OUTCOME_BUCKETS.map((b) => {
+                  const s = PIN_STATUSES.find((x) => x.bucket === b)!;
+                  const current = bucketOf(pinCard.current_status).bucket === b;
+                  return (
+                    <Pressable
+                      key={b}
+                      onPress={() => applyOutcome(pinCard, s.house)}
+                      className="flex-row items-center justify-center gap-1.5 rounded-xl border py-2.5"
+                      style={{
+                        width: '48%',
+                        borderColor: current ? s.color : '#E5E5E5',
+                        backgroundColor: current ? `${s.color}18` : '#FAFAFA',
+                      }}
+                    >
+                      <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: s.color }} />
+                      <Text className="text-[12px] font-semibold" style={{ color: current ? s.color : '#404040' }}>
+                        {b === 'closed_won' && !pinCard.job_id ? t.mobileField.createJobOutcome : t.mobileField[s.labelKey]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Secondary actions */}
               <View className="flex-row" style={{ gap: 8 }}>
                 <Pressable
                   onPress={() => openEdit(pinCard)}
-                  className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 py-3"
+                  className="flex-1 items-center rounded-xl bg-neutral-900 py-3"
                 >
-                  <SymbolView name="pencil" tintColor="rgba(255,255,255,0.8)" size={13} resizeMode="scaleAspectFit" />
-                  <Text className="text-[13px] font-semibold text-white/80">{t.mobileField.editPin}</Text>
+                  <Text className="text-[13px] font-semibold text-white">✎ {t.mobileField.editPin}</Text>
                 </Pressable>
+                {pinCard.client_id ? (
+                  <Pressable
+                    onPress={() => {
+                      const cid = pinCard.client_id;
+                      setPinCard(null);
+                      router.push(`/(app)/clients/${cid}` as any);
+                    }}
+                    className="flex-1 items-center rounded-xl border border-neutral-300 bg-white py-3"
+                  >
+                    <Text className="text-[13px] font-semibold text-neutral-700">👤 {t.mobileField.viewClient}</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() => {
+                      const id = pinCard.id;
+                      setPinCard(null);
+                      router.push(`/(app)/d2d-house/${id}` as any);
+                    }}
+                    className="flex-1 items-center rounded-xl border border-neutral-300 bg-white py-3"
+                  >
+                    <Text className="text-[13px] font-semibold text-neutral-700">{t.mobileField.fullRecord}</Text>
+                  </Pressable>
+                )}
                 <Pressable
                   onPress={() => confirmDeletePin(pinCard)}
-                  className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-red-400/30 bg-red-500/10 py-3"
+                  className="items-center justify-center rounded-xl border border-red-200 bg-red-50 px-4 py-3"
                 >
-                  <SymbolView name="trash" tintColor="#FCA5A5" size={13} resizeMode="scaleAspectFit" />
-                  <Text className="text-[13px] font-semibold text-red-300">{t.mobileField.deletePin}</Text>
+                  <SymbolView name="trash" tintColor="#DC2626" size={15} resizeMode="scaleAspectFit" />
                 </Pressable>
               </View>
-              {bucketOf(pinCard.current_status).bucket === 'closed_won' && !pinCard.job_id ? (
-                <Pressable
-                  onPress={() => {
-                    const addr = pinCard.address ?? '';
-                    setPinCard(null);
-                    crmFor('sale', addr);
-                  }}
-                  className="items-center rounded-xl border border-indigo-400/40 bg-indigo-500/20 py-3"
-                >
-                  <Text className="text-[13px] font-semibold text-indigo-300">→ {t.mobileField.createJob}</Text>
-                </Pressable>
-              ) : null}
-              {bucketOf(pinCard.current_status).bucket === 'appointment' && !pinCard.quote_id ? (
-                <Pressable
-                  onPress={() => {
-                    const addr = pinCard.address ?? '';
-                    setPinCard(null);
-                    crmFor('quote_sent', addr);
-                  }}
-                  className="items-center rounded-xl border border-indigo-400/40 bg-indigo-500/20 py-3"
-                >
-                  <Text className="text-[13px] font-semibold text-indigo-300">→ {t.mobileField.createQuote}</Text>
-                </Pressable>
-              ) : null}
               {pinCard.client_id ? (
                 <Pressable
                   onPress={() => {
-                    const cid = pinCard.client_id;
+                    const id = pinCard.id;
                     setPinCard(null);
-                    router.push(`/(app)/clients/${cid}` as any);
+                    router.push(`/(app)/d2d-house/${id}` as any);
                   }}
-                  className="items-center rounded-xl border border-white/10 bg-white/5 py-3"
+                  className="items-center py-0.5"
                 >
-                  <Text className="text-[13px] font-semibold text-white/80">👤 {t.mobileField.viewClient}</Text>
+                  <Text className="text-[12px] font-medium text-neutral-400">{t.mobileField.fullRecord} →</Text>
                 </Pressable>
               ) : null}
-              <Pressable
-                onPress={() => {
-                  const id = pinCard.id;
-                  setPinCard(null);
-                  router.push(`/(app)/d2d-house/${id}` as any);
-                }}
-                className="items-center py-1"
-              >
-                <Text className="text-[13px] font-medium text-white/40">{t.mobileField.fullRecord} →</Text>
-              </Pressable>
             </Pressable>
           ) : null}
         </Pressable>
       </Modal>
 
-      {/* ===== Edit pin modal (web's edit modal) ===== */}
+      {/* ===== Edit pin modal (web's WHITE edit modal: 7 chips, indigo save) ===== */}
       <Modal visible={!!editPin} transparent animationType="slide" onRequestClose={() => setEditPin(null)}>
         <Pressable className="flex-1 justify-end bg-black/50" onPress={() => setEditPin(null)}>
           {editPin ? (
             <Pressable
-              className="gap-3 rounded-t-3xl border-t border-white/10 bg-[#0c0c14] p-5"
+              className="gap-3 rounded-t-3xl bg-white p-5"
               style={{ paddingBottom: insets.bottom + 16 }}
               onPress={(e) => e.stopPropagation()}
             >
-              <Text className="text-[15px] font-semibold text-white">✎ {t.mobileField.editPin}</Text>
-              <Text className="text-[10px] font-semibold uppercase tracking-wider text-white/30">{t.mobileField.statusLabel}</Text>
+              <Text className="text-[15px] font-bold text-neutral-900">✎ {t.mobileField.editPin}</Text>
+              <Text className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">{t.mobileField.statusLabel}</Text>
               <View className="flex-row flex-wrap" style={{ gap: 6 }}>
                 {PIN_STATUSES.map((s) => {
                   const sel = (STATUS_TO_BUCKET[editPin.status] ?? 'other') === s.bucket;
@@ -1122,10 +1243,16 @@ export default function D2DMap() {
                     <Pressable
                       key={s.bucket}
                       onPress={() => setEditPin({ ...editPin, status: s.house })}
-                      className={`flex-row items-center gap-1.5 rounded-full border px-3 py-1.5 ${sel ? 'border-white/40 bg-white/15' : 'border-white/10 bg-white/5'}`}
+                      className="flex-row items-center gap-1.5 rounded-full border px-3 py-1.5"
+                      style={{
+                        borderColor: sel ? s.color : '#E5E5E5',
+                        backgroundColor: sel ? `${s.color}18` : '#FAFAFA',
+                      }}
                     >
                       <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: s.color }} />
-                      <Text className={`text-[11px] font-semibold ${sel ? 'text-white' : 'text-white/40'}`}>{t.mobileField[s.labelKey]}</Text>
+                      <Text className="text-[11px] font-semibold" style={{ color: sel ? s.color : '#737373' }}>
+                        {t.mobileField[s.labelKey]}
+                      </Text>
                     </Pressable>
                   );
                 })}
@@ -1134,99 +1261,190 @@ export default function D2DMap() {
                 value={editPin.name}
                 onChangeText={(v) => setEditPin({ ...editPin, name: v })}
                 placeholder={t.mobileField.nameLabel}
-                placeholderTextColor="rgba(255,255,255,0.25)"
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[14px] text-white"
+                placeholderTextColor="#A3A3A3"
+                className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-[14px] text-neutral-900"
               />
               <TextInput
                 value={editPin.phone}
                 onChangeText={(v) => setEditPin({ ...editPin, phone: v })}
                 placeholder={t.mobileField.phoneLabel}
-                placeholderTextColor="rgba(255,255,255,0.25)"
+                placeholderTextColor="#A3A3A3"
                 keyboardType="phone-pad"
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[14px] text-white"
+                className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-[14px] text-neutral-900"
               />
               <TextInput
                 value={editPin.email}
                 onChangeText={(v) => setEditPin({ ...editPin, email: v })}
                 placeholder={t.mobileField.emailLabel}
-                placeholderTextColor="rgba(255,255,255,0.25)"
+                placeholderTextColor="#A3A3A3"
                 keyboardType="email-address"
                 autoCapitalize="none"
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[14px] text-white"
+                className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-[14px] text-neutral-900"
               />
               <TextInput
                 value={editPin.note}
                 onChangeText={(v) => setEditPin({ ...editPin, note: v })}
                 placeholder={t.mobileField.noteLabel}
-                placeholderTextColor="rgba(255,255,255,0.25)"
+                placeholderTextColor="#A3A3A3"
                 multiline
-                className="min-h-[64px] rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[14px] text-white"
+                className="min-h-[64px] rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-[14px] text-neutral-900"
               />
               <Pressable onPress={savePinEdit} className="items-center rounded-xl bg-indigo-500 py-3.5">
                 <Text className="text-base font-semibold text-white">{t.mobileField.save}</Text>
               </Pressable>
               <Pressable onPress={() => setEditPin(null)} className="items-center py-1">
-                <Text className="text-sm font-medium text-white/40">{t.mobileField.cancel}</Text>
+                <Text className="text-sm font-medium text-neutral-400">{t.mobileField.cancel}</Text>
               </Pressable>
             </Pressable>
           ) : null}
         </Pressable>
       </Modal>
 
-      {/* ===== Zone panel (web's zone detail: reassign + delete) ===== */}
+      {/* ===== Zone stats panel (web's neutral-palette stats card, 5cdd618) ===== */}
       <Modal visible={!!zoneCard} transparent animationType="slide" onRequestClose={() => setZoneCard(null)}>
         <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setZoneCard(null)}>
           {zoneCard ? (
             <Pressable
-              className="gap-3 rounded-t-3xl border-t border-white/10 bg-[#0c0c14] p-5"
-              style={{ paddingBottom: insets.bottom + 16 }}
+              className="rounded-t-3xl border-t border-white/10 bg-neutral-950 px-5 pt-5"
+              style={{ paddingBottom: insets.bottom + 16, maxHeight: '85%' }}
               onPress={(e) => e.stopPropagation()}
             >
-              <View className="flex-row items-center gap-2.5">
-                <View style={{ width: 13, height: 13, borderRadius: 4, backgroundColor: zoneCard.color ?? '#6366f1' }} />
-                <Text className="flex-1 text-[16px] font-bold text-white">{zoneCard.name}</Text>
-                <Pressable onPress={() => setZoneCard(null)} hitSlop={10}>
-                  <SymbolView name="xmark.circle.fill" tintColor="rgba(255,255,255,0.3)" size={24} resizeMode="scaleAspectFit" />
-                </Pressable>
-              </View>
-              <Text className="text-[12px] text-white/50">
-                {t.mobileField.assignedTo}{' '}
-                {(teams ?? []).find((tm) => tm.id === zoneCard.assigned_team_id)?.name ?? t.mobileField.none}
-                {zoneCard.created_at
-                  ? ` · ${new Date(zoneCard.created_at).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA')}`
-                  : ''}
-              </Text>
-              {canDraw ? (
-                <>
-                  <Text className="text-[10px] font-semibold uppercase tracking-wider text-white/30">{t.mobileField.assignToTeam}</Text>
-                  <View className="flex-row flex-wrap" style={{ gap: 6 }}>
-                    <Pressable
-                      onPress={() => reassignZone(null)}
-                      className={`rounded-full border px-3 py-1.5 ${!zoneCard.assigned_team_id ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
-                    >
-                      <Text className={`text-[11px] font-semibold ${!zoneCard.assigned_team_id ? 'text-indigo-300' : 'text-white/40'}`}>
-                        {t.mobileField.none}
+              <ScrollView showsVerticalScrollIndicator={false} bounces={false} contentContainerStyle={{ gap: 12 }}>
+                {/* Header: color dot + name + date + close */}
+                <View className="flex-row items-center gap-2.5">
+                  <View
+                    style={{
+                      width: 10, height: 10, borderRadius: 5,
+                      backgroundColor: zoneCard.color ?? '#6366f1',
+                      borderWidth: 2, borderColor: 'rgba(255,255,255,0.1)',
+                    }}
+                  />
+                  <View className="flex-1">
+                    <Text className="text-[14px] font-bold text-white">{zoneCard.name}</Text>
+                    {zoneCard.created_at ? (
+                      <Text className="text-[10px] text-neutral-500">
+                        {new Date(zoneCard.created_at).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', {
+                          day: 'numeric', month: 'short', year: 'numeric',
+                        })}
                       </Text>
-                    </Pressable>
-                    {(teams ?? []).map((tm) => {
-                      const sel = zoneCard.assigned_team_id === tm.id;
-                      return (
-                        <Pressable
-                          key={tm.id}
-                          onPress={() => reassignZone(tm.id)}
-                          className={`flex-row items-center gap-1.5 rounded-full border px-3 py-1.5 ${sel ? 'border-indigo-400/40 bg-indigo-500/20' : 'border-white/10 bg-white/5'}`}
-                        >
-                          {tm.color_hex ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: tm.color_hex }} /> : null}
-                          <Text className={`text-[11px] font-semibold ${sel ? 'text-indigo-300' : 'text-white/40'}`}>{tm.name}</Text>
-                        </Pressable>
-                      );
-                    })}
+                    ) : null}
                   </View>
-                  <Pressable onPress={confirmDeleteZone} className="items-center rounded-xl border border-red-400/30 bg-red-500/10 py-3">
-                    <Text className="text-[13px] font-semibold text-red-300">{t.mobileField.deleteZoneBtn}</Text>
+                  <Pressable onPress={() => setZoneCard(null)} hitSlop={10}>
+                    <SymbolView name="xmark.circle.fill" tintColor="rgba(255,255,255,0.3)" size={24} resizeMode="scaleAspectFit" />
                   </Pressable>
-                </>
-              ) : null}
+                </View>
+
+                {zoneStats ? (
+                  <>
+                    {/* 3 KPIs — Portes / Ventes / Pipeline */}
+                    <View className="flex-row overflow-hidden rounded-xl" style={{ gap: 1, backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                      {[
+                        [t.mobileField.kpiDoors, zoneStats.total],
+                        [t.mobileField.kpiSales, zoneStats.sales],
+                        [t.mobileField.pipeline, zoneStats.pipeline],
+                      ].map(([label, value]) => (
+                        <View key={String(label)} className="flex-1 items-center bg-neutral-950 py-2.5">
+                          <Text className="text-[19px] font-bold text-white" style={{ fontVariant: ['tabular-nums'] }}>{value}</Text>
+                          <Text className="text-[9px] font-semibold uppercase text-neutral-500" style={{ letterSpacing: 0.8 }}>{label}</Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    {/* Conversion + contact rates (white bars, web style) */}
+                    {[
+                      [t.mobileField.conversionRate, zoneStats.conversionRate, 'rgba(255,255,255,1)'],
+                      [t.mobileField.contactRate, zoneStats.contactRate, 'rgba(255,255,255,0.45)'],
+                    ].map(([label, pct, barColor]) => (
+                      <View key={String(label)} className="gap-1">
+                        <View className="flex-row items-center justify-between">
+                          <Text className="text-[10px] font-semibold uppercase text-neutral-500" style={{ letterSpacing: 0.8 }}>{label}</Text>
+                          <Text className="text-[11px] font-bold text-white" style={{ fontVariant: ['tabular-nums'] }}>{pct}%</Text>
+                        </View>
+                        <View className="h-1 overflow-hidden rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                          <View style={{ width: `${Number(pct)}%`, height: '100%', backgroundColor: String(barColor) }} />
+                        </View>
+                      </View>
+                    ))}
+
+                    {/* Secondary: Contactées / Sans réponse / Reps */}
+                    <View className="flex-row">
+                      {[
+                        [t.mobileField.contacted, zoneStats.contacted],
+                        [t.mobileField.noAnswerShort, zoneStats.noAnswer],
+                        [t.mobileField.repsShort, zoneStats.repCount],
+                      ].map(([label, value]) => (
+                        <View key={String(label)} className="flex-1 items-center">
+                          <Text className="text-[13px] font-bold text-white" style={{ fontVariant: ['tabular-nums'] }}>{value}</Text>
+                          <Text className="text-[9px] font-semibold uppercase text-neutral-500" style={{ letterSpacing: 0.8 }}>{label}</Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    {/* Breakdown by status (web order, bars relative to max) */}
+                    {zoneStats.total > 0 ? (
+                      <View className="gap-1.5">
+                        {ZONE_BREAKDOWN_ORDER.filter((b) => (zoneStats.byStatus[b] ?? 0) > 0).map((b) => {
+                          const s = PIN_STATUSES.find((x) => x.bucket === b)!;
+                          const n = zoneStats.byStatus[b] ?? 0;
+                          return (
+                            <View key={b} className="gap-1">
+                              <View className="flex-row items-center gap-2">
+                                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.color }} />
+                                <Text className="flex-1 text-[12px] text-white/80">{t.mobileField[s.labelKey]}</Text>
+                                <Text className="text-[12px] font-bold text-white" style={{ fontVariant: ['tabular-nums'] }}>{n}</Text>
+                                <Text className="w-9 text-right text-[10px] text-neutral-500" style={{ fontVariant: ['tabular-nums'] }}>
+                                  {Math.round((n / zoneStats.total) * 100)}%
+                                </Text>
+                              </View>
+                              <View className="ml-4 h-[3px] overflow-hidden rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                                <View style={{ width: `${(n / zoneStats.maxByStatus) * 100}%`, height: '100%', backgroundColor: 'rgba(255,255,255,0.3)' }} />
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    ) : (
+                      <Text className="text-[12px] text-neutral-500">{t.mobileField.noPinsInZone}</Text>
+                    )}
+                  </>
+                ) : null}
+
+                {/* Assigné à + delete (owner/admin) */}
+                {canDraw ? (
+                  <>
+                    <Text className="text-[10px] font-semibold uppercase text-neutral-500" style={{ letterSpacing: 0.8 }}>{t.mobileField.assignedTo}</Text>
+                    <View className="flex-row flex-wrap" style={{ gap: 6 }}>
+                      <Pressable
+                        onPress={() => reassignZone(null)}
+                        className={`rounded-full border px-3 py-1.5 ${!zoneCard.assigned_user_id ? 'border-white/40 bg-white/15' : 'border-white/10 bg-white/5'}`}
+                      >
+                        <Text className={`text-[11px] font-semibold ${!zoneCard.assigned_user_id ? 'text-white' : 'text-white/40'}`}>
+                          {t.mobileField.unassigned}
+                        </Text>
+                      </Pressable>
+                      {(fieldReps ?? []).map((r) => {
+                        const sel = zoneCard.assigned_user_id === r.user_id;
+                        return (
+                          <Pressable
+                            key={r.user_id}
+                            onPress={() => reassignZone(r.user_id)}
+                            className={`rounded-full border px-3 py-1.5 ${sel ? 'border-white/40 bg-white/15' : 'border-white/10 bg-white/5'}`}
+                          >
+                            <Text className={`text-[11px] font-semibold ${sel ? 'text-white' : 'text-white/40'}`}>{r.display_name ?? '—'}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <Pressable onPress={confirmDeleteZone} className="items-center rounded-xl border border-red-500/30 py-3" style={{ backgroundColor: 'rgba(239,68,68,0.08)' }}>
+                      <Text className="text-[13px] font-semibold text-red-400">{t.mobileField.deleteZoneBtn}</Text>
+                    </Pressable>
+                  </>
+                ) : zoneStats ? (
+                  <Text className="text-[11px] text-neutral-500">
+                    {t.mobileField.assignedTo} {repName(zoneCard.assigned_user_id) ?? t.mobileField.unassigned}
+                  </Text>
+                ) : null}
+              </ScrollView>
             </Pressable>
           ) : null}
         </Pressable>

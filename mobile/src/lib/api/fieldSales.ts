@@ -83,6 +83,8 @@ export interface FieldHouse {
   lead_id?: string | null;
   job_id?: string | null;
   quote_id?: string | null;
+  /** Rep who placed/owns the pin — used by zone stats + rep filters */
+  assigned_user_id?: string | null;
 }
 
 export interface FieldHouseEvent {
@@ -155,7 +157,7 @@ export interface Bounds {
 export async function listHousesInBounds(b: Bounds, limit = 500): Promise<FieldHouse[]> {
   const { data, error } = await supabase
     .from('field_house_profiles')
-    .select('id, org_id, address, lat, lng, current_status, house_score, visit_count, last_activity_at, created_at, metadata, client_id, lead_id, job_id, quote_id')
+    .select('id, org_id, address, lat, lng, current_status, house_score, visit_count, last_activity_at, created_at, metadata, client_id, lead_id, job_id, quote_id, assigned_user_id')
     .is('deleted_at', null)
     .gte('lat', b.minLat)
     .lte('lat', b.maxLat)
@@ -169,7 +171,7 @@ export async function listHousesInBounds(b: Bounds, limit = 500): Promise<FieldH
 export async function getHouse(id: string): Promise<FieldHouse | null> {
   const { data, error } = await supabase
     .from('field_house_profiles')
-    .select('id, org_id, address, lat, lng, current_status, house_score, visit_count, last_activity_at, created_at, metadata, client_id, lead_id, job_id, quote_id')
+    .select('id, org_id, address, lat, lng, current_status, house_score, visit_count, last_activity_at, created_at, metadata, client_id, lead_id, job_id, quote_id, assigned_user_id')
     .eq('id', id)
     .is('deleted_at', null)
     .maybeSingle();
@@ -289,7 +291,7 @@ export async function createHouseAt(params: {
       assigned_user_id: userId,
       visit_count: 0,
     })
-    .select('id, org_id, address, lat, lng, current_status, house_score, visit_count, last_activity_at, created_at, metadata, client_id, lead_id, job_id, quote_id')
+    .select('id, org_id, address, lat, lng, current_status, house_score, visit_count, last_activity_at, created_at, metadata, client_id, lead_id, job_id, quote_id, assigned_user_id')
     .single();
   if (error) throw new Error(error.message);
 
@@ -316,6 +318,8 @@ export interface Territory {
   color: string | null;
   polygon_geojson: any;
   assigned_team_id: string | null;
+  /** Web parity: zones are assigned to a rep (user), like the prod map */
+  assigned_user_id?: string | null;
   created_at?: string | null;
 }
 
@@ -323,17 +327,39 @@ export interface Territory {
 export async function listTerritories(orgId: string): Promise<Territory[]> {
   const { data, error } = await supabase
     .from('field_territories')
-    .select('id, name, color, polygon_geojson, assigned_team_id, created_at')
+    .select('id, name, color, polygon_geojson, assigned_team_id, assigned_user_id, created_at')
     .eq('org_id', orgId)
     .is('deleted_at', null);
   if (error) return [];
   return (data ?? []) as Territory[];
 }
 
+/** Active sales reps (web's rep selects: value = user_id, label = display_name). */
+export interface FieldRep {
+  user_id: string;
+  display_name: string | null;
+}
+export async function listFieldReps(orgId: string): Promise<FieldRep[]> {
+  const { data, error } = await supabase
+    .from('field_sales_reps')
+    .select('user_id, display_name, is_active')
+    .eq('org_id', orgId)
+    .eq('is_active', true)
+    .order('display_name');
+  if (error) return [];
+  return (data ?? [])
+    .filter((r) => r.user_id)
+    .map((r) => ({ user_id: r.user_id as string, display_name: (r.display_name as string) ?? null }));
+}
+
 /** Reassign / rename a zone (admin/owner — gate the UI). */
-export async function updateTerritory(id: string, patch: { assignedTeamId?: string | null; name?: string }): Promise<void> {
+export async function updateTerritory(
+  id: string,
+  patch: { assignedTeamId?: string | null; assignedUserId?: string | null; name?: string },
+): Promise<void> {
   const upd: Record<string, any> = {};
   if ('assignedTeamId' in patch) upd.assigned_team_id = patch.assignedTeamId ?? null;
+  if ('assignedUserId' in patch) upd.assigned_user_id = patch.assignedUserId ?? null;
   if (patch.name) upd.name = patch.name;
   const { error } = await supabase.from('field_territories').update(upd).eq('id', id);
   if (error) throw new Error(error.message);
@@ -354,7 +380,9 @@ export async function createTerritory(params: {
   name: string;
   color: string;
   coordinates: [number, number][];
-  assignedTeamId: string | null;
+  assignedTeamId?: string | null;
+  /** Web parity: prod assigns zones to a rep (assigned_user_id) */
+  assignedUserId?: string | null;
 }): Promise<void> {
   const ring = [...params.coordinates];
   if (ring.length && (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1])) {
@@ -365,7 +393,8 @@ export async function createTerritory(params: {
     name: params.name,
     color: params.color,
     polygon_geojson: { type: 'Polygon', coordinates: [ring] },
-    assigned_team_id: params.assignedTeamId,
+    assigned_team_id: params.assignedTeamId ?? null,
+    assigned_user_id: params.assignedUserId ?? null,
   });
   if (error) throw new Error(error.message);
 }

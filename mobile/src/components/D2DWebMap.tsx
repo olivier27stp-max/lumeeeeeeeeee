@@ -50,8 +50,10 @@ interface Props {
   showZones?: boolean;
   /** Visible pin buckets (web PinStatus keys); undefined = all visible */
   visibleStatuses?: string[];
-  /** Show 📝 note labels above pins (web's "Afficher notes" toggle) */
+  /** Show 📝 note labels under pins (web's "Afficher notes" toggle) */
   showNotes?: boolean;
+  /** Base map style — 'streets' (web default) or 'satellite' (toolbar toggle) */
+  mapStyle?: 'streets' | 'satellite';
   onSelectHouse: (id: string) => void;
   /** Tap on a zone polygon (empty map area) — opens the zone panel, like the web */
   onZoneTap?: (id: string) => void;
@@ -71,31 +73,35 @@ const TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 // STATUS_MAP as src/pages/D2DMap.tsx, then rendered with the SAME gradient,
 // icon, colour, border and glow. Keep these two files in sync.
 const COLOR_JS = `
-// PinStatus -> web PIN_STATUS_CONFIG (color, gradientFrom, gradientTo, icon)
+// PinStatus -> web PIN_STATUS_CONFIG (lead-pin.ts on current main): 7 statuses,
+// recentered 14px-in-28px glyphs (kept at the same 50% ratio in our 34px pins).
 var CFG={
-  closed_won:{color:'#22C55E',from:'#4ADE80',to:'#16A34A',icon:'<polyline points="20 6 9 17 4 12"/>'},
+  closed_won:{color:'#22C55E',from:'#4ADE80',to:'#16A34A',icon:'<polyline points="20 6.5 9 17.5 4 12.5"/>'},
+  lead:{color:'#A855F7',from:'#C084FC',to:'#9333EA',icon:'<circle cx="12" cy="12" r="7"/><line x1="12" y1="2" x2="12" y2="5.5"/><line x1="12" y1="18.5" x2="12" y2="22"/><line x1="2" y1="12" x2="5.5" y2="12"/><line x1="18.5" y1="12" x2="22" y2="12"/><circle cx="12" cy="12" r="1" fill="#fff" stroke="none"/>'},
   follow_up:{color:'#06B6D4',from:'#22D3EE',to:'#0891B2',icon:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'},
   appointment:{color:'#6B7280',from:'#9CA3AF',to:'#4B5563',icon:'<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'},
-  no_answer:{color:'#EAB308',from:'#FDE047',to:'#CA8A04',icon:'<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><circle cx="12" cy="17" r=".5"/>'},
+  no_answer:{color:'#EAB308',from:'#FDE047',to:'#CA8A04',icon:'<path d="M8.32 7.78a3.9 3.9 0 0 1 7.58 1.3c0 2.6-3.9 3.9-3.9 3.9"/><circle cx="12.1" cy="18.2" r=".5"/>'},
   rejected:{color:'#EF4444',from:'#F87171',to:'#DC2626',icon:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'},
-  other:{color:'#9CA3AF',from:'#D1D5DB',to:'#6B7280',icon:'<circle cx="12" cy="12" r="1.5"/>'}
+  other:{color:'#F97316',from:'#FB923C',to:'#EA580C',icon:'<circle cx="12" cy="12" r="4.5" fill="#fff" stroke="none"/>'}
 };
-// DB status -> PinStatus (mirror of STATUS_MAP in src/pages/D2DMap.tsx)
+// DB status -> PinStatus (mirror of STATUS_MAP in src/pages/D2DMap.tsx, current main)
 var SMAP={
   sale:'closed_won',sold:'closed_won',closed_won:'closed_won',
-  lead:'follow_up',follow_up:'follow_up',callback:'follow_up',
+  lead:'lead',
+  follow_up:'follow_up',callback:'follow_up',
   no_answer:'no_answer',
   not_interested:'rejected',do_not_knock:'rejected',rejected:'rejected',
   quote_sent:'appointment',appointment:'appointment',
   unknown:'other',new:'other',knocked:'other',note:'other',revisit:'other',other:'other'
 };
+var ALLB=['closed_won','lead','follow_up','appointment','no_answer','rejected','other'];
 function bucketFor(s){return SMAP[s]||'other';}
 function cfgFor(s){return CFG[bucketFor(s)]||CFG.other;}
-// Phone-sized: the web's 28px/12px pin reads tiny on a phone screen — 34px
-// circle with a 16px icon keeps the same look but stays legible and tappable.
+// Phone-sized: the web's 28px pin reads tiny on a phone screen — 34px circle
+// with a 17px icon keeps the web's exact 50% icon/circle ratio but stays tappable.
 function makeMarker(s){var c=cfgFor(s);var el=document.createElement('div');
 el.style.cssText='box-sizing:border-box;width:34px;height:34px;border-radius:50%;border:2.5px solid rgba(255,255,255,0.92);display:flex;align-items:center;justify-content:center;line-height:0;box-shadow:0 0 8px '+c.color+'66,0 2px 6px rgba(0,0,0,0.4);cursor:pointer;background:linear-gradient(135deg,'+c.from+','+c.to+')';
-el.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">'+c.icon+'</svg>';return el;}`;
+el.innerHTML='<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">'+c.icon+'</svg>';return el;}`;
 
 /**
  * Mapbox GL JS (streets-v12, light — same style as the deployed web map) in a
@@ -107,11 +113,14 @@ el.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke
  * the map is ready, so updates never reload the WebView.
  */
 const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
-  { center, houses, zones = [], reps = [], showReps = true, showZones = true, visibleStatuses, showNotes = false, onSelectHouse, onZoneTap, onPlace, onZoneDrawn, onCenterChange, onSelectionChange, onDrawCount },
+  { center, houses, zones = [], reps = [], showReps = true, showZones = true, visibleStatuses, showNotes = false, mapStyle = 'streets', onSelectHouse, onZoneTap, onPlace, onZoneDrawn, onCenterChange, onSelectionChange, onDrawCount },
   ref,
 ) {
   const webRef = useRef<WebView>(null);
   const [webReady, setWebReady] = useState(false);
+  // Only the FIRST value feeds the HTML template — later changes go through
+  // _setStyle injection so the WebView never reloads on toggle.
+  const initialStyleRef = useRef(mapStyle);
   const inject = (js: string) => webRef.current?.injectJavaScript(js + ';true;');
 
   useImperativeHandle(ref, () => ({
@@ -132,6 +141,7 @@ const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet" />
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
+<script src="https://unpkg.com/supercluster@8.0.1/dist/supercluster.min.js"></script>
 <style>html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#e5e7eb}
 .me{position:relative;width:22px;height:22px}
 .me .p{position:absolute;inset:0;border-radius:50%;background:rgba(99,102,241,.25);animation:gpsPulse 2s ease-out infinite}
@@ -144,7 +154,10 @@ const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
 mapboxgl.accessToken='${TOKEN}';
 function post(o){try{window.ReactNativeWebView.postMessage(JSON.stringify(o))}catch(e){}}
 ${COLOR_JS}
-var map=new mapboxgl.Map({container:'map',style:'mapbox://styles/mapbox/satellite-streets-v12',center:[${center.lng},${center.lat}],zoom:16});
+// Web parity: streets by default, satellite via the toolbar toggle
+var styleName='${initialStyleRef.current}';
+function styleUrl(n){return n==='satellite'?'mapbox://styles/mapbox/satellite-streets-v12':'mapbox://styles/mapbox/streets-v12';}
+var map=new mapboxgl.Map({container:'map',style:styleUrl(styleName),center:[${center.lng},${center.lat}],zoom:16,maxZoom:22,minZoom:1,doubleClickZoom:false});
 var meEl=document.createElement('div');meEl.className='me';meEl.innerHTML='<div class="p"></div><div class="c"></div>';
 var meMarker=new mapboxgl.Marker({element:meEl,anchor:'center'}).setLngLat([${center.lng},${center.lat}]).addTo(map);
 
@@ -205,23 +218,67 @@ map.on('click',function(e){
 // --- Houses: web-look gradient markers + invisible tap layer, filterable ---
 var allHouses=[];
 var houseMarkers=[]; // {id, bucket, marker, noteEl}
-var visibleBuckets={closed_won:1,follow_up:1,appointment:1,no_answer:1,rejected:1,other:1};
+var visibleBuckets={};ALLB.forEach(function(k){visibleBuckets[k]=1;});
 var notesVisible=false;
+
+// --- Clustering (web's pin-cluster.ts: Supercluster radius 55, maxZoom 16) ---
+var clusterIndex=null, clusterMarkers=[], clusteredIds={};
+function clSize(n){return n>=500?52:n>=100?46:n>=50?40:n>=10?34:28;}
+function clFont(n){return n>=500?13:n>=100?12.5:n>=50?12:n>=10?11.5:11;}
+function clLabel(n){return n>99999?Math.round(n/1000)+'k':''+n;}
+function rebuildClusterIndex(){
+  clusterIndex=null;
+  if(typeof Supercluster!=='undefined'){
+    clusterIndex=new Supercluster({radius:55,maxZoom:16,minPoints:2});
+    clusterIndex.load(allHouses.filter(function(h){return h.lat!=null&&h.lng!=null&&visibleBuckets[bucketFor(h.status)];})
+      .map(function(h){return{type:'Feature',properties:{id:h.id},geometry:{type:'Point',coordinates:[h.lng,h.lat]}};}));
+  }
+  renderClusters();
+}
+function renderClusters(){
+  clusterMarkers.forEach(function(m){m.remove();});clusterMarkers=[];clusteredIds={};
+  if(clusterIndex){
+    var z=Math.max(0,Math.min(24,Math.floor(map.getZoom())));
+    clusterIndex.getClusters([-180,-85,180,85],z).forEach(function(f){
+      if(!f.properties.cluster)return;
+      var n=f.properties.point_count;
+      clusterIndex.getLeaves(f.properties.cluster_id,Infinity).forEach(function(l){clusteredIds[l.properties.id]=1;});
+      var s=clSize(n);
+      var el=document.createElement('div');
+      var inner=document.createElement('div');
+      inner.style.cssText='width:'+s+'px;height:'+s+'px;border-radius:50%;background:linear-gradient(135deg,#272c3e,#14171f);border:2px solid rgba(255,255,255,0.92);box-shadow:0 2px 6px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-family:Inter,system-ui,sans-serif;font-weight:600;color:#fff;font-size:'+clFont(n)+'px;letter-spacing:-0.01em;user-select:none;';
+      inner.textContent=clLabel(n);
+      el.appendChild(inner);
+      (function(cid,coord){
+        el.addEventListener('click',function(ev){ev.stopPropagation();ev.preventDefault();
+          var t;try{t=clusterIndex.getClusterExpansionZoom(cid);}catch(e){t=map.getZoom()+2;}
+          t=Math.min(Math.max(t,map.getZoom()+0.5),22);
+          map.easeTo({center:coord,zoom:t,duration:600});});
+      })(f.properties.cluster_id,f.geometry.coordinates);
+      clusterMarkers.push(new mapboxgl.Marker({element:el}).setLngLat(f.geometry.coordinates).addTo(map));
+    });
+  }
+  applyHouseVisibility();
+}
+map.on('zoomend',renderClusters);
+
 function applyHouseVisibility(){
-  houseMarkers.forEach(function(h){h.marker.getElement().style.display=visibleBuckets[h.bucket]?'':'none';});
-  var feats=allHouses.filter(function(h){return h.lat!=null&&h.lng!=null&&visibleBuckets[bucketFor(h.status)];})
+  // 'flex', never '' — resetting to '' drops the flex centering (web fix 9df4ebe)
+  houseMarkers.forEach(function(h){
+    var vis=visibleBuckets[h.bucket]&&!clusteredIds[h.id];
+    h.marker.getElement().style.display=vis?'flex':'none';
+    if(h.noteEl)h.noteEl.style.display=vis&&notesVisible?'':'none';
+  });
+  var feats=allHouses.filter(function(h){return h.lat!=null&&h.lng!=null&&visibleBuckets[bucketFor(h.status)]&&!clusteredIds[h.id];})
     .map(function(h){return {type:'Feature',properties:{id:h.id},geometry:{type:'Point',coordinates:[h.lng,h.lat]}};});
   if(map.getSource('houses'))map.getSource('houses').setData({type:'FeatureCollection',features:feats});
 }
 window._setFilters=function(list){
   visibleBuckets={};(list||[]).forEach(function(k){visibleBuckets[k]=1;});
-  applyHouseVisibility();
+  rebuildClusterIndex();
 };
-// 📝 note labels above pins (web's showNotes toggle)
-window._showNotes=function(b){
-  notesVisible=!!b;
-  houseMarkers.forEach(function(h){if(h.noteEl)h.noteEl.style.display=notesVisible?'':'none';});
-};
+// 📝 note labels under pins (web's showNotes toggle)
+window._showNotes=function(b){notesVisible=!!b;applyHouseVisibility();};
 // White outline on the pin currently visited by the pin-nav (web's easeTo highlight)
 var navId=null;
 function recFor(id){for(var i=0;i<houseMarkers.length;i++){if(houseMarkers[i].id===id)return houseMarkers[i];}return null;}
@@ -239,8 +296,9 @@ window._setHouses=function(arr){
     var el=makeMarker(h.status);
     var noteEl=null;
     if(h.note){
+      // Web note label (map-container 805-820): under the pin, dark glass, ellipsis
       noteEl=document.createElement('div');
-      noteEl.style.cssText='position:absolute;bottom:37px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.78);border:1px solid rgba(255,255,255,0.15);color:#fde68a;font-family:system-ui;font-size:10px;font-weight:600;padding:2px 7px;border-radius:7px;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;'+(notesVisible?'':'display:none;');
+      noteEl.style.cssText='position:absolute;top:37px;left:50%;transform:translateX(-50%);background:rgba(12,12,20,0.88);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.65);font-family:system-ui;font-size:10px;line-height:1.35;padding:3px 8px;border-radius:6px;white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;text-align:center;pointer-events:none;'+(notesVisible?'':'display:none;');
       noteEl.textContent='📝 '+h.note;
       el.style.position='relative';
       el.appendChild(noteEl);
@@ -249,13 +307,14 @@ window._setHouses=function(arr){
     var m=new mapboxgl.Marker(el).setLngLat([h.lng,h.lat]).addTo(map);
     houseMarkers.push({id:h.id,bucket:bucketFor(h.status),marker:m,noteEl:noteEl});
   });
-  applyHouseVisibility();
+  rebuildClusterIndex();
 };
 
 // --- Zones ---
-var zonesVisible=true;
+var zonesVisible=true, lastZones=[];
 window._setZones=function(zs){
-  var fc={type:'FeatureCollection',features:(zs||[]).filter(function(z){return z.polygon_geojson;})
+  lastZones=zs||[];
+  var fc={type:'FeatureCollection',features:lastZones.filter(function(z){return z.polygon_geojson;})
     .map(function(z){return {type:'Feature',properties:{id:z.id,color:z.color||'#6366f1'},geometry:z.polygon_geojson};})};
   if(map.getSource('zones'))map.getSource('zones').setData(fc);
 };
@@ -302,12 +361,32 @@ function syncReps(){
 window._setReps=function(arr){repsData=arr||[];syncReps();};
 window._showReps=function(b){repsVisible=!!b;syncReps();};
 
+function setupLayers(){
+  if(!map.getSource('zones')){
+    map.addSource('zones',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    map.addLayer({id:'zones-fill',type:'fill',source:'zones',paint:{'fill-color':['get','color'],'fill-opacity':0.18}});
+    map.addLayer({id:'zones-line',type:'line',source:'zones',paint:{'line-color':['get','color'],'line-width':2.5,'line-opacity':0.8}});
+    window._showZones(zonesVisible);
+  }
+  if(!map.getSource('houses')){
+    map.addSource('houses',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    map.addLayer({id:'houses-hit',type:'circle',source:'houses',paint:{'circle-radius':18,'circle-opacity':0.01,'circle-color':'#000'}});
+  }
+}
+// Plan/satellite toggle: setStyle drops all sources/layers — re-add them once
+// the new style loads. DOM markers (pins, clusters, reps) survive on their own.
+window._setStyle=function(n){
+  if(n===styleName)return;
+  styleName=n;
+  map.setStyle(styleUrl(n));
+  map.once('style.load',function(){
+    setupLayers();
+    window._setZones(lastZones);
+    applyHouseVisibility();
+  });
+};
 map.on('load',function(){
-  map.addSource('zones',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
-  map.addLayer({id:'zones-fill',type:'fill',source:'zones',paint:{'fill-color':['get','color'],'fill-opacity':0.18}});
-  map.addLayer({id:'zones-line',type:'line',source:'zones',paint:{'line-color':['get','color'],'line-width':2.5,'line-opacity':0.8}});
-  map.addSource('houses',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
-  map.addLayer({id:'houses-hit',type:'circle',source:'houses',paint:{'circle-radius':18,'circle-opacity':0.01,'circle-color':'#000'}});
+  setupLayers();
   post({type:'ready'});
 });
 map.on('moveend',function(){var c=map.getCenter();post({type:'center',lat:c.lat,lng:c.lng});});
@@ -342,12 +421,16 @@ map.on('moveend',function(){var c=map.getCenter();post({type:'center',lat:c.lat,
   }, [webReady, showZones]);
   useEffect(() => {
     if (!webReady) return;
-    inject(visibleStatuses ? `window._setFilters(${JSON.stringify(visibleStatuses)})` : 'window._setFilters(["closed_won","follow_up","appointment","no_answer","rejected","other"])');
+    inject(visibleStatuses ? `window._setFilters(${JSON.stringify(visibleStatuses)})` : 'window._setFilters(["closed_won","lead","follow_up","appointment","no_answer","rejected","other"])');
   }, [webReady, visibleStatuses]);
   useEffect(() => {
     if (!webReady) return;
     inject(`window._showNotes(${showNotes})`);
   }, [webReady, showNotes]);
+  useEffect(() => {
+    if (!webReady) return;
+    inject(`window._setStyle&&window._setStyle(${JSON.stringify(mapStyle)})`);
+  }, [webReady, mapStyle]);
 
   const onMessage = (e: WebViewMessageEvent) => {
     try {

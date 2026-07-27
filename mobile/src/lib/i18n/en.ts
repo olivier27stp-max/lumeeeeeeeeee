@@ -3887,11 +3887,12 @@ const en = {
     noClientsFound: 'No clients found.',
 
     // D2D map — pin statuses
-    pinClosed: 'Closed ✓',
-    pinFollowUp: 'Follow-up',
+    pinClosed: 'Sold ✓',
+    pinLead: 'Lead',
+    pinFollowUp: 'Follow up',
     pinAppointment: 'Appointment',
     pinNoAnswer: 'No answer',
-    pinDeclined: 'Declined',
+    pinDeclined: 'Not interested',
     pinOther: 'Other',
     // D2D map — alert titles + toasts
     pin: 'Pin',
@@ -3942,6 +3943,22 @@ const en = {
     assignedTo: 'Assigned to',
     deleteZoneBtn: 'Delete zone',
     zoneDeleteConfirm: 'Delete this zone?',
+    // D2D map — zone stats panel + rep assignment (web parity)
+    pipeline: 'Pipeline',
+    conversionRate: 'Conversion rate',
+    contactRate: 'Contact rate',
+    contacted: 'Contacted',
+    noAnswerShort: 'No answer',
+    repsShort: 'Reps',
+    noPinsInZone: 'No pins in this zone',
+    unassigned: 'Unassigned',
+    byRep: 'By rep',
+    allReps: 'All',
+    assignToRep: 'Assign to a rep',
+    skipForNow: 'Skip for now',
+    linkedJob: 'Linked job',
+    linkedQuote: 'Linked quote',
+    createJobOutcome: '+ Create job',
     // D2D map — web-parity action buttons
     addPin: 'Add a pin',
     selectMode: 'Select',

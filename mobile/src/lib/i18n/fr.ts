@@ -3878,12 +3878,13 @@ const fr: TranslationKeys = {
     errorPrefix: 'Erreur : {message}',
     noClientsFound: 'Aucun client trouvé.',
 
-    // D2D map — pin statuses
-    pinClosed: 'Fermé ✓',
-    pinFollowUp: 'Suivi',
+    // D2D map — pin statuses (web lead-pin.ts labels, current main)
+    pinClosed: 'Vendu ✓',
+    pinLead: 'Lead',
+    pinFollowUp: 'À repasser',
     pinAppointment: 'Rendez-vous',
-    pinNoAnswer: 'Pas de réponse',
-    pinDeclined: 'Refusé',
+    pinNoAnswer: 'Aucune réponse',
+    pinDeclined: 'Pas intéressé',
     pinOther: 'Autre',
     // D2D map — alert titles + toasts
     pin: 'Pin',
@@ -3934,6 +3935,22 @@ const fr: TranslationKeys = {
     assignedTo: 'Assignée à',
     deleteZoneBtn: 'Supprimer la zone',
     zoneDeleteConfirm: 'Supprimer cette zone ?',
+    // D2D map — zone stats panel + rep assignment (web parity)
+    pipeline: 'Pipeline',
+    conversionRate: 'Taux de conversion',
+    contactRate: 'Taux de contact',
+    contacted: 'Contactées',
+    noAnswerShort: 'Sans réponse',
+    repsShort: 'Reps',
+    noPinsInZone: 'Aucun pin dans cette zone',
+    unassigned: 'Non assigné',
+    byRep: 'Par représentant',
+    allReps: 'Tous',
+    assignToRep: 'Assigner à un représentant',
+    skipForNow: 'Passer pour le moment',
+    linkedJob: 'Job liée',
+    linkedQuote: 'Soumission liée',
+    createJobOutcome: '+ Créer une Job',
     // D2D map — web-parity action buttons
     addPin: 'Ajouter un pin',
     selectMode: 'Sélectionner',
