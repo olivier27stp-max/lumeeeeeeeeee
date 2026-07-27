@@ -40,7 +40,7 @@ type AdminTab = 'overview' | 'reps' | 'my' | 'rates';
  *  - owner / admin        → management dashboard with Overview / Reps / My / Rates tabs
  */
 export default function Commissions() {
-  const { currentRole, loading } = useCompany();
+  const { currentRole, userId, loading } = useCompany();
   const { language } = useTranslation();
   const isFr = language === 'fr';
 
@@ -72,7 +72,15 @@ export default function Commissions() {
           </div>
         </div>
         <PayrollSummaryCard metric="deals" />
-        <PersonalCommissionView />
+        {/* Scope explicitement au self: un rep ne voit QUE ses commissions.
+            Sans userId, un owner en preview (Dev Role Switcher → rep) verrait
+            tout, car le serveur applique son vrai rôle. Passer son propre id
+            garantit l'aperçu correct; pour un vrai rep, le serveur force déjà. */}
+        <PersonalCommissionView
+          userId={userId ?? undefined}
+          title={isFr ? 'Mes commissions' : 'My commissions'}
+          subtitle={isFr ? 'Vos propres commissions' : 'Your own commissions'}
+        />
       </div>
     );
   }
