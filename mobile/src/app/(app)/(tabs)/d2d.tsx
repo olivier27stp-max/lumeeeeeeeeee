@@ -8,6 +8,7 @@ import { ActivityIndicator, Alert, Keyboard, Linking, Modal, Pressable, ScrollVi
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import D2DWebMap, { D2DWebMapHandle } from '@/components/D2DWebMap';
+import { IconCompass, IconDrawHand, IconFoldedMap, IconFunnel, IconPin, IconSearch, IconSelectRect } from '@/components/MapToolbarIcons';
 import {
   createHouseAt,
   createTerritory,
@@ -84,14 +85,14 @@ function pointInPolygon(lng: number, lat: number, ring: [number, number][]): boo
 type MapMode = 'view' | 'add_pin' | 'select' | 'draw_zone';
 
 /** Web's right toolbar boxes: white 44px squares, red icons, active = red bg. */
-function ToolBtn({ icon, onPress, active }: { icon: string; onPress: () => void; active?: boolean }) {
+function ToolBtn({ onPress, active, round, children }: { onPress: () => void; active?: boolean; round?: boolean; children: React.ReactNode }) {
   return (
     <Pressable
       onPress={onPress}
-      className={`h-11 w-11 items-center justify-center rounded-xl ${active ? 'bg-red-600' : 'bg-white'}`}
-      style={{ shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
+      className={`h-11 w-11 items-center justify-center ${round ? 'rounded-full' : 'rounded-xl'} ${active ? 'bg-red-600' : 'bg-white'}`}
+      style={{ shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
     >
-      <SymbolView name={icon as any} tintColor={active ? '#FFFFFF' : '#DC2626'} size={18} resizeMode="scaleAspectFit" />
+      {children}
     </Pressable>
   );
 }
@@ -126,6 +127,8 @@ export default function D2DMap() {
   const [center, setCenter] = useState(DEFAULT);
   const [mapCenter, setMapCenter] = useState(DEFAULT);
   const [ready, setReady] = useState(false);
+  // Map bearing → the compass needle rotates like the web's
+  const [bearing, setBearing] = useState(0);
   // Web parity: last GPS fix cached → instant open at zoom 17 next launch
   const [initialZoom, setInitialZoom] = useState(16);
   useEffect(() => {
@@ -705,6 +708,7 @@ export default function D2DMap() {
           setZoneCoords(c);
         }}
         onCenterChange={(lat, lng) => setMapCenter({ lat, lng })}
+        onBearingChange={setBearing}
         onSelectionChange={setSelectedIds}
         onDrawCount={setDrawCount}
       />
@@ -750,25 +754,35 @@ export default function D2DMap() {
 
       </View>
 
-      {/* ===== RIGHT toolbar (web's white boxes with red icons, vertically centered) ===== */}
-      {mode === 'view' ? (
-        <View className="absolute right-3 items-end" style={{ top: '30%', gap: 8 }}>
-          <ToolBtn icon="mappin.and.ellipse" onPress={enterAddPin} />
-          <ToolBtn icon="line.3.horizontal.decrease" active={filtersOpen} onPress={() => setFiltersOpen(!filtersOpen)} />
-          <ToolBtn icon="magnifyingglass" active={searchVisible} onPress={() => { setSearchVisible(!searchVisible); setFiltersOpen(false); }} />
-          {canDraw ? <ToolBtn icon="hand.draw" onPress={enterDraw} /> : null}
-          <ToolBtn icon="rectangle.dashed" onPress={enterSelect} />
-          <ToolBtn icon="map" active={mapStyle === 'satellite'} onPress={toggleMapStyle} />
-          {/* Compass (web: round, white, red needle → reset north-up) */}
-          <Pressable
-            onPress={() => mapRef.current?.resetNorth()}
-            className="h-11 w-11 items-center justify-center rounded-full bg-white"
-            style={{ shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
-          >
-            <SymbolView name="safari" tintColor="#dc2626" size={22} resizeMode="scaleAspectFit" />
-          </Pressable>
-        </View>
-      ) : null}
+      {/* ===== RIGHT toolbar — exact web boxes (always visible, buttons toggle their mode) ===== */}
+      <View className="absolute right-3 items-end" style={{ top: '30%', gap: 8 }}>
+        <ToolBtn active={mode === 'add_pin'} onPress={() => (mode === 'add_pin' ? exitAddPin() : enterAddPin())}>
+          <IconPin color={mode === 'add_pin' ? '#FFFFFF' : '#DC2626'} />
+        </ToolBtn>
+        <ToolBtn active={filtersOpen} onPress={() => setFiltersOpen(!filtersOpen)}>
+          <IconFunnel color={filtersOpen ? '#FFFFFF' : '#DC2626'} />
+        </ToolBtn>
+        <ToolBtn active={searchVisible} onPress={() => { setSearchVisible(!searchVisible); setFiltersOpen(false); }}>
+          <IconSearch color={searchVisible ? '#FFFFFF' : '#DC2626'} />
+        </ToolBtn>
+        {canDraw ? (
+          <ToolBtn active={mode === 'draw_zone'} onPress={() => (mode === 'draw_zone' ? exitDraw() : enterDraw())}>
+            <IconDrawHand color={mode === 'draw_zone' ? '#FFFFFF' : '#DC2626'} />
+          </ToolBtn>
+        ) : null}
+        <ToolBtn active={mode === 'select'} onPress={() => (mode === 'select' ? exitSelect() : enterSelect())}>
+          <IconSelectRect color={mode === 'select' ? '#FFFFFF' : '#DC2626'} />
+        </ToolBtn>
+        <ToolBtn active={mapStyle === 'satellite'} onPress={toggleMapStyle}>
+          <IconFoldedMap color={mapStyle === 'satellite' ? '#FFFFFF' : '#DC2626'} />
+        </ToolBtn>
+        {/* Compass — round, black, needle rotates with the map bearing */}
+        <ToolBtn round onPress={() => mapRef.current?.resetNorth()}>
+          <View style={{ transform: [{ rotate: `${-bearing}deg` }] }}>
+            <IconCompass color="#000000" />
+          </View>
+        </ToolBtn>
+      </View>
 
       {/* Bottom placement toolbar while adding a pin (web's bottom strip) */}
       {mode === 'add_pin' ? (
@@ -940,7 +954,7 @@ export default function D2DMap() {
       ) : null}
 
       {/* ===== Filters — anchored 280px panel, exact web structure (map-container 2136-2289) ===== */}
-      {filtersOpen && mode === 'view' ? (
+      {filtersOpen ? (
         <>
           <Pressable className="absolute inset-0" onPress={() => setFiltersOpen(false)} />
           <View

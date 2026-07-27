@@ -66,6 +66,8 @@ interface Props {
   onPlace?: (lat: number, lng: number) => void;
   onZoneDrawn?: (coordinates: [number, number][]) => void;
   onCenterChange?: (lat: number, lng: number) => void;
+  /** Map bearing in degrees — drives the toolbar compass needle */
+  onBearingChange?: (deg: number) => void;
   /** Selected pin ids while in select mode (web's rectangle-select, tap-based) */
   onSelectionChange?: (ids: string[]) => void;
   /** Number of corners tapped so far while drawing a zone */
@@ -119,7 +121,7 @@ el.innerHTML='<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke
  * the map is ready, so updates never reload the WebView.
  */
 const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
-  { center, houses, zones = [], reps = [], showReps = true, showZones = true, visibleStatuses, showNotes = false, mapStyle = 'streets', initialZoom = 16, onSelectHouse, onZoneTap, onPlace, onZoneDrawn, onCenterChange, onSelectionChange, onDrawCount },
+  { center, houses, zones = [], reps = [], showReps = true, showZones = true, visibleStatuses, showNotes = false, mapStyle = 'streets', initialZoom = 16, onSelectHouse, onZoneTap, onPlace, onZoneDrawn, onCenterChange, onBearingChange, onSelectionChange, onDrawCount },
   ref,
 ) {
   const webRef = useRef<WebView>(null);
@@ -442,6 +444,12 @@ map.on('load',function(){
   post({type:'ready'});
 });
 map.on('moveend',function(){var c=map.getCenter();post({type:'center',lat:c.lat,lng:c.lng});});
+var brPending=false;
+map.on('rotate',function(){
+  if(brPending)return;brPending=true;
+  requestAnimationFrame(function(){brPending=false;post({type:'bearing',deg:map.getBearing()});});
+});
+map.on('rotateend',function(){post({type:'bearing',deg:map.getBearing()});});
 </script></body></html>`;
   }, [center.lat, center.lng]);
 
@@ -492,6 +500,7 @@ map.on('moveend',function(){var c=map.getCenter();post({type:'center',lat:c.lat,
       else if (msg.type === 'zonetap' && msg.id) onZoneTap?.(msg.id);
       else if (msg.type === 'place') onPlace?.(msg.lat, msg.lng);
       else if (msg.type === 'center') onCenterChange?.(msg.lat, msg.lng);
+      else if (msg.type === 'bearing') onBearingChange?.(msg.deg ?? 0);
       else if (msg.type === 'zone' && Array.isArray(msg.coordinates)) onZoneDrawn?.(msg.coordinates);
       else if (msg.type === 'selection' && Array.isArray(msg.ids)) onSelectionChange?.(msg.ids);
       else if (msg.type === 'drawcount') onDrawCount?.(msg.n ?? 0);
