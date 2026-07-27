@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, ShieldOff, ChevronLeft } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/d2d/card';
 import { Button } from '../components/d2d/button';
 import { useCompany } from '../contexts/CompanyContext';
 import {
   getCommissionRules,
-  createCommissionRule,
-  updateCommissionRule,
+  assignMemberToRule,
 } from '../lib/commissionsApi';
 import { fetchTeamList, type OrgMember } from '../lib/invitationsApi';
 import type { FsCommissionRule } from '../types';
@@ -356,25 +356,28 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
 // (admin-only; lets owner/admin edit per-rep commission % rules)
 // ──────────────────────────────────────────────────────────────────────
 
+/** Taux effectif d'un plan (base_percent > percentage, ou forfait). */
+function planRateLabel(rule: FsCommissionRule | undefined, isFr: boolean): string {
+  if (!rule) return isFr ? 'Plan par défaut' : 'Default plan';
+  if (rule.base_kind === 'flat') return `${((rule.base_value_cents || 0) / 100).toFixed(2)} $ ${isFr ? '/ vente' : '/ sale'}`;
+  const pct = rule.base_percent ?? rule.percentage ?? 0;
+  return `${pct}%`;
+}
+
 function RatesPanel() {
   const { language } = useTranslation();
   const isFr = language === 'fr';
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [rules, setRules] = useState<FsCommissionRule[]>([]);
   const [busy, setBusy] = useState(true);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftPct, setDraftPct] = useState<string>('');
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setBusy(true);
     try {
-      const [team, rulesData] = await Promise.all([
-        fetchTeamList(),
-        getCommissionRules(),
-      ]);
+      const [team, rulesData] = await Promise.all([fetchTeamList(), getCommissionRules()]);
       setMembers(team.members.filter((m) => m.status === 'active'));
-      setRules(rulesData);
+      setRules(rulesData.filter((r) => r.is_active && !r.deleted_at));
     } catch (err) {
       console.error('Failed to load rates:', err);
     } finally {
@@ -384,35 +387,27 @@ function RatesPanel() {
 
   useEffect(() => { void reload(); }, [reload]);
 
-  function rateForUser(userId: string): FsCommissionRule | undefined {
-    return rules.find((r) => r.applies_to_user_id === userId && r.type === 'percentage');
+  // Le plan qui paie un membre = la règle dont assigned_user_ids le contient.
+  // C'est EXACTEMENT ce que le moteur de calcul résout quand une facture est
+  // payée — donc l'assignation ici est réellement effective.
+  function planForUser(userId: string): FsCommissionRule | undefined {
+    return rules.find((r) => (r.assigned_user_ids || []).includes(userId));
   }
 
-  async function handleSave(userId: string) {
-    const pct = parseFloat(draftPct);
-    if (isNaN(pct) || pct < 0 || pct > 100) {
-      alert(isFr ? 'Pourcentage invalide (0-100)' : 'Invalid percentage (0-100)');
-      return;
-    }
+  async function handleAssign(userId: string, ruleId: string) {
     setSavingId(userId);
     try {
-      const existing = rateForUser(userId);
-      if (existing) {
-        await updateCommissionRule(existing.id, { percentage: pct });
-      } else {
-        await createCommissionRule({
-          name: `Rate for ${userId.slice(0, 8)}`,
-          type: 'percentage',
-          percentage: pct,
-          applies_to_user_id: userId,
-          priority: 10,
-        } as Partial<FsCommissionRule>);
-      }
-      setEditingId(null);
-      setDraftPct('');
-      await reload();
+      await assignMemberToRule(userId, ruleId || null);
+      // maj optimiste
+      setRules((prev) => prev.map((r) => ({
+        ...r,
+        assigned_user_ids: r.id === ruleId
+          ? [...new Set([...(r.assigned_user_ids || []), userId])]
+          : (r.assigned_user_ids || []).filter((u) => u !== userId),
+      })));
+      toast.success(isFr ? 'Plan mis à jour' : 'Plan updated');
     } catch (err: any) {
-      alert(err?.message || (isFr ? "Échec de l'enregistrement" : 'Save failed'));
+      toast.error(err?.message || (isFr ? "Échec de l'enregistrement" : 'Save failed'));
     } finally {
       setSavingId(null);
     }
@@ -429,24 +424,29 @@ function RatesPanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{isFr ? 'Taux de commission par représentant' : 'Commission rates per rep'}</CardTitle>
+        <CardTitle>{isFr ? 'Plan de commission par membre' : 'Commission plan per member'}</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
+        {rules.length === 0 && (
+          <p className="px-5 pt-3 text-xs text-text-muted">
+            {isFr
+              ? "Aucun plan de commission créé. Les commissions utilisent le plan par défaut de l'entreprise tant qu'aucun plan n'est assigné."
+              : 'No commission plan created yet. Commissions use the company default until a plan is assigned.'}
+          </p>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border-subtle">
                 <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{isFr ? 'Membre' : 'Member'}</th>
                 <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{isFr ? 'Rôle' : 'Role'}</th>
-                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{isFr ? 'Taux actuel' : 'Current rate'}</th>
-                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">Action</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{isFr ? 'Plan appliqué' : 'Applied plan'}</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{isFr ? 'Taux effectif' : 'Effective rate'}</th>
               </tr>
             </thead>
             <tbody>
               {members.map((m) => {
-                const rule = rateForUser(m.user_id);
-                const pct = rule?.percentage ?? null;
-                const isEditing = editingId === m.user_id;
+                const plan = planForUser(m.user_id);
                 const isSaving = savingId === m.user_id;
                 return (
                   <tr key={m.user_id} className="border-b border-border-subtle last:border-b-0">
@@ -456,37 +456,25 @@ function RatesPanel() {
                       </Link>
                     </td>
                     <td className="px-5 py-2.5 text-sm text-text-muted capitalize">{m.role}</td>
-                    <td className="px-5 py-2.5 text-right text-sm">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          max="100"
-                          value={draftPct}
-                          onChange={(e) => setDraftPct(e.target.value)}
-                          className="w-20 rounded border border-border bg-surface-card px-2 py-1 text-right text-sm"
-                          autoFocus
-                        />
-                      ) : (
-                        <span className="font-semibold text-text-primary">{pct != null ? `${pct}%` : '—'}</span>
-                      )}
+                    <td className="px-5 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={plan?.id ?? ''}
+                          disabled={isSaving}
+                          onChange={(e) => handleAssign(m.user_id, e.target.value)}
+                          style={{ colorScheme: 'dark light' }}
+                          className="rounded-md border border-border-subtle px-2 py-1 text-sm text-text-primary disabled:opacity-60"
+                        >
+                          <option value="">{isFr ? "Plan par défaut de l'entreprise" : 'Company default plan'}</option>
+                          {rules.map((r) => (
+                            <option key={r.id} value={r.id}>{r.name} — {planRateLabel(r, isFr)}</option>
+                          ))}
+                        </select>
+                        {isSaving && <Loader2 className="h-3.5 w-3.5 animate-spin text-text-tertiary" />}
+                      </div>
                     </td>
-                    <td className="px-5 py-2.5 text-right">
-                      {isEditing ? (
-                        <div className="flex justify-end gap-1.5">
-                          <Button size="sm" disabled={isSaving} onClick={() => handleSave(m.user_id)}>
-                            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : (isFr ? 'Enregistrer' : 'Save')}
-                          </Button>
-                          <Button size="sm" variant="outline" disabled={isSaving} onClick={() => { setEditingId(null); setDraftPct(''); }}>
-                            {isFr ? 'Annuler' : 'Cancel'}
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button size="sm" variant="outline" onClick={() => { setEditingId(m.user_id); setDraftPct(pct != null ? String(pct) : ''); }}>
-                          {isFr ? 'Modifier' : 'Edit'}
-                        </Button>
-                      )}
+                    <td className="px-5 py-2.5 text-right text-sm font-semibold text-text-primary tabular-nums">
+                      {planRateLabel(plan, isFr)}
                     </td>
                   </tr>
                 );
