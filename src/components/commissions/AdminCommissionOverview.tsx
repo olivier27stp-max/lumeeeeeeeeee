@@ -7,6 +7,7 @@ import {
   getPayrollPreview,
   approveCommission,
   reverseCommission,
+  markCommissionPaid,
 } from '../../lib/commissionsApi';
 import type { FsCommissionEntry, CommissionPayrollPreview } from '../../types';
 import CommissionFilters, { type CommissionFiltersValue } from './CommissionFilters';
@@ -100,6 +101,21 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
       setEntries((prev) => prev?.map((e) => (e.id === id ? updated : e)) ?? null);
     } catch (err: any) {
       setError(err?.message || 'Reverse failed');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleMarkPaid = async (id: string) => {
+    setActionLoading(id);
+    try {
+      const updated = await markCommissionPaid(id);
+      setEntries((prev) => prev?.map((e) => (e.id === id ? updated : e)) ?? null);
+      // Reflète le versement dans les totaux (payé/en attente).
+      const p = await getPayrollPreview(filters.from, filters.to, filters.repId);
+      setPayroll(p);
+    } catch (err: any) {
+      setError(err?.message || (isFr ? 'Échec du versement' : 'Mark paid failed'));
     } finally {
       setActionLoading(null);
     }
@@ -242,6 +258,7 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
                 actionLoading={actionLoading}
                 onApprove={handleApprove}
                 onReverse={handleReverse}
+                onMarkPaid={handleMarkPaid}
               />
             </CardContent>
           </Card>

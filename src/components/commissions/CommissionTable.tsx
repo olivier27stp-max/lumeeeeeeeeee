@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, Banknote } from 'lucide-react';
 import UnifiedAvatar from '../ui/UnifiedAvatar';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
@@ -23,6 +23,7 @@ interface Props {
   actionLoading?: string | null;
   onApprove?: (id: string) => void;
   onReverse?: (id: string) => void;
+  onMarkPaid?: (id: string) => void;
   emptyMessage?: string;
 }
 
@@ -39,6 +40,7 @@ export default function CommissionTable({
   actionLoading,
   onApprove,
   onReverse,
+  onMarkPaid,
   emptyMessage,
 }: Props) {
   const { language } = useTranslation();
@@ -103,6 +105,17 @@ export default function CommissionTable({
                         title={fr ? 'Approuver' : 'Approve'}
                       >
                         {actionLoading === e.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
+                      </button>
+                    )}
+                    {showActions && e.status === 'approved' && onMarkPaid && (
+                      <button
+                        onClick={() => onMarkPaid(e.id)}
+                        disabled={actionLoading === e.id}
+                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-success hover:bg-success/10 transition-colors disabled:opacity-50"
+                        title={fr ? 'Marquer comme versé (payé au rep)' : 'Mark as paid'}
+                      >
+                        {actionLoading === e.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Banknote className="h-3 w-3" />}
+                        <span>{fr ? 'Verser' : 'Pay'}</span>
                       </button>
                     )}
                     {showActions && (e.status === 'pending' || e.status === 'approved') && onReverse && (

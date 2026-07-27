@@ -23,6 +23,7 @@ import {
   getCommissionEntries,
   approveCommission,
   reverseCommission,
+  markCommissionPaid,
 } from '../lib/commissionsApi';
 import type { FsCommissionEntry } from '../types';
 import { useTranslation } from '../i18n';
@@ -281,6 +282,13 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
       setEntries((prev) => prev?.map((e) => (e.id === id ? updated : e)) ?? null);
     } finally { setActionLoading(null); }
   };
+  const handleMarkPaid = async (id: string) => {
+    setActionLoading(id);
+    try {
+      const updated = await markCommissionPaid(id);
+      setEntries((prev) => prev?.map((e) => (e.id === id ? updated : e)) ?? null);
+    } finally { setActionLoading(null); }
+  };
 
   const repOptions = (() => {
     const ids = [...new Set((entries ?? []).map((e) => e.user_id).filter(Boolean))];
@@ -320,6 +328,7 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
                 actionLoading={actionLoading}
                 onApprove={handleApprove}
                 onReverse={handleReverse}
+                onMarkPaid={handleMarkPaid}
               />
             </CardContent>
           </Card>
