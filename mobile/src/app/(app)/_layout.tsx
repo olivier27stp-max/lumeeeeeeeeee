@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
 import { ViewModeProvider } from '@/lib/view-mode';
 import { LiveTrackingController } from '@/lib/live-tracking';
+import { SessionTimeoutController } from '@/lib/session-timeout';
 import { useTranslation } from '@/lib/i18n';
 
 export default function AppLayout() {
@@ -51,6 +52,7 @@ export default function AppLayout() {
     <View className="flex-1">
       <OfflineBanner />
       <LiveTrackingController />
+      <SessionTimeoutController />
       <View className="flex-1">
         <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />

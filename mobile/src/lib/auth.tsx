@@ -63,7 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) return { error: error.message };
       if (!data?.url) return { error: 'Could not start Google sign-in.' };
 
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      // Ephemeral session skips the iOS consent popup that exposes the Supabase domain.
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo, {
+        preferEphemeralSession: true,
+      });
       if (result.type !== 'success' || !result.url) {
         return { error: result.type === 'cancel' ? null : 'Google sign-in was cancelled.' };
       }

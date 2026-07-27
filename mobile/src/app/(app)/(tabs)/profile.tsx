@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import UnifiedAvatar from '@/components/ui/UnifiedAvatar';
 import { getMember } from '@/lib/api/org';
 import { useViewMode } from '@/lib/view-mode';
+import { IDLE_LIMIT_OPTIONS, useIdleLimit } from '@/lib/session-timeout';
 import { useTranslation } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
@@ -44,6 +45,7 @@ export default function More() {
   const { can, orgId } = usePermissions();
   const { mode, setMode, canSwitch } = useViewMode();
   const { t, language, setLanguage } = useTranslation();
+  const { limit: idleLimit, setLimit: setIdleLimit } = useIdleLimit();
   const me = session?.user.id ?? '';
   const { data: meMember } = useQuery({
     queryKey: ['member', orgId, me],
@@ -162,6 +164,34 @@ export default function More() {
               >
                 <Text className={`text-sm font-semibold ${language === l ? 'text-ink' : 'text-ink-muted'}`}>
                   {l === 'fr' ? 'Français' : 'English'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        {/* Session — auto sign-out after chosen inactivity ('forever' = never) */}
+        <View className="rounded-3xl bg-white p-4 gap-2">
+          <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileProfile.stayLoggedIn}</Text>
+          <Text className="text-xs text-ink-muted">{t.mobileProfile.stayLoggedInHint}</Text>
+          <View className="flex-row flex-wrap gap-1 rounded-2xl bg-surface-sunken p-1">
+            {IDLE_LIMIT_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt}
+                onPress={() => setIdleLimit(opt)}
+                className={`min-w-[31%] flex-1 items-center rounded-xl py-2 ${idleLimit === opt ? 'bg-white' : ''}`}
+              >
+                <Text className={`text-sm font-semibold ${idleLimit === opt ? 'text-ink' : 'text-ink-muted'}`}>
+                  {
+                    {
+                      '1h': t.mobileProfile.idle1h,
+                      '8h': t.mobileProfile.idle8h,
+                      '24h': t.mobileProfile.idle24h,
+                      '7d': t.mobileProfile.idle7d,
+                      '30d': t.mobileProfile.idle30d,
+                      forever: t.mobileProfile.idleForever,
+                    }[opt]
+                  }
                 </Text>
               </Pressable>
             ))}
