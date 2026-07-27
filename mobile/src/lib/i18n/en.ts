@@ -4394,6 +4394,14 @@ const en = {
     writeMessagePlaceholder: 'Write a message…',
     send: 'Send',
     messageAlertTitle: 'Message',
+    // New conversation modal (parity with the web Messages page)
+    newMessage: 'New message',
+    searchClientLabel: 'Search a client',
+    nameOrPhonePlaceholder: 'Name or company…',
+    phoneNumberLabel: 'Phone number',
+    // Thread date separators
+    msgToday: 'Today',
+    msgYesterday: 'Yesterday',
     // Notifications
     notificationsRelJustNow: 'just now',
     notificationsRelMinutes: '{n} min ago',

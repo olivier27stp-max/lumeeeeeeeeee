@@ -4386,6 +4386,14 @@ const fr: TranslationKeys = {
     writeMessagePlaceholder: 'Écrire un message…',
     send: 'Envoyer',
     messageAlertTitle: 'Message',
+    // Modal nouvelle conversation (parité avec la page Messages du web)
+    newMessage: 'Nouveau message',
+    searchClientLabel: 'Rechercher un client',
+    nameOrPhonePlaceholder: 'Nom ou compagnie…',
+    phoneNumberLabel: 'Numéro de téléphone',
+    // Séparateurs de date du fil
+    msgToday: 'Aujourd’hui',
+    msgYesterday: 'Hier',
     // Notifications
     notificationsRelJustNow: "à l'instant",
     notificationsRelMinutes: 'il y a {n} min',
