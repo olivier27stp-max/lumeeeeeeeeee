@@ -16,9 +16,12 @@ export type PickedClient = { id: string; name: string };
 export function ClientPicker({
   value,
   onChange,
+  initialForm,
 }: {
   value: PickedClient | null;
   onChange: (c: PickedClient | null) => void;
+  /** Pre-fills the "new client" form (e.g. from a D2D pin's customer info) */
+  initialForm?: { name?: string; phone?: string; email?: string };
 }) {
   const { t } = useTranslation();
   const tc = t.mobileComp;
@@ -110,7 +113,18 @@ export function ClientPicker({
       {canCreateClients ? (
         <Pressable
           onPress={() => {
-            setForm((f) => ({ ...f, first_name: '', last_name: '', company: search }));
+            if (initialForm && (initialForm.name || initialForm.phone || initialForm.email)) {
+              const parts = (initialForm.name ?? '').trim().split(/\s+/);
+              setForm({
+                first_name: parts[0] ?? '',
+                last_name: parts.slice(1).join(' '),
+                company: '',
+                phone: initialForm.phone ?? '',
+                email: initialForm.email ?? '',
+              });
+            } else {
+              setForm((f) => ({ ...f, first_name: '', last_name: '', company: search }));
+            }
             setCreating(true);
           }}
           className="flex-row items-center gap-2 rounded-xl border border-dashed border-surface-border px-4 py-3"

@@ -66,11 +66,20 @@ export default function NewJob() {
   });
 
   // Prefill from a D2D pin "close" (address) or other deep-links.
-  const prefill = useLocalSearchParams<{ address?: string; title?: string }>();
+  const prefill = useLocalSearchParams<{
+    address?: string; title?: string;
+    clientId?: string; clientName?: string; clientPhone?: string; clientEmail?: string; note?: string;
+  }>();
   const [title, setTitle] = useState(typeof prefill.title === 'string' ? prefill.title : '');
-  const [client, setClient] = useState<PickedClient | null>(null);
+  // D2D flow: a pin with a linked client arrives pre-selected; otherwise its
+  // customer info pre-fills the "new client" form (web pinToJobDraft behavior).
+  const [client, setClient] = useState<PickedClient | null>(
+    typeof prefill.clientId === 'string' && prefill.clientId
+      ? { id: prefill.clientId, name: typeof prefill.clientName === 'string' && prefill.clientName ? prefill.clientName : 'Client' }
+      : null,
+  );
   const [address, setAddress] = useState(typeof prefill.address === 'string' ? prefill.address : '');
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState(typeof prefill.note === 'string' ? prefill.note : '');
   const [jobType, setJobType] = useState<'one_off' | 'recurring'>('one_off');
   const [frequency, setFrequency] = useState('weekly');
   const [startDate, setStartDate] = useState<Date>(() => {
@@ -232,7 +241,15 @@ export default function NewJob() {
 
       <View className="gap-2">
         <SectionLabel>{t.mobileJobs.client}</SectionLabel>
-        <ClientPicker value={client} onChange={setClient} />
+        <ClientPicker
+          value={client}
+          onChange={setClient}
+          initialForm={{
+            name: typeof prefill.clientName === 'string' ? prefill.clientName : undefined,
+            phone: typeof prefill.clientPhone === 'string' ? prefill.clientPhone : undefined,
+            email: typeof prefill.clientEmail === 'string' ? prefill.clientEmail : undefined,
+          }}
+        />
       </View>
 
       {/* Team assignment (owner/admin) */}

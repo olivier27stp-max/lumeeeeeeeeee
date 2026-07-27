@@ -410,22 +410,37 @@ export default function D2DMap() {
     }
   };
 
-  const crmFor = (house: HouseStatus, address: string) => {
+  // Everything the pin knows travels into the CRM form (web pinToJobDraft /
+  // pinToQuoteLead behavior): linked client, customer info, address, last note.
+  const crmQuery = (h: Partial<FieldHouse>) => {
+    const q = new URLSearchParams();
+    if (h.address) q.set('address', h.address);
+    if (h.client_id) q.set('clientId', h.client_id);
+    const m = h.metadata ?? {};
+    const name = (m.name ?? m.customer_name ?? '') as string;
+    const phone = (m.phone ?? m.customer_phone ?? '') as string;
+    const email = (m.email ?? m.customer_email ?? '') as string;
+    if (name) q.set('clientName', name);
+    if (phone) q.set('clientPhone', phone);
+    if (email) q.set('clientEmail', email);
+    const note = h.id ? houseNotes?.[h.id] : null;
+    if (note) q.set('note', note);
+    return q.toString();
+  };
+  const crmFor = (house: HouseStatus, h: Partial<FieldHouse>) => {
     // Web flows (pin-crm-actions.ts): closed_won opens the job flow; a lead
     // opens a choice (the web offers contract/quote/skip — mobile: quote/skip).
+    const qs = crmQuery(h);
+    const quoteUrl = `/(app)/quotes/new?title=${encodeURIComponent(h.address ? `Estimation — ${h.address}` : '')}&${qs}`;
     if (house === 'sale') {
-      router.push(`/(app)/jobs/new?address=${encodeURIComponent(address)}` as any);
+      router.push(`/(app)/jobs/new?${qs}` as any);
     } else if (house === 'lead') {
       Alert.alert(t.mobileField.pinLead, undefined, [
-        {
-          text: t.mobileField.createQuote,
-          onPress: () =>
-            router.push(`/(app)/quotes/new?title=${encodeURIComponent(address ? `Estimation — ${address}` : '')}` as any),
-        },
+        { text: t.mobileField.createQuote, onPress: () => router.push(quoteUrl as any) },
         { text: t.mobileField.skipForNow, style: 'cancel' },
       ]);
     } else if (house === 'quote_sent') {
-      router.push(`/(app)/quotes/new?title=${encodeURIComponent(address ? `Estimation — ${address}` : '')}` as any);
+      router.push(quoteUrl as any);
     }
   };
 
@@ -498,7 +513,7 @@ export default function D2DMap() {
         // Status already chosen in the placement strip — don't re-ask, just
         // chain into the CRM flow when it applies (sale → job, lead → choice)
         if (house === 'sale' || house === 'lead' || house === 'quote_sent') {
-          crmFor(house, created.address ?? '');
+          crmFor(house, created);
         }
       }
     } catch (e) {
@@ -630,9 +645,9 @@ export default function D2DMap() {
       refetchNotes();
       // Web: switching to a close/estimation without a linked job/quote opens the CRM flow
       if (status === 'sale' && !house.job_id && house.current_status !== 'sale') {
-        crmFor('sale', house.address ?? '');
+        crmFor('sale', house);
       } else if (status === 'quote_sent' && !house.quote_id && house.current_status !== 'quote_sent') {
-        crmFor('quote_sent', house.address ?? '');
+        crmFor('quote_sent', house);
       }
     } catch (e) {
       Alert.alert(t.mobileField.pin, (e as Error).message);
@@ -650,8 +665,8 @@ export default function D2DMap() {
       await logHouseEvent({ orgId, houseId: h.id, userId, eventType: 'status_change', statusOverride: status });
       closePinCard();
       refetch();
-      if (status === 'sale' && !h.job_id) crmFor('sale', h.address ?? '');
-      else if (status === 'lead' && !h.quote_id) crmFor('lead', h.address ?? '');
+      if (status === 'sale' && !h.job_id) crmFor('sale', h);
+      else if (status === 'lead' && !h.quote_id) crmFor('lead', h);
     } catch (e) {
       Alert.alert(t.mobileField.pin, (e as Error).message);
     }

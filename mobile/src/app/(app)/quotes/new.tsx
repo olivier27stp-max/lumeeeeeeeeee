@@ -45,8 +45,17 @@ export default function NewQuote() {
   const [quoteNice, setQuoteNice] = useState('');
   const [sendingQuote, setSendingQuote] = useState(false);
 
-  const prefill = useLocalSearchParams<{ title?: string }>();
-  const [client, setClient] = useState<PickedClient | null>(null);
+  const prefill = useLocalSearchParams<{
+    title?: string;
+    clientId?: string; clientName?: string; clientPhone?: string; clientEmail?: string; note?: string;
+  }>();
+  // D2D flow: a pin with a linked client arrives pre-selected; otherwise its
+  // customer info pre-fills the "new client" form (web pinToQuoteLead behavior).
+  const [client, setClient] = useState<PickedClient | null>(
+    typeof prefill.clientId === 'string' && prefill.clientId
+      ? { id: prefill.clientId, name: typeof prefill.clientName === 'string' && prefill.clientName ? prefill.clientName : 'Client' }
+      : null,
+  );
   const [title, setTitle] = useState(typeof prefill.title === 'string' ? prefill.title : '');
   const [validDays, setValidDays] = useState('30');
   const [items, setItems] = useState<LineItemInput[]>([]);
@@ -245,7 +254,15 @@ export default function NewQuote() {
     <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt" contentContainerStyle={{ padding: 20, gap: 14 }}>
       <View className="gap-2">
         <SectionLabel>{t.invoices.client}</SectionLabel>
-        <ClientPicker value={client} onChange={setClient} />
+        <ClientPicker
+          value={client}
+          onChange={setClient}
+          initialForm={{
+            name: typeof prefill.clientName === 'string' ? prefill.clientName : undefined,
+            phone: typeof prefill.clientPhone === 'string' ? prefill.clientPhone : undefined,
+            email: typeof prefill.clientEmail === 'string' ? prefill.clientEmail : undefined,
+          }}
+        />
       </View>
 
       <View className="flex-row gap-3">
