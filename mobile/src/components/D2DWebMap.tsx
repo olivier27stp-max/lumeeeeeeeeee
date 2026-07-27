@@ -7,6 +7,8 @@ export interface WebMapHouse {
   lat: number | null;
   lng: number | null;
   status?: string | null;
+  /** Last note, shown as a 📝 label above the pin when showNotes is on */
+  note?: string | null;
 }
 
 export interface WebMapZone {
@@ -34,6 +36,8 @@ export interface D2DWebMapHandle {
   updateMe: (lat: number, lng: number) => void;
   setSelectMode: (on: boolean) => void;
   clearSelection: () => void;
+  /** White outline on the pin being visited by the filter panel's pin-nav (null clears) */
+  navHighlight: (id: string | null) => void;
 }
 
 interface Props {
@@ -46,7 +50,11 @@ interface Props {
   showZones?: boolean;
   /** Visible pin buckets (web PinStatus keys); undefined = all visible */
   visibleStatuses?: string[];
+  /** Show 📝 note labels above pins (web's "Afficher notes" toggle) */
+  showNotes?: boolean;
   onSelectHouse: (id: string) => void;
+  /** Tap on a zone polygon (empty map area) — opens the zone panel, like the web */
+  onZoneTap?: (id: string) => void;
   onPlace?: (lat: number, lng: number) => void;
   onZoneDrawn?: (coordinates: [number, number][]) => void;
   onCenterChange?: (lat: number, lng: number) => void;
@@ -99,7 +107,7 @@ el.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke
  * the map is ready, so updates never reload the WebView.
  */
 const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
-  { center, houses, zones = [], reps = [], showReps = true, showZones = true, visibleStatuses, onSelectHouse, onPlace, onZoneDrawn, onCenterChange, onSelectionChange, onDrawCount },
+  { center, houses, zones = [], reps = [], showReps = true, showZones = true, visibleStatuses, showNotes = false, onSelectHouse, onZoneTap, onPlace, onZoneDrawn, onCenterChange, onSelectionChange, onDrawCount },
   ref,
 ) {
   const webRef = useRef<WebView>(null);
@@ -116,6 +124,7 @@ const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
     updateMe: (lat, lng) => inject(`window._updateMe&&window._updateMe(${lng},${lat})`),
     setSelectMode: (on) => inject(`window._setSelectMode&&window._setSelectMode(${on})`),
     clearSelection: () => inject('window._clearSelection&&window._clearSelection()'),
+    navHighlight: (id) => inject(`window._navHl&&window._navHl(${JSON.stringify(id)})`),
   }));
 
   const html = useMemo(() => {
@@ -135,7 +144,7 @@ const D2DWebMap = forwardRef<D2DWebMapHandle, Props>(function D2DWebMap(
 mapboxgl.accessToken='${TOKEN}';
 function post(o){try{window.ReactNativeWebView.postMessage(JSON.stringify(o))}catch(e){}}
 ${COLOR_JS}
-var map=new mapboxgl.Map({container:'map',style:'mapbox://styles/mapbox/streets-v12',center:[${center.lng},${center.lat}],zoom:16});
+var map=new mapboxgl.Map({container:'map',style:'mapbox://styles/mapbox/satellite-streets-v12',center:[${center.lng},${center.lat}],zoom:16});
 var meEl=document.createElement('div');meEl.className='me';meEl.innerHTML='<div class="p"></div><div class="c"></div>';
 var meMarker=new mapboxgl.Marker({element:meEl,anchor:'center'}).setLngLat([${center.lng},${center.lat}]).addTo(map);
 
@@ -147,10 +156,10 @@ window._updateMe=function(lng,lat){meMarker.setLngLat([lng,lat]);};
 function ensureDraw(){
   if(map.getSource('draw'))return;
   map.addSource('draw',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
-  map.addLayer({id:'draw-fill',type:'fill',source:'draw',paint:{'fill-color':'#2563EB','fill-opacity':0.25}});
-  map.addLayer({id:'draw-line',type:'line',source:'draw',paint:{'line-color':'#2563EB','line-width':3}});
+  map.addLayer({id:'draw-fill',type:'fill',source:'draw',paint:{'fill-color':'#6366f1','fill-opacity':0.12}});
+  map.addLayer({id:'draw-line',type:'line',source:'draw',paint:{'line-color':'#6366f1','line-width':3,'line-dasharray':[2,2]}});
   map.addSource('drawpts',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
-  map.addLayer({id:'draw-pts',type:'circle',source:'drawpts',paint:{'circle-radius':6,'circle-color':'#fff','circle-stroke-color':'#2563EB','circle-stroke-width':3}});
+  map.addLayer({id:'draw-pts',type:'circle',source:'drawpts',paint:{'circle-radius':6,'circle-color':'#fff','circle-stroke-color':'#6366f1','circle-stroke-width':3}});
 }
 function updateDraw(){
   ensureDraw();
@@ -189,13 +198,15 @@ function houseTapped(id){
 map.on('click',function(e){
   if(placing){post({type:'place',lat:e.lngLat.lat,lng:e.lngLat.lng});return;}
   if(drawing){pts.push([e.lngLat.lng,e.lngLat.lat]);updateDraw();post({type:'drawcount',n:pts.length});return;}
-  if(map.getLayer('houses-hit')){var f=map.queryRenderedFeatures(e.point,{layers:['houses-hit']});if(f&&f.length){houseTapped(f[0].properties.id);}}
+  if(map.getLayer('houses-hit')){var f=map.queryRenderedFeatures(e.point,{layers:['houses-hit']});if(f&&f.length){houseTapped(f[0].properties.id);return;}}
+  if(!selecting&&zonesVisible&&map.getLayer('zones-fill')){var zf=map.queryRenderedFeatures(e.point,{layers:['zones-fill']});if(zf&&zf.length&&zf[0].properties.id){post({type:'zonetap',id:zf[0].properties.id});}}
 });
 
 // --- Houses: web-look gradient markers + invisible tap layer, filterable ---
 var allHouses=[];
-var houseMarkers=[]; // {id, bucket, marker}
+var houseMarkers=[]; // {id, bucket, marker, noteEl}
 var visibleBuckets={closed_won:1,follow_up:1,appointment:1,no_answer:1,rejected:1,other:1};
+var notesVisible=false;
 function applyHouseVisibility(){
   houseMarkers.forEach(function(h){h.marker.getElement().style.display=visibleBuckets[h.bucket]?'':'none';});
   var feats=allHouses.filter(function(h){return h.lat!=null&&h.lng!=null&&visibleBuckets[bucketFor(h.status)];})
@@ -206,16 +217,37 @@ window._setFilters=function(list){
   visibleBuckets={};(list||[]).forEach(function(k){visibleBuckets[k]=1;});
   applyHouseVisibility();
 };
+// 📝 note labels above pins (web's showNotes toggle)
+window._showNotes=function(b){
+  notesVisible=!!b;
+  houseMarkers.forEach(function(h){if(h.noteEl)h.noteEl.style.display=notesVisible?'':'none';});
+};
+// White outline on the pin currently visited by the pin-nav (web's easeTo highlight)
+var navId=null;
+function recFor(id){for(var i=0;i<houseMarkers.length;i++){if(houseMarkers[i].id===id)return houseMarkers[i];}return null;}
+window._navHl=function(id){
+  if(navId){var p=recFor(navId);if(p){p.marker.getElement().style.outline='';p.marker.getElement().style.outlineOffset='';}}
+  navId=id||null;
+  if(navId){var r=recFor(navId);if(r){var el=r.marker.getElement();el.style.outline='3px solid #fff';el.style.outlineOffset='2px';}}
+};
 window._setHouses=function(arr){
   allHouses=arr||[];
   houseMarkers.forEach(function(h){h.marker.remove();});houseMarkers=[];
-  selected={};postSel();
+  selected={};postSel();navId=null;
   allHouses.forEach(function(h){
     if(h.lat==null||h.lng==null)return;
     var el=makeMarker(h.status);
+    var noteEl=null;
+    if(h.note){
+      noteEl=document.createElement('div');
+      noteEl.style.cssText='position:absolute;bottom:37px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.78);border:1px solid rgba(255,255,255,0.15);color:#fde68a;font-family:system-ui;font-size:10px;font-weight:600;padding:2px 7px;border-radius:7px;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;'+(notesVisible?'':'display:none;');
+      noteEl.textContent='📝 '+h.note;
+      el.style.position='relative';
+      el.appendChild(noteEl);
+    }
     el.addEventListener('click',function(ev){ev.stopPropagation();ev.preventDefault();houseTapped(h.id);});
     var m=new mapboxgl.Marker(el).setLngLat([h.lng,h.lat]).addTo(map);
-    houseMarkers.push({id:h.id,bucket:bucketFor(h.status),marker:m});
+    houseMarkers.push({id:h.id,bucket:bucketFor(h.status),marker:m,noteEl:noteEl});
   });
   applyHouseVisibility();
 };
@@ -224,7 +256,7 @@ window._setHouses=function(arr){
 var zonesVisible=true;
 window._setZones=function(zs){
   var fc={type:'FeatureCollection',features:(zs||[]).filter(function(z){return z.polygon_geojson;})
-    .map(function(z){return {type:'Feature',properties:{color:z.color||'#6366f1'},geometry:z.polygon_geojson};})};
+    .map(function(z){return {type:'Feature',properties:{id:z.id,color:z.color||'#6366f1'},geometry:z.polygon_geojson};})};
   if(map.getSource('zones'))map.getSource('zones').setData(fc);
 };
 window._showZones=function(b){
@@ -273,7 +305,7 @@ window._showReps=function(b){repsVisible=!!b;syncReps();};
 map.on('load',function(){
   map.addSource('zones',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
   map.addLayer({id:'zones-fill',type:'fill',source:'zones',paint:{'fill-color':['get','color'],'fill-opacity':0.18}});
-  map.addLayer({id:'zones-line',type:'line',source:'zones',paint:{'line-color':['get','color'],'line-width':2}});
+  map.addLayer({id:'zones-line',type:'line',source:'zones',paint:{'line-color':['get','color'],'line-width':2.5,'line-opacity':0.8}});
   map.addSource('houses',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
   map.addLayer({id:'houses-hit',type:'circle',source:'houses',paint:{'circle-radius':18,'circle-opacity':0.01,'circle-color':'#000'}});
   post({type:'ready'});
@@ -312,12 +344,17 @@ map.on('moveend',function(){var c=map.getCenter();post({type:'center',lat:c.lat,
     if (!webReady) return;
     inject(visibleStatuses ? `window._setFilters(${JSON.stringify(visibleStatuses)})` : 'window._setFilters(["closed_won","follow_up","appointment","no_answer","rejected","other"])');
   }, [webReady, visibleStatuses]);
+  useEffect(() => {
+    if (!webReady) return;
+    inject(`window._showNotes(${showNotes})`);
+  }, [webReady, showNotes]);
 
   const onMessage = (e: WebViewMessageEvent) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
       if (msg.type === 'ready') setWebReady(true);
       else if (msg.type === 'house' && msg.id) onSelectHouse(msg.id);
+      else if (msg.type === 'zonetap' && msg.id) onZoneTap?.(msg.id);
       else if (msg.type === 'place') onPlace?.(msg.lat, msg.lng);
       else if (msg.type === 'center') onCenterChange?.(msg.lat, msg.lng);
       else if (msg.type === 'zone' && Array.isArray(msg.coordinates)) onZoneDrawn?.(msg.coordinates);

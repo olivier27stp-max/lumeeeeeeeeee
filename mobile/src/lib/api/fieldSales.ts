@@ -76,7 +76,13 @@ export interface FieldHouse {
   house_score: 'cold' | 'warm' | 'hot' | string | null;
   visit_count: number | null;
   last_activity_at: string | null;
+  created_at?: string | null;
   metadata: Record<string, any> | null;
+  /** CRM links (drive the popup's contextual actions, like the web) */
+  client_id?: string | null;
+  lead_id?: string | null;
+  job_id?: string | null;
+  quote_id?: string | null;
 }
 
 export interface FieldHouseEvent {
@@ -149,7 +155,7 @@ export interface Bounds {
 export async function listHousesInBounds(b: Bounds, limit = 500): Promise<FieldHouse[]> {
   const { data, error } = await supabase
     .from('field_house_profiles')
-    .select('id, org_id, address, lat, lng, current_status, house_score, visit_count, last_activity_at, metadata')
+    .select('id, org_id, address, lat, lng, current_status, house_score, visit_count, last_activity_at, created_at, metadata, client_id, lead_id, job_id, quote_id')
     .is('deleted_at', null)
     .gte('lat', b.minLat)
     .lte('lat', b.maxLat)
@@ -163,12 +169,32 @@ export async function listHousesInBounds(b: Bounds, limit = 500): Promise<FieldH
 export async function getHouse(id: string): Promise<FieldHouse | null> {
   const { data, error } = await supabase
     .from('field_house_profiles')
-    .select('id, org_id, address, lat, lng, current_status, house_score, visit_count, last_activity_at, metadata')
+    .select('id, org_id, address, lat, lng, current_status, house_score, visit_count, last_activity_at, created_at, metadata, client_id, lead_id, job_id, quote_id')
     .eq('id', id)
     .is('deleted_at', null)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return (data as FieldHouse | null) ?? null;
+}
+
+/** Last hand-written note per house (for the map's 📝 labels — the web /pins
+ * endpoint does the same join server-side). Plain object, not a Map: React
+ * Query's offline persistence would rehydrate a Map as {}. */
+export async function listLastNotes(orgId: string): Promise<Record<string, string>> {
+  const { data, error } = await supabase
+    .from('field_house_events')
+    .select('house_id, note_text, created_at')
+    .eq('org_id', orgId)
+    .not('note_text', 'is', null)
+    .neq('note_text', '')
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (error) return {};
+  const out: Record<string, string> = {};
+  (data ?? []).forEach((e) => {
+    if (e.house_id && e.note_text && !out[e.house_id]) out[e.house_id] = e.note_text;
+  });
+  return out;
 }
 
 export async function listHouseEvents(houseId: string): Promise<FieldHouseEvent[]> {
@@ -263,7 +289,7 @@ export async function createHouseAt(params: {
       assigned_user_id: userId,
       visit_count: 0,
     })
-    .select('id, org_id, address, lat, lng, current_status, house_score, visit_count, last_activity_at, metadata')
+    .select('id, org_id, address, lat, lng, current_status, house_score, visit_count, last_activity_at, created_at, metadata, client_id, lead_id, job_id, quote_id')
     .single();
   if (error) throw new Error(error.message);
 
@@ -290,17 +316,36 @@ export interface Territory {
   color: string | null;
   polygon_geojson: any;
   assigned_team_id: string | null;
+  created_at?: string | null;
 }
 
 /** All active zones for the org. */
 export async function listTerritories(orgId: string): Promise<Territory[]> {
   const { data, error } = await supabase
     .from('field_territories')
-    .select('id, name, color, polygon_geojson, assigned_team_id')
+    .select('id, name, color, polygon_geojson, assigned_team_id, created_at')
     .eq('org_id', orgId)
     .is('deleted_at', null);
   if (error) return [];
   return (data ?? []) as Territory[];
+}
+
+/** Reassign / rename a zone (admin/owner — gate the UI). */
+export async function updateTerritory(id: string, patch: { assignedTeamId?: string | null; name?: string }): Promise<void> {
+  const upd: Record<string, any> = {};
+  if ('assignedTeamId' in patch) upd.assigned_team_id = patch.assignedTeamId ?? null;
+  if (patch.name) upd.name = patch.name;
+  const { error } = await supabase.from('field_territories').update(upd).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+/** Soft-delete a zone (admin/owner) — never hard delete. */
+export async function deleteTerritory(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('field_territories')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
 }
 
 /** Create a zone (admin/owner). `coordinates` is a [lng,lat][] ring. */
