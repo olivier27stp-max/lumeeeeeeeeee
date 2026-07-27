@@ -3,6 +3,7 @@ import { z } from 'zod';
 import Stripe from 'stripe';
 import { validate } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, findUserByEmail, companyOrgIds } from '../lib/supabase';
+import { getUserContext, hasPermission } from '../lib/rbac';
 
 const router = Router();
 
@@ -94,6 +95,27 @@ router.get('/billing/current', async (req, res) => {
         .eq('org_id', auth.orgId)
         .maybeSingle(),
     ]);
+
+    // Any member may know the org's PLAN — it gates whole app areas, and a 403
+    // here made the front treat paying orgs as "no subscription" and paywall
+    // sales reps. Payment details stay behind financial.view_payments.
+    const ctx = await getUserContext(admin, auth.user.id, auth.orgId);
+    const canViewPayments = ctx ? hasPermission(ctx, 'financial.view_payments') : false;
+    if (!canViewPayments) {
+      const s = subRes.data as Record<string, any> | null;
+      const redacted = s
+        ? {
+            id: s.id,
+            org_id: s.org_id,
+            plan_id: s.plan_id,
+            status: s.status,
+            interval: s.interval ?? null,
+            current_period_end: s.current_period_end ?? null,
+            plans: s.plans ?? null,
+          }
+        : null;
+      return res.json({ subscription: redacted, billing_profile: null, restricted: true });
+    }
 
     return res.json({ subscription: subRes.data, billing_profile: profileRes.data });
   } catch (err: any) {
