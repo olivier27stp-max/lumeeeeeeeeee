@@ -16,7 +16,7 @@ export interface OptimizedStop {
 export interface OptimizeResponse {
   ok: true;
   algorithm: 'nearest-neighbor';
-  provider: 'haversine' | 'google';
+  provider: 'haversine' | 'osrm' | 'google';
   ordered_jobs: OptimizedStop[];
   total_distance_km: number;
   total_drive_minutes: number;
