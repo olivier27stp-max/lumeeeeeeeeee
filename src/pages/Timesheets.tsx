@@ -452,6 +452,11 @@ export default function Timesheets() {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      // Cmd/Ctrl/Alt : on laisse les raccourcis navigateur (Cmd+R, Cmd+Shift+R, Cmd+T…) intacts.
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        if (hubTab === 'feuilles' && !e.altKey && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); selectAll(); }
+        return;
+      }
       if (hubTab === 'feuilles') {
         if (e.key === 'ArrowLeft') { e.preventDefault(); nav(-1); }
         if (e.key === 'ArrowRight') { e.preventDefault(); nav(1); }
@@ -462,7 +467,6 @@ export default function Timesheets() {
         if (e.key === 'e' || e.key === 'E') { e.preventDefault(); handleExport(); }
         if ((e.key === 'a' || e.key === 'A') && selected.size > 0) { e.preventDefault(); approveEntries([...selected]); }
         if (e.key === 'Escape') { setEditingId(null); setNoteId(null); setSelected(new Set()); }
-        if (e.ctrlKey && e.key === 'a') { e.preventDefault(); selectAll(); }
         if (e.key === 'r' || e.key === 'R') { e.preventDefault(); loadData(); toast.success(fr ? 'Rafraîchi' : 'Refreshed'); }
       }
       if (e.key === 'm' || e.key === 'M') { e.preventDefault(); setHubTab(prev => prev === 'carte' ? 'feuilles' : 'carte'); }
