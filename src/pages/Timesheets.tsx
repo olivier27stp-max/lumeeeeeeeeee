@@ -35,6 +35,8 @@ import { punchIn as apiPunchIn, punchOut as apiPunchOut, startBreak as apiStartB
 import { fetchTeamList } from '../lib/invitationsApi';
 import { useGpsTracker } from '../hooks/useGpsTracker';
 import TechnicianTimesheetTable from '../components/timesheets/TechnicianTimesheetTable';
+import TeamColorSwatches from '../components/TeamColorSwatches';
+import { PRESET_GRADIENTS } from '../lib/presetPalette';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -184,7 +186,7 @@ function getStatus(entry: TimeEntry, fr: boolean): { label: string; key: string 
 // AVAILABILITY HELPERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const TEAM_COLORS = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#06B6D4','#F97316','#6366F1','#14B8A6'];
+const TEAM_COLORS = PRESET_GRADIENTS.map(([primary]) => primary);
 
 function avStartOfWeek(date: Date): Date {
   const d = new Date(date); const day = d.getDay(); const diff = day === 0 ? -6 : 1 - day;
@@ -1163,7 +1165,7 @@ export default function Timesheets() {
             <h3 className="text-[16px] font-bold text-text-primary">{teamModal.editing ? (fr ? 'Modifier l\'équipe' : 'Edit Team') : (fr ? 'Ajouter une équipe' : 'Add Team')}</h3>
             <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Nom' : 'Name'}</label><input value={teamForm.name} onChange={e => setTeamForm(f => ({ ...f, name: e.target.value }))} className="glass-input mt-1.5 w-full" placeholder={fr ? 'Ex: Équipe Installation' : 'e.g. Installation Team'} autoFocus /></div>
             <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">Description</label><input value={teamForm.description || ''} onChange={e => setTeamForm(f => ({ ...f, description: e.target.value }))} className="glass-input mt-1.5 w-full" placeholder={fr ? 'Optionnel...' : 'Optional...'} /></div>
-            <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Couleur' : 'Color'}</label><div className="flex flex-wrap gap-2 mt-2">{TEAM_COLORS.map(c => (<button key={c} onClick={() => setTeamForm(f => ({ ...f, color_hex: c }))} className={cn('h-7 w-7 rounded-full transition-all', teamForm.color_hex === c ? 'ring-2 ring-offset-2 ring-text-primary scale-110' : 'hover:scale-105')} style={{ backgroundColor: c }} />))}</div></div>
+            <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Couleur' : 'Color'}</label><div className="mt-2"><TeamColorSwatches value={teamForm.color_hex} onChange={hex => setTeamForm(f => ({ ...f, color_hex: hex }))} /></div></div>
             {teamModal.editing && (
               <div className="flex items-center gap-2">
                 <label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Statut' : 'Status'}</label>

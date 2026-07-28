@@ -5,14 +5,12 @@ import { shortAddress } from './dailyGeometry';
 
 /**
  * Carte de visite de la vue Jour : fond blanc (jeton `bg-surface`), bordure
- * pâle, rayon discret, ombre très légère, sidebar verticale colorée collée au
- * bord gauche (couleur d'accent de la rangée — palette des presets de devis)
- * — la couleur ne remplit jamais la carte. Le contenu se dégrade proprement
- * sur les cartes étroites (ellipsis, lignes retirées, tooltip natif complet).
+ * pâle, rayon discret, ombre très légère — entièrement blanche, aucune
+ * couleur appliquée. Le contenu se dégrade proprement sur les cartes
+ * étroites (ellipsis, lignes retirées, tooltip natif complet).
  */
 export interface DailyVisitCardProps {
   ev: ScheduleEventRecord;
-  color: string;
   left: number;
   top: number;
   width: number;
@@ -25,7 +23,7 @@ export interface DailyVisitCardProps {
 }
 
 export default function DailyVisitCard({
-  ev, color, left, top, width, height, timeLabel, dimmed, onOpen, onMoveStart, onResizeStart,
+  ev, left, top, width, height, timeLabel, dimmed, onOpen, onMoveStart, onResizeStart,
 }: DailyVisitCardProps) {
   const clientName = ev.job?.client_name || ev.job?.title || 'Job';
   const city = shortAddress(ev.job?.property_address);
@@ -52,7 +50,6 @@ export default function DailyVisitCard({
         onMoveStart(e);
       }}
     >
-      <span aria-hidden className="absolute inset-y-0 left-0 w-[5px]" style={{ backgroundColor: color }} />
       <div className="flex h-full min-w-0 flex-col justify-center py-1 pl-3 pr-2">
         {width >= 96 && (
           <div className="truncate text-[10px] font-medium tabular-nums leading-[1.4] text-text-tertiary">{timeLabel}</div>
@@ -68,8 +65,7 @@ export default function DailyVisitCard({
       {/* Poignée de redimensionnement (bord droit → durée) */}
       <span
         data-resize="true"
-        className="absolute inset-y-0 right-0 w-2 cursor-ew-resize opacity-0 transition-opacity group-hover/daily-card:opacity-100"
-        style={{ backgroundColor: `${color}55` }}
+        className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-border/70 opacity-0 transition-opacity group-hover/daily-card:opacity-100"
         onPointerDown={(e) => {
           if (e.button !== 0) return;
           e.stopPropagation();
