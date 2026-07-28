@@ -319,6 +319,7 @@ export default function Schedule() {
   const lang = deviceLanguage();
   const reschedKey = `lume_resched_tmpl_${me}`;
   const [reschedEv, setReschedEv] = useState<{ ev: ScheduleEventRecord; when: string } | null>(null);
+  const [reschedPhone, setReschedPhone] = useState<string | null>(null);
   const [showResched, setShowResched] = useState(false);
   const [reschedNice, setReschedNice] = useState('');
   const [sendingResched, setSendingResched] = useState(false);
@@ -407,11 +408,20 @@ export default function Schedule() {
         Alert.alert(fr ? 'Conflit' : 'Overlap', fr ? 'Cette visite chevauche une autre visite de la même équipe.' : 'This visit overlaps another visit for the same team.');
       }
       setReschedEv({ ev: v.ev, when: v.startAt });
+      // Le numéro du client, affiché au-dessus de la boîte de message pour
+      // vérifier d'un coup d'œil à qui le texto s'en va.
+      setReschedPhone(null);
+      if (v.ev.job?.client_id) {
+        getClient(v.ev.job.client_id)
+          .then((c) => setReschedPhone(c?.phone ?? null))
+          .catch(() => {});
+      }
       const saved = await AsyncStorage.getItem(reschedKey).catch(() => null);
-      setReschedNice(
+      const base =
         unpackTemplate(saved, current?.companyName, lang, v.ev.job?.client_name ?? '') ??
-          rescheduleNiceMessage(current?.companyName, v.ev.job?.client_name ?? null, lang),
-      );
+        rescheduleNiceMessage(current?.companyName, v.ev.job?.client_name ?? null, lang);
+      // La nouvelle heure fait partie du message éditable (plus d'ajout caché à l'envoi).
+      setReschedNice(`${base}${newTimeLine(formatDateTime(v.startAt), lang)}`);
       setShowResched(true);
     },
     onError: (e: Error) => Alert.alert(t.mobileField.reschedule, e.message),
@@ -455,7 +465,8 @@ export default function Schedule() {
         setSendingResched(false);
         return;
       }
-      const body = `${reschedNice.trim()}${newTimeLine(formatDateTime(reschedEv.when), lang)}`;
+      // Le message part tel qu'affiché — l'heure est déjà dans le texte.
+      const body = reschedNice.trim();
       try {
         await sendSmsViaServer({ phone, text: body, clientId: job.client_id, clientName: job.client_name });
       } catch (e) {
@@ -465,7 +476,9 @@ export default function Schedule() {
           await logOutboundMessage({ orgId, phone, text: body, userId: me, clientId: job.client_id, clientName: job.client_name });
         }
       }
-      AsyncStorage.setItem(reschedKey, packTemplate(reschedNice.trim(), current?.companyName, job.client_name ?? '')).catch(() => {});
+      // Gabarit sauvegardé SANS la ligne d'heure (elle change à chaque déplacement).
+      const tmpl = reschedNice.replace(/\n*📅\s*(?:Nouvelle heure|New time)\s*:[^\n]*/g, '').trim();
+      AsyncStorage.setItem(reschedKey, packTemplate(tmpl, current?.companyName, job.client_name ?? '')).catch(() => {});
       const cid = await findOrCreateConversation({ orgId, phone, clientId: job.client_id, clientName: job.client_name });
       setShowResched(false);
       router.push(
@@ -1138,7 +1151,14 @@ export default function Schedule() {
               </Text>
             </View>
             <View className="gap-1.5">
-              <Text className="text-xs uppercase text-ink-muted">{t.mobileField.messageToClient}</Text>
+              <View className="flex-row items-center justify-between">
+                <Text className="text-xs uppercase text-ink-muted">{t.mobileField.messageToClient}</Text>
+                {/* Le destinataire, en petit — nom · numéro — pour vérifier d'un coup d'œil. */}
+                <Text numberOfLines={1} className="max-w-[60%] text-[11px] font-medium text-ink-subtle">
+                  {reschedEv?.ev.job?.client_name ?? ''}
+                  {reschedPhone ? ` · ${reschedPhone}` : ''}
+                </Text>
+              </View>
               <TextInput
                 value={reschedNice}
                 onChangeText={setReschedNice}
@@ -1147,7 +1167,7 @@ export default function Schedule() {
                 textAlignVertical="top"
                 placeholderTextColor="#A3A3A3"
                 style={{
-                  height: 110,
+                  height: 140,
                   borderWidth: 1,
                   borderColor: '#E5E5E5',
                   borderRadius: 12,
@@ -1160,7 +1180,6 @@ export default function Schedule() {
                   color: '#171717',
                 }}
               />
-              <Text className="text-xs italic text-ink-subtle">{t.mobileField.newTimeAutoAdded}</Text>
             </View>
             <View className="flex-row gap-2 pt-1">
               <View className="flex-1">
