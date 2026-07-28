@@ -293,14 +293,16 @@ export default function Schedule() {
   const insets = useSafeAreaInsets();
   const { width: screenW } = useWindowDimensions();
   const qc = useQueryClient();
-  const { orgId } = usePermissions();
+  const { orgId, role, teamId: myTeamId } = usePermissions();
+  // Un tech/rep ne voit que sa propre équipe ; owner/admin voient tout et filtrent.
+  const isManager = role === 'owner' || role === 'admin';
   const { session } = useAuth();
   const { current } = useMembership();
   const me = session?.user.id ?? '';
 
   const [view, setView] = useState<ViewMode>('day');
-  // Vue Jour : « Trajet » (tournées optimisées par équipe, comme le web) ou « Grille » (24 h).
-  const [dayMode, setDayMode] = useState<'route' | 'grid'>('route');
+  // Vue Jour : « Grille » (24 h, défaut) ou « Trajet » (tournées optimisées, secondaire).
+  const [dayMode, setDayMode] = useState<'grid' | 'route'>('grid');
   const [cursor, setCursor] = useState(() => new Date());
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [unassignedMode, setUnassignedMode] = useState(false);
@@ -344,8 +346,12 @@ export default function Schedule() {
 
   const allSel = teams.length > 0 && selectedTeamIds.length === teams.length;
   const noneSel = teams.length > 0 && selectedTeamIds.length === 0;
-  const effTeams = useMemo(() => (allSel || noneSel ? [] : selectedTeamIds), [allSel, noneSel, selectedTeamIds]);
-  const tKey = allSel || noneSel ? 'all' : [...selectedTeamIds].sort().join(',');
+  const effTeams = useMemo(() => {
+    // Tech/rep : scope forcé à sa propre équipe, pas de sélecteur.
+    if (!isManager && myTeamId) return [myTeamId];
+    return allSel || noneSel ? [] : selectedTeamIds;
+  }, [isManager, myTeamId, allSel, noneSel, selectedTeamIds]);
+  const tKey = !isManager && myTeamId ? `mine:${myTeamId}` : allSel || noneSel ? 'all' : [...selectedTeamIds].sort().join(',');
   const range = useMemo(() => buildRange(cursor, view), [cursor, view]);
 
   const evQ = useQuery({
@@ -569,22 +575,24 @@ export default function Schedule() {
       <View className="flex-row items-center justify-between px-5 pb-2 pt-3">
         <Text className="text-2xl font-bold text-ink">{t.mobileField.scheduleTitle}</Text>
         <View className="flex-row items-center gap-2">
-          <Pressable
-            onPress={() => setTeamSheet(true)}
-            className={`flex-row items-center gap-1.5 rounded-full px-3.5 py-2 ${unassignedMode || effTeams.length > 0 ? 'bg-ink' : 'bg-white'}`}
-            style={{ shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
-          >
-            <SymbolView
-              name="person.2.fill"
-              tintColor={unassignedMode || effTeams.length > 0 ? '#FFFFFF' : '#171717'}
-              size={14}
-              resizeMode="scaleAspectFit"
-            />
-            <Text className={`text-sm font-medium ${unassignedMode || effTeams.length > 0 ? 'text-white' : 'text-ink'}`}>
-              {unassignedMode ? (fr ? 'Non assignées' : 'Unassigned') : fr ? 'Équipes' : 'Teams'}
-              {!unassignedMode && effTeams.length > 0 ? ` · ${effTeams.length}` : ''}
-            </Text>
-          </Pressable>
+          {isManager ? (
+            <Pressable
+              onPress={() => setTeamSheet(true)}
+              className={`flex-row items-center gap-1.5 rounded-full px-3.5 py-2 ${unassignedMode || effTeams.length > 0 ? 'bg-ink' : 'bg-white'}`}
+              style={{ shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
+            >
+              <SymbolView
+                name="person.2.fill"
+                tintColor={unassignedMode || effTeams.length > 0 ? '#FFFFFF' : '#171717'}
+                size={14}
+                resizeMode="scaleAspectFit"
+              />
+              <Text className={`text-sm font-medium ${unassignedMode || effTeams.length > 0 ? 'text-white' : 'text-ink'}`}>
+                {unassignedMode ? (fr ? 'Non assignées' : 'Unassigned') : fr ? 'Équipes' : 'Teams'}
+                {!unassignedMode && effTeams.length > 0 ? ` · ${effTeams.length}` : ''}
+              </Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={() => setUnschedOpen(true)}
             className="relative h-9 w-9 items-center justify-center rounded-full bg-white"
