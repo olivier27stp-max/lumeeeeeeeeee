@@ -149,7 +149,10 @@ export default function More() {
           ) : null}
           <Row icon="bell" label={t.mobileProfile.notifications} onPress={() => router.push('/(app)/notifications' as any)} />
           <Row icon="bubble.left.and.bubble.right" label={t.mobileProfile.messages} onPress={() => router.push('/(app)/messages' as any)} />
-          <Row icon="person.crop.circle.badge.plus" label={t.mobileProfile.referAFriend} onPress={() => router.push('/(app)/refer')} />
+          {/* Parrainage : entrée cachée tant que la récompense (crédit Stripe
+              au parrain) n'est pas validée par un vrai paiement — même règle
+              que le web (route retirée, API 404). L'écran refer.tsx est
+              conservé. Réactivation : REFERRALS_ENABLED. */}
         </View>
 
         {/* Langue / Language */}

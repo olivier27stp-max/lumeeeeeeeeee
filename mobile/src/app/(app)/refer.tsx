@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Redirect } from 'expo-router';
 import { ActivityIndicator, Share, Text, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
@@ -24,7 +25,17 @@ function Step({ n, title, body }: { n: number; title: string; body: string }) {
   );
 }
 
-export default function ReferFriend() {
+// Parrainage désactivé tant que la récompense (crédit Stripe au parrain) n'est
+// pas validée par un vrai paiement — même règle que le web (route retirée,
+// API 404). L'écran est conservé tel quel ; remettre à true pour réactiver.
+const REFERRALS_ENABLED = false;
+
+export default function ReferFriendGate() {
+  if (!REFERRALS_ENABLED) return <Redirect href="/(app)/(tabs)/profile" />;
+  return <ReferFriend />;
+}
+
+function ReferFriend() {
   const { t } = useTranslation();
   const { session } = useAuth();
   const { orgId } = usePermissions();
