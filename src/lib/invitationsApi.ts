@@ -34,6 +34,8 @@ export interface OrgMember {
   full_name: string;
   avatar_url: string | null;
   email?: string;
+  /** Équipe d'attache RBAC (memberships.team_id) — renvoyée par le serveur. */
+  team_id?: string | null;
 }
 
 export interface Invitation {

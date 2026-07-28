@@ -35,6 +35,8 @@ import { punchIn as apiPunchIn, punchOut as apiPunchOut, startBreak as apiStartB
 import { fetchTeamList } from '../lib/invitationsApi';
 import { useGpsTracker } from '../hooks/useGpsTracker';
 import TechnicianTimesheetTable from '../components/timesheets/TechnicianTimesheetTable';
+import TeamScheduleGrid from '../components/timesheets/TeamScheduleGrid';
+import { usePermissions } from '../hooks/usePermissions';
 import TeamColorSwatches from '../components/TeamColorSwatches';
 import { PRESET_GRADIENTS } from '../lib/presetPalette';
 
@@ -43,7 +45,7 @@ import { PRESET_GRADIENTS } from '../lib/presetPalette';
 // ═══════════════════════════════════════════════════════════════════════════════
 
 type ViewMode = 'day' | 'week' | 'month';
-type HubTab = 'feuilles' | 'carte' | 'disponibilites';
+type HubTab = 'feuilles' | 'carte' | 'disponibilites' | 'horaire';
 
 interface TimeEntry {
   id: string;
@@ -286,11 +288,15 @@ export default function Timesheets() {
   const days = fr ? DAY_FR : DAY_EN;
   const qc = useQueryClient();
   const { currentOrgId } = useCompany();
+  // Horaire (onglet Schedule) : owner/admin gèrent, les autres rôles lisent.
+  const { role: myRole, userId: myUserId } = usePermissions();
+  const canManageSchedule = myRole === 'owner' || myRole === 'admin';
 
   // ── Hub tab (check URL params for redirect from /availability) ──
   const [hubTab, setHubTab] = useState<HubTab>(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('view') === 'disponibilites') return 'disponibilites';
+    if (params.get('view') === 'horaire') return 'horaire';
     return 'feuilles';
   });
 
@@ -749,7 +755,7 @@ export default function Timesheets() {
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Date controls for feuilles/carte */}
-          {hubTab !== 'disponibilites' && (
+          {(hubTab === 'feuilles' || hubTab === 'carte') && (
             <>
               <div className="flex rounded-md border border-outline overflow-hidden">
                 {((hubTab === 'feuilles' ? ['day', 'week'] : ['day', 'week', 'month']) as ViewMode[]).map(m => (
@@ -777,15 +783,15 @@ export default function Timesheets() {
 
       {/* ── Sub-tabs — same underline pattern as Finances/Jobs ── */}
       <div className="tab-nav">
-        {([['feuilles', fr ? 'Feuilles de temps' : 'Timesheets'], ['carte', fr ? 'Carte' : 'Map'], ['disponibilites', fr ? 'Disponibilités' : 'Availability']] as [HubTab, string][]).map(([key, label]) => (
+        {([['feuilles', fr ? 'Feuilles de temps' : 'Timesheets'], ['carte', fr ? 'Carte' : 'Map'], ['disponibilites', fr ? 'Disponibilités' : 'Availability'], ['horaire', fr ? 'Horaire' : 'Schedule']] as [HubTab, string][]).map(([key, label]) => (
           <button key={key} className={hubTab === key ? 'tab-item-active' : 'tab-item'} onClick={() => setHubTab(key)}>
             {label}
           </button>
         ))}
       </div>
 
-      {/* ── Secondary bar: date nav (feuilles/carte) or nothing (dispo/profils) ── */}
-      {hubTab !== 'disponibilites' && (
+      {/* ── Secondary bar: date nav (feuilles/carte) or nothing (dispo/horaire) ── */}
+      {(hubTab === 'feuilles' || hubTab === 'carte') && (
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2.5">
             <div className="inline-flex items-center gap-1.5 rounded-md border border-outline bg-surface px-3 py-[7px]">
@@ -1117,6 +1123,20 @@ export default function Timesheets() {
             )}
           </div>
         </div>
+      )}
+
+      {hubTab === 'horaire' && (
+        /* ════ HORAIRE VIEW — qui travaille dans quelle équipe, par jour ════ */
+        <TeamScheduleGrid
+          fr={fr}
+          teams={teamsQuery.data ?? []}
+          members={(membersQuery.data?.members ?? [])
+            .filter(m => m.status === 'active')
+            .map(m => ({ user_id: m.user_id, name: m.full_name?.trim() || m.email || (fr ? 'Sans nom' : 'Unnamed'), role: m.role }))
+            .sort((a, b) => a.name.localeCompare(b.name))}
+          canManage={canManageSchedule}
+          currentUserId={myUserId}
+        />
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════

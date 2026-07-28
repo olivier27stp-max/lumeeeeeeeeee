@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { isSameDay } from 'date-fns';
 import { AlertTriangle } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import type { ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
+import { getRosterForDate } from '../../lib/teamScheduleApi';
+import { fetchTeamList } from '../../lib/invitationsApi';
 import type { useCalendarDnd } from '../../hooks/useCalendarDnd';
 import { FALLBACK_TEAM_COLOR, isHexColor } from '../../lib/colorUtils';
 import {
@@ -97,6 +100,38 @@ export default function DailyDispatchView({
     () => (optimistic.size ? events.map((e) => (optimistic.has(e.id) ? { ...e, ...optimistic.get(e.id)! } : e)) : events),
     [events, optimistic],
   );
+
+  /* ── Roster du jour — qui travaille dans chaque équipe CETTE date ──
+     Source de vérité : l'onglet Horaire (Feuilles de temps). Repli silencieux
+     tant que la migration team_daily_schedule n'est pas appliquée. */
+  const dayKey = useMemo(() => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, [date]);
+  const rosterQuery = useQuery({
+    queryKey: ['team-schedule-roster', orgId, dayKey],
+    queryFn: () => getRosterForDate(dayKey),
+    enabled: !!orgId,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const membersQuery = useQuery({
+    queryKey: ['org-members', orgId],
+    queryFn: fetchTeamList,
+    enabled: !!orgId && !!rosterQuery.data && !rosterQuery.data.missing,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const memberFirstName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of membersQuery.data?.members ?? []) {
+      const name = (m.full_name || '').trim() || m.email || '';
+      map.set(m.user_id, name.split(/\s+/)[0] || name);
+    }
+    return map;
+  }, [membersQuery.data]);
 
   /* ── Lignes (ressources) ── */
   const activeTeams = useMemo(() => teams.filter((tm) => tm.is_active !== false), [teams]);
@@ -452,6 +487,33 @@ export default function DailyDispatchView({
                     {secondaryRaw && !secondaryAsEyebrow && (
                       <span className="truncate text-[11px] text-text-secondary">{secondaryRaw}</span>
                     )}
+                    {/* Membres assignés à l'équipe pour CETTE journée (onglet Horaire) */}
+                    {row.team && rosterQuery.data && !rosterQuery.data.missing && (() => {
+                      const roster = (rosterQuery.data.byTeam.get(row.team.id) || [])
+                        .filter((e) => e.status === 'available' || e.status === 'partial');
+                      if (!roster.length) {
+                        return (
+                          <span className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-[#c2410c]">
+                            <AlertTriangle size={9} className="shrink-0" />
+                            {isFr ? 'Aucun membre assigné' : 'No members assigned'}
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="mt-0.5 flex flex-wrap gap-x-1.5 gap-y-0.5">
+                          {roster.map((e) => (
+                            <span
+                              key={`${e.user_id}-${e.start_time}`}
+                              title={`${memberFirstName.get(e.user_id) || ''} · ${e.start_time}–${e.end_time}`}
+                              className="text-[10px] leading-[13px] text-text-secondary"
+                            >
+                              {memberFirstName.get(e.user_id) || (isFr ? 'Membre' : 'Member')}
+                              <span className="ml-0.5 tabular-nums text-text-tertiary">{e.start_time.slice(0, 2)}–{e.end_time.slice(0, 2)}h</span>
+                            </span>
+                          ))}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Timeline de la ligne */}

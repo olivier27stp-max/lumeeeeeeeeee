@@ -30,6 +30,7 @@ import {
   listUnscheduledJobs, rescheduleEvent, scheduleUnscheduledJob,
 } from '../lib/scheduleApi';
 import { findFreeSlots, type FreeSlot } from '../lib/availabilityApi';
+import { checkVisitAgainstRoster } from '../lib/teamScheduleApi';
 import { optimizeRoute, applyOptimizedSchedule } from '../lib/routeOptimizationApi';
 import { listTeams, TeamRecord } from '../lib/teamsApi';
 import { supabase } from '../lib/supabase';
@@ -762,6 +763,26 @@ function ScheduleContent() {
     onError: (e: any) => toast.error(e?.message || t.schedule.couldNotAssign),
   });
 
+  // Avertissements non bloquants basés sur l'onglet Horaire (Feuilles de
+  // temps) : équipe sans membre assigné ce jour-là, ou visite posée hors des
+  // heures des membres présents. Silencieux tant que la migration
+  // team_daily_schedule n'est pas appliquée.
+  const warnRoster = useCallback((teamId: string | null | undefined, startAt: string, endAt: string) => {
+    if (!teamId) return;
+    void checkVisitAgainstRoster(teamId, startAt, endAt).then((check) => {
+      const fr = language === 'fr';
+      if (check === 'no_members') {
+        toast.warning(fr
+          ? "Aucun membre n'est assigné à cette équipe ce jour-là (onglet Horaire)."
+          : 'No members are assigned to this team on that day (Schedule tab).');
+      } else if (check === 'outside_hours') {
+        toast.warning(fr
+          ? 'Visite planifiée en dehors des heures des membres assignés ce jour-là.'
+          : "Visit scheduled outside the assigned members' hours for that day.");
+      }
+    });
+  }, [language]);
+
   /* ── Drag & Drop ── */
   const dnd = useCalendarDnd({
     onReschedule: async (eventId, startAt, endAt, teamId) => {
@@ -769,6 +790,7 @@ function ScheduleContent() {
         const result = await rescheduleMut.mutateAsync({ eventId, startAt, endAt, teamId, timezone: DEFAULT_TIMEZONE });
         if (result.overlaps > 0) toast.warning(t.schedule.overlapping);
         else toast.success(t.schedule.eventRescheduled);
+        warnRoster(teamId, startAt, endAt);
       } catch (err: any) {
         toast.error(err?.message || t.schedule.couldNotReschedule);
         throw err;
@@ -777,8 +799,10 @@ function ScheduleContent() {
     onScheduleJob: async (jobId, startAt, endAt, teamId) => {
       if (teamId) {
         await scheduleMut.mutateAsync({ jobId, teamId, startAt, endAt, timezone: DEFAULT_TIMEZONE });
+        warnRoster(teamId, startAt, endAt);
       } else if (selectedTeamIds.length === 1) {
         await scheduleMut.mutateAsync({ jobId, teamId: selectedTeamIds[0], startAt, endAt, timezone: DEFAULT_TIMEZONE });
+        warnRoster(selectedTeamIds[0], startAt, endAt);
       } else {
         // Need team picker
         setTeamPickerDrop({ jobId, startAt, endAt, revert: () => {}, removeEvent: () => {} });
@@ -827,11 +851,12 @@ function ScheduleContent() {
       const result = await rescheduleMut.mutateAsync({ eventId, startAt, endAt, teamId, timezone: DEFAULT_TIMEZONE });
       if (result.overlaps > 0) toast.warning(t.schedule.overlapping);
       else toast.success(t.schedule.eventRescheduled);
+      warnRoster(teamId, startAt, endAt);
     } catch (err: any) {
       toast.error(err?.message || t.schedule.couldNotReschedule);
       throw err;
     }
-  }, [rescheduleMut, t]);
+  }, [rescheduleMut, t, warnRoster]);
 
   const handleDailyResize = useCallback(async (eventId: string, startAt: string, endAt: string) => {
     try {
