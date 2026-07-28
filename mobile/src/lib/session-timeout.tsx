@@ -62,10 +62,27 @@ export function SessionTimeoutController() {
   useEffect(() => {
     // A cold start is a return from inactivity too: the last-active stamp was
     // written when the app was backgrounded before being killed.
-    expireIfIdle().then((expired) => {
+    //
+    // MAIS une connexion toute fraîche est de l'activité par définition. Sans
+    // ce garde, le jalon d'AVANT la déconnexion (hier…) « expirait » un login
+    // vieux d'une demi-seconde → signOut immédiat, en boucle, à chaque
+    // tentative (Google comme courriel). On compare donc le dernier sign-in de
+    // la session au jalon : plus récent = login frais → on réinitialise.
+    (async () => {
+      const [{ data }, lastRaw] = await Promise.all([
+        supabase.auth.getSession(),
+        AsyncStorage.getItem(LAST_ACTIVE_KEY),
+      ]);
+      const lastSignIn = new Date(data.session?.user?.last_sign_in_at ?? 0).getTime();
+      const lastActive = Number(lastRaw) || 0;
+      if (lastSignIn > lastActive) {
+        await AsyncStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+        return;
+      }
+      const expired = await expireIfIdle();
       if (expired) router.replace('/(auth)/sign-in');
       else AsyncStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
-    });
+    })();
 
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
