@@ -284,16 +284,20 @@ export function ScheduleRouteView({ jobs, onJobOpen }: { jobs: RouteJob[]; onJob
 
   const fmtTime = (d: Date) => d.toLocaleTimeString(fr ? 'fr-CA' : 'en-US', { hour: 'numeric', minute: '2-digit' });
 
+  // Une « tournée » n'existe qu'à partir de 2 arrêts géolocalisés pour une même
+  // équipe. En dessous, la journée n'est que des rendez-vous isolés : on montre
+  // quand même la carte (pins) + la liste, sans le chrome d'optimisation.
   const anyRoutable = routes.some((r) => r.jobs.length >= 2);
   const html = useMemo(() => mapHtml(routes, startPoint, token), [routes, startPoint, token]);
   const mapKey = useMemo(() => `${jobsKey}::${startKey}::${routes.length}::${loading}`, [jobsKey, startKey, routes.length, loading]);
+  const anyGeocoded = routes.some((r) => r.jobs.length > 0);
 
-  if (!loading && !anyRoutable && !routes.some((r) => r.ungeocoded.length)) {
+  if (jobs.length === 0) {
     return (
       <View className="items-center py-20">
-        <SymbolView name="map" tintColor="#D4D4D4" size={40} resizeMode="scaleAspectFit" />
+        <SymbolView name="calendar" tintColor="#D4D4D4" size={40} resizeMode="scaleAspectFit" />
         <Text className="mt-3 text-sm font-medium text-ink-muted">
-          {fr ? 'Aucun arrêt géolocalisé aujourd’hui' : 'No geolocated stops today'}
+          {fr ? 'Aucun rendez-vous aujourd’hui' : 'No appointments today'}
         </Text>
       </View>
     );
@@ -305,50 +309,66 @@ export function ScheduleRouteView({ jobs, onJobOpen }: { jobs: RouteJob[]; onJob
       <View className="mx-4 rounded-t-2xl border border-b-0 border-surface-border bg-white px-4 pb-3 pt-3">
         <View className="flex-row items-center gap-2">
           <SymbolView name="point.topleft.down.curvedto.point.bottomright.up" tintColor="#525252" size={14} resizeMode="scaleAspectFit" />
-          <Text className="text-sm font-bold text-ink">{fr ? 'Trajet du jour' : "Day's route"}</Text>
-          <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: '#ECFDF5' }}>
-            <Text className="text-[10px] font-bold" style={{ color: '#059669' }}>
-              {fr ? 'Optimisé' : 'Optimized'}
-            </Text>
-          </View>
+          <Text className="text-sm font-bold text-ink">
+            {anyRoutable ? (fr ? 'Trajet du jour' : "Day's route") : fr ? 'Rendez-vous du jour' : "Day's appointments"}
+          </Text>
+          {anyRoutable ? (
+            <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: '#ECFDF5' }}>
+              <Text className="text-[10px] font-bold" style={{ color: '#059669' }}>
+                {fr ? 'Optimisé' : 'Optimized'}
+              </Text>
+            </View>
+          ) : null}
           {loading ? <ActivityIndicator size="small" color="#A3A3A3" style={{ marginLeft: 'auto' }} /> : null}
         </View>
 
         <View className="mt-2.5 flex-row items-center justify-between">
-          <View className="flex-row items-center gap-1.5">
-            <Text className="text-[11px] font-medium text-ink-subtle">{fr ? 'Départ' : 'Start'}</Text>
-            <View className="flex-row overflow-hidden rounded-lg border border-surface-border">
-              {(['first', 'me'] as StartMode[]).map((m) => (
-                <Pressable key={m} onPress={() => chooseStart(m)} disabled={locating} className={`px-2.5 py-1 ${startMode === m ? 'bg-ink' : 'bg-white'}`}>
-                  <Text className={`text-[11px] font-semibold ${startMode === m ? 'text-white' : 'text-ink-muted'}`}>
-                    {m === 'first' ? (fr ? '1er arrêt' : 'First stop') : locating ? (fr ? 'Localisation…' : 'Locating…') : fr ? 'Ma position' : 'My location'}
-                  </Text>
-                </Pressable>
-              ))}
+          {anyRoutable ? (
+            <View className="flex-row items-center gap-1.5">
+              <Text className="text-[11px] font-medium text-ink-subtle">{fr ? 'Départ' : 'Start'}</Text>
+              <View className="flex-row overflow-hidden rounded-lg border border-surface-border">
+                {(['first', 'me'] as StartMode[]).map((m) => (
+                  <Pressable key={m} onPress={() => chooseStart(m)} disabled={locating} className={`px-2.5 py-1 ${startMode === m ? 'bg-ink' : 'bg-white'}`}>
+                    <Text className={`text-[11px] font-semibold ${startMode === m ? 'text-white' : 'text-ink-muted'}`}>
+                      {m === 'first' ? (fr ? '1er arrêt' : 'First stop') : locating ? (fr ? 'Localisation…' : 'Locating…') : fr ? 'Ma position' : 'My location'}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
-          </View>
+          ) : (
+            <Text className="text-[11px] text-ink-subtle">
+              {jobs.length} {jobs.length > 1 ? (fr ? 'rendez-vous' : 'appointments') : fr ? 'rendez-vous' : 'appointment'}
+            </Text>
+          )}
           <View className="flex-row items-center gap-3">
-            <Totals value={String(totals.trips)} label={fr ? 'Tournées' : 'Trips'} />
-            <Totals value={formatDistance(totals.dist, fr)} label="Distance" />
-            <Totals value={formatDuration(totals.dur, fr)} label={fr ? 'Conduite' : 'Drive'} />
+            {totals.trips > 0 ? (
+              <>
+                <Totals value={String(totals.trips)} label={fr ? 'Tournées' : 'Trips'} />
+                <Totals value={formatDistance(totals.dist, fr)} label="Distance" />
+                <Totals value={formatDuration(totals.dur, fr)} label={fr ? 'Conduite' : 'Drive'} />
+              </>
+            ) : null}
             {totals.revenueCents > 0 ? <Totals value={formatCurrencyCents(totals.revenueCents)} label={fr ? 'Revenu' : 'Revenue'} accent /> : null}
           </View>
         </View>
       </View>
 
-      {/* Map */}
-      <View className="mx-4 overflow-hidden border border-surface-border" style={{ height: 300 }}>
-        <WebView
-          key={mapKey}
-          ref={webRef}
-          source={{ html }}
-          onMessage={onMapMessage}
-          originWhitelist={['*']}
-          javaScriptEnabled
-          domStorageEnabled
-          style={{ flex: 1 }}
-        />
-      </View>
+      {/* Map — only when at least one stop (or the start point) can be plotted */}
+      {anyGeocoded || startPoint ? (
+        <View className="mx-4 overflow-hidden border border-surface-border" style={{ height: 300 }}>
+          <WebView
+            key={mapKey}
+            ref={webRef}
+            source={{ html }}
+            onMessage={onMapMessage}
+            originWhitelist={['*']}
+            javaScriptEnabled
+            domStorageEnabled
+            style={{ flex: 1 }}
+          />
+        </View>
+      ) : null}
 
       {/* Per-team trips */}
       <View className="mx-4 rounded-b-2xl border border-t-0 border-surface-border bg-white pb-2">
@@ -480,12 +500,37 @@ export function ScheduleRouteView({ jobs, onJobOpen }: { jobs: RouteJob[]; onJob
                 })}
               </View>
 
+              {/* Rendez-vous sans géolocalisation (ou au-delà du cap de 12 arrêts) :
+                  affichés comme des lignes normales, jamais réduits à un compteur. */}
               {r.ungeocoded.length > 0 ? (
-                <Text className="mx-4 mb-3 border-t border-surface-border pt-2 text-[10.5px] text-ink-subtle">
-                  {fr
-                    ? `${r.ungeocoded.length} job(s) exclus du trajet (non géolocalisés ou au-delà de 12 arrêts)`
-                    : `${r.ungeocoded.length} job(s) excluded from the route (not geolocated or beyond 12 stops)`}
-                </Text>
+                <View className="border-t border-surface-border px-2 pb-2 pt-1">
+                  {r.ungeocoded.map((j) => {
+                    const done = DONE_STATUSES.has(j.status);
+                    return (
+                      <Pressable
+                        key={j.id}
+                        onPress={() => j.jobId && onJobOpen(j.jobId)}
+                        className="flex-row items-center gap-2 rounded-xl px-2 py-2 active:bg-surface-sunken"
+                      >
+                        <SymbolView name="mappin.slash" tintColor="#A3A3A3" size={13} resizeMode="scaleAspectFit" style={{ width: 16 }} />
+                        <UnifiedAvatar id={j.clientId || j.id} name={j.clientName || j.title} size={32} />
+                        <View className="min-w-0 flex-1">
+                          <Text numberOfLines={1} className={`text-[12.5px] font-semibold ${done ? 'text-ink-subtle line-through' : 'text-ink'}`}>
+                            {j.clientName ? `${j.clientName} · ${j.title}` : j.title}
+                          </Text>
+                          <Text className="text-[11px] text-ink-subtle">{fr ? 'Adresse non géolocalisée' : 'Address not geolocated'}</Text>
+                        </View>
+                        {j.revenueCents > 0 ? (
+                          <Text className="text-[11.5px] font-bold" style={{ color: '#059669' }}>
+                            {formatCurrencyCents(j.revenueCents)}
+                          </Text>
+                        ) : null}
+                        <Text className="text-xs font-bold text-ink">{fmtTime(new Date(j.startAt))}</Text>
+                        <SymbolView name="chevron.right" tintColor="#A3A3A3" size={11} resizeMode="scaleAspectFit" />
+                      </Pressable>
+                    );
+                  })}
+                </View>
               ) : null}
             </View>
           );
