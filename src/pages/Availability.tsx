@@ -19,7 +19,9 @@ import {
   type AvailabilityRecord,
 } from '../lib/availabilityApi';
 import { cn } from '../lib/utils';
+import { PRESET_GRADIENTS } from '../lib/presetPalette';
 import { PageHeader, EmptyState } from '../components/ui';
+import TeamColorSwatches from '../components/TeamColorSwatches';
 import { useTranslation } from '../i18n';
 
 /* ── Helpers ─────────────────────────────────────────────────── */
@@ -54,10 +56,7 @@ function formatTime(time: string): string {
 
 /* ── Constants ───────────────────────────────────────────────── */
 
-const TEAM_COLORS = [
-  '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
-  '#EC4899', '#06B6D4', '#F97316', '#6366F1', '#14B8A6',
-];
+const TEAM_COLORS = PRESET_GRADIENTS.map(([primary]) => primary);
 
 /* ── Main Component ──────────────────────────────────────────── */
 
@@ -625,19 +624,11 @@ export default function Availability() {
               </div>
               <div>
                 <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.teamColor}</label>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {TEAM_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setTeamForm((f) => ({ ...f, color_hex: c }))}
-                      className={cn(
-                        'h-7 w-7 rounded-full transition-all',
-                        teamForm.color_hex === c ? 'ring-2 ring-offset-2 ring-primary scale-110' : 'hover:scale-105',
-                      )}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
+                <div className="mt-2">
+                  <TeamColorSwatches
+                    value={teamForm.color_hex}
+                    onChange={(hex) => setTeamForm((f) => ({ ...f, color_hex: hex }))}
+                  />
                 </div>
               </div>
               {teamModal.editing && (

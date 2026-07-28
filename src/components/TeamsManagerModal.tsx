@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Palette, Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { createTeam, listTeams, softDeleteTeam, updateTeam } from '../lib/teamsApi';
+import { PRESET_GRADIENTS } from '../lib/presetPalette';
+import TeamColorSwatches from './TeamColorSwatches';
 import { useTranslation } from '../i18n';
 
 interface TeamsManagerModalProps {
@@ -16,11 +18,11 @@ interface TeamDraft {
   color_hex: string;
 }
 
-const DEFAULT_TEAM_COLOR = '#3B82F6';
+const DEFAULT_TEAM_COLOR = PRESET_GRADIENTS[0][0];
 
 function normalizeColorHex(raw: string) {
   const value = raw.trim();
-  if (/^#[0-9a-f]{6}$/i.test(value)) return value.toUpperCase();
+  if (/^#[0-9a-f]{6}$/i.test(value)) return value.toLowerCase();
   return DEFAULT_TEAM_COLOR;
 }
 
@@ -153,32 +155,25 @@ export default function TeamsManagerModal({ isOpen, onClose }: TeamsManagerModal
             <div className="space-y-5 px-5 py-4">
               <section className="rounded-xl border border-border bg-surface-card/70 p-3">
                 <h3 className="mb-3 text-sm font-semibold text-text-primary">{t.modals.addTeam}</h3>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_170px_auto]">
-                  <input
-                    value={newTeamName}
-                    onChange={(event) => setNewTeamName(event.target.value)}
-                    placeholder={t.modals.teamName}
-                    className="glass-input w-full"
-                  />
-                  <label className="glass-input flex items-center gap-2">
-                    <Palette size={14} className="text-text-tertiary" />
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
                     <input
-                      type="color"
-                      value={normalizeColorHex(newTeamColor)}
-                      onChange={(event) => setNewTeamColor(event.target.value)}
-                      className="h-7 w-10 cursor-pointer border-0 bg-transparent p-0"
+                      value={newTeamName}
+                      onChange={(event) => setNewTeamName(event.target.value)}
+                      placeholder={t.modals.teamName}
+                      className="glass-input w-full"
                     />
-                    <span className="text-xs font-medium text-text-secondary">{normalizeColorHex(newTeamColor)}</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => void handleCreateTeam()}
-                    disabled={isBusy}
-                    className="glass-button-primary inline-flex items-center justify-center gap-2"
-                  >
-                    <Plus size={14} />
-                    {t.modals.addTeam}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateTeam()}
+                      disabled={isBusy}
+                      className="glass-button-primary inline-flex items-center justify-center gap-2"
+                    >
+                      <Plus size={14} />
+                      {t.modals.addTeam}
+                    </button>
+                  </div>
+                  <TeamColorSwatches value={newTeamColor} onChange={setNewTeamColor} />
                 </div>
               </section>
 
@@ -192,48 +187,45 @@ export default function TeamsManagerModal({ isOpen, onClose }: TeamsManagerModal
                   {teams.map((team) => {
                     const draft = drafts[team.id] || { name: team.name, color_hex: normalizeColorHex(team.color_hex) };
                     return (
-                      <div key={team.id} className="grid grid-cols-1 gap-2 rounded-xl border border-border bg-surface-card p-2 md:grid-cols-[1fr_170px_auto_auto]">
-                        <input
-                          value={draft.name}
-                          onChange={(event) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [team.id]: { ...draft, name: event.target.value },
-                            }))
-                          }
-                          className="glass-input w-full"
-                        />
-                        <label className="glass-input flex items-center gap-2">
-                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: normalizeColorHex(draft.color_hex) }} />
+                      <div key={team.id} className="space-y-2 rounded-xl border border-border bg-surface-card p-2">
+                        <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto]">
                           <input
-                            type="color"
-                            value={normalizeColorHex(draft.color_hex)}
+                            value={draft.name}
                             onChange={(event) =>
                               setDrafts((prev) => ({
                                 ...prev,
-                                [team.id]: { ...draft, color_hex: event.target.value },
+                                [team.id]: { ...draft, name: event.target.value },
                               }))
                             }
-                            className="h-7 w-10 cursor-pointer border-0 bg-transparent p-0"
+                            className="glass-input w-full"
                           />
-                          <span className="text-xs font-medium text-text-secondary">{normalizeColorHex(draft.color_hex)}</span>
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => void handleSaveTeam(team.id)}
-                          disabled={isBusy}
-                          className="glass-button !px-3"
-                        >
-                          {t.common.save}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteTeam(team.id, team.name)}
-                          disabled={isBusy}
-                          className="glass-button !px-3 text-danger hover:!bg-danger-light"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleSaveTeam(team.id)}
+                            disabled={isBusy}
+                            className="glass-button !px-3"
+                          >
+                            {t.common.save}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteTeam(team.id, team.name)}
+                            disabled={isBusy}
+                            className="glass-button !px-3 text-danger hover:!bg-danger-light"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                        <TeamColorSwatches
+                          size="sm"
+                          value={draft.color_hex}
+                          onChange={(hex) =>
+                            setDrafts((prev) => ({
+                              ...prev,
+                              [team.id]: { ...draft, color_hex: hex },
+                            }))
+                          }
+                        />
                       </div>
                     );
                   })}
