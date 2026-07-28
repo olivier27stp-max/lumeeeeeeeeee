@@ -14,10 +14,22 @@ import { listJobsForClient } from '@/lib/api/jobs';
 import { listInvoicesForClient, listQuotesForClient } from '@/lib/api/billing';
 import { findOrCreateConversation, listRecentMessages } from '@/lib/api/messaging';
 import { getClientLeadSource } from '@/lib/api/leads';
-import { listActivityLog, activityLabel } from '@/lib/api/activity';
+import { ClientHistoryKind, getClientHistory } from '@/lib/api/clientHistory';
 import { clientFullName, formatCurrencyCents, formatDateTime } from '@/lib/format';
 import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
+
+const HISTORY_ICONS: Record<ClientHistoryKind, string> = {
+  job: '🧰',
+  job_completed: '✔️',
+  visit: '📅',
+  quote: '📝',
+  invoice: '📄',
+  payment: '💵',
+  message_in: '📩',
+  message_out: '📤',
+  activity: '•',
+};
 
 function Row({
   label,
@@ -78,9 +90,11 @@ export default function ClientDetail() {
     queryFn: () => getClientLeadSource(String(id)),
     enabled: !!id,
   });
-  const { data: activity } = useQuery({
-    queryKey: ['client-activity', orgId, id],
-    queryFn: () => listActivityLog(String(orgId), 'client', String(id)),
+  // Historique unifié : TOUTES les actions liées au client (jobs, visites,
+  // soumissions, factures, paiements, SMS, événements du activity_log).
+  const { data: history } = useQuery({
+    queryKey: ['client-history', orgId, id, language],
+    queryFn: () => getClientHistory(String(orgId), String(id), language),
     enabled: !!orgId && !!id,
   });
   const lang = language; // langue des réglages de l'app, pas celle du téléphone
@@ -367,18 +381,44 @@ export default function ClientDetail() {
           </Card>
         ) : null}
 
-        {/* Activity timeline */}
-        {(activity?.length ?? 0) > 0 ? (
+        {/* Historique — toutes les actions liées au client, une seule timeline */}
+        {(history?.length ?? 0) > 0 ? (
           <Card className="gap-2">
-            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileClients.activity}</Text>
-            {activity!.map((a) => (
-              <View key={a.id} className="flex-row items-start justify-between border-t border-surface-border pt-2">
-                <Text className="flex-1 text-sm text-ink" numberOfLines={2}>
-                  {activityLabel(a.event_type, lang)}
-                </Text>
-                <Text className="ml-2 text-[11px] text-ink-subtle">{formatDateTime(a.created_at)}</Text>
-              </View>
-            ))}
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
+              {lang === 'fr' ? 'Historique' : 'History'}
+            </Text>
+            {history!.map((h) => {
+              const row = (
+                <View className="flex-row items-start gap-2 border-t border-surface-border pt-2">
+                  <Text style={{ width: 20 }} className="text-center text-sm">
+                    {HISTORY_ICONS[h.kind] ?? '•'}
+                  </Text>
+                  <View className="min-w-0 flex-1">
+                    <Text className="text-sm text-ink" numberOfLines={1}>
+                      {h.title}
+                    </Text>
+                    {h.subtitle ? (
+                      <Text className="text-[11px] text-ink-subtle" numberOfLines={1}>
+                        {h.subtitle}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View className="items-end">
+                    {h.amountCents != null && h.amountCents > 0 && canSeePricing ? (
+                      <Text className="text-sm font-semibold text-ink">{formatCurrencyCents(h.amountCents)}</Text>
+                    ) : null}
+                    <Text className="text-[11px] text-ink-subtle">{formatDateTime(h.date)}</Text>
+                  </View>
+                </View>
+              );
+              return h.route ? (
+                <Pressable key={h.id} onPress={() => router.push(h.route as any)}>
+                  {row}
+                </Pressable>
+              ) : (
+                <View key={h.id}>{row}</View>
+              );
+            })}
           </Card>
         ) : null}
 
