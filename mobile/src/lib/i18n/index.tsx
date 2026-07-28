@@ -3,11 +3,17 @@
 // The en.ts / fr.ts dictionaries are copied verbatim from the web so keys match.
 // Adapted for React Native: language persists in AsyncStorage (async), defaults to
 // the device language.
+//
+// SYNCED WITH THE WEB: the chosen language also lives on the ACCOUNT
+// (auth user_metadata.language, written by both platforms). On startup the
+// account preference wins over the local one, so picking « Français » on the
+// web makes the mobile app French too — like everything else in the CRM.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { deviceLanguage } from '@/lib/contact';
+import { supabase } from '../supabase';
 import en, { TranslationKeys } from './en';
 import fr from './fr';
 
@@ -30,20 +36,47 @@ const LanguageContext = createContext<LanguageContextValue>({
 });
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  // Start on the device language; load the stored preference (async) right after.
+  // Start on the device language; the stored preference then the ACCOUNT
+  // preference (authoritative) load right after.
   const [language, setLanguageState] = useState<Language>(() => deviceLanguage());
 
   useEffect(() => {
+    let mounted = true;
+    const apply = (v: unknown) => {
+      if (mounted && (v === 'fr' || v === 'en')) {
+        setLanguageState(v);
+        AsyncStorage.setItem(STORAGE_KEY, v).catch(() => {});
+      }
+    };
+
+    // 1. Local preference (fast, offline) …
     AsyncStorage.getItem(STORAGE_KEY)
       .then((v) => {
-        if (v === 'fr' || v === 'en') setLanguageState(v);
+        if (mounted && (v === 'fr' || v === 'en')) setLanguageState(v);
       })
+      .catch(() => {})
+      // 2. … then the account preference, fetched FRESH from the server so a
+      // change made on the web is picked up at next app open.
+      .then(() => supabase.auth.getUser())
+      .then(({ data }) => apply(data.user?.user_metadata?.language))
       .catch(() => {});
+
+    // Login / user refresh → re-apply the account preference.
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      apply(session?.user?.user_metadata?.language);
+    });
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState(lang);
     AsyncStorage.setItem(STORAGE_KEY, lang).catch(() => {});
+    // Propagate to the account so the web follows (fire-and-forget; no-op when
+    // signed out).
+    supabase.auth.updateUser({ data: { language: lang } }).catch(() => {});
   }, []);
 
   const value = useMemo(
