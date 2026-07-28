@@ -125,7 +125,6 @@ export function ScheduleRouteView({ jobs, onJobOpen }: { jobs: RouteJob[]; onJob
   const [startMode, setStartMode] = useState<StartMode>('first');
   const [myPos, setMyPos] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
-  const webRef = useRef<WebView>(null);
 
   async function chooseStart(mode: StartMode) {
     if (mode === 'me' && !myPos) {
@@ -269,28 +268,10 @@ export function ScheduleRouteView({ jobs, onJobOpen }: { jobs: RouteJob[]; onJob
     return { dist, dur, trips, revenueCents };
   }, [routes]);
 
-  const onMapMessage = (e: WebViewMessageEvent) => {
-    try {
-      const m = JSON.parse(e.nativeEvent.data);
-      if (m.type === 'stop' && m.jobId) onJobOpen(m.jobId);
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const focusStop = (j: RouteJob) => {
-    if (j.lat != null && j.lng != null) webRef.current?.injectJavaScript(`window.__fly&&window.__fly(${j.lng},${j.lat});true;`);
-  };
-
-  const fmtTime = (d: Date) => d.toLocaleTimeString(fr ? 'fr-CA' : 'en-US', { hour: 'numeric', minute: '2-digit' });
-
   // Une « tournée » n'existe qu'à partir de 2 arrêts géolocalisés pour une même
   // équipe. En dessous, la journée n'est que des rendez-vous isolés : on montre
   // quand même la carte (pins) + la liste, sans le chrome d'optimisation.
   const anyRoutable = routes.some((r) => r.jobs.length >= 2);
-  const html = useMemo(() => mapHtml(routes, startPoint, token), [routes, startPoint, token]);
-  const mapKey = useMemo(() => `${jobsKey}::${startKey}::${routes.length}::${loading}`, [jobsKey, startKey, routes.length, loading]);
-  const anyGeocoded = routes.some((r) => r.jobs.length > 0);
 
   if (jobs.length === 0) {
     return (
@@ -306,7 +287,7 @@ export function ScheduleRouteView({ jobs, onJobOpen }: { jobs: RouteJob[]; onJob
   return (
     <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 110 }}>
       {/* Bar: title + start-from + totals */}
-      <View className="mx-4 rounded-t-2xl border border-b-0 border-surface-border bg-white px-4 pb-3 pt-3">
+      <View className="mx-4 rounded-2xl border border-surface-border bg-white px-4 pb-3 pt-3">
         <View className="flex-row items-center gap-2">
           <SymbolView name="point.topleft.down.curvedto.point.bottomright.up" tintColor="#525252" size={14} resizeMode="scaleAspectFit" />
           <Text className="text-sm font-bold text-ink">
@@ -354,37 +335,65 @@ export function ScheduleRouteView({ jobs, onJobOpen }: { jobs: RouteJob[]; onJob
         </View>
       </View>
 
-      {/* Map — only when at least one stop (or the start point) can be plotted */}
-      {anyGeocoded || startPoint ? (
-        <View className="mx-4 overflow-hidden border border-surface-border" style={{ height: 300 }}>
-          <WebView
-            key={mapKey}
-            ref={webRef}
-            source={{ html }}
-            onMessage={onMapMessage}
-            originWhitelist={['*']}
-            javaScriptEnabled
-            domStorageEnabled
-            style={{ flex: 1 }}
-          />
-        </View>
-      ) : null}
+      {/* One card PER TEAM — its own map, its own trip. Nothing mixed. */}
+      {routes.map((r) => (
+        <TeamTrip key={r.teamId || 'none'} r={r} startPoint={startPoint} fr={fr} token={token} loading={loading} onJobOpen={onJobOpen} />
+      ))}
+    </ScrollView>
+  );
+}
 
-      {/* Per-team trips */}
-      <View className="mx-4 rounded-b-2xl border border-t-0 border-surface-border bg-white pb-2">
-        {routes.map((r, ti) => {
-          const late = r.jobs.reduce((n, j, i) => {
-            const eta = r.etas[i];
-            return n + (eta && eta.getTime() - new Date(j.startAt).getTime() > 5 * 60_000 ? 1 : 0);
-          }, 0);
-          const mapsUrl = googleMapsTripUrl(
-            r.jobs.filter((j) => j.lat != null && j.lng != null).map((j) => ({ lat: j.lat!, lng: j.lng! })),
-            startPoint,
-          );
-          return (
-            <View key={r.teamId} className={ti > 0 ? 'border-t-4 border-surface-sunken' : ''}>
-              {/* team header */}
-              <View className="px-4 pb-2 pt-3">
+/* ── One team's trip: its own map + ordered stops ── */
+function TeamTrip({
+  r,
+  startPoint,
+  fr,
+  token,
+  loading,
+  onJobOpen,
+}: {
+  r: TeamRoute;
+  startPoint: { lat: number; lng: number } | null;
+  fr: boolean;
+  token: string;
+  loading: boolean;
+  onJobOpen: (jobId: string) => void;
+}) {
+  const webRef = useRef<WebView>(null);
+
+  const html = useMemo(() => mapHtml([r], startPoint, token), [r, startPoint, token]);
+  const mapKey = useMemo(
+    () => `${r.teamId}::${r.jobs.map((j) => j.id).join('-')}::${startPoint ? `${startPoint.lat},${startPoint.lng}` : 'first'}::${loading}`,
+    [r, startPoint, loading],
+  );
+  const hasMap = r.jobs.length > 0;
+
+  const onMapMessage = (e: WebViewMessageEvent) => {
+    try {
+      const m = JSON.parse(e.nativeEvent.data);
+      if (m.type === 'stop' && m.jobId) onJobOpen(m.jobId);
+    } catch {
+      /* ignore */
+    }
+  };
+  const focusStop = (j: RouteJob) => {
+    if (j.lat != null && j.lng != null) webRef.current?.injectJavaScript(`window.__fly&&window.__fly(${j.lng},${j.lat});true;`);
+  };
+  const fmtTime = (d: Date) => d.toLocaleTimeString(fr ? 'fr-CA' : 'en-US', { hour: 'numeric', minute: '2-digit' });
+
+  const late = r.jobs.reduce((n, j, i) => {
+    const eta = r.etas[i];
+    return n + (eta && eta.getTime() - new Date(j.startAt).getTime() > 5 * 60_000 ? 1 : 0);
+  }, 0);
+  const mapsUrl = googleMapsTripUrl(
+    r.jobs.filter((j) => j.lat != null && j.lng != null).map((j) => ({ lat: j.lat!, lng: j.lng! })),
+    startPoint,
+  );
+
+  return (
+    <View className="mx-4 mt-3 overflow-hidden rounded-2xl border border-surface-border bg-white pb-2" style={{ borderTopWidth: 3, borderTopColor: r.color }}>
+      {/* team header */}
+      <View className="px-4 pb-2 pt-3">
                 <View className="flex-row items-center gap-2">
                   <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: r.color }} />
                   <Text className="text-sm font-bold text-ink">{r.teamName}</Text>
@@ -434,6 +443,22 @@ export function ScheduleRouteView({ jobs, onJobOpen }: { jobs: RouteJob[]; onJob
                   </View>
                 ) : null}
               </View>
+
+              {/* this team's own map */}
+              {hasMap ? (
+                <View className="overflow-hidden border-b border-t border-surface-border" style={{ height: 220 }}>
+                  <WebView
+                    key={mapKey}
+                    ref={webRef}
+                    source={{ html }}
+                    onMessage={onMapMessage}
+                    originWhitelist={['*']}
+                    javaScriptEnabled
+                    domStorageEnabled
+                    style={{ flex: 1 }}
+                  />
+                </View>
+              ) : null}
 
               {/* stops */}
               <View className="px-2 pb-1">
@@ -532,11 +557,7 @@ export function ScheduleRouteView({ jobs, onJobOpen }: { jobs: RouteJob[]; onJob
                   })}
                 </View>
               ) : null}
-            </View>
-          );
-        })}
-      </View>
-    </ScrollView>
+    </View>
   );
 }
 
