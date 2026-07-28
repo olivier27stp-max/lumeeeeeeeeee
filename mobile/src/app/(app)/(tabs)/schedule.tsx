@@ -31,6 +31,7 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CreateMenuFab } from '@/components/CreateMenuFab';
+import { RouteJob, ScheduleRouteView } from '@/components/ScheduleRouteView';
 import { Button } from '@/components/ui/Button';
 import { getClient } from '@/lib/api/clients';
 import { findOrCreateConversation, logOutboundMessage } from '@/lib/api/messaging';
@@ -298,6 +299,8 @@ export default function Schedule() {
   const me = session?.user.id ?? '';
 
   const [view, setView] = useState<ViewMode>('day');
+  // Vue Jour : « Trajet » (tournées optimisées par équipe, comme le web) ou « Grille » (24 h).
+  const [dayMode, setDayMode] = useState<'route' | 'grid'>('route');
   const [cursor, setCursor] = useState(() => new Date());
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [unassignedMode, setUnassignedMode] = useState(false);
@@ -506,6 +509,32 @@ export default function Schedule() {
 
   const dayEvs = useMemo(() => eventsForDay(filtered, cursor), [filtered, cursor]);
   const dayLayout = useMemo(() => layoutDayEvents(dayEvs), [dayEvs]);
+
+  // Vue Trajet — mêmes données que le web (RouteJob[] du AgendaRoutePanel).
+  const routeJobs: RouteJob[] = useMemo(
+    () =>
+      dayEvs.map((ev) => {
+        const tid = ev.team_id || ev.job?.team_id || '';
+        const team = tid ? teams.find((tm) => tm.id === tid) : null;
+        return {
+          id: ev.id,
+          jobId: ev.job_id || null,
+          title: ev.job?.title || 'Job',
+          address: ev.job?.property_address ?? null,
+          lat: ev.job?.latitude ?? null,
+          lng: ev.job?.longitude ?? null,
+          startAt: ev.start_at,
+          teamId: tid,
+          teamName: team?.name || (fr ? 'Sans équipe' : 'No team'),
+          teamColor: (tid ? tcMap.get(tid) : null) || FALLBACK_TEAM_COLOR,
+          clientId: ev.job?.client_id ?? null,
+          clientName: ev.job?.client_name || '',
+          revenueCents: ev.job?.total_cents ?? 0,
+          status: ns(ev.job?.status || ev.status || ''),
+        };
+      }),
+    [dayEvs, teams, tcMap, fr],
+  );
   const hours = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
 
   const filterChips: { id: QF; label: string; count: number }[] = [
@@ -645,8 +674,24 @@ export default function Schedule() {
         </View>
       ) : null}
 
-      {/* DAY VIEW — 24h time grid with team-coloured, draggable visit blocks */}
+      {/* Day mode toggle: Trajet (web's day routes) / Grille (24h time grid) */}
       {view === 'day' ? (
+        <View className="mx-5 mb-1.5 flex-row self-start overflow-hidden rounded-lg border border-surface-border">
+          {(['route', 'grid'] as const).map((m) => (
+            <Pressable key={m} onPress={() => setDayMode(m)} className={`px-3 py-1.5 ${dayMode === m ? 'bg-ink' : 'bg-white'}`}>
+              <Text className={`text-xs font-semibold ${dayMode === m ? 'text-white' : 'text-ink-muted'}`}>
+                {m === 'route' ? (fr ? 'Trajet' : 'Route') : fr ? 'Grille' : 'Grid'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      {/* DAY VIEW — Trajet: optimized per-team trips on a map (web parity) */}
+      {view === 'day' && dayMode === 'route' ? <ScheduleRouteView jobs={routeJobs} onJobOpen={(id) => openJob(id)} /> : null}
+
+      {/* DAY VIEW — 24h time grid with team-coloured, draggable visit blocks */}
+      {view === 'day' && dayMode === 'grid' ? (
         <ScrollView
           scrollEnabled={!dragging}
           keyboardDismissMode="on-drag"
