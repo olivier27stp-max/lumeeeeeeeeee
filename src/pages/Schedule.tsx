@@ -1091,16 +1091,33 @@ function ScheduleContent() {
           {unscheduledJobs.length > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-white">{unscheduledJobs.length}</span>}
         </button>
 
-        {view === 'day' && selectedTeamIds.length === 1 && (
+        {(
           <button
             onClick={async () => {
+              // Prérequis gérés ici (avec messages clairs) plutôt qu'en cachant
+              // le bouton : l'optimisation travaille sur UNE journée et UNE équipe.
+              if (view !== 'day') {
+                setView('day');
+                toast.info(language === 'fr'
+                  ? 'Passé en vue Jour. Choisissez une équipe puis recliquez sur « Optimiser ».'
+                  : 'Switched to Day view. Pick one team, then click Optimize again.');
+                return;
+              }
+              if (selectedTeamIds.length !== 1) {
+                toast.info(language === 'fr'
+                  ? 'Sélectionnez une seule équipe pour optimiser sa tournée.'
+                  : 'Select a single team to optimize its route.');
+                return;
+              }
               const dayJobs = filtered
                 .slice()
                 .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
                 .map((e) => e.job?.id)
                 .filter(Boolean) as string[];
               if (dayJobs.length < 2) {
-                toast.info(t.routing?.needTwoJobs || 'Need at least 2 scheduled jobs.');
+                toast.info(language === 'fr'
+                  ? 'Il faut au moins 2 jobs planifiés (avec adresse) cette journée.'
+                  : 'Need at least 2 scheduled jobs (with an address) this day.');
                 return;
               }
               const team = teams.find((tm) => tm.id === selectedTeamIds[0]);
@@ -1133,10 +1150,10 @@ function ScheduleContent() {
                 toast.error(e?.message || (language === 'fr' ? "Échec de l'optimisation." : 'Optimization failed.'));
               }
             }}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-[5px] text-[13px] font-medium text-text-primary hover:bg-surface-secondary transition-colors"
-            title={t.routing?.optimizeDay || 'Optimize day'}
+            className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-[5px] text-[13px] font-semibold text-primary hover:bg-primary/10 transition-colors"
+            title={language === 'fr' ? 'Optimiser la tournée de la journée' : 'Optimize the day route'}
           >
-            <MapPin size={13} />{t.routing?.optimizeDay || 'Optimize day'}
+            <MapPin size={13} />{language === 'fr' ? 'Optimiser la tournée' : 'Optimize route'}
           </button>
         )}
         <button onClick={() => openCreate(selectedDate)} className="flex items-center gap-1.5 rounded-lg bg-text-primary px-3.5 py-[6px] text-[13px] font-semibold text-white shadow-sm hover:opacity-90 transition-opacity"><Plus size={14} strokeWidth={2.5} />{t.schedule.scheduleJob}</button>
