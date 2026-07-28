@@ -54,14 +54,13 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       .then((v) => {
         if (mounted && (v === 'fr' || v === 'en')) setLanguageState(v);
       })
-      .catch(() => {})
-      // 2. … then the account preference, fetched FRESH from the server so a
-      // change made on the web is picked up at next app open.
-      .then(() => supabase.auth.getUser())
-      .then(({ data }) => apply(data.user?.user_metadata?.language))
       .catch(() => {});
 
-    // Login / user refresh → re-apply the account preference.
+    // 2. … account preference via the auth events ONLY (INITIAL_SESSION at
+    // startup, SIGNED_IN at login, USER_UPDATED after a web change picked up on
+    // token refresh). No direct auth API call here: an extra getUser() at boot
+    // contended with the login flow's token exchange/refresh and could get the
+    // fresh session revoked — signing the user right back out.
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       apply(session?.user?.user_metadata?.language);
     });
