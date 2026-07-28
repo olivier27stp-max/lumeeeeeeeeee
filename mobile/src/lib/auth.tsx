@@ -63,13 +63,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) return { error: error.message };
       if (!data?.url) return { error: 'Could not start Google sign-in.' };
 
-      // Ephemeral session skips the iOS consent popup that exposes the Supabase domain.
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo, {
-        preferEphemeralSession: true,
-      });
+      // Session PARTAGÉE (pas éphémère) : la fenêtre voit les cookies Google du
+      // téléphone → choix de compte en un tap. En éphémère (mode privé), Google
+      // exige un login complet et peut refuser (« browser not secure ») — la
+      // fenêtre se fermait alors sans jamais revenir dans l'app, silencieusement.
+      // Coût : iOS montre une petite confirmation nommant le domaine d'auth.
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
       if (result.type !== 'success' || !result.url) {
-        return { error: result.type === 'cancel' ? null : 'Google sign-in was cancelled.' };
+        // Y compris le « cancel » : visible, sinon l'échec est indiagnosticable.
+        return {
+          error:
+            result.type === 'cancel'
+              ? 'Connexion Google interrompue — la fenêtre s’est fermée avant la fin.'
+              : `Google sign-in failed (${result.type}).`,
+        };
       }
+      // Un échec côté Supabase/Google revient en deep link avec ?error=… — l'afficher.
+      const retErr = new URL(result.url).searchParams.get('error_description') || new URL(result.url).searchParams.get('error');
+      if (retErr) return { error: retErr };
 
       // Extract the auth code from the redirect and exchange it for a session.
       const code = new URL(result.url).searchParams.get('code');
