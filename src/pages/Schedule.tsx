@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   addDays, addHours, addMonths, endOfMonth, endOfWeek, format,
   isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek,
-  getHours, getMinutes, differenceInMinutes,
 } from 'date-fns';
 import { frCA, enCA } from 'date-fns/locale';
 import type { Locale } from 'date-fns';
@@ -18,6 +17,7 @@ import { useTranslation } from '../i18n';
 import CalendarMapModal from '../components/CalendarMapModal';
 import AddVisitModal from '../components/AddVisitModal';
 import DailyDispatchView from '../components/dispatch-daily/DailyDispatchView';
+import WeeklyDispatchView from '../components/dispatch-weekly/WeeklyDispatchView';
 import AgendaRoutePanel, { type RouteJob } from '../components/schedule/AgendaRoutePanel';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarControllerProvider, CalendarUiView, useCalendarController } from '../contexts/CalendarController';
@@ -31,26 +31,17 @@ import {
 } from '../lib/scheduleApi';
 import { findFreeSlots, type FreeSlot } from '../lib/availabilityApi';
 import { checkVisitAgainstRoster } from '../lib/teamScheduleApi';
+import TeamDayRoster from '../components/TeamDayRoster';
 import { optimizeRoute, applyOptimizedSchedule } from '../lib/routeOptimizationApi';
 import { listTeams, TeamRecord } from '../lib/teamsApi';
 import { supabase } from '../lib/supabase';
 import { cn, formatCurrency } from '../lib/utils';
 import { FALLBACK_TEAM_COLOR, isHexColor, toRgba } from '../lib/colorUtils';
-import {
-  useCalendarDnd,
-  SLOT_HEIGHT_PX,
-  snapToGrid,
-  minutesToPx,
-  pxToMinutes,
-  type CalendarDragData,
-} from '../hooks/useCalendarDnd';
+import { useCalendarDnd } from '../hooks/useCalendarDnd';
 
 /* ════════════════════════════════════════════════════════════════
    HELPERS
    ════════════════════════════════════════════════════════════════ */
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
-const SLOT_H = SLOT_HEIGHT_PX;
-
 function _dfLocale(): Locale {
   try {
     return (typeof localStorage !== 'undefined' && localStorage.getItem('lume-language') === 'fr') ? frCA : enCA;
@@ -59,7 +50,7 @@ function _dfLocale(): Locale {
 const _LOC = { get locale() { return _dfLocale(); } };
 
 // Module-level FR check for subcomponents that render outside the translation
-// hook (DragEventCard, MonthView, AgendaView, MiniCal) — same source as _dfLocale.
+// hook (MonthView, AgendaView, MiniCal) — same source as _dfLocale.
 function _isFr(): boolean {
   try {
     return typeof localStorage !== 'undefined' && localStorage.getItem('lume-language') === 'fr';
@@ -106,347 +97,6 @@ function eventsForDay(events: ScheduleEventRecord[], day: Date) {
   // startsWith(prefixe UTC) rangeait les jobs du soir dans la mauvaise case
   // (un job 21h local = lendemain 01h UTC apparaissait le mauvais jour).
   return events.filter((e) => format(new Date(e.start_at), 'yyyy-MM-dd') === dStr);
-}
-
-/**
- * Lay out a single day's events into side-by-side columns when they overlap in
- * time. Returns, per event id, its column index and the number of columns in
- * its overlap cluster, so cards at the same hour sit next to each other instead
- * of stacking on top of one another.
- */
-function layoutDayEvents(dayEvs: ScheduleEventRecord[]): Record<string, { col: number; cols: number }> {
-  const out: Record<string, { col: number; cols: number }> = {};
-  const items = dayEvs
-    .map((e) => ({ id: e.id, start: new Date(e.start_at).getTime(), end: new Date(e.end_at).getTime() }))
-    .sort((a, b) => a.start - b.start || a.end - b.end);
-
-  let cluster: typeof items = [];
-  let clusterEnd = -Infinity;
-
-  const flush = () => {
-    if (!cluster.length) return;
-    // Greedy column assignment within the cluster.
-    const colEnds: number[] = []; // end time occupying each column
-    const assign: Record<string, number> = {};
-    for (const it of cluster) {
-      let placed = -1;
-      for (let c = 0; c < colEnds.length; c++) {
-        if (it.start >= colEnds[c]) { colEnds[c] = it.end; placed = c; break; }
-      }
-      if (placed < 0) { colEnds.push(it.end); placed = colEnds.length - 1; }
-      assign[it.id] = placed;
-    }
-    const cols = colEnds.length;
-    for (const it of cluster) out[it.id] = { col: assign[it.id], cols };
-    cluster = [];
-  };
-
-  for (const it of items) {
-    if (cluster.length && it.start >= clusterEnd) flush();
-    cluster.push(it);
-    clusterEnd = Math.max(clusterEnd, it.end);
-  }
-  flush();
-  return out;
-}
-
-/* ════════════════════════════════════════════════════════════════
-   DRAGGABLE EVENT CARD (used in Week/Day time grids)
-   ════════════════════════════════════════════════════════════════ */
-interface DragEventProps {
-  ev: ScheduleEventRecord;
-  color: string;
-  style: React.CSSProperties;
-  isDragging: boolean;
-  previewDuration: number | null;
-  onEventClick: (jobId: string) => void;
-  onDragStart: (e: React.PointerEvent) => void;
-  onResizeStart: (e: React.PointerEvent) => void;
-}
-
-function DragEventCard({ ev, color, style, isDragging, previewDuration, onEventClick, onDragStart, onResizeStart }: DragEventProps) {
-  const s = new Date(ev.start_at), e = new Date(ev.end_at);
-  const computedHeight = previewDuration != null
-    ? Math.max(minutesToPx(previewDuration), 20)
-    : (style.height as number | undefined);
-
-  // Distinguish a real drag from a plain click. On pointer-down we watch the
-  // pointer at the WINDOW level (the grid handles the drag, so moves don't reach
-  // this card): if it travels past the threshold it was a drag → suppress the
-  // click so it only moves the job, never opens the panel. A still pointer = a
-  // real click → open the job.
-  const movedRef = useRef(false);
-
-  const beginPress = (e: React.PointerEvent) => {
-    if (e.button !== 0 || (e.target as HTMLElement).dataset.resize) return;
-    movedRef.current = false;
-    const ox = e.clientX, oy = e.clientY;
-    const THRESHOLD = 4; // px
-    const onMove = (me: PointerEvent) => {
-      if (Math.hypot(me.clientX - ox, me.clientY - oy) > THRESHOLD) {
-        movedRef.current = true;
-        cleanup();
-      }
-    };
-    const cleanup = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', cleanup);
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', cleanup);
-    e.preventDefault();
-    onDragStart(e);
-  };
-
-  return (
-    <div
-      className={cn(
-        'pointer-events-auto absolute cursor-grab overflow-hidden rounded-md px-1.5 py-1 text-left select-none',
-        'transition-shadow group/event',
-        isDragging
-          ? 'opacity-40 ring-2 ring-primary/40 shadow-xl z-30 cursor-grabbing'
-          : 'hover:shadow-lg hover:z-10',
-      )}
-      style={{
-        ...style,
-        height: computedHeight ?? style.height,
-        backgroundColor: toRgba(color, isDragging ? 0.08 : 0.15),
-        borderLeft: `3px solid ${color}`,
-      }}
-      onClick={(e) => {
-        e.stopPropagation();
-        // Only open on a genuine click (no drag movement, not mid-drag).
-        if (movedRef.current || isDragging) { movedRef.current = false; return; }
-        if (ev.job_id) onEventClick(ev.job_id);
-      }}
-      onPointerDown={beginPress}
-    >
-      <div className="truncate text-[11px] font-semibold" style={{ color }}>{ev.job?.title || 'Job'}</div>
-      <div className="truncate text-[10px] text-text-secondary">{format(s, 'h:mm a', _LOC)}{computedHeight && computedHeight > 30 ? ` – ${format(e, 'h:mm a', _LOC)}` : ''}</div>
-      {ev.job?.client_name && computedHeight && computedHeight > 44 && (
-        <div className="mt-0.5 truncate text-[10px] text-text-tertiary">{ev.job.client_name}</div>
-      )}
-      {/* Resize handle (bottom) */}
-      <div
-        data-resize="true"
-        className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize opacity-0 group-hover/event:opacity-100 transition-opacity"
-        style={{ backgroundColor: toRgba(color, 0.3), borderRadius: '0 0 4px 4px' }}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onResizeStart(e);
-        }}
-      />
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════════════
-   GHOST PREVIEW (shown during drag)
-   ════════════════════════════════════════════════════════════════ */
-function DragGhostPreview({ top, width, left, height, label }: {
-  top: number; width: string; left: string; height: number; label: string;
-}) {
-  return (
-    <div
-      className="pointer-events-none absolute rounded-md border-2 border-dashed border-primary/60 bg-primary/10 z-40"
-      style={{ top, left, width, height: Math.max(height, 20) }}
-    >
-      <div className="px-2 py-1 text-[11px] font-semibold text-primary truncate">{label}</div>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════════════
-   DRAG-AWARE TIME GRID (shared between Week & Day views)
-   ════════════════════════════════════════════════════════════════ */
-interface TimeGridProps {
-  columns: Date[];
-  events: ScheduleEventRecord[];
-  tcMap: Map<string, string>;
-  onSlotClick: (start: Date) => void;
-  onEventClick: (jobId: string) => void;
-  // DnD
-  isDragging: (eventId: string) => boolean;
-  isAnyDragActive: boolean;
-  dragState: ReturnType<typeof useCalendarDnd>['dragState'];
-  applyOptimistic: (ev: ScheduleEventRecord) => ScheduleEventRecord;
-  onEventDragStart: (ev: ScheduleEventRecord, e: React.PointerEvent, gridEl: HTMLElement) => void;
-  onResizeStart: (ev: ScheduleEventRecord, e: React.PointerEvent) => void;
-  onGridPointerMove: (e: React.PointerEvent, gridEl: HTMLElement) => void;
-  onGridPointerUp: (e: React.PointerEvent, columns: Date[]) => void;
-  onDragSlotDrop: (date: Date, hour: number, minute: number) => void;
-}
-
-function TimeGrid({
-  columns, events, tcMap, onSlotClick, onEventClick,
-  isDragging, isAnyDragActive, dragState, applyOptimistic,
-  onEventDragStart, onResizeStart,
-  onGridPointerMove, onGridPointerUp, onDragSlotDrop,
-}: TimeGridProps) {
-  const gridRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const isMultiCol = columns.length > 1;
-  const gridCols = isMultiCol ? `56px repeat(${columns.length}, 1fr)` : '56px 1fr';
-
-  // Scroll to ~7am on mount
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 7 * SLOT_H;
-  }, [columns[0]?.getTime()]);
-
-  // Pointer handlers on the grid for drag operations
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!isAnyDragActive || !gridRef.current) return;
-    onGridPointerMove(e, gridRef.current);
-  }, [isAnyDragActive, onGridPointerMove]);
-
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    if (!isAnyDragActive) return;
-    onGridPointerUp(e, columns);
-  }, [isAnyDragActive, onGridPointerUp, columns]);
-
-  // Compute drop target highlight during drag
-  const dropHighlight = useMemo(() => {
-    if (!isAnyDragActive || dragState.ghostTop == null) return null;
-    const snappedMin = snapToGrid(pxToMinutes(dragState.ghostTop));
-    const h = Math.floor(snappedMin / 60);
-    const m = snappedMin % 60;
-    return { hour: h, minute: m, top: minutesToPx(snappedMin), colIndex: dragState.ghostColIndex };
-  }, [isAnyDragActive, dragState.ghostTop, dragState.ghostColIndex]);
-
-  return (
-    <div className="flex h-full flex-col">
-      {/* Scrollable time grid — the day header lives inside this same scroll
-          container (sticky) so its columns always line up with the grid below
-          it, regardless of the scrollbar width. */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto"
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-      >
-        {/* Header row (sticky) */}
-        <div className="sticky top-0 z-20 grid border-b-[1.5px] border-border bg-surface" style={{ gridTemplateColumns: gridCols }}>
-          <div className="border-r-[1.5px] border-border" />
-          {columns.map((d, i) => {
-            const today = isSameDay(d, new Date());
-            return (
-              <div key={i} className={cn('border-r-[1.5px] border-border px-2 py-2.5 text-center', today && 'bg-primary/[0.03]')}>
-                <div className={cn('text-[11px] font-semibold uppercase tracking-wider', today ? 'text-primary' : 'text-text-tertiary')}>
-                  {format(d, 'EEE', _LOC)}
-                </div>
-                <div className={cn('mx-auto mt-0.5 flex h-8 w-8 items-center justify-center rounded-full text-[15px]',
-                  today ? 'bg-primary font-bold text-white' : 'font-medium text-text-primary')}>
-                  {format(d, 'd')}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div ref={gridRef} className="relative" style={{ touchAction: isAnyDragActive ? 'none' : 'auto' }}>
-          {/* Hour rows */}
-          {HOURS.map((h) => (
-            <div key={h} className="grid border-b-[1.5px] border-border" style={{ gridTemplateColumns: gridCols, height: SLOT_H }}>
-              <div className="flex items-start justify-end border-r-[1.5px] border-border pr-2 pt-0.5 text-[11px] font-medium text-text-tertiary">
-                {h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}
-              </div>
-              {columns.map((d, ci) => {
-                const today = isSameDay(d, new Date());
-                const isDropTarget = dropHighlight && dropHighlight.colIndex === ci && dropHighlight.hour === h;
-                return (
-                  <div key={ci}
-                    onClick={() => { if (!isAnyDragActive) { const slot = new Date(d); slot.setHours(h, 0, 0, 0); onSlotClick(slot); } }}
-                    data-col={ci}
-                    data-hour={h}
-                    data-date={format(d, 'yyyy-MM-dd')}
-                    className={cn(
-                      'border-r-[1.5px] border-border transition-colors',
-                      isAnyDragActive ? 'cursor-copy' : 'cursor-pointer hover:bg-primary/[0.03]',
-                      today && 'bg-primary/[0.02]',
-                      isDropTarget && 'bg-primary/[0.08]',
-                    )}
-                  />
-                );
-              })}
-            </div>
-          ))}
-
-          {/* Events overlay */}
-          <div className="pointer-events-none absolute inset-0" style={{ marginLeft: 56 }}>
-            {columns.map((d, ci) => {
-              const dayEvs = eventsForDay(events, d);
-              const colWidth = isMultiCol ? `calc(100% / ${columns.length})` : '100%';
-              // Side-by-side layout for events overlapping in time.
-              const lay = layoutDayEvents(dayEvs);
-              return dayEvs.map((rawEv) => {
-                const ev = applyOptimistic(rawEv);
-                const s = new Date(ev.start_at), e = new Date(ev.end_at);
-                const startMin = getHours(s) * 60 + getMinutes(s);
-                const dur = Math.max(differenceInMinutes(e, s), 15);
-                const top = minutesToPx(startMin);
-                const height = minutesToPx(dur);
-                const c = tcMap.get(ev.team_id || ev.job?.team_id || '') || FALLBACK_TEAM_COLOR;
-                if (startMin < 0 || startMin >= 24 * 60) return null;
-                const dragging = isDragging(ev.id);
-                const previewDur = dragging && dragState.previewDuration ? dragState.previewDuration : null;
-
-                // Split the day column into N sub-columns for overlapping events.
-                const { col, cols } = lay[ev.id] || { col: 0, cols: 1 };
-                const GAP = 2; // px between overlapping cards
-                // Width of one day column: full width in single-col, else 100%/n.
-                const dayCol = isMultiCol ? `(100% / ${columns.length})` : '100%';
-                const base = isMultiCol ? `${ci} * ${dayCol}` : '0px';
-                // Each sub-column is (dayCol - side padding) / cols wide.
-                const inner = `((${dayCol} - 6px) / ${cols})`;
-                const left = `calc(${base} + 2px + ${col} * ${inner})`;
-                const width = `calc(${inner} - ${GAP}px)`;
-
-                return (
-                  <DragEventCard
-                    key={ev.id}
-                    ev={ev}
-                    color={c}
-                    isDragging={dragging}
-                    previewDuration={previewDur}
-                    style={{ left, width, top, height: Math.max(height, 20) }}
-                    onEventClick={onEventClick}
-                    onDragStart={(e) => gridRef.current && onEventDragStart(ev, e, gridRef.current)}
-                    onResizeStart={(e) => onResizeStart(ev, e)}
-                  />
-                );
-              });
-            })}
-
-            {/* Ghost preview during drag */}
-            {isAnyDragActive && dragState.ghostTop != null && dragState.active?.type !== 'resize-bottom' && (
-              <DragGhostPreview
-                top={dragState.ghostTop}
-                left={
-                  isMultiCol && dragState.ghostColIndex != null
-                    ? `calc(${dragState.ghostColIndex} * (100% / ${columns.length}) + 2px)`
-                    : '4px'
-                }
-                width={
-                  isMultiCol
-                    ? `calc(100% / ${columns.length} - 4px)`
-                    : 'calc(100% - 8px)'
-                }
-                height={minutesToPx(120)}
-                label={(() => {
-                  const min = snapToGrid(pxToMinutes(dragState.ghostTop));
-                  const h = Math.floor(min / 60), m = min % 60;
-                  const ampm = h >= 12 ? 'PM' : 'AM';
-                  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-                  return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
-                })()}
-              />
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -820,31 +470,7 @@ function ScheduleContent() {
     },
   });
 
-  // Grid drag handlers
-  const handleEventDragStart = useCallback((ev: ScheduleEventRecord, e: React.PointerEvent, gridEl: HTMLElement) => {
-    const rect = gridEl.getBoundingClientRect();
-    dnd.startEventDrag(ev, e.clientY, rect.top);
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-  }, [dnd]);
-
-  const handleResizeStart = useCallback((ev: ScheduleEventRecord, e: React.PointerEvent) => {
-    dnd.startResize(ev, e.clientY);
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-  }, [dnd]);
-
-  const handleGridPointerMove = useCallback((e: React.PointerEvent, gridEl: HTMLElement) => {
-    const rect = gridEl.getBoundingClientRect();
-    // Determine which column we're over
-    const timeColStart = 56; // px for time label column
-    const gridWidth = rect.width - timeColStart;
-    const relX = e.clientX - rect.left - timeColStart;
-    const cols = view === 'week' ? 7 : 1;
-    const colIndex = Math.max(0, Math.min(cols - 1, Math.floor((relX / gridWidth) * cols)));
-
-    dnd.updateDragPosition(e.clientY, rect.top, colIndex);
-  }, [dnd, view]);
-
-  // Vue Jour (timeline horizontale) — mêmes mutations que le DnD de la vue
+  // Vues Jour et Semaine (dispatch) — mêmes mutations que le DnD de la vue
   // Semaine, exposées en callbacks pour le drag/resize horizontal dédié.
   const handleDailyReschedule = useCallback(async (eventId: string, startAt: string, endAt: string, teamId: string | null) => {
     try {
@@ -868,30 +494,6 @@ function ScheduleContent() {
       throw err;
     }
   }, [rescheduleMut, t]);
-
-  const handleGridPointerUp = useCallback((e: React.PointerEvent, columns: Date[]) => {
-    if (!dnd.dragState.active) return;
-
-    if (dnd.dragState.active.type === 'resize-bottom') {
-      dnd.completeResize();
-      return;
-    }
-
-    // Calculate drop position
-    const ghostTop = dnd.dragState.ghostTop;
-    if (ghostTop == null) {
-      dnd.cancelDrag();
-      return;
-    }
-
-    const snappedMin = snapToGrid(pxToMinutes(ghostTop));
-    const dropHour = Math.floor(snappedMin / 60);
-    const dropMinute = snappedMin % 60;
-    const colIdx = dnd.dragState.ghostColIndex ?? 0;
-    const dropDate = columns[colIdx] || columns[0];
-
-    dnd.completeDrop(dropDate, dropHour, dropMinute).catch(() => {});
-  }, [dnd]);
 
   /* ── Computed ── */
   // Stable "now" — only refreshed when the underlying events list changes,
@@ -975,7 +577,7 @@ function ScheduleContent() {
       .then((r) => { setTeamSlots(new Map(r)); setLoadingSlots(false); }).catch(() => setLoadingSlots(false));
   }, [teamPickerDrop, teams]);
 
-  // Build columns for TimeGrid
+  // Les 7 jours de la semaine affichée (vue Semaine)
   const weekColumns = useMemo(() => {
     const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -992,19 +594,6 @@ function ScheduleContent() {
     { id: 'requires_invoicing', label: t.schedule.requiresInvoicing, count: cInv },
     { id: 'needs_attention', label: t.schedule.needsAttention, count: cAtt },
   ];
-
-  // Shared TimeGrid DnD props
-  const timeGridDndProps = {
-    isDragging: dnd.isDragging,
-    isAnyDragActive: dnd.isAnyDragActive,
-    dragState: dnd.dragState,
-    applyOptimistic: dnd.applyOptimistic,
-    onEventDragStart: handleEventDragStart,
-    onResizeStart: handleResizeStart,
-    onGridPointerMove: handleGridPointerMove,
-    onGridPointerUp: handleGridPointerUp,
-    onDragSlotDrop: () => {},
-  };
 
   /* ════════════════ RENDER ════════════════ */
   return (
@@ -1191,7 +780,19 @@ function ScheduleContent() {
            view === 'month' ? (
             <MonthView date={selectedDate} events={filtered} tcMap={tcMap} onDayClick={(d) => { setDate(d); setView('day'); }} onEventClick={openExisting} />
           ) : view === 'week' ? (
-            <TimeGrid columns={weekColumns} events={filtered} tcMap={tcMap} onSlotClick={(s) => openAddVisit(s)} onEventClick={openExisting} {...timeGridDndProps} />
+            <WeeklyDispatchView
+              weekDays={weekColumns}
+              events={filtered}
+              teams={teams}
+              visibleTeamIds={effTeams}
+              orgId={orgId || null}
+              unassignedMode={unassignedMode}
+              isError={evQ.isError}
+              onEventClick={openExisting}
+              onSlotClick={(s) => openAddVisit(s)}
+              onReschedule={handleDailyReschedule}
+              externalDnd={dnd}
+            />
           ) : view === 'day' ? (
             <DailyDispatchView
               date={selectedDate}
@@ -1269,7 +870,12 @@ function ScheduleContent() {
               {teams.map((tm) => { const c = isHexColor(tm.color_hex) ? tm.color_hex : FALLBACK_TEAM_COLOR; const slots = teamSlots.get(tm.id) || []; return (
                 <button key={tm.id} onClick={() => pickTeam(tm.id)} className="flex w-full items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-surface-secondary transition-colors">
                   <span className="h-3.5 w-3.5 shrink-0 rounded-full shadow-sm" style={{ backgroundColor: c }} />
-                  <div className="min-w-0 flex-1"><span className="text-[13px] font-semibold text-text-primary">{tm.name}</span><p className="mt-0.5 text-[11px] text-text-tertiary">{loadingSlots ? '...' : slots.length > 0 ? slots.slice(0, 3).map((s) => `${s.start_time}–${s.end_time}`).join(', ') : t.schedule.noSlotsToday}</p></div>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[13px] font-semibold text-text-primary">{tm.name}</span>
+                    <p className="mt-0.5 text-[11px] text-text-tertiary">{loadingSlots ? '...' : slots.length > 0 ? slots.slice(0, 3).map((s) => `${s.start_time}–${s.end_time}`).join(', ') : t.schedule.noSlotsToday}</p>
+                    {/* Membres de l'équipe pour la journée du drop (onglet Horaire) */}
+                    <TeamDayRoster teamId={tm.id} date={format(new Date(teamPickerDrop.startAt), 'yyyy-MM-dd')} fr={language === 'fr'} className="mt-0.5" />
+                  </div>
                 </button>); })}
               <button onClick={() => pickTeam(null)} className="flex w-full items-center gap-3 rounded-xl border border-dashed border-border p-3 text-[13px] text-text-secondary hover:bg-surface-secondary transition-colors">{t.schedule.scheduleWithoutTeam}</button>
             </div>
@@ -1302,10 +908,16 @@ function AssignModal({ job, teams, events, tcMap, onAssign, onClose, loading, t 
   job: UnscheduledJobRecord | ScheduleEventRecord; teams: TeamRecord[]; events: ScheduleEventRecord[];
   tcMap: Map<string, string>; onAssign: (tid: string) => void; onClose: () => void; loading: boolean; t: any;
 }) {
+  const { language } = useTranslation();
   const title = 'title' in job ? job.title : (job as ScheduleEventRecord).job?.title || 'Job';
   const client = 'client_name' in job ? job.client_name : (job as ScheduleEventRecord).job?.client_name;
   const addr = 'property_address' in job ? job.property_address : (job as ScheduleEventRecord).job?.property_address;
   const wl = useMemo(() => { const c = new Map<string, number>(); const td = format(new Date(), 'yyyy-MM-dd'); events.forEach((e) => { const tid = e.team_id || e.job?.team_id; if (tid && format(new Date(e.start_at), 'yyyy-MM-dd') === td) c.set(tid, (c.get(tid) || 0) + 1); }); return c; }, [events]);
+  // Journée de référence pour le roster : la date de la visite si elle existe,
+  // sinon aujourd'hui (job pas encore planifié).
+  const rosterDate = 'start_at' in job && (job as ScheduleEventRecord).start_at
+    ? format(new Date((job as ScheduleEventRecord).start_at), 'yyyy-MM-dd')
+    : format(new Date(), 'yyyy-MM-dd');
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl">
@@ -1313,7 +925,13 @@ function AssignModal({ job, teams, events, tcMap, onAssign, onClose, loading, t 
         <div className="mb-4 rounded-xl bg-surface-secondary p-3"><p className="text-[13px] font-semibold text-text-primary">{title}</p>{client && <p className="mt-0.5 text-[11px] text-text-secondary">{client}</p>}{addr && <p className="mt-0.5 flex items-center gap-1 text-[11px] text-text-tertiary"><MapPin size={9} />{addr}</p>}</div>
         <div className="space-y-1.5">{teams.map((tm) => { const c = tcMap.get(tm.id) || FALLBACK_TEAM_COLOR; const w = wl.get(tm.id) || 0; return (
           <button key={tm.id} onClick={() => onAssign(tm.id)} disabled={loading} className="flex w-full items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-surface-secondary transition-colors disabled:opacity-50">
-            <span className="h-3.5 w-3.5 shrink-0 rounded-full shadow-sm" style={{ backgroundColor: c }} /><div className="flex-1"><span className="text-[13px] font-semibold text-text-primary">{tm.name}</span>{w > 0 && <span className="ml-2 text-[11px] text-text-tertiary">{w} {t.schedule.teamWorkload}</span>}</div>
+            <span className="h-3.5 w-3.5 shrink-0 rounded-full shadow-sm" style={{ backgroundColor: c }} />
+            <div className="min-w-0 flex-1">
+              <span className="text-[13px] font-semibold text-text-primary">{tm.name}</span>
+              {w > 0 && <span className="ml-2 text-[11px] text-text-tertiary">{w} {t.schedule.teamWorkload}</span>}
+              {/* Membres assignés à cette équipe pour la journée visée */}
+              <TeamDayRoster teamId={tm.id} date={rosterDate} fr={language === 'fr'} className="mt-0.5" />
+            </div>
           </button>); })}</div>
       </div>
     </div>
