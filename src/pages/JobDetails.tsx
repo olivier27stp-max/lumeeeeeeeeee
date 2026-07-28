@@ -33,7 +33,7 @@ import { toast } from 'sonner';
 import { cn, formatDate } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
-import { getJobById, getJobLineItems, listSalespeople, updateJob, type JobLineItem } from '../lib/jobsApi';
+import { getJobById, getJobLineItems, updateJob, type JobLineItem } from '../lib/jobsApi';
 import AddVisitModal from '../components/AddVisitModal';
 import { invalidateScheduleCache, rescheduleEvent, unscheduleJob } from '../lib/scheduleApi';
 import { listTeams, type TeamRecord } from '../lib/teamsApi';
@@ -74,6 +74,7 @@ import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import EntityHubHeader from '../components/EntityHubHeader';
 import EntityNumberEditor from '../components/EntityNumberEditor';
+import TeamDayRoster from '../components/TeamDayRoster';
 import ClientPinMiniMap, { type ClientMapPin } from '../components/map-d2d/ClientPinMiniMap';
 import { getPins } from '../lib/fieldSalesApi';
 
@@ -164,44 +165,23 @@ export default function JobDetails() {
   const [editVisitEnd, setEditVisitEnd] = useState('');
   const [editVisitTeamId, setEditVisitTeamId] = useState('');
   const [visitActionBusy, setVisitActionBusy] = useState(false);
-  // Assignment context: teams (visit.team_id → name/color) and the job's
-  // individual assignee ("technician" — jobs.assigned_user_id), shown as the
-  // fallback when a visit has no team of its own.
+  // Assignment context: les visites appartiennent à une ÉQUIPE seulement —
+  // les personnes découlent de l'horaire du jour (onglet Horaire).
   const [teams, setTeams] = useState<TeamRecord[]>([]);
-  const [salespeople, setSalespeople] = useState<Array<{ id: string; label: string }>>([]);
-  const [jobAssignedUserId, setJobAssignedUserId] = useState<string | null>(null);
 
   useEffect(() => {
     listTeams().then(setTeams).catch(() => setTeams([]));
-    listSalespeople().then(setSalespeople).catch(() => setSalespeople([]));
   }, []);
 
-  // assigned_user_id lives on the jobs row but isn't part of the mapped Job type.
-  useEffect(() => {
-    if (!id) return;
-    supabase
-      .from('jobs')
-      .select('assigned_user_id')
-      .eq('id', id)
-      .maybeSingle()
-      .then(({ data }) => setJobAssignedUserId((data as any)?.assigned_user_id || null));
-  }, [id]);
-
   const teamById = useMemo(() => new Map(teams.map((tm) => [tm.id, tm])), [teams]);
-  const jobAssigneeLabel = useMemo(
-    () => (jobAssignedUserId ? salespeople.find((p) => p.id === jobAssignedUserId)?.label || null : null),
-    [jobAssignedUserId, salespeople]
-  );
 
-  // Who's on a visit: the visit's own team first, else the job's individual
-  // assignee (technician), else the job's team, else unassigned.
+  // Who's on a visit: the visit's own team first, else the job's team.
   const getVisitAssignment = (visit: ScheduleEvent): { team: TeamRecord | undefined; label: string } => {
     const visitTeam = visit.team_id ? teamById.get(visit.team_id) : undefined;
     const jobTeam = !visit.team_id && job?.team_id ? teamById.get(job.team_id) : undefined;
-    const team = visitTeam || (jobAssigneeLabel ? undefined : jobTeam);
+    const team = visitTeam || jobTeam;
     const label = visitTeam?.name
       || (visit.team_id ? (language === 'fr' ? 'Équipe assignée' : 'Team assigned') : null)
-      || (jobAssigneeLabel ? `${language === 'fr' ? 'Technicien' : 'Technician'} · ${jobAssigneeLabel}` : null)
       || jobTeam?.name
       || (language === 'fr' ? 'Pas encore assignée' : 'Not assigned yet');
     return { team, label };
@@ -2299,6 +2279,7 @@ export default function JobDetails() {
                             .filter((tm) => tm.is_active !== false || tm.id === editVisitTeamId)
                             .map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
                         </select>
+                        <TeamDayRoster teamId={editVisitTeamId || null} date={editVisitDate} fr={fr} className="mt-1.5" />
                       </div>
                     </div>
                     <div className="flex justify-end gap-2">

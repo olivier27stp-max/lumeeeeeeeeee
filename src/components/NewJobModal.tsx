@@ -11,6 +11,7 @@ import { createServiceContract } from '../lib/serviceContractsApi';
 import { createJobAgreement, DEFAULT_AGREEMENT_TERMS } from '../lib/jobAgreementsApi';
 import AgreementDraftPreviewModal, { type AgreementDraftPreviewData } from './agreements/AgreementDraftPreviewModal';
 import FileUpload from './FileUpload';
+import TeamDayRoster from './TeamDayRoster';
 import { STORAGE_BUCKETS } from '../lib/storage';
 import { resolveClientIdForLead } from '../lib/leadsApi';
 import { listTeams } from '../lib/teamsApi';
@@ -327,9 +328,6 @@ export default function NewJobModal({
   const [saleDate, setSaleDate] = useState(new Date().toISOString().slice(0, 10));
   const [showOnLeaderboard, setShowOnLeaderboard] = useState(true);
   const [jobType, setJobType] = useState<'one_off' | 'recurring'>('one_off');
-  // Assignment: choose between assigning an individual user or a team (tabs)
-  const [assignMode, setAssignMode] = useState<'user' | 'team'>('team');
-  const [assignedUserId, setAssignedUserId] = useState('');
   // "Ask for a review" setup
   const [askForReview, setAskForReview] = useState(false);
   // startDate/startTime/endTime are DERIVED from the first visit (see the sync
@@ -621,11 +619,8 @@ export default function NewJobModal({
         .catch(() => {});
     }
     setJobType(initialValues?.job_type || 'one_off');
-    // Assignment / review (best-effort fields — may be absent on the draft)
+    // Review (best-effort field — may be absent on the draft)
     const iv = initialValues as any;
-    const initialAssignedUser = iv?.assigned_user_id || '';
-    setAssignedUserId(initialAssignedUser);
-    setAssignMode(initialAssignedUser && !(initialValues?.team_id) ? 'user' : 'team');
     setAskForReview(Boolean(iv?.ask_for_review));
     setSaleDate(initialValues?.sale_date || new Date().toISOString().slice(0, 10));
     setShowOnLeaderboard(initialValues?.show_on_leaderboard !== false);
@@ -1256,13 +1251,13 @@ export default function NewJobModal({
       return;
     }
 
-    if (assignMode === 'team' && !teamSelection) {
+    if (!teamSelection) {
       setInlineError(t.modals.teamRequired);
       return;
     }
 
     // Block scheduling on unavailable/busy team
-    if (assignMode === 'team' && selectedTeamSuggestion && teamSelection !== UNASSIGNED_TEAM_VALUE) {
+    if (selectedTeamSuggestion && teamSelection !== UNASSIGNED_TEAM_VALUE) {
       const { status } = selectedTeamSuggestion;
       if (status === 'unavailable') {
         setInlineError(t.teamSuggestions.teamUnavailableDay);
@@ -1317,11 +1312,8 @@ export default function NewJobModal({
       }
     }
 
-    // Assignment is exclusive: a job is assigned to a team OR an individual user.
-    const teamIdPayload = assignMode === 'user'
-      ? null
-      : (teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection);
-    const assignedUserPayload = assignMode === 'user' ? (assignedUserId || null) : null;
+    // Les visites sont assignées à une équipe seulement (jamais à un individu).
+    const teamIdPayload = teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection;
 
     // Service plan: the schedule comes from the planned months (first visit =
     // the job's own schedule); at least one month with its date is required.
@@ -1530,12 +1522,12 @@ export default function NewJobModal({
         total: grandTotalCents / 100,
         tax_lines: taxLines,
       });
-      // Persist ask-for-review / individual assignee (best-effort —
-      // no-ops gracefully if the migration hasn't been applied yet).
+      // Persist ask-for-review; assigned_user_id est toujours vidé — les jobs
+      // hérités d'une assignation individuelle convergent vers équipe-seulement.
       if (createdJob?.id) {
         await applyJobExtras(createdJob.id, {
           askForReview,
-          assignedUserId: assignedUserPayload,
+          assignedUserId: null,
         });
       }
 
@@ -1957,11 +1949,8 @@ export default function NewJobModal({
               </Box>
 
               <Box title={language === 'fr' ? 'Assignation' : 'Assignment'}>
-                <div className="inline-flex rounded-xl bg-surface-secondary border border-border p-1">
-                  <button type="button" onClick={() => setAssignMode('team')} className={cn('px-4 py-2 rounded-lg text-sm font-medium transition-colors', assignMode === 'team' ? 'bg-surface shadow-sm text-text-primary' : 'text-text-tertiary')}>{language === 'fr' ? 'Assigner une équipe' : 'Assign team'}</button>
-                  <button type="button" onClick={() => setAssignMode('user')} className={cn('px-4 py-2 rounded-lg text-sm font-medium transition-colors', assignMode === 'user' ? 'bg-surface shadow-sm text-text-primary' : 'text-text-tertiary')}>{language === 'fr' ? 'Assigner un utilisateur' : 'Assign user'}</button>
-                </div>
-                {assignMode === 'team' ? (
+                {/* Les visites sont assignées à une ÉQUIPE seulement — les
+                    personnes viennent de l'horaire du jour (onglet Horaire). */}
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-text-tertiary">{t.modals.assignTeam}</label>
                   <select
@@ -1983,6 +1972,10 @@ export default function NewJobModal({
                   {teamsQuery.isError ? (
                     <p className="text-[11px] text-danger">{t.modals.couldNotLoadTeamsMsg}</p>
                   ) : null}
+                  {/* Membres de l'équipe choisie pour la journée de la 1re visite */}
+                  {teamSelection && teamSelection !== UNASSIGNED_TEAM_VALUE && (
+                    <TeamDayRoster teamId={teamSelection} date={startDate} fr={language === 'fr'} />
+                  )}
                   {/* Team availability — always visible when a date is set */}
                   <TeamSuggestions
                     date={startDate}
@@ -2002,23 +1995,6 @@ export default function NewJobModal({
                     </div>
                   )}
                 </div>
-                ) : (
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Utilisateur' : 'User'}</label>
-                  <select
-                    value={assignedUserId}
-                    onChange={(event) => setAssignedUserId(event.target.value)}
-                    className="glass-input w-full"
-                  >
-                    <option value="">{language === 'fr' ? 'Choisir un utilisateur' : 'Select a user'}</option>
-                    {salespeople.map((person) => (
-                      <option key={person.id} value={person.id}>
-                        {person.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                )}
               </Box>
 
               {/* Property — a job must be assigned to one of the client's properties */}

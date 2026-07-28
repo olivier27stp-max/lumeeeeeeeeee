@@ -7,6 +7,7 @@ import { listTeams, type TeamRecord } from '../lib/teamsApi';
 import { getJobs } from '../lib/jobsApi';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import LeaveFormConfirm from './ui/LeaveFormConfirm';
+import TeamDayRoster from './TeamDayRoster';
 
 interface LockedJob {
   id: string;
@@ -247,6 +248,8 @@ export default function AddVisitModal({
                 <option value="">{fr ? 'Non assignée' : 'Unassigned'}</option>
                 {teams.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
               </select>
+              {/* Membres assignés à cette équipe pour la date de la visite */}
+              <TeamDayRoster teamId={teamId} date={date} fr={fr} className="mt-1.5" />
             </div>
           )}
         </div>
