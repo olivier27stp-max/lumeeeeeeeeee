@@ -47,8 +47,9 @@ import storageUploadRouter from './routes/storage-upload';
 import timesheetsRouter from './routes/timesheets';
 import requestFormsRouter from './routes/request-forms';
 import marketingRouter from './routes/marketing';
-// Removed: campaigns / booking / recurring-invoices / route-optimization /
-// webhooks-config / quickbooks-export — corresponding UI features deleted.
+import routeOptimizationRouter from './routes/route-optimization';
+// Removed: campaigns / booking / recurring-invoices / webhooks-config /
+// quickbooks-export — corresponding UI features deleted.
 import quoteTemplatesRouter from './routes/quote-templates';
 import checklistsRouter from './routes/checklists';
 import taxesRouter from './routes/taxes';
@@ -363,6 +364,7 @@ app.use(rbacMiddleware());
 // ── Mount all route modules under /api ──
 app.use('/api', searchRouter);
 app.use('/api', geocodeRouter);
+app.use('/api', routeOptimizationRouter);
 app.use('/api', leadsRouter);
 app.use('/api', paymentsRouter);
 app.use('/api', notificationsRouter);
