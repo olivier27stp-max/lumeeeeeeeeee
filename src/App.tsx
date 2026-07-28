@@ -348,6 +348,24 @@ export default function App() {
     const pendingOAuth =
       url.searchParams.has('code') || window.location.hash.includes('access_token=');
 
+    // Un échec OAuth (échange Supabase↔Google raté, consentement refusé, app
+    // non vérifiée…) revient sur le Site URL avec ?error=…&error_description=….
+    // Sans ceci, l'erreur était avalée et l'utilisateur « rebondissait » sur
+    // l'accueil sans aucune explication — indiagnosticable.
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const oauthErrDesc = url.searchParams.get('error_description') || hashParams.get('error_description');
+    const oauthErrCode =
+      url.searchParams.get('error_code') || url.searchParams.get('error') || hashParams.get('error');
+    if (oauthErrCode || oauthErrDesc) {
+      import('sonner').then(({ toast }) => {
+        toast.error(`Connexion échouée / Sign-in failed — ${oauthErrDesc || oauthErrCode}`, {
+          duration: 20000,
+        });
+      });
+      for (const k of ['error', 'error_code', 'error_description', 'state']) url.searchParams.delete(k);
+      window.history.replaceState({}, '', url.pathname + url.search);
+    }
+
     const finishBootstrap = (session: any) => {
       if (resolved) return;
       resolved = true;
