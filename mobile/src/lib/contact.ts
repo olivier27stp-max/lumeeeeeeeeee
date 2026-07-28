@@ -99,33 +99,52 @@ export function onMyWayMessage(
 }
 
 // Saved message templates must NOT freeze the company name — otherwise renaming
-// the company later still texts the old name. We persist the text together with
-// the company name in effect when it was saved (JSON), then swap that stored
-// name for the LIVE name when loading. Legacy plain-string saves (name baked in,
-// unknown) can't be migrated → the caller regenerates the default instead.
+// the company later still texts the old name. Same for the CLIENT name: the
+// default greetings say « Bonjour {client}! », so a saved template would greet
+// every future client with the first client's name. We persist the text
+// together with the company AND client names in effect at save time (JSON),
+// then swap both for the LIVE values when loading. Legacy saves that predate a
+// token (name baked in, unknown) can't be migrated → the caller regenerates
+// the default instead.
 
-/** Serialize a template for storage: the edited text + the company at save time. */
-export function packTemplate(text: string, companyName?: string | null): string {
-  return JSON.stringify({ text, company: (companyName ?? '').trim() });
+/** Serialize a template for storage: the edited text + company/client at save time. */
+export function packTemplate(text: string, companyName?: string | null, clientName?: string | null): string {
+  const o: Record<string, string> = { text, company: (companyName ?? '').trim() };
+  if (clientName !== undefined) o.client = (clientName ?? '').trim();
+  return JSON.stringify(o);
 }
 
 /**
- * Load a stored template with the LIVE company name swapped in for the one that
- * was in effect when it was saved. Returns null for legacy/invalid data so the
- * caller falls back to a freshly-generated default (with the current name).
+ * Load a stored template with the LIVE company (and, for client-aware callers,
+ * client) name swapped in for the ones in effect when it was saved. Returns
+ * null for legacy/invalid data so the caller falls back to a freshly-generated
+ * default (with the current names).
  */
 export function unpackTemplate(
   raw: string | null | undefined,
   companyName?: string | null,
   lang: 'fr' | 'en' = 'en',
+  clientName?: string | null,
 ): string | null {
   if (!raw) return null;
   try {
     const o = JSON.parse(raw);
     if (o && typeof o.text === 'string') {
+      // Client-aware caller + save made before client tokenization: the old
+      // client's name is baked in and unknown → regenerate the default.
+      if (clientName !== undefined && typeof o.client !== 'string') return null;
       const live = companyName?.trim() || (lang === 'fr' ? 'nous' : 'us');
       const old = (o.company ?? '').trim();
-      return old && old !== live ? o.text.split(old).join(live) : o.text;
+      let out: string = old && old !== live ? o.text.split(old).join(live) : o.text;
+      if (clientName !== undefined) {
+        const oldClient = (o.client ?? '').trim();
+        const liveClient = (clientName ?? '').trim();
+        if (oldClient && oldClient !== liveClient) {
+          out = out.split(` ${oldClient}`).join(liveClient ? ` ${liveClient}` : '');
+          out = out.split(oldClient).join(liveClient);
+        }
+      }
+      return out;
     }
   } catch {
     /* legacy plain string → fall through */

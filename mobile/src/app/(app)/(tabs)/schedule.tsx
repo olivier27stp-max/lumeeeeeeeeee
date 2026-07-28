@@ -409,7 +409,7 @@ export default function Schedule() {
       setReschedEv({ ev: v.ev, when: v.startAt });
       const saved = await AsyncStorage.getItem(reschedKey).catch(() => null);
       setReschedNice(
-        unpackTemplate(saved, current?.companyName, lang) ??
+        unpackTemplate(saved, current?.companyName, lang, v.ev.job?.client_name ?? '') ??
           rescheduleNiceMessage(current?.companyName, v.ev.job?.client_name ?? null, lang),
       );
       setShowResched(true);
@@ -465,7 +465,7 @@ export default function Schedule() {
           await logOutboundMessage({ orgId, phone, text: body, userId: me, clientId: job.client_id, clientName: job.client_name });
         }
       }
-      AsyncStorage.setItem(reschedKey, packTemplate(reschedNice.trim(), current?.companyName)).catch(() => {});
+      AsyncStorage.setItem(reschedKey, packTemplate(reschedNice.trim(), current?.companyName, job.client_name ?? '')).catch(() => {});
       const cid = await findOrCreateConversation({ orgId, phone, clientId: job.client_id, clientName: job.client_name });
       setShowResched(false);
       router.push(

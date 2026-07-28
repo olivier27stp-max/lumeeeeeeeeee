@@ -121,7 +121,7 @@ export default function NewQuote() {
       setSentQuote(quote);
       const saved = await AsyncStorage.getItem(quoteKey).catch(() => null);
       setQuoteNice(
-        unpackTemplate(saved, current?.companyName, lang) ??
+        unpackTemplate(saved, current?.companyName, lang, client?.name ?? '') ??
           quoteNiceMessage(current?.companyName, client?.name ?? null, lang),
       );
       setShowSend(true);
@@ -192,7 +192,7 @@ export default function NewQuote() {
       }
       await sendSmsViaServer({ phone, text: quoteBody(), clientId: client.id, clientName: client.name });
       await markQuoteSent(sentQuote.id);
-      AsyncStorage.setItem(quoteKey, packTemplate(quoteNice.trim(), current?.companyName)).catch(() => {});
+      AsyncStorage.setItem(quoteKey, packTemplate(quoteNice.trim(), current?.companyName, client.name ?? '')).catch(() => {});
       qc.invalidateQueries({ queryKey: ['quotes'] });
       const cid = await findOrCreateConversation({ orgId, phone, clientId: client.id, clientName: client.name });
       setShowSend(false);

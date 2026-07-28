@@ -180,7 +180,7 @@ export default function NewJob() {
       setCreatedJobId(job.id);
       const saved = await AsyncStorage.getItem(bookingKey).catch(() => null);
       setBookingNice(
-        unpackTemplate(saved, current?.companyName, lang) ??
+        unpackTemplate(saved, current?.companyName, lang, client?.name ?? '') ??
           bookingNiceMessage(current?.companyName, client?.name ?? null, lang),
       );
       setShowBooking(true);
@@ -220,7 +220,7 @@ export default function NewJob() {
       const body = `${bookingNice.trim()}\n\n${bookingDetails()}`;
       await sendSmsViaServer({ phone, text: body, clientId: client.id, clientName: client.name });
       // Persist the edited nice message for next time.
-      AsyncStorage.setItem(bookingKey, packTemplate(bookingNice.trim(), current?.companyName)).catch(() => {});
+      AsyncStorage.setItem(bookingKey, packTemplate(bookingNice.trim(), current?.companyName, client.name ?? '')).catch(() => {});
       const cid = await findOrCreateConversation({ orgId, phone, clientId: client.id, clientName: client.name });
       setShowBooking(false);
       router.replace(
