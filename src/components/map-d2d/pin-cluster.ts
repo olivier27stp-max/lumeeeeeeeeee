@@ -47,8 +47,11 @@ interface PinClusterOptions {
 
 // Rayon de regroupement en px écran. Au-delà de MAX_CLUSTER_ZOOM, tout est
 // individuel (sauf coordonnées strictement identiques, regroupées à part).
-const CLUSTER_RADIUS = 55;
-const MAX_CLUSTER_ZOOM = 16;
+// Valeurs volontairement basses : les clusters ne doivent apparaître que tard
+// dans le dézoom — on garde un aperçu des pins individuels d'assez loin, et
+// deux pins ne fusionnent que quand ils se chevauchent presque à l'écran.
+const CLUSTER_RADIUS = 38;
+const MAX_CLUSTER_ZOOM = 14;
 const CONVERGE_MS = 180;
 const FADE_MS = 150;
 // Distance écran max pour rattacher un nouveau marqueur à son parent disparu
