@@ -89,7 +89,6 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
   const [myPos, setMyPos] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const flyToRef = useRef<((lng: number, lat: number) => void) | null>(null);
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
@@ -207,11 +206,6 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
     return { dist, dur, trips, revenueCents };
   }, [routes]);
 
-  function focusStop(j: RouteJob) {
-    setSelectedId(j.id);
-    if (j.lat != null && j.lng != null) flyToRef.current?.(j.lng, j.lat);
-  }
-
   const anyRoutable = routes.some((r) => r.jobs.length >= 2);
   if (!loading && !anyRoutable && !routes.some((r) => r.ungeocoded.length)) return null;
 
@@ -261,122 +255,155 @@ export default function AgendaRoutePanel({ jobs, onJobClick }: Props) {
         </div>
       </div>
 
-      {/* Split: map + side list */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.85fr_1fr]">
-        <div className="relative min-h-[320px] border-b border-border lg:min-h-[calc(100vh-16rem)] lg:border-b-0 lg:border-r">
-          <RouteMap routes={routes} startPoint={startPoint} selectedId={selectedId} onSelect={setSelectedId} onJobClick={onJobClick} flyToRef={flyToRef} />
-          {loading && (
-            <div className="pointer-events-none absolute left-3 top-3 rounded-lg border border-border bg-surface-card/90 px-2.5 py-1 text-[11px] font-medium text-text-secondary shadow-sm backdrop-blur">
-              {fr ? 'Calcul du trajet…' : 'Computing route…'}
-            </div>
+      {/* Une section PAR ÉQUIPE — chacune sa propre carte, rien de mélangé. */}
+      {routes.map((r, ti) => (
+        <TeamTripSection
+          key={r.teamId}
+          r={r}
+          first={ti === 0}
+          startPoint={startPoint}
+          loading={loading}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          onJobClick={onJobClick}
+          fr={fr}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ── One team's trip: its own map + its ordered stops ─────────────────── */
+
+function TeamTripSection({
+  r, first, startPoint, loading, selectedId, onSelect, onJobClick, fr,
+}: {
+  r: TeamRoute; first: boolean; startPoint: { lat: number; lng: number } | null;
+  loading: boolean; selectedId: string | null; onSelect: (id: string) => void;
+  onJobClick?: (jobId: string) => void; fr: boolean;
+}) {
+  const flyToRef = useRef<((lng: number, lat: number) => void) | null>(null);
+
+  const late = r.jobs.reduce((n, j, i) => {
+    const eta = r.etas[i];
+    return n + (eta && eta.getTime() - new Date(j.startAt).getTime() > 5 * 60_000 ? 1 : 0);
+  }, 0);
+  const mapsUrl = googleMapsTripUrl(
+    r.jobs.filter((j) => j.lat != null && j.lng != null).map((j) => ({ lat: j.lat!, lng: j.lng! })),
+    startPoint,
+  );
+  const hasMap = r.jobs.some((j) => j.lat != null && j.lng != null);
+
+  function focusStop(j: RouteJob) {
+    onSelect(j.id);
+    if (j.lat != null && j.lng != null) flyToRef.current?.(j.lng, j.lat);
+  }
+
+  return (
+    <div className={first ? '' : 'border-t-[6px] border-surface-secondary'}>
+      {/* team header — full width, above this team's map */}
+      <div className="px-4 pb-2.5 pt-3" style={{ boxShadow: `inset 0 3px 0 ${r.color}` }}>
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: r.color }} />
+          <span className="text-[12.5px] font-bold text-text-primary">{r.teamName}</span>
+          {r.revenueCents > 0 && (
+            <span className="ml-auto text-[12px] font-extrabold text-success tabular-nums">
+              {formatCurrency(r.revenueCents / 100)}
+            </span>
           )}
         </div>
 
-        <div className="overflow-y-auto lg:max-h-[calc(100vh-16rem)]">
-          {routes.map((r, ti) => {
-            const late = r.jobs.reduce((n, j, i) => {
-              const eta = r.etas[i];
-              return n + (eta && eta.getTime() - new Date(j.startAt).getTime() > 5 * 60_000 ? 1 : 0);
-            }, 0);
-            const mapsUrl = googleMapsTripUrl(
-              r.jobs.filter((j) => j.lat != null && j.lng != null).map((j) => ({ lat: j.lat!, lng: j.lng! })),
-              startPoint,
-            );
-            return (
-              <div key={r.teamId} className={ti > 0 ? 'border-t-[6px] border-surface-secondary' : ''}>
-                {/* team header */}
-                <div className="sticky top-0 z-[1] bg-surface-card px-4 pb-2.5 pt-3">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: r.color }} />
-                    <span className="text-[12.5px] font-bold text-text-primary">{r.teamName}</span>
-                    {r.revenueCents > 0 && (
-                      <span className="ml-auto text-[12px] font-extrabold text-success tabular-nums">
-                        {formatCurrency(r.revenueCents / 100)}
-                      </span>
-                    )}
-                  </div>
+        {/* progress bar (done vs total) */}
+        {r.jobs.length > 0 && (
+          <div className="mt-2">
+            <div className="mb-1 flex items-center justify-between text-[10px] text-text-tertiary tabular-nums">
+              <span className="flex items-center gap-1">
+                <CheckCircle2 size={10} className={r.done > 0 ? 'text-success' : 'opacity-50'} />
+                {r.done}/{r.jobs.length} {fr ? 'faits' : 'done'}
+              </span>
+              {late > 0 && (
+                <span className="font-semibold text-warning">
+                  {late} {fr ? 'en retard' : 'late'}
+                </span>
+              )}
+            </div>
+            <div className="h-1 overflow-hidden rounded-full bg-surface-tertiary">
+              <div className="h-full rounded-full transition-all" style={{ width: `${(r.done / r.jobs.length) * 100}%`, backgroundColor: r.color }} />
+            </div>
+          </div>
+        )}
 
-                  {/* progress bar (done vs total) */}
-                  {r.jobs.length > 0 && (
-                    <div className="mt-2">
-                      <div className="mb-1 flex items-center justify-between text-[10px] text-text-tertiary tabular-nums">
-                        <span className="flex items-center gap-1">
-                          <CheckCircle2 size={10} className={r.done > 0 ? 'text-success' : 'opacity-50'} />
-                          {r.done}/{r.jobs.length} {fr ? 'faits' : 'done'}
-                        </span>
-                        {late > 0 && (
-                          <span className="font-semibold text-warning">
-                            {late} {fr ? 'en retard' : 'late'}
-                          </span>
-                        )}
-                      </div>
-                      <div className="h-1 overflow-hidden rounded-full bg-surface-tertiary">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${(r.done / r.jobs.length) * 100}%`, backgroundColor: r.color }} />
-                      </div>
-                    </div>
-                  )}
+        {/* trip meta + open in maps */}
+        <div className="mt-2 flex items-center gap-2.5 text-[10.5px] text-text-tertiary tabular-nums">
+          {r.route && r.jobs.length >= 2 && (
+            <>
+              <span>{r.jobs.length} {fr ? 'arrêts' : 'stops'}</span>
+              <span className="flex items-center gap-1"><Navigation size={10} />{formatDistance(r.route.totalDistanceM, fr)}</span>
+              <span className="flex items-center gap-1"><Clock size={10} />{formatDuration(r.route.totalDurationS, fr)}</span>
+            </>
+          )}
+          {mapsUrl && (
+            <a
+              href={mapsUrl} target="_blank" rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10.5px] font-semibold text-text-secondary transition-colors hover:bg-surface-secondary"
+            >
+              <ExternalLink size={11} />{fr ? 'Ouvrir dans Maps' : 'Open in Maps'}
+            </a>
+          )}
+        </div>
 
-                  {/* trip meta + open in maps */}
-                  <div className="mt-2 flex items-center gap-2.5 text-[10.5px] text-text-tertiary tabular-nums">
-                    {r.route && r.jobs.length >= 2 && (
-                      <>
-                        <span>{r.jobs.length} {fr ? 'arrêts' : 'stops'}</span>
-                        <span className="flex items-center gap-1"><Navigation size={10} />{formatDistance(r.route.totalDistanceM, fr)}</span>
-                        <span className="flex items-center gap-1"><Clock size={10} />{formatDuration(r.route.totalDurationS, fr)}</span>
-                      </>
-                    )}
-                    {mapsUrl && (
-                      <a
-                        href={mapsUrl} target="_blank" rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10.5px] font-semibold text-text-secondary transition-colors hover:bg-surface-secondary"
-                      >
-                        <ExternalLink size={11} />{fr ? 'Ouvrir dans Maps' : 'Open in Maps'}
-                      </a>
-                    )}
-                  </div>
+        {/* Economy vs the chronological (by-time) order — proves the
+            optimization saves driving. Only shown when it actually does. */}
+        {r.savedSeconds >= 60 && (
+          <div className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-success-light px-2 py-0.5 text-[10.5px] font-semibold text-success">
+            <Sparkles size={10} />
+            {fr
+              ? `Économie ${formatDuration(r.savedSeconds, fr)}${r.savedMeters >= 300 ? ` · ${formatDistance(r.savedMeters, fr)}` : ''} vs par heure`
+              : `Saves ${formatDuration(r.savedSeconds, fr)}${r.savedMeters >= 300 ? ` · ${formatDistance(r.savedMeters, fr)}` : ''} vs by-time`}
+          </div>
+        )}
+      </div>
 
-                  {/* Economy vs the chronological (by-time) order — proves the
-                      optimization saves driving. Only shown when it actually does. */}
-                  {r.savedSeconds >= 60 && (
-                    <div className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-success-light px-2 py-0.5 text-[10.5px] font-semibold text-success">
-                      <Sparkles size={10} />
-                      {fr
-                        ? `Économie ${formatDuration(r.savedSeconds, fr)}${r.savedMeters >= 300 ? ` · ${formatDistance(r.savedMeters, fr)}` : ''} vs par heure`
-                        : `Saves ${formatDuration(r.savedSeconds, fr)}${r.savedMeters >= 300 ? ` · ${formatDistance(r.savedMeters, fr)}` : ''} vs by-time`}
-                    </div>
-                  )}
-                </div>
-
-                {/* stops */}
-                <ol className="px-1.5 pb-2">
-                  {r.jobs.map((j, i) => (
-                    <StopRow
-                      key={j.id}
-                      job={j}
-                      index={i}
-                      color={r.color}
-                      leg={i > 0 ? r.route?.legs[i + (startPoint ? 1 : 0)] : undefined}
-                      eta={r.etas[i]}
-                      selected={selectedId === j.id}
-                      done={DONE_STATUSES.has(j.status)}
-                      fr={fr}
-                      onFocus={() => focusStop(j)}
-                      onOpen={() => j.jobId && onJobClick?.(j.jobId)}
-                    />
-                  ))}
-                </ol>
-
-                {r.ungeocoded.length > 0 && (
-                  <p className="mx-4 mb-3 border-t border-border-light pt-2 text-[10.5px] text-text-tertiary">
-                    {fr
-                      ? `${r.ungeocoded.length} job(s) exclus du trajet (non géolocalisés ou au-delà de 12 arrêts)`
-                      : `${r.ungeocoded.length} job(s) excluded from the route (not geolocated or beyond 12 stops)`}
-                  </p>
-                )}
+      {/* this team's map + its stops */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr]">
+        {hasMap && (
+          <div className="relative min-h-[280px] border-b border-t border-border lg:border-b-0 lg:border-r">
+            <RouteMap routes={[r]} startPoint={startPoint} selectedId={selectedId} onSelect={onSelect} onJobClick={onJobClick} flyToRef={flyToRef} />
+            {loading && (
+              <div className="pointer-events-none absolute left-3 top-3 rounded-lg border border-border bg-surface-card/90 px-2.5 py-1 text-[11px] font-medium text-text-secondary shadow-sm backdrop-blur">
+                {fr ? 'Calcul du trajet…' : 'Computing route…'}
               </div>
-            );
-          })}
+            )}
+          </div>
+        )}
+
+        <div className={hasMap ? 'overflow-y-auto lg:max-h-[420px]' : 'lg:col-span-2'}>
+          <ol className="px-1.5 pb-2 pt-1">
+            {r.jobs.map((j, i) => (
+              <StopRow
+                key={j.id}
+                job={j}
+                index={i}
+                color={r.color}
+                leg={i > 0 ? r.route?.legs[i + (startPoint ? 1 : 0)] : undefined}
+                eta={r.etas[i]}
+                selected={selectedId === j.id}
+                done={DONE_STATUSES.has(j.status)}
+                fr={fr}
+                onFocus={() => focusStop(j)}
+                onOpen={() => j.jobId && onJobClick?.(j.jobId)}
+              />
+            ))}
+          </ol>
+
+          {r.ungeocoded.length > 0 && (
+            <p className="mx-4 mb-3 border-t border-border-light pt-2 text-[10.5px] text-text-tertiary">
+              {fr
+                ? `${r.ungeocoded.length} job(s) exclus du trajet (non géolocalisés ou au-delà de 12 arrêts)`
+                : `${r.ungeocoded.length} job(s) excluded from the route (not geolocated or beyond 12 stops)`}
+            </p>
+          )}
         </div>
       </div>
     </div>
