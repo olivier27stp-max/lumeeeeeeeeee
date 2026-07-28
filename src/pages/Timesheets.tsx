@@ -742,15 +742,6 @@ export default function Timesheets() {
           <p className="text-[13px] text-text-tertiary mt-1">{fr ? 'Suivi des équipes, pointages, disponibilité et répartition terrain' : 'Team tracking, punches, availability and field distribution'}</p>
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Hub tabs */}
-          <div className="flex rounded-md border border-outline overflow-hidden">
-            {([['feuilles', fr ? 'Feuilles' : 'Timesheets'], ['carte', fr ? 'Carte' : 'Map'], ['disponibilites', fr ? 'Disponibilités' : 'Availability']] as [HubTab, string][]).map(([key, label]) => (
-              <button key={key} onClick={() => setHubTab(key)}
-                className={cn('px-4 py-2 text-[13px] font-medium transition-all', hubTab === key ? 'bg-text-primary text-white' : 'bg-surface-card text-text-secondary hover:bg-surface-secondary')}>
-                {label}
-              </button>
-            ))}
-          </div>
           {/* Date controls for feuilles/carte */}
           {hubTab !== 'disponibilites' && (
             <>
@@ -776,6 +767,15 @@ export default function Timesheets() {
             </>
           )}
         </div>
+      </div>
+
+      {/* ── Sub-tabs — same underline pattern as Finances/Jobs ── */}
+      <div className="tab-nav">
+        {([['feuilles', fr ? 'Feuilles de temps' : 'Timesheets'], ['carte', fr ? 'Carte' : 'Map'], ['disponibilites', fr ? 'Disponibilités' : 'Availability']] as [HubTab, string][]).map(([key, label]) => (
+          <button key={key} className={hubTab === key ? 'tab-item-active' : 'tab-item'} onClick={() => setHubTab(key)}>
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* ── Secondary bar: date nav (feuilles/carte) or nothing (dispo/profils) ── */}
