@@ -638,8 +638,16 @@ export default function Schedule() {
         </View>
       </View>
 
-      {/* Quick filters */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-1 max-h-9" contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}>
+      {/* Quick filters — hauteur fixe + flexShrink:0, sinon le ScrollView du
+          contenu (Trajet/Grille) compresse cette rangée à zéro dès qu'il y a
+          des jobs dans la journée. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        className="mb-1"
+        style={{ flexGrow: 0, flexShrink: 0, height: 38 }}
+        contentContainerStyle={{ paddingHorizontal: 20, gap: 8, alignItems: 'center' }}
+      >
         {filterChips.map((f) => {
           const on = activeFilter === f.id;
           return (
@@ -693,6 +701,7 @@ export default function Schedule() {
       {/* DAY VIEW — 24h time grid with team-coloured, draggable visit blocks */}
       {view === 'day' && dayMode === 'grid' ? (
         <ScrollView
+          className="flex-1"
           scrollEnabled={!dragging}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
@@ -739,7 +748,7 @@ export default function Schedule() {
 
       {/* WEEK VIEW — the web Agenda's grouped-by-day cards, scoped to the week */}
       {view === 'week' ? (
-        <ScrollView keyboardDismissMode="on-drag" contentContainerStyle={{ paddingBottom: 110 }}>
+        <ScrollView className="flex-1" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingBottom: 110 }}>
           {weekGroups.size === 0 ? (
             <View className="items-center py-24">
               <SymbolView name="calendar" tintColor="#D4D4D4" size={40} resizeMode="scaleAspectFit" />
@@ -841,7 +850,7 @@ export default function Schedule() {
 
       {/* MONTH VIEW — web-parity grid with coloured event chips */}
       {view === 'month' ? (
-        <ScrollView keyboardDismissMode="on-drag" contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 110 }}>
+        <ScrollView className="flex-1" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 110 }}>
           <View className="flex-row pb-1">
             {DAY_ABBR.map((d) => (
               <Text key={d} className="flex-1 text-center text-[10px] font-semibold uppercase text-ink-subtle">

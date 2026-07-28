@@ -304,7 +304,7 @@ export function ScheduleRouteView({ jobs, onJobOpen }: { jobs: RouteJob[]; onJob
   }
 
   return (
-    <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
+    <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 110 }}>
       {/* Bar: title + start-from + totals */}
       <View className="mx-4 rounded-t-2xl border border-b-0 border-surface-border bg-white px-4 pb-3 pt-3">
         <View className="flex-row items-center gap-2">
