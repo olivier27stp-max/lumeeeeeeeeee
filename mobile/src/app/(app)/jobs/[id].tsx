@@ -26,7 +26,7 @@ import { uploadJobSignature } from '@/lib/api/jobPhotos';
 import { findOrCreateConversation } from '@/lib/api/messaging';
 import { sendSmsViaServer } from '@/lib/api/server';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { callNumber, deviceLanguage, etaSentence, onMyWayGreeting, packTemplate, promptCall, unpackTemplate } from '@/lib/contact';
+import { callNumber, etaSentence, onMyWayGreeting, packTemplate, promptCall, unpackTemplate } from '@/lib/contact';
 import { clientFullName, formatCurrencyCents, formatDateTime } from '@/lib/format';
 import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
@@ -56,7 +56,7 @@ export default function JobDetail() {
   const [savedTemplate, setSavedTemplate] = useState<string | null>(null);
   const { session } = useAuth();
   const { current } = useMembership();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { teamId, scope, permissions, role, canSeePricing, orgId, can } = usePermissions();
   const access = { teamId, scope, permissions, role };
   const isManager = role === 'owner' || role === 'admin';
@@ -149,7 +149,7 @@ export default function JobDetail() {
   const phone = client?.phone ?? null;
 
   // Messages go out in the device's language (fr/en) — mirrors the user's choice.
-  const lang = deviceLanguage();
+  const lang = language; // langue des réglages de l'app, pas celle du téléphone
   const omwKey = `lume_omw_tmpl_${session?.user.id ?? ''}`;
 
   // Load the user's saved greeting (if any) so it's reused every time.

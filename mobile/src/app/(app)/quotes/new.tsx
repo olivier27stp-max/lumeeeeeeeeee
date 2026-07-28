@@ -16,7 +16,7 @@ import { findOrCreateConversation } from '@/lib/api/messaging';
 import { sendEmail } from '@/lib/email';
 import { htmlToPdf, shareHtmlAsPdf } from '@/lib/pdf';
 import { sendSmsViaServer } from '@/lib/api/server';
-import { depositNote, deviceLanguage, packTemplate, quoteNiceMessage, unpackTemplate } from '@/lib/contact';
+import { depositNote, packTemplate, quoteNiceMessage, unpackTemplate } from '@/lib/contact';
 import { formatCurrencyCents } from '@/lib/format';
 import { buildQuotePreviewHtml } from '@/lib/invoicePreview';
 import { useAuth } from '@/lib/auth';
@@ -32,13 +32,13 @@ function SectionLabel({ children }: { children: string }) {
 
 export default function NewQuote() {
   const qc = useQueryClient();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { session } = useAuth();
   const { current } = useMembership();
   const { orgId, can, canSeePricing } = usePermissions();
 
   // After a quote is created, offer to text the client the accept link (Twilio).
-  const lang = deviceLanguage();
+  const lang = language; // langue des réglages de l'app, pas celle du téléphone
   const quoteKey = `lume_quote_tmpl_${session?.user.id ?? ''}`;
   const [showSend, setShowSend] = useState(false);
   const [sentQuote, setSentQuote] = useState<{ id: string; viewToken: string | null } | null>(null);

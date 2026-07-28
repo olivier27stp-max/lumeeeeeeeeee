@@ -50,7 +50,7 @@ import {
   UnscheduledJobRecord,
 } from '@/lib/api/schedule';
 import { isSmsUnavailable, sendSmsViaServer } from '@/lib/api/server';
-import { deviceLanguage, newTimeLine, packTemplate, rescheduleNiceMessage, textNumber, unpackTemplate } from '@/lib/contact';
+import { newTimeLine, packTemplate, rescheduleNiceMessage, textNumber, unpackTemplate } from '@/lib/contact';
 import { formatCurrencyCents, formatDateTime, formatTime } from '@/lib/format';
 import { useAuth } from '@/lib/auth';
 import { useTranslation } from '@/lib/i18n';
@@ -316,7 +316,7 @@ export default function Schedule() {
   const hydratedRef = useRef(false);
 
   // Reschedule (drag-and-drop) → "text the client" confirmation, same flow as before.
-  const lang = deviceLanguage();
+  const lang = language; // langue des réglages de l'app, pas celle du téléphone
   const reschedKey = `lume_resched_tmpl_${me}`;
   const [reschedEv, setReschedEv] = useState<{ ev: ScheduleEventRecord; when: string } | null>(null);
   const [reschedPhone, setReschedPhone] = useState<string | null>(null);
@@ -421,7 +421,7 @@ export default function Schedule() {
         unpackTemplate(saved, current?.companyName, lang, v.ev.job?.client_name ?? '') ??
         rescheduleNiceMessage(current?.companyName, v.ev.job?.client_name ?? null, lang);
       // La nouvelle heure fait partie du message éditable (plus d'ajout caché à l'envoi).
-      setReschedNice(`${base}${newTimeLine(formatDateTime(v.startAt), lang)}`);
+      setReschedNice(`${base}${newTimeLine(formatDateTime(v.startAt, lang === 'fr' ? 'fr-CA' : 'en-CA'), lang)}`);
       setShowResched(true);
     },
     onError: (e: Error) => Alert.alert(t.mobileField.reschedule, e.message),
@@ -1147,7 +1147,7 @@ export default function Schedule() {
             <View className="gap-0.5">
               <Text className="text-lg font-bold text-ink">{t.mobileField.apptMoved}</Text>
               <Text className="text-xs text-ink-muted">
-                {reschedEv ? t.mobileField.newTimeLabel.replace('{time}', formatDateTime(reschedEv.when)) : ''}
+                {reschedEv ? t.mobileField.newTimeLabel.replace('{time}', formatDateTime(reschedEv.when, lang === 'fr' ? 'fr-CA' : 'en-CA')) : ''}
               </Text>
             </View>
             <View className="gap-1.5">

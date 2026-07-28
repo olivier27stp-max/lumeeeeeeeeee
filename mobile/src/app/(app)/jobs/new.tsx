@@ -17,7 +17,7 @@ import { listTeams } from '@/lib/api/org';
 import { findOrCreateConversation } from '@/lib/api/messaging';
 import { sendSmsViaServer } from '@/lib/api/server';
 import { LineItemInput } from '@/lib/api/billing';
-import { bookingNiceMessage, deviceLanguage, packTemplate, unpackTemplate } from '@/lib/contact';
+import { bookingNiceMessage, packTemplate, unpackTemplate } from '@/lib/contact';
 import { formatCurrencyCents, formatDateTime, formatTime } from '@/lib/format';
 import { useAuth } from '@/lib/auth';
 import { useMembership } from '@/lib/membership-context';
@@ -36,7 +36,7 @@ export default function NewJob() {
   const { orgId, teamId, scope, permissions, role, canCreateJobs, canSeePricing } = usePermissions();
   const { session } = useAuth();
   const { current } = useMembership();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const isManager = role === 'owner' || role === 'admin';
 
   const freqLabels: Record<(typeof FREQUENCY_KEYS)[number], string> = {
@@ -50,7 +50,7 @@ export default function NewJob() {
 
   // Booking-confirmation popup (after Save): send the client the appointment
   // details (time / amount / address) + an editable, persisted nice message.
-  const lang = deviceLanguage();
+  const lang = language; // langue des réglages de l'app, pas celle du téléphone
   const bookingKey = `lume_booking_tmpl_${session?.user.id ?? ''}`;
   const [createdJobId, setCreatedJobId] = useState<string | null>(null);
   const [showBooking, setShowBooking] = useState(false);
@@ -190,7 +190,7 @@ export default function NewJob() {
 
   // The auto-filled appointment details appended under the nice message.
   const bookingDetails = () => {
-    const lines: string[] = [`📅 ${formatDateTime(startDate.toISOString())}`];
+    const lines: string[] = [`📅 ${formatDateTime(startDate.toISOString(), lang === 'fr' ? 'fr-CA' : 'en-CA')}`];
     if (address.trim()) lines.push(`📍 ${address.trim()}`);
     if (canSeePricing && totals.total > 0) lines.push(`💵 ${formatCurrencyCents(totals.total, 'CAD')}`);
     return lines.join('\n');

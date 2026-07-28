@@ -15,7 +15,6 @@ import { listInvoicesForClient, listQuotesForClient } from '@/lib/api/billing';
 import { findOrCreateConversation, listRecentMessages } from '@/lib/api/messaging';
 import { getClientLeadSource } from '@/lib/api/leads';
 import { listActivityLog, activityLabel } from '@/lib/api/activity';
-import { deviceLanguage } from '@/lib/contact';
 import { clientFullName, formatCurrencyCents, formatDateTime } from '@/lib/format';
 import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
@@ -42,7 +41,7 @@ function Row({
 
 export default function ClientDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { can, canSeePricing, teamId, scope, permissions, role, orgId } = usePermissions();
   const { data: client, isLoading, error } = useQuery({
     queryKey: ['clients', id],
@@ -84,7 +83,7 @@ export default function ClientDetail() {
     queryFn: () => listActivityLog(String(orgId), 'client', String(id)),
     enabled: !!orgId && !!id,
   });
-  const lang = deviceLanguage();
+  const lang = language; // langue des réglages de l'app, pas celle du téléphone
 
   // Billing rollup from the client's invoices.
   const invoiced = (invoices ?? []).reduce((s, i) => s + (i.total_cents ?? 0), 0);

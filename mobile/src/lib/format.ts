@@ -11,11 +11,13 @@ export function formatCurrencyCents(cents: number, currency = 'CAD') {
   }
 }
 
-export function formatDateTime(iso: string | null | undefined) {
+/** locale: pass 'fr-CA' / 'en-CA' to follow the APP language (settings) instead
+ * of the device language — required for client-facing message content. */
+export function formatDateTime(iso: string | null | undefined, locale?: string) {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString(locale, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
