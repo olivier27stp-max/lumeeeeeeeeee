@@ -102,10 +102,16 @@ export interface CompanySettings {
   province: string | null;
   postal_code: string | null;
   country: string | null;
+  /** Objectif de revenus (cents) — le diagramme d'objectif d'Insights le lit. */
+  revenue_goal_cents: number | null;
+  /** Devise d'affichage (CAD/USD). */
+  currency: string | null;
+  google_review_url: string | null;
+  review_enabled: boolean | null;
 }
 
 const COMPANY_COLS =
-  'org_id, company_name, logo_url, phone, email, website, street1, street2, city, province, postal_code, country';
+  'org_id, company_name, logo_url, phone, email, website, street1, street2, city, province, postal_code, country, revenue_goal_cents, currency, google_review_url, review_enabled';
 
 export async function getCompany(orgId: string): Promise<CompanySettings | null> {
   const { data, error } = await supabase
@@ -128,11 +134,19 @@ export async function updateCompany(
     .eq('org_id', orgId)
     .maybeSingle();
   if (existing) {
-    const { error } = await supabase.from('company_settings').update(input).eq('org_id', orgId);
+    const { error } = await supabase
+      .from('company_settings')
+      .update({ ...input, updated_at: new Date().toISOString() })
+      .eq('org_id', orgId);
     if (error) throw new Error(error.message);
   } else {
     const { error } = await supabase.from('company_settings').insert({ org_id: orgId, ...input });
     if (error) throw new Error(error.message);
+  }
+  // Keep the org's name in sync — same rule as the web CompanySettings page,
+  // which is the single source for the company name.
+  if (input.company_name && input.company_name.trim()) {
+    await supabase.from('orgs').update({ name: input.company_name.trim() }).eq('id', orgId);
   }
 }
 
