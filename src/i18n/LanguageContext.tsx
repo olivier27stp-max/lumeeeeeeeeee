@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import en, { TranslationKeys } from './en';
 import fr from './fr';
 
@@ -39,9 +40,37 @@ function getInitialLanguage(): Language {
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>(getInitialLanguage);
 
+  // SYNCED WITH MOBILE: the chosen language also lives on the ACCOUNT
+  // (auth user_metadata.language, written by both platforms). On load the
+  // account preference wins over localStorage, so picking « Français » on
+  // mobile makes the web French too.
+  useEffect(() => {
+    let mounted = true;
+    const apply = (v: unknown) => {
+      if (mounted && (v === 'fr' || v === 'en')) {
+        setLanguageState(v);
+        localStorage.setItem('lume-language', v);
+      }
+    };
+    supabase.auth
+      .getUser()
+      .then(({ data }) => apply(data.user?.user_metadata?.language))
+      .catch(() => {});
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      apply(session?.user?.user_metadata?.language);
+    });
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState(lang);
     localStorage.setItem('lume-language', lang);
+    // Propagate to the account so mobile follows (fire-and-forget; no-op when
+    // signed out).
+    supabase.auth.updateUser({ data: { language: lang } }).catch(() => {});
   }, []);
 
   useEffect(() => {
