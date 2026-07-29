@@ -82,7 +82,7 @@ export const INTEGRATIONS: Integration[] = [
       "Les paiements de Lume passent par Stripe. Vos clients reglent leurs factures et soumissions par carte, et l'argent est depose dans votre compte bancaire. Rien a installer : tout est deja inclus dans votre abonnement.",
     category: 'Paiements',
     connection_type: 'native',
-    logo_url: '/integrations/stripe.svg',
+    logo_url: '/integrations/stripe.svg?v=2',
     logo_color: '#635BFF',
     logo_initials: 'S',
     auth_fields: [],
@@ -105,7 +105,7 @@ export const INTEGRATIONS: Integration[] = [
       "Votre organisation obtient son propre numero de telephone pour envoyer et recevoir des textos directement dans Lume : rappels de rendez-vous, confirmations et suivis. Inclus avec les forfaits qui comprennent les SMS.",
     category: 'Communication',
     connection_type: 'native',
-    logo_url: '/integrations/twilio.svg',
+    logo_url: '/integrations/twilio.svg?v=2',
     logo_color: '#F22F46',
     logo_initials: 'SMS',
     auth_fields: [],
@@ -131,7 +131,7 @@ export const INTEGRATIONS: Integration[] = [
     // pas en place, un bouton "Connecter" mene a un echec : on annonce
     // l'integration sans la promettre. Repasser a 'oauth' apres le setup.
     connection_type: 'coming_soon',
-    logo_url: '/integrations/quickbooks.svg',
+    logo_url: '/integrations/quickbooks.svg?v=2',
     logo_color: '#2CA01C',
     logo_initials: 'QB',
     auth_fields: [],
