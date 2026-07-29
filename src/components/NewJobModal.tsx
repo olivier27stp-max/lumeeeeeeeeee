@@ -1948,55 +1948,6 @@ export default function NewJobModal({
                 )}
               </Box>
 
-              <Box title={language === 'fr' ? 'Assignation' : 'Assignment'}>
-                {/* Les visites sont assignées à une ÉQUIPE seulement — les
-                    personnes viennent de l'horaire du jour (onglet Horaire). */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-text-tertiary">{t.modals.assignTeam}</label>
-                  <select
-                    value={teamSelection}
-                    onChange={(event) => setTeamSelection(event.target.value)}
-                    className="glass-input w-full"
-                  >
-                    <option value="">{t.modals.selectTeam}</option>
-                    <option value={UNASSIGNED_TEAM_VALUE}>{t.modals.unassignedOption}</option>
-                    {teams.map((team) => (
-                      <option key={team.id} value={team.id}>
-                        {team.name}
-                      </option>
-                    ))}
-                  </select>
-                  {teamsQuery.isFetching ? (
-                    <p className="text-[11px] text-text-tertiary">{t.modals.loadingTeamsMsg}</p>
-                  ) : null}
-                  {teamsQuery.isError ? (
-                    <p className="text-[11px] text-danger">{t.modals.couldNotLoadTeamsMsg}</p>
-                  ) : null}
-                  {/* Membres de l'équipe choisie pour la journée de la 1re visite */}
-                  {teamSelection && teamSelection !== UNASSIGNED_TEAM_VALUE && (
-                    <TeamDayRoster teamId={teamSelection} date={startDate} fr={language === 'fr'} />
-                  )}
-                  {/* Team availability — always visible when a date is set */}
-                  <TeamSuggestions
-                    date={startDate}
-                    startTime={startTime}
-                    endTime={endTime}
-                    address={addressLine1 || selectedClient?.address || prefilledAddress || undefined}
-                    onSelectTeam={(id) => setTeamSelection(id)}
-                    onSuggestionsLoaded={setTeamSuggestions}
-                    selectedTeamId={teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection || null}
-                    compact
-                  />
-                  {/* Conflict warning */}
-                  {teamConflictWarning && (
-                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-[12px] text-amber-800">
-                      <AlertTriangle size={14} className="shrink-0 mt-0.5 text-amber-600" />
-                      <span>{teamConflictWarning}</span>
-                    </div>
-                  )}
-                </div>
-              </Box>
-
               {/* Property — a job must be assigned to one of the client's properties */}
               {(clientId || isCreatingNewClient) && (
                 <Box title={t.modals.property} subtitle={language === 'fr' ? 'Requis' : 'Required'}>
@@ -2333,6 +2284,55 @@ export default function NewJobModal({
                   </button>
               </Box>
               )}
+
+              <Box title={language === 'fr' ? 'Assignation' : 'Assignment'}>
+                {/* Les visites sont assignées à une ÉQUIPE seulement — les
+                    personnes viennent de l'horaire du jour (onglet Horaire). */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-text-tertiary">{t.modals.assignTeam}</label>
+                  <select
+                    value={teamSelection}
+                    onChange={(event) => setTeamSelection(event.target.value)}
+                    className="glass-input w-full"
+                  >
+                    <option value="">{t.modals.selectTeam}</option>
+                    <option value={UNASSIGNED_TEAM_VALUE}>{t.modals.unassignedOption}</option>
+                    {teams.map((team) => (
+                      <option key={team.id} value={team.id}>
+                        {team.name}
+                      </option>
+                    ))}
+                  </select>
+                  {teamsQuery.isFetching ? (
+                    <p className="text-[11px] text-text-tertiary">{t.modals.loadingTeamsMsg}</p>
+                  ) : null}
+                  {teamsQuery.isError ? (
+                    <p className="text-[11px] text-danger">{t.modals.couldNotLoadTeamsMsg}</p>
+                  ) : null}
+                  {/* Membres de l'équipe choisie pour la journée de la 1re visite */}
+                  {teamSelection && teamSelection !== UNASSIGNED_TEAM_VALUE && (
+                    <TeamDayRoster teamId={teamSelection} date={startDate} fr={language === 'fr'} />
+                  )}
+                  {/* Team availability — always visible when a date is set */}
+                  <TeamSuggestions
+                    date={startDate}
+                    startTime={startTime}
+                    endTime={endTime}
+                    address={addressLine1 || selectedClient?.address || prefilledAddress || undefined}
+                    onSelectTeam={(id) => setTeamSelection(id)}
+                    onSuggestionsLoaded={setTeamSuggestions}
+                    selectedTeamId={teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection || null}
+                    compact
+                  />
+                  {/* Conflict warning */}
+                  {teamConflictWarning && (
+                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-[12px] text-amber-800">
+                      <AlertTriangle size={14} className="shrink-0 mt-0.5 text-amber-600" />
+                      <span>{teamConflictWarning}</span>
+                    </div>
+                  )}
+                </div>
+              </Box>
 
               <Box title={t.modals.billing}>
                 <label className="flex items-center gap-3 cursor-pointer">
