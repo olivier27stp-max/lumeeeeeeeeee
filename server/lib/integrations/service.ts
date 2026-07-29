@@ -196,6 +196,12 @@ export async function handleOAuthCallback(params: {
   code: string;
   state: string;
   callbackBaseUrl: string;
+  /**
+   * Non-secret identifiers some providers return on the callback query
+   * rather than in the token response (e.g. Intuit's `realmId`). Stored
+   * alongside the credentials so later API calls can address the account.
+   */
+  callbackParams?: Record<string, string>;
 }): Promise<{ success: boolean; orgId: string; error?: string }> {
   const db = getDb();
 
@@ -259,14 +265,21 @@ export async function handleOAuthCallback(params: {
     ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
     : null;
 
+  // Callback identifiers (Intuit realm id, …) are not secrets, but they
+  // live with the credentials so providers receive them via `extra`.
+  const extraCredentials = { ...(params.callbackParams || {}) };
+
   const updatePayload: Record<string, unknown> = {
     status: 'connected' as ConnectionStatus,
     auth_type: 'oauth',
     encrypted_access_token: encryptSecret(tokens.access_token),
     encrypted_refresh_token: tokens.refresh_token ? encryptSecret(tokens.refresh_token) : null,
     token_expires_at: tokenExpiresAt,
+    encrypted_credentials: Object.keys(extraCredentials).length
+      ? encryptCredentials(extraCredentials)
+      : {},
     connected_account_name: tokens.account_name || null,
-    connected_account_id: tokens.account_id || null,
+    connected_account_id: tokens.account_id || params.callbackParams?.realm_id || null,
     scopes_granted: tokens.scope ? tokens.scope.split(' ') : provider.oauth?.scopes || [],
     connected_at: new Date().toISOString(),
     last_tested: new Date().toISOString(),
@@ -278,8 +291,11 @@ export async function handleOAuthCallback(params: {
 
   // 5. Test connection if possible
   try {
-    const creds = { access_token: tokens.access_token, refresh_token: tokens.refresh_token };
-    const testResult = await provider.testConnection(creds);
+    const testResult = await provider.testConnection({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      extra: extraCredentials,
+    });
     if (!testResult.success) {
       updatePayload.status = 'error';
       updatePayload.last_test_result = 'failure';
@@ -434,6 +450,28 @@ export async function testConnection(orgId: string, appId: string): Promise<Test
     result = await provider.testConnection(creds);
   } catch (err) {
     result = { success: false, error: err instanceof Error ? err.message : 'Test failed' };
+  }
+
+  // An OAuth access token that simply lapsed is not a broken connection.
+  // Intuit's expire after an hour, so testing an idle integration would
+  // otherwise always report failure. Refresh once, then retry.
+  if (!result.success && conn.auth_type === 'oauth' && conn.encrypted_refresh_token) {
+    const refreshed = await refreshOAuthToken(orgId, appId);
+    if (refreshed) {
+      const { data: renewed } = await db
+        .from('app_connections')
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('app_id', appId)
+        .maybeSingle();
+      if (renewed) {
+        try {
+          result = await provider.testConnection(buildDecryptedCredentials(renewed));
+        } catch (err) {
+          result = { success: false, error: err instanceof Error ? err.message : 'Test failed' };
+        }
+      }
+    }
   }
 
   // Update test result in DB

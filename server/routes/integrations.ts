@@ -169,7 +169,7 @@ router.post('/integrations/:appId/connect/oauth', async (req, res) => {
 // ── OAuth callback (provider redirects here) ──────────────────
 router.get('/integrations/:appId/callback', async (req, res) => {
   try {
-    const { code, state, error: oauthError, error_description } = req.query;
+    const { code, state, error: oauthError, error_description, realmId } = req.query;
 
     if (oauthError) {
       // Provider returned an error (user denied, etc.)
@@ -193,6 +193,10 @@ router.get('/integrations/:appId/callback', async (req, res) => {
       code: String(code),
       state: String(state),
       callbackBaseUrl,
+      // Intuit identifies the authorized company with a `realmId` query
+      // param rather than a field in the token response. Every Accounting
+      // API call is addressed to it, so it must survive the callback.
+      callbackParams: realmId ? { realm_id: String(realmId) } : undefined,
     });
 
     const frontendUrl = getBaseUrl();

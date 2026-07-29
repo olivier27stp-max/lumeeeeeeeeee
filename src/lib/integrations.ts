@@ -126,11 +126,7 @@ export const INTEGRATIONS: Integration[] = [
     description_long:
       'Synchronisez vos factures et vos paiements avec QuickBooks Online pour garder votre comptabilite a jour sans double saisie. Connectez votre compte QuickBooks en une fois, la synchronisation se fait ensuite toute seule.',
     category: 'Comptabilite',
-    // OAuth Intuit pret cote code, mais l'app doit d'abord etre approuvee
-    // chez Intuit (cle client + revue production). Tant que les cles ne sont
-    // pas en place, un bouton "Connecter" mene a un echec : on annonce
-    // l'integration sans la promettre. Repasser a 'oauth' apres le setup.
-    connection_type: 'coming_soon',
+    connection_type: 'oauth',
     logo_url: '/integrations/quickbooks.svg?v=2',
     logo_color: '#2CA01C',
     logo_initials: 'QB',
