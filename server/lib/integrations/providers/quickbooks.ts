@@ -39,14 +39,29 @@ function basicAuth(clientId: string, clientSecret: string): string {
   return Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 }
 
-/** Intuit returns errors as JSON or HTML depending on the failure. */
+/**
+ * Intuit returns errors as JSON or HTML depending on the failure.
+ *
+ * Every response carries an `intuit_tid` header identifying the request on
+ * Intuit's side; their support team asks for it first when troubleshooting,
+ * so it is appended to the message that gets persisted on the connection.
+ */
 async function readError(res: Response): Promise<string> {
+  const tid = res.headers.get('intuit_tid');
+  const suffix = tid ? ` [intuit_tid: ${tid}]` : '';
   const body = await res.text();
   try {
     const json = JSON.parse(body);
-    return json.error_description || json.error || `HTTP ${res.status}`;
+    // The Accounting API nests failures under Fault.Error[]; the OAuth
+    // endpoints use flat error/error_description fields.
+    const fault = json?.Fault?.Error?.[0];
+    if (fault) {
+      const detail = fault.Detail || fault.Message || 'Unknown error';
+      return `${detail}${fault.code ? ` (code ${fault.code})` : ''}${suffix}`;
+    }
+    return `${json.error_description || json.error || `HTTP ${res.status}`}${suffix}`;
   } catch {
-    return `HTTP ${res.status}: ${body.slice(0, 200)}`;
+    return `HTTP ${res.status}: ${body.slice(0, 200)}${suffix}`;
   }
 }
 
@@ -173,7 +188,11 @@ const quickbooks: ProviderDefinition = {
 
       // 401 means the access token lapsed; the service refreshes and retries.
       if (res.status === 401) {
-        return { success: false, error: 'QuickBooks access expired' };
+        const tid = res.headers.get('intuit_tid');
+        return {
+          success: false,
+          error: `QuickBooks access expired${tid ? ` [intuit_tid: ${tid}]` : ''}`,
+        };
       }
       if (!res.ok) {
         return { success: false, error: `QuickBooks API — ${await readError(res)}` };
