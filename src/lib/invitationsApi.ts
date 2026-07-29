@@ -29,13 +29,16 @@ export interface OrgMember {
   permissions: Record<string, boolean> | null;
   created_at: string;
   experience_level: 'rookie' | 'experienced' | null;
+  /**
+   * Équipe de rattachement (`memberships.team_id`, FK vers `teams`) — source
+   * unique partagée avec Disponibilité et le RBAC. Renvoyée par le serveur.
+   */
+  team_id?: string | null;
   /** Apparaît sur le leaderboard des ventes (défaut true). */
   show_on_leaderboard?: boolean;
   full_name: string;
   avatar_url: string | null;
   email?: string;
-  /** Équipe d'attache RBAC (memberships.team_id) — renvoyée par le serveur. */
-  team_id?: string | null;
 }
 
 export interface Invitation {
