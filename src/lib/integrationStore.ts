@@ -274,7 +274,9 @@ export function resolveAppStatus(
     case 'setup_required': return 'requires_setup';
     case 'pending_authorization': return 'pending';
     case 'token_expired': return 'token_expired';
-    case 'reconnect_required': return 'error';
+    // Not a fault to debug — the authorization simply has to be granted
+    // again, which is exactly what the token_expired card offers.
+    case 'reconnect_required': return 'token_expired';
     case 'error': return 'error';
     case 'disabled': return 'available';
     default: return 'available';

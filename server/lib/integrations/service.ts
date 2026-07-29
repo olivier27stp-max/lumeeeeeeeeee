@@ -593,18 +593,79 @@ export async function refreshOAuthToken(orgId: string, appId: string): Promise<b
       .eq('app_id', appId);
 
     return true;
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Token refresh failed';
+
+    // `invalid_grant` means the refresh token itself is dead — revoked by the
+    // user, expired (Intuit: 100 days), or already rotated. Retrying can never
+    // succeed, so the connection must ask for a fresh authorization instead of
+    // sitting in a state that looks recoverable.
+    const unrecoverable = /invalid_grant|invalid_request|unauthorized_client/i.test(message);
+
     await db
       .from('app_connections')
       .update({
-        status: 'token_expired',
-        last_error: 'Token refresh failed',
+        status: unrecoverable ? 'reconnect_required' : 'token_expired',
+        last_error: unrecoverable
+          ? 'Authorization is no longer valid — please reconnect this integration.'
+          : message,
       })
       .eq('org_id', orgId)
       .eq('app_id', appId);
 
     return false;
   }
+}
+
+/**
+ * Return a valid access token for an org's OAuth integration, refreshing
+ * it first when it is expired or about to be.
+ *
+ * Any caller that hits a provider API must go through this rather than
+ * reading the stored token directly: Intuit access tokens live one hour,
+ * so a token read straight from the row is expired far more often than
+ * not. The 2-minute skew covers a refresh landing just before expiry.
+ *
+ * Returns null when there is no usable token — the caller should surface
+ * a "reconnect required" state rather than retrying.
+ */
+export async function getValidAccessToken(
+  orgId: string,
+  appId: string,
+): Promise<{ access_token: string; extra: Record<string, string> } | null> {
+  const db = getDb();
+  const { data: conn } = await db
+    .from('app_connections')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('app_id', appId)
+    .maybeSingle();
+
+  if (!conn || conn.status === 'not_connected') return null;
+
+  const expiresAt = conn.token_expires_at ? new Date(conn.token_expires_at).getTime() : 0;
+  const stillValid = expiresAt - Date.now() > 120_000;
+
+  if (!stillValid && conn.encrypted_refresh_token) {
+    const ok = await refreshOAuthToken(orgId, appId);
+    if (!ok) return null;
+    const { data: renewed } = await db
+      .from('app_connections')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('app_id', appId)
+      .maybeSingle();
+    if (!renewed) return null;
+    const creds = buildDecryptedCredentials(renewed);
+    return creds.access_token
+      ? { access_token: creds.access_token, extra: creds.extra || {} }
+      : null;
+  }
+
+  const creds = buildDecryptedCredentials(conn);
+  return creds.access_token
+    ? { access_token: creds.access_token, extra: creds.extra || {} }
+    : null;
 }
 
 // ── Internal helpers ──────────────────────────────────────────
