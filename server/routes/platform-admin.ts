@@ -65,7 +65,7 @@ router.get('/platform-admin/business', async (req, res) => {
       admin.from('orgs').select('id', { count: 'exact', head: true }),
       admin.from('orgs').select('id', { count: 'exact', head: true }).gte('created_at', thirtyDaysAgo.toISOString()),
       // All subscriptions (not just active) for breakdown
-      admin.from('subscriptions').select('id, org_id, plan_id, status, interval, amount_cents, current_period_end, trial_end, canceled_at, created_at, plans(slug, name)'),
+      admin.from('subscriptions').select('id, org_id, plan_id, status, interval, amount_cents, current_period_end, trial_end, canceled_at, created_at, plans!subscriptions_plan_id_fkey(slug, name)'),
       // Canceled in last 30d
       admin.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'canceled').gte('canceled_at', thirtyDaysAgo.toISOString()),
       // New subscriptions in last 30d
@@ -238,10 +238,10 @@ router.get('/platform-admin/operations', async (req, res) => {
         .is('deleted_at', null).eq('status', 'failed').gte('created_at', thirtyDaysAgo.toISOString())
         .order('created_at', { ascending: false }).limit(20),
       // Past due subscriptions
-      admin.from('subscriptions').select('id, org_id, amount_cents, interval, status, current_period_end, plans(slug, name)')
+      admin.from('subscriptions').select('id, org_id, amount_cents, interval, status, current_period_end, plans!subscriptions_plan_id_fkey(slug, name)')
         .eq('status', 'past_due'),
       // Trials ending in next 7 days
-      admin.from('subscriptions').select('id, org_id, amount_cents, trial_end, status, plans(slug, name)')
+      admin.from('subscriptions').select('id, org_id, amount_cents, trial_end, status, plans!subscriptions_plan_id_fkey(slug, name)')
         .eq('status', 'trialing').lte('trial_end', sevenDaysFromNow.toISOString()).gte('trial_end', now.toISOString()),
       // Webhook errors (7d)
       admin.from('webhook_events').select('id, provider, event_type, error_message, created_at')
@@ -420,7 +420,7 @@ router.get('/platform-admin/billing', async (req, res) => {
 
     // Get all subscriptions with plan info
     let subsQuery = admin.from('subscriptions')
-      .select('*, plans(slug, name, monthly_price_cad, yearly_price_cad)')
+      .select('*, plans!subscriptions_plan_id_fkey(slug, name, monthly_price_cad, yearly_price_cad)')
       .order('created_at', { ascending: false });
 
     if (statusFilter) subsQuery = subsQuery.eq('status', statusFilter);
@@ -500,7 +500,7 @@ router.get('/platform-admin/org/:orgId', async (req, res) => {
     const [orgResult, membersResult, subResult, allSubsResult, jobsResult, clientsResult] = await Promise.all([
       admin.from('orgs').select('*').eq('id', orgId).single(),
       admin.from('memberships').select('user_id, role, full_name, avatar_url, created_at').eq('org_id', orgId),
-      admin.from('subscriptions').select('*, plans(slug, name)').eq('org_id', orgId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      admin.from('subscriptions').select('*, plans!subscriptions_plan_id_fkey(slug, name)').eq('org_id', orgId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       // All subscriptions for this org (to calculate total subscription revenue)
       admin.from('subscriptions').select('amount_cents, interval, status, created_at, current_period_start, canceled_at').eq('org_id', orgId),
       admin.from('jobs').select('id', { count: 'exact', head: true }).is('deleted_at', null).eq('org_id', orgId),

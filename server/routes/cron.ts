@@ -119,4 +119,19 @@ router.post('/cron/webhook-retries', async (req, res) => {
   }
 });
 
+// Irreversibly release Twilio numbers whose grace period has elapsed.
+// Safe to run daily: it skips anything still within its grace window and
+// re-checks the plan before deleting, so a re-subscribed org keeps its number.
+router.post('/cron/release-sms-numbers', async (req, res) => {
+  if (!checkCronAuth(req, res)) return;
+  try {
+    const { releaseExpiredSmsNumbers } = await import('../lib/twilioRelease');
+    const summary = await releaseExpiredSmsNumbers();
+    console.log('[cron] release-sms-numbers:', JSON.stringify(summary));
+    return res.status(200).json({ ok: true, ...summary });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Cron job failed.', '[cron/release-sms-numbers]');
+  }
+});
+
 export default router;

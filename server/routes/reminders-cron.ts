@@ -27,7 +27,7 @@ import { sendSmsIfConfigured, applyTemplate } from '../lib/notificationHelpers';
 import { twilioClient, twilioPhoneNumber } from '../lib/config';
 import { resolvePublicBaseUrl } from '../lib/helpers';
 import { createPaymentRequest } from '../lib/stripe-connect';
-import { getOrgSmsFromNumber, SmsNumberNotProvisionedError } from '../lib/twilioProvisioning';
+import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 
 const router = Router();
 
@@ -226,14 +226,20 @@ router.post('/cron/payment-reminders', async (req, res) => {
               (inv as any)._email_result = result;
             }
 
-            // SMS leg — resolve per-org Twilio "from" number, fallback to shared.
+            // SMS leg — strictly the org's OWN number. No shared fallback: sending
+            // a tenant's invoice reminder from the platform number leaks identity
+            // across orgs, and skips the plan gate. Skip the SMS leg instead.
             let orgFromNumber: string | null = null;
             if (twilioClient && (channel === 'sms' || channel === 'both') && toPhone) {
               try {
                 orgFromNumber = await getOrgSmsFromNumber(orgId);
               } catch (e) {
-                if (!(e instanceof SmsNumberNotProvisionedError)) throw e;
-                orgFromNumber = twilioPhoneNumber || null;
+                if (e instanceof SmsNumberNotProvisionedError || e instanceof SmsNotInPlanError) {
+                  console.warn(`[reminders-cron] Skipping SMS for org ${orgId}: ${(e as Error).name}`);
+                  orgFromNumber = null;
+                } else {
+                  throw e;
+                }
               }
             }
             if ((channel === 'sms' || channel === 'both') && toPhone && twilioClient && orgFromNumber) {

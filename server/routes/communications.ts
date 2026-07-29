@@ -3,7 +3,7 @@ import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { twilioClient, emailFrom } from '../lib/config';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { normalizeE164, findOrCreateConversation } from '../lib/helpers';
-import { provisionSmsNumber, getOrgSmsChannel } from '../lib/twilioProvisioning';
+import { provisionSmsNumber, getOrgSmsChannel, orgPlanIncludesSms } from '../lib/twilioProvisioning';
 import {
   submitA2PBrand,
   submitA2PCampaign,
@@ -67,6 +67,15 @@ router.post('/communications/send-sms', validate(sendSmsSchema), async (req, res
       return res.status(409).json({
         error: 'Your organization does not have an SMS number yet. Provision one in Settings → Messaging.',
         code: 'sms_not_provisioned',
+      });
+    }
+
+    // Owning a number is not enough: a downgraded org keeps its channel row, so
+    // check the plan server-side too (the nav gate is front-end only).
+    if (!(await orgPlanIncludesSms(orgId))) {
+      return res.status(403).json({
+        error: 'Your current plan does not include SMS. Upgrade to Scale or Autopilot to send messages.',
+        code: 'plan_excludes_sms',
       });
     }
 
@@ -301,19 +310,8 @@ router.post('/communications/provision-sms', requireRole('owner', 'admin'), asyn
     if (!authed) return;
     const { orgId } = authed;
 
-    const serviceClient = getServiceClient();
-
     // Buying a number costs real money — the org's plan must include SMS.
-    // An org can briefly hold more than one live subscription mid-upgrade, so
-    // take every active row and accept if ANY of them includes SMS.
-    const { data: subs } = await serviceClient
-      .from('subscriptions')
-      .select('status, plans(name, includes_sms)')
-      .eq('org_id', orgId)
-      .in('status', ['active', 'trialing']);
-
-    const includesSms = (subs || []).some((s: any) => s.plans?.includes_sms);
-    if (!includesSms) {
+    if (!(await orgPlanIncludesSms(orgId))) {
       return res.status(403).json({
         error: 'Your current plan does not include a dedicated SMS number. Upgrade to Scale or Autopilot.',
         code: 'plan_excludes_sms',

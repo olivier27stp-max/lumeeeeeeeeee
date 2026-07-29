@@ -172,7 +172,7 @@ export async function resendPaymentReceipt(subscriptionId: string): Promise<{
   // Get subscription + plan + billing profile
   const { data: sub } = await admin
     .from('subscriptions')
-    .select('*, plans(*)')
+    .select('*, plans!subscriptions_plan_id_fkey(*)')
     .eq('id', subscriptionId)
     .maybeSingle();
 

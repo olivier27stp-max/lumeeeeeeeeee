@@ -100,9 +100,66 @@ export class SmsNumberNotProvisionedError extends Error {
   }
 }
 
+/**
+ * Thrown when the org still owns a number but its current plan no longer
+ * includes SMS (e.g. downgraded to Minimum). Callers return HTTP 403.
+ */
+export class SmsNotInPlanError extends Error {
+  code = 'plan_excludes_sms' as const;
+  constructor(orgId: string) {
+    super(`Organization ${orgId} is on a plan that does not include SMS.`);
+    this.name = 'SmsNotInPlanError';
+  }
+}
+
+/**
+ * True when at least one live subscription for the org is on a plan with SMS.
+ * An org can briefly hold two live subscriptions mid-upgrade, so ANY match wins.
+ */
+export async function orgPlanIncludesSms(orgId: string): Promise<boolean> {
+  const serviceClient = getServiceClient();
+
+  // NOTE: `subscriptions.plan_id` has NO foreign key to `plans` (only
+  // `scheduled_plan_id` does), so a PostgREST embed like `plans(includes_sms)`
+  // silently resolves to null and would deny every paying org. Read the ids and
+  // resolve the plans in a second query instead.
+  const { data: subs, error: subErr } = await serviceClient
+    .from('subscriptions')
+    .select('plan_id')
+    .eq('org_id', orgId)
+    .in('status', ['active', 'trialing']);
+
+  if (subErr) {
+    // Fail closed on a lookup we cannot verify — never send on a guess.
+    console.error(`[sms] Subscription lookup failed for org ${orgId}:`, subErr.message);
+    return false;
+  }
+
+  const planIds = (subs || []).map((s: any) => s.plan_id).filter(Boolean);
+  if (!planIds.length) return false;
+
+  const { data: plans, error: planErr } = await serviceClient
+    .from('plans')
+    .select('id, includes_sms')
+    .in('id', planIds);
+
+  if (planErr) {
+    console.error(`[sms] Plan lookup failed for org ${orgId}:`, planErr.message);
+    return false;
+  }
+
+  return (plans || []).some((p: any) => p.includes_sms === true);
+}
+
 export async function getOrgSmsFromNumber(orgId: string): Promise<string> {
   const channel = await getOrgSmsChannel(orgId);
   if (!channel?.phone_number) throw new SmsNumberNotProvisionedError(orgId);
+
+  // Owning a number is not enough — the plan must still include SMS. Without
+  // this the front-end gate alone lets a downgraded org keep sending
+  // (reminders, quotes, agreements) on a plan it no longer pays for.
+  if (!(await orgPlanIncludesSms(orgId))) throw new SmsNotInPlanError(orgId);
+
   return channel.phone_number;
 }
 

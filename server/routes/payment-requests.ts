@@ -3,7 +3,7 @@ import { sendSafeError } from '../lib/error-handler';
 import { requireAuthedClient, isOrgMember, getServiceClient } from '../lib/supabase';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
 import { emailFrom, twilioClient } from '../lib/config';
-import { getOrgSmsFromNumber, SmsNumberNotProvisionedError } from '../lib/twilioProvisioning';
+import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { getInvoiceForOrg } from '../lib/payments';
 import {
@@ -172,6 +172,9 @@ async function sendPaymentSms(params: {
   } catch (e) {
     if (e instanceof SmsNumberNotProvisionedError) {
       return { sent: false, reason: 'Organization has no SMS number provisioned' };
+    }
+    if (e instanceof SmsNotInPlanError) {
+      return { sent: false, reason: 'Plan does not include SMS' };
     }
     throw e;
   }

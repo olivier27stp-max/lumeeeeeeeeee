@@ -382,20 +382,64 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           .from('subscriptions')
           .update(updateRow)
           .eq('stripe_subscription_id', sub.id);
+
+        // ── Sync the org's SMS number with its new entitlement ──
+        // A downgrade to a plan without SMS must not leave the number running:
+        // Twilio keeps billing us and the org keeps a service it stopped paying for.
+        try {
+          const { data: row } = await admin
+            .from('subscriptions')
+            .select('org_id')
+            .eq('stripe_subscription_id', sub.id)
+            .maybeSingle();
+
+          if (row?.org_id) {
+            const { orgPlanIncludesSms } = await import('../lib/twilioProvisioning');
+            const { scheduleSmsNumberRelease, cancelSmsNumberRelease } = await import('../lib/twilioRelease');
+
+            if (await orgPlanIncludesSms(row.org_id)) {
+              // Upgraded back (or still entitled) — undo any pending release.
+              await cancelSmsNumberRelease(row.org_id);
+            } else {
+              await scheduleSmsNumberRelease(row.org_id, `plan_change:${sub.status}`);
+            }
+          }
+        } catch (smsErr: any) {
+          // Never fail the webhook over number housekeeping — it is retried by the sweep.
+          console.error('[webhook/subscription.updated] SMS entitlement sync failed:', smsErr?.message);
+        }
       }
 
       // ── F-13: Handle customer.subscription.deleted ──
       if (event.type === 'customer.subscription.deleted') {
         const sub = event.data.object as Stripe.Subscription;
         const admin = getServiceClient();
-        await admin
+
+        const { data: canceledRow } = await admin
           .from('subscriptions')
           .update({
             status: 'canceled',
             canceled_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
-          .eq('stripe_subscription_id', sub.id);
+          .eq('stripe_subscription_id', sub.id)
+          .select('org_id')
+          .maybeSingle();
+
+        // Schedule the Twilio number for release (grace period, not immediate —
+        // releasing is irreversible and breaks every existing conversation).
+        try {
+          if (canceledRow?.org_id) {
+            const { orgPlanIncludesSms } = await import('../lib/twilioProvisioning');
+            // Only if no OTHER live subscription still grants SMS.
+            if (!(await orgPlanIncludesSms(canceledRow.org_id))) {
+              const { scheduleSmsNumberRelease } = await import('../lib/twilioRelease');
+              await scheduleSmsNumberRelease(canceledRow.org_id, 'subscription_canceled');
+            }
+          }
+        } catch (smsErr: any) {
+          console.error('[webhook/subscription.deleted] SMS release scheduling failed:', smsErr?.message);
+        }
       }
 
       // ── F-13: Handle invoice.paid (SaaS subscription renewal) ──
@@ -1765,6 +1809,18 @@ async function provisionSmsForNewSubscription(params: {
 }): Promise<void> {
   const { orgId, subscriptionId } = params;
   const admin = getServiceClient();
+
+  // If the org still has a number pending release (re-subscribed during the
+  // grace period), reactivate it rather than buying a second one.
+  try {
+    const { cancelSmsNumberRelease } = await import('../lib/twilioRelease');
+    if (await cancelSmsNumberRelease(orgId)) {
+      console.log(`[provisioning] Org ${orgId} re-subscribed — restored its existing number`);
+      return;
+    }
+  } catch (err: any) {
+    console.error('[provisioning] Failed to check pending release:', err?.message);
+  }
 
   // Skip if an active SMS channel is already attached to this org
   const { data: existingChannel } = await admin

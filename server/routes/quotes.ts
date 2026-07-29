@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { emailFrom, twilioClient, getBaseUrl } from '../lib/config';
-import { getOrgSmsFromNumber, SmsNumberNotProvisionedError } from '../lib/twilioProvisioning';
+import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
 import { eventBus } from '../lib/eventBus';
@@ -464,6 +464,12 @@ router.post('/quotes/send-sms', async (req, res) => {
         return res.status(409).json({
           error: 'Your organization does not have an SMS number yet. Provision one in Settings → Messaging.',
           code: 'sms_not_provisioned',
+        });
+      }
+      if (e instanceof SmsNotInPlanError) {
+        return res.status(403).json({
+          error: 'Your current plan does not include SMS. Upgrade to Scale or Autopilot to send messages.',
+          code: 'plan_excludes_sms',
         });
       }
       throw e;
