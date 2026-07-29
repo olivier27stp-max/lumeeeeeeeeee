@@ -431,7 +431,16 @@ router.post('/messages/status', async (req, res) => {
       });
       return res.status(403).json({ error: 'Missing signature' });
     }
-    const baseUrl = process.env.TWILIO_WEBHOOK_BASE_URL || process.env.PUBLIC_BASE_URL || process.env.FRONTEND_URL || resolvePublicBaseUrl(req);
+    // Meme ordre que /inbound : la signature se valide contre l'URL EXACTE que
+    // Twilio a appelee, c.-a-d. celle enregistree a l'achat du numero — et
+    // twilioProvisioning.ts enregistre PUBLIC_URL. L'omettre ici faisait
+    // echouer toutes les signatures, donc aucun accuse de reception n'etait
+    // enregistre et les messages restaient bloques a "sent".
+    const baseUrl = process.env.TWILIO_WEBHOOK_BASE_URL
+      || process.env.PUBLIC_URL
+      || process.env.PUBLIC_BASE_URL
+      || process.env.FRONTEND_URL
+      || resolvePublicBaseUrl(req);
     const isValid = Twilio.validateRequest(twilioAuthToken, sig, `${baseUrl.replace(/\/$/, '')}/api/messages/status`, req.body || {});
     if (!isValid) {
       logSecurityEvent({
