@@ -63,13 +63,17 @@ export default function TeamDayRoster({ teamId, date, fr, className }: Props) {
     );
   }
 
+  // Un membre = présent ou non ce jour-là; les heures appartiennent à
+  // l'équipe-journée (affichées ailleurs), donc on ne liste que les noms.
+  const names = [...new Set(roster.map((e) => firstName.get(e.user_id) || (fr ? 'Membre' : 'Member')))];
+
   return (
     <p className={cn('text-[11px] text-text-tertiary leading-relaxed', className)}>
-      {roster.map((e, i) => (
-        <span key={`${e.user_id}-${e.start_time}`}>
+      <span className="mr-1">{fr ? 'Ce jour-là :' : 'That day:'}</span>
+      {names.map((name, i) => (
+        <span key={name + i}>
           {i > 0 && <span className="mx-1 text-text-tertiary/50">·</span>}
-          <span className="font-medium text-text-secondary">{firstName.get(e.user_id) || (fr ? 'Membre' : 'Member')}</span>
-          <span className="ml-1 tabular-nums">{e.start_time}–{e.end_time}</span>
+          <span className="font-medium text-text-secondary">{name}</span>
         </span>
       ))}
     </p>

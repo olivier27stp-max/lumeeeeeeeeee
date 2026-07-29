@@ -73,13 +73,48 @@ export interface TimeOffRecord {
   approved_by: string | null;
 }
 
+/** Plage hebdo d'équipe (team_availability_active — existe déjà en prod). */
+export interface TeamWeeklyHoursRecord {
+  team_id: string;
+  weekday: number; // 0=dimanche … 6=samedi
+  start_minute: number;
+  end_minute: number;
+}
+
+/** Créneau d'équipe pour une date précise (team_date_slots — existe déjà). */
+export interface TeamDateSlotRecord {
+  team_id: string;
+  slot_date: string;
+  start_time: string;
+  end_time: string;
+  status: 'available' | 'blocked';
+}
+
 export interface ScheduleRangeData {
   assignments: ScheduleAssignmentRecord[];
   recurrings: RecurringScheduleRecord[];
   timeOffs: TimeOffRecord[];
+  /** Heures D'ÉQUIPE : hebdo + overrides par date (tables déjà en prod). */
+  teamWeekly: TeamWeeklyHoursRecord[];
+  teamDateSlots: TeamDateSlotRecord[];
   /** true quand la migration 20260749000000 n'est pas encore appliquée. */
   missing: boolean;
 }
+
+/**
+ * Heures de travail d'une ÉQUIPE pour une journée. Les heures appartiennent à
+ * l'équipe-journée (pas aux membres) : override de date > horaire hebdo >
+ * défaut 08:00–17:00.
+ */
+export interface TeamDayHours {
+  start: string; // HH:MM
+  end: string;
+  source: 'date_slot' | 'weekly' | 'default';
+  /** true si la journée est explicitement bloquée (équipe fermée). */
+  blocked: boolean;
+}
+
+export const DEFAULT_TEAM_HOURS = { start: '08:00', end: '17:00' } as const;
 
 /** Une personne dans une équipe pour une journée, une fois tout résolu. */
 export interface ResolvedMemberDay {
@@ -153,6 +188,26 @@ function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): b
 
 export async function fetchScheduleRange(startDate: string, endDate: string): Promise<ScheduleRangeData> {
   const orgId = await getCurrentOrgIdOrThrow();
+
+  // Heures d'équipe — tables déjà en prod, indépendantes de la migration
+  // horaire. Une erreur ici ne doit jamais bloquer la grille.
+  const [weeklyRes, slotsRes] = await Promise.all([
+    supabase
+      .from('team_availability_active')
+      .select('team_id,weekday,start_minute,end_minute')
+      .eq('org_id', orgId)
+      .then((res) => res, () => ({ data: null, error: null })),
+    supabase
+      .from('team_date_slots')
+      .select('team_id,slot_date,start_time,end_time,status')
+      .eq('org_id', orgId)
+      .gte('slot_date', startDate)
+      .lte('slot_date', endDate)
+      .then((res) => res, () => ({ data: null, error: null })),
+  ]);
+  const teamWeekly = (weeklyRes.data || []) as TeamWeeklyHoursRecord[];
+  const teamDateSlots = (slotsRes.data || []) as TeamDateSlotRecord[];
+
   try {
     const [a, r, t] = await Promise.all([
       supabase
@@ -183,12 +238,82 @@ export async function fetchScheduleRange(startDate: string, endDate: string): Pr
       assignments: (a.data || []) as ScheduleAssignmentRecord[],
       recurrings: (r.data || []) as RecurringScheduleRecord[],
       timeOffs: (t.data || []) as TimeOffRecord[],
+      teamWeekly,
+      teamDateSlots,
       missing: false,
     };
   } catch (e) {
-    if (isMissingScheduleTables(e)) return { assignments: [], recurrings: [], timeOffs: [], missing: true };
+    if (isMissingScheduleTables(e)) {
+      return { assignments: [], recurrings: [], timeOffs: [], teamWeekly, teamDateSlots, missing: true };
+    }
     throw e;
   }
+}
+
+/**
+ * Heures de l'équipe pour une journée : override de date (team_date_slots)
+ * > horaire hebdo (team_availability) > défaut 08:00–17:00. Plusieurs
+ * créneaux le même jour → enveloppe min(début)–max(fin).
+ */
+export function resolveTeamHours(teamId: string, dateStr: string, data: ScheduleRangeData): TeamDayHours {
+  const daySlots = data.teamDateSlots.filter((s) => s.team_id === teamId && s.slot_date === dateStr);
+  const available = daySlots.filter((s) => s.status === 'available');
+  if (available.length) {
+    const start = available.reduce((min, s) => (hhmm(s.start_time) < min ? hhmm(s.start_time) : min), hhmm(available[0].start_time));
+    const end = available.reduce((max, s) => (hhmm(s.end_time) > max ? hhmm(s.end_time) : max), hhmm(available[0].end_time));
+    return { start, end, source: 'date_slot', blocked: false };
+  }
+  const blocked = daySlots.some((s) => s.status === 'blocked');
+
+  const dow = dayOfWeek(dateStr);
+  const weekly = data.teamWeekly.filter((w) => w.team_id === teamId && w.weekday === dow);
+  if (weekly.length) {
+    const start = minToTime(Math.min(...weekly.map((w) => w.start_minute)));
+    const end = minToTime(Math.max(...weekly.map((w) => w.end_minute)));
+    return { start, end, source: 'weekly', blocked };
+  }
+  return { ...DEFAULT_TEAM_HOURS, source: 'default', blocked };
+}
+
+/**
+ * Définit les heures de TOUTE l'équipe pour une journée : écrit l'override
+ * dans team_date_slots (source de vérité partagée avec l'onglet
+ * Disponibilités) et aligne les assignations du jour dessus.
+ */
+export async function setTeamHoursForDate(teamId: string, dateStr: string, start: string, end: string): Promise<void> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const del = await supabase
+    .from('team_date_slots')
+    .delete()
+    .eq('org_id', orgId)
+    .eq('team_id', teamId)
+    .eq('slot_date', dateStr);
+  if (del.error) throw del.error;
+  const ins = await supabase.from('team_date_slots').insert({
+    org_id: orgId,
+    team_id: teamId,
+    slot_date: dateStr,
+    start_time: start,
+    end_time: end,
+    status: 'available',
+  });
+  if (ins.error) throw ins.error;
+
+  // Les lignes de présence du jour suivent les heures de l'équipe (elles ne
+  // portent pas d'heures individuelles). Best-effort si la migration manque.
+  try {
+    await supabase
+      .from('team_schedule_assignments')
+      .update({ start_time: start, end_time: end })
+      .eq('org_id', orgId)
+      .eq('team_id', teamId)
+      .eq('work_date', dateStr)
+      .eq('availability_status', 'available');
+  } catch { /* tables absentes — ignoré */ }
+
+  void audit('team_hours_updated', {
+    team_id: teamId, work_date: dateStr, new_value: { start, end },
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -387,8 +512,10 @@ export interface AssignmentInput {
   team_id: string;
   user_id: string;
   work_date: string;
-  start_time: string;
-  end_time: string;
+  /** Heures de l'ÉQUIPE pour la journée (copiées sur la ligne pour le
+      garde-fou anti-chevauchement). Défaut : 08:00–17:00. */
+  start_time?: string;
+  end_time?: string;
   note?: string | null;
   availability_status?: AssignmentStatus;
   source?: AssignmentSource;
@@ -416,8 +543,8 @@ export async function createAssignment(input: AssignmentInput): Promise<Schedule
       team_id: input.team_id,
       user_id: input.user_id,
       work_date: input.work_date,
-      start_time: input.start_time,
-      end_time: input.end_time,
+      start_time: input.start_time || DEFAULT_TEAM_HOURS.start,
+      end_time: input.end_time || DEFAULT_TEAM_HOURS.end,
       note: input.note?.trim() || null,
       availability_status: input.availability_status || 'available',
       source: input.source || 'manual',
@@ -469,8 +596,8 @@ export interface RecurringInput {
   team_id: string;
   user_id: string;
   days: number[]; // 0=dimanche … 6=samedi
-  start_time: string;
-  end_time: string;
+  /** Heures d'équipe par jour de semaine (repli : défaut 08:00–17:00). */
+  hoursByDay?: Record<number, { start: string; end: string }>;
   effective_start_date: string;
   effective_end_date?: string | null;
 }
@@ -483,8 +610,8 @@ export async function createRecurring(input: RecurringInput): Promise<RecurringS
     team_id: input.team_id,
     user_id: input.user_id,
     day_of_week: day,
-    start_time: input.start_time,
-    end_time: input.end_time,
+    start_time: input.hoursByDay?.[day]?.start || DEFAULT_TEAM_HOURS.start,
+    end_time: input.hoursByDay?.[day]?.end || DEFAULT_TEAM_HOURS.end,
     effective_start_date: input.effective_start_date,
     effective_end_date: input.effective_end_date || null,
     created_by: user?.id ?? null,
@@ -677,12 +804,14 @@ export async function deleteTimeOff(rec: TimeOffRecord): Promise<void> {
 
 /**
  * Recrée des entrées résolues comme assignations manuelles sur d'autres dates.
- * Les congés/indisponibilités ne sont pas copiés. Les doublons et conflits
- * (garde-fous DB) sont comptés comme ignorés, jamais bloquants.
+ * On copie la PRÉSENCE (membre ⇄ équipe); les heures adoptées sont celles de
+ * l'équipe pour la date CIBLE (`hoursFor`). Les congés/indisponibilités ne
+ * sont pas copiés. Doublons et conflits sont comptés comme ignorés.
  */
 export async function copyEntries(
   entries: ResolvedMemberDay[],
-  dateMapper: (entryDate: string) => string
+  dateMapper: (entryDate: string) => string,
+  hoursFor?: (teamId: string, targetDate: string) => { start: string; end: string }
 ): Promise<{ created: number; skipped: number }> {
   let created = 0;
   let skipped = 0;
@@ -690,13 +819,14 @@ export async function copyEntries(
     if (entry.status === 'time_off' || entry.status === 'unavailable') { skipped++; continue; }
     const target = dateMapper(entry.date);
     if (!target || target === entry.date) { skipped++; continue; }
+    const hours = hoursFor?.(entry.team_id, target);
     try {
       await createAssignment({
         team_id: entry.team_id,
         user_id: entry.user_id,
         work_date: target,
-        start_time: entry.start_time,
-        end_time: entry.end_time,
+        start_time: hours?.start ?? entry.start_time,
+        end_time: hours?.end ?? entry.end_time,
         note: entry.note,
         source: 'copy',
       });

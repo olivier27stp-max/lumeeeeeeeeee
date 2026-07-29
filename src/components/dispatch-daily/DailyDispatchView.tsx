@@ -499,18 +499,12 @@ export default function DailyDispatchView({
                           </span>
                         );
                       }
+                      // Noms seulement : les heures appartiennent à l'équipe-journée,
+                      // pas aux membres.
+                      const names = [...new Set(roster.map((e) => memberFirstName.get(e.user_id) || (isFr ? 'Membre' : 'Member')))];
                       return (
-                        <span className="mt-0.5 flex flex-wrap gap-x-1.5 gap-y-0.5">
-                          {roster.map((e) => (
-                            <span
-                              key={`${e.user_id}-${e.start_time}`}
-                              title={`${memberFirstName.get(e.user_id) || ''} · ${e.start_time}–${e.end_time}`}
-                              className="text-[10px] leading-[13px] text-text-secondary"
-                            >
-                              {memberFirstName.get(e.user_id) || (isFr ? 'Membre' : 'Member')}
-                              <span className="ml-0.5 tabular-nums text-text-tertiary">{e.start_time.slice(0, 2)}–{e.end_time.slice(0, 2)}h</span>
-                            </span>
-                          ))}
+                        <span className="mt-0.5 truncate text-[10px] leading-[13px] text-text-secondary" title={names.join(', ')}>
+                          {names.join(' · ')}
                         </span>
                       );
                     })()}

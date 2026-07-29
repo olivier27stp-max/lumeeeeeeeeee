@@ -25,13 +25,14 @@ import UnifiedAvatar from '../ui/UnifiedAvatar';
 import type { TeamRecord } from '../../lib/teamsApi';
 import {
   fetchScheduleRange, resolveRange, resolveDay, cellKey, scheduledMinutes, hhmm, timeToMin,
+  resolveTeamHours, setTeamHoursForDate, DEFAULT_TEAM_HOURS,
   createAssignment, updateAssignment, deleteAssignment,
   createRecurring, endRecurringFrom, splitRecurringFrom, updateRecurring,
   removeOccurrence, overrideOccurrence,
   createTimeOff, deleteTimeOff,
   copyEntries, scheduleErrorMessage,
   type ResolvedMemberDay, type ScheduleRangeData, type RecurringScheduleRecord,
-  type TimeOffKind,
+  type TimeOffKind, type TeamDayHours,
 } from '../../lib/teamScheduleApi';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -153,6 +154,7 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
   const [addModal, setAddModal] = useState<AddModalState | null>(null);
   const [editModal, setEditModal] = useState<EditModalState | null>(null);
   const [timeOffModal, setTimeOffModal] = useState<TimeOffModalState | null>(null);
+  const [hoursModal, setHoursModal] = useState<{ teamId: string; date: string; hours: TeamDayHours } | null>(null);
   const [copyMenuDate, setCopyMenuDate] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -314,13 +316,20 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
     }
   }
 
+  // Les heures adoptées sont toujours celles de l'équipe pour la date cible.
+  const targetHours = (teamId: string, targetDate: string) => {
+    if (!data) return { ...DEFAULT_TEAM_HOURS };
+    const h = resolveTeamHours(teamId, targetDate, data);
+    return { start: h.start, end: h.end };
+  };
+
   async function copyDayTo(fromDate: string, targets: string[]) {
     setBusy(true);
     try {
       const entries = dates.includes(fromDate) && data ? resolveDay(fromDate, data) : [];
       let created = 0, skipped = 0;
       for (const target of targets) {
-        const res = await copyEntries(entries, () => target);
+        const res = await copyEntries(entries, () => target, targetHours);
         created += res.created; skipped += res.skipped;
       }
       toast.success(fr ? `${created} assignation(s) copiée(s)${skipped ? `, ${skipped} ignorée(s)` : ''}` : `${created} assignment(s) copied${skipped ? `, ${skipped} skipped` : ''}`);
@@ -340,7 +349,7 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
       if (prevData.missing) return;
       const prevDates = Array.from({ length: 7 }, (_, i) => addDaysStr(prevStart, i));
       const entries = prevDates.flatMap((d) => resolveDay(d, prevData));
-      const res = await copyEntries(entries, (d) => addDaysStr(d, 7));
+      const res = await copyEntries(entries, (d) => addDaysStr(d, 7), targetHours);
       toast.success(fr ? `${res.created} assignation(s) copiée(s)${res.skipped ? `, ${res.skipped} ignorée(s)` : ''}` : `${res.created} assignment(s) copied${res.skipped ? `, ${res.skipped} skipped` : ''}`);
       refresh();
     } catch (e) {
@@ -550,6 +559,9 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
                     const entries = cellEntries(team.id, date);
                     const key = cellKey(team.id, date);
                     const isSelected = selectedCells.has(key);
+                    // Les heures appartiennent à l'ÉQUIPE pour la journée —
+                    // affichées une fois en tête de cellule, jamais par membre.
+                    const teamHours = data && !data.missing ? resolveTeamHours(team.id, date, data) : null;
                     return (
                       <div
                         key={key}
@@ -561,6 +573,23 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
                           isSelected && 'ring-2 ring-inset ring-text-primary bg-surface-secondary'
                         )}
                       >
+                        {teamHours && (
+                          <button
+                            type="button"
+                            disabled={!canManage || selecting}
+                            onClick={canManage && !selecting ? (e) => { e.stopPropagation(); setHoursModal({ teamId: team.id, date, hours: teamHours }); } : undefined}
+                            title={fr ? 'Heures de toute l’équipe pour cette journée' : 'Whole-team hours for this day'}
+                            className={cn(
+                              'flex items-center gap-1 self-start rounded px-1 py-0.5 text-[10px] font-semibold tabular-nums transition-colors',
+                              teamHours.blocked ? 'text-red-600' : 'text-text-tertiary',
+                              canManage && !selecting ? 'hover:bg-surface-secondary hover:text-text-primary cursor-pointer' : 'cursor-default'
+                            )}
+                          >
+                            <Clock size={9} className="shrink-0" />
+                            {teamHours.start}–{teamHours.end}
+                            {teamHours.blocked && <span className="ml-0.5">· {fr ? 'Fermé' : 'Closed'}</span>}
+                          </button>
+                        )}
                         {entries.map((entry) => {
                           const name = memberName.get(entry.user_id) || '?';
                           const isMe = entry.user_id === currentUserId;
@@ -591,20 +620,24 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
                                   <span title={fr ? 'Demande de congé en attente' : 'Pending time-off request'} className="h-1.5 w-1.5 rounded-full bg-orange-400 shrink-0" />
                                 )}
                               </div>
-                              <div className="mt-0.5 pl-[24px]">
-                                {entry.status === 'time_off' ? (
-                                  <span className="text-[10.5px] font-semibold text-red-600">
-                                    {KIND_LABELS[entry.timeOff?.kind || 'time_off'][fr ? 'fr' : 'en']}
-                                  </span>
-                                ) : entry.status === 'unavailable' ? (
-                                  <span className="text-[10.5px] font-medium text-text-tertiary inline-flex items-center gap-1"><Ban size={9} /> {fr ? 'Indisponible' : 'Unavailable'}</span>
-                                ) : (
-                                  <span className={cn('text-[10.5px] tabular-nums font-medium', entry.status === 'partial' ? 'text-[#c2410c]' : 'text-text-secondary')}>
-                                    {entry.start_time} – {entry.end_time}
-                                    {entry.status === 'partial' && <span className="ml-1">({fr ? 'partiel' : 'partial'})</span>}
-                                  </span>
-                                )}
-                              </div>
+                              {/* Pas d'heures par membre : les heures sont celles de
+                                  l'équipe (tête de cellule). On n'affiche un détail
+                                  que pour congé / indispo / présence partielle. */}
+                              {entry.status !== 'available' && (
+                                <div className="mt-0.5 pl-[24px]">
+                                  {entry.status === 'time_off' ? (
+                                    <span className="text-[10.5px] font-semibold text-red-600">
+                                      {KIND_LABELS[entry.timeOff?.kind || 'time_off'][fr ? 'fr' : 'en']}
+                                    </span>
+                                  ) : entry.status === 'unavailable' ? (
+                                    <span className="text-[10.5px] font-medium text-text-tertiary inline-flex items-center gap-1"><Ban size={9} /> {fr ? 'Indisponible' : 'Unavailable'}</span>
+                                  ) : (
+                                    <span className="text-[10.5px] tabular-nums font-medium text-[#c2410c]">
+                                      {entry.start_time} – {entry.end_time} ({fr ? 'partiel' : 'partial'})
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </button>
                           );
                         })}
@@ -717,8 +750,92 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
             onSaved={() => { setTimeOffModal(null); refresh(); }}
           />
         )}
+        {hoursModal && (
+          <TeamHoursModal
+            key="hours"
+            fr={fr}
+            state={hoursModal}
+            teams={teams}
+            onClose={() => setHoursModal(null)}
+            onSaved={() => { setHoursModal(null); refresh(); }}
+          />
+        )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODAL — Heures de l'équipe pour une journée (s'applique à tous les membres)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function TeamHoursModal({ fr, state, teams, onClose, onSaved }: {
+  fr: boolean;
+  state: { teamId: string; date: string; hours: TeamDayHours };
+  teams: TeamRecord[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const team = teams.find((t) => t.id === state.teamId);
+  const [start, setStart] = useState(state.hours.start);
+  const [end, setEnd] = useState(state.hours.end);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (timeToMin(end) <= timeToMin(start)) {
+      toast.error(fr ? "L'heure de fin doit être après l'heure de début." : 'End time must be after start time.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await setTeamHoursForDate(state.teamId, state.date, start, end);
+      toast.success(fr ? 'Heures de l’équipe mises à jour' : 'Team hours updated');
+      onSaved();
+    } catch (e) {
+      toast.error(scheduleErrorMessage(e, fr));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell onClose={onClose} width="w-[380px]">
+      <div className="p-6">
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <h3 className="text-[16px] font-bold text-text-primary">{fr ? 'Heures de l’équipe' : 'Team hours'}</h3>
+            <p className="text-[12px] text-text-tertiary mt-0.5">
+              {team && <span className="inline-flex items-center gap-1.5 mr-1"><span className="h-2 w-2 rounded-full inline-block" style={{ backgroundColor: team.color_hex }} />{team.name}</span>}
+              · {fmtDay(state.date, fr)}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:bg-surface-secondary"><X size={15} /></button>
+        </div>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>{fr ? 'Début' : 'Start'}</label>
+              <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="glass-input w-full mt-1.5" />
+            </div>
+            <div>
+              <label className={labelCls}>{fr ? 'Fin' : 'End'}</label>
+              <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="glass-input w-full mt-1.5" />
+            </div>
+          </div>
+          <p className="text-[12px] text-text-tertiary">
+            {fr
+              ? 'S’applique à TOUTE l’équipe pour cette journée : tous les membres présents suivent ces heures. (Écrit un override de date dans Disponibilités.)'
+              : 'Applies to the WHOLE team for this day: every member present follows these hours. (Writes a date override in Availability.)'}
+          </p>
+        </div>
+        <div className="flex justify-end gap-2 mt-6">
+          <button onClick={onClose} className={btnGhost}>{fr ? 'Annuler' : 'Cancel'}</button>
+          <button onClick={save} disabled={saving} className={btnPrimary}>
+            {saving ? <Loader2 size={14} className="animate-spin inline" /> : (fr ? 'Sauvegarder' : 'Save')}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
   );
 }
 
@@ -748,8 +865,6 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
   const first = cells[0];
   const team = teams.find((t) => t.id === first.teamId);
   const [userId, setUserId] = useState('');
-  const [start, setStart] = useState('08:00');
-  const [end, setEnd] = useState('17:00');
   const [note, setNote] = useState('');
   const [repeat, setRepeat] = useState(false);
   const [repeatDays, setRepeatDays] = useState<number[]>(() => [new Date(first.date + 'T00:00:00').getDay()]);
@@ -758,30 +873,53 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
 
   const dayNames = fr ? ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+  // Les heures viennent de l'ÉQUIPE pour la journée — jamais saisies ici.
+  const cellHours = (cell: { teamId: string; date: string }) => {
+    const h = resolveTeamHours(cell.teamId, cell.date, data);
+    return { start: h.start, end: h.end };
+  };
+  const firstHours = cellHours(first);
+
+  // Heures hebdo de l'équipe par jour (pour une récurrence).
+  const weeklyHoursByDay = useMemo(() => {
+    const map: Record<number, { start: string; end: string }> = {};
+    for (let d = 0; d < 7; d++) {
+      const weekly = data.teamWeekly.filter((w) => w.team_id === first.teamId && w.weekday === d);
+      map[d] = weekly.length
+        ? {
+            start: `${String(Math.floor(Math.min(...weekly.map((w) => w.start_minute)) / 60)).padStart(2, '0')}:${String(Math.min(...weekly.map((w) => w.start_minute)) % 60).padStart(2, '0')}`,
+            end: `${String(Math.floor(Math.max(...weekly.map((w) => w.end_minute)) / 60)).padStart(2, '0')}:${String(Math.max(...weekly.map((w) => w.end_minute)) % 60).padStart(2, '0')}`,
+          }
+        : { ...DEFAULT_TEAM_HOURS };
+    }
+    return map;
+  }, [data.teamWeekly, first.teamId]);
+
   // Avertissements de conflit (calculés sur les données déjà chargées).
   const warnings = useMemo(() => {
     if (!userId) return [];
     const list: string[] = [];
-    const s = timeToMin(start);
-    const e = timeToMin(end);
     for (const cell of cells) {
+      const hours = cellHours(cell);
+      const s = timeToMin(hours.start);
+      const e = timeToMin(hours.end);
       const others = resolveDay(cell.date, data).filter((en) => en.user_id === userId);
       for (const other of others) {
         if (other.status === 'time_off') {
           list.push(fr ? `${fmtDay(cell.date, fr)} : ce membre est en congé.` : `${fmtDay(cell.date, fr)}: this member is on time off.`);
         } else if (other.team_id !== cell.teamId && timeToMin(other.start_time) < e && timeToMin(other.end_time) > s) {
           list.push(fr
-            ? `${fmtDay(cell.date, fr)} : déjà assigné à une autre équipe de ${other.start_time} à ${other.end_time}.`
-            : `${fmtDay(cell.date, fr)}: already assigned to another team from ${other.start_time} to ${other.end_time}.`);
+            ? `${fmtDay(cell.date, fr)} : déjà assigné à une autre équipe dont les heures chevauchent (${other.start_time}–${other.end_time}).`
+            : `${fmtDay(cell.date, fr)}: already assigned to another team with overlapping hours (${other.start_time}–${other.end_time}).`);
         }
       }
     }
     return [...new Set(list)];
-  }, [userId, start, end, cells, data, fr]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, cells, data, fr]);
 
   async function save() {
     if (!userId) { toast.error(fr ? 'Choisis un membre.' : 'Pick a member.'); return; }
-    if (timeToMin(end) <= timeToMin(start)) { toast.error(fr ? "L'heure de fin doit être après l'heure de début." : 'End time must be after start time.'); return; }
     setSaving(true);
     try {
       if (repeat && single) {
@@ -790,8 +928,7 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
           team_id: first.teamId,
           user_id: userId,
           days: repeatDays,
-          start_time: start,
-          end_time: end,
+          hoursByDay: weeklyHoursByDay,
           effective_start_date: first.date,
           effective_end_date: repeatEnd || null,
         });
@@ -799,8 +936,9 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
       } else {
         let created = 0, skipped = 0;
         for (const cell of cells) {
+          const hours = cellHours(cell);
           try {
-            await createAssignment({ team_id: cell.teamId, user_id: userId, work_date: cell.date, start_time: start, end_time: end, note });
+            await createAssignment({ team_id: cell.teamId, user_id: userId, work_date: cell.date, start_time: hours.start, end_time: hours.end, note });
             created++;
           } catch (e) {
             skipped++;
@@ -844,15 +982,14 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
               {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>{fr ? 'Début' : 'Start'}</label>
-              <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="glass-input w-full mt-1.5" />
-            </div>
-            <div>
-              <label className={labelCls}>{fr ? 'Fin' : 'End'}</label>
-              <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="glass-input w-full mt-1.5" />
-            </div>
+          {/* Heures : celles de l'équipe pour la journée — pas de saisie par membre. */}
+          <div className="rounded-lg border border-outline bg-surface-secondary/40 px-3.5 py-2.5 flex items-center gap-2">
+            <Clock size={13} className="text-text-tertiary shrink-0" />
+            <p className="text-[12px] text-text-secondary">
+              {single
+                ? <>{fr ? 'Heures de l’équipe ce jour-là :' : 'Team hours that day:'} <span className="font-semibold tabular-nums text-text-primary">{firstHours.start}–{firstHours.end}</span></>
+                : (fr ? 'Chaque cellule adopte les heures de son équipe pour la journée.' : 'Each cell adopts its team’s hours for the day.')}
+            </p>
           </div>
           <div>
             <label className={labelCls}>{fr ? 'Note (optionnel)' : 'Note (optional)'}</label>
@@ -930,30 +1067,46 @@ function EditEntryModal({ fr, state, teams, memberName, data, onClose, onSaved, 
   const isRecurring = entry.source === 'recurring' && !!recurring;
   const isTimeOff = entry.status === 'time_off';
   const [teamId, setTeamId] = useState(entry.team_id);
-  const [start, setStart] = useState(entry.start_time);
-  const [end, setEnd] = useState(entry.end_time);
   const [note, setNote] = useState(entry.note || '');
   const [unavailable, setUnavailable] = useState(entry.status === 'unavailable');
   const [scope, setScope] = useState<EditScope>('one');
   const [saving, setSaving] = useState(false);
 
+  // Heures = celles de l'équipe SÉLECTIONNÉE pour la journée (jamais saisies
+  // par membre). Déplacer quelqu'un vers une autre équipe = adopter les heures
+  // de cette équipe-là.
+  const dayHours = useMemo(() => {
+    if (!data) return { ...DEFAULT_TEAM_HOURS };
+    const h = resolveTeamHours(teamId, entry.date, data);
+    return { start: h.start, end: h.end };
+  }, [teamId, entry.date, data]);
+
+  // Pour une série (future/all) : heures hebdo de l'équipe cible pour le jour
+  // de semaine de la récurrence.
+  const recurringHours = useMemo(() => {
+    if (!recurring) return { ...DEFAULT_TEAM_HOURS };
+    const weekly = (data?.teamWeekly || []).filter((w) => w.team_id === teamId && w.weekday === recurring.day_of_week);
+    if (!weekly.length) return { ...DEFAULT_TEAM_HOURS };
+    const toHH = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    return { start: toHH(Math.min(...weekly.map((w) => w.start_minute))), end: toHH(Math.max(...weekly.map((w) => w.end_minute))) };
+  }, [recurring, teamId, data]);
+
   async function save() {
-    if (timeToMin(end) <= timeToMin(start)) { toast.error(fr ? "L'heure de fin doit être après l'heure de début." : 'End time must be after start time.'); return; }
     setSaving(true);
     try {
       const status = unavailable ? 'unavailable' as const : 'available' as const;
       if (isRecurring && recurring) {
         if (scope === 'one') {
-          await overrideOccurrence(entry, { team_id: teamId, start_time: start, end_time: end, note: note || null, availability_status: status });
+          await overrideOccurrence(entry, { team_id: teamId, start_time: dayHours.start, end_time: dayHours.end, note: note || null, availability_status: status });
         } else if (scope === 'future') {
-          await splitRecurringFrom(recurring, entry.date, { team_id: teamId, start_time: start, end_time: end });
+          await splitRecurringFrom(recurring, entry.date, { team_id: teamId, start_time: recurringHours.start, end_time: recurringHours.end });
         } else {
-          await updateRecurring(recurring, { team_id: teamId, start_time: start, end_time: end });
+          await updateRecurring(recurring, { team_id: teamId, start_time: recurringHours.start, end_time: recurringHours.end });
         }
       } else if (entry.assignment_id) {
         await updateAssignment(
           entry.assignment_id,
-          { team_id: teamId, start_time: start, end_time: end, note: note || null, availability_status: status },
+          { team_id: teamId, start_time: dayHours.start, end_time: dayHours.end, note: note || null, availability_status: status },
           { team_id: entry.team_id, start_time: entry.start_time, end_time: entry.end_time, note: entry.note, user_id: entry.user_id, work_date: entry.date }
         );
       }
@@ -1065,15 +1218,14 @@ function EditEntryModal({ fr, state, teams, memberName, data, onClose, onSaved, 
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>{fr ? 'Début' : 'Start'}</label>
-                <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="glass-input w-full mt-1.5" />
-              </div>
-              <div>
-                <label className={labelCls}>{fr ? 'Fin' : 'End'}</label>
-                <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="glass-input w-full mt-1.5" />
-              </div>
+            {/* Heures de l'équipe pour la journée — informatif, pas de saisie par membre. */}
+            <div className="rounded-lg border border-outline bg-surface-secondary/40 px-3.5 py-2.5 flex items-center gap-2">
+              <Clock size={13} className="text-text-tertiary shrink-0" />
+              <p className="text-[12px] text-text-secondary">
+                {isRecurring && scope !== 'one'
+                  ? <>{fr ? 'Heures hebdo de cette équipe :' : 'This team’s weekly hours:'} <span className="font-semibold tabular-nums text-text-primary">{recurringHours.start}–{recurringHours.end}</span></>
+                  : <>{fr ? 'Heures de l’équipe ce jour-là :' : 'Team hours that day:'} <span className="font-semibold tabular-nums text-text-primary">{dayHours.start}–{dayHours.end}</span></>}
+              </p>
             </div>
             {!(isRecurring && scope !== 'one') && (
               <div>
