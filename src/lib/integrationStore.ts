@@ -86,6 +86,46 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   return data as T;
 }
 
+// ── Native integrations (Stripe Connect + plan SMS number) ─────
+
+export interface NativeStatus {
+  stripe: {
+    active: boolean;
+    payouts_enabled?: boolean;
+    detail?: 'no_account' | 'onboarding_incomplete' | null;
+  };
+  twilio: {
+    active: boolean;
+    number?: string | null;
+    detail?: 'not_provisioned' | 'plan_excludes_sms' | null;
+  };
+}
+
+const EMPTY_NATIVE: NativeStatus = {
+  stripe: { active: false },
+  twilio: { active: false },
+};
+
+let nativeCache: NativeStatus = EMPTY_NATIVE;
+
+/**
+ * Fetch the real state of the natively-provisioned integrations.
+ * These are not "connected" by the org — Lume provisions them — so their
+ * state comes from Stripe Connect and the SMS channel, not the store.
+ */
+export async function fetchNativeStatus(): Promise<NativeStatus> {
+  const data = await apiFetch<NativeStatus>('/integrations/native-status');
+  nativeCache = {
+    stripe: data.stripe || { active: false },
+    twilio: data.twilio || { active: false },
+  };
+  return nativeCache;
+}
+
+export function getNativeStatus(): NativeStatus {
+  return nativeCache;
+}
+
 // ── Connection cache (in-memory, refreshed on demand) ─────────
 
 let connectionCache: Map<string, ConnectionInfo> = new Map();
@@ -212,6 +252,19 @@ export function resolveAppStatus(
 ): 'connected' | 'available' | 'coming_soon' | 'requires_setup' | 'error' | 'pending' | 'token_expired' {
   if (connectionType === 'internal') return 'connected';
   if (connectionType === 'coming_soon') return 'coming_soon';
+
+  // Natively provisioned by Lume — real state, never a "Connect" button.
+  // `requires_setup` means the customer has an action to take elsewhere
+  // (finish Stripe onboarding, get a number, upgrade the plan).
+  if (connectionType === 'native') {
+    if (appId === 'stripe') {
+      return nativeCache.stripe.active ? 'connected' : 'requires_setup';
+    }
+    if (appId === 'twilio') {
+      return nativeCache.twilio.active ? 'connected' : 'requires_setup';
+    }
+    return 'requires_setup';
+  }
 
   const conn = connectionCache.get(appId);
   if (!conn || conn.status === 'not_connected') return 'available';

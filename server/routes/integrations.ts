@@ -40,6 +40,58 @@ router.get('/integrations', async (req, res) => {
   }
 });
 
+// ── Native integrations status ────────────────────────────────
+// Stripe and Twilio are not "connected" by the org through this store: they
+// are provisioned by Lume itself (Connect account + plan-included SMS number).
+// The Marketplace reads their real state here instead of showing a dead
+// "Connect" button for something the org cannot action.
+router.get('/integrations/native-status', async (req, res) => {
+  try {
+    const ctx = await requireAuthedClient(req, res);
+    if (!ctx) return;
+    const { orgId } = ctx;
+
+    const [stripe, twilio] = await Promise.all([
+      (async () => {
+        try {
+          const { refreshAccountStatus } = await import('../lib/stripe-connect');
+          const account = await refreshAccountStatus(orgId);
+          if (!account) return { active: false, detail: 'no_account' };
+          // Only a fully onboarded account can actually take money.
+          return {
+            active: account.charges_enabled === true,
+            payouts_enabled: account.payouts_enabled === true,
+            detail: account.charges_enabled ? null : 'onboarding_incomplete',
+          };
+        } catch {
+          // Stripe unconfigured on the server — report inactive, never 500.
+          return { active: false };
+        }
+      })(),
+      (async () => {
+        try {
+          const { getOrgSmsChannel, orgPlanIncludesSms } = await import('../lib/twilioProvisioning');
+          const [channel, inPlan] = await Promise.all([
+            getOrgSmsChannel(orgId),
+            orgPlanIncludesSms(orgId),
+          ]);
+          const number = channel?.phone_number || null;
+          // Both conditions must hold — same rule the send path enforces.
+          if (!number) return { active: false, detail: 'not_provisioned' };
+          if (!inPlan) return { active: false, number, detail: 'plan_excludes_sms' };
+          return { active: true, number, detail: null };
+        } catch {
+          return { active: false };
+        }
+      })(),
+    ]);
+
+    res.json({ stripe, twilio });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Internal error' });
+  }
+});
+
 // ── Get single connection status ──────────────────────────────
 router.get('/integrations/:appId/status', async (req, res) => {
   try {

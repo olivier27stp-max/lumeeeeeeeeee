@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" role="img" aria-label="Twilio">
+  <path fill="#fff" d="M20 4a16 16 0 1 0 0 32 16 16 0 0 0 0-32zm0 27.4A11.4 11.4 0 1 1 31.4 20 11.4 11.4 0 0 1 20 31.4z"/>
+  <circle fill="#fff" cx="16.1" cy="16.1" r="3.3"/>
+  <circle fill="#fff" cx="23.9" cy="16.1" r="3.3"/>
+  <circle fill="#fff" cx="23.9" cy="23.9" r="3.3"/>
+  <circle fill="#fff" cx="16.1" cy="23.9" r="3.3"/>
+</svg>

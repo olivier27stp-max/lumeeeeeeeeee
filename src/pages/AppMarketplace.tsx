@@ -1,69 +1,65 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Check,
-  ChevronRight,
-  Copy,
   ExternalLink,
-  Eye,
-  EyeOff,
   Link2,
   Loader2,
-  RefreshCw,
-  Search,
-  Star,
   Unplug,
   X,
   Zap,
   AlertTriangle,
   Shield,
   Clock,
+  ArrowRight,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
-import {
-  INTEGRATIONS,
-  CATEGORIES,
-  getFeaturedIntegrations,
-  type Integration,
-  type AuthField,
-} from '../lib/integrations';
+import { INTEGRATIONS, type Integration } from '../lib/integrations';
 import {
   getConnection,
   fetchAllConnections,
+  fetchNativeStatus,
+  getNativeStatus,
   startOAuthFlow,
-  connectWithCredentials,
   testConnectionApi,
   disconnectApp,
   resolveAppStatus,
   refreshToken,
   type ConnectionInfo,
+  type NativeStatus,
 } from '../lib/integrationStore';
 
 // ─── Status helpers ─────────────────────────────────────────────
-type ResolvedStatus = 'connected' | 'available' | 'coming_soon' | 'requires_setup' | 'error' | 'pending' | 'token_expired';
+type ResolvedStatus =
+  | 'connected'
+  | 'available'
+  | 'coming_soon'
+  | 'requires_setup'
+  | 'error'
+  | 'pending'
+  | 'token_expired';
 
 function useConnectionState() {
   const [, setTick] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
-    try {
-      await fetchAllConnections();
-    } catch {
-      // Silent fail — cache stays as-is
-    }
+  const load = useCallback(async () => {
+    // Both are independent round-trips — fetch together. Either may fail
+    // without blocking the other (a broken Stripe key must not hide SMS).
+    await Promise.allSettled([fetchAllConnections(), fetchNativeStatus()]);
     setTick((t) => t + 1);
   }, []);
 
-  // Load connections on mount
+  const refresh = useCallback(async () => {
+    await load();
+  }, [load]);
+
   useEffect(() => {
-    fetchAllConnections()
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    load().finally(() => setLoading(false));
+  }, [load]);
 
   const getStatus = useCallback((app: Integration): ResolvedStatus => {
     return resolveAppStatus(app.id, app.connection_type);
@@ -76,6 +72,70 @@ function useConnectionState() {
   return { getStatus, getConn, refresh, loading };
 }
 
+/**
+ * Plain-language line describing what the customer should do next.
+ * Deliberately concrete — "no SMS number yet" beats "not configured".
+ */
+function nativeHint(
+  app: Integration,
+  native: NativeStatus,
+  isFr: boolean,
+): { text: string; actionable: boolean } | null {
+  if (app.id === 'stripe') {
+    const s = native.stripe;
+    if (s.active) {
+      return {
+        text: isFr
+          ? 'Vos clients peuvent payer par carte.'
+          : 'Your customers can pay by card.',
+        actionable: false,
+      };
+    }
+    if (s.detail === 'onboarding_incomplete') {
+      return {
+        text: isFr
+          ? 'Il reste des informations a fournir avant de recevoir des paiements.'
+          : 'Some information is still required before you can receive payments.',
+        actionable: true,
+      };
+    }
+    return {
+      text: isFr
+        ? 'Activez les paiements pour vous faire payer directement dans Lume.'
+        : 'Turn on payments to get paid directly in Lume.',
+      actionable: true,
+    };
+  }
+
+  if (app.id === 'twilio') {
+    const t = native.twilio;
+    if (t.active) {
+      return {
+        text: isFr
+          ? `Votre numero : ${t.number}`
+          : `Your number: ${t.number}`,
+        actionable: false,
+      };
+    }
+    if (t.detail === 'plan_excludes_sms') {
+      return {
+        text: isFr
+          ? "Votre forfait actuel n'inclut pas les textos."
+          : 'Your current plan does not include SMS.',
+        actionable: true,
+      };
+    }
+    return {
+      text: isFr
+        ? "Obtenez votre numero pour texter vos clients."
+        : 'Get your number to text your customers.',
+      actionable: true,
+    };
+  }
+
+  return null;
+}
+
 // ─── Status Badge ───────────────────────────────────────────────
 function StatusBadge({ status }: { status: ResolvedStatus }) {
   const { language } = useTranslation();
@@ -84,7 +144,7 @@ function StatusBadge({ status }: { status: ResolvedStatus }) {
     case 'connected':
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-success bg-success/10 rounded-full px-2 py-0.5">
-          <Check size={9} /> {isFr ? 'Connectée' : 'Connected'}
+          <Check size={9} /> {isFr ? 'Actif' : 'Active'}
         </span>
       );
     case 'error':
@@ -96,7 +156,7 @@ function StatusBadge({ status }: { status: ResolvedStatus }) {
     case 'requires_setup':
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 rounded-full px-2 py-0.5">
-          {isFr ? 'Configuration requise' : 'Setup required'}
+          {isFr ? 'A activer' : 'To activate'}
         </span>
       );
     case 'pending':
@@ -108,29 +168,21 @@ function StatusBadge({ status }: { status: ResolvedStatus }) {
     case 'token_expired':
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 rounded-full px-2 py-0.5">
-          <Clock size={9} /> {isFr ? 'Token expiré' : 'Token Expired'}
+          <Clock size={9} /> {isFr ? 'Reconnexion requise' : 'Reconnection required'}
         </span>
       );
     case 'coming_soon':
       return (
         <span className="text-[10px] font-bold text-text-tertiary bg-surface-secondary rounded-full px-2 py-0.5">
-          {isFr ? 'Bientôt disponible' : 'Coming Soon'}
+          {isFr ? 'Bientot disponible' : 'Coming soon'}
         </span>
       );
     default:
-      return null;
-  }
-}
-
-// ─── Connection Type Label ──────────────────────────────────────
-function connectionLabel(type: string): string {
-  switch (type) {
-    case 'oauth': return 'OAuth';
-    case 'api_key': return 'API Key';
-    case 'webhook': return 'Webhook';
-    case 'manual': return 'Manual';
-    case 'internal': return 'Built-in';
-    default: return '';
+      return (
+        <span className="text-[10px] font-bold text-text-tertiary bg-surface-secondary rounded-full px-2 py-0.5">
+          {isFr ? 'Non connecte' : 'Not connected'}
+        </span>
+      );
   }
 }
 
@@ -138,18 +190,20 @@ function connectionLabel(type: string): string {
 function AppLogo({ app, size = 'md' }: { app: Integration; size?: 'sm' | 'md' | 'lg' }) {
   const sizeClasses = {
     sm: 'w-9 h-9 text-[11px] rounded-lg',
-    md: 'w-11 h-11 text-[12px] rounded-xl',
+    md: 'w-12 h-12 text-[12px] rounded-xl',
     lg: 'w-14 h-14 text-[15px] rounded-2xl',
   };
-  const imgSizes = { sm: 20, md: 24, lg: 32 };
+  const imgSizes = { sm: 20, md: 28, lg: 32 };
 
   const [imgError, setImgError] = useState(false);
 
-  // Use official logo if available and not broken
   if (app.logo_url && !imgError) {
     return (
       <div
-        className={cn('flex items-center justify-center shrink-0 shadow-sm overflow-hidden p-2', sizeClasses[size])}
+        className={cn(
+          'flex items-center justify-center shrink-0 shadow-sm overflow-hidden p-2',
+          sizeClasses[size],
+        )}
         style={{ backgroundColor: app.logo_color }}
       >
         <img
@@ -174,145 +228,92 @@ function AppLogo({ app, size = 'md' }: { app: Integration; size?: 'sm' | 'md' | 
   );
 }
 
-// ─── App Card ───────────────────────────────────────────────────
-interface AppCardProps {
+// ─── Integration Row ────────────────────────────────────────────
+interface RowProps {
   app: Integration;
   status: ResolvedStatus;
-  onClick: () => void;
+  native: NativeStatus;
+  onOpen: () => void;
+  onManage: (route: string) => void;
 }
 
-const AppCard: React.FC<AppCardProps> = ({ app, status, onClick }) => {
+const IntegrationRow: React.FC<RowProps> = ({ app, status, native, onOpen, onManage }) => {
   const { language } = useTranslation();
   const isFr = language === 'fr';
+  const isNative = app.connection_type === 'native';
+  const isComingSoon = status === 'coming_soon';
+  const hint = isNative ? nativeHint(app, native, isFr) : null;
+
+  // Native cards route the customer to the page that actually owns the
+  // setting; only QuickBooks opens the connection modal.
+  const handleClick = () => {
+    if (isComingSoon) return;
+    if (isNative && app.manage_route) onManage(app.manage_route);
+    else onOpen();
+  };
+
+  const ctaLabel = isNative
+    ? status === 'connected'
+      ? isFr ? 'Gerer' : 'Manage'
+      : isFr ? 'Activer' : 'Activate'
+    : status === 'connected'
+      ? isFr ? 'Gerer' : 'Manage'
+      : isFr ? 'Connecter' : 'Connect';
+
   return (
     <button
-      onClick={onClick}
-      className="section-card p-4 text-left hover:shadow-md hover:border-outline transition-all group flex flex-col h-full"
-    >
-      <div className="flex items-start gap-3 mb-3">
-        <AppLogo app={app} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-[14px] font-bold text-text-primary truncate">{app.name}</p>
-            <StatusBadge status={status} />
-          </div>
-          <p className="text-[11px] text-text-tertiary mt-0.5">{app.category}</p>
-        </div>
-      </div>
-      <p className="text-[12px] text-text-secondary leading-relaxed flex-1">{app.description_short}</p>
-      <div className="mt-3 pt-3 border-t border-outline-subtle/40 flex items-center justify-between">
-        <span className="text-[11px] text-text-tertiary font-medium">{connectionLabel(app.connection_type)}</span>
-        <span className="text-xs font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1">
-          {isFr ? 'Voir détails' : 'View details'} <ChevronRight size={10} />
-        </span>
-      </div>
-    </button>
-  );
-};
-
-// ─── Featured Card ──────────────────────────────────────────────
-interface FeaturedCardProps {
-  app: Integration;
-  status: ResolvedStatus;
-  onClick: () => void;
-}
-
-const FeaturedCard: React.FC<FeaturedCardProps> = ({ app, status, onClick }) => {
-  const { language } = useTranslation();
-  const isFr = language === 'fr';
-  return (
-    <button
-      onClick={onClick}
-      className="section-card p-5 text-left hover:shadow-md hover:border-outline transition-all group"
+      onClick={handleClick}
+      disabled={isComingSoon}
+      className={cn(
+        'section-card w-full p-5 text-left transition-all group',
+        isComingSoon
+          ? 'opacity-60 cursor-default'
+          : 'hover:shadow-md hover:border-outline',
+      )}
     >
       <div className="flex items-center gap-4">
         <AppLogo app={app} size="lg" />
+
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <p className="text-[15px] font-bold text-text-primary">{app.name}</p>
             <StatusBadge status={status} />
           </div>
-          <p className="text-[12px] text-text-secondary leading-relaxed">{app.description_short}</p>
-        </div>
-        <div className="shrink-0">
-          {status === 'connected' ? (
-            <span className="glass-button !text-[11px] !py-1.5 inline-flex items-center gap-1.5 !border-success/40 !text-success">
-              <Check size={11} /> {isFr ? 'Connectée' : 'Connected'}
-            </span>
-          ) : status === 'available' ? (
-            <span className="glass-button-primary !text-[11px] !py-1.5 inline-flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Zap size={11} /> {isFr ? 'Connecter' : 'Connect'}
-            </span>
-          ) : (
-            <span className="badge-neutral text-[10px]">{isFr ? 'Bientôt disponible' : 'Coming Soon'}</span>
+          <p className="text-[12px] text-text-secondary leading-relaxed">
+            {app.description_short}
+          </p>
+          {hint && (
+            <p
+              className={cn(
+                'text-[11px] mt-1.5 font-medium',
+                hint.actionable ? 'text-warning' : 'text-success',
+              )}
+            >
+              {hint.text}
+            </p>
           )}
         </div>
+
+        {!isComingSoon && (
+          <div className="shrink-0">
+            <span
+              className={cn(
+                'glass-button !text-[11px] !py-1.5 inline-flex items-center gap-1.5',
+                status === 'connected'
+                  ? 'opacity-0 group-hover:opacity-100 transition-opacity'
+                  : '!border-primary/40 !text-primary',
+              )}
+            >
+              {ctaLabel} <ArrowRight size={11} />
+            </span>
+          </div>
+        )}
       </div>
     </button>
   );
 };
 
-// ─── Credential Field ───────────────────────────────────────────
-interface CredentialFieldProps {
-  field: AuthField;
-  value: string;
-  onChange: (v: string) => void;
-}
-
-const CredentialField: React.FC<CredentialFieldProps> = ({ field, value, onChange }) => {
-  const [visible, setVisible] = useState(false);
-  const isSecret = field.type === 'password';
-
-  if (field.type === 'select' && field.options) {
-    return (
-      <div>
-        <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-          {field.label} {field.required && '*'}
-        </label>
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="glass-input w-full mt-1"
-        >
-          <option value="">{field.placeholder}</option>
-          {field.options.map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
-        </select>
-        {field.helpText && <p className="text-[10px] text-text-tertiary mt-1">{field.helpText}</p>}
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
-        {field.label} {field.required && '*'}
-      </label>
-      <div className="relative mt-1">
-        <input
-          type={isSecret && !visible ? 'password' : 'text'}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={field.placeholder}
-          className="glass-input w-full pr-9"
-        />
-        {isSecret && (
-          <button
-            type="button"
-            onClick={() => setVisible(!visible)}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary"
-          >
-            {visible ? <EyeOff size={13} /> : <Eye size={13} />}
-          </button>
-        )}
-      </div>
-      {field.helpText && <p className="text-[10px] text-text-tertiary mt-1">{field.helpText}</p>}
-    </div>
-  );
-};
-
-// ─── Integration Detail Modal ───────────────────────────────────
+// ─── Integration Detail Modal (QuickBooks / OAuth only) ─────────
 interface DetailModalProps {
   app: Integration | null;
   onClose: () => void;
@@ -322,63 +323,19 @@ interface DetailModalProps {
 function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModalProps) {
   const { language } = useTranslation();
   const isFr = language === 'fr';
-  const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
-  // Endpoint webhook STABLE : dérivé de l'app + de la connexion (pas d'UUID
-  // aléatoire régénéré à chaque ouverture, qui donnait au client une URL
-  // morte différente à chaque fois). Sur le vrai domaine de l'API, pas un
-  // domaine fictif.
-  const webhookUrl = app
-    ? `${window.location.origin}/api/webhooks/incoming/${app.id}`
-    : '';
+
+  React.useEffect(() => {
+    setShowDisconnectConfirm(false);
+  }, [app?.id]);
 
   if (!app) return null;
 
   const status = resolveAppStatus(app.id, app.connection_type);
   const conn = getConnection(app.id);
-
-  // Initialize form
-  const initForm = () => {
-    const initial: Record<string, string> = {};
-    app.auth_fields.forEach((f) => { initial[f.key] = ''; });
-    setFormValues(initial);
-  };
-
-  React.useEffect(() => {
-    if (app) {
-      initForm();
-      setShowDisconnectConfirm(false);
-    }
-  }, [app?.id]);
-
-  const handleFieldChange = (key: string, value: string) => {
-    setFormValues((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const requiredFieldsFilled = app.auth_fields
-    .filter((f) => f.required)
-    .every((f) => (formValues[f.key] || '').trim() !== '');
-
-  const handleSave = async () => {
-    if (!requiredFieldsFilled) return;
-    setSaving(true);
-    try {
-      const result = await connectWithCredentials(app.id, formValues);
-      if (result.success) {
-        await onConnectionChange();
-        toast.success(isFr ? `${app.name} connecté avec succès` : `${app.name} connected successfully`);
-      } else {
-        toast.error(result.error || (isFr ? `Échec de la connexion à ${app.name}` : `Failed to connect to ${app.name}`));
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : (isFr ? 'Erreur de connexion' : 'Connection error'));
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleTest = async () => {
     setTesting(true);
@@ -386,16 +343,15 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
       const result = await testConnectionApi(app.id);
       if (result.success) {
         toast.success(
-          (isFr ? `Connexion à ${app.name} fonctionnelle` : `Connection to ${app.name} is working`) +
-          (result.account_name ? ` (${result.account_name})` : '')
+          (isFr ? `Connexion a ${app.name} fonctionnelle` : `Connection to ${app.name} is working`) +
+            (result.account_name ? ` (${result.account_name})` : ''),
         );
-        await onConnectionChange();
       } else {
-        toast.error(result.error || (isFr ? `Test échoué pour ${app.name}` : `Test failed for ${app.name}`));
-        await onConnectionChange();
+        toast.error(result.error || (isFr ? `Test echoue pour ${app.name}` : `Test failed for ${app.name}`));
       }
+      await onConnectionChange();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : (isFr ? 'Test échoué' : 'Test failed'));
+      toast.error(err instanceof Error ? err.message : isFr ? 'Test echoue' : 'Test failed');
     } finally {
       setTesting(false);
     }
@@ -405,10 +361,15 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
     setSaving(true);
     try {
       const authorizeUrl = await startOAuthFlow(app.id);
-      // Redirect to provider's OAuth page
       window.location.href = authorizeUrl;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : (isFr ? `Échec du démarrage OAuth pour ${app.name}` : `Failed to start OAuth for ${app.name}`));
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : isFr
+            ? `Echec du demarrage OAuth pour ${app.name}`
+            : `Failed to start OAuth for ${app.name}`,
+      );
       setSaving(false);
     }
   };
@@ -418,13 +379,17 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
     try {
       const success = await refreshToken(app.id);
       if (success) {
-        toast.success(isFr ? `Token de ${app.name} rafraîchi` : `${app.name} token refreshed`);
+        toast.success(isFr ? `Connexion a ${app.name} renouvelee` : `${app.name} connection renewed`);
         await onConnectionChange();
       } else {
-        toast.error(isFr ? `Impossible de rafraîchir le token. Reconnectez ${app.name}.` : `Unable to refresh token. Please reconnect ${app.name}.`);
+        toast.error(
+          isFr
+            ? `Impossible de renouveler. Reconnectez ${app.name}.`
+            : `Unable to renew. Please reconnect ${app.name}.`,
+        );
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : (isFr ? 'Rafraîchissement échoué' : 'Refresh failed'));
+      toast.error(err instanceof Error ? err.message : isFr ? 'Renouvellement echoue' : 'Refresh failed');
     } finally {
       setSaving(false);
     }
@@ -436,23 +401,15 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
       await disconnectApp(app.id);
       setShowDisconnectConfirm(false);
       await onConnectionChange();
-      initForm();
-      toast.success(isFr ? `${app.name} déconnecté` : `${app.name} disconnected`);
+      toast.success(isFr ? `${app.name} deconnecte` : `${app.name} disconnected`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : (isFr ? 'Échec de la déconnexion' : 'Disconnection failed'));
+      toast.error(err instanceof Error ? err.message : isFr ? 'Echec de la deconnexion' : 'Disconnection failed');
     } finally {
       setDisconnecting(false);
     }
   };
 
-  const handleCopyWebhook = () => {
-    navigator.clipboard.writeText(webhookUrl);
-    toast.success(isFr ? 'URL du webhook copiée' : 'Webhook URL copied');
-  };
-
-  // ── Render connection UI based on type ──
   const renderConnectionUI = () => {
-    // ── CONNECTED STATE ──
     if (status === 'connected') {
       return (
         <div className="space-y-4">
@@ -461,52 +418,56 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               <Check size={16} className="text-success" />
             </div>
             <div className="flex-1">
-              <p className="text-[13px] font-semibold text-text-primary">{isFr ? 'Connecté' : 'Connected'}</p>
+              <p className="text-[13px] font-semibold text-text-primary">{isFr ? 'Connecte' : 'Connected'}</p>
               <p className="text-[11px] text-text-tertiary">
-                {conn?.connected_account_name && <span className="font-medium text-text-secondary">{conn.connected_account_name}</span>}
-                {conn?.connected_at ? (isFr ? ` — depuis le ${new Date(conn.connected_at).toLocaleDateString('fr-CA')}` : ` — since ${new Date(conn.connected_at).toLocaleDateString('en-CA')}`) : ''}
+                {conn?.connected_account_name && (
+                  <span className="font-medium text-text-secondary">{conn.connected_account_name}</span>
+                )}
+                {conn?.connected_at
+                  ? isFr
+                    ? ` — depuis le ${new Date(conn.connected_at).toLocaleDateString('fr-CA')}`
+                    : ` — since ${new Date(conn.connected_at).toLocaleDateString('en-CA')}`
+                  : ''}
               </p>
             </div>
           </div>
 
-          {/* Last test info */}
           {conn?.last_tested && (
             <div className="flex items-center gap-2 text-[11px] text-text-tertiary px-1">
               <Shield size={10} />
-              {isFr ? 'Dernier test' : 'Last test'}: {new Date(conn.last_tested).toLocaleString(isFr ? 'fr-CA' : 'en-CA')}
+              {isFr ? 'Dernier test' : 'Last test'}:{' '}
+              {new Date(conn.last_tested).toLocaleString(isFr ? 'fr-CA' : 'en-CA')}
               {conn.last_test_result === 'success' ? (
                 <span className="text-success font-medium">— OK</span>
               ) : conn.last_test_result === 'failure' ? (
-                <span className="text-danger font-medium">{isFr ? '— Échec' : '— Failed'}</span>
+                <span className="text-danger font-medium">{isFr ? '— Echec' : '— Failed'}</span>
               ) : null}
             </div>
           )}
 
-          {/* Webhook URL for webhook apps */}
-          {app.connection_type === 'webhook' && (
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{isFr ? 'Endpoint Webhook' : 'Webhook Endpoint'}</p>
-              <div className="flex items-center gap-2 p-3 bg-surface-secondary/50 rounded-lg">
-                <code className="text-[11px] text-text-secondary font-mono flex-1 truncate">{webhookUrl}</code>
-                <button onClick={handleCopyWebhook} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary">
-                  <Copy size={12} />
-                </button>
-              </div>
-            </div>
-          )}
-
           <div className="flex items-center gap-2 pt-2">
-            <button onClick={handleTest} disabled={testing} className="glass-button !text-[12px] inline-flex items-center gap-1.5">
+            <button
+              onClick={handleTest}
+              disabled={testing}
+              className="glass-button !text-[12px] inline-flex items-center gap-1.5"
+            >
               {testing ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
               {isFr ? 'Tester la connexion' : 'Test connection'}
             </button>
             {!showDisconnectConfirm ? (
-              <button onClick={() => setShowDisconnectConfirm(true)} className="glass-button !text-[12px] inline-flex items-center gap-1.5 !text-danger !border-danger/30 hover:!bg-danger/5">
-                <Unplug size={12} /> {isFr ? 'Déconnecter' : 'Disconnect'}
+              <button
+                onClick={() => setShowDisconnectConfirm(true)}
+                className="glass-button !text-[12px] inline-flex items-center gap-1.5 !text-danger !border-danger/30 hover:!bg-danger/5"
+              >
+                <Unplug size={12} /> {isFr ? 'Deconnecter' : 'Disconnect'}
               </button>
             ) : (
               <div className="flex items-center gap-2">
-                <button onClick={handleDisconnect} disabled={disconnecting} className="glass-button !text-[12px] !bg-danger !text-white !border-danger inline-flex items-center gap-1.5">
+                <button
+                  onClick={handleDisconnect}
+                  disabled={disconnecting}
+                  className="glass-button !text-[12px] !bg-danger !text-white !border-danger inline-flex items-center gap-1.5"
+                >
                   {disconnecting ? <Loader2 size={12} className="animate-spin" /> : null}
                   {isFr ? 'Confirmer' : 'Confirm'}
                 </button>
@@ -520,7 +481,6 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
       );
     }
 
-    // ── TOKEN EXPIRED STATE ──
     if (status === 'token_expired') {
       return (
         <div className="space-y-4">
@@ -529,51 +489,38 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               <Clock size={16} className="text-warning" />
             </div>
             <div className="flex-1">
-              <p className="text-[13px] font-semibold text-text-primary">{isFr ? 'Token expiré' : 'Token expired'}</p>
+              <p className="text-[13px] font-semibold text-text-primary">
+                {isFr ? 'Reconnexion requise' : 'Reconnection required'}
+              </p>
               <p className="text-[11px] text-text-tertiary">
-                {conn?.connected_account_name || app.name} — {isFr ? "Le token d'accès a expiré et doit être renouvelé." : 'The access token has expired and must be renewed.'}
+                {isFr
+                  ? "L'acces a expire. Renouvelez-le pour continuer la synchronisation."
+                  : 'Access has expired. Renew it to keep syncing.'}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <button onClick={handleRefreshToken} disabled={saving} className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5">
-              {saving ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              {isFr ? 'Rafraîchir le token' : 'Refresh token'}
+            <button
+              onClick={handleRefreshToken}
+              disabled={saving}
+              className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5"
+            >
+              {saving ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />}
+              {isFr ? 'Renouveler' : 'Renew'}
             </button>
-            <button onClick={handleOAuth} disabled={saving} className="glass-button !text-[12px] inline-flex items-center gap-1.5">
-              <Link2 size={12} /> {isFr ? 'Reconnecter via OAuth' : 'Reconnect via OAuth'}
+            <button
+              onClick={handleOAuth}
+              disabled={saving}
+              className="glass-button !text-[12px] inline-flex items-center gap-1.5"
+            >
+              <Link2 size={12} /> {isFr ? 'Reconnecter' : 'Reconnect'}
             </button>
           </div>
         </div>
       );
     }
 
-    // ── PENDING AUTHORIZATION STATE ──
-    if (status === 'pending') {
-      return (
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 p-3 bg-neutral-50 dark:bg-neutral-800/10 border border-neutral-200 dark:border-neutral-700/30 rounded-xl">
-            <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-neutral-800/20 flex items-center justify-center">
-              <Loader2 size={16} className="text-text-primary animate-spin" />
-            </div>
-            <div className="flex-1">
-              <p className="text-[13px] font-semibold text-text-primary">{isFr ? 'Autorisation en attente' : 'Authorization pending'}</p>
-              <p className="text-[11px] text-text-tertiary">
-                {isFr ? "Le processus OAuth a été démarré. Complétez l'autorisation dans la fenêtre du fournisseur." : "The OAuth process has started. Complete the authorization in the provider's window."}
-              </p>
-            </div>
-          </div>
-
-          <button onClick={handleOAuth} disabled={saving} className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5">
-            {saving ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-            {isFr ? "Relancer l'autorisation" : 'Restart authorization'}
-          </button>
-        </div>
-      );
-    }
-
-    // ── ERROR STATE ──
     if (status === 'error') {
       return (
         <div className="space-y-4">
@@ -582,220 +529,71 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               <AlertTriangle size={16} className="text-danger" />
             </div>
             <div className="flex-1">
-              <p className="text-[13px] font-semibold text-text-primary">{isFr ? 'Erreur de connexion' : 'Connection error'}</p>
+              <p className="text-[13px] font-semibold text-text-primary">
+                {isFr ? 'Erreur de connexion' : 'Connection error'}
+              </p>
               <p className="text-[11px] text-text-tertiary">
-                {conn?.last_error || (isFr ? 'Une erreur est survenue avec cette intégration.' : 'An error occurred with this integration.')}
+                {conn?.last_error ||
+                  (isFr ? 'Une erreur est survenue avec cette integration.' : 'An error occurred with this integration.')}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <button onClick={handleTest} disabled={testing} className="glass-button !text-[12px] inline-flex items-center gap-1.5">
+            <button
+              onClick={handleTest}
+              disabled={testing}
+              className="glass-button !text-[12px] inline-flex items-center gap-1.5"
+            >
               {testing ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
               {isFr ? 'Re-tester' : 'Re-test'}
             </button>
-            {app.connection_type === 'oauth' ? (
-              <button onClick={handleOAuth} disabled={saving} className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5">
-                {saving ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />}
-                {isFr ? 'Reconnecter' : 'Reconnect'}
-              </button>
-            ) : null}
-            <button onClick={() => setShowDisconnectConfirm(true)} className="glass-button !text-[12px] inline-flex items-center gap-1.5 !text-danger !border-danger/30">
-              <Unplug size={12} /> {isFr ? 'Déconnecter' : 'Disconnect'}
-            </button>
-          </div>
-
-          {showDisconnectConfirm && (
-            <div className="flex items-center gap-2">
-              <button onClick={handleDisconnect} disabled={disconnecting} className="glass-button !text-[12px] !bg-danger !text-white !border-danger inline-flex items-center gap-1.5">
-                {disconnecting ? <Loader2 size={12} className="animate-spin" /> : null}
-                {isFr ? 'Confirmer la déconnexion' : 'Confirm disconnection'}
-              </button>
-              <button onClick={() => setShowDisconnectConfirm(false)} className="glass-button !text-[12px]">
-                {isFr ? 'Annuler' : 'Cancel'}
-              </button>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // ── COMING SOON ──
-    if (app.connection_type === 'coming_soon') {
-      return (
-        <div className="p-4 bg-surface-secondary/50 rounded-xl text-center">
-          <p className="text-[13px] font-medium text-text-secondary">{isFr ? 'Cette intégration arrive bientôt.' : 'This integration is coming soon.'}</p>
-          <p className="text-[11px] text-text-tertiary mt-1">{isFr ? "Nous vous notifierons dès qu'elle sera disponible." : "We'll notify you as soon as it's available."}</p>
-        </div>
-      );
-    }
-
-    // ── INTERNAL (always connected) ──
-    if (app.connection_type === 'internal') {
-      return (
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 p-3 bg-success/5 border border-success/20 rounded-xl">
-            <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center">
-              <Check size={16} className="text-success" />
-            </div>
-            <div>
-              <p className="text-[13px] font-semibold text-text-primary">{isFr ? 'Intégration intégrée' : 'Built-in integration'}</p>
-              <p className="text-[11px] text-text-tertiary">{isFr ? 'Cette intégration est préconfigurée et toujours active.' : 'This integration is preconfigured and always active.'}</p>
-            </div>
-          </div>
-          {app.auth_fields.length > 0 && (
-            <div className="space-y-3">
-              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{isFr ? 'Configuration actuelle' : 'Current configuration'}</p>
-              {app.auth_fields.map((field) => (
-                <div key={field.key} className="flex items-center justify-between py-2 px-3 bg-surface-secondary/50 rounded-lg">
-                  <span className="text-[12px] text-text-secondary">{field.label}</span>
-                  <span className="text-[12px] text-text-tertiary font-mono">{isFr ? 'Configuré' : 'Configured'}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // ── OAUTH FLOW ──
-    if (app.connection_type === 'oauth') {
-      return (
-        <div className="space-y-4">
-          <div className="p-4 bg-surface-secondary/50 rounded-xl space-y-3">
-            <div className="flex items-center gap-2">
-              <Link2 size={14} className="text-text-tertiary" />
-              <p className="text-[12px] font-semibold text-text-primary">{isFr ? 'Connexion via' : 'Connect via'} {app.oauth_provider || 'OAuth'}</p>
-            </div>
-            <p className="text-[12px] text-text-secondary">
-              {isFr
-                ? `Cliquez pour connecter votre compte ${app.name}. Vous serez redirigé vers ${app.oauth_provider || app.name} pour autoriser Lume CRM.`
-                : `Click to connect your ${app.name} account. You'll be redirected to ${app.oauth_provider || app.name} to authorize Lume CRM.`}
-            </p>
             <button
               onClick={handleOAuth}
               disabled={saving}
-              className="glass-button-primary !text-[12px] w-full inline-flex items-center justify-center gap-2"
+              className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5"
             >
-              {saving ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
-              {saving ? (isFr ? 'Redirection...' : 'Redirecting...') : (isFr ? `Connecter ${app.name}` : `Connect ${app.name}`)}
+              {saving ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />}
+              {isFr ? 'Reconnecter' : 'Reconnect'}
             </button>
-            {app.official_setup_url && (
-              <a
-                href={app.official_setup_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-[11px] text-primary hover:underline w-full justify-center"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <ExternalLink size={10} /> {isFr ? 'Console développeur' : 'Developer console'} {app.name}
-              </a>
-            )}
           </div>
         </div>
       );
     }
 
-    // ── WEBHOOK FLOW ──
-    if (app.connection_type === 'webhook') {
-      return (
-        <div className="space-y-4">
-          {/* Webhook URL */}
-          <div className="space-y-2">
-            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{isFr ? 'Votre endpoint webhook' : 'Your webhook endpoint'}</p>
-            <div className="flex items-center gap-2 p-3 bg-surface-secondary/50 rounded-xl border border-outline-subtle/40">
-              <code className="text-[11px] text-text-primary font-mono flex-1 truncate">{webhookUrl}</code>
-              <button onClick={handleCopyWebhook} className="p-1.5 rounded-md text-text-tertiary hover:text-primary hover:bg-primary/5 transition-colors" title={isFr ? "Copier l'URL" : 'Copy URL'}>
-                <Copy size={13} />
-              </button>
-            </div>
-            {app.webhook_instructions && (
-              <p className="text-[11px] text-text-tertiary leading-relaxed">{app.webhook_instructions}</p>
-            )}
-          </div>
-
-          {/* API key if needed */}
-          {app.auth_fields.length > 0 && (
-            <div className="space-y-3">
-              <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{isFr ? 'Authentification' : 'Authentication'}</p>
-              {app.auth_fields.map((field) => (
-                <CredentialField
-                  key={field.key}
-                  field={field}
-                  value={formValues[field.key] || ''}
-                  onChange={(v) => handleFieldChange(field.key, v)}
-                />
-              ))}
-            </div>
-          )}
-
+    // ── Not connected — OAuth start ──
+    return (
+      <div className="space-y-4">
+        <div className="p-4 bg-surface-secondary/50 rounded-xl space-y-3">
+          <p className="text-[12px] text-text-secondary">
+            {isFr
+              ? `Vous serez redirige vers ${app.oauth_provider || app.name} pour autoriser Lume a synchroniser vos factures.`
+              : `You'll be redirected to ${app.oauth_provider || app.name} to authorize Lume to sync your invoices.`}
+          </p>
           <button
-            onClick={handleSave}
-            disabled={!requiredFieldsFilled || saving}
+            onClick={handleOAuth}
+            disabled={saving}
             className="glass-button-primary !text-[12px] w-full inline-flex items-center justify-center gap-2"
           >
             {saving ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
-            {saving ? (isFr ? 'Connexion...' : 'Connecting...') : (isFr ? 'Activer le Webhook' : 'Activate Webhook')}
+            {saving
+              ? isFr
+                ? 'Redirection...'
+                : 'Redirecting...'
+              : isFr
+                ? `Connecter ${app.name}`
+                : `Connect ${app.name}`}
           </button>
         </div>
-      );
-    }
-
-    // ── API KEY / MANUAL FLOW ──
-    return (
-      <div className="space-y-4">
-        {app.official_setup_url && (
-          <a
-            href={app.official_setup_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-xl text-[12px] text-primary hover:bg-primary/10 transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <ExternalLink size={13} />
-            <span className="font-medium">{isFr ? `Obtenir vos identifiants depuis ${app.name}` : `Get your credentials from ${app.name}`}</span>
-          </a>
-        )}
-        {app.auth_fields.length > 0 ? (
-          <>
-            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">
-              {app.connection_type === 'api_key' ? (isFr ? 'Identifiants API' : 'API credentials') : 'Configuration'}
-            </p>
-            <div className="space-y-3">
-              {app.auth_fields.map((field) => (
-                <CredentialField
-                  key={field.key}
-                  field={field}
-                  value={formValues[field.key] || ''}
-                  onChange={(v) => handleFieldChange(field.key, v)}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleSave}
-                disabled={!requiredFieldsFilled || saving}
-                className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5"
-              >
-                {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                {saving ? (isFr ? 'Validation en cours...' : 'Verifying...') : (isFr ? 'Valider & Connecter' : 'Verify & Connect')}
-              </button>
-            </div>
-            <p className="text-[10px] text-text-tertiary">
-              {isFr ? "Les identifiants seront testés en temps réel avant d'être sauvegardés." : 'Credentials will be tested in real time before being saved.'}
-            </p>
-          </>
-        ) : (
-          <div className="p-4 bg-surface-secondary/50 rounded-xl text-center">
-            <p className="text-[12px] text-text-tertiary">{isFr ? 'Aucune configuration requise pour cette intégration.' : 'No configuration required for this integration.'}</p>
-          </div>
-        )}
       </div>
     );
   };
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <motion.div
         initial={{ opacity: 0, y: 16, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -804,10 +602,15 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
         onClick={(e) => e.stopPropagation()}
         className="bg-surface w-full max-w-lg max-h-[90vh] rounded-2xl border border-outline shadow-2xl overflow-hidden flex flex-col"
       >
-        {/* Colored banner */}
-        <div className="relative h-20 shrink-0 flex items-end px-6 pb-0" style={{ backgroundColor: app.logo_color + '18' }}>
+        <div
+          className="relative h-20 shrink-0 flex items-end px-6 pb-0"
+          style={{ backgroundColor: app.logo_color + '18' }}
+        >
           <div className="absolute right-4 top-4">
-            <button onClick={onClose} className="p-1.5 rounded-lg bg-surface/80 backdrop-blur-sm text-text-tertiary hover:text-text-primary transition-colors border border-outline-subtle/40">
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg bg-surface/80 backdrop-blur-sm text-text-tertiary hover:text-text-primary transition-colors border border-outline-subtle/40"
+            >
               <X size={14} />
             </button>
           </div>
@@ -816,55 +619,33 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
           </div>
         </div>
 
-        {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto px-6 pt-9 pb-6 space-y-5">
-          {/* Header */}
           <div>
             <div className="flex items-center gap-2.5 mb-1">
               <h2 className="text-[18px] font-bold text-text-primary">{app.name}</h2>
               <StatusBadge status={status} />
             </div>
-            <div className="flex items-center gap-2 text-[11px] text-text-tertiary font-medium">
-              <span>{app.category}</span>
-              <span>&middot;</span>
-              <span>{connectionLabel(app.connection_type)}</span>
-              {app.official_site_url && (
-                <>
-                  <span>&middot;</span>
-                  <a
-                    href={app.official_site_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-primary hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {isFr ? 'Site web' : 'Website'} <ExternalLink size={9} />
-                  </a>
-                </>
-              )}
-              {app.docs_url && (
-                <>
-                  <span>&middot;</span>
-                  <a
-                    href={app.docs_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-primary hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Docs <ExternalLink size={9} />
-                  </a>
-                </>
-              )}
-            </div>
+            {app.official_site_url && (
+              <div className="flex items-center gap-2 text-[11px] text-text-tertiary font-medium">
+                <a
+                  href={app.official_site_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {isFr ? 'Site web' : 'Website'} <ExternalLink size={9} />
+                </a>
+              </div>
+            )}
           </div>
 
-          {/* Description */}
           <p className="text-[13px] text-text-secondary leading-relaxed">{app.description_long}</p>
 
-          {/* Features */}
           <div>
-            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-2">{isFr ? 'Fonctionnalités' : 'Features'}</p>
+            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-2">
+              {isFr ? 'Ce que ca fait' : 'What it does'}
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {app.supported_features.map((f, i) => (
                 <div key={i} className="flex items-center gap-2 text-[12px] text-text-secondary">
@@ -875,55 +656,11 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
             </div>
           </div>
 
-          {/* Divider */}
           <div className="border-t border-outline-subtle/40" />
 
-          {/* Connection UI */}
-          <div>
-            <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-3">
-              {status === 'connected' ? (isFr ? 'Statut de connexion' : 'Connection status') : 'Configuration'}
-            </p>
-            {renderConnectionUI()}
-          </div>
+          <div>{renderConnectionUI()}</div>
         </div>
       </motion.div>
-    </div>
-  );
-}
-
-// ─── Connected Apps Summary ─────────────────────────────────────
-function ConnectedAppsSummary({
-  onOpenApp,
-  getStatus,
-}: {
-  onOpenApp: (app: Integration) => void;
-  getStatus: (app: Integration) => ResolvedStatus;
-}) {
-  const { language } = useTranslation();
-  const isFr = language === 'fr';
-  const connected = INTEGRATIONS.filter((app) => getStatus(app) === 'connected');
-  if (connected.length === 0) return null;
-
-  return (
-    <div className="section-card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
-          {isFr ? 'Connectées' : 'Connected'} ({connected.length})
-        </p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {connected.map((app) => (
-          <button
-            key={app.id}
-            onClick={() => onOpenApp(app)}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-secondary/50 hover:bg-surface-secondary border border-outline-subtle/40 transition-colors"
-          >
-            <AppLogo app={app} size="sm" />
-            <span className="text-[12px] font-semibold text-text-primary">{app.name}</span>
-            <Check size={11} className="text-success" />
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -933,148 +670,65 @@ export default function AppMarketplace() {
   const navigate = useNavigate();
   const { language } = useTranslation();
   const isFr = language === 'fr';
-  const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [selectedApp, setSelectedApp] = useState<Integration | null>(null);
   const { getStatus, refresh, loading } = useConnectionState();
 
-  const featured = useMemo(() => getFeaturedIntegrations(), []);
-
-  const filtered = useMemo(() => {
-    let list = INTEGRATIONS;
-    if (activeCategory) {
-      list = list.filter((a) => a.category === activeCategory);
-    }
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (a) =>
-          a.name.toLowerCase().includes(q) ||
-          a.description_short.toLowerCase().includes(q) ||
-          a.category.toLowerCase().includes(q) ||
-          a.slug.toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [search, activeCategory]);
-
-  const showGrouped = !search.trim() && !activeCategory;
+  const native = getNativeStatus();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-3xl">
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
           <Zap size={18} className="text-white" />
         </div>
         <div>
-          <h1 className="text-[22px] font-bold text-text-primary tracking-tight">Marketplace</h1>
-          <p className="text-[13px] text-text-tertiary">{isFr ? "Connectez vos outils préférés pour étendre vos processus d'affaires." : 'Connect your favorite tools to extend your business processes.'}</p>
+          <h1 className="text-[22px] font-bold text-text-primary tracking-tight">
+            {isFr ? 'Connexions' : 'Connections'}
+          </h1>
+          <p className="text-[13px] text-text-tertiary">
+            {isFr
+              ? 'Les outils branches a votre compte Lume.'
+              : 'The tools connected to your Lume account.'}
+          </p>
         </div>
       </div>
 
-      {/* Connected Apps Summary */}
-      <ConnectedAppsSummary onOpenApp={setSelectedApp} getStatus={getStatus} />
-
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
-        <input
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setActiveCategory(null); }}
-          placeholder={isFr ? 'Rechercher des applications...' : 'Search apps...'}
-          className="w-full bg-surface border border-outline-subtle/60 rounded-xl pl-9 pr-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40 transition-colors"
-        />
-        {search && (
-          <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary">
-            <X size={12} />
-          </button>
-        )}
-      </div>
-
-      {/* Category pills */}
-      <div className="flex flex-wrap gap-1.5">
-        <button
-          onClick={() => setActiveCategory(null)}
-          className={cn(
-            'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
-            !activeCategory
-              ? 'bg-primary text-white border-text-primary'
-              : 'bg-surface border-outline-subtle/60 text-text-secondary hover:border-outline hover:text-text-primary'
-          )}
-        >
-          {isFr ? 'Toutes' : 'All'}
-        </button>
-        {CATEGORIES.map((cat) => (
-          <button
-            key={cat}
-            onClick={() => { setActiveCategory(activeCategory === cat ? null : cat); setSearch(''); }}
-            className={cn(
-              'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
-              activeCategory === cat
-                ? 'bg-primary text-white border-text-primary'
-                : 'bg-surface border-outline-subtle/60 text-text-secondary hover:border-outline hover:text-text-primary'
-            )}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      {/* Content */}
-      {showGrouped ? (
-        <>
-          {/* Featured */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Star size={14} className="text-text-secondary" />
-              <h2 className="text-[15px] font-bold text-text-primary">{isFr ? 'Applications vedettes' : 'Featured apps'}</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {featured.map((app) => (
-                <FeaturedCard key={app.id} app={app} status={getStatus(app)} onClick={() => setSelectedApp(app)} />
-              ))}
-            </div>
-          </div>
-
-          {/* Categories */}
-          {CATEGORIES.map((cat) => {
-            const apps = INTEGRATIONS.filter((a) => a.category === cat);
-            if (apps.length === 0) return null;
-            return (
-              <div key={cat}>
-                <h2 className="text-[15px] font-bold text-text-primary mb-3">{cat}</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {apps.map((app) => (
-                    <AppCard key={app.id} app={app} status={getStatus(app)} onClick={() => setSelectedApp(app)} />
-                  ))}
+      {loading ? (
+        <div className="space-y-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="section-card p-5 animate-pulse">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-surface-secondary" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-32 bg-surface-secondary rounded" />
+                  <div className="h-2.5 w-56 bg-surface-secondary rounded" />
                 </div>
               </div>
-            );
-          })}
-        </>
-      ) : filtered.length === 0 ? (
-        <div className="section-card p-12 text-center">
-          <Search size={28} className="text-text-tertiary mx-auto mb-3 opacity-30" />
-          <p className="text-[14px] font-medium text-text-secondary">{isFr ? 'Aucune application trouvée' : 'No apps found'}</p>
-          <p className="text-[12px] text-text-tertiary mt-1">{isFr ? 'Essayez un autre terme de recherche ou une autre catégorie.' : 'Try a different search term or category.'}</p>
+            </div>
+          ))}
         </div>
       ) : (
-        <div>
-          <p className="text-[12px] text-text-tertiary mb-3">
-            {isFr
-              ? `${filtered.length} application${filtered.length !== 1 ? 's' : ''} trouvée${filtered.length !== 1 ? 's' : ''}`
-              : `${filtered.length} app${filtered.length !== 1 ? 's' : ''} found`}
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filtered.map((app) => (
-              <AppCard key={app.id} app={app} status={getStatus(app)} onClick={() => setSelectedApp(app)} />
-            ))}
-          </div>
+        <div className="space-y-3">
+          {INTEGRATIONS.map((app) => (
+            <IntegrationRow
+              key={app.id}
+              app={app}
+              status={getStatus(app)}
+              native={native}
+              onOpen={() => setSelectedApp(app)}
+              onManage={(route) => navigate(route)}
+            />
+          ))}
         </div>
       )}
 
-      {/* Detail Modal */}
+      <p className="text-[11px] text-text-tertiary">
+        {isFr
+          ? "D'autres connexions s'ajouteront au fur et a mesure."
+          : 'More connections will be added over time.'}
+      </p>
+
       <AnimatePresence>
         {selectedApp && (
           <IntegrationDetailModal
