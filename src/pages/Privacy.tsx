@@ -305,8 +305,8 @@ export default function Privacy() {
           <Section id="google-gmail" title={sections[9].label}>
             <p>
               {fr
-                ? "Si vous choisissez de connecter votre boîte Gmail à Lume CRM (fonction facultative « Boîte de réception »), nous accédons à certaines données de votre compte Google via les API de Google. Cette section décrit précisément ce à quoi nous accédons et ce que nous en faisons."
-                : 'If you choose to connect your Gmail mailbox to Lume CRM (the optional "Inbox" feature), we access certain data from your Google account through Google APIs. This section describes exactly what we access and how we use it.'}
+                ? "Si vous choisissez de vous connecter à Lume CRM avec votre compte Google (fonction facultative), nous accédons uniquement à votre adresse courriel pour identifier votre compte. Lume ne demande aucun accès à Gmail : nous ne pouvons ni lire, ni envoyer, ni modifier vos courriels."
+                : 'If you choose to sign in to Lume CRM with your Google account (an optional feature), we access only your email address to identify your account. Lume requests no access to Gmail: we cannot read, send, or modify your email.'}
             </p>
 
             <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-3">
@@ -316,14 +316,12 @@ export default function Privacy() {
               <ul className="space-y-2 list-none pl-0">
                 {(fr
                   ? [
-                      ['Lecture des courriels (gmail.readonly)', "afficher vos fils de discussion, messages et pièces jointes à l'intérieur de Lume."],
-                      ['Envoi de courriels (gmail.send)', 'envoyer, répondre et transférer des courriels depuis votre adresse, à votre demande.'],
-                      ['Adresse du compte (userinfo.email)', "identifier la boîte connectée et l'afficher dans l'application."],
+                      ['Adresse du compte (userinfo.email)', "identifier le compte connecté et l'afficher dans l'application."],
+                      ['Authentification (openid)', 'vous connecter à Lume avec votre compte Google.'],
                     ]
                   : [
-                      ['Read email (gmail.readonly)', 'display your threads, messages and attachments inside Lume.'],
-                      ['Send email (gmail.send)', 'send, reply and forward emails from your address, at your request.'],
-                      ['Account address (userinfo.email)', 'identify the connected mailbox and show it in the app.'],
+                      ['Account address (userinfo.email)', 'identify the connected account and show it in the app.'],
+                      ['Authentication (openid)', 'sign you in to Lume with your Google account.'],
                     ]
                 ).map(([k, v]) => (
                   <li key={k} className="flex gap-3">

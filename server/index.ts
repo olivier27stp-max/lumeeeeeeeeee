@@ -538,10 +538,10 @@ app.post('/api/workflows/execute-action', workflowActionLimiter, async (req, res
 const CRAWLER_FALLBACKS: Record<string, string> = {
   '/privacy': `<h1 style="font-size:2rem;margin:0 0 1rem">Politique de confidentialité — Lume</h1>
         <p style="margin:0 0 1rem">Cette politique explique quelles données personnelles Lume collecte, pourquoi, comment elles sont protégées et quels sont vos droits (Loi 25, LPRPDE, RGPD).</p>
-        <p style="margin:0 0 1rem"><strong>Intégration Google / Gmail.</strong> La connexion d'un compte Google est facultative. Lume demande uniquement les autorisations <code>gmail.readonly</code> (afficher vos conversations, messages et pièces jointes dans la Boîte de réception), <code>gmail.send</code> (envoyer ou répondre à un courriel lorsque vous le demandez) et <code>userinfo.email</code> (identifier la boîte connectée). Lume ne supprime, ne modifie, n'archive et ne marque comme lu aucun message.</p>
+        <p style="margin:0 0 1rem"><strong>Intégration Google.</strong> La connexion d'un compte Google est facultative et sert uniquement à l'authentification. Lume demande uniquement les autorisations <code>userinfo.email</code> et <code>openid</code>, qui identifient le compte connecté. Lume ne demande aucun accès à Gmail : ni lecture, ni envoi, ni modification de vos messages.</p>
         <p style="margin:0 0 1rem"><strong>Limited Use.</strong> L'utilisation par Lume des informations obtenues via les API Google est conforme à la Google API Services User Data Policy, y compris ses exigences relatives à la Limited Use. Ces données ne sont jamais utilisées à des fins publicitaires, ne sont jamais vendues et ne servent jamais à entraîner des modèles d'intelligence artificielle.</p>
         <p style="margin:0 0 1rem"><strong>Conservation et révocation.</strong> À la déconnexion du compte Google, les jetons OAuth sont révoqués immédiatement et les données synchronisées sont supprimées sous 30 jours. L'accès peut être révoqué à tout moment depuis <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
-        <p style="margin:0 0 1rem"><strong>Privacy Policy (English).</strong> This policy explains what personal data Lume collects, why, how it is protected, and your rights. Google integration is optional; Lume requests only <code>gmail.readonly</code>, <code>gmail.send</code> and <code>userinfo.email</code>, never modifies or deletes messages, adheres to the Google API Services User Data Policy including the Limited Use requirements, and never uses Google data for advertising or to train AI models.</p>
+        <p style="margin:0 0 1rem"><strong>Privacy Policy (English).</strong> This policy explains what personal data Lume collects, why, how it is protected, and your rights. Google sign-in is optional and used for authentication only; Lume requests only <code>userinfo.email</code> and <code>openid</code> and requests no Gmail access whatsoever. Its use of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements, and Google data is never used for advertising, never sold, and never used to train AI models.</p>
         <p style="margin:0"><a href="/">Accueil / Home</a> · <a href="/terms">Conditions d'utilisation / Terms of Service</a></p>`,
   '/terms': `<h1 style="font-size:2rem;margin:0 0 1rem">Conditions d'utilisation — Lume</h1>
         <p style="margin:0 0 1rem">En créant un compte ou en utilisant Lume (le « Service »), vous acceptez les présentes conditions. Si vous les acceptez au nom d'une organisation, vous déclarez avoir le pouvoir de l'engager.</p>
@@ -587,17 +587,16 @@ const ABOUT_PAGE = `<!doctype html>
 </ul>
 
 <h2>Utilisation des données Google</h2>
-<p>La connexion d'un compte Google est <strong>facultative</strong> et sert uniquement à la fonction Boîte de réception. Lorsqu'un utilisateur choisit de connecter sa boîte Gmail, Lume demande trois autorisations :</p>
+<p>La connexion d'un compte Google est <strong>facultative</strong> et sert uniquement à l'authentification. Lume demande deux autorisations :</p>
 <ul>
-  <li><code>gmail.readonly</code> — afficher ses conversations, messages et pièces jointes dans Lume.</li>
-  <li><code>gmail.send</code> — envoyer, répondre et transférer des courriels depuis sa propre adresse, à sa demande explicite.</li>
-  <li><code>userinfo.email</code> — identifier la boîte connectée et l'afficher dans l'application.</li>
+  <li><code>userinfo.email</code> — identifier le compte connecté.</li>
+  <li><code>openid</code> — authentifier l'utilisateur.</li>
 </ul>
-<p>Lume ne supprime, ne modifie, n'archive et ne marque comme lu aucun message. L'utilisation des informations obtenues via les API Google est conforme à la <em>Google API Services User Data Policy</em>, y compris ses exigences relatives à la <em>Limited Use</em>. Ces données ne sont jamais utilisées à des fins publicitaires, ne sont jamais vendues et ne servent jamais à entraîner des modèles d'intelligence artificielle.</p>
+<p>Lume ne demande <strong>aucun accès à Gmail</strong> : ni lecture, ni envoi, ni modification de vos messages. L'utilisation des informations obtenues via les API Google est conforme à la <em>Google API Services User Data Policy</em>, y compris ses exigences relatives à la <em>Limited Use</em>. Ces données ne sont jamais utilisées à des fins publicitaires, ne sont jamais vendues et ne servent jamais à entraîner des modèles d'intelligence artificielle.</p>
 
 <h2>About Lume (English)</h2>
-<p>Lume is an all-in-one management platform for residential service businesses (window cleaning, roofing, landscaping, HVAC, excavation and similar trades). It lets owners manage clients and leads, create quotes and invoices, schedule jobs and crews, track payments, and read and reply to their business email — all in one place.</p>
-<p>Connecting a Google account is optional and powers the Inbox feature only. Lume requests <code>gmail.readonly</code>, <code>gmail.send</code> and <code>userinfo.email</code>; it never modifies, archives or deletes messages. Its use of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. Google data is never used for advertising, never sold, and never used to train artificial-intelligence models.</p>
+<p>Lume is an all-in-one management platform for residential service businesses (window cleaning, roofing, landscaping, HVAC, excavation and similar trades). It lets owners manage clients and leads, create quotes and invoices, schedule jobs and crews, and track payments — all in one place.</p>
+<p>Connecting a Google account is optional and is used for sign-in only. Lume requests <code>userinfo.email</code> and <code>openid</code>, and requests no access to Gmail. Its use of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. Google data is never used for advertising, never sold, and never used to train artificial-intelligence models.</p>
 
 <footer>
 <p><strong>Lume</strong> — exploité par William Hébert, Québec, Canada — <a href="mailto:willhebert30@gmail.com">willhebert30@gmail.com</a></p>

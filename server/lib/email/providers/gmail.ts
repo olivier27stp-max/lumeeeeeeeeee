@@ -2,15 +2,22 @@
    Email Provider — Gmail (Gmail API + Google OAuth 2.0)
 
    Scopes requested:
-   - gmail.readonly → read messages (list/sync inbox, sent, trash) [SENSITIVE]
-   - gmail.send     → send mail
    - userinfo.email → resolve the mailbox address
+   - openid         → identity only
+
+   NO GMAIL SCOPES ARE REQUESTED. The inbox feature was removed from the
+   product and no UI reaches these routes, but the scopes were still being
+   declared — and `gmail.readonly` is a RESTRICTED scope, which forces a
+   third-party CASA security assessment plus annual recertification before
+   the app can leave test mode and serve real users. Asking for access the
+   product no longer uses is what was blocking Google verification.
+
+   (`gmail.send` is only SENSITIVE — no CASA — but it is dropped too since
+   all transactional mail goes through Resend via lib/mailer.)
+
+   Re-adding either scope means re-entering Google verification: keep the
+   scope list matched to what the product actually does.
    Requires GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET.
-   NOTE: we deliberately avoid the RESTRICTED gmail.modify scope so that
-   Google OAuth verification does NOT require a third-party CASA security
-   audit. readonly + send are SENSITIVE scopes (standard verification only).
-   Trade-off: the mailbox is read-only in the provider — no mark-read /
-   archive / trash write-back to Gmail (those actions were removed).
    ═══════════════════════════════════════════════════════════════ */
 
 import type {
@@ -24,8 +31,6 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
 
 const SCOPES = [
-  'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/userinfo.email',
   'openid',
 ];

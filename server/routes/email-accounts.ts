@@ -26,6 +26,26 @@ import { getValidAccessToken } from '../lib/email/accountService';
 
 const router = Router();
 
+/**
+ * The Gmail inbox feature was removed from the product and its OAuth scopes
+ * were dropped (gmail.readonly is RESTRICTED and forces a CASA assessment).
+ * These routes are no longer reachable from any UI, but leaving them live
+ * would let a stale client start a consent flow that can no longer read or
+ * send mail — failing deep inside Google's API with an opaque error.
+ *
+ * Closed explicitly. Restoring the feature means restoring the scopes and
+ * re-entering Google verification first.
+ */
+const GMAIL_ROUTES_ENABLED = process.env.GMAIL_INBOX_ENABLED === 'true';
+
+router.use((req, res, next) => {
+  if (GMAIL_ROUTES_ENABLED) return next();
+  res.status(410).json({
+    error: 'The email inbox feature is no longer available.',
+    code: 'feature_removed',
+  });
+});
+
 // Verify the account belongs to the caller (defence in depth on top of RLS).
 async function ownedAccount(userId: string, accountId: string) {
   const { data } = await getServiceClient()
