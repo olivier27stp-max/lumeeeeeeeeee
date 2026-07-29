@@ -237,10 +237,28 @@ export async function executeSendSms(
 
   const body = resolveTemplate(config.body, vars);
 
+  // Toujours partir du numero DE L'ORG, jamais du numero partage de la
+  // plateforme : sinon les automatisations d'un locataire arrivent chez ses
+  // clients depuis un numero inconnu, les reponses atterrissent dans la
+  // mauvaise boite, et le gate de forfait est contourne.
+  let fromNumber: string;
+  try {
+    const { getOrgSmsFromNumber } = await import('../twilioProvisioning');
+    fromNumber = await getOrgSmsFromNumber(ctx.orgId);
+  } catch (err: any) {
+    return {
+      success: false,
+      error:
+        err?.code === 'plan_excludes_sms'
+          ? 'Plan does not include SMS'
+          : `Organization has no SMS number provisioned (${err?.code || err?.message || 'unknown'})`,
+    };
+  }
+
   try {
     const sent = await ctx.twilio.client.messages.create({
       body,
-      from: ctx.twilio.phoneNumber,
+      from: fromNumber,
       to,
     });
 
