@@ -99,6 +99,74 @@ router.post('/team-suggestions', async (req, res) => {
       .in('team_id', teamIds)
       .eq('slot_date', date);
 
+    // ── 3b. Roster de l'onglet Horaire (Feuilles de temps) ──
+    // Depuis la refonte, les heures appartiennent à l'ÉQUIPE-JOURNÉE et la
+    // composition vient de team_schedule_assignments / recurring_team_schedules.
+    // Une équipe sans dispo configurée mais avec des membres planifiés ce
+    // jour-là est DISPONIBLE (fenêtre = enveloppe des présences, qui portent
+    // une copie des heures d'équipe). Best-effort : si la migration n'est pas
+    // appliquée, on retombe sur l'ancien comportement.
+    const rosterWindows = new Map<string, Array<{ startMin: number; endMin: number }>>();
+    try {
+      const [assignRes, recurRes, offRes] = await Promise.all([
+        client
+          .from('team_schedule_assignments')
+          .select('team_id, user_id, start_time, end_time, availability_status, recurring_schedule_id')
+          .in('team_id', teamIds)
+          .eq('work_date', date),
+        client
+          .from('recurring_team_schedules')
+          .select('id, team_id, user_id, start_time, end_time, effective_start_date, effective_end_date')
+          .in('team_id', teamIds)
+          .eq('day_of_week', weekday)
+          .eq('is_active', true)
+          .lte('effective_start_date', date)
+          .or(`effective_end_date.is.null,effective_end_date.gte.${date}`),
+        client
+          .from('time_off_requests')
+          .select('user_id, all_day')
+          .eq('org_id', orgId)
+          .eq('status', 'approved')
+          .lte('start_date', date)
+          .gte('end_date', date),
+      ]);
+      if (assignRes.error || recurRes.error) throw assignRes.error || recurRes.error;
+
+      const assigns = assignRes.data || [];
+      const recurs = recurRes.data || [];
+      const fullDayOff = new Set((offRes.data || []).filter((o: any) => o.all_day).map((o: any) => o.user_id));
+
+      const toMin = (t: string) => { const [h, m] = String(t).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+      const manual = assigns.filter((a: any) => a.availability_status === 'available');
+      const removedIds = new Set(
+        assigns.filter((a: any) => a.availability_status === 'removed' && a.recurring_schedule_id).map((a: any) => a.recurring_schedule_id)
+      );
+      const removedUserTeam = new Set(
+        assigns.filter((a: any) => a.availability_status === 'removed' && !a.recurring_schedule_id).map((a: any) => `${a.user_id}|${a.team_id}`)
+      );
+
+      const pushWindow = (tid: string, start: string, end: string) => {
+        const list = rosterWindows.get(tid) || [];
+        list.push({ startMin: toMin(start), endMin: toMin(end) });
+        rosterWindows.set(tid, list);
+      };
+      for (const a of manual) {
+        if (fullDayOff.has(a.user_id)) continue;
+        pushWindow(a.team_id, a.start_time, a.end_time);
+      }
+      for (const r of recurs) {
+        if (removedIds.has(r.id)) continue;
+        if (removedUserTeam.has(`${r.user_id}|${r.team_id}`)) continue;
+        if (fullDayOff.has(r.user_id)) continue;
+        // Une ligne manuelle du même membre dans la même équipe remplace
+        // son occurrence récurrente du jour.
+        if (manual.some((m: any) => m.user_id === r.user_id && m.team_id === r.team_id)) continue;
+        pushWindow(r.team_id, r.start_time, r.end_time);
+      }
+    } catch {
+      // Tables d'horaire absentes — comportement historique conservé.
+    }
+
     // ── 4. Fetch scheduled events for this date (org-scoped) ──
     const dayStart = `${date}T00:00:00`;
     const dayEnd = `${date}T23:59:59`;
@@ -171,15 +239,24 @@ router.post('/team-suggestions', async (req, res) => {
         for (const rule of teamWeekly) {
           availWindows.push({ startMin: rule.start_minute, endMin: rule.end_minute });
         }
+      } else if ((rosterWindows.get(team.id) || []).length > 0) {
+        // FALLBACK 2 : des membres sont planifiés dans l'équipe ce jour-là
+        // (onglet Horaire) → l'équipe est disponible sur l'enveloppe de
+        // leurs présences.
+        const wins = rosterWindows.get(team.id)!;
+        availWindows.push({
+          startMin: Math.min(...wins.map((w) => w.startMin)),
+          endMin: Math.max(...wins.map((w) => w.endMin)),
+        });
       } else {
-        // NO availability at all for this day → team is unavailable
+        // NO availability and no scheduled members for this day → unavailable
         suggestions.push({
           team_id: team.id,
           team_name: team.name,
           team_color: team.color_hex,
           score: 0,
           status: 'unavailable',
-          reasons: ['No availability set for this day'],
+          reasons: ['No availability or scheduled members for this day'],
           earliest_available_at: null,
           jobs_today: teamEvents.length,
           sector_today: null,
