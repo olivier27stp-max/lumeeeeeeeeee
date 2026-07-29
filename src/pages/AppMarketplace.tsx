@@ -266,15 +266,16 @@ const IntegrationRow: React.FC<RowProps> = ({ app, status, native, onOpen, onMan
       disabled={isComingSoon}
       className={cn(
         'section-card w-full p-5 text-left transition-all group',
-        isComingSoon
-          ? 'opacity-60 cursor-default'
-          : 'hover:shadow-md hover:border-outline',
+        isComingSoon ? 'cursor-default' : 'hover:shadow-md hover:border-outline',
       )}
     >
       <div className="flex items-center gap-4">
+        {/* The logo keeps its full brand colour even when the integration is
+            not yet available — dimming it reads as a broken image. The badge
+            alone carries the "not yet" message. */}
         <AppLogo app={app} size="lg" />
 
-        <div className="flex-1 min-w-0">
+        <div className={cn('flex-1 min-w-0', isComingSoon && 'opacity-70')}>
           <div className="flex items-center gap-2 mb-1">
             <p className="text-[15px] font-bold text-text-primary">{app.name}</p>
             <StatusBadge status={status} />
