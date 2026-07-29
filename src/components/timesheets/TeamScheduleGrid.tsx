@@ -95,6 +95,9 @@ const KIND_LABELS: Record<TimeOffKind, { fr: string; en: string }> = {
 
 type EditScope = 'one' | 'future' | 'all';
 
+/** Nombre maximal de membres assignables à une même équipe pour une journée. */
+const MAX_MEMBERS_PER_TEAM_DAY = 5;
+
 interface AddModalState {
   cells: Array<{ teamId: string; date: string }>;
 }
@@ -558,6 +561,9 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
                   {dates.map((date) => {
                     const entries = cellEntries(team.id, date);
                     const key = cellKey(team.id, date);
+                    // Capacité calculée sur la liste NON filtrée : les filtres
+                    // Membre / Congés ne doivent pas rouvrir une cellule pleine.
+                    const cellCount = (resolved.get(key) || []).length;
                     const isSelected = selectedCells.has(key);
                     // Les heures appartiennent à l'ÉQUIPE pour la journée —
                     // affichées une fois en tête de cellule, jamais par membre.
@@ -641,18 +647,27 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
                             </button>
                           );
                         })}
-                        {/* État vide / ajout */}
+                        {/* État vide / ajout — bouton TOUJOURS visible tant que
+                            l'équipe-journée n'est pas complète (max 5 membres).
+                            (Avant : visible seulement au survol dès qu'un membre
+                            existait, ce qui donnait l'impression d'une limite.) */}
                         {canManage && !selecting && !missing ? (
-                          <button
-                            type="button"
-                            onClick={() => openAdd(team.id, date)}
-                            className={cn(
-                              'w-full rounded-lg border border-dashed border-outline text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-all flex items-center justify-center gap-1 text-[11px] font-medium py-1.5',
-                              entries.length === 0 ? 'flex-1 min-h-[52px]' : 'opacity-0 group-hover:opacity-100'
-                            )}
-                          >
-                            <Plus size={11} /> {entries.length === 0 ? (fr ? 'Assigner' : 'Assign') : (fr ? 'Ajouter' : 'Add')}
-                          </button>
+                          cellCount < MAX_MEMBERS_PER_TEAM_DAY ? (
+                            <button
+                              type="button"
+                              onClick={() => openAdd(team.id, date)}
+                              className={cn(
+                                'w-full rounded-lg border border-dashed border-outline text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-all flex items-center justify-center gap-1 text-[11px] font-medium py-1.5',
+                                entries.length === 0 && 'flex-1 min-h-[52px]'
+                              )}
+                            >
+                              <Plus size={11} /> {entries.length === 0 ? (fr ? 'Assigner' : 'Assign') : (fr ? 'Ajouter' : 'Add')}
+                            </button>
+                          ) : (
+                            <span className="w-full py-1 text-center text-[10px] font-medium text-text-tertiary/70">
+                              {fr ? 'Complet (5 max)' : 'Full (max 5)'}
+                            </span>
+                          )
                         ) : entries.length === 0 ? (
                           <div className="flex-1 flex items-center justify-center text-[11px] text-text-tertiary/60">—</div>
                         ) : null}
@@ -895,11 +910,26 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
     return map;
   }, [data.teamWeekly, first.teamId]);
 
+  // Membres déjà assignés à cette équipe-journée (mode 1 cellule) — inutile
+  // de les proposer une deuxième fois dans le menu.
+  const takenIds = useMemo(() => {
+    if (!single) return new Set<string>();
+    return new Set(resolveDay(first.date, data).filter((e) => e.team_id === first.teamId).map((e) => e.user_id));
+  }, [single, first.date, first.teamId, data]);
+
+  const cellFull = (cell: { teamId: string; date: string }) =>
+    resolveDay(cell.date, data).filter((e) => e.team_id === cell.teamId).length >= MAX_MEMBERS_PER_TEAM_DAY;
+
   // Avertissements de conflit (calculés sur les données déjà chargées).
   const warnings = useMemo(() => {
     if (!userId) return [];
     const list: string[] = [];
     for (const cell of cells) {
+      if (cellFull(cell)) {
+        list.push(fr
+          ? `${fmtDay(cell.date, fr)} : équipe déjà complète (${MAX_MEMBERS_PER_TEAM_DAY} membres max) — cette cellule sera ignorée.`
+          : `${fmtDay(cell.date, fr)}: team already full (max ${MAX_MEMBERS_PER_TEAM_DAY} members) — this cell will be skipped.`);
+      }
       const hours = cellHours(cell);
       const s = timeToMin(hours.start);
       const e = timeToMin(hours.end);
@@ -920,6 +950,12 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
 
   async function save() {
     if (!userId) { toast.error(fr ? 'Choisis un membre.' : 'Pick a member.'); return; }
+    if (cells.every(cellFull)) {
+      toast.error(fr
+        ? `Équipe déjà complète (${MAX_MEMBERS_PER_TEAM_DAY} membres max par journée).`
+        : `Team already full (max ${MAX_MEMBERS_PER_TEAM_DAY} members per day).`);
+      return;
+    }
     setSaving(true);
     try {
       if (repeat && single) {
@@ -934,8 +970,9 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
         });
         toast.success(fr ? 'Horaire récurrent créé' : 'Recurring schedule created');
       } else {
-        let created = 0, skipped = 0;
+        let created = 0, skipped = 0, full = 0;
         for (const cell of cells) {
+          if (cellFull(cell)) { full++; continue; }
           const hours = cellHours(cell);
           try {
             await createAssignment({ team_id: cell.teamId, user_id: userId, work_date: cell.date, start_time: hours.start, end_time: hours.end, note });
@@ -948,7 +985,9 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
         toast.success(
           single
             ? (fr ? 'Membre assigné' : 'Member assigned')
-            : (fr ? `${created} assignation(s) créée(s)${skipped ? `, ${skipped} en conflit` : ''}` : `${created} assignment(s) created${skipped ? `, ${skipped} conflicted` : ''}`)
+            : (fr
+                ? `${created} assignation(s) créée(s)${skipped ? `, ${skipped} en conflit` : ''}${full ? `, ${full} équipe(s) complète(s)` : ''}`
+                : `${created} assignment(s) created${skipped ? `, ${skipped} conflicted` : ''}${full ? `, ${full} team(s) full` : ''}`)
         );
       }
       onSaved();
@@ -979,8 +1018,15 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
             <label className={labelCls}>{fr ? 'Membre' : 'Member'}</label>
             <select value={userId} onChange={(e) => setUserId(e.target.value)} className="glass-input w-full mt-1.5">
               <option value="">{fr ? '— Choisir —' : '— Pick —'}</option>
-              {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}
+              {members.filter((m) => !takenIds.has(m.user_id)).map((m) => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}
             </select>
+            {single && takenIds.size > 0 && (
+              <p className="mt-1 text-[11px] text-text-tertiary">
+                {fr
+                  ? `${takenIds.size}/${MAX_MEMBERS_PER_TEAM_DAY} membre(s) déjà assigné(s) à cette équipe ce jour-là.`
+                  : `${takenIds.size}/${MAX_MEMBERS_PER_TEAM_DAY} member(s) already assigned to this team that day.`}
+              </p>
+            )}
           </div>
           {/* Heures : celles de l'équipe pour la journée — pas de saisie par membre. */}
           <div className="rounded-lg border border-outline bg-surface-secondary/40 px-3.5 py-2.5 flex items-center gap-2">
