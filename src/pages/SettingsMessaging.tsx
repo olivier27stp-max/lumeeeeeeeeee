@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import {
   fetchChannels,
+  provisionSmsNumber,
   sendSms,
   fetchA2PStatus,
   submitA2PBrand,
@@ -47,6 +48,9 @@ export default function SettingsMessaging() {
   const [orgCountry, setOrgCountry] = useState<string | null>(null);
   const [a2p, setA2p] = useState<A2PRegistration | null>(null);
 
+  const [provisioning, setProvisioning] = useState(false);
+  const [provisionError, setProvisionError] = useState('');
+
   const [testPhone, setTestPhone] = useState('');
   const [testBody, setTestBody] = useState(
     isFr ? 'Test depuis Lume CRM ✅' : 'Test from Lume CRM ✅',
@@ -65,12 +69,14 @@ export default function SettingsMessaging() {
       const orgId = await getCurrentOrgId();
       let country: string | null = null;
       if (orgId) {
-        const { data: org } = await supabase
-          .from('orgs')
+        // The address lives in company_settings — `orgs` has no country column.
+        const { data: settings } = await supabase
+          .from('company_settings')
           .select('country')
-          .eq('id', orgId)
+          .eq('org_id', orgId)
           .maybeSingle();
-        country = (org?.country || 'CA').toUpperCase();
+        const raw = String(settings?.country || '').trim().toUpperCase();
+        country = raw === 'US' || raw === 'USA' || raw === 'UNITED STATES' ? 'US' : 'CA';
         setOrgCountry(country);
       }
 
@@ -90,6 +96,21 @@ export default function SettingsMessaging() {
       setLoadError(err?.message || 'Failed to load channel');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleProvision() {
+    setProvisioning(true);
+    setProvisionError('');
+    try {
+      await provisionSmsNumber();
+      await load();
+    } catch (err: any) {
+      setProvisionError(
+        err?.message || (isFr ? "Échec de l'attribution du numéro." : 'Failed to provision number.'),
+      );
+    } finally {
+      setProvisioning(false);
     }
   }
 
@@ -165,16 +186,43 @@ export default function SettingsMessaging() {
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
               <span>
                 {isFr
-                  ? "Aucun numéro SMS n'est encore attribué. Votre numéro sera prêt dans quelques minutes après l'activation de votre plan."
-                  : 'No SMS number assigned yet. Your number will be ready within a few minutes after plan activation.'}
+                  ? "Aucun numéro SMS n'est encore attribué. Votre numéro est normalement créé automatiquement après l'activation de votre plan — s'il n'apparaît pas, vous pouvez l'obtenir maintenant."
+                  : 'No SMS number assigned yet. Your number is normally created automatically after plan activation — if it has not appeared, you can get it now.'}
               </span>
             </div>
-            <button
-              onClick={load}
-              className="text-xs font-medium text-[#1F5F4F] hover:underline"
-            >
-              {isFr ? 'Actualiser' : 'Refresh'}
-            </button>
+
+            {provisionError && (
+              <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 rounded-lg px-4 py-3">
+                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                <span>{provisionError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleProvision}
+                disabled={provisioning}
+                className="inline-flex items-center gap-2 px-4 h-10 rounded-lg bg-[#1F5F4F] text-white text-sm font-medium hover:bg-[#1a5143] transition disabled:opacity-60"
+              >
+                {provisioning ? <Loader2 size={15} className="animate-spin" /> : <MessageSquare size={15} />}
+                {provisioning
+                  ? (isFr ? 'Attribution en cours…' : 'Provisioning…')
+                  : (isFr ? 'Obtenir mon numéro' : 'Get my number')}
+              </button>
+              <button
+                onClick={load}
+                disabled={provisioning}
+                className="text-xs font-medium text-[#1F5F4F] hover:underline disabled:opacity-60"
+              >
+                {isFr ? 'Actualiser' : 'Refresh'}
+              </button>
+            </div>
+
+            <p className="text-[11px] text-text-tertiary">
+              {isFr
+                ? "L'indicatif régional est choisi automatiquement selon l'adresse de votre entreprise."
+                : 'The area code is chosen automatically from your company address.'}
+            </p>
           </div>
         )}
 

@@ -128,6 +128,27 @@ export async function fetchChannels(): Promise<CommunicationChannel[]> {
   return data;
 }
 
+/**
+ * Provision the org's dedicated Twilio SMS number.
+ * Owner/admin only; requires a plan that includes SMS. The area code is derived
+ * server-side from the org's address — no country override from the client.
+ */
+export async function provisionSmsNumber(): Promise<{
+  channelId: string;
+  phoneNumber: string;
+  already_provisioned?: boolean;
+}> {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/communications/provision-sms', {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || 'Failed to provision SMS number');
+  return data;
+}
+
 export async function fetchCommSettings(): Promise<CommunicationSettings> {
   const headers = await getAuthHeaders();
   const res = await fetch('/api/communications/settings', { headers });

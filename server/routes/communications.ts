@@ -12,6 +12,7 @@ import {
   type A2PBrandInput,
   type A2PCampaignInput,
 } from '../lib/twilioA2P';
+import { requireRole } from '../lib/rbac';
 import { validate, sendSmsSchema } from '../lib/validation';
 import { sanitizeText, sanitizeHtml, sanitizeMessageContent, stripCRLF, logSecurityEvent, checkAnomalies, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
@@ -294,17 +295,43 @@ router.get('/communications/settings', async (req, res) => {
 // Provision a Twilio number for the org (admin only)
 // ═══════════════════════════════════════════════════════════════
 
-router.post('/communications/provision-sms', async (req, res) => {
+router.post('/communications/provision-sms', requireRole('owner', 'admin'), async (req, res) => {
   try {
     const authed = await requireAuthedClient(req, res);
     if (!authed) return;
     const { orgId } = authed;
 
-    const { area_code, country } = req.body || {};
+    const serviceClient = getServiceClient();
+
+    // Buying a number costs real money — the org's plan must include SMS.
+    // An org can briefly hold more than one live subscription mid-upgrade, so
+    // take every active row and accept if ANY of them includes SMS.
+    const { data: subs } = await serviceClient
+      .from('subscriptions')
+      .select('status, plans(name, includes_sms)')
+      .eq('org_id', orgId)
+      .in('status', ['active', 'trialing']);
+
+    const includesSms = (subs || []).some((s: any) => s.plans?.includes_sms);
+    if (!includesSms) {
+      return res.status(403).json({
+        error: 'Your current plan does not include a dedicated SMS number. Upgrade to Scale or Autopilot.',
+        code: 'plan_excludes_sms',
+      });
+    }
+
+    // Idempotent: never buy a second number for an org that already has one.
+    const existing = await getOrgSmsChannel(orgId);
+    if (existing?.phone_number) {
+      return res.json({ channelId: existing.id, phoneNumber: existing.phone_number, already_provisioned: true });
+    }
+
+    // Region is derived server-side from the org's address; callers may only
+    // override the area code, never the country (prevents buying US numbers by hand).
+    const { area_code } = req.body || {};
 
     const result = await provisionSmsNumber(orgId, {
-      areaCode: area_code,
-      country: country || 'CA',
+      areaCode: typeof area_code === 'string' && /^\d{3}$/.test(area_code) ? area_code : undefined,
     });
 
     return res.json(result);

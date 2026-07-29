@@ -112,20 +112,26 @@ export async function getOrgSmsFromNumber(orgId: string): Promise<string> {
 
 async function resolveRegionForOrg(orgId: string): Promise<{ country: string | null; areaCode: string | null }> {
   const serviceClient = getServiceClient();
-  const { data: org } = await serviceClient
-    .from('orgs')
-    .select('country, region, city, postal_code')
-    .eq('id', orgId)
+  // The org address lives in company_settings — `orgs` has no address columns.
+  // Note the column is `province` (not `region`).
+  const { data: settings, error } = await serviceClient
+    .from('company_settings')
+    .select('country, province, city, postal_code')
+    .eq('org_id', orgId)
     .maybeSingle();
 
-  if (!org) return { country: null, areaCode: null };
+  if (error) {
+    console.error(`[provisioning] Failed to read company_settings for org ${orgId}:`, error.message);
+    return { country: null, areaCode: null };
+  }
+  if (!settings) return { country: null, areaCode: null };
 
-  const country = normalizeCountry(org.country);
+  const country = normalizeCountry(settings.country);
   const areaCode = pickAreaCode({
     country,
-    region: org.region || null,
-    city: org.city || null,
-    postal: org.postal_code || null,
+    region: settings.province || null,
+    city: settings.city || null,
+    postal: settings.postal_code || null,
   });
 
   return { country, areaCode };
@@ -136,6 +142,15 @@ function normalizeCountry(raw: string | null | undefined): string {
   if (v === 'CA' || v === 'CAN' || v === 'CANADA') return 'CA';
   if (v === 'US' || v === 'USA' || v === 'UNITED STATES') return 'US';
   return v || 'CA';
+}
+
+/** Strip accents + collapse whitespace so "Montréal" and "Montreal" both match. */
+function foldKey(raw: string | null): string {
+  return String(raw || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function pickAreaCode(input: {
@@ -151,10 +166,10 @@ function pickAreaCode(input: {
     const fsa = (postal || '').replace(/\s+/g, '').toUpperCase().slice(0, 3);
     if (fsa && CA_FSA_TO_AREA[fsa]) return CA_FSA_TO_AREA[fsa];
 
-    const cityKey = (city || '').trim().toLowerCase();
+    const cityKey = foldKey(city).toLowerCase();
     if (cityKey && CA_CITY_TO_AREA[cityKey]) return CA_CITY_TO_AREA[cityKey];
 
-    const regionKey = (region || '').trim().toUpperCase();
+    const regionKey = foldKey(region).toUpperCase();
     if (regionKey && CA_REGION_TO_AREA[regionKey]) return CA_REGION_TO_AREA[regionKey];
     return null;
   }
@@ -163,10 +178,10 @@ function pickAreaCode(input: {
     const zip3 = (postal || '').replace(/\D/g, '').slice(0, 3);
     if (zip3 && US_ZIP3_TO_AREA[zip3]) return US_ZIP3_TO_AREA[zip3];
 
-    const cityKey = (city || '').trim().toLowerCase();
+    const cityKey = foldKey(city).toLowerCase();
     if (cityKey && US_CITY_TO_AREA[cityKey]) return US_CITY_TO_AREA[cityKey];
 
-    const regionKey = (region || '').trim().toUpperCase();
+    const regionKey = foldKey(region).toUpperCase();
     if (regionKey && US_REGION_TO_AREA[regionKey]) return US_REGION_TO_AREA[regionKey];
     return null;
   }
@@ -192,6 +207,23 @@ const CA_FSA_TO_AREA: Record<string, string> = {
   H4A: '514', H4B: '514', H4C: '514', H4E: '514', H4G: '514', H4H: '514', H4J: '514',
   // Laval (450/579)
   H7A: '450', H7B: '450', H7C: '450', H7E: '450', H7G: '450', H7H: '450', H7J: '450',
+  // Montérégie / couronne sud — Longueuil, Brossard, Saint-Hubert, Saint-Bruno,
+  // Mont-Saint-Hilaire, Beloeil, Saint-Hyacinthe, Granby, Sorel (450/579)
+  J3A: '450', J3B: '450', J3E: '450', J3G: '450', J3H: '450', J3L: '450',
+  J3M: '450', J3N: '450', J3P: '450', J3R: '450', J3V: '450', J3X: '450', J3Y: '450', J3Z: '450',
+  J2A: '450', J2B: '450', J2C: '450', J2E: '450', J2G: '450', J2H: '450',
+  J2J: '450', J2K: '450', J2L: '450', J2M: '450', J2N: '450', J2R: '450', J2S: '450', J2T: '450', J2W: '450', J2X: '450', J2Y: '450',
+  J4B: '450', J4G: '450', J4H: '450', J4J: '450', J4K: '450', J4L: '450', J4M: '450',
+  J4N: '450', J4P: '450', J4R: '450', J4S: '450', J4T: '450', J4V: '450', J4W: '450',
+  J4X: '450', J4Y: '450', J4Z: '450',
+  J5A: '450', J5B: '450', J5C: '450', J5J: '450', J5K: '450', J5L: '450', J5M: '450',
+  J5R: '450', J5T: '450', J5V: '450', J5W: '450', J5X: '450', J5Y: '450', J5Z: '450',
+  J6A: '450', J6E: '450', J6J: '450', J6K: '450', J6N: '450', J6R: '450', J6S: '450',
+  J6T: '450', J6V: '450', J6W: '450', J6X: '450', J6Y: '450', J6Z: '450',
+  J7A: '450', J7B: '450', J7C: '450', J7E: '450', J7G: '450', J7H: '450', J7J: '450',
+  J7K: '450', J7L: '450', J7M: '450', J7N: '450', J7P: '450', J7R: '450', J7T: '450',
+  J7V: '450', J7W: '450', J7X: '450', J7Y: '450', J7Z: '450',
+  J0L: '450', J0J: '450',
   // Québec City (418/581)
   G1A: '418', G1B: '418', G1C: '418', G1E: '418', G1G: '418', G1H: '418', G1J: '418',
   G1K: '418', G1L: '418', G1M: '418', G1N: '418', G1P: '418', G1R: '418', G1S: '418',
@@ -228,6 +260,23 @@ const CA_CITY_TO_AREA: Record<string, string> = {
   'montreal': '514', 'montréal': '514',
   'laval': '450',
   'longueuil': '450',
+  'brossard': '450',
+  'saint-hubert': '450',
+  'saint-bruno-de-montarville': '450',
+  'mont-saint-hilaire': '450',
+  'beloeil': '450',
+  'chambly': '450',
+  'saint-jean-sur-richelieu': '450',
+  'saint-hyacinthe': '450',
+  'granby': '450',
+  'sorel-tracy': '450',
+  'terrebonne': '450',
+  'repentigny': '450',
+  'blainville': '450',
+  'mirabel': '450',
+  'saint-jerome': '450',
+  'salaberry-de-valleyfield': '450',
+  'vaudreuil-dorion': '450',
   'quebec': '418', 'québec': '418', 'quebec city': '418',
   'gatineau': '819',
   'sherbrooke': '819',
