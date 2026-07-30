@@ -99,8 +99,12 @@ function normalize(value: string | null | undefined) {
 }
 
 function moneyFromRow(row: any): number {
-  if (typeof row.total_amount === 'number') return row.total_amount;
+  // `total_cents` est la source de vérité (entier, jamais de flottant).
+  // `total_amount` est une colonne héritée, laissée à 0.00 sur une partie des
+  // jobs : la tester en premier renvoyait 0 $ alors que total_cents était bon.
+  // On ne retombe dessus que si total_cents est réellement absent.
   if (typeof row.total_cents === 'number') return row.total_cents / 100;
+  if (typeof row.total_amount === 'number') return row.total_amount;
   return 0;
 }
 

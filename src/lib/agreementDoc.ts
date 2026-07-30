@@ -87,7 +87,10 @@ export function buildAgreementDocData(params: {
       .filter((it) => it.included)
       .map((it) => ({ name: it.name, qty: it.qty, unit_price_cents: it.unit_price_cents, total_cents: it.total_cents }));
     const computedSubtotal = items.reduce((sum, it) => sum + it.total_cents, 0);
-    subtotalCents = job.subtotal ? Math.round(job.subtotal * 100) : computedSubtotal;
+    // N1.4 — subtotal_cents (entier) fait foi ; repli sur la somme des lignes.
+    subtotalCents = Number(job.subtotal_cents) > 0
+      ? Number(job.subtotal_cents)
+      : computedSubtotal;
     const enabled = (Array.isArray(job.tax_lines) ? (job.tax_lines as TaxLine[]) : []).filter((tx) => tx.enabled && tx.rate > 0);
     taxLines = enabled.map((tx) => ({
       label: tx.label,

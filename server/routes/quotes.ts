@@ -627,12 +627,13 @@ router.post('/quotes/convert-to-job', async (req, res) => {
     }
 
     // Update job financials + transfer deposit settings from quote
+    // N1.7 — on n'ecrit QUE les cents. Les colonnes numeric heritees
+    // (total, total_amount, subtotal, tax_total) sont recalculees par le
+    // trigger sync_jobs_legacy_money ; les ecrire ici creerait une 2e source.
     await admin.from('jobs').update({
       total_cents: quote.total_cents,
-      total_amount: quote.total_cents / 100,
-      subtotal: quote.subtotal_cents / 100,
-      tax_total: quote.tax_cents / 100,
-      total: quote.total_cents / 100,
+      subtotal_cents: quote.subtotal_cents,
+      tax_cents: quote.tax_cents,
       deposit_required: quote.deposit_required || false,
       deposit_type: quote.deposit_type || null,
       deposit_value: quote.deposit_value || null,

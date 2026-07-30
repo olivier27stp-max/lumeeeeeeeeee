@@ -246,6 +246,12 @@ function mapJob(raw: any, clientNameFallback?: string | null): Job {
     end_at: raw.end_at || null,
     status: raw.derived_status ? displayFromDerivedStatus(raw.derived_status) : deriveJobDisplayStatus(raw),
     total_cents: raw.total_cents ?? Math.round(Number(raw.total_amount || 0) * 100),
+    subtotal_cents: raw.subtotal_cents == null
+      ? (raw.subtotal == null ? undefined : Math.round(Number(raw.subtotal) * 100))
+      : Number(raw.subtotal_cents),
+    tax_cents: raw.tax_cents == null
+      ? (raw.tax_total == null ? undefined : Math.round(Number(raw.tax_total) * 100))
+      : Number(raw.tax_cents),
     currency: raw.currency || 'CAD',
     subtotal: raw.subtotal == null ? undefined : Number(raw.subtotal),
     tax_total: raw.tax_total == null ? undefined : Number(raw.tax_total),
@@ -632,7 +638,8 @@ export async function createJob(payload: {
       scheduled_at: payload.scheduled_at || null,
       end_at: payload.end_at || null,
       status: normalizeStatusValue(payload.status || 'scheduled'),
-      total_amount: payload.total_amount ?? Number((payload.total_cents || 0) / 100),
+      // N1.7 — seules les colonnes *_cents sont ecrites. total_amount, total,
+      // subtotal et tax_total sont recalculees par sync_jobs_legacy_money.
       total_cents: payload.total_cents ?? Math.round(Number(payload.total_amount || 0) * 100),
       currency: payload.currency || 'CAD',
       client_id: payload.client_id || null,
@@ -643,9 +650,10 @@ export async function createJob(payload: {
       ...(payload.show_on_leaderboard !== undefined ? { show_on_leaderboard: payload.show_on_leaderboard } : {}),
       requires_invoicing: payload.requires_invoicing ?? false,
       billing_split: payload.billing_split ?? false,
-      subtotal: payload.subtotal ?? Number((payload.total_cents || 0) / 100),
-      tax_total: payload.tax_total ?? 0,
-      total: payload.total ?? Number((payload.total_cents || 0) / 100),
+      subtotal_cents: payload.subtotal != null
+        ? Math.round(Number(payload.subtotal) * 100)
+        : (payload.total_cents ?? 0),
+      tax_cents: payload.tax_total != null ? Math.round(Number(payload.tax_total) * 100) : 0,
       tax_lines: payload.tax_lines ?? [],
       updated_at: new Date().toISOString(),
     };
@@ -864,11 +872,10 @@ export async function createJob(payload: {
     const { error: finErr, status: finStatus } = await supabase
       .from('jobs')
       .update({
-        subtotal: financials.subtotal,
-        tax_total: financials.tax_amount,
-        total: financials.total,
+        // N1.7 — cents uniquement ; les colonnes numeric suivent par trigger.
+        subtotal_cents: Math.round(Number(financials.subtotal) * 100),
+        tax_cents: Math.round(Number(financials.tax_amount) * 100),
         total_cents: financials.total_cents,
-        total_amount: financials.total,
         tax_lines: payload.tax_lines || [],
       })
       .eq('id', data.id)
@@ -1005,8 +1012,8 @@ export async function updateJob(
   if (payload.end_at !== undefined) updatePayload.end_at = payload.end_at;
   if (payload.team_id !== undefined) updatePayload.team_id = payload.team_id || null;
   if (payload.total_cents !== undefined) {
+    // total_amount est recalcule par sync_jobs_legacy_money (N1.7).
     updatePayload.total_cents = payload.total_cents;
-    updatePayload.total_amount = Number(payload.total_cents || 0) / 100;
   }
   if (payload.title !== undefined) updatePayload.title = payload.title;
   if (payload.property_address !== undefined) {
@@ -1030,9 +1037,18 @@ export async function updateJob(
   if (payload.job_type !== undefined) updatePayload.job_type = payload.job_type;
   if (payload.client_name !== undefined) updatePayload.client_name = payload.client_name;
   if (payload.notes !== undefined) updatePayload.notes = payload.notes;
-  if (payload.subtotal !== undefined) updatePayload.subtotal = payload.subtotal;
-  if (payload.tax_total !== undefined) updatePayload.tax_total = payload.tax_total;
-  if (payload.total !== undefined) updatePayload.total = payload.total;
+  // N1.7 — les appelants historiques passent encore des dollars (subtotal,
+  // tax_total, total). On convertit en cents ici : la DB ne recoit que *_cents,
+  // les colonnes numeric etant recalculees par sync_jobs_legacy_money.
+  if (payload.subtotal !== undefined) {
+    updatePayload.subtotal_cents = Math.round(Number(payload.subtotal || 0) * 100);
+  }
+  if (payload.tax_total !== undefined) {
+    updatePayload.tax_cents = Math.round(Number(payload.tax_total || 0) * 100);
+  }
+  if (payload.total !== undefined) {
+    updatePayload.total_cents = Math.round(Number(payload.total || 0) * 100);
+  }
   if (payload.tax_lines !== undefined) updatePayload.tax_lines = payload.tax_lines;
 
   // Support optimistic locking if version provided in payload

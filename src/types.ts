@@ -95,11 +95,19 @@ export interface Job {
   start_at?: string | null;
   end_at?: string | null;
   status: JobStatus | string;
+  /** Source de vérité pour l'argent (N1.4 : entier en cents, jamais de float). */
   total_cents: number;
-  total_amount?: number;
+  subtotal_cents?: number;
+  tax_cents?: number;
   currency: string;
+  /** @deprecated Projections numeric de *_cents, maintenues par le trigger
+   *  sync_jobs_legacy_money. Ne jamais lire pour afficher ni calculer. */
+  total_amount?: number;
+  /** @deprecated voir total_amount */
   subtotal?: number;
+  /** @deprecated voir total_amount */
   tax_total?: number;
+  /** @deprecated voir total_amount */
   total?: number;
   tax_lines?: Array<{ code: string; label: string; rate: number; enabled: boolean }>;
   job_type?: string | null;

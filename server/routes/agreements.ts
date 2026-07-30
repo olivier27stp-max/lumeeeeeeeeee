@@ -70,7 +70,7 @@ interface ComposedAgreementDoc {
 async function composeLiveDoc(admin: any, agreement: any): Promise<ComposedAgreementDoc> {
   const { data: job } = await admin
     .from('jobs')
-    .select('id, job_number, subtotal, tax_lines, property_address, client_id')
+    .select('id, job_number, subtotal_cents, tax_lines, property_address, client_id')
     .eq('id', agreement.job_id)
     .maybeSingle();
 
@@ -90,7 +90,11 @@ async function composeLiveDoc(admin: any, agreement: any): Promise<ComposedAgree
     }));
 
   const computedSubtotal = items.reduce((sum: number, it: any) => sum + it.total_cents, 0);
-  const subtotalCents = job?.subtotal ? Math.round(Number(job.subtotal) * 100) : computedSubtotal;
+  // N1.4 — subtotal_cents (entier) fait foi ; on ne repasse plus par la colonne
+  // numeric heritee. Repli sur la somme des lignes si le job n'a pas de total.
+  const subtotalCents = Number(job?.subtotal_cents) > 0
+    ? Number(job.subtotal_cents)
+    : computedSubtotal;
   const taxLines = (Array.isArray(job?.tax_lines) ? job.tax_lines : [])
     .filter((tx: any) => tx?.enabled && Number(tx.rate) > 0)
     .map((tx: any) => ({

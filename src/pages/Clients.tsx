@@ -755,7 +755,7 @@ export default function Clients() {
                             </p>
                           </div>
                           <span className="text-[14px] font-bold text-text-primary tabular-nums">
-                            {formatCurrency(Math.round(Number(job.total_amount || 0)))}
+                            {formatCurrency(Math.round(Number(job.total_cents || 0) / 100))}
                           </span>
                         </button>
                       ))}
