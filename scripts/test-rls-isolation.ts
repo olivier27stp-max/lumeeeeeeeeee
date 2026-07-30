@@ -222,6 +222,22 @@ async function main() {
       and has_table_privilege('authenticated', k.oid, 'update')`)).rows;
   for (const r of noCheck) leaks.push(`UPDATE policy without WITH CHECK: ${r.p}`);
 
+  // ── J. SSRF via pg_net ──
+  // pg_net fait émettre à la base des requêtes HTTP sortantes. Un rôle
+  // client qui peut l'appeler dispose d'une SSRF : exfiltrer des données
+  // vers un serveur tiers, atteindre des services internes, ou couper le
+  // worker réseau (donc push + libération des numéros SMS).
+  // Les appelants légitimes sont SECURITY DEFINER et ne sont pas affectés
+  // par le retrait du grant.
+  const netFns = (await c.query(`
+    select count(*)::int n from pg_proc p
+    join pg_namespace ns on ns.oid = p.pronamespace and ns.nspname = 'net'
+    where has_function_privilege('anon', p.oid, 'execute')
+       or has_function_privilege('authenticated', p.oid, 'execute')`)).rows[0]?.n ?? 0;
+  if (netFns > 0) {
+    leaks.push(`SSRF: ${netFns} pg_net function(s) callable by client roles — see scripts/A-APPLIQUER-dashboard-pgnet.sql`);
+  }
+
   // ── I. Vues sans security_invoker ──
   // Une vue s'exécute avec les droits de son propriétaire (postgres), donc
   // elle voit TOUTES les orgs quelle que soit la RLS des tables sous-jacentes.
