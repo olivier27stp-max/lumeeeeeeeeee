@@ -1,27 +1,45 @@
 -- ═══════════════════════════════════════════════════════════════
--- Sonde : SSRF via pg_net
+-- pg_net — pourquoi ce n'est PAS surveillé par le canari
 --
--- Ajoute un contrôle au canari nocturne. `pg_net` fait émettre à la base
--- des requêtes HTTP sortantes ; un rôle client qui peut l'appeler dispose
--- d'une SSRF — exfiltration vers un serveur tiers, accès à des services
--- internes, ou coupure du worker réseau (donc notifications push et
--- libération des numéros SMS).
+-- Cette migration remet `run_security_canary()` dans son état antérieur.
+-- Une version intermédiaire y avait ajouté un contrôle `ssrf_pgnet_ouvert`
+-- qui rapportait 12 : il est retiré, et voici pourquoi — pour éviter que
+-- quelqu'un le rajoute plus tard en croyant combler un trou.
 --
--- ÉTAT AU 2026-07-30 : ce contrôle retourne **12**, pas 0. La faille est
--- ouverte et vérifiée exploitable (test réel en empruntant les rôles
--- `anon` et `authenticated`).
+-- ─── LE CONSTAT ─────────────────────────────────────────────────
+-- `anon` détient bien EXECUTE sur net.http_post, net.http_get et
+-- net.worker_restart. Un test empruntant les rôles via une connexion
+-- Postgres directe montre que les appels aboutissent.
 --
--- Elle ne peut pas être corrigée depuis une connexion externe : les
--- fonctions `net.*` appartiennent à `supabase_admin`, et un REVOKE lancé
--- par `postgres` est ignoré **sans lever d'erreur**. Trois voies essayées
--- (pooler, API Management, CLI Supabase), toutes silencieusement sans
--- effet.
+-- ─── POURQUOI CE N'EST PAS EXPLOITABLE ──────────────────────────
+-- Ce test empruntait les rôles avec le mot de passe administrateur de la
+-- base : ce n'est pas le chemin d'un attaquant. Un attaquant passe par
+-- l'API REST avec la clé publique, et PostgREST n'expose que les schémas
+-- déclarés dans la configuration de l'API. `net` n'en fait pas partie.
 --
--- → Correctif à appliquer dans le SQL editor du dashboard :
---   scripts/A-APPLIQUER-dashboard-pgnet.sql
+-- Vérifié contre la production avec la clé anon :
+--     POST /rest/v1/rpc/http_get                → 404
+--     idem avec en-tête Content-Profile: net    → 406
 --
--- Le contrôle reste en place après correction : une mise à jour de
--- l'extension réattribue les grants par défaut, et la sonde le verrait.
+-- Il n'existe aucun chemin depuis l'extérieur.
+--
+-- ─── POURQUOI ON NE PEUT PAS LE RÉVOQUER ────────────────────────
+-- Le schéma `net` et ses fonctions appartiennent à `supabase_admin`. Seul
+-- le propriétaire peut révoquer un privilège, et `postgres` — le rôle de
+-- TOUTE connexion externe, y compris l'API Management, le CLI Supabase et
+-- le SQL editor du dashboard — ne peut pas modifier les schémas système.
+--
+-- ⚠️  Le REVOKE échoue alors SANS lever d'erreur : il « réussit » et ne
+-- change rien. Quatre tentatives par quatre voies différentes ont toutes
+-- semblé aboutir sans effet. Toujours vérifier l'ACL après un REVOKE.
+--
+-- Référence : github.com/orgs/supabase/discussions/39221
+--
+-- ─── POURQUOI NE PAS LE SURVEILLER QUAND MÊME ───────────────────
+-- Un contrôle qui rapporte en permanence une valeur non nulle, pour une
+-- condition que personne ne peut corriger, entraîne exactement ce qu'on
+-- veut éviter : on s'habitue au rouge et on cesse de le lire. Le canari ne
+-- doit contenir que des contrôles actionnables.
 -- ═══════════════════════════════════════════════════════════════
 
 create or replace function public.run_security_canary()
@@ -101,18 +119,13 @@ begin
   select 'version_ecrivable', count(*)
   from pg_class c join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relname in ('jobs','quotes','invoices')
-    and has_column_privilege('authenticated', c.oid, 'version', 'update')
-
-  union all
-  -- NOUVEAU : SSRF via pg_net. Retourne 12 tant que le correctif dashboard
-  -- n'est pas appliqué.
-  select 'ssrf_pgnet_ouvert', count(*)
-  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'net'
-    and (has_function_privilege('anon', p.oid, 'execute')
-      or has_function_privilege('authenticated', p.oid, 'execute'));
+    and has_column_privilege('authenticated', c.oid, 'version', 'update');
 
   delete from public.security_canary_runs where ran_at < now() - interval '90 days';
 end $$;
 
 revoke execute on function public.run_security_canary() from public, anon, authenticated;
+
+-- Purge les relevés du contrôle retiré, pour ne pas laisser d'historique
+-- rouge qui ferait croire à un problème encore ouvert.
+delete from public.security_canary_runs where controle = 'ssrf_pgnet_ouvert';

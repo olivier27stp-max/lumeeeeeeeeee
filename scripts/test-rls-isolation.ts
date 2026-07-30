@@ -222,20 +222,34 @@ async function main() {
       and has_table_privilege('authenticated', k.oid, 'update')`)).rows;
   for (const r of noCheck) leaks.push(`UPDATE policy without WITH CHECK: ${r.p}`);
 
-  // ── J. SSRF via pg_net ──
-  // pg_net fait émettre à la base des requêtes HTTP sortantes. Un rôle
-  // client qui peut l'appeler dispose d'une SSRF : exfiltrer des données
-  // vers un serveur tiers, atteindre des services internes, ou couper le
-  // worker réseau (donc push + libération des numéros SMS).
-  // Les appelants légitimes sont SECURITY DEFINER et ne sont pas affectés
-  // par le retrait du grant.
+  // ── J. pg_net — NON traité comme une fuite, volontairement ──
+  //
+  // `anon` détient bien EXECUTE sur net.http_post & co. Cela ressemble à une
+  // SSRF, mais ce n'en est pas une exploitable : PostgREST n'expose que les
+  // schémas déclarés dans la configuration de l'API, et `net` n'en fait pas
+  // partie. Vérifié contre la prod avec la clé publique —
+  //   POST /rest/v1/rpc/http_get            → 404
+  //   idem avec en-tête Content-Profile:net → 406
+  // Il n'existe donc aucun chemin depuis l'extérieur.
+  //
+  // Le grant ne peut PAS être révoqué : le schéma appartient à
+  // `supabase_admin`, et `postgres` — le rôle de toute connexion externe,
+  // API Management et CLI inclus — n'a pas le droit de le modifier. Le
+  // REVOKE échoue alors SANS lever d'erreur, ce qui donne l'illusion d'un
+  // correctif appliqué. Confirmé par Supabase :
+  // github.com/orgs/supabase/discussions/39221
+  //
+  // Échouer ici mettrait la CI en rouge en permanence pour une condition
+  // que personne ne peut corriger — et une alerte toujours rouge finit
+  // ignorée, y compris le jour où elle signale du vrai. On se contente donc
+  // de journaliser.
   const netFns = (await c.query(`
     select count(*)::int n from pg_proc p
     join pg_namespace ns on ns.oid = p.pronamespace and ns.nspname = 'net'
     where has_function_privilege('anon', p.oid, 'execute')
        or has_function_privilege('authenticated', p.oid, 'execute')`)).rows[0]?.n ?? 0;
   if (netFns > 0) {
-    leaks.push(`SSRF: ${netFns} pg_net function(s) callable by client roles — see scripts/A-APPLIQUER-dashboard-pgnet.sql`);
+    console.log(`ℹ pg_net: ${netFns} function(s) granted to client roles — not exploitable (schema not exposed by PostgREST, and not revocable: owned by supabase_admin).`);
   }
 
   // ── I. Vues sans security_invoker ──

@@ -39,7 +39,8 @@ isolation*). Il est armé : le secret `RLS_TEST_DB_URL` est configuré.
 | Rétention / Loi 25 | A− |
 | Performance RLS | A |
 
-**Un point reste ouvert** : `pg_net` exécutable par `anon` — voir plus bas.
+**Aucune faille exploitable ouverte.** Le cas `pg_net` a été vérifié puis
+écarté — voir la section dédiée.
 
 ---
 
@@ -112,31 +113,48 @@ les réauditer sans raison.
 
 ---
 
+## `pg_net` — écarté après vérification
+
+`anon` détient EXECUTE sur `net.http_post`, `net.http_get` et
+`net.worker_restart`. Ça ressemble à une SSRF, et un premier test — en
+empruntant les rôles via une connexion Postgres directe — semblait le
+confirmer.
+
+**Ce test était faux.** Il empruntait les rôles avec le mot de passe
+administrateur de la base : ce n'est pas le chemin d'un attaquant. Un
+attaquant passe par l'API REST avec la clé publique, et PostgREST n'expose
+que les schémas déclarés dans la configuration de l'API — `net` n'en fait
+pas partie. Vérifié contre la production :
+
+```
+POST /rest/v1/rpc/http_get                → 404
+idem avec en-tête Content-Profile: net    → 406
+```
+
+Aucun chemin depuis l'extérieur. Et le grant **ne peut pas** être révoqué :
+le schéma appartient à `supabase_admin`, que `postgres` — le rôle de toute
+connexion externe, API Management, CLI et SQL editor inclus — n'a pas le
+droit de modifier. Confirmé par Supabase :
+[discussion #39221](https://github.com/orgs/supabase/discussions/39221).
+
+Ni la CI ni le canari ne le signalent : un contrôle en permanence rouge,
+pour une condition que personne ne peut corriger, mène à ignorer les
+alertes. Le test le journalise à titre informatif.
+
+**Leçon** : un privilège en base n'est pas une faille tant qu'il n'existe
+pas de chemin depuis l'extérieur. Toujours vérifier l'exploitabilité par le
+canal qu'un attaquant emprunterait réellement.
+
+---
+
 ## Reste à faire
 
-### 1. `pg_net` accessible à `anon` — à appliquer
-
-**→ `scripts/A-APPLIQUER-dashboard-pgnet.sql`**
-
-`net.http_post` est exécutable **sans être connecté**. C'est une SSRF depuis
-la base : exfiltration vers un serveur tiers, accès à des services internes,
-ou perturbation du worker réseau (`worker_restart`).
-
-Ne peut pas être corrigé depuis une connexion externe : les fonctions
-appartiennent à `supabase_admin`, et un `REVOKE` lancé par `postgres` via le
-pooler est **ignoré en silence** — l'ACL reste inchangée sans qu'aucune
-erreur ne soit levée. Il faut passer par le SQL editor du dashboard.
-
-Sans risque : les deux seuls appelants (`fn_push_on_notification`,
-`trigger_sms_number_release`) sont `SECURITY DEFINER` et continueront de
-fonctionner.
-
-### 2. Verrou optimiste dans l'interface
+### 1. Verrou optimiste dans l'interface
 
 Actif en base et vérifié, mais le message de conflit n'est câblé que sur les
 jobs. À étendre aux soumissions et aux factures, écran par écran.
 
-### 3. Vulnérabilités npm
+### 2. Vulnérabilités npm
 
 Voir `docs/audit-dependances.md`. 0 critique ; les 3 « élevées » sont non
 exploitables ici. **Ne pas lancer `npm audit fix --force`** : il propose une
