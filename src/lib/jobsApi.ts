@@ -668,23 +668,41 @@ export async function createJob(payload: {
       updatePayload.longitude = null;
     }
 
-    let { data: updated, error, status } = await supabase
-      .from('jobs')
-      .update(updatePayload)
-      .eq('id', payload.id)
-      .select('*')
-      .single();
+    // Verrouillage optimiste : si `version` est fournie, l'UPDATE ne
+    // s'applique que si personne n'a modifié la job entre-temps. Sans ce
+    // garde-fou, deux répartiteurs qui sauvent la même job voient le second
+    // écraser le premier en silence — aucune erreur, la donnée est perdue.
+    // La version est absente sur les anciens appels : on reste alors sur le
+    // comportement historique plutôt que de bloquer une sauvegarde légitime.
+    const expectedVersion = (payload as { version?: number }).version;
+
+    let query = supabase.from('jobs').update(updatePayload).eq('id', payload.id);
+    if (typeof expectedVersion === 'number') query = query.eq('version', expectedVersion);
+
+    let { data: updated, error, status } = await query.select('*').single();
+
+    // 0 ligne touchée avec une version attendue = conflit, pas une panne.
+    // PGRST116 = "aucune ligne" côté PostgREST sur .single().
+    if (typeof expectedVersion === 'number' && error?.code === 'PGRST116') {
+      const { data: current } = await supabase
+        .from('jobs').select('version').eq('id', payload.id).maybeSingle();
+      if (current && current.version !== expectedVersion) {
+        throw new Error(
+          'Cette job a été modifiée par quelqu\'un d\'autre pendant que vous l\'éditiez. '
+          + 'Rechargez la page pour voir les changements avant de sauvegarder.',
+        );
+      }
+    }
     if (error && isMissingLeaderboardColumnsError(error)) {
       // Migration sale_date/show_on_leaderboard pas encore appliquée : on
       // sauvegarde le job sans ces colonnes plutôt que d'échouer l'édition.
       delete updatePayload.sale_date;
       delete updatePayload.show_on_leaderboard;
-      ({ data: updated, error, status } = await supabase
-        .from('jobs')
-        .update(updatePayload)
-        .eq('id', payload.id)
-        .select('*')
-        .single());
+      let retry = supabase.from('jobs').update(updatePayload).eq('id', payload.id);
+      // Le repli doit porter la même contrainte de version, sinon il
+      // contourne le verrou optimiste au premier schéma incomplet venu.
+      if (typeof expectedVersion === 'number') retry = retry.eq('version', expectedVersion);
+      ({ data: updated, error, status } = await retry.select('*').single());
     }
     devLogJobWrite('update_jobs_response', {
       org_id: orgId,

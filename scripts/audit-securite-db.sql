@@ -144,4 +144,20 @@ from information_schema.columns
 where table_schema = 'public'
   and data_type = 'timestamp without time zone'
 
+union all
+-- Si un client peut écrire `version`, il renvoie la valeur courante et
+-- contourne le verrouillage optimiste : deux répartiteurs qui sauvent la
+-- même job, le second écrase le premier en silence.
+--
+-- NB : has_table_privilege(...,'update') renvoie FAUX dès qu'un grant est
+-- par colonne — d'où has_column_privilege ici. Le contrôle inverse
+-- (« la table est-elle encore éditable ? ») doit utiliser la même fonction,
+-- sinon ces trois tables ressortent en faux négatif.
+select 'M. Colonne version ecrivable par un client',
+       count(*)
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relname in ('jobs','quotes','invoices')
+  and has_column_privilege('authenticated', c.oid, 'version', 'update')
+
 order by 1;

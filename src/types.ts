@@ -71,6 +71,13 @@ export type JobStatus =
 export interface Job {
   id: string;
   org_id: string;
+  /**
+   * Verrouillage optimiste. Incrémentée par trigger à chaque modification
+   * réelle. Renvoyée telle quelle lors d'un update : si elle ne correspond
+   * plus, quelqu'un a modifié la job entre-temps et la sauvegarde est
+   * refusée plutôt que d'écraser son travail en silence.
+   */
+  version?: number;
   created_by?: string;
   lead_id?: string | null;
   job_number: string;
