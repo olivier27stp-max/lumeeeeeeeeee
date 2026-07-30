@@ -17,6 +17,13 @@
  * CI:   point DB_URL at a staging DB seeded with >=2 orgs. Exit 1 on any leak.
  */
 import { Client } from 'pg';
+import dotenv from 'dotenv';
+
+// En CI la chaîne arrive par le secret RLS_TEST_DB_URL → DB_URL. En local
+// elle vit dans .env.local, qui n'est pas chargé automatiquement : sans
+// ceci, `npm run test:rls` échoue sur "Set DB_URL" alors que la valeur est
+// bien présente sur la machine.
+dotenv.config({ path: '.env.local' });
 
 const DB_URL = process.env.DB_URL || process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
 if (!DB_URL) { console.error('Set DB_URL (privileged/postgres connection).'); process.exit(2); }
