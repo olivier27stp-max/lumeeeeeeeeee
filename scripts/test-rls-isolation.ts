@@ -95,7 +95,61 @@ async function main() {
     }
   } catch { /* skip */ }
 
-  console.log(`Checked: anon(${anonRels.length}) auth-org(${orgRels.length}) child(${childTbls.length}) + write\n`);
+  // ── E. RPC ouvertes à anon ──
+  // La RLS ne s'applique PAS aux fonctions: une SECURITY DEFINER exécutable
+  // par anon tourne avec les droits de son propriétaire et voit toutes les
+  // orgs. Trois fuites réelles ont été trouvées ainsi le 2026-07-30
+  // (ac_client_name, resolve_primary_property, ac_log_event).
+  // NB: le revoke doit viser PUBLIC, pas seulement anon — l'ACL
+  // "=X/postgres" est un grant au pseudo-rôle PUBLIC qui englobe anon.
+  const anonFns = (await c.query(`
+    select p.proname n from pg_proc p join pg_namespace ns on ns.oid=p.pronamespace
+    where ns.nspname='public' and p.prosecdef
+      and has_function_privilege('anon', p.oid, 'execute')`)).rows;
+  for (const f of anonFns) leaks.push(`ANON can execute SECURITY DEFINER ${f.n}()`);
+
+  // ── F. Control plane écrivable par un client ──
+  // Si un utilisateur peut écrire ici, il se donne un forfait, efface ses
+  // traces d'audit, ou désactive les protections anti-brute-force.
+  const CONTROL_PLANE = ['plans','api_keys','audit_events','security_incidents',
+    'security_events','security_alerts','rate_limits','ip_blocklist',
+    'failed_login_attempts','login_history','payment_provider_secrets',
+    'invoice_sequences','quote_sequences','org_invoice_sequences','promo_codes',
+    'referrals','webhook_events','processed_checkout_sessions','org_features',
+    'subscriptions','consents','dsar_requests','integration_audit_logs'];
+  for (const t of CONTROL_PLANE) {
+    const r = (await c.query(`
+      select coalesce(bool_or(has_table_privilege('authenticated', c.oid, v)), false) w
+      from pg_class c join pg_namespace ns on ns.oid=c.relnamespace and ns.nspname='public',
+           unnest(array['insert','update','delete']) v
+      where c.relname=$1 and c.relkind='r'`, [t])).rows[0];
+    if (r?.w) leaks.push(`CONTROL PLANE ${t} is writable by authenticated`);
+  }
+
+  // ── G. Secrets lisibles par un client ──
+  // La RLS filtre les LIGNES, jamais les COLONNES: un GRANT SELECT au niveau
+  // table expose les jetons OAuth même si la ligne est bien cloisonnée.
+  for (const col of ['encrypted_access_token','encrypted_refresh_token','encrypted_credentials','credentials']) {
+    const r = (await c.query(`
+      select has_column_privilege('authenticated','public.app_connections',$1,'select') p
+      where exists(select 1 from pg_attribute a
+                   where a.attrelid='public.app_connections'::regclass
+                     and a.attname=$1 and not a.attisdropped)`, [col])).rows[0];
+    if (r?.p) leaks.push(`SECRET app_connections.${col} readable by authenticated`);
+  }
+
+  // ── H. UPDATE sans WITH CHECK = tenant hopping ──
+  // Sans WITH CHECK, Postgres réutilise USING, qui contraint la ligne AVANT
+  // modification et ne dit rien de la ligne APRÈS: on peut donc déplacer
+  // ses propres lignes vers une autre org.
+  const noCheck = (await c.query(`
+    select tablename||'.'||policyname p from pg_policies
+    where schemaname='public' and cmd in ('UPDATE','ALL')
+      and ('authenticated' = any(roles) or 'public' = any(roles))
+      and with_check is null`)).rows;
+  for (const r of noCheck) leaks.push(`UPDATE policy without WITH CHECK: ${r.p}`);
+
+  console.log(`Checked: anon(${anonRels.length}) auth-org(${orgRels.length}) child(${childTbls.length}) write rpc(${anonFns.length}) control-plane(${CONTROL_PLANE.length}) secrets policies\n`);
   if (leaks.length) { console.log(`🔴 ${leaks.length} LEAK(S):`); leaks.forEach(l => console.log('   - ' + l)); await c.end(); process.exit(1); }
   console.log('✅ PASS — no cross-tenant leak (reads, anon, child tables, and writes all isolated).');
   await c.end();
