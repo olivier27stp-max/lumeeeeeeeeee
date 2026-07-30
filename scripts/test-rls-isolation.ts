@@ -21,10 +21,69 @@ import { Client } from 'pg';
 const DB_URL = process.env.DB_URL || process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
 if (!DB_URL) { console.error('Set DB_URL (privileged/postgres connection).'); process.exit(2); }
 
+/**
+ * Parse the connection string by hand rather than handing it to `pg`.
+ *
+ * A Supabase-generated password routinely contains `@ / # ? %`, which all
+ * have meaning inside a URL: `new URL()` (and therefore `pg`) mis-parses
+ * the string and the failure surfaces as a confusing
+ * "password authentication failed" or "tenant not found" — pointing at the
+ * credentials when the real problem is the encoding. Splitting on the LAST
+ * `@` (the host separator) and the FIRST `:` after the scheme makes the
+ * literal password survive untouched, whatever it contains.
+ */
+function parseConn(raw: string) {
+  const url = raw.trim();
+  const m = /^postgres(?:ql)?:\/\/(.+)$/i.exec(url);
+  if (!m) throw new Error('DB_URL must start with postgresql://');
+
+  const rest = m[1];
+  const at = rest.lastIndexOf('@');
+  if (at < 0) throw new Error('DB_URL is missing the "@" before the host');
+
+  const creds = rest.slice(0, at);
+  const hostPart = rest.slice(at + 1);
+
+  const colon = creds.indexOf(':');
+  if (colon < 0) {
+    throw new Error(
+      'DB_URL is missing the ":" between user and password '
+      + '(expected postgresql://USER:PASSWORD@HOST:5432/postgres)',
+    );
+  }
+  const user = decodeURIComponent(creds.slice(0, colon));
+  const password = creds.slice(colon + 1); // kept literal on purpose
+
+  const slash = hostPart.indexOf('/');
+  const hostPort = slash < 0 ? hostPart : hostPart.slice(0, slash);
+  const database = slash < 0 ? 'postgres' : (hostPart.slice(slash + 1).split('?')[0] || 'postgres');
+  const [host, portRaw] = hostPort.split(':');
+  const port = Number(portRaw || 5432);
+
+  // Port 6543 is the transaction-mode pooler: it does not keep a session, so
+  // `SET LOCAL ROLE` — which this whole test depends on to impersonate a
+  // user — is silently dropped. Fail loudly instead of reporting fake passes.
+  if (port === 6543) {
+    throw new Error(
+      'DB_URL uses port 6543 (transaction pooler). This test needs SET LOCAL ROLE; use port 5432.',
+    );
+  }
+
+  return { host, port, user, password, database };
+}
+
+let conn: ReturnType<typeof parseConn>;
+try {
+  conn = parseConn(DB_URL);
+} catch (e) {
+  console.error('✗ DB_URL malformed:', e instanceof Error ? e.message : e);
+  process.exit(2);
+}
+
 // Relations that are GLOBAL by design (not tenant data) — allowed to be shared/anon-visible.
 const GLOBAL = new Set(['plans', 'promo_codes']);
 
-const c = new Client({ connectionString: DB_URL, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 15000 });
+const c = new Client({ ...conn, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 15000 });
 
 async function inRole<T>(role: string, claims: string | null, fn: () => Promise<T>): Promise<T> {
   await c.query('begin');
@@ -175,4 +234,31 @@ async function main() {
   console.log('✅ PASS — no cross-tenant leak (reads, anon, child tables, and writes all isolated).');
   await c.end();
 }
-main().catch(e => { console.error('✗', e.message); process.exit(2); });
+main().catch(e => {
+  const msg = e?.message || String(e);
+  console.error('✗', msg);
+
+  // A connection failure is NOT a security finding, and reporting it as one
+  // wastes the reader's time. Say which of the four things is actually wrong
+  // so the fix does not require re-deriving the diagnosis from scratch.
+  if (/password authentication failed/i.test(msg)) {
+    console.error(
+      '\n  The host and the URL format are fine — only the password was rejected.\n'
+      + '  → The DB_URL secret holds a stale password, or the current one was\n'
+      + '    reset after the secret was saved. Update it at\n'
+      + '    Supabase → Project Settings → Database → Database password.',
+    );
+  } else if (/tenant or user not found|ENOTFOUND/i.test(msg)) {
+    console.error(
+      '\n  The pooler did not recognise the host or the user.\n'
+      + '  → Check the hostname: Supabase now uses aws-1-<region>, not aws-0-.\n'
+      + '  → The user must be postgres.<project-ref>, not plain "postgres".',
+    );
+  } else if (/Need >=2/i.test(msg)) {
+    console.error(
+      '\n  Not a leak: the database lacks two single-org users to compare.\n'
+      + '  → Seed a second organisation, or point DB_URL at a staging copy.',
+    );
+  }
+  process.exit(2);
+});
