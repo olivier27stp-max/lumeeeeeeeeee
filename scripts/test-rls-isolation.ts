@@ -142,11 +142,18 @@ async function main() {
   // Sans WITH CHECK, Postgres réutilise USING, qui contraint la ligne AVANT
   // modification et ne dit rien de la ligne APRÈS: on peut donc déplacer
   // ses propres lignes vers une autre org.
+  // Le filtre sur has_table_privilege n'est pas cosmétique : une policy sans
+  // WITH CHECK sur une table dont le GRANT UPDATE a été révoqué est inerte —
+  // sans privilège, il n'y a rien à autoriser. Sans ce filtre, 14 policies du
+  // control plane ressortent en faux positif permanent.
   const noCheck = (await c.query(`
-    select tablename||'.'||policyname p from pg_policies
-    where schemaname='public' and cmd in ('UPDATE','ALL')
-      and ('authenticated' = any(roles) or 'public' = any(roles))
-      and with_check is null`)).rows;
+    select p.tablename||'.'||p.policyname p from pg_policies p
+    join pg_class k on k.relname = p.tablename and k.relkind = 'r'
+    join pg_namespace ns on ns.oid = k.relnamespace and ns.nspname = 'public'
+    where p.schemaname='public' and p.cmd in ('UPDATE','ALL')
+      and ('authenticated' = any(p.roles) or 'public' = any(p.roles))
+      and p.with_check is null
+      and has_table_privilege('authenticated', k.oid, 'update')`)).rows;
   for (const r of noCheck) leaks.push(`UPDATE policy without WITH CHECK: ${r.p}`);
 
   // ── I. Vues sans security_invoker ──
