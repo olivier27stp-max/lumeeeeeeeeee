@@ -1,6 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import express from 'express';
 import { googleGeocodingKey, mapboxGeocodingToken } from './config';
+import { getServiceClient } from './supabase';
 
 // ── Types ──
 
@@ -230,7 +231,10 @@ export async function searchByType(
 ) {
   const safePage = Math.max(1, page);
   const offset = (safePage - 1) * pageSize;
-  const { data, error } = await client.rpc('search_global_by_type', {
+  // N3.5 — search_global_by_type est SECURITY DEFINER et prend l'org en
+  // parametre : reservee a service_role (migration 20260751101400). L'orgId
+  // parvient ici depuis requireAuthedClient, jamais depuis la requete.
+  const { data, error } = await getServiceClient().rpc('search_global_by_type', {
     p_org: orgId,
     p_q: query,
     p_entity_type: entityType,

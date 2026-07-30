@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { sendSafeError } from '../lib/error-handler';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { requireAuthedClient } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { getUserContext, isFinanciallyRestricted, hasPermission, stripFinancialFields, filterFinancialEntities } from '../lib/rbac';
 import {
   sanitizeQuery,
@@ -290,7 +290,10 @@ async function handleSuggestions(req: import('express').Request, res: import('ex
     if (!auth) return;
 
     const { client, orgId } = auth;
-    const { data, error } = await client.rpc('search_global', {
+    // N3.5 — search_global est SECURITY DEFINER et prend l'org en parametre :
+    // elle est donc reservee a service_role (migration 20260751101400). L'org
+    // provient ici de requireAuthedClient, jamais de la requete du client.
+    const { data, error } = await (getServiceClient() as SupabaseClient).rpc('search_global', {
       p_org: orgId,
       p_q: q,
       p_limit: Math.max(48, limit * 6),
@@ -381,7 +384,8 @@ router.get('/search/results', async (req, res) => {
     if (!auth) return;
 
     const { client, orgId } = auth;
-    const { data: countRows, error: countError } = await client.rpc('search_global_counts', {
+    // Idem search_global : reservee a service_role, org validee cote serveur.
+    const { data: countRows, error: countError } = await (getServiceClient() as SupabaseClient).rpc('search_global_counts', {
       p_org: orgId,
       p_q: q,
     });
