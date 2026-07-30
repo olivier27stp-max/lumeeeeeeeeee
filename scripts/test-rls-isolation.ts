@@ -149,7 +149,21 @@ async function main() {
       and with_check is null`)).rows;
   for (const r of noCheck) leaks.push(`UPDATE policy without WITH CHECK: ${r.p}`);
 
-  console.log(`Checked: anon(${anonRels.length}) auth-org(${orgRels.length}) child(${childTbls.length}) write rpc(${anonFns.length}) control-plane(${CONTROL_PLANE.length}) secrets policies\n`);
+  // ── I. Vues sans security_invoker ──
+  // Une vue s'exécute avec les droits de son propriétaire (postgres), donc
+  // elle voit TOUTES les orgs quelle que soit la RLS des tables sous-jacentes.
+  // Postgres accepte 'on' comme 'true' — tester les deux, sinon des vues
+  // correctement protégées ressortent en faux positif.
+  const badViews = (await c.query(`
+    select c.relname n from pg_class c
+    join pg_namespace ns on ns.oid=c.relnamespace and ns.nspname='public'
+    where c.relkind='v' and has_table_privilege('authenticated', c.oid,'select')
+      and not exists (
+        select 1 from unnest(coalesce(c.reloptions, array[]::text[])) o
+        where lower(o) in ('security_invoker=true','security_invoker=on'))`)).rows;
+  for (const v of badViews) leaks.push(`VIEW ${v.n} runs as owner (no security_invoker)`);
+
+  console.log(`Checked: anon(${anonRels.length}) auth-org(${orgRels.length}) child(${childTbls.length}) write rpc(${anonFns.length}) control-plane(${CONTROL_PLANE.length}) secrets policies views\n`);
   if (leaks.length) { console.log(`🔴 ${leaks.length} LEAK(S):`); leaks.forEach(l => console.log('   - ' + l)); await c.end(); process.exit(1); }
   console.log('✅ PASS — no cross-tenant leak (reads, anon, child tables, and writes all isolated).');
   await c.end();
