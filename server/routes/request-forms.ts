@@ -348,8 +348,11 @@ router.post(
         .upload(path, buffer, { contentType, upsert: true, cacheControl: '3600' });
       if (upErr) throw upErr;
 
+      // Ne PAS renvoyer `path` : il contient l'org_id, et cette route est
+      // publique. Le divulguer donne a un visiteur anonyme l'UUID du tenant,
+      // premier maillon des attaques qui prennent l'org en parametre.
       const { data: pub } = admin.storage.from(PHOTO_BUCKET).getPublicUrl(path);
-      return res.json({ url: pub.publicUrl, path });
+      return res.json({ url: pub.publicUrl });
     } catch (err: any) {
       console.error('[public/form] upload failed:', err.message);
       return res.status(500).json({ error: 'Unable to upload image.' });

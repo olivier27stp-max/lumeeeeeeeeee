@@ -114,7 +114,7 @@ router.post('/gamification/challenges/:id/join', async (req, res) => {
 
   try {
     const sc = getServiceClient();
-    const participant = await joinChallenge(sc, req.params.id, auth.user.id);
+    const participant = await joinChallenge(sc, auth.orgId, req.params.id, auth.user.id);
     res.json(participant);
   } catch (err: any) {
     return sendSafeError(res, err, 'Gamification operation failed.', '[gamification]');

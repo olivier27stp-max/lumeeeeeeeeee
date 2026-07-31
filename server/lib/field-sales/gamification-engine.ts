@@ -28,9 +28,24 @@ export async function createChallenge(
 
 export async function joinChallenge(
   supabase: SupabaseClient,
+  orgId: string,
   challengeId: string,
   userId: string
 ) {
+  // fs_challenge_participants n'a pas de colonne org_id : son cloisonnement
+  // depend entierement du defi parent. Cet appel se fait en service_role, donc
+  // la RLS ne filtre rien — sans cette verification, un utilisateur peut
+  // s'inscrire au defi d'une autre organisation en fournissant son UUID.
+  const { data: challenge, error: cErr } = await supabase
+    .from('fs_challenges')
+    .select('id')
+    .eq('id', challengeId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (cErr) throw new Error(cErr.message);
+  if (!challenge) throw new Error('Challenge not found');
+
   const { data, error } = await supabase
     .from('fs_challenge_participants')
     .insert({

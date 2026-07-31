@@ -116,6 +116,22 @@ router.post('/dsr/erase/client/:id', async (req, res) => {
   }
 
   const svc = getServiceClient();
+
+  // Meme raison qu'a l'export (N3.5) : la garde interne d'anonymize_client
+  // repose sur auth.uid(), NULL sous service_role. On valide donc
+  // l'appartenance ici, avec l'orgId issu de requireAuthedClient — jamais de
+  // la requete. Sans ceci, reparer le RPC transformerait cette route en
+  // effacement destructif cross-tenant.
+  const { data: target, error: targetErr } = await svc
+    .from('clients')
+    .select('org_id')
+    .eq('id', clientId)
+    .maybeSingle();
+
+  if (targetErr) return sendSafeError(res, targetErr, 'Anonymization failed.', '[dsr/erase/client]');
+  if (!target) return res.status(404).json({ error: 'Client not found' });
+  if (target.org_id !== auth.orgId) return res.status(403).json({ error: 'Forbidden' });
+
   const { error } = await svc.rpc('anonymize_client', { p_client_id: clientId });
   if (error) return sendSafeError(res, error, 'Anonymization failed.', '[dsr/erase/client]');
 
@@ -141,6 +157,19 @@ router.post('/dsr/erase/lead/:id', async (req, res) => {
   // RPC targets the dropped `leads` table and throws. A lead id IS a client id,
   // so route erasure through the working anonymize_client.
   const svc = getServiceClient();
+
+  // Meme garde que sur /dsr/erase/client : auth.uid() est NULL sous
+  // service_role, la verification interne du RPC ne protege donc rien ici.
+  const { data: target, error: targetErr } = await svc
+    .from('clients')
+    .select('org_id')
+    .eq('id', leadId)
+    .maybeSingle();
+
+  if (targetErr) return sendSafeError(res, targetErr, 'Anonymization failed.', '[dsr/erase/lead]');
+  if (!target) return res.status(404).json({ error: 'Lead not found' });
+  if (target.org_id !== auth.orgId) return res.status(403).json({ error: 'Forbidden' });
+
   const { error } = await svc.rpc('anonymize_client', { p_client_id: leadId });
   if (error) return sendSafeError(res, error, 'Anonymization failed.', '[dsr/erase/lead]');
 
