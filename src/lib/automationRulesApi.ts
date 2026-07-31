@@ -71,15 +71,19 @@ export async function updateRuleSmsBody(id: string, body: string): Promise<void>
   if (error) throw error;
 }
 
-/** Manually trigger preset seeding for an org (admin use only) */
-export async function seedDefaultPresets(): Promise<number> {
-  const orgId = await getCurrentOrgId();
-  if (!orgId) return 0;
-
-  const { data, error } = await supabase.rpc('seed_automation_presets', { p_org_id: orgId });
-  if (error) {
-    console.warn('[automationRulesApi] seed_automation_presets error:', error.message);
-    return 0;
-  }
-  return (data as number) || 0;
-}
+// seedDefaultPresets() a été retiré (audit 2026-07-31).
+//
+// Il appelait seed_automation_presets(), dont le droit d'exécution a été retiré
+// à `authenticated` le 2026-05-13 par 20260513020000_security_p0_fixes.sql —
+// délibérément, la fonction étant réservée aux admins. L'appel restait donc
+// branché dans le vide depuis deux mois et demi, échouant en 42501 avalé par un
+// console.warn.
+//
+// Aucun composant ne l'appelait, et surtout il était REDONDANT : le trigger
+// `trg_org_created_seed_automations` sur la table `orgs` sème déjà les presets
+// à la création de l'organisation, en SECURITY DEFINER. La fonctionnalité
+// marche donc sans ce chemin manuel.
+//
+// Si un ensemencement manuel redevient nécessaire, le passer par une route
+// serveur avec contrôle admin explicite — ne PAS re-accorder le droit à
+// `authenticated`.
