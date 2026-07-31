@@ -41,7 +41,7 @@ export default function RecurringJobs() {
     try {
       const { data, error } = await supabase
         .from('job_recurrence_rules')
-        .select('*, jobs(title, client_name)')
+        .select('*, jobs!job_recurrence_rules_job_id_fkey(title, client_name)')
         .order('next_run_at', { ascending: true });
 
       if (error) throw error;

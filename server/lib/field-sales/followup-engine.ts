@@ -46,7 +46,7 @@ export async function getFollowUpRecommendations(
   // 1. Unclosed quotes (sent but not accepted/declined for > 2 days)
   const { data: quotes } = await admin
     .from('quotes')
-    .select('id, title, client_id, status, sent_at, total_cents, clients!inner(first_name, last_name, address)')
+    .select('id, title, client_id, status, sent_at, total_cents, clients!quotes_client_id_fkey!inner(first_name, last_name, address)')
     .eq('org_id', orgId)
     .in('status', ['awaiting_response', 'changes_requested'])
     .is('deleted_at', null)

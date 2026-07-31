@@ -172,7 +172,7 @@ router.post('/team-suggestions', async (req, res) => {
     const dayEnd = `${date}T23:59:59`;
     const { data: events } = await client
       .from('schedule_events')
-      .select('id, team_id, start_at, end_at, job_id, notes, job:jobs!inner(id, title, property_address, latitude, longitude, client_name, status)')
+      .select('id, team_id, start_at, end_at, job_id, notes, job:jobs!schedule_events_job_id_fkey!inner(id, title, property_address, latitude, longitude, client_name, status)')
       .eq('org_id', orgId)
       .in('team_id', teamIds)
       .gte('start_at', dayStart)

@@ -449,7 +449,7 @@ function RepDashboard({ userId }: { userId: string | null }) {
           getLeaderboard('daily'),
           supabase
             .from('schedule_events')
-            .select('start_at, end_at, status, job:jobs!inner(title)')
+            .select('start_at, end_at, status, job:jobs!schedule_events_job_id_fkey!inner(title)')
             .gte('start_at', dayStart)
             .lte('start_at', dayEnd)
             .is('deleted_at', null)

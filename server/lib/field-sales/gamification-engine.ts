@@ -352,7 +352,7 @@ export async function getRepBadges(
 ) {
   const { data, error } = await supabase
     .from('fs_rep_badges')
-    .select('*, badge:fs_badges(*)')
+    .select('*, badge:fs_badges!fs_rep_badges_badge_id_fkey(*)')
     .eq('org_id', orgId)
     .eq('user_id', userId)
     .order('earned_at', { ascending: false });

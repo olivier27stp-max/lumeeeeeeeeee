@@ -59,7 +59,7 @@ router.get('/recurring-invoices', async (req, res) => {
     const svc = getServiceClient();
     let query = svc
       .from('recurring_invoice_schedules')
-      .select('*, clients(id, first_name, last_name, company, email)')
+      .select('*, clients!recurring_invoice_schedules_client_id_fkey(id, first_name, last_name, company, email)')
       .eq('org_id', auth.orgId)
       .order('created_at', { ascending: false });
     const clientId = typeof req.query.client_id === 'string' ? req.query.client_id : null;

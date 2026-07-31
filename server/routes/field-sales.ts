@@ -1209,7 +1209,7 @@ router.get('/pins', async (req: Request, res: Response) => {
       // Filter out soft-deleted houses to prevent ghost pins from appearing
       const { data: pins, error } = await admin
         .from('field_pins')
-        .select('id, house_id, status, has_note, pin_color, field_house_profiles!inner(lat, lng, address, metadata, current_status, client_id, lead_id, quote_id, job_id, assigned_user_id, territory_id, created_at, deleted_at)')
+        .select('id, house_id, status, has_note, pin_color, field_house_profiles!field_pins_house_id_fkey!inner(lat, lng, address, metadata, current_status, client_id, lead_id, quote_id, job_id, assigned_user_id, territory_id, created_at, deleted_at)')
         .eq('org_id', auth.orgId)
         .is('field_house_profiles.deleted_at', null);
 

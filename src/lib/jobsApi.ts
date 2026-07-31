@@ -518,7 +518,7 @@ export async function checkScheduleConflict(scheduledAt: string, durationHours =
 
   let query = supabase
     .from('schedule_events')
-    .select('id, job_id, start_time, end_time, jobs!inner(id, title, client_name)')
+    .select('id, job_id, start_time, end_time, jobs!schedule_events_job_id_fkey!inner(id, title, client_name)')
     .lt('start_time', end.toISOString())
     .gt('end_time', start.toISOString())
     .is('deleted_at', null);

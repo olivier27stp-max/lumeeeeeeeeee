@@ -20,8 +20,8 @@ router.get('/survey/:token', async (req, res) => {
       .from('satisfaction_surveys')
       .select(`
         id, token, rating, feedback, submitted_at, created_at,
-        clients(first_name, last_name),
-        jobs(title),
+        clients!satisfaction_surveys_client_id_fkey(first_name, last_name),
+        jobs!satisfaction_surveys_job_id_fkey(title),
         org_id
       `)
       .eq('token', token)

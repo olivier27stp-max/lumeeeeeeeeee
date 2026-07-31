@@ -721,7 +721,7 @@ export async function listAllQuotes(opts?: {
     .from('quotes')
     // quotes has two FKs to clients (client_id + lead_id since the leads merge) —
     // embeds must name the FK explicitly or PostgREST rejects the query (PGRST201)
-    .select('*, clients!quotes_client_id_fkey(id, first_name, last_name, company, display_as_company, deleted_at), leads:clients!quotes_lead_id_fkey(id, first_name, last_name, company, display_as_company, deleted_at), properties(name, address)', { count: 'exact' })
+    .select('*, clients!quotes_client_id_fkey(id, first_name, last_name, company, display_as_company, deleted_at), leads:clients!quotes_lead_id_fkey(id, first_name, last_name, company, display_as_company, deleted_at), properties!quotes_property_id_fkey(name, address)', { count: 'exact' })
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -773,7 +773,7 @@ export const PENDING_QUOTE_STATUSES: QuoteStatus[] = ['awaiting_response', 'chan
 export async function countPendingQuotes(orgId: string): Promise<number> {
   const { count, error } = await supabase
     .from('quotes')
-    .select('id, clients!quotes_client_id_fkey(id), leads:clients!quotes_lead_id_fkey(id), properties(id)', { count: 'exact', head: true })
+    .select('id, clients!quotes_client_id_fkey(id), leads:clients!quotes_lead_id_fkey(id), properties!quotes_property_id_fkey(id)', { count: 'exact', head: true })
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .in('status', PENDING_QUOTE_STATUSES);
