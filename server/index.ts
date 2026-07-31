@@ -152,7 +152,10 @@ app.use((req, res, next) => {
     [
       "default-src 'self'",
       process.env.NODE_ENV === 'production'
-        ? "script-src 'self' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com"
+        // wasm-unsafe-eval: le moteur de la carte 3D photoréaliste Google est en
+        // WebAssembly — sans cette source, gmp-map-3d charge à l'infini. Ça
+        // n'autorise QUE la compilation WASM, pas l'eval JavaScript.
+        ? "script-src 'self' 'wasm-unsafe-eval' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com"
         // unsafe-eval required for Vite HMR in dev only; unsafe-inline scoped to dev
         : "script-src 'self' 'unsafe-eval' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com http://localhost:*",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.mapbox.com",
