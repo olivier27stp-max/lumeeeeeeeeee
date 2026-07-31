@@ -46,7 +46,7 @@ cross-tenant.
 | 7 | **Aucune fonction `SECURITY DEFINER` servant des données sur la seule foi d'un paramètre org** | ❌ | **P0-1 — `list_archived_items`** |
 | 8 | **Impossible de prendre le contrôle d'une organisation tierce** | ❌ | **P1-1 — 12 orgs sur 31 revendicables** |
 | 9 | **Aucune divulgation publique d'identifiant d'organisation** | ❌ | **P2-1 — `request-forms.ts:351`** |
-| 10 | **Isolation entre deux utilisateurs authentifiés d'organisations différentes prouvée par test** | ❌ | **JAMAIS TESTÉ** — voir §4 |
+| 10 | **Isolation entre deux utilisateurs authentifiés d'organisations différentes prouvée par test** | ✅ **en lecture** | Campagne exécutée : 45 tables + 4 vues avec données réelles d'orgs tierces, **0 fuite** (`S5_TESTS.md`). Écriture cross-org non couverte ; 125 tables non mesurables faute de données multi-org. |
 | 11 | **Traçabilité en cas d'incident** | ❌ | **P2-3 — 6 tables de télémétrie sécurité vides** |
 | 12 | **Le schéma déployé est reproductible depuis les migrations** | ❌ | **P2-2 — dérive confirmée + 25 collisions de version** |
 
