@@ -263,3 +263,41 @@ suspectes — toutes sans dépendance dans le code**. La seule qu'il touche
 (`20260506000000_jobs_structured_address`) est explicitement contournée :
 `src/lib/jobsApi.ts:665-670` retire ces champs du payload et documente que les
 colonnes n'existent pas. Aucune fonctionnalité cassée à ce jour.
+
+---
+
+## 8. Tester une restauration
+
+**Une sauvegarde jamais restaurée n'est pas une sauvegarde, c'est une
+hypothèse.** Au 2026-07-31, aucune des 8 sauvegardes quotidiennes n'avait
+jamais été restaurée.
+
+> ⚠️ **Ne jamais utiliser le bouton « Restore » du tableau de bord pour
+> tester.** Il restaure **par-dessus** la production et écrase tout ce qui s'est
+> passé depuis. Ce n'est pas un test, c'est une perte de données.
+
+```bash
+SUPABASE_DB_URL='postgresql://postgres:MOTDEPASSE@db.bbzcuzqfgsdvjsymfwmr.supabase.co:5432/postgres' \
+  bash scripts/test-restauration.sh
+```
+
+La chaîne se récupère dans **Supabase → Settings → Database → Connection string
+→ URI**. Elle contient le mot de passe : ne jamais la commiter.
+
+Le script exporte la production (`pg_dump`, **lecture seule**), démarre un
+PostgreSQL local jetable, y restaure l'export, compte les lignes, puis détruit
+le conteneur. **La production n'est jamais modifiée.** Aucun outil à installer :
+tout passe par l'image Docker `postgres:17`, qui fournit `pg_dump`,
+`pg_restore` et `psql`.
+
+**Ce qu'il faut regarder** : les nombres restaurés doivent correspondre à la
+production. Et surtout, **le temps qu'a pris le script** — c'est ton délai de
+reprise réel, la seule information qui compte vraiment le jour d'un incident.
+
+**Limite connue** : `pg_dump` ne capture ni les utilisateurs Supabase Auth ni
+les fichiers Storage. Une reprise complète demanderait aussi le schéma `auth`
+(`--schema=auth`) et les buckets. Ce test valide la récupérabilité des
+**données métier**.
+
+À refaire après tout changement structurel majeur, et au moins une fois par
+trimestre.
