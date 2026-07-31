@@ -1984,6 +1984,25 @@ export default function NewJobModal({
                       placeholder={t.modals.propertyNamePlaceholder}
                     />
                   )}
+                  {/* New property needs an address; when creating a new client
+                      the address field already lives in the client box above. */}
+                  {!propertyId && !isCreatingNewClient && (
+                    <AddressAutocomplete
+                      value={addressSearch}
+                      onChange={setAddressSearch}
+                      onSelect={(addr: StructuredAddress) => {
+                        const line1 = [addr.street_number, addr.street_name].filter(Boolean).join(' ').trim();
+                        setAddressLine1(line1 || addr.formatted_address);
+                        setAddressCity(addr.city);
+                        setAddressProvince(addr.province);
+                        setAddressPostalCode(addr.postal_code);
+                        setAddressCountry(addr.country || 'Canada');
+                        setAddressPlaceId(addr.place_id || null);
+                        setAddressSearch(addr.formatted_address);
+                      }}
+                      placeholder={language === 'fr' ? 'Commencez à taper une adresse…' : 'Start typing an address...'}
+                    />
+                  )}
                 </Box>
               )}
 
