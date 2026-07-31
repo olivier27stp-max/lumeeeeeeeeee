@@ -209,6 +209,69 @@ Documenté dans la migration, non corrigé (décision produit : réparer ou supp
 
 ---
 
+## 4.ter Troisième vague — les 109 `SECURITY DEFINER` triées une par une
+
+L'advisor signalait 112 fonctions `SECURITY DEFINER` appelables par
+`authenticated` (109 au moment du tri). **Toutes ont été classées.**
+
+| Catégorie | Nombre |
+|---|---|
+| Possèdent déjà un motif d'autorisation | **95** |
+| Ne touchent aucune table (utilitaires purs) | **4** |
+| Sans aucune garde | **10** |
+| — dont primitives de garde elles-mêmes (normal) | 5 |
+| — **cas réels traités** | **5** |
+
+### Les 5 cas réels
+
+| Fonction | Traitement | Raison |
+|---|---|---|
+| `rpc_recalculate_quote(p_quote_id)` | **Garde dans le corps** | **Appelée par le navigateur** (`src/lib/quotesApi.ts:345`, `:552`) — un revoke aurait cassé l'édition de devis |
+| `resolve_primary_property(p_client_id)` | Revoke | 0 appelant applicatif ; ses 2 appelants sont des triggers `SECURITY DEFINER` postgres |
+| `user_org_ids(p_user_id)` | Revoke | 0 référence nulle part |
+| `same_company_orgs(p_user)` | Revoke | 0 référence nulle part |
+| `check_subscription_active(p_org_id)` | Revoke | 0 référence nulle part |
+
+**`rpc_recalculate_quote` est la sœur de `list_archived_items`** :
+`20260751101400` les avait épargnées **toutes les deux**, sur le même
+raisonnement erroné. Elle **écrit** — elle recalcule subtotal, remise, taxes et
+total d'un devis désigné par un simple UUID. Tout compte authentifié pouvait
+donc écraser les montants du devis d'une autre organisation.
+
+**Vérification obligatoire avant chaque revoke** : contrôler qu'aucune **policy
+RLS** n'utilise la fonction. Les expressions de policy s'évaluent avec les
+privilèges de l'utilisateur courant ; révoquer une fonction employée dans une
+policy aurait cassé l'évaluation de cette policy — donc l'accès à la table.
+Résultat du contrôle : 0 policy concernée sur les 4.
+
+**Vérifié par exécution** : non-membre → `42501 Not authorized for this quote.` ;
+membre légitime → passe sans exception.
+
+### État final des 9 fonctions traitées
+
+| Fonction | `authenticated` | Garde |
+|---|---|---|
+| `list_archived_items` | conservé | ✅ |
+| `rpc_recalculate_quote` | conservé | ✅ |
+| `create_minimal_job_for_deal` | **retiré** | — |
+| `record_consent` | **retiré** | — |
+| `crm_next_invoice_number` | **retiré** | — |
+| `resolve_primary_property` | **retiré** | — |
+| `user_org_ids` | **retiré** | — |
+| `same_company_orgs` | **retiré** | — |
+| `check_subscription_active` | **retiré** | — |
+
+Les deux qui conservent l'accès sont exactement celles dont le navigateur a
+besoin ; elles sont désormais gardées.
+
+> **Incident de méthode évité de justesse** : la migration `20260751102300` a
+> d'abord été rédigée **à la main** à partir d'une lecture partielle du corps.
+> La comparaison au `prosrc` réel a révélé des `coalesce()` ajoutés par erreur.
+> La migration a été **régénérée à partir du corps exact lu en base**.
+> Règle : ne jamais retranscrire un corps de fonction, toujours le lire.
+
+---
+
 ## 5. Ce qui reste non vérifié
 
 - **Advisors Supabase Security & Performance** — non récupérés (endpoint distinct).
