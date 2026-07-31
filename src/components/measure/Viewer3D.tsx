@@ -75,15 +75,21 @@ export default function Viewer3D({ lat, lng, fr, onClose, onUnavailable }: Props
     setStreet('loading');
     try {
       const svc = new google.maps.StreetViewService();
+      // Littéraux plutôt qu'enums (le canal beta de Maps peut ne pas les exposer)
+      // et double filtre sources: imagerie OFFICIELLE Google ET extérieure —
+      // sinon getPanorama peut retourner la photo sphère intérieure d'un
+      // utilisateur (observé au banc: un salon au lieu de la rue).
+      const request = {
+        location: { lat, lng },
+        radius: 120,
+        preference: 'nearest',
+        source: 'outdoor',
+        sources: ['google', 'outdoor'],
+      } as unknown as google.maps.StreetViewLocationRequest;
       svc.getPanorama(
-        {
-          location: { lat, lng },
-          radius: 120,
-          preference: google.maps.StreetViewPreference.NEAREST,
-          source: google.maps.StreetViewSource.OUTDOOR,
-        },
+        request,
         (data, status) => {
-          if (status === google.maps.StreetViewStatus.OK && data?.location?.latLng && streetDiv.current) {
+          if (String(status).toUpperCase() === 'OK' && data?.location?.latLng && streetDiv.current) {
             const panoPos = data.location.latLng;
             // Oriente la caméra vers la propriété, pas vers la rue.
             let heading = 0;
@@ -99,6 +105,8 @@ export default function Viewer3D({ lat, lng, fr, onClose, onUnavailable }: Props
               motionTracking: false,
               motionTrackingControl: false,
             });
+            // Verrouille sur le pano officiel retourné (évite tout repli implicite).
+            try { panoRef.current.setPano(data.location.pano as string); } catch {}
             setStreet('ok');
           } else {
             setStreet('none');
