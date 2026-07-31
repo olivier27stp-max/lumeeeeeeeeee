@@ -224,10 +224,13 @@ export default function ClientDetails() {
     maxSizeMB: 10,
     onDrop: async (files) => {
       if (!client) return;
+      // Org-scoped path prefix — storage RLS resolves the tenant from the first
+      // path segment, so every object must live under `${orgId}/…` (C1-04).
+      const orgId = await getCurrentOrgIdOrThrow();
       for (const file of files) {
         try {
           const ext = file.name.split('.').pop() ?? 'bin';
-          const path = `clients/${client.id}/${crypto.randomUUID()}.${ext}`;
+          const path = `${orgId}/clients/${client.id}/${crypto.randomUUID()}.${ext}`;
           const { error: err } = await supabase.storage.from('attachments').upload(path, file, { upsert: false });
           if (err) throw err;
           toast.success(language === 'fr' ? `${file.name} téléversé` : `${file.name} uploaded`);

@@ -8,6 +8,7 @@ import { ClipboardList, Plus, Trash2, Check, X, Camera } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { uploadFile, STORAGE_BUCKETS } from '../lib/storage';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import {
   listChecklistTemplates,
   listJobChecklists,
@@ -138,7 +139,10 @@ function PhotoResponse({
     if (!file) return;
     setUploading(true);
     try {
-      const path = `checklists/${jobId}/${itemId}-${Date.now()}-${file.name}`;
+      // Org-scoped prefix — storage RLS resolves the tenant from the first path
+      // segment, so every object must live under `${orgId}/…` (C1-04).
+      const orgId = await getCurrentOrgIdOrThrow();
+      const path = `${orgId}/checklists/${jobId}/${itemId}-${Date.now()}-${file.name}`;
       const { url } = await uploadFile(STORAGE_BUCKETS.ATTACHMENTS, path, file);
       onChange(url);
     } catch (err: any) {
