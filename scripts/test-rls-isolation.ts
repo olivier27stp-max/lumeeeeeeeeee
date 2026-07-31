@@ -131,10 +131,35 @@ async function main() {
   const orgRels = (await c.query(`select c.relname n from pg_class c join pg_namespace ns on ns.oid=c.relnamespace and ns.nspname='public'
     where c.relkind in ('r','v') and has_table_privilege('authenticated',c.oid,'SELECT')
       and exists(select 1 from pg_attribute a where a.attrelid=c.oid and a.attname='org_id' and not a.attisdropped)`)).rows;
+  // Comptabilité de couverture. Un « 0 fuite » sur une relation qui ne contient
+  // AUCUNE ligne d'une autre org ne prouve rien : il n'y avait rien à fuir.
+  // Sans ce décompte, un jeu de données pauvre produit un vert trompeur — c'est
+  // le piège rencontré pendant l'audit du 2026-07-31, où 125 relations sur 170
+  // étaient non concluantes.
+  let conclusive = 0;
+  let inconclusive = 0;
   for (const r of orgRels) {
-    try { const foreign = await inRole('authenticated', claimsA, async () =>
+    try {
+      // Vu par le rôle privilégié : y a-t-il seulement quelque chose à fuir ?
+      const exists = (await c.query(
+        `select count(*)::int f from public."${r.n}" where org_id is not null and org_id <> $1`,
+        [A.org_id])).rows[0].f;
+      if (exists === 0) { inconclusive++; continue; }
+      conclusive++;
+      const foreign = await inRole('authenticated', claimsA, async () =>
         (await c.query(`select count(*)::int f from public."${r.n}" where org_id is not null and org_id <> $1`, [A.org_id])).rows[0].f);
-      if (foreign > 0) leaks.push(`AUTH ${r.n} shows ${foreign} foreign-org rows`); } catch { /* skip */ }
+      if (foreign > 0) leaks.push(`AUTH ${r.n} shows ${foreign} foreign-org rows`);
+    } catch { /* skip */ }
+  }
+  console.log(`Couverture lecture: ${conclusive} relation(s) testée(s) de façon concluante, ${inconclusive} sans donnée d'une autre org (NON testées).`);
+  // Un jeu de données trop pauvre rend le résultat sans valeur : on le dit, et
+  // on sort en code 2 (« fixture inadéquate »), distinct du code 1 (« fuite »).
+  const MIN_CONCLUSIVE = 10;
+  if (conclusive < MIN_CONCLUSIVE) {
+    console.error(`\n✗ FIXTURE INADÉQUATE : seulement ${conclusive} relation(s) concluante(s) (minimum ${MIN_CONCLUSIVE}).`);
+    console.error('  La base de test doit contenir des données réparties sur au moins 2 organisations.');
+    console.error('  Un résultat « 0 fuite » sur ce jeu de données ne prouverait rien.');
+    process.exit(2);
   }
 
   // ── C. CHILD reads (no org_id): two users must not overlap ──
@@ -204,14 +229,27 @@ async function main() {
     if (r?.p) leaks.push(`SECRET app_connections.${col} readable by authenticated`);
   }
 
-  // ── H. UPDATE sans WITH CHECK = tenant hopping ──
-  // Sans WITH CHECK, Postgres réutilise USING, qui contraint la ligne AVANT
-  // modification et ne dit rien de la ligne APRÈS: on peut donc déplacer
-  // ses propres lignes vers une autre org.
-  // Le filtre sur has_table_privilege n'est pas cosmétique : une policy sans
-  // WITH CHECK sur une table dont le GRANT UPDATE a été révoqué est inerte —
-  // sans privilège, il n'y a rien à autoriser. Sans ce filtre, 14 policies du
-  // control plane ressortent en faux positif permanent.
+  // ── H. UPDATE sans WITH CHECK — INFORMATIF, ce n'est PAS une fuite ──
+  //
+  // CORRECTION 2026-07-31. Le commentaire précédent affirmait que sans
+  // WITH CHECK on peut déplacer ses lignes vers une autre org. C'est FAUX, et
+  // ça aurait mis la CI en rouge pour rien le jour où on l'active.
+  //
+  // PostgreSQL réutilise l'expression USING comme WITH CHECK quand cette
+  // dernière est absente (doc CREATE POLICY). La ligne APRÈS modification est
+  // donc contrainte elle aussi. Vérifié par exécution contre la prod :
+  //
+  //   create table t(id int, org text);
+  //   alter table t enable row level security;
+  //   create policy p on t for update to public using (org = 'A');
+  //   -- puis, en tant qu'authenticated :
+  //   update t set org = 'B' where id = 1;
+  //   -- ERROR 42501: new row violates row-level security policy for table "t"
+  //
+  // On garde le relevé à titre informatif — expliciter WITH CHECK reste une
+  // bonne pratique de lisibilité — mais on ne le compte plus comme une fuite.
+  // Le filtre has_table_privilege est conservé : une policy sur une table dont
+  // le GRANT UPDATE est révoqué est de toute façon inerte.
   const noCheck = (await c.query(`
     select p.tablename||'.'||p.policyname p from pg_policies p
     join pg_class k on k.relname = p.tablename and k.relkind = 'r'
@@ -220,7 +258,9 @@ async function main() {
       and ('authenticated' = any(p.roles) or 'public' = any(p.roles))
       and p.with_check is null
       and has_table_privilege('authenticated', k.oid, 'update')`)).rows;
-  for (const r of noCheck) leaks.push(`UPDATE policy without WITH CHECK: ${r.p}`);
+  if (noCheck.length) {
+    console.log(`ℹ ${noCheck.length} policy(ies) UPDATE/ALL sans WITH CHECK explicite — non bloquant, Postgres réutilise USING : ${noCheck.map(r => r.p).join(', ')}`);
+  }
 
   // ── J. pg_net — NON traité comme une fuite, volontairement ──
   //
