@@ -148,3 +148,41 @@ export function getPublicUrl(bucket: string, path: string): string {
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
+
+// Buckets made private by migration 20260717250000 — the DB still stores
+// public-format URLs for them, which now 400 in the browser. Display code
+// must resolve those to signed URLs.
+const PRIVATE_BUCKETS = new Set(['attachments', 'job-photos', 'director-panel']);
+
+// Long enough to cover a full course session (3h videos use range requests
+// against the same signed URL throughout playback).
+const SIGNED_URL_TTL_SECONDS = 60 * 60 * 12;
+
+const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
+
+/**
+ * Resolve a stored storage URL for display. Public-format URLs pointing at a
+ * private bucket are exchanged for a signed URL (cached); anything else
+ * (external links, public buckets) is returned unchanged.
+ */
+export async function resolveStorageUrl(url: string): Promise<string> {
+  const match = url.match(/\/storage\/v1\/object\/public\/([^/]+)\/([^?]+)/);
+  if (!match || !PRIVATE_BUCKETS.has(match[1])) return url;
+
+  const cached = signedUrlCache.get(url);
+  if (cached && cached.expiresAt > Date.now()) return cached.url;
+
+  const path = decodeURIComponent(match[2]);
+  const { data, error } = await supabase.storage
+    .from(match[1])
+    .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+  if (error || !data?.signedUrl) return url;
+
+  // Expire the cache entry 5 min before the URL itself so we never hand out
+  // an about-to-die link.
+  signedUrlCache.set(url, {
+    url: data.signedUrl,
+    expiresAt: Date.now() + (SIGNED_URL_TTL_SECONDS - 300) * 1000,
+  });
+  return data.signedUrl;
+}

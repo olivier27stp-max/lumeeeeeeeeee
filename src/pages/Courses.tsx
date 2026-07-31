@@ -14,6 +14,17 @@ import {
   type Course, type ProgressSummary,
 } from '../lib/coursesApi';
 import { EmptyState } from '../components/ui';
+import { useStorageUrl } from '../hooks/useStorageUrl';
+
+// Le bucket attachments est privé : l'URL publique stockée doit être signée.
+function CourseCoverImage({ src, alt }: { src: string; alt: string }) {
+  const resolved = useStorageUrl(src);
+  if (!resolved) return <div className="w-full h-full bg-surface-tertiary" />;
+  return (
+    <img src={resolved} alt={alt}
+      className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300" />
+  );
+}
 
 function formatDuration(min: number, t: any) {
   if (!min) return '';
@@ -229,12 +240,12 @@ export default function Courses() {
           icon={GraduationCap}
           title={t.courses.noCourses}
           description={t.courses.noCoursesDesc}
-          action={
+          action={isAdminOrOwner ? (
             <button onClick={() => navigate('/courses/new')}
               className="glass-button-primary flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold">
               <Plus size={16} /> {t.courses.createCourse}
             </button>
-          }
+          ) : undefined}
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -254,8 +265,7 @@ export default function Courses() {
                 {/* Cover */}
                 <div className="aspect-[16/10] bg-surface-tertiary relative overflow-hidden">
                   {course.cover_image ? (
-                    <img src={course.cover_image} alt={course.title}
-                      className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300" />
+                    <CourseCoverImage src={course.cover_image} alt={course.title} />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-surface-tertiary to-surface-secondary">
                       <GraduationCap size={40} className="text-text-muted/30" />

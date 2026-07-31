@@ -14,6 +14,7 @@ import {
   getCourse, getCourseProgress, updateProgress, getCurrentUserRole, getTeamCourseProgress,
   type CourseFull, type CourseLesson, type LessonProgress, type TeamMemberProgress,
 } from '../lib/coursesApi';
+import { useStorageUrl } from '../hooks/useStorageUrl';
 
 function formatDuration(min: number, t: any) {
   if (!min) return '';
@@ -32,6 +33,24 @@ function getEmbedUrl(url: string): string | null {
   const vimeo = url.match(/vimeo\.com\/(\d+)/);
   if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
   return url;
+}
+
+// Bucket attachments privé : le lien stocké (URL publique) doit être signé.
+function AttachmentRow({ att }: { att: { name: string; url: string; type: string } }) {
+  const href = useStorageUrl(att.url);
+  return (
+    <a href={href || att.url} target="_blank" rel="noopener noreferrer"
+      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-secondary transition-colors group">
+      <div className="w-9 h-9 rounded-lg bg-info-light flex items-center justify-center shrink-0">
+        <FileText size={14} className="text-info" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[13px] text-text-primary truncate">{att.name}</p>
+        <p className="text-[11px] text-text-muted uppercase">{att.type}</p>
+      </div>
+      <Download size={14} className="text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
+    </a>
+  );
 }
 
 const CONTENT_ICON: Record<string, React.ElementType> = {
@@ -53,6 +72,8 @@ export default function CourseView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeLesson, setActiveLesson] = useState<CourseLesson | null>(null);
+  // Bucket attachments privé : les URL publiques stockées sont signées à l'affichage.
+  const lessonMediaUrl = useStorageUrl(activeLesson?.video_url);
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [markingComplete, setMarkingComplete] = useState(false);
   // Leçons vidéo regardées jusqu'à la fin (≥95%) pendant cette session — permet
@@ -234,7 +255,7 @@ export default function CourseView() {
               {activeLesson?.content_type === 'video' && activeLesson.video_url ? (
                 <video
                   key={activeLesson.id}
-                  src={activeLesson.video_url}
+                  src={lessonMediaUrl || undefined}
                   controls
                   className="w-full h-full object-contain"
                   onEnded={() => { const lid = activeLesson.id; setVideoWatched(prev => new Set(prev).add(lid)); }}
@@ -252,7 +273,7 @@ export default function CourseView() {
                 <iframe key={activeLesson.id} src={getEmbedUrl(activeLesson.embed_url) || ''} className="w-full h-full"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
               ) : activeLesson?.content_type === 'pdf' && activeLesson.video_url ? (
-                <iframe key={activeLesson.id} src={activeLesson.video_url} className="w-full h-full bg-white" />
+                <iframe key={activeLesson.id} src={lessonMediaUrl || 'about:blank'} className="w-full h-full bg-white" />
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center text-text-muted gap-3">
                   {activeLesson ? (
@@ -366,17 +387,7 @@ export default function CourseView() {
               <h3 className="text-sm font-bold text-text-primary mb-3">{t.courses.attachments}</h3>
               <div className="space-y-1.5">
                 {activeLesson.attachments.map((att, i) => (
-                  <a key={i} href={att.url} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-secondary transition-colors group">
-                    <div className="w-9 h-9 rounded-lg bg-info-light flex items-center justify-center shrink-0">
-                      <FileText size={14} className="text-info" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-text-primary truncate">{att.name}</p>
-                      <p className="text-[11px] text-text-muted uppercase">{att.type}</p>
-                    </div>
-                    <Download size={14} className="text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </a>
+                  <AttachmentRow key={i} att={att} />
                 ))}
               </div>
             </div>

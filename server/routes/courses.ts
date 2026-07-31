@@ -2,6 +2,10 @@ import express from 'express';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
+import {
+  validate, upsertCourseSchema, upsertCourseModuleSchema, upsertCourseLessonSchema,
+  courseReorderSchema, courseAssignSchema, courseProgressSchema,
+} from '../lib/validation';
 
 const router = express.Router();
 router.use(maxBodySize());
@@ -446,7 +450,7 @@ router.get('/courses/:id', async (req, res) => {
 });
 
 /** POST /api/courses — create course (admin/owner/any authorized role) */
-router.post('/courses', async (req, res) => {
+router.post('/courses', validate(upsertCourseSchema), async (req, res) => {
   try {
     await ensureTables();
     const auth = await requireAdmin(req, res);
@@ -481,7 +485,7 @@ router.post('/courses', async (req, res) => {
 });
 
 /** PATCH /api/courses/:id — update course (admin/owner/creator) */
-router.patch('/courses/:id', async (req, res) => {
+router.patch('/courses/:id', validate(upsertCourseSchema), async (req, res) => {
   try {
     const auth = await requireEditor(req, res, req.params.id);
     if (!auth) return;
@@ -562,6 +566,9 @@ router.post('/courses/:id/duplicate', async (req, res) => {
         cover_image: original.cover_image,
         status: 'draft',
         ...(hasCategoryColumn ? { category: original.category } : {}),
+        // Sans ça, un cours 'assigned' dupliqué retombe sur 'all' et devient
+        // visible à toute l'org dès sa publication.
+        ...(hasVisibilityColumn ? { visibility: original.visibility } : {}),
         created_by: auth.user.id,
         ...(hasTargetingColumns && original.target_roles?.length ? { target_roles: original.target_roles } : {}),
         ...(hasTargetingColumns && original.target_user_ids?.length ? { target_user_ids: original.target_user_ids } : {}),
@@ -616,7 +623,7 @@ router.post('/courses/:id/duplicate', async (req, res) => {
 // ════════════════════════════════════════════════════════════════
 
 /** POST /api/courses/:courseId/modules */
-router.post('/courses/:courseId/modules', async (req, res) => {
+router.post('/courses/:courseId/modules', validate(upsertCourseModuleSchema), async (req, res) => {
   try {
     const auth = await requireEditor(req, res, req.params.courseId);
     if (!auth) return;
@@ -643,7 +650,7 @@ router.post('/courses/:courseId/modules', async (req, res) => {
 });
 
 /** PATCH /api/courses/modules/:id */
-router.patch('/courses/modules/:id', async (req, res) => {
+router.patch('/courses/modules/:id', validate(upsertCourseModuleSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
@@ -701,7 +708,7 @@ router.delete('/courses/modules/:id', async (req, res) => {
 });
 
 /** PUT /api/courses/:courseId/modules/reorder */
-router.put('/courses/:courseId/modules/reorder', async (req, res) => {
+router.put('/courses/:courseId/modules/reorder', validate(courseReorderSchema), async (req, res) => {
   try {
     const auth = await requireEditor(req, res, req.params.courseId);
     if (!auth) return;
@@ -739,7 +746,7 @@ async function getCourseIdFromLesson(lessonId: string): Promise<string | null> {
 }
 
 /** POST /api/courses/modules/:moduleId/lessons */
-router.post('/courses/modules/:moduleId/lessons', async (req, res) => {
+router.post('/courses/modules/:moduleId/lessons', validate(upsertCourseLessonSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
@@ -780,7 +787,7 @@ router.post('/courses/modules/:moduleId/lessons', async (req, res) => {
 });
 
 /** PATCH /api/courses/lessons/:id */
-router.patch('/courses/lessons/:id', async (req, res) => {
+router.patch('/courses/lessons/:id', validate(upsertCourseLessonSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
@@ -878,7 +885,7 @@ router.post('/courses/lessons/:id/duplicate', async (req, res) => {
 });
 
 /** PUT /api/courses/modules/:moduleId/lessons/reorder */
-router.put('/courses/modules/:moduleId/lessons/reorder', async (req, res) => {
+router.put('/courses/modules/:moduleId/lessons/reorder', validate(courseReorderSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
@@ -907,7 +914,7 @@ router.put('/courses/modules/:moduleId/lessons/reorder', async (req, res) => {
 // ════════════════════════════════════════════════════════════════
 
 /** POST /api/courses/:id/assign */
-router.post('/courses/:id/assign', async (req, res) => {
+router.post('/courses/:id/assign', validate(courseAssignSchema), async (req, res) => {
   try {
     const auth = await requireAdmin(req, res);
     if (!auth) return;
@@ -982,7 +989,7 @@ router.get('/courses/:id/progress', async (req, res) => {
 });
 
 /** POST /api/courses/progress — mark lesson viewed/completed */
-router.post('/courses/progress', async (req, res) => {
+router.post('/courses/progress', validate(courseProgressSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;

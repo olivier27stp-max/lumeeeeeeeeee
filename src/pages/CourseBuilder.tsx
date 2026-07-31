@@ -19,6 +19,7 @@ import {
   type CourseFull, type CourseModule, type CourseLesson, type OrgMember,
 } from '../lib/coursesApi';
 import { uploadFile, STORAGE_BUCKETS } from '../lib/storage';
+import { useStorageUrl } from '../hooks/useStorageUrl';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -133,6 +134,8 @@ export default function CourseBuilder() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [coverImage, setCoverImage] = useState('');
+  // Bucket attachments privé : l'URL publique stockée doit être signée à l'affichage.
+  const coverImageDisplayUrl = useStorageUrl(coverImage);
   const [courseStatus, setCourseStatus] = useState<'draft' | 'published'>('draft');
 
   // Structure
@@ -144,6 +147,7 @@ export default function CourseBuilder() {
   const [lessonTitle, setLessonTitle] = useState('');
   const [lessonContentType, setLessonContentType] = useState<CourseLesson['content_type']>('video');
   const [lessonVideoUrl, setLessonVideoUrl] = useState('');
+  const lessonVideoDisplayUrl = useStorageUrl(lessonVideoUrl);
   const [lessonEmbedUrl, setLessonEmbedUrl] = useState('');
   const [lessonTextContent, setLessonTextContent] = useState('');
   const [lessonDuration, setLessonDuration] = useState(0);
@@ -665,7 +669,7 @@ export default function CourseBuilder() {
                             </button>
 
                             {isEditingThis ? (
-                              <input ref={moduleInputRef} value={editingModuleTitle} onChange={e => setEditingModuleTitle(e.target.value)}
+                              <input ref={moduleInputRef} value={editingModuleTitle} maxLength={500} onChange={e => setEditingModuleTitle(e.target.value)}
                                 onBlur={() => { handleRenameModule(mod.id, editingModuleTitle); setEditingModuleId(null); }}
                                 onKeyDown={e => { if (e.key === 'Enter') { handleRenameModule(mod.id, editingModuleTitle); setEditingModuleId(null); } if (e.key === 'Escape') setEditingModuleId(null); }}
                                 className="flex-1 bg-transparent text-[13px] font-semibold text-text-primary outline-none border-b border-primary" />
@@ -772,7 +776,7 @@ export default function CourseBuilder() {
               {(title || coverImage) && (
                 <div className="bg-surface-card rounded-2xl border border-outline/30 overflow-hidden mb-2">
                   <div className="aspect-[16/6] bg-surface-tertiary relative">
-                    {coverImage ? <img src={coverImage} alt="" className="w-full h-full object-cover" /> : (
+                    {coverImageDisplayUrl ? <img src={coverImageDisplayUrl} alt="" className="w-full h-full object-cover" /> : (
                       <div className="w-full h-full flex items-center justify-center"><GraduationCap size={32} className="text-text-muted/20" /></div>
                     )}
                     <div className={cn('absolute top-3 left-3 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider backdrop-blur-md', courseStatus === 'published' ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning')}>
@@ -793,13 +797,13 @@ export default function CourseBuilder() {
 
               <div>
                 <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.courseTitle}</label>
-                <input value={title} onChange={e => setTitle(e.target.value)} placeholder={fr ? 'Titre de la formation' : 'Course Title'}
+                <input value={title} maxLength={500} onChange={e => setTitle(e.target.value)} placeholder={fr ? 'Titre de la formation' : 'Course Title'}
                   className="glass-input w-full px-4 py-2.5 rounded-xl text-sm" />
               </div>
 
               <div>
                 <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.courseDescription}</label>
-                <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder={fr ? 'Description' : 'Description'} rows={4}
+                <textarea value={description} maxLength={10000} onChange={e => setDescription(e.target.value)} placeholder={fr ? 'Description' : 'Description'} rows={4}
                   className="glass-input w-full px-4 py-2.5 rounded-xl text-sm resize-none" />
               </div>
 
@@ -807,7 +811,9 @@ export default function CourseBuilder() {
                 <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.coverImage}</label>
                 {coverImage ? (
                   <div className="relative group rounded-xl overflow-hidden">
-                    <img src={coverImage} alt="" className="w-full h-40 object-cover" />
+                    {coverImageDisplayUrl
+                      ? <img src={coverImageDisplayUrl} alt="" className="w-full h-40 object-cover" />
+                      : <div className="w-full h-40 bg-surface-tertiary" />}
                     <button onClick={() => setCoverImage('')} className="absolute top-2 right-2 w-7 h-7 bg-black/50 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"><X size={13} /></button>
                   </div>
                 ) : (
@@ -1002,7 +1008,7 @@ export default function CourseBuilder() {
               <div className="flex gap-4 mb-6">
                 <div className="flex-1">
                   <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.lessonTitle}</label>
-                  <input value={lessonTitle} onChange={e => setLessonTitle(e.target.value)} className="glass-input w-full px-4 py-2.5 rounded-xl text-sm" />
+                  <input value={lessonTitle} maxLength={500} onChange={e => setLessonTitle(e.target.value)} className="glass-input w-full px-4 py-2.5 rounded-xl text-sm" />
                 </div>
                 <div className="w-32">
                   <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.duration}</label>
@@ -1044,7 +1050,7 @@ export default function CourseBuilder() {
                         <p className="text-[11px] text-text-muted">{videoProgress}%</p>
                       </div>
                     ) : lessonVideoUrl ? (
-                      <div><video src={lessonVideoUrl} controls className="w-full rounded-xl max-h-[280px] bg-black mb-2" /><button onClick={() => setLessonVideoUrl('')} className="text-xs text-danger hover:underline">{fr ? 'Supprimer' : 'Remove'}</button></div>
+                      <div><video src={lessonVideoDisplayUrl || undefined} controls className="w-full rounded-xl max-h-[280px] bg-black mb-2" /><button onClick={() => setLessonVideoUrl('')} className="text-xs text-danger hover:underline">{fr ? 'Supprimer' : 'Remove'}</button></div>
                     ) : (
                       <label className="flex flex-col items-center justify-center gap-3 py-10 rounded-xl border-2 border-dashed border-outline/40 hover:border-outline-strong cursor-pointer transition-colors">
                         <input type="file" accept="video/*" onChange={handleVideoUpload} className="hidden" />

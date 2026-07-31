@@ -411,6 +411,57 @@ export const commissionActionSchema = z.object({
   id: z.string().trim().optional(),
 }).passthrough();
 
+// ─── Courses (LMS) ──────────────────────────────────────────────
+
+const optionalStorageUrl = z.string().trim().max(2000).optional().nullable();
+const uuidArray = z.array(z.string().uuid()).max(500);
+
+export const upsertCourseSchema = z.object({
+  title: z.string().trim().max(500).optional().nullable(),
+  description: z.string().trim().max(10_000).optional().nullable(),
+  cover_image: optionalStorageUrl,
+  status: z.enum(['draft', 'published']).optional(),
+  category: z.string().trim().max(100).optional().nullable(),
+  visibility: z.enum(['all', 'assigned']).optional(),
+  target_roles: z.array(z.string().trim().max(50)).max(50).optional(),
+  target_user_ids: uuidArray.optional(),
+}).passthrough();
+
+export const upsertCourseModuleSchema = z.object({
+  title: z.string().trim().max(500).optional().nullable(),
+  sort_order: z.number().int().min(0).max(100_000).optional(),
+}).passthrough();
+
+export const upsertCourseLessonSchema = z.object({
+  title: z.string().trim().max(500).optional().nullable(),
+  content_type: z.enum(['video', 'embed', 'text', 'pdf', 'link']).optional(),
+  video_url: optionalStorageUrl,
+  embed_url: optionalStorageUrl,
+  text_content: z.string().max(200_000).optional().nullable(),
+  attachments: z.array(z.object({
+    name: z.string().trim().max(300),
+    url: z.string().trim().max(2000),
+    type: z.string().trim().max(50),
+  }).passthrough()).max(50).optional(),
+  duration_min: z.number().int().min(0).max(10_000).optional().nullable(),
+  sort_order: z.number().int().min(0).max(100_000).optional(),
+}).passthrough();
+
+export const courseReorderSchema = z.object({
+  order: z.array(z.string().uuid()).max(500),
+});
+
+export const courseAssignSchema = z.object({
+  user_ids: uuidArray.optional(),
+  team_ids: uuidArray.optional(),
+}).passthrough();
+
+export const courseProgressSchema = z.object({
+  course_id: z.string().uuid().optional().nullable(),
+  lesson_id: z.string().uuid('lesson_id must be a valid UUID.'),
+  completed: z.boolean().optional().default(false),
+}).passthrough();
+
 // ─── Generic passthrough schemas for loose validation ───────────
 
 /** Validates that a request body is a non-empty object (catches nulls, arrays, primitives) */
