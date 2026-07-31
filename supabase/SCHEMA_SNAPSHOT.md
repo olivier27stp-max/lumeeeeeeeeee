@@ -11,7 +11,7 @@
 > **Régénérer avec** `scripts/gen-schema-snapshot.mjs` après tout changement
 > structurel. Un référentiel périmé est pire qu'aucun référentiel.
 
-**Généré le 2026-07-31 14:33 UTC depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
+**Généré le 2026-07-31 15:02 UTC depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
 
 ## 1. Tables (218)
 
@@ -1877,6 +1877,7 @@
 - `client_email_snapshot` text
 - `billing_milestone_id` uuid
 - `version` integer NOT NULL DEFAULT 1
+- `salesperson_id` uuid
 
 ### `ip_blocklist`
 
@@ -5981,7 +5982,7 @@ l'audit. Lire le corps réel avec :
 | `rpc_insights_revenue_series(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(bucket_start date, revenue_cents bigint, invoiced_cents bigint) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `rpc_insights_team_performance(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(team_id uuid, team_name text, jobs_count bigint, jobs_completed bigint, completion_rate numeric, revenue_cents bigint, avg_job_value_cents bigint) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `rpc_invoices_kpis_30d(p_org uuid DEFAULT NULL::uuid)` → TABLE(past_due_count bigint, past_due_total_cents bigint, sent_not_due_count bigint, sent_not_due_total_cents bigint, draft_count bigint, draft_total_cents bigint, issued_30d_count bigint, issued_30d_total_cents bigint, avg_invoice_30d_cents bigint, avg_payment_time_days_30d numeric) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_list_invoices(p_status text DEFAULT 'all'::text, p_range text DEFAULT 'all'::text, p)` → TABLE(id uuid, client_id uuid, client_name text, invoice_number text, status text, subject text, issued_at timestamp with time zone, due_date date, total_cents integer, balance_cents integer, paid_cents integer, created_at timestamp with time zone, updated_at timestamp with time zone, total_count bigint) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_list_invoices(p_status text DEFAULT 'all'::text, p_range text DEFAULT 'all'::text, p)` → TABLE(id uuid, client_id uuid, client_name text, invoice_number text, status text, subject text, issued_at timestamp with time zone, due_date date, total_cents integer, balance_cents integer, paid_cents integer, created_at timestamp with time zone, updated_at timestamp with time zone, property_id uuid, job_id uuid, site text, quote_number text, payer_name text, payment_method text, provider text, card_last4 text, card_brand text, payment_id uuid, total_count bigint) | ⚠️ oui | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `rpc_list_payments(p_status text DEFAULT 'all'::text, p_method text DEFAULT 'all'::text, )` → TABLE(id uuid, client_id uuid, client_name text, invoice_id uuid, invoice_number text, payment_date timestamp with time zone, payout_date timestamp with time zone, status text, method text, amount_cents integer, currency text, total_count bigint) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `rpc_payments_overview(p_org uuid DEFAULT NULL::uuid)` → TABLE(available_funds_cents bigint, invoice_payment_time_days_30d numeric, paid_on_time_global_pct_60d numeric, paid_on_time_residential_pct_60d numeric, paid_on_time_commercial_pct_60d numeric, has_property_split boolean) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `rpc_payments_overview_kpis(p_org uuid DEFAULT NULL::uuid, p_now timestamp with time zone DEFAULT )` → TABLE(available_funds_cents bigint, invoice_payment_time_days_30d numeric, paid_on_time_global_pct_60d numeric, paid_on_time_residential_pct_60d numeric, paid_on_time_commercial_pct_60d numeric, has_segment_split boolean) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
