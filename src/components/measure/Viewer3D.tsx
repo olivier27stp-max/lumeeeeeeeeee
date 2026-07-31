@@ -6,6 +6,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Loader2, MoveVertical } from 'lucide-react';
+import Cam3DControls from './Cam3DControls';
 
 interface Props {
   lat: number;
@@ -18,6 +19,7 @@ interface Props {
 
 export default function Viewer3D({ lat, lng, fr, onClose, onUnavailable }: Props) {
   const div = useRef<HTMLDivElement>(null);
+  const elRef = useRef<any>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -44,7 +46,7 @@ export default function Viewer3D({ lat, lng, fr, onClose, onUnavailable }: Props
     const check = setInterval(() => {
       if (disposed) { clearInterval(check); return; }
       elapsed += 200;
-      if (okNow()) { clearInterval(check); setReady(true); }
+      if (okNow()) { clearInterval(check); elRef.current = map3d; setReady(true); }
       else if (elapsed >= 5000) { clearInterval(check); onUnavailable(); }
     }, 200);
     return () => { disposed = true; clearInterval(check); try { map3d?.remove(); } catch {} };
@@ -75,6 +77,14 @@ export default function Viewer3D({ lat, lng, fr, onClose, onUnavailable }: Props
           <div className="absolute inset-0 flex items-center justify-center bg-surface/80 z-10">
             <Loader2 size={28} className="animate-spin text-text-muted" />
           </div>
+        )}
+        {ready && (
+          <>
+            <Cam3DControls getEl={() => elRef.current} fr={fr} className="absolute right-3 top-3 z-20" />
+            <div className="absolute bottom-3 right-3 z-20 bg-gray-900/70 text-white/90 text-[10px] px-3 py-1.5 rounded-lg pointer-events-none backdrop-blur-sm hidden sm:block">
+              {fr ? 'Glisser : déplacer · Ctrl+glisser : pivoter · Molette : zoom' : 'Drag: pan · Ctrl+drag: rotate · Scroll: zoom'}
+            </div>
+          </>
         )}
       </div>
     </div>

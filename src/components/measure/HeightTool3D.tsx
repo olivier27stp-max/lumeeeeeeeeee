@@ -18,6 +18,7 @@ import type { LatLng, UnitSystem, Shape } from '../../lib/measurementTypes';
 import { nextColor, elevationStats, formatElevation } from '../../lib/measurementEngine';
 import { groundElevation, roofElevation } from '../../lib/buildingHeightApi';
 import { useGMaps3D } from './useGMaps3D';
+import Cam3DControls from './Cam3DControls';
 
 const FT_TO_M = 0.3048;
 const M_TO_FT = 1 / FT_TO_M;
@@ -382,6 +383,15 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
           <div className="absolute inset-0 flex items-center justify-center bg-surface/80 z-10">
             <Loader2 size={28} className="animate-spin text-text-muted" />
           </div>
+        )}
+
+        {is3d && ready && (
+          <>
+            <Cam3DControls getEl={() => map3dRef.current} fr={fr} className="absolute right-3 top-14 z-20" />
+            <div className="absolute bottom-3 right-3 z-20 bg-gray-900/70 text-white/90 text-[10px] px-3 py-1.5 rounded-lg pointer-events-none backdrop-blur-sm hidden sm:block">
+              {fr ? 'Glisser : déplacer · Ctrl+glisser : pivoter · Molette : zoom' : 'Drag: pan · Ctrl+drag: rotate · Scroll: zoom'}
+            </div>
+          </>
         )}
 
         {step < 3 && ready && (
