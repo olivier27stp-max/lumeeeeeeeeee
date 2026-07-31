@@ -11,9 +11,9 @@
 > **Régénérer avec** `scripts/gen-schema-snapshot.mjs` après tout changement
 > structurel. Un référentiel périmé est pire qu'aucun référentiel.
 
-**Généré le 2026-07-31 15:02 UTC depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
+**Généré le 2026-07-31 15:19 UTC depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
 
-## 1. Tables (218)
+## 1. Tables (219)
 
 | Table | RLS | FORCE | Policies | Lignes (est.) |
 |---|---|---|---|---|
@@ -174,6 +174,7 @@
 | `push_tokens` | ✅ | ✅ | 4 | 0 |
 | `quote_attachments` | ✅ | ✅ | 4 | 1 |
 | `quote_line_items` | ✅ | ✅ | 5 | 19 |
+| `quote_measurement_camera` | ✅ | ✅ | 4 | ? |
 | `quote_measurements` | ✅ | ✅ | 4 | 0 |
 | `quote_sections` | ✅ | ✅ | 4 | 9 |
 | `quote_send_log` | ✅ | ✅ | 2 | 0 |
@@ -2769,6 +2770,17 @@
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 
+### `quote_measurement_camera`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `org_id` uuid NOT NULL DEFAULT current_org_id()
+- `quote_id` uuid NOT NULL
+- `address` text NOT NULL DEFAULT ''::text
+- `camera` jsonb NOT NULL DEFAULT '{}'::jsonb
+- `unit_system` text NOT NULL DEFAULT 'imperial'::text
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+
 ### `quote_measurements`
 
 - `id` uuid NOT NULL DEFAULT gen_random_uuid()
@@ -2788,6 +2800,8 @@
 - `created_by` uuid NOT NULL DEFAULT auth.uid()
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+- `camera_state` jsonb
+- `metadata` jsonb DEFAULT '{}'::jsonb
 
 ### `quote_sections`
 
@@ -3748,7 +3762,7 @@
 - `conditions` jsonb NOT NULL DEFAULT '[]'::jsonb
 - `actions_config` jsonb NOT NULL DEFAULT '[]'::jsonb
 
-## 3. Policies RLS (584)
+## 3. Policies RLS (588)
 
 
 ### `a2p_registrations`
@@ -5202,6 +5216,18 @@
   - USING: `(EXISTS ( SELECT 1 FROM quotes q WHERE ((q.id = quote_line_items.quote_id) AND has_org_membership(( SELECT auth.uid() AS uid), q.org_id))))`
   - WITH CHECK: `(EXISTS ( SELECT 1 FROM quotes q WHERE ((q.id = quote_line_items.quote_id) AND has_org_membership(( SELECT auth.uid() AS uid), q.org_id))))`
 
+### `quote_measurement_camera`
+
+- **qmc_delete** — DELETE, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_membership(auth.uid(), org_id)`
+- **qmc_insert** — INSERT, PERMISSIVE, roles={authenticated}
+  - WITH CHECK: `has_org_membership(auth.uid(), org_id)`
+- **qmc_select** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_membership(auth.uid(), org_id)`
+- **qmc_update** — UPDATE, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_membership(auth.uid(), org_id)`
+  - WITH CHECK: `has_org_membership(auth.uid(), org_id)`
+
 ### `quote_measurements`
 
 - **quote_measurements_delete** — DELETE, PERMISSIVE, roles={public}
@@ -5739,7 +5765,7 @@
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 
-## 4. Fonctions (319)
+## 4. Fonctions (320)
 
 Corps non inclus — ils divergent, et c'est précisément ce qui a trompé
 l'audit. Lire le corps réel avec :
@@ -5818,13 +5844,13 @@ l'audit. Lire le corps réel avec :
 | `create_client_with_duplicate_handling(p_org_id uuid, p_mode text, p_payload jsonb, p_merge_duplicates boolea)` → clients | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_field_pin_for_client_row(c clients)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `create_incident(p_title text, p_type text, p_severity text, p_description text DEFAULT)` → uuid | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `create_invoice_from_job(p_org_id uuid, p_job_id uuid, p_send_now boolean DEFAULT false)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_invoice_from_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `create_invoice_from_job(p_org_id uuid, p_job_id uuid, p_send_now boolean DEFAULT false)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_invoice_from_milestone(p_org_id uuid, p_job_id uuid, p_milestone_id uuid, p_send_now boolean )` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_job_from_intent(p_intent_id uuid, p_lead_id uuid, p_title text, p_address text DEFAULT)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_job_from_lead(p_org_id uuid, p_lead_id uuid, p_payload jsonb)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `create_job_from_lead(p_org_id uuid, p_lead_id uuid, p_title text DEFAULT NULL::text, p_stat)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_job_from_lead(p_org_id uuid, p_lead_id uuid, p_title text DEFAULT NULL::text, p_addr)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `create_job_from_lead(p_org_id uuid, p_lead_id uuid, p_title text DEFAULT NULL::text, p_stat)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_lead_with_client(p_org_id uuid, p_payload jsonb)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_or_get_invoice_from_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_pipeline_deal(p_lead_id uuid, p_title text, p_value numeric, p_stage text DEFAULT 'n)` → uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
@@ -5941,6 +5967,7 @@ l'audit. Lire le corps réel avec :
 | `purge_old_failed_logins()` → bigint | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `purge_old_location_data(p_days integer DEFAULT 180)` → jsonb | ⚠️ oui | search_path="" | service_role=X/postgres |
 | `purge_old_soft_deletes(p_org_id uuid, p_days integer DEFAULT 90)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `qmc_updated_at()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
 | `quote_line_items_set_total()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
 | `quote_measurements_updated_at()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
 | `recalculate_calibration(p_org uuid, p_domain text)` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
@@ -6081,7 +6108,7 @@ l'audit. Lire le corps réel avec :
 - `v_revenue_analytics` — security_invoker=true
 - `v_schedule_calendar` — security_invoker=true
 
-## 6. Contraintes (1064)
+## 6. Contraintes (1067)
 
 
 ### `a2p_registrations`
@@ -7309,6 +7336,12 @@ CASE
 - `quote_line_items_quote_id_fkey` — FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE
 - `quote_line_items_source_service_id_fkey` — FOREIGN KEY (source_service_id) REFERENCES predefined_services(id) ON DELETE SET NULL
 
+### `quote_measurement_camera`
+
+- `quote_measurement_camera_pkey` — PRIMARY KEY (id)
+- `quote_measurement_camera_quote_id_fkey` — FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE
+- `quote_measurement_camera_quote_id_key` — UNIQUE (quote_id)
+
 ### `quote_measurements`
 
 - `quote_measurements_measurement_type_check` — CHECK ((measurement_type = ANY (ARRAY['line'::text, 'path'::text, 'polygon'::text])))
@@ -7816,7 +7849,7 @@ CASE
 - `workflows_pkey` — PRIMARY KEY (id)
 - `workflows_status_check` — CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'paused'::text])))
 
-## 7. Triggers (221)
+## 7. Triggers (222)
 
 - `a2p_registrations` → **trg_a2p_registrations_updated_at** (`set_updated_at()`)
 - `activity_notes` → **trg_ac_track_activity_notes** (`ac_track_activity_notes()`)
@@ -7983,6 +8016,7 @@ CASE
 - `push_tokens` → **set_push_tokens_updated_at** (`set_updated_at()`)
 - `quote_line_items` → **trg_quote_line_items_set_total** (`quote_line_items_set_total()`)
 - `quote_line_items` → **trg_quote_line_items_set_updated_at** (`set_updated_at()`)
+- `quote_measurement_camera` → **qmc_updated_at_trigger** (`qmc_updated_at()`)
 - `quote_measurements` → **trg_quote_measurements_updated_at** (`quote_measurements_updated_at()`)
 - `quote_sections` → **set_quote_sections_updated_at** (`set_updated_at()`)
 - `quote_sequences` → **set_quote_sequences_updated_at** (`set_updated_at()`)

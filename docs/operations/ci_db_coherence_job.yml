@@ -1,0 +1,56 @@
+# ============================================================================
+# À COLLER À LA FIN DE .github/workflows/ci.yml
+# ============================================================================
+#
+# Ce bloc n'a PAS pu être ajouté automatiquement : GitHub refuse qu'un jeton
+# OAuth modifie un fichier de workflow sans la portée `workflow`. Il faut donc
+# le coller à la main — c'est une protection de GitHub, pas un contournement à
+# chercher.
+#
+# Une fois collé, le job reste SAUTÉ tant que le secret DB_COHERENCE_URL n'est
+# pas renseigné (Settings -> Secrets and variables -> Actions). Il ne bloquera
+# donc aucune PR d'ici là, et il ne passera jamais au vert sans avoir vérifié.
+#
+# Le secret doit contenir une chaîne de connexion PostgreSQL. Une base de
+# STAGING est préférable ; à défaut, un rôle en LECTURE SEULE sur la production
+# suffit — le script n'émet que des SELECT sur pg_catalog.
+#
+# En local, sans rien configurer :  npm run check:db-coherence
+# ============================================================================
+
+  # Cohérence code ↔ base : chaque .rpc()/.from() du code doit exister en base
+  # ET rester exécutable par le rôle qui l'appelle.
+  #
+  # Pourquoi ce job existe — l'audit du 2026-07-31 a trouvé en production neuf
+  # fonctions mortes depuis des semaines (dont le droit à l'effacement Loi 25),
+  # l'inscription cassée une journée, un appel frontend dans le vide depuis
+  # deux mois et demi, une table jamais créée alors qu'une page l'interroge, et
+  # une migration perdue deux semaines sur une collision d'horodatage. Aucun de
+  # ces problèmes n'était visible. Tous auraient été attrapés ici.
+  #
+  # Le job est SAUTÉ tant que DB_COHERENCE_URL n'existe pas — pas rouge, pas
+  # vert. Un job sauté se VOIT dans l'interface ; un job vert mentirait, et un
+  # job rouge bloquerait toutes les PR alors que personne n'a encore de base de
+  # staging. Le script lui-même sort en code 2 s'il ne peut pas se connecter,
+  # jamais en 0 : « je n'ai pas pu vérifier » ne doit jamais ressembler à
+  # « tout va bien ».
+  db-coherence:
+    name: Cohérence code ↔ base
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ secrets.DB_COHERENCE_URL != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Vérifier la cohérence
+        env:
+          DB_URL: ${{ secrets.DB_COHERENCE_URL }}
+        run: |
+          node scripts/check-db-coherence.mjs

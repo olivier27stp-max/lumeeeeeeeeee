@@ -20,7 +20,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:apply": "tsx scripts/apply-sql.ts",
-    "test:rls": "tsx scripts/test-rls-isolation.ts"
+    "test:rls": "tsx scripts/test-rls-isolation.ts",
+    "check:db-coherence": "node --env-file=.env.local scripts/check-db-coherence.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
