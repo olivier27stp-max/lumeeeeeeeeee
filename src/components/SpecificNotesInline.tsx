@@ -16,6 +16,7 @@ import {
   type EntityType,
 } from '../lib/specificNotesApi';
 import { toast } from 'sonner';
+import { useTranslation } from '../i18n';
 
 // ── Types ──
 
@@ -61,6 +62,8 @@ function fileIcon(type: SpecificNoteFile['file_type']) {
 
 const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesInlineProps>(
   ({ tempEntityType, tempEntityId }, ref) => {
+    const { language } = useTranslation();
+    const fr = language === 'fr';
     const [text, setText] = useState('');
     const [files, setFiles] = useState<SpecificNoteFile[]>([]);
     const [uploading, setUploading] = useState(false);
@@ -73,7 +76,7 @@ const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesI
     const handleFiles = async (fileList: FileList | File[]) => {
       const arr = Array.from(fileList).filter((f) => {
         if (f.size > MAX_FILE_SIZE) {
-          toast.error(`${f.name} is too large (max 50 MB)`);
+          toast.error(fr ? `${f.name} est trop volumineux (max 50 Mo)` : `${f.name} is too large (max 50 MB)`);
           return false;
         }
         return true;
@@ -88,9 +91,11 @@ const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesI
           uploaded.push(result);
         }
         setFiles((prev) => [...prev, ...uploaded]);
-        toast.success(`${uploaded.length} file${uploaded.length > 1 ? 's' : ''} uploaded`);
+        toast.success(fr
+          ? `${uploaded.length} fichier${uploaded.length > 1 ? 's' : ''} téléversé${uploaded.length > 1 ? 's' : ''}`
+          : `${uploaded.length} file${uploaded.length > 1 ? 's' : ''} uploaded`);
       } catch (err: any) {
-        toast.error(err?.message || 'Upload failed');
+        toast.error(err?.message || (fr ? 'Échec du téléversement' : 'Upload failed'));
       } finally {
         setUploading(false);
       }
@@ -119,8 +124,8 @@ const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesI
             className="flex items-center gap-2 text-[13px] font-medium text-text-secondary hover:text-primary transition-colors"
           >
             <Paperclip size={14} />
-            Notes spécifiques
-            <span className="text-[11px] text-text-tertiary">(photos, vidéos, documents, notes)</span>
+            {fr ? 'Notes spécifiques' : 'Specific notes'}
+            <span className="text-[11px] text-text-tertiary">{fr ? '(photos, vidéos, documents, notes)' : '(photos, videos, documents, notes)'}</span>
           </button>
         </div>
       );
@@ -131,7 +136,7 @@ const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesI
         <div className="flex items-center justify-between">
           <h4 className="text-[14px] font-bold tracking-tight text-text-primary flex items-center gap-2">
             <Paperclip size={14} className="text-violet-500" />
-            Notes spécifiques
+            {fr ? 'Notes spécifiques' : 'Specific notes'}
           </h4>
           <button
             type="button"
@@ -145,7 +150,7 @@ const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesI
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Add notes, details, context..."
+          placeholder={fr ? 'Ajoutez des notes, détails, contexte...' : 'Add notes, details, context...'}
           className="glass-input w-full min-h-[60px] text-[13px] resize-none"
         />
 
@@ -182,10 +187,10 @@ const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesI
             className="glass-button !text-[12px] flex items-center gap-1.5"
           >
             <Upload size={12} />
-            {uploading ? 'Uploading...' : 'Add Files'}
+            {uploading ? (fr ? 'Téléversement...' : 'Uploading...') : (fr ? 'Ajouter des fichiers' : 'Add Files')}
           </button>
           <span className="text-[10px] text-text-tertiary">
-            Photos, vidéos, PDF, documents (max 50 MB)
+            {fr ? 'Photos, vidéos, PDF, documents (max 50 Mo)' : 'Photos, videos, PDFs, documents (max 50 MB)'}
           </span>
         </div>
 

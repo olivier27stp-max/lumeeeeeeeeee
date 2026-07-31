@@ -19,6 +19,7 @@ import {
   User,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 import type { TaskRow } from '../../types/task';
 
 interface TaskDetailSheetProps {
@@ -30,6 +31,9 @@ interface TaskDetailSheetProps {
 }
 
 export default function TaskDetailSheet({ task, onClose, onEdit, onToggleStatus, onDelete }: TaskDetailSheetProps) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const dateLocale = fr ? 'fr-CA' : 'en-US';
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -56,7 +60,7 @@ export default function TaskDetailSheet({ task, onClose, onEdit, onToggleStatus,
                 : 'text-[#525252] border-[#d4d4d4] bg-[#fafafa]'
             )}>
               <span className="w-[4px] h-[4px] rounded-full bg-current" />
-              {task.status === 'done' ? 'Done' : 'Open'}
+              {task.status === 'done' ? (fr ? 'Terminée' : 'Done') : (fr ? 'Ouverte' : 'Open')}
             </span>
           </div>
           <button
@@ -88,34 +92,36 @@ export default function TaskDetailSheet({ task, onClose, onEdit, onToggleStatus,
             <DetailRow icon={Tag} label="Type" value={task.type} />
             <DetailRow
               icon={Flag}
-              label="Priority"
+              label={fr ? 'Priorité' : 'Priority'}
               value={
                 <span className={cn(
                   'inline-flex items-center gap-1 text-[12px] font-medium capitalize',
                   task.priority === 'high' ? 'text-[#dc2626]' :
                   task.priority === 'medium' ? 'text-[#d97706]' : 'text-[#2563eb]'
                 )}>
-                  {task.priority}
+                  {fr
+                    ? (task.priority === 'high' ? 'Élevée' : task.priority === 'medium' ? 'Moyenne' : 'Faible')
+                    : task.priority}
                 </span>
               }
             />
             {task.due_date && (
               <DetailRow
                 icon={Calendar}
-                label="Due Date"
-                value={new Date(task.due_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                label={fr ? 'Échéance' : 'Due Date'}
+                value={new Date(task.due_date).toLocaleDateString(dateLocale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
               />
             )}
             {task.linked_entity_type && (
-              <DetailRow icon={Link} label="Linked Entity" value={task.linked_entity_type} />
+              <DetailRow icon={Link} label={fr ? 'Entité liée' : 'Linked Entity'} value={task.linked_entity_type} />
             )}
             {task.linked_person_type && (
-              <DetailRow icon={User} label="Linked Person" value={task.linked_person_type.replace('_', ' ')} />
+              <DetailRow icon={User} label={fr ? 'Personne liée' : 'Linked Person'} value={task.linked_person_type.replace('_', ' ')} />
             )}
             <DetailRow
               icon={Hash}
-              label="Created"
-              value={new Date(task.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              label={fr ? 'Créée le' : 'Created'}
+              value={new Date(task.created_at).toLocaleDateString(dateLocale, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
             />
           </div>
         </div>
@@ -132,21 +138,21 @@ export default function TaskDetailSheet({ task, onClose, onEdit, onToggleStatus,
             )}
           >
             {task.status === 'open' ? <CheckCircle2 size={14} /> : <Circle size={14} />}
-            {task.status === 'open' ? 'Mark Done' : 'Reopen'}
+            {task.status === 'open' ? (fr ? 'Marquer terminée' : 'Mark Done') : (fr ? 'Rouvrir' : 'Reopen')}
           </button>
           <button
             onClick={onEdit}
             className="flex items-center gap-1.5 h-9 px-4 bg-surface border border-outline rounded-md text-[13px] text-text-secondary font-medium hover:bg-surface-secondary transition-colors"
           >
             <Pencil size={14} />
-            Edit
+            {fr ? 'Modifier' : 'Edit'}
           </button>
           <button
             onClick={onDelete}
             className="flex items-center gap-1.5 h-9 px-4 rounded-md text-[13px] font-medium text-danger hover:bg-danger-light transition-colors ml-auto"
           >
             <Trash2 size={14} />
-            Delete
+            {fr ? 'Supprimer' : 'Delete'}
           </button>
         </div>
       </div>

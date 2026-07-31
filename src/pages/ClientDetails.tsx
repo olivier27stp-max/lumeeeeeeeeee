@@ -1006,7 +1006,7 @@ export default function ClientDetails() {
                 <div className="space-y-2.5">
                   {leads.length === 0 ? (
                     <p className="text-[13px] text-text-tertiary py-4 text-center">
-                      {t.leads?.noLeadsFound || 'No leads for this client.'}
+                      {language === 'fr' ? 'Aucun lead pour ce client.' : 'No leads for this client.'}
                     </p>
                   ) : leads.map((lead) => (
                     <button

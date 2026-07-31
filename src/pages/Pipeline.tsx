@@ -15,6 +15,7 @@ import {
   listPipelineDeals,
   listScheduleEventsForJob,
   PIPELINE_STAGES,
+  pipelineStageLabel,
   PipelineDeal,
   PipelineScheduleEvent,
   PipelineStageName,
@@ -45,13 +46,14 @@ type KanbanColumnProps = {
 };
 
 const KanbanColumn: React.FC<KanbanColumnProps> = ({ stage, deals, total, onCardClick, onDeleteDeal, t }) => {
+  const { language } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: stage });
 
   return (
     <section className="w-[320px] flex-shrink-0 section-card p-3">
       <header className="mb-3 flex items-center justify-between">
         <div>
-          <h3 className="text-[13px] font-bold text-text-primary">{stage}</h3>
+          <h3 className="text-[13px] font-bold text-text-primary">{pipelineStageLabel(stage, language)}</h3>
           <p className="text-xs text-text-tertiary">{formatCurrency(total)} • {deals.length} {t.pipeline.deals}</p>
         </div>
       </header>
@@ -72,6 +74,8 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ stage, deals, total, onCard
 };
 
 const DealCard: React.FC<{ deal: PipelineDeal; onClick: () => void; onDelete: () => void; t: TranslationKeys }> = ({ deal, onClick, onDelete, t }) => {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const { setNodeRef, listeners, attributes, transform, isDragging } = useDraggable({ id: deal.id });
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -98,8 +102,8 @@ const DealCard: React.FC<{ deal: PipelineDeal; onClick: () => void; onDelete: ()
       {/* Header: lead name + hot/cold + delete */}
       <div className="flex items-center justify-between gap-1 mb-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
-          {isHot && <span className="shrink-0 w-2 h-2 rounded-full bg-red-500" title="Hot lead" />}
-          {isCold && <span className="shrink-0 w-2 h-2 rounded-full bg-neutral-400" title="Cold lead" />}
+          {isHot && <span className="shrink-0 w-2 h-2 rounded-full bg-red-500" title={fr ? 'Lead chaud' : 'Hot lead'} />}
+          {isCold && <span className="shrink-0 w-2 h-2 rounded-full bg-neutral-400" title={fr ? 'Lead froid' : 'Cold lead'} />}
           <p className="text-xs font-semibold text-text-primary truncate">{leadName}</p>
         </div>
         {canDelete && (
@@ -134,12 +138,12 @@ const DealCard: React.FC<{ deal: PipelineDeal; onClick: () => void; onDelete: ()
       <div className="mt-2 pt-2 border-t border-outline/50">
         <p className="text-[10px] text-text-tertiary flex items-center gap-1">
           <span className="w-1 h-1 rounded-full bg-text-tertiary shrink-0" />
-          {stageToSlug(deal.stage) === 'new_prospect' ? 'Next: Send quote' :
-           stageToSlug(deal.stage) === 'no_response' ? 'Next: Follow up' :
-           stageToSlug(deal.stage) === 'quote_sent' ? 'Next: Close deal' :
-           stageToSlug(deal.stage) === 'closed_won' ? 'Next: Create job' :
-           stageToSlug(deal.stage) === 'closed_lost' ? 'Lost' :
-           'Next: Move forward'}
+          {stageToSlug(deal.stage) === 'new_prospect' ? (fr ? 'Prochaine étape : Envoyer le devis' : 'Next: Send quote') :
+           stageToSlug(deal.stage) === 'no_response' ? (fr ? 'Prochaine étape : Relancer' : 'Next: Follow up') :
+           stageToSlug(deal.stage) === 'quote_sent' ? (fr ? 'Prochaine étape : Conclure' : 'Next: Close deal') :
+           stageToSlug(deal.stage) === 'closed_won' ? (fr ? 'Prochaine étape : Créer le job' : 'Next: Create job') :
+           stageToSlug(deal.stage) === 'closed_lost' ? (fr ? 'Perdu' : 'Lost') :
+           (fr ? 'Prochaine étape : Avancer' : 'Next: Move forward')}
         </p>
       </div>
     </article>
@@ -354,7 +358,7 @@ export default function Pipeline() {
         stage: createStage,
         notes: createNotes.trim() || null,
       });
-      toast.success(t.pipeline.dealCreated, { action: { label: 'View Pipeline', onClick: () => {} } });
+      toast.success(t.pipeline.dealCreated, { action: { label: language === 'fr' ? 'Voir le pipeline' : 'View Pipeline', onClick: () => {} } });
       setCreateOpen(false);
       setCreateTitle('');
       setCreateValue('0');
@@ -436,7 +440,7 @@ export default function Pipeline() {
         try {
           await updateJob(updated.job_id, { title: updated.title });
         } catch (jobErr: any) {
-          toast.error(jobErr?.message || 'Failed to sync job title');
+          toast.error(jobErr?.message || (language === 'fr' ? 'Échec de la synchronisation du titre du job' : 'Failed to sync job title'));
         }
       }
 
@@ -510,7 +514,9 @@ export default function Pipeline() {
       setSelected(null);
       await load();
       toast.success(
-        `Lead deleted. Deals: ${result.deals}${result.client_deleted > 0 ? ', linked client deleted' : ''}.`
+        language === 'fr'
+          ? `Lead supprimé. Deals : ${result.deals}${result.client_deleted > 0 ? ', client lié supprimé' : ''}.`
+          : `Lead deleted. Deals: ${result.deals}${result.client_deleted > 0 ? ', linked client deleted' : ''}.`
       );
     } catch (error: any) {
       toast.error(error?.message || t.pipeline.failedDeleteLead);
@@ -519,16 +525,18 @@ export default function Pipeline() {
     }
   }
 
+  const locale = language === 'fr' ? 'fr-CA' : 'en-CA';
+
   const slotsByDay = useMemo(() => {
     const grouped = new Map<string, AvailabilitySlot[]>();
     for (const slot of availableSlots) {
-      const key = new Date(slot.slot_start).toLocaleDateString();
+      const key = new Date(slot.slot_start).toLocaleDateString(locale);
       const bucket = grouped.get(key) || [];
       bucket.push(slot);
       grouped.set(key, bucket);
     }
     return Array.from(grouped.entries());
-  }, [availableSlots]);
+  }, [availableSlots, locale]);
 
   async function onDragEnd(event: any) {
     const { active, over } = event;
@@ -558,7 +566,7 @@ export default function Pipeline() {
           try {
             await updateLeadStatus(deal.lead_id, dbStatus);
           } catch {
-            toast.error('Deal moved but lead status sync failed');
+            toast.error(language === 'fr' ? 'Deal déplacé, mais la synchronisation du statut du lead a échoué' : 'Deal moved but lead status sync failed');
           }
         }
       }
@@ -763,7 +771,7 @@ export default function Pipeline() {
                   <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.pipeline.stage}</label>
                   <select value={createStage} onChange={(e) => setCreateStage(e.target.value as PipelineStageName)} className="glass-input w-full">
                     {PIPELINE_STAGES.map((stage) => (
-                      <option key={stage} value={stage}>{stage}</option>
+                      <option key={stage} value={stage}>{pipelineStageLabel(stage, language)}</option>
                     ))}
                   </select>
                 </div>
@@ -808,7 +816,7 @@ export default function Pipeline() {
                     <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.pipeline.stage}</label>
                     <select value={editStage} onChange={(e) => setEditStage(e.target.value as PipelineStageName)} className="glass-input w-full">
                       {PIPELINE_STAGES.map((stage) => (
-                        <option key={stage} value={stage}>{stage}</option>
+                        <option key={stage} value={stage}>{pipelineStageLabel(stage, language)}</option>
                       ))}
                     </select>
                   </div>
@@ -876,7 +884,7 @@ export default function Pipeline() {
                         <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                           {formatDate(event.start_time)} - {formatDate(event.end_time)}
                         </p>
-                        <p className="text-xs text-text-secondary">{event.status || 'scheduled'}</p>
+                        <p className="text-xs text-text-secondary">{(t as any).status?.[event.status || 'scheduled'] || event.status || 'scheduled'}</p>
                         {event.notes && <p className="text-xs text-text-secondary">{event.notes}</p>}
                       </div>
                     ))}
@@ -914,7 +922,7 @@ export default function Pipeline() {
                 <button
                   className="rounded-lg p-1 hover:bg-surface-secondary"
                   onClick={() => !isDeletingDeal && setDealToDelete(null)}
-                  aria-label="Close delete dialog"
+                  aria-label={t.common.close}
                 >
                   <X size={16} />
                 </button>
@@ -1018,7 +1026,7 @@ export default function Pipeline() {
                             onClick={() => void handleSelectSlot(slot)}
                             disabled={slotSaving}
                           >
-                            {new Date(slot.slot_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(slot.slot_start).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
                           </button>
                         ))}
                       </div>

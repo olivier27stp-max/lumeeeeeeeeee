@@ -13,6 +13,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { endTrackingAndSignOut } from '../../hooks/useLiveLocationTracking';
 import { Shield, Loader2 } from 'lucide-react';
+import { useTranslation } from '../../i18n';
 
 interface Props {
   children: React.ReactNode;
@@ -21,6 +22,8 @@ interface Props {
 type GuardState = 'checking' | 'ok' | 'needs-mfa';
 
 export default function AaL2Guard({ children }: Props) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const [state, setState] = useState<GuardState>('checking');
 
   useEffect(() => {
@@ -71,15 +74,17 @@ export default function AaL2Guard({ children }: Props) {
               <Shield size={24} className="text-primary" />
             </div>
           </div>
-          <h2 className="text-xl font-semibold">Two-Factor Authentication Required</h2>
+          <h2 className="text-xl font-semibold">{fr ? 'Authentification à deux facteurs requise' : 'Two-Factor Authentication Required'}</h2>
           <p className="text-sm text-gray-500">
-            Your account has MFA enabled. Please sign in again and complete the verification step.
+            {fr
+              ? 'Votre compte a l’authentification à deux facteurs activée. Veuillez vous reconnecter et compléter l’étape de vérification.'
+              : 'Your account has MFA enabled. Please sign in again and complete the verification step.'}
           </p>
           <button
             onClick={async () => { await endTrackingAndSignOut(); window.location.href = '/'; }}
             className="glass-button-primary"
           >
-            Sign out and retry
+            {fr ? 'Se déconnecter et réessayer' : 'Sign out and retry'}
           </button>
         </div>
       </div>

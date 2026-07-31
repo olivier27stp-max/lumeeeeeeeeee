@@ -41,6 +41,7 @@ export default function SendEmailModal({
   onSent,
 }: SendEmailModalProps) {
   const { language } = useTranslation();
+  const fr = language === 'fr';
   const [to, setTo] = useState(email || '');
   const [subject, setSubject] = useState(defaultSubject);
   const [body, setBody] = useState(defaultBody);
@@ -81,7 +82,7 @@ export default function SendEmailModal({
 
   const handleSend = async () => {
     if (!to.trim() || !subject.trim() || !body.trim()) {
-      toast.error('All fields are required.');
+      toast.error(fr ? 'Tous les champs sont requis.' : 'All fields are required.');
       return;
     }
     setSending(true);
@@ -98,11 +99,11 @@ export default function SendEmailModal({
         reply_to: replyTo,
       });
       setSent(true);
-      toast.success('Email sent');
+      toast.success(fr ? 'Courriel envoyé' : 'Email sent');
       onSent?.();
       setTimeout(() => onClose(), 1500);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to send email');
+      toast.error(err?.message || (fr ? 'Échec de l\'envoi du courriel' : 'Failed to send email'));
     } finally {
       setSending(false);
     }
@@ -133,12 +134,14 @@ export default function SendEmailModal({
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-outline">
         <h3 className="text-[16px] font-bold text-text-primary">
-          Email booking confirmation{clientName ? ` to ${clientName}` : ''}
+          {fr
+            ? `Confirmation de réservation par courriel${clientName ? ` à ${clientName}` : ''}`
+            : `Email booking confirmation${clientName ? ` to ${clientName}` : ''}`}
         </h3>
         <button
           onClick={onClose}
           className="p-1.5 rounded-lg border border-transparent text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary hover:border-outline-subtle transition-all"
-          aria-label="Close"
+          aria-label={fr ? 'Fermer' : 'Close'}
         >
           <X size={16} />
         </button>
@@ -151,7 +154,7 @@ export default function SendEmailModal({
           <div className="flex-[3] px-6 py-5 space-y-4 border-b lg:border-b-0 lg:border-r border-outline min-w-0">
             {/* To */}
             <div>
-              <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">To</label>
+              <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{fr ? 'À' : 'To'}</label>
               <div className="glass-input w-full flex items-center gap-2 flex-wrap min-h-[34px]">
                 {to.trim() && isEmailValid ? (
                   <span className="inline-flex items-center gap-1 bg-surface-tertiary text-text-primary text-[12px] font-medium rounded px-2 py-0.5">
@@ -169,7 +172,7 @@ export default function SendEmailModal({
                     type="email"
                     value={to}
                     onChange={(e) => setTo(e.target.value)}
-                    placeholder="client@example.com"
+                    placeholder={fr ? 'client@exemple.com' : 'client@example.com'}
                     className="flex-1 bg-transparent outline-none text-[13px] text-text-primary placeholder:text-text-tertiary min-w-[120px]"
                     disabled={sent}
                     autoFocus
@@ -177,19 +180,19 @@ export default function SendEmailModal({
                 )}
               </div>
               {to.trim().length > 0 && !isEmailValid && (
-                <p className="text-[11px] text-danger mt-1">Enter a valid email address</p>
+                <p className="text-[11px] text-danger mt-1">{fr ? 'Entrez une adresse courriel valide' : 'Enter a valid email address'}</p>
               )}
             </div>
 
             {/* Subject */}
             <div>
-              <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">Subject</label>
+              <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{fr ? 'Objet' : 'Subject'}</label>
               <input
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 className="glass-input w-full"
                 disabled={sent}
-                placeholder="Email subject"
+                placeholder={fr ? 'Objet du courriel' : 'Email subject'}
               />
             </div>
 
@@ -201,7 +204,7 @@ export default function SendEmailModal({
                 rows={12}
                 className="glass-input w-full resize-none leading-relaxed"
                 disabled={sent}
-                placeholder="Write your message..."
+                placeholder={fr ? 'Écrivez votre message...' : 'Write your message...'}
               />
             </div>
 
@@ -242,18 +245,20 @@ export default function SendEmailModal({
                 className="w-3.5 h-3.5 rounded border-outline text-primary accent-primary"
                 disabled={sent}
               />
-              <span className="text-[12px] text-text-secondary">Send me a copy</span>
+              <span className="text-[12px] text-text-secondary">{fr ? 'M\'envoyer une copie' : 'Send me a copy'}</span>
             </label>
 
             {/* Helper text */}
             <p className="text-[11px] text-text-tertiary">
-              Your client will see a button to view the schedule and location of their upcoming appointments in their client hub.
+              {fr
+                ? 'Votre client verra un bouton pour consulter l\'horaire et le lieu de ses rendez-vous à venir dans son espace client.'
+                : 'Your client will see a button to view the schedule and location of their upcoming appointments in their client hub.'}
             </p>
           </div>
 
           {/* Right column: attachments */}
           <div className="flex-[2] px-6 py-5 space-y-4 min-w-0">
-            <h4 className="text-[13px] font-semibold text-text-primary">Attachments</h4>
+            <h4 className="text-[13px] font-semibold text-text-primary">{fr ? 'Pièces jointes' : 'Attachments'}</h4>
 
             {/* Drop zone */}
             <div
@@ -267,14 +272,14 @@ export default function SendEmailModal({
               }`}
             >
               <Upload size={18} className="mx-auto mb-2 text-text-tertiary" />
-              <p className="text-[12px] text-text-tertiary mb-2">Drag your files here or</p>
+              <p className="text-[12px] text-text-tertiary mb-2">{fr ? 'Glissez vos fichiers ici ou' : 'Drag your files here or'}</p>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="glass-button text-[12px] inline-flex items-center gap-1.5"
                 disabled={sent}
               >
                 <Paperclip size={12} />
-                Select a File
+                {fr ? 'Choisir un fichier' : 'Select a File'}
               </button>
               <input
                 ref={fileInputRef}
@@ -304,14 +309,14 @@ export default function SendEmailModal({
               onClick={() => setJobAttOpen(!jobAttOpen)}
               className="w-full flex items-center justify-between py-2 px-3 rounded-lg border border-outline hover:bg-surface-secondary transition-colors text-[13px]"
             >
-              <span className="text-text-primary font-medium">Job attachments</span>
+              <span className="text-text-primary font-medium">{fr ? 'Pièces jointes du job' : 'Job attachments'}</span>
               <span className="flex items-center gap-1.5 text-text-tertiary">
                 <span className="bg-surface-tertiary text-text-secondary text-xs font-medium rounded-full w-5 h-5 inline-flex items-center justify-center">0</span>
                 {jobAttOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </span>
             </button>
             {jobAttOpen && (
-              <p className="text-[11px] text-text-tertiary px-3">No job attachments available.</p>
+              <p className="text-[11px] text-text-tertiary px-3">{fr ? 'Aucune pièce jointe pour ce job.' : 'No job attachments available.'}</p>
             )}
 
             {/* Client attachments */}
@@ -319,19 +324,21 @@ export default function SendEmailModal({
               onClick={() => setClientAttOpen(!clientAttOpen)}
               className="w-full flex items-center justify-between py-2 px-3 rounded-lg border border-outline hover:bg-surface-secondary transition-colors text-[13px]"
             >
-              <span className="text-text-primary font-medium">Client attachments</span>
+              <span className="text-text-primary font-medium">{fr ? 'Pièces jointes du client' : 'Client attachments'}</span>
               <span className="flex items-center gap-1.5 text-text-tertiary">
                 <span className="bg-surface-tertiary text-text-secondary text-xs font-medium rounded-full w-5 h-5 inline-flex items-center justify-center">0</span>
                 {clientAttOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </span>
             </button>
             {clientAttOpen && (
-              <p className="text-[11px] text-text-tertiary px-3">No client attachments available.</p>
+              <p className="text-[11px] text-text-tertiary px-3">{fr ? 'Aucune pièce jointe pour ce client.' : 'No client attachments available.'}</p>
             )}
 
             {/* Size indicator */}
             <p className="text-[11px] text-text-tertiary">
-              You've attached {totalSizeMB.toFixed(2)} MB out of the 10 MB limit
+              {fr
+                ? `Vous avez joint ${totalSizeMB.toFixed(2)} Mo sur la limite de 10 Mo`
+                : `You've attached ${totalSizeMB.toFixed(2)} MB out of the 10 MB limit`}
             </p>
           </div>
         </div>
@@ -340,11 +347,11 @@ export default function SendEmailModal({
       {/* ── Footer ── */}
       <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-outline bg-surface">
         <button onClick={onClose} className="glass-button">
-          Cancel
+          {fr ? 'Annuler' : 'Cancel'}
         </button>
         {sent ? (
           <span className="inline-flex items-center gap-1.5 text-[13px] text-success font-semibold px-3 py-1.5">
-            <CheckCircle2 size={15} /> Sent
+            <CheckCircle2 size={15} /> {fr ? 'Envoyé' : 'Sent'}
           </span>
         ) : (
           <button
@@ -355,12 +362,12 @@ export default function SendEmailModal({
             {sending ? (
               <>
                 <span className="inline-block w-3.5 h-3.5 border-2 border-surface/30 border-t-surface rounded-full animate-spin" />
-                Sending…
+                {fr ? 'Envoi…' : 'Sending…'}
               </>
             ) : (
               <>
                 <Send size={14} />
-                Send Email
+                {fr ? 'Envoyer le courriel' : 'Send Email'}
               </>
             )}
           </button>

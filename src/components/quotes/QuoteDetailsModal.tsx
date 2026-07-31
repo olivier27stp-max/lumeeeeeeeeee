@@ -9,14 +9,14 @@ import { cn } from '../../lib/utils';
 import { StatusBadge } from '../ui';
 import {
   type QuoteDetail, type QuoteStatus,
-  QUOTE_STATUS_LABELS,
+  getQuoteStatusLabel,
   formatQuoteMoney, updateQuoteStatus, unarchiveQuote, sendQuoteEmail, sendQuoteSms,
   convertQuoteToJob, duplicateQuote, deleteQuote,
 } from '../../lib/quotesApi';
 import { toast } from 'sonner';
 import { displayEmail, displayPhone, displayAddress } from '../../lib/piiSanitizer';
 import SpecificNotes from '../SpecificNotes';
-import { format } from 'date-fns';
+import { useTranslation } from '../../i18n';
 
 interface QuoteDetailsModalProps {
   isOpen: boolean;
@@ -30,6 +30,8 @@ interface QuoteDetailsModalProps {
 export default function QuoteDetailsModal({
   isOpen, onClose, detail, onRefresh, onConvertedToJob, onDuplicated,
 }: QuoteDetailsModalProps) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const [moreOpen, setMoreOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -37,7 +39,9 @@ export default function QuoteDetailsModal({
 
   const { quote, line_items, sections, lead, client } = detail;
   const entity = client || lead;
-  const entityName = entity ? `${entity.first_name || ''} ${entity.last_name || ''}`.trim() : 'Unknown';
+  const entityName = entity ? `${entity.first_name || ''} ${entity.last_name || ''}`.trim() : (fr ? 'Inconnu' : 'Unknown');
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString(fr ? 'fr-CA' : 'en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
   const entityEmail = entity?.email || null;
   const entityPhone = entity?.phone || null;
   const entityAddress = (entity as any)?.address || null;
@@ -47,51 +51,53 @@ export default function QuoteDetailsModal({
 
   async function handleAction(action: () => Promise<void>) {
     setBusy(true);
-    try { await action(); } catch (err: any) { toast.error(err?.message || 'Action failed.'); }
+    try { await action(); } catch (err: any) { toast.error(err?.message || (fr ? 'L\'action a échoué.' : 'Action failed.')); }
     finally { setBusy(false); setMoreOpen(false); }
   }
 
   const handleSendEmail = () => handleAction(async () => {
     await sendQuoteEmail(quote.id);
-    toast.success('Quote sent via email.');
+    toast.success(fr ? 'Devis envoyé par courriel.' : 'Quote sent via email.');
     onRefresh();
   });
 
   const handleSendSms = () => handleAction(async () => {
     await sendQuoteSms(quote.id);
-    toast.success('Quote sent via SMS.');
+    toast.success(fr ? 'Devis envoyé par texto.' : 'Quote sent via SMS.');
     onRefresh();
   });
 
   const handleMarkStatus = (status: QuoteStatus) => () => handleAction(async () => {
     await updateQuoteStatus(quote.id, status);
-    toast.success(`Quote marked as ${QUOTE_STATUS_LABELS[status]}.`);
+    toast.success(fr
+      ? `Devis marqué comme ${getQuoteStatusLabel(status, language).toLowerCase()}.`
+      : `Quote marked as ${getQuoteStatusLabel(status, language)}.`);
     onRefresh();
   });
 
   const handleUnarchive = () => handleAction(async () => {
     await unarchiveQuote(quote.id);
-    toast.success('Quote unarchived.');
+    toast.success(fr ? 'Devis désarchivé.' : 'Quote unarchived.');
     onRefresh();
   });
 
   const handleConvert = () => handleAction(async () => {
     const { jobId } = await convertQuoteToJob(quote.id);
-    toast.success('Quote converted to job.');
+    toast.success(fr ? 'Devis converti en job.' : 'Quote converted to job.');
     onConvertedToJob?.(jobId);
     onRefresh();
   });
 
   const handleDuplicate = () => handleAction(async () => {
     const dup = await duplicateQuote(quote.id);
-    toast.success('Similar quote created.');
+    toast.success(fr ? 'Devis similaire créé.' : 'Similar quote created.');
     onDuplicated?.(dup);
   });
 
   const handleDelete = () => handleAction(async () => {
-    if (!window.confirm('Delete this quote?')) return;
+    if (!window.confirm(fr ? 'Supprimer ce devis ?' : 'Delete this quote?')) return;
     await deleteQuote(quote.id);
-    toast.success('Quote deleted.');
+    toast.success(fr ? 'Devis supprimé.' : 'Quote deleted.');
     onClose();
   });
 
@@ -126,70 +132,72 @@ export default function QuoteDetailsModal({
             <div className="relative">
               <button onClick={() => setMoreOpen(!moreOpen)} disabled={busy}
                 className="px-3 py-2 text-sm font-medium border border-outline rounded-lg hover:bg-surface-secondary flex items-center gap-1.5">
-                <MoreHorizontal size={14} /> More
+                <MoreHorizontal size={14} /> {fr ? 'Plus' : 'More'}
               </button>
               {moreOpen && (
                 <div className="absolute right-0 top-full mt-1 w-56 bg-surface border border-outline rounded-xl shadow-xl z-50 py-1 text-sm">
                   <button onClick={handleConvert} disabled={quote.status !== 'approved' || busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2 disabled:opacity-40">
-                    <Briefcase size={14} /> Convert to Job
+                    <Briefcase size={14} /> {fr ? 'Convertir en job' : 'Convert to Job'}
                   </button>
                   <button onClick={handleDuplicate} disabled={busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                    <Copy size={14} /> Create Similar Quote
+                    <Copy size={14} /> {fr ? 'Créer un devis similaire' : 'Create Similar Quote'}
                   </button>
                   <div className="border-t border-outline my-1" />
-                  <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">Send as...</p>
+                  <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{fr ? 'Envoyer par...' : 'Send as...'}</p>
                   <button onClick={handleSendEmail} disabled={!entityEmail || busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2 disabled:opacity-40">
-                    <Mail size={14} /> Email
+                    <Mail size={14} /> {fr ? 'Courriel' : 'Email'}
                   </button>
                   <button onClick={handleSendSms} disabled={!entityPhone || busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2 disabled:opacity-40">
-                    <MessageSquare size={14} /> Text
+                    <MessageSquare size={14} /> {fr ? 'Texto' : 'Text'}
                   </button>
                   <div className="border-t border-outline my-1" />
-                  <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">Mark as...</p>
+                  <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{fr ? 'Marquer comme...' : 'Mark as...'}</p>
                   <button onClick={handleMarkStatus('awaiting_response')} disabled={busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                    <Clock size={14} /> Awaiting Response
+                    <Clock size={14} /> {fr ? 'En attente de réponse' : 'Awaiting Response'}
                   </button>
                   <button onClick={handleMarkStatus('approved')} disabled={busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                    <CheckCircle2 size={14} /> Approved
+                    <CheckCircle2 size={14} /> {fr ? 'Approuvé' : 'Approved'}
                   </button>
                   {quote.status === 'archived' ? (
                     <button onClick={handleUnarchive} disabled={busy}
                       className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                      <Archive size={14} /> Unarchive
+                      <Archive size={14} /> {fr ? 'Désarchiver' : 'Unarchive'}
                     </button>
                   ) : (
                     <button onClick={handleMarkStatus('archived')} disabled={busy}
                       className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                      <Archive size={14} /> Archive
+                      <Archive size={14} /> {fr ? 'Archiver' : 'Archive'}
                     </button>
                   )}
                   <div className="border-t border-outline my-1" />
                   <button onClick={handlePreview}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                    <Eye size={14} /> Preview as Client
+                    <Eye size={14} /> {fr ? 'Voir comme client' : 'Preview as Client'}
                   </button>
                   <button onClick={handlePrint}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                    <Printer size={14} /> Print or Save PDF
+                    <Printer size={14} /> {fr ? 'Imprimer ou enregistrer en PDF' : 'Print or Save PDF'}
                   </button>
                   <button onClick={() => {
                     const url = `${window.location.origin}/quote/${quote.view_token}`;
-                    navigator.clipboard.writeText(url).then(() => toast.success('Signature link copied to clipboard')).catch(() => toast.error('Failed to copy link'));
+                    navigator.clipboard.writeText(url)
+                      .then(() => toast.success(fr ? 'Lien de signature copié dans le presse-papiers' : 'Signature link copied to clipboard'))
+                      .catch(() => toast.error(fr ? 'Échec de la copie du lien' : 'Failed to copy link'));
                     setMoreOpen(false);
                   }}
                     className="w-full px-4 py-2.5 text-left hover:bg-surface-secondary flex items-center gap-2">
-                    <FileSignature size={14} /> Collect Signature
+                    <FileSignature size={14} /> {fr ? 'Recueillir une signature' : 'Collect Signature'}
                   </button>
                   <div className="border-t border-outline my-1" />
                   <button onClick={handleDelete} disabled={busy}
                     className="w-full px-4 py-2.5 text-left hover:bg-danger-light text-danger flex items-center gap-2">
-                    <Trash2 size={14} /> Delete
+                    <Trash2 size={14} /> {fr ? 'Supprimer' : 'Delete'}
                   </button>
                 </div>
               )}
@@ -197,7 +205,7 @@ export default function QuoteDetailsModal({
             {entityPhone && (
               <button onClick={handleSendSms} disabled={busy}
                 className="px-3 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg flex items-center gap-1.5">
-                <MessageSquare size={14} /> Send Text
+                <MessageSquare size={14} /> {fr ? 'Envoyer un texto' : 'Send Text'}
               </button>
             )}
             <button onClick={onClose} className="p-2 hover:bg-surface-tertiary rounded-full text-text-tertiary hover:text-text-secondary">
@@ -210,7 +218,7 @@ export default function QuoteDetailsModal({
         <div className="flex-1 overflow-y-auto">
           <div className="px-6 py-6 space-y-6">
             {/* Title */}
-            <h1 className="text-2xl font-bold text-text-primary">{quote.title || `Quote for ${entityName}`}</h1>
+            <h1 className="text-2xl font-bold text-text-primary">{quote.title || (fr ? `Devis pour ${entityName}` : `Quote for ${entityName}`)}</h1>
 
             {/* Identity + Meta */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -243,23 +251,23 @@ export default function QuoteDetailsModal({
               {/* Meta */}
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-text-tertiary">Quote #</span>
+                  <span className="text-text-tertiary">{fr ? 'Devis #' : 'Quote #'}</span>
                   <span className="font-semibold">{quote.quote_number}</span>
                 </div>
                 {quote.salesperson_id && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-text-tertiary">Salesperson</span>
-                    <span className="font-medium">Assigned</span>
+                    <span className="text-text-tertiary">{fr ? 'Vendeur' : 'Salesperson'}</span>
+                    <span className="font-medium">{fr ? 'Assigné' : 'Assigned'}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
-                  <span className="text-text-tertiary">Created</span>
-                  <span className="font-medium">{format(new Date(quote.created_at), 'MMM d, yyyy')}</span>
+                  <span className="text-text-tertiary">{fr ? 'Créé' : 'Created'}</span>
+                  <span className="font-medium">{fmtDate(quote.created_at)}</span>
                 </div>
                 {quote.valid_until && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-text-tertiary">Valid until</span>
-                    <span className="font-medium">{format(new Date(quote.valid_until), 'MMM d, yyyy')}</span>
+                    <span className="text-text-tertiary">{fr ? 'Valide jusqu\'au' : 'Valid until'}</span>
+                    <span className="font-medium">{fmtDate(quote.valid_until)}</span>
                   </div>
                 )}
               </div>
@@ -276,14 +284,14 @@ export default function QuoteDetailsModal({
             {/* Line Items Table */}
             <div className="border border-outline rounded-xl overflow-hidden">
               <div className="px-5 py-3 border-b border-outline flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-text-primary">Product / Service</h4>
+                <h4 className="text-sm font-semibold text-text-primary">{fr ? 'Produit / Service' : 'Product / Service'}</h4>
               </div>
               <table className="w-full text-sm">
                 <thead className="bg-surface-secondary border-b border-outline">
                   <tr>
-                    <th className="px-5 py-2.5 text-left text-xs font-semibold text-text-tertiary uppercase">Line Item</th>
-                    <th className="px-5 py-2.5 text-center text-xs font-semibold text-text-tertiary uppercase">Quantity</th>
-                    <th className="px-5 py-2.5 text-right text-xs font-semibold text-text-tertiary uppercase">Unit Price</th>
+                    <th className="px-5 py-2.5 text-left text-xs font-semibold text-text-tertiary uppercase">{fr ? 'Article' : 'Line Item'}</th>
+                    <th className="px-5 py-2.5 text-center text-xs font-semibold text-text-tertiary uppercase">{fr ? 'Quantité' : 'Quantity'}</th>
+                    <th className="px-5 py-2.5 text-right text-xs font-semibold text-text-tertiary uppercase">{fr ? 'Prix unitaire' : 'Unit Price'}</th>
                     <th className="px-5 py-2.5 text-right text-xs font-semibold text-text-tertiary uppercase">Total</th>
                   </tr>
                 </thead>
@@ -292,7 +300,7 @@ export default function QuoteDetailsModal({
                     <tr key={item.id} className={item.is_optional ? 'opacity-60' : ''}>
                       <td className="px-5 py-3">
                         <span className="font-medium text-text-primary">{item.name}</span>
-                        {item.is_optional && <span className="ml-2 text-[10px] text-text-tertiary uppercase">Optional</span>}
+                        {item.is_optional && <span className="ml-2 text-[10px] text-text-tertiary uppercase">{fr ? 'Optionnel' : 'Optional'}</span>}
                         {item.description && <p className="text-xs text-text-tertiary mt-0.5">{item.description}</p>}
                       </td>
                       <td className="px-5 py-3 text-center text-text-primary font-medium">{item.quantity}</td>
@@ -305,17 +313,17 @@ export default function QuoteDetailsModal({
               {/* Totals */}
               <div className="bg-surface-secondary border-t border-outline px-5 py-3 space-y-1.5">
                 <div className="flex justify-between text-sm">
-                  <span className="text-text-tertiary">Subtotal</span>
+                  <span className="text-text-tertiary">{fr ? 'Sous-total' : 'Subtotal'}</span>
                   <span>{formatQuoteMoney(quote.subtotal_cents)}</span>
                 </div>
                 {quote.discount_cents > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-text-tertiary">Discount</span>
+                    <span className="text-text-tertiary">{fr ? 'Rabais' : 'Discount'}</span>
                     <span className="text-danger">-{formatQuoteMoney(quote.discount_cents)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
-                  <span className="text-text-tertiary">{quote.tax_rate_label || 'Tax'}</span>
+                  <span className="text-text-tertiary">{quote.tax_rate_label || (fr ? 'Taxe' : 'Tax')}</span>
                   <span>{formatQuoteMoney(quote.tax_cents)}</span>
                 </div>
                 <div className="flex justify-between text-base font-bold border-t border-outline pt-2">
@@ -328,12 +336,14 @@ export default function QuoteDetailsModal({
             {/* Deposit settings */}
             {(quote.deposit_required || quote.require_payment_method) && (
               <div className="border border-outline rounded-xl p-4 space-y-2">
-                <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Deposit</h4>
+                <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Acompte' : 'Deposit'}</h4>
                 {quote.deposit_required && (
                   <>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-text-secondary">
-                        {quote.deposit_type === 'percentage' ? `${quote.deposit_value}% deposit` : 'Fixed deposit'}
+                        {quote.deposit_type === 'percentage'
+                          ? (fr ? `Acompte de ${quote.deposit_value} %` : `${quote.deposit_value}% deposit`)
+                          : (fr ? 'Acompte fixe' : 'Fixed deposit')}
                       </span>
                       <span className="font-semibold text-text-primary">
                         {quote.deposit_type === 'percentage'
@@ -342,7 +352,7 @@ export default function QuoteDetailsModal({
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-text-secondary">Deposit status</span>
+                      <span className="text-text-secondary">{fr ? 'Statut de l\'acompte' : 'Deposit status'}</span>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                         (quote as any).deposit_status === 'paid'
                           ? 'bg-emerald-50 text-emerald-700'
@@ -350,17 +360,17 @@ export default function QuoteDetailsModal({
                           ? 'bg-amber-50 text-amber-700'
                           : 'bg-surface-tertiary text-text-primary'
                       }`}>
-                        {(quote as any).deposit_status === 'paid' ? 'Paid' :
-                         (quote as any).deposit_status === 'pending' ? 'Pending' :
-                         (quote as any).deposit_status === 'waived' ? 'Waived' : 'Not required'}
+                        {(quote as any).deposit_status === 'paid' ? (fr ? 'Payé' : 'Paid') :
+                         (quote as any).deposit_status === 'pending' ? (fr ? 'En attente' : 'Pending') :
+                         (quote as any).deposit_status === 'waived' ? (fr ? 'Exempté' : 'Waived') : (fr ? 'Non requis' : 'Not required')}
                       </span>
                     </div>
                   </>
                 )}
                 {quote.require_payment_method && (
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-text-secondary">Require payment method on file</span>
-                    <span className="text-xs font-bold text-text-primary bg-surface-tertiary px-2 py-0.5 rounded-full">ON</span>
+                    <span className="text-text-secondary">{fr ? 'Exiger un moyen de paiement enregistré' : 'Require payment method on file'}</span>
+                    <span className="text-xs font-bold text-text-primary bg-surface-tertiary px-2 py-0.5 rounded-full">{fr ? 'ACTIVÉ' : 'ON'}</span>
                   </div>
                 )}
               </div>
@@ -369,7 +379,7 @@ export default function QuoteDetailsModal({
             {/* Contract / Disclaimer */}
             {disclaimerSection && (
               <div className="border border-outline rounded-xl p-4">
-                <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">Contract / Disclaimer</h4>
+                <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">{fr ? 'Contrat / Clause' : 'Contract / Disclaimer'}</h4>
                 <p className="text-sm text-text-secondary italic">{disclaimerSection.content || quote.contract_disclaimer}</p>
               </div>
             )}

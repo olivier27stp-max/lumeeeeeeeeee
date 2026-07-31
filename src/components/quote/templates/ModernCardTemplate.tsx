@@ -1,6 +1,7 @@
 import React from 'react';
 import type { QuoteRenderData } from '../types';
 import { formatMoneyFromCents } from '../../../lib/invoicesApi';
+import { useTranslation } from '../../../i18n';
 
 /* ── Modern Card — Quote Template ───────────────────────────────
    Card-based sections, rounded corners, modern SaaS feel.
@@ -9,27 +10,72 @@ import { formatMoneyFromCents } from '../../../lib/invoicesApi';
 
 const ACCENT = '#2563eb';
 
-function fmtDate(iso: string | null | undefined) {
+function fmtDate(iso: string | null | undefined, locale: string) {
   if (!iso) return '—';
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-const STATUS_MAP: Record<string, { label: string; bg: string; fg: string }> = {
-  draft:             { label: 'Draft',     bg: '#f1f5f9', fg: '#475569' },
-  sent:              { label: 'Sent',      bg: '#dbeafe', fg: '#1d4ed8' },
-  awaiting_response: { label: 'Pending',   bg: '#fef3c7', fg: '#a16207' },
-  changes_requested: { label: 'Changes Requested', bg: '#fef2f2', fg: '#b91c1c' },
-  archived:          { label: 'Archived',  bg: '#f1f5f9', fg: '#64748b' },
-  approved:          { label: 'Approved',  bg: '#dcfce7', fg: '#15803d' },
-  declined:          { label: 'Declined',  bg: '#fecaca', fg: '#b91c1c' },
-  expired:           { label: 'Expired',   bg: '#f1f5f9', fg: '#64748b' },
-  converted:         { label: 'Converted', bg: '#dcfce7', fg: '#15803d' },
+const STATUS_MAP: Record<string, { label: string; labelFr: string; bg: string; fg: string }> = {
+  draft:             { label: 'Draft',     labelFr: 'Brouillon',  bg: '#f1f5f9', fg: '#475569' },
+  sent:              { label: 'Sent',      labelFr: 'Envoyée',    bg: '#dbeafe', fg: '#1d4ed8' },
+  awaiting_response: { label: 'Pending',   labelFr: 'En attente', bg: '#fef3c7', fg: '#a16207' },
+  changes_requested: { label: 'Changes Requested', labelFr: 'Modifications demandées', bg: '#fef2f2', fg: '#b91c1c' },
+  archived:          { label: 'Archived',  labelFr: 'Archivée',   bg: '#f1f5f9', fg: '#64748b' },
+  approved:          { label: 'Approved',  labelFr: 'Approuvée',  bg: '#dcfce7', fg: '#15803d' },
+  declined:          { label: 'Declined',  labelFr: 'Refusée',    bg: '#fecaca', fg: '#b91c1c' },
+  expired:           { label: 'Expired',   labelFr: 'Expirée',    bg: '#f1f5f9', fg: '#64748b' },
+  converted:         { label: 'Converted', labelFr: 'Convertie',  bg: '#dcfce7', fg: '#15803d' },
 };
 
 export default function ModernCardTemplate({ data }: { data: QuoteRenderData }) {
-  const fmt = (c: number) => formatMoneyFromCents(c, data.currency);
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
+  const fmt = (c: number) => formatMoneyFromCents(c, data.currency, locale);
   const st = STATUS_MAP[data.status] || STATUS_MAP.draft;
+  const stLabel = fr ? st.labelFr : st.label;
+  const L = fr ? {
+    client: 'Client',
+    details: 'Détails',
+    subject: 'Objet',
+    date: 'Date',
+    validUntil: 'Valide jusqu\'au',
+    total: 'Total',
+    services: 'Services',
+    description: 'Description',
+    qty: 'Qté',
+    price: 'Prix',
+    noItems: 'Aucun élément',
+    optional: 'Ajouts optionnels',
+    subtotal: 'Sous-total',
+    discount: 'Rabais',
+    tax: 'Taxes',
+    deposit: 'Dépôt requis',
+    depositDue: 'Payable à l\'acceptation pour réserver la plage horaire',
+    notes: 'Notes',
+    terms: 'Termes et conditions',
+  } : {
+    client: 'Client',
+    details: 'Details',
+    subject: 'Subject',
+    date: 'Date',
+    validUntil: 'Valid until',
+    total: 'Total',
+    services: 'Services',
+    description: 'Description',
+    qty: 'Qty',
+    price: 'Price',
+    noItems: 'No items',
+    optional: 'Optional add-ons',
+    subtotal: 'Subtotal',
+    discount: 'Discount',
+    tax: 'Tax',
+    deposit: 'Deposit Required',
+    depositDue: 'Due upon acceptance to secure scheduling',
+    notes: 'Notes',
+    terms: 'Terms & Conditions',
+  };
 
   return (
     <div className="bg-[#f8fafc] text-[#111]" style={{ fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI","Inter",sans-serif', fontSize: '13px', lineHeight: 1.55 }}>
@@ -51,11 +97,11 @@ export default function ModernCardTemplate({ data }: { data: QuoteRenderData }) 
             <div className="text-right">
               <div className="flex items-center gap-2 justify-end">
                 <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ backgroundColor: st.bg, color: st.fg }}>
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: st.fg }} />{st.label}
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: st.fg }} />{stLabel}
                 </span>
               </div>
               <p className="text-[11px] text-[#9ca3af] mt-2">#{data.quote_number}</p>
-              <p className="text-[11px] text-[#9ca3af]">{fmtDate(data.created_at)}</p>
+              <p className="text-[11px] text-[#9ca3af]">{fmtDate(data.created_at, locale)}</p>
             </div>
           </div>
         </div>
@@ -63,7 +109,7 @@ export default function ModernCardTemplate({ data }: { data: QuoteRenderData }) 
         {/* ── Client + Details cards ── */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white rounded-xl border border-[#e5e7eb] p-5">
-            <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: ACCENT }}>Client</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: ACCENT }}>{L.client}</p>
             <p className="text-[14px] font-semibold">{data.contact_name}</p>
             <div className="text-[11px] text-[#6b7280] mt-1 space-y-0.5">
               {data.contact_company && <p>{data.contact_company}</p>}
@@ -73,12 +119,12 @@ export default function ModernCardTemplate({ data }: { data: QuoteRenderData }) 
             </div>
           </div>
           <div className="bg-white rounded-xl border border-[#e5e7eb] p-5">
-            <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: ACCENT }}>Details</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: ACCENT }}>{L.details}</p>
             <div className="text-[12px] space-y-1.5">
-              {data.title && <div className="flex justify-between"><span className="text-[#9ca3af]">Subject</span><span className="font-medium">{data.title}</span></div>}
-              <div className="flex justify-between"><span className="text-[#9ca3af]">Date</span><span>{fmtDate(data.created_at)}</span></div>
-              {data.valid_until && <div className="flex justify-between"><span className="text-[#9ca3af]">Valid until</span><span>{fmtDate(data.valid_until)}</span></div>}
-              <div className="flex justify-between pt-1.5 mt-1.5 border-t border-[#f3f4f6]"><span className="font-semibold">Total</span><span className="font-bold text-[14px]">{fmt(data.total_cents)}</span></div>
+              {data.title && <div className="flex justify-between"><span className="text-[#9ca3af]">{L.subject}</span><span className="font-medium">{data.title}</span></div>}
+              <div className="flex justify-between"><span className="text-[#9ca3af]">{L.date}</span><span>{fmtDate(data.created_at, locale)}</span></div>
+              {data.valid_until && <div className="flex justify-between"><span className="text-[#9ca3af]">{L.validUntil}</span><span>{fmtDate(data.valid_until, locale)}</span></div>}
+              <div className="flex justify-between pt-1.5 mt-1.5 border-t border-[#f3f4f6]"><span className="font-semibold">{L.total}</span><span className="font-bold text-[14px]">{fmt(data.total_cents)}</span></div>
             </div>
           </div>
         </div>
@@ -93,15 +139,15 @@ export default function ModernCardTemplate({ data }: { data: QuoteRenderData }) 
         {/* ── Line items card ── */}
         <div className="bg-white rounded-xl border border-[#e5e7eb] overflow-hidden">
           <div className="px-5 py-3 border-b border-[#f3f4f6]">
-            <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: ACCENT }}>Services</p>
+            <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: ACCENT }}>{L.services}</p>
           </div>
           <table className="w-full">
             <thead>
               <tr className="border-b border-[#f3f4f6] bg-[#fafafa]">
-                <th className="px-5 py-2.5 text-left text-[10px] font-medium uppercase tracking-widest text-[#9ca3af]">Description</th>
-                <th className="px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-widest text-[#9ca3af] w-14">Qty</th>
-                <th className="px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-widest text-[#9ca3af] w-24">Price</th>
-                <th className="px-5 py-2.5 text-right text-[10px] font-medium uppercase tracking-widest text-[#9ca3af] w-24">Total</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-medium uppercase tracking-widest text-[#9ca3af]">{L.description}</th>
+                <th className="px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-widest text-[#9ca3af] w-14">{L.qty}</th>
+                <th className="px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-widest text-[#9ca3af] w-24">{L.price}</th>
+                <th className="px-5 py-2.5 text-right text-[10px] font-medium uppercase tracking-widest text-[#9ca3af] w-24">{L.total}</th>
               </tr>
             </thead>
             <tbody>
@@ -116,7 +162,7 @@ export default function ModernCardTemplate({ data }: { data: QuoteRenderData }) 
                   <td className="px-5 py-3 text-right text-[12px] font-medium tabular-nums">{fmt(item.total_cents)}</td>
                 </tr>
               ))}
-              {data.items.length === 0 && <tr><td colSpan={4} className="py-10 text-center text-[12px] text-[#d1d5db]">No items</td></tr>}
+              {data.items.length === 0 && <tr><td colSpan={4} className="py-10 text-center text-[12px] text-[#d1d5db]">{L.noItems}</td></tr>}
             </tbody>
           </table>
 
@@ -124,7 +170,7 @@ export default function ModernCardTemplate({ data }: { data: QuoteRenderData }) 
           {data.optional_items.length > 0 && (
             <>
               <div className="px-5 py-2 bg-[#fafafa] border-t border-b border-[#f3f4f6]">
-                <p className="text-[10px] font-medium uppercase tracking-widest text-[#9ca3af]">Optional add-ons</p>
+                <p className="text-[10px] font-medium uppercase tracking-widest text-[#9ca3af]">{L.optional}</p>
               </div>
               {data.optional_items.map(item => (
                 <div key={item.id} className="px-5 py-2.5 flex justify-between border-b border-dashed border-[#f3f4f6] text-[12px] text-[#9ca3af] italic">
@@ -138,10 +184,10 @@ export default function ModernCardTemplate({ data }: { data: QuoteRenderData }) 
           <div className="px-5 py-4 bg-[#fafafa]">
             <div className="flex justify-end">
               <div className="w-56 text-[12px] space-y-1.5">
-                <div className="flex justify-between"><span className="text-[#9ca3af]">Subtotal</span><span className="tabular-nums">{fmt(data.subtotal_cents)}</span></div>
-                {data.discount_cents > 0 && <div className="flex justify-between text-[#dc2626]"><span>Discount</span><span className="tabular-nums">-{fmt(data.discount_cents)}</span></div>}
-                <div className="flex justify-between"><span className="text-[#9ca3af]">{data.tax_rate_label || 'Tax'}</span><span className="tabular-nums">{fmt(data.tax_cents)}</span></div>
-                <div className="flex justify-between pt-2 mt-1 border-t border-[#e5e7eb] text-[15px] font-bold"><span>Total</span><span className="tabular-nums">{fmt(data.total_cents)}</span></div>
+                <div className="flex justify-between"><span className="text-[#9ca3af]">{L.subtotal}</span><span className="tabular-nums">{fmt(data.subtotal_cents)}</span></div>
+                {data.discount_cents > 0 && <div className="flex justify-between text-[#dc2626]"><span>{L.discount}</span><span className="tabular-nums">-{fmt(data.discount_cents)}</span></div>}
+                <div className="flex justify-between"><span className="text-[#9ca3af]">{data.tax_rate_label || L.tax}</span><span className="tabular-nums">{fmt(data.tax_cents)}</span></div>
+                <div className="flex justify-between pt-2 mt-1 border-t border-[#e5e7eb] text-[15px] font-bold"><span>{L.total}</span><span className="tabular-nums">{fmt(data.total_cents)}</span></div>
               </div>
             </div>
           </div>
@@ -150,9 +196,9 @@ export default function ModernCardTemplate({ data }: { data: QuoteRenderData }) 
         {/* ── Deposit card ── */}
         {data.deposit_required && data.deposit_cents > 0 && (
           <div className="rounded-xl border-2 overflow-hidden" style={{ borderColor: ACCENT }}>
-            <div className="px-5 py-3 text-white text-[11px] font-semibold uppercase tracking-widest" style={{ backgroundColor: ACCENT }}>Deposit Required</div>
+            <div className="px-5 py-3 text-white text-[11px] font-semibold uppercase tracking-widest" style={{ backgroundColor: ACCENT }}>{L.deposit}</div>
             <div className="bg-white px-5 py-4 flex items-center justify-between">
-              <p className="text-[12px] text-[#6b7280]">Due upon acceptance to secure scheduling</p>
+              <p className="text-[12px] text-[#6b7280]">{L.depositDue}</p>
               <p className="text-[22px] font-bold" style={{ color: ACCENT }}>{fmt(data.deposit_cents)}</p>
             </div>
           </div>
@@ -163,13 +209,13 @@ export default function ModernCardTemplate({ data }: { data: QuoteRenderData }) 
           <div className="bg-white rounded-xl border border-[#e5e7eb] p-5 space-y-4">
             {data.notes && (
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af] mb-1.5">Notes</p>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af] mb-1.5">{L.notes}</p>
                 <p className="text-[11px] text-[#6b7280] whitespace-pre-wrap leading-relaxed">{data.notes}</p>
               </div>
             )}
             {data.contract_disclaimer && (
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af] mb-1.5">Terms & Conditions</p>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af] mb-1.5">{L.terms}</p>
                 <p className="text-[11px] text-[#9ca3af] whitespace-pre-wrap leading-relaxed">{data.contract_disclaimer}</p>
               </div>
             )}

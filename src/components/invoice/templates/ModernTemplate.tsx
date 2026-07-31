@@ -1,20 +1,29 @@
 import React from 'react';
 import type { InvoiceRenderData } from '../types';
 import { formatMoneyFromCents } from '../../../lib/invoicesApi';
+import { useTranslation } from '../../../i18n';
 
 /* ── FreshBooks / Wave-inspired Modern Template ──────────────────
    Warm, approachable but professional. Rounded cards, soft shadows,
    accent colour used sparingly. Friendly for service businesses.
    ─────────────────────────────────────────────────────────────── */
 
-function fmtDate(iso: string | null | undefined): string {
+function fmtDate(iso: string | null | undefined, locale: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+const STATUS_FR: Record<string, string> = {
+  draft: 'Brouillon', sent: 'Ouverte', sent_not_due: 'Ouverte', partial: 'Partiel',
+  paid: 'Payée', void: 'Annulée', overdue: 'En retard',
+};
+
 export default function ModernTemplate({ data }: { data: InvoiceRenderData }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
   const fmt = (cents: number) => formatMoneyFromCents(cents, data.currency);
   const accent = data.accent_color || '#374151'; // Stripe purple
 
@@ -41,7 +50,7 @@ export default function ModernTemplate({ data }: { data: InvoiceRenderData }) {
             </div>
           </div>
           <div className="text-right">
-            <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: accent }}>Invoice</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: accent }}>{fr ? 'Facture' : 'Invoice'}</p>
             <p className="mt-0.5 text-[16px] font-bold text-[#0a0a0a]">{data.invoice_number}</p>
             <div className="mt-2">
               <span
@@ -54,7 +63,9 @@ export default function ModernTemplate({ data }: { data: InvoiceRenderData }) {
                 <span className="h-1.5 w-1.5 rounded-full" style={{
                   backgroundColor: data.status === 'paid' ? '#059669' : data.status === 'void' ? '#dc2626' : accent,
                 }} />
-                {data.status === 'sent_not_due' ? 'Open' : data.status.charAt(0).toUpperCase() + data.status.slice(1).replace(/_/g, ' ')}
+                {fr
+                  ? (STATUS_FR[data.status] || data.status)
+                  : (data.status === 'sent_not_due' ? 'Open' : data.status.charAt(0).toUpperCase() + data.status.slice(1).replace(/_/g, ' '))}
               </span>
             </div>
           </div>
@@ -63,7 +74,7 @@ export default function ModernTemplate({ data }: { data: InvoiceRenderData }) {
         {/* ── Info cards ── */}
         <div className="mt-8 grid grid-cols-2 gap-4">
           <div className="rounded-xl bg-white border border-[#e5e7eb] p-5">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af]">Bill to</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af]">{fr ? 'Facturer à' : 'Bill to'}</p>
             <p className="mt-2 text-[14px] font-semibold text-[#111]">{data.client_name}</p>
             {data.client_company && <p className="text-[12px] text-[#6b7280]">{data.client_company}</p>}
             <div className="mt-1.5 text-[12px] text-[#9ca3af] space-y-0.5">
@@ -73,18 +84,18 @@ export default function ModernTemplate({ data }: { data: InvoiceRenderData }) {
             </div>
           </div>
           <div className="rounded-xl bg-white border border-[#e5e7eb] p-5">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af]">Details</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af]">{fr ? 'Détails' : 'Details'}</p>
             <div className="mt-2 space-y-2 text-[13px]">
               <div className="flex justify-between">
-                <span className="text-[#9ca3af]">Issued</span>
-                <span className="text-[#374151]">{fmtDate(data.issued_at || data.created_at)}</span>
+                <span className="text-[#9ca3af]">{fr ? 'Émise le' : 'Issued'}</span>
+                <span className="text-[#374151]">{fmtDate(data.issued_at || data.created_at, locale)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#9ca3af]">Due</span>
-                <span className="text-[#374151]">{fmtDate(data.due_date)}</span>
+                <span className="text-[#9ca3af]">{fr ? 'Échéance' : 'Due'}</span>
+                <span className="text-[#374151]">{fmtDate(data.due_date, locale)}</span>
               </div>
               <div className="flex justify-between pt-2 border-t border-[#f3f4f6]">
-                <span className="text-[#9ca3af]">Amount due</span>
+                <span className="text-[#9ca3af]">{fr ? 'Montant dû' : 'Amount due'}</span>
                 <span className="text-[16px] font-bold text-[#111]">{fmt(data.balance_cents || data.total_cents)}</span>
               </div>
             </div>
@@ -94,7 +105,7 @@ export default function ModernTemplate({ data }: { data: InvoiceRenderData }) {
         {/* ── Subject ── */}
         {data.subject && (
           <div className="mt-4 text-[13px] text-[#6b7280]">
-            <span className="font-medium text-[#374151]">Re: </span>{data.subject}
+            <span className="font-medium text-[#374151]">{fr ? 'Objet : ' : 'Re: '}</span>{data.subject}
           </div>
         )}
 
@@ -103,10 +114,10 @@ export default function ModernTemplate({ data }: { data: InvoiceRenderData }) {
           <table className="w-full">
             <thead>
               <tr className="bg-[#f9fafb] border-b border-[#e5e7eb]">
-                <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#6b7280]">Item</th>
-                <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-[#6b7280] w-16">Qty</th>
-                <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-[#6b7280] w-24">Rate</th>
-                <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-[#6b7280] w-28">Amount</th>
+                <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#6b7280]">{fr ? 'Article' : 'Item'}</th>
+                <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-[#6b7280] w-16">{fr ? 'Qté' : 'Qty'}</th>
+                <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-[#6b7280] w-24">{fr ? 'Prix' : 'Rate'}</th>
+                <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-[#6b7280] w-28">{fr ? 'Montant' : 'Amount'}</th>
               </tr>
             </thead>
             <tbody>
@@ -122,7 +133,7 @@ export default function ModernTemplate({ data }: { data: InvoiceRenderData }) {
                 </tr>
               ))}
               {data.items.length === 0 && (
-                <tr><td colSpan={4} className="px-5 py-10 text-center text-[13px] text-[#9ca3af]">No items</td></tr>
+                <tr><td colSpan={4} className="px-5 py-10 text-center text-[13px] text-[#9ca3af]">{fr ? 'Aucun élément' : 'No items'}</td></tr>
               )}
             </tbody>
           </table>
@@ -133,17 +144,17 @@ export default function ModernTemplate({ data }: { data: InvoiceRenderData }) {
           <div className="w-72 rounded-xl bg-white border border-[#e5e7eb] overflow-hidden">
             <div className="px-5 py-3 space-y-2 text-[13px]">
               <div className="flex justify-between">
-                <span className="text-[#6b7280]">Subtotal</span>
+                <span className="text-[#6b7280]">{fr ? 'Sous-total' : 'Subtotal'}</span>
                 <span className="tabular-nums text-[#374151]">{fmt(data.subtotal_cents)}</span>
               </div>
               {data.discount_cents > 0 && (
                 <div className="flex justify-between text-[#dc2626]">
-                  <span>Discount</span>
+                  <span>{fr ? 'Rabais' : 'Discount'}</span>
                   <span className="tabular-nums">−{fmt(data.discount_cents)}</span>
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-[#6b7280]">Tax</span>
+                <span className="text-[#6b7280]">{fr ? 'Taxes' : 'Tax'}</span>
                 <span className="tabular-nums text-[#374151]">{fmt(data.tax_cents)}</span>
               </div>
             </div>
@@ -153,13 +164,13 @@ export default function ModernTemplate({ data }: { data: InvoiceRenderData }) {
             </div>
             {data.paid_cents > 0 && (
               <div className="flex justify-between px-5 py-2.5 text-[13px] text-[#059669] bg-[#f0fdf4]">
-                <span className="font-medium">Paid</span>
+                <span className="font-medium">{fr ? 'Payé' : 'Paid'}</span>
                 <span className="tabular-nums font-medium">{fmt(data.paid_cents)}</span>
               </div>
             )}
             {data.balance_cents > 0 && data.balance_cents !== data.total_cents && (
               <div className="flex justify-between px-5 py-2.5 text-[13px] font-bold bg-[#f9fafb]" style={{ color: accent }}>
-                <span>Balance due</span>
+                <span>{fr ? 'Solde dû' : 'Balance due'}</span>
                 <span className="tabular-nums">{fmt(data.balance_cents)}</span>
               </div>
             )}
@@ -176,7 +187,7 @@ export default function ModernTemplate({ data }: { data: InvoiceRenderData }) {
 
         {/* ── Footer ── */}
         <div className="mt-10 text-center text-[11px] text-[#d1d5db]">
-          <p>Thank you for your business</p>
+          <p>{fr ? 'Merci de faire affaire avec nous' : 'Thank you for your business'}</p>
           <p className="mt-0.5">{data.company_name}</p>
         </div>
       </div>

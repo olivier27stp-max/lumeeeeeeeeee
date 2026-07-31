@@ -31,7 +31,8 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
   const [emailTo, setEmailTo] = useState('');
   const [phoneTo, setPhoneTo] = useState('');
   const [company, setCompany] = useState<any>(null);
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const fr = language === 'fr';
 
   useEffect(() => {
     if (!isOpen || !invoiceId) return;
@@ -63,7 +64,7 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
     if (emailEnabled && emailTo) channels.push('email');
     if (smsEnabled && phoneTo) channels.push('sms');
     if (channels.length === 0) {
-      toast.error('Please select at least one channel');
+      toast.error(fr ? 'Veuillez sélectionner au moins un canal' : 'Please select at least one channel');
       return;
     }
     setSending(true);
@@ -73,7 +74,7 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
       onSent?.();
       onClose();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to send invoice');
+      toast.error(err?.message || t.modals.unableToSend);
     } finally {
       setSending(false);
     }
@@ -116,16 +117,16 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
             <div className="space-y-4">
               {/* Send options */}
               <div className="space-y-3 rounded-xl border border-border bg-surface/70 p-4">
-                <p className="text-sm font-semibold">Send Options</p>
+                <p className="text-sm font-semibold">{fr ? "Options d'envoi" : 'Send Options'}</p>
 
                 {/* Email toggle */}
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={emailEnabled} onChange={(e) => setEmailEnabled(e.target.checked)} className="rounded accent-primary" />
-                  <span className="text-sm">Email</span>
+                  <span className="text-sm">{fr ? 'Courriel' : 'Email'}</span>
                 </label>
                 {emailEnabled && (
                   <input value={emailTo} onChange={(e) => setEmailTo(e.target.value)}
-                    placeholder="Email" className="glass-input w-full text-sm" />
+                    placeholder={fr ? 'Courriel' : 'Email'} className="glass-input w-full text-sm" />
                 )}
 
                 {/* SMS toggle */}
@@ -135,7 +136,7 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
                 </label>
                 {smsEnabled && (
                   <input value={phoneTo} onChange={(e) => setPhoneTo(e.target.value)}
-                    placeholder="Phone" className="glass-input w-full text-sm" />
+                    placeholder={fr ? 'Téléphone' : 'Phone'} className="glass-input w-full text-sm" />
                 )}
 
                 <button
@@ -144,7 +145,7 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
                   className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-all"
                 >
                   <Send size={14} />
-                  {sending ? 'Sending...' : 'Send Invoice'}
+                  {sending ? (fr ? 'Envoi...' : 'Sending...') : (fr ? 'Envoyer la facture' : 'Send Invoice')}
                 </button>
               </div>
             </div>

@@ -1,20 +1,28 @@
 import React from 'react';
 import type { InvoiceRenderData } from '../types';
 import { formatMoneyFromCents } from '../../../lib/invoicesApi';
+import { useTranslation } from '../../../i18n';
 
 /* ── Stripe-inspired Classic Template ────────────────────────────
    Clean, professional, lots of whitespace.
    Inspired by Stripe Invoicing / Billing portal.
    ─────────────────────────────────────────────────────────────── */
 
-function fmtDate(iso: string | null | undefined): string {
+function fmtDate(iso: string | null | undefined, locale: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+const STATUS_FR: Record<string, string> = {
+  draft: 'Brouillon', sent: 'Ouverte', sent_not_due: 'Ouverte', partial: 'Partiel',
+  paid: 'Payée', void: 'Annulée', overdue: 'En retard',
+};
+
 function StatusPill({ status }: { status: string }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const colors: Record<string, { bg: string; text: string }> = {
     draft:        { bg: '#f1f5f9', text: '#475569' },
     sent:         { bg: '#eff6ff', text: '#1d4ed8' },
@@ -24,7 +32,9 @@ function StatusPill({ status }: { status: string }) {
     void:         { bg: '#fef2f2', text: '#b91c1c' },
   };
   const c = colors[status] || colors.draft;
-  const label = status === 'sent_not_due' ? 'Open' : status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
+  const label = fr
+    ? (STATUS_FR[status] || status)
+    : (status === 'sent_not_due' ? 'Open' : status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' '));
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ backgroundColor: c.bg, color: c.text }}>
       <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: c.text }} />
@@ -34,6 +44,9 @@ function StatusPill({ status }: { status: string }) {
 }
 
 export default function ClassicTemplate({ data }: { data: InvoiceRenderData }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
   const fmt = (cents: number) => formatMoneyFromCents(cents, data.currency);
 
   return (
@@ -50,7 +63,7 @@ export default function ClassicTemplate({ data }: { data: InvoiceRenderData }) {
             )}
           </div>
           <div className="text-right">
-            <p className="text-[28px] font-semibold tracking-tight text-[#0a0a0a]">Invoice</p>
+            <p className="text-[28px] font-semibold tracking-tight text-[#0a0a0a]">{fr ? 'Facture' : 'Invoice'}</p>
           </div>
         </div>
 
@@ -59,7 +72,7 @@ export default function ClassicTemplate({ data }: { data: InvoiceRenderData }) {
           <div className="space-y-4">
             {/* From */}
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wider text-[#6b7280]">From</p>
+              <p className="text-[11px] font-medium uppercase tracking-wider text-[#6b7280]">{fr ? 'De' : 'From'}</p>
               <div className="mt-1 text-[13px] text-[#374151] space-y-0.5">
                 <p className="font-medium text-[#111]">{data.company_name}</p>
                 {data.company_address && <p>{data.company_address}</p>}
@@ -69,7 +82,7 @@ export default function ClassicTemplate({ data }: { data: InvoiceRenderData }) {
             </div>
             {/* Bill To */}
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wider text-[#6b7280]">Bill to</p>
+              <p className="text-[11px] font-medium uppercase tracking-wider text-[#6b7280]">{fr ? 'Facturer à' : 'Bill to'}</p>
               <div className="mt-1 text-[13px] text-[#374151] space-y-0.5">
                 <p className="font-medium text-[#111]">{data.client_name}</p>
                 {data.client_company && <p>{data.client_company}</p>}
@@ -85,16 +98,16 @@ export default function ClassicTemplate({ data }: { data: InvoiceRenderData }) {
             <StatusPill status={data.status} />
             <div className="space-y-2 text-[13px]">
               <div>
-                <p className="text-[11px] font-medium uppercase tracking-wider text-[#6b7280]">Invoice number</p>
+                <p className="text-[11px] font-medium uppercase tracking-wider text-[#6b7280]">{fr ? 'Numéro de facture' : 'Invoice number'}</p>
                 <p className="mt-0.5 font-medium text-[#111]">{data.invoice_number}</p>
               </div>
               <div>
-                <p className="text-[11px] font-medium uppercase tracking-wider text-[#6b7280]">Date issued</p>
-                <p className="mt-0.5 text-[#374151]">{fmtDate(data.issued_at || data.created_at)}</p>
+                <p className="text-[11px] font-medium uppercase tracking-wider text-[#6b7280]">{fr ? "Date d'émission" : 'Date issued'}</p>
+                <p className="mt-0.5 text-[#374151]">{fmtDate(data.issued_at || data.created_at, locale)}</p>
               </div>
               <div>
-                <p className="text-[11px] font-medium uppercase tracking-wider text-[#6b7280]">Date due</p>
-                <p className="mt-0.5 text-[#374151]">{fmtDate(data.due_date)}</p>
+                <p className="text-[11px] font-medium uppercase tracking-wider text-[#6b7280]">{fr ? "Date d'échéance" : 'Date due'}</p>
+                <p className="mt-0.5 text-[#374151]">{fmtDate(data.due_date, locale)}</p>
               </div>
             </div>
           </div>
@@ -103,13 +116,13 @@ export default function ClassicTemplate({ data }: { data: InvoiceRenderData }) {
         {/* ── Subject ── */}
         {data.subject && (
           <div className="mt-6 text-[13px] text-[#374151]">
-            <span className="font-medium text-[#111]">Subject: </span>{data.subject}
+            <span className="font-medium text-[#111]">{fr ? 'Objet : ' : 'Subject: '}</span>{data.subject}
           </div>
         )}
 
         {/* ── Amount due highlight ── */}
         <div className="mt-8 flex items-center justify-between rounded-lg bg-[#f8fafc] border border-[#e2e8f0] px-6 py-4">
-          <p className="text-[13px] font-medium text-[#6b7280]">Amount due</p>
+          <p className="text-[13px] font-medium text-[#6b7280]">{fr ? 'Montant dû' : 'Amount due'}</p>
           <p className="text-[24px] font-semibold tracking-tight text-[#0a0a0a]">{fmt(data.balance_cents || data.total_cents)}</p>
         </div>
 
@@ -119,9 +132,9 @@ export default function ClassicTemplate({ data }: { data: InvoiceRenderData }) {
             <thead>
               <tr className="border-b border-[#e5e7eb]">
                 <th className="pb-3 text-left text-[11px] font-medium uppercase tracking-wider text-[#6b7280]">Description</th>
-                <th className="pb-3 text-right text-[11px] font-medium uppercase tracking-wider text-[#6b7280] w-16">Qty</th>
-                <th className="pb-3 text-right text-[11px] font-medium uppercase tracking-wider text-[#6b7280] w-28">Unit price</th>
-                <th className="pb-3 text-right text-[11px] font-medium uppercase tracking-wider text-[#6b7280] w-28">Amount</th>
+                <th className="pb-3 text-right text-[11px] font-medium uppercase tracking-wider text-[#6b7280] w-16">{fr ? 'Qté' : 'Qty'}</th>
+                <th className="pb-3 text-right text-[11px] font-medium uppercase tracking-wider text-[#6b7280] w-28">{fr ? 'Prix unitaire' : 'Unit price'}</th>
+                <th className="pb-3 text-right text-[11px] font-medium uppercase tracking-wider text-[#6b7280] w-28">{fr ? 'Montant' : 'Amount'}</th>
               </tr>
             </thead>
             <tbody>
@@ -137,7 +150,7 @@ export default function ClassicTemplate({ data }: { data: InvoiceRenderData }) {
                 </tr>
               ))}
               {data.items.length === 0 && (
-                <tr><td colSpan={4} className="py-10 text-center text-[13px] text-[#9ca3af]">No line items</td></tr>
+                <tr><td colSpan={4} className="py-10 text-center text-[13px] text-[#9ca3af]">{fr ? 'Aucun élément' : 'No line items'}</td></tr>
               )}
             </tbody>
           </table>
@@ -148,17 +161,17 @@ export default function ClassicTemplate({ data }: { data: InvoiceRenderData }) {
           <div className="w-72">
             <div className="space-y-2 text-[13px]">
               <div className="flex justify-between py-1">
-                <span className="text-[#6b7280]">Subtotal</span>
+                <span className="text-[#6b7280]">{fr ? 'Sous-total' : 'Subtotal'}</span>
                 <span className="tabular-nums text-[#374151]">{fmt(data.subtotal_cents)}</span>
               </div>
               {data.discount_cents > 0 && (
                 <div className="flex justify-between py-1 text-[#dc2626]">
-                  <span>Discount</span>
+                  <span>{fr ? 'Rabais' : 'Discount'}</span>
                   <span className="tabular-nums">−{fmt(data.discount_cents)}</span>
                 </div>
               )}
               <div className="flex justify-between py-1">
-                <span className="text-[#6b7280]">Tax</span>
+                <span className="text-[#6b7280]">{fr ? 'Taxes' : 'Tax'}</span>
                 <span className="tabular-nums text-[#374151]">{fmt(data.tax_cents)}</span>
               </div>
               <div className="flex justify-between border-t border-[#e5e7eb] pt-3 pb-1">
@@ -167,13 +180,13 @@ export default function ClassicTemplate({ data }: { data: InvoiceRenderData }) {
               </div>
               {data.paid_cents > 0 && (
                 <div className="flex justify-between py-1 text-[#15803d]">
-                  <span>Paid</span>
+                  <span>{fr ? 'Payé' : 'Paid'}</span>
                   <span className="tabular-nums">{fmt(data.paid_cents)}</span>
                 </div>
               )}
               {data.balance_cents > 0 && data.balance_cents !== data.total_cents && (
                 <div className="flex justify-between border-t border-[#e5e7eb] pt-3 font-semibold text-[#111]">
-                  <span>Amount due</span>
+                  <span>{fr ? 'Montant dû' : 'Amount due'}</span>
                   <span className="tabular-nums">{fmt(data.balance_cents)}</span>
                 </div>
               )}

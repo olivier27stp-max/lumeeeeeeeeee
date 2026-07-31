@@ -30,7 +30,7 @@ async function loadRoleOverrides(): Promise<Partial<Record<TeamRole, Permissions
   return out;
 }
 
-async function saveRolePermissions(role: TeamRole, permissions: PermissionsMap): Promise<number> {
+async function saveRolePermissions(role: TeamRole, permissions: PermissionsMap, fr: boolean): Promise<number> {
   const { data: { session } } = await supabase.auth.getSession();
   const res = await fetch('/api/roles/update-preset', {
     method: 'POST',
@@ -42,7 +42,7 @@ async function saveRolePermissions(role: TeamRole, permissions: PermissionsMap):
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Save failed');
+    throw new Error(err.error || (fr ? 'Échec de la sauvegarde' : 'Save failed'));
   }
   const json = await res.json();
   return json.affected_members ?? 0;
@@ -108,7 +108,7 @@ export default function SettingsRoles() {
     setSaving(true);
     setSaveStatus('idle');
     try {
-      await saveRolePermissions(role, next);
+      await saveRolePermissions(role, next, fr);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 1500);
     } catch (e) {
@@ -117,7 +117,7 @@ export default function SettingsRoles() {
     } finally {
       setSaving(false);
     }
-  }, [currentOrgId]);
+  }, [currentOrgId, fr]);
 
   const togglePermission = useCallback((key: PermissionKey) => {
     if (isOwner) return; // owner is locked
@@ -200,7 +200,7 @@ export default function SettingsRoles() {
                     <p className="text-[10px] text-text-tertiary mt-0.5">{fr ? 'Portée' : 'Scope'}: {scopeLabel}</p>
                   </div>
                   {role === 'owner' && (
-                    <span className="text-[9px] font-medium bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded">FULL</span>
+                    <span className="text-[9px] font-medium bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded">{fr ? 'COMPLET' : 'FULL'}</span>
                   )}
                 </button>
               );
@@ -288,7 +288,7 @@ export default function SettingsRoles() {
                             title={financialLocked ? (fr ? 'Verrouillé : les techniciens ne peuvent pas accéder aux données financières' : 'Locked: technicians cannot access financial data') : undefined}
                           >
                             <span className="text-[12px] text-text-secondary flex items-center gap-1.5">
-                              {perm.label_fr && (fr ? perm.label_fr : perm.label_en)}
+                              {fr ? (perm.label_fr || perm.label_en) : (perm.label_en || perm.label_fr)}
                               {financialLocked && <Lock size={10} className="text-text-tertiary" />}
                             </span>
                             <button

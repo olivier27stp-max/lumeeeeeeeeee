@@ -1,6 +1,7 @@
 import React from 'react';
 import type { QuoteRenderData } from '../types';
 import { formatMoneyFromCents } from '../../../lib/invoicesApi';
+import { useTranslation } from '../../../i18n';
 
 /* ── Modern Bold Quote Template ─────────────────────────────────
    Vibrant orange theme with organic wave shapes (SVG).
@@ -12,12 +13,24 @@ const ORANGE_DARK = '#d35400';
 const BG_DARK = '#1a1a1a';
 const TEXT_SEC = '#6b7280';
 
-function fmtDate(iso: string | null | undefined): string {
+function fmtDate(iso: string | null | undefined, locale: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  return d.toLocaleDateString(locale, { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
+
+const STATUS_FR: Record<string, string> = {
+  draft: 'Brouillon',
+  sent: 'Envoyée',
+  awaiting_response: 'En attente',
+  changes_requested: 'Modifications demandées',
+  archived: 'Archivée',
+  approved: 'Approuvée',
+  declined: 'Refusée',
+  expired: 'Expirée',
+  converted: 'Convertie',
+};
 
 function WaveTop() {
   return (
@@ -49,8 +62,11 @@ function StatusPill({ status }: { status: string }) {
     expired:            { bg: '#f1f5f9', text: '#64748b' },
     converted:          { bg: '#f0fdf4', text: '#15803d' },
   };
+  const { language } = useTranslation();
   const c = colors[status] || colors.draft;
-  const label = status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
+  const label = language === 'fr'
+    ? (STATUS_FR[status] || STATUS_FR.draft)
+    : status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider" style={{ backgroundColor: c.bg, color: c.text }}>
       <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: c.text }} />
@@ -60,7 +76,55 @@ function StatusPill({ status }: { status: string }) {
 }
 
 export default function ModernBoldTemplate({ data }: { data: QuoteRenderData }) {
-  const fmt = (cents: number) => formatMoneyFromCents(cents, data.currency);
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
+  const fmt = (cents: number) => formatMoneyFromCents(cents, data.currency, locale);
+  const L = fr ? {
+    quote: 'SOUMISSION',
+    quoteNo: 'Soumission nº :',
+    date: 'Date :',
+    validUntil: 'Valide jusqu\'au :',
+    contact: 'Contact',
+    preparedFor: 'Préparé pour',
+    description: 'Description',
+    qty: 'Qté',
+    price: 'Prix',
+    total: 'Total',
+    noItems: 'Aucun élément',
+    optional: 'Ajouts optionnels',
+    subtotal: 'SOUS-TOTAL',
+    discount: 'RABAIS',
+    tax: 'TAXES',
+    totalCaps: 'TOTAL',
+    deposit: 'DÉPÔT',
+    notes: 'Notes',
+    terms: 'Termes et conditions',
+    signature: 'Signature',
+    thanks: 'MERCI',
+  } : {
+    quote: 'QUOTE',
+    quoteNo: 'Quote No :',
+    date: 'Date :',
+    validUntil: 'Valid Until :',
+    contact: 'Contact',
+    preparedFor: 'Prepared For',
+    description: 'Description',
+    qty: 'Qty',
+    price: 'Price',
+    total: 'Total',
+    noItems: 'No line items',
+    optional: 'Optional Add-ons',
+    subtotal: 'SUBTOTAL',
+    discount: 'DISCOUNT',
+    tax: 'TAX',
+    totalCaps: 'TOTAL',
+    deposit: 'DEPOSIT',
+    notes: 'Notes',
+    terms: 'Terms & Conditions',
+    signature: 'Signature',
+    thanks: 'THANKS',
+  };
 
   return (
     <div className="bg-white text-[#262626] relative overflow-hidden" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif', fontSize: '13px', lineHeight: '1.5' }}>
@@ -72,7 +136,7 @@ export default function ModernBoldTemplate({ data }: { data: QuoteRenderData }) 
         <div className="relative z-10 px-10 pt-8">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[36px] font-extrabold tracking-tight" style={{ color: ORANGE }}>QUOTE</p>
+              <p className="text-[36px] font-extrabold tracking-tight" style={{ color: ORANGE }}>{L.quote}</p>
               <div className="mt-1">
                 {data.company_logo_url ? (
                   <img src={data.company_logo_url} alt={data.company_name} className="h-20 max-w-[320px] object-contain" />
@@ -85,9 +149,9 @@ export default function ModernBoldTemplate({ data }: { data: QuoteRenderData }) 
 
             <div className="text-right text-white z-10 pt-2">
               <div className="text-[11px] space-y-0.5">
-                <p>Quote No : <span className="font-semibold">{data.quote_number}</span></p>
-                <p>Date : <span className="font-semibold">{fmtDate(data.created_at)}</span></p>
-                {data.valid_until && <p>Valid Until : <span className="font-semibold">{fmtDate(data.valid_until)}</span></p>}
+                <p>{L.quoteNo} <span className="font-semibold">{data.quote_number}</span></p>
+                <p>{L.date} <span className="font-semibold">{fmtDate(data.created_at, locale)}</span></p>
+                {data.valid_until && <p>{L.validUntil} <span className="font-semibold">{fmtDate(data.valid_until, locale)}</span></p>}
               </div>
             </div>
           </div>
@@ -97,7 +161,7 @@ export default function ModernBoldTemplate({ data }: { data: QuoteRenderData }) 
             <div>
               {(data.company_phone || data.company_email) && (
                 <div className="mb-4">
-                  <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: ORANGE }}>Contact</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: ORANGE }}>{L.contact}</p>
                   <div className="text-[11px] mt-1 space-y-0.5" style={{ color: TEXT_SEC }}>
                     {data.company_phone && <p>{data.company_phone}</p>}
                     {data.company_email && <p>{data.company_email}</p>}
@@ -106,7 +170,7 @@ export default function ModernBoldTemplate({ data }: { data: QuoteRenderData }) 
               )}
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: TEXT_SEC }}>Prepared For</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: TEXT_SEC }}>{L.preparedFor}</p>
               <p className="text-[14px] font-bold mt-1" style={{ color: ORANGE }}>{data.contact_name}</p>
               <div className="text-[11px] mt-0.5 space-y-0.5" style={{ color: TEXT_SEC }}>
                 {data.contact_company && <p>{data.contact_company}</p>}
@@ -138,10 +202,10 @@ export default function ModernBoldTemplate({ data }: { data: QuoteRenderData }) 
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-white rounded-l-lg" style={{ backgroundColor: ORANGE }}>Description</th>
-              <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: ORANGE }}>Qty</th>
-              <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: ORANGE }}>Price</th>
-              <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-white rounded-r-lg" style={{ backgroundColor: ORANGE }}>Total</th>
+              <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-white rounded-l-lg" style={{ backgroundColor: ORANGE }}>{L.description}</th>
+              <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: ORANGE }}>{L.qty}</th>
+              <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: ORANGE }}>{L.price}</th>
+              <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-white rounded-r-lg" style={{ backgroundColor: ORANGE }}>{L.total}</th>
             </tr>
           </thead>
           <tbody>
@@ -157,7 +221,7 @@ export default function ModernBoldTemplate({ data }: { data: QuoteRenderData }) 
               </tr>
             ))}
             {data.items.length === 0 && (
-              <tr><td colSpan={4} className="py-10 text-center text-[12px] text-[#9ca3af]">No line items</td></tr>
+              <tr><td colSpan={4} className="py-10 text-center text-[12px] text-[#9ca3af]">{L.noItems}</td></tr>
             )}
           </tbody>
         </table>
@@ -165,7 +229,7 @@ export default function ModernBoldTemplate({ data }: { data: QuoteRenderData }) 
         {/* ── Optional Items ── */}
         {data.optional_items.length > 0 && (
           <div className="mt-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: ORANGE }}>Optional Add-ons</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: ORANGE }}>{L.optional}</p>
             <table className="w-full border-collapse">
               <tbody>
                 {data.optional_items.map((item) => (
@@ -188,26 +252,26 @@ export default function ModernBoldTemplate({ data }: { data: QuoteRenderData }) 
         <div className="mt-4 flex justify-end">
           <div className="w-64 text-[12px]">
             <div className="flex justify-between py-1.5">
-              <span className="font-semibold" style={{ color: TEXT_SEC }}>SUBTOTAL</span>
+              <span className="font-semibold" style={{ color: TEXT_SEC }}>{L.subtotal}</span>
               <span className="tabular-nums font-medium">{fmt(data.subtotal_cents)}</span>
             </div>
             {data.discount_cents > 0 && (
               <div className="flex justify-between py-1.5 text-[#dc2626]">
-                <span className="font-semibold">DISCOUNT</span>
+                <span className="font-semibold">{L.discount}</span>
                 <span className="tabular-nums">-{fmt(data.discount_cents)}</span>
               </div>
             )}
             <div className="flex justify-between py-1.5">
-              <span className="font-semibold" style={{ color: TEXT_SEC }}>{data.tax_rate_label || 'TAX'}</span>
+              <span className="font-semibold" style={{ color: TEXT_SEC }}>{data.tax_rate_label || L.tax}</span>
               <span className="tabular-nums">{fmt(data.tax_cents)}</span>
             </div>
             <div className="flex justify-between py-2.5 mt-1 rounded-md px-3 -mx-3 text-[14px] font-bold text-white" style={{ backgroundColor: ORANGE }}>
-              <span>TOTAL</span>
+              <span>{L.totalCaps}</span>
               <span className="tabular-nums">{fmt(data.total_cents)}</span>
             </div>
             {data.deposit_required && data.deposit_cents > 0 && (
               <div className="flex justify-between py-1.5 mt-1">
-                <span className="font-semibold" style={{ color: TEXT_SEC }}>DEPOSIT</span>
+                <span className="font-semibold" style={{ color: TEXT_SEC }}>{L.deposit}</span>
                 <span className="tabular-nums font-semibold">{fmt(data.deposit_cents)}</span>
               </div>
             )}
@@ -219,26 +283,26 @@ export default function ModernBoldTemplate({ data }: { data: QuoteRenderData }) 
           <div className="flex-1 space-y-4">
             {data.notes && (
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: ORANGE }}>Notes</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: ORANGE }}>{L.notes}</p>
                 <p className="mt-1.5 whitespace-pre-wrap text-[11px] leading-relaxed" style={{ color: TEXT_SEC }}>{data.notes}</p>
               </div>
             )}
             {data.contract_disclaimer && (
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: ORANGE }}>Terms & Conditions</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: ORANGE }}>{L.terms}</p>
                 <p className="mt-1.5 whitespace-pre-wrap text-[11px] leading-relaxed" style={{ color: TEXT_SEC }}>{data.contract_disclaimer}</p>
               </div>
             )}
           </div>
           <div className="flex-1 text-right">
-            <p className="text-[18px] italic" style={{ color: TEXT_SEC }}>Signature</p>
+            <p className="text-[18px] italic" style={{ color: TEXT_SEC }}>{L.signature}</p>
             <div className="mt-4 border-b border-[#d1d5db] w-48 ml-auto" />
           </div>
         </div>
 
         {/* ── Thank You ── */}
         <div className="mt-8 text-center">
-          <p className="text-[32px] font-extrabold tracking-wide" style={{ color: TEXT_SEC, opacity: 0.2 }}>THANKS</p>
+          <p className="text-[32px] font-extrabold tracking-wide" style={{ color: TEXT_SEC, opacity: 0.2 }}>{L.thanks}</p>
         </div>
       </div>
 

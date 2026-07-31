@@ -82,6 +82,7 @@ export function CrmBadge({ label, color }: { label: string; color: 'green' | 'or
    PAGE HEADER — "Users" left, "⊕ Add New User" right
    ════════════════════════════════════ */
 export function CrmPageHeader({ title, onAdd, addLabel }: { title: string; onAdd?: () => void; addLabel?: string }) {
+  const { language } = useTranslation();
   return (
     <div className="flex items-center justify-between">
       <h1 className="text-[28px] font-bold text-text-primary leading-tight">{title}</h1>
@@ -89,7 +90,7 @@ export function CrmPageHeader({ title, onAdd, addLabel }: { title: string; onAdd
         <button onClick={onAdd}
           className="inline-flex items-center gap-2 h-10 px-5 bg-[#d8d0c2] text-[#000] hover:bg-[#cabfad] rounded-md text-[14px] font-medium active:scale-[0.98] transition-all">
           <CirclePlus size={16} strokeWidth={1.5} />
-          {addLabel || 'Add New'}
+          {addLabel || (language === 'fr' ? 'Ajouter' : 'Add New')}
         </button>
       )}
     </div>
@@ -154,7 +155,7 @@ export function CrmTableCard<T extends { id: string }>({
   searchPlaceholder?: string;
   filters?: React.ReactNode;
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [sel, setSel] = useState<Set<string>>(new Set());
   const allSel = rows.length > 0 && sel.size === rows.length;
   const toggleAll = () => { allSel ? setSel(new Set()) : setSel(new Set(rows.map(r => r.id))); };
@@ -166,14 +167,14 @@ export function CrmTableCard<T extends { id: string }>({
       <div className="flex items-center gap-2 mt-5 mb-4">
         <input
           value={search} onChange={e => onSearch(e.target.value)}
-          placeholder={searchPlaceholder || 'Search...'}
+          placeholder={searchPlaceholder || (language === 'fr' ? 'Rechercher...' : 'Search...')}
           className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary focus:border-text-tertiary transition-all"
         />
         {filters}
         <div className="ml-auto">
           <button className="inline-flex items-center gap-2 h-9 px-3 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal hover:bg-surface-secondary transition-colors">
             <SlidersHorizontal size={15} className="text-[#64748b]" />
-            Columns
+            {language === 'fr' ? 'Colonnes' : 'Columns'}
           </button>
         </div>
       </div>
@@ -209,7 +210,7 @@ export function CrmTableCard<T extends { id: string }>({
             ))}
 
             {!loading && rows.length === 0 && (
-              <tr><td colSpan={columns.length + 2} className="py-20 text-center text-[14px] text-text-tertiary">{emptyMessage || 'No results.'}</td></tr>
+              <tr><td colSpan={columns.length + 2} className="py-20 text-center text-[14px] text-text-tertiary">{emptyMessage || (language === 'fr' ? 'Aucun résultat.' : 'No results.')}</td></tr>
             )}
 
             {!loading && rows.map(row => (

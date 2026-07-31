@@ -58,7 +58,7 @@ export default function AgreementDraftPreviewModal({
   useEffect(() => {
     if (!open) return;
     getAgreementCompanyBranding().then(setCompany).catch(() => {
-      setCompany({ company_name: 'Business', logo_url: null, phone: null, email: null, website: null, address: null, taxLines: [] });
+      setCompany({ company_name: fr ? 'Entreprise' : 'Business', logo_url: null, phone: null, email: null, website: null, address: null, taxLines: [] });
     });
   }, [open]);
 

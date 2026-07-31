@@ -80,7 +80,7 @@ export default function PresetSelectModal({
               {isFr ? 'Nouveau devis' : 'New Quote'}
             </h2>
             <p className="text-[12.5px] mt-[3px] text-black dark:text-white">
-              {isFr ? "Choisissez un preset ou partez d'une page blanche." : 'Choose a preset or start from a blank page.'}
+              {isFr ? "Choisissez un modèle ou partez d'une page blanche." : 'Choose a preset or start from a blank page.'}
             </p>
           </div>
           <button
@@ -123,12 +123,12 @@ export default function PresetSelectModal({
               </div>
             ) : presets.length === 0 ? (
               <p className="text-center py-8 text-[12px] text-black dark:text-white">
-                {isFr ? 'Aucun preset disponible.' : 'No presets available.'}
+                {isFr ? 'Aucun modèle disponible.' : 'No presets available.'}
               </p>
             ) : (
               <>
                 <p className="text-[10px] font-extrabold uppercase tracking-[1.4px] px-2 pt-3 pb-1 text-black dark:text-white">
-                  Presets
+                  {isFr ? 'Modèles' : 'Presets'}
                 </p>
                 {presets.map((preset, i) => {
                   const isSelected = selectedId === preset.id;
@@ -240,14 +240,14 @@ export default function PresetSelectModal({
             className={cn('h-[38px] px-3.5 rounded-[10px] border inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-black dark:text-white', outline, hoverFill)}
           >
             <Plus size={14} />
-            {isFr ? 'Créer un nouveau preset' : 'Create New Preset'}
+            {isFr ? 'Créer un nouveau modèle' : 'Create New Preset'}
           </button>
           <button
             onClick={handleConfirm}
             className="h-[38px] px-[22px] rounded-[10px] text-[13px] font-bold bg-black text-white dark:bg-white dark:text-black active:scale-[0.98] transition-transform"
           >
             {selected
-              ? (isFr ? 'Utiliser ce preset' : 'Use this preset')
+              ? (isFr ? 'Utiliser ce modèle' : 'Use this preset')
               : (isFr ? 'Créer le devis' : 'Create quote')}
           </button>
         </div>

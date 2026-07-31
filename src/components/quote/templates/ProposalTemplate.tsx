@@ -1,6 +1,7 @@
 import React from 'react';
 import type { QuoteRenderData, QuoteRenderItem } from '../types';
 import { formatMoneyFromCents } from '../../../lib/invoicesApi';
+import { useTranslation } from '../../../i18n';
 
 /* ── HoneyBook / Buildertrend-inspired Proposal Template ─────────
    Magazine-style, multi-section, brand-heavy.
@@ -8,11 +9,11 @@ import { formatMoneyFromCents } from '../../../lib/invoicesApi';
    payment schedule, terms — feels like a landing page.
    ─────────────────────────────────────────────────────────────── */
 
-function fmtDate(iso: string | null | undefined): string {
+function fmtDate(iso: string | null | undefined, locale: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function ServiceCard({ item, fmt }: { item: QuoteRenderItem; fmt: (c: number) => string }) {
@@ -44,8 +45,60 @@ function ServiceCard({ item, fmt }: { item: QuoteRenderItem; fmt: (c: number) =>
 }
 
 export default function ProposalTemplate({ data }: { data: QuoteRenderData }) {
-  const fmt = (cents: number) => formatMoneyFromCents(cents, data.currency);
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
+  const fmt = (cents: number) => formatMoneyFromCents(cents, data.currency, locale);
   const accent = '#374151';
+  const L = fr ? {
+    proposal: 'Proposition',
+    preparedFor: 'Préparé pour',
+    date: 'Date',
+    validUntil: 'Valide jusqu\'au',
+    ref: 'Réf',
+    total: 'Total',
+    client: 'Client',
+    from: 'De',
+    scope: 'Portée des travaux',
+    included: 'Ce qui est inclus',
+    noServices: 'Aucun service inscrit',
+    optional: 'Ajouts optionnels',
+    investment: 'Votre investissement',
+    subtotal: 'Sous-total',
+    discount: 'Rabais',
+    tax: 'Taxes',
+    totalInvestment: 'Investissement total',
+    paymentSchedule: 'Calendrier de paiement',
+    depositDue: 'Dépôt — payable à l\'acceptation',
+    balanceDue: 'Solde — payable à la fin des travaux',
+    additionalNotes: 'Notes supplémentaires',
+    terms: 'Termes et conditions',
+    lookForward: 'Au plaisir de travailler avec vous.',
+  } : {
+    proposal: 'Proposal',
+    preparedFor: 'Prepared for',
+    date: 'Date',
+    validUntil: 'Valid until',
+    ref: 'Ref',
+    total: 'Total',
+    client: 'Client',
+    from: 'From',
+    scope: 'Scope of Work',
+    included: "What's Included",
+    noServices: 'No services listed',
+    optional: 'Optional Add-ons',
+    investment: 'Your Investment',
+    subtotal: 'Subtotal',
+    discount: 'Discount',
+    tax: 'Tax',
+    totalInvestment: 'Total Investment',
+    paymentSchedule: 'Payment Schedule',
+    depositDue: 'Deposit — due upon acceptance',
+    balanceDue: 'Balance — due upon completion',
+    additionalNotes: 'Additional Notes',
+    terms: 'Terms & Conditions',
+    lookForward: 'We look forward to working with you.',
+  };
 
   return (
     <div className="bg-white text-[#1a1a1a]" style={{ fontFamily: '"Inter", -apple-system, sans-serif', fontSize: '14px', lineHeight: '1.6' }}>
@@ -70,10 +123,10 @@ export default function ProposalTemplate({ data }: { data: QuoteRenderData }) {
 
           {/* Title */}
           <div className="mt-12">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.25em]" style={{ color: accent }}>Proposal</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.25em]" style={{ color: accent }}>{L.proposal}</p>
             <h1 className="mt-2 text-[28px] font-bold text-white leading-tight">{data.title}</h1>
             <p className="mt-3 text-[13px] text-white/60">
-              Prepared for <span className="text-white font-medium">{data.contact_name || '—'}</span>
+              {L.preparedFor} <span className="text-white font-medium">{data.contact_name || '—'}</span>
               {data.contact_company && <> · {data.contact_company}</>}
             </p>
           </div>
@@ -81,21 +134,21 @@ export default function ProposalTemplate({ data }: { data: QuoteRenderData }) {
           {/* Meta pills */}
           <div className="mt-8 flex gap-3">
             <div className="rounded-lg bg-white/10 backdrop-blur px-4 py-2.5">
-              <p className="text-[9px] font-semibold uppercase tracking-wider text-white/40">Date</p>
-              <p className="mt-0.5 text-[13px] font-medium text-white">{fmtDate(data.created_at)}</p>
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-white/40">{L.date}</p>
+              <p className="mt-0.5 text-[13px] font-medium text-white">{fmtDate(data.created_at, locale)}</p>
             </div>
             {data.valid_until && (
               <div className="rounded-lg bg-white/10 backdrop-blur px-4 py-2.5">
-                <p className="text-[9px] font-semibold uppercase tracking-wider text-white/40">Valid until</p>
-                <p className="mt-0.5 text-[13px] font-medium text-white">{fmtDate(data.valid_until)}</p>
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-white/40">{L.validUntil}</p>
+                <p className="mt-0.5 text-[13px] font-medium text-white">{fmtDate(data.valid_until, locale)}</p>
               </div>
             )}
             <div className="rounded-lg bg-white/10 backdrop-blur px-4 py-2.5">
-              <p className="text-[9px] font-semibold uppercase tracking-wider text-white/40">Ref</p>
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-white/40">{L.ref}</p>
               <p className="mt-0.5 text-[13px] font-medium text-white">{data.quote_number}</p>
             </div>
             <div className="rounded-lg px-4 py-2.5 ml-auto" style={{ backgroundColor: accent }}>
-              <p className="text-[9px] font-semibold uppercase tracking-wider text-white/60">Total</p>
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-white/60">{L.total}</p>
               <p className="mt-0.5 text-[16px] font-bold text-white tabular-nums">{fmt(data.total_cents)}</p>
             </div>
           </div>
@@ -112,7 +165,7 @@ export default function ProposalTemplate({ data }: { data: QuoteRenderData }) {
         {/* Client info card */}
         <div className="rounded-xl bg-[#f8fafc] border border-[#e2e8f0] p-6 flex gap-8">
           <div className="flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af]">Client</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af]">{L.client}</p>
             <p className="mt-2 text-[15px] font-semibold text-[#111]">{data.contact_name || '—'}</p>
             {data.contact_company && <p className="text-[13px] text-[#6b7280]">{data.contact_company}</p>}
             <div className="mt-1.5 text-[12px] text-[#9ca3af] space-y-0.5">
@@ -122,7 +175,7 @@ export default function ProposalTemplate({ data }: { data: QuoteRenderData }) {
             </div>
           </div>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af]">From</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af]">{L.from}</p>
             <p className="mt-2 text-[14px] font-semibold text-[#111]">{data.company_name}</p>
             <div className="mt-1.5 text-[12px] text-[#9ca3af] space-y-0.5">
               {data.company_address && <p>{data.company_address}</p>}
@@ -135,7 +188,7 @@ export default function ProposalTemplate({ data }: { data: QuoteRenderData }) {
         {/* Introduction / scope */}
         {data.introduction && (
           <div className="mt-8">
-            <h2 className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: accent }}>Scope of Work</h2>
+            <h2 className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: accent }}>{L.scope}</h2>
             <div className="mt-3 text-[13px] text-[#4b5563] leading-relaxed whitespace-pre-wrap">
               {data.introduction}
             </div>
@@ -148,7 +201,7 @@ export default function ProposalTemplate({ data }: { data: QuoteRenderData }) {
           ═══════════════════════════════════════════════════════════ */}
       <div className="px-10 py-6 bg-[#f9fafb]">
         <h2 className="text-[11px] font-semibold uppercase tracking-widest mb-4" style={{ color: accent }}>
-          What's Included
+          {L.included}
         </h2>
         <div className="space-y-3">
           {data.items.map((item) => (
@@ -161,7 +214,7 @@ export default function ProposalTemplate({ data }: { data: QuoteRenderData }) {
             )
           ))}
           {data.items.length === 0 && (
-            <p className="text-center text-[13px] text-[#9ca3af] py-8">No services listed</p>
+            <p className="text-center text-[13px] text-[#9ca3af] py-8">{L.noServices}</p>
           )}
         </div>
 
@@ -169,7 +222,7 @@ export default function ProposalTemplate({ data }: { data: QuoteRenderData }) {
         {data.optional_items.length > 0 && (
           <>
             <h3 className="text-[11px] font-semibold uppercase tracking-widest text-[#9ca3af] mt-8 mb-3">
-              Optional Add-ons
+              {L.optional}
             </h3>
             <div className="space-y-3">
               {data.optional_items.map((item) => (
@@ -200,47 +253,47 @@ export default function ProposalTemplate({ data }: { data: QuoteRenderData }) {
           SECTION 4 — INVESTMENT SUMMARY
           ═══════════════════════════════════════════════════════════ */}
       <div className="px-10 py-8">
-        <h2 className="text-[11px] font-semibold uppercase tracking-widest mb-5" style={{ color: accent }}>Your Investment</h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-widest mb-5" style={{ color: accent }}>{L.investment}</h2>
 
         <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
           <div className="px-6 py-4 space-y-3 text-[14px]">
             <div className="flex justify-between">
-              <span className="text-[#6b7280]">Subtotal</span>
+              <span className="text-[#6b7280]">{L.subtotal}</span>
               <span className="tabular-nums text-[#374151]">{fmt(data.subtotal_cents)}</span>
             </div>
             {data.discount_cents > 0 && (
               <div className="flex justify-between text-[#059669]">
-                <span>Discount</span>
+                <span>{L.discount}</span>
                 <span className="tabular-nums">−{fmt(data.discount_cents)}</span>
               </div>
             )}
             {data.tax_cents > 0 && (
               <div className="flex justify-between">
-                <span className="text-[#6b7280]">{data.tax_rate_label || 'Tax'} ({data.tax_rate}%)</span>
+                <span className="text-[#6b7280]">{data.tax_rate_label || L.tax} ({data.tax_rate}%)</span>
                 <span className="tabular-nums text-[#374151]">{fmt(data.tax_cents)}</span>
               </div>
             )}
           </div>
           <div className="flex justify-between px-6 py-5 text-[18px] font-bold text-white" style={{ backgroundColor: accent }}>
-            <span>Total Investment</span>
+            <span>{L.totalInvestment}</span>
             <span className="tabular-nums">{fmt(data.total_cents)}</span>
           </div>
           {/* Payment schedule */}
           {data.deposit_required && data.deposit_cents > 0 && (
             <div className="px-6 py-4 bg-[#f8fafc] border-t border-[#e5e7eb]">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#9ca3af] mb-3">Payment Schedule</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#9ca3af] mb-3">{L.paymentSchedule}</p>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-[13px]">
                   <div className="flex items-center gap-2">
                     <span className="w-5 h-5 rounded-full bg-[#111] text-white text-[10px] font-bold flex items-center justify-center">1</span>
-                    <span className="text-[#374151]">Deposit — due upon acceptance</span>
+                    <span className="text-[#374151]">{L.depositDue}</span>
                   </div>
                   <span className="font-semibold text-[#111] tabular-nums">{fmt(data.deposit_cents)}</span>
                 </div>
                 <div className="flex items-center justify-between text-[13px]">
                   <div className="flex items-center gap-2">
                     <span className="w-5 h-5 rounded-full bg-[#e5e7eb] text-[#6b7280] text-[10px] font-bold flex items-center justify-center">2</span>
-                    <span className="text-[#6b7280]">Balance — due upon completion</span>
+                    <span className="text-[#6b7280]">{L.balanceDue}</span>
                   </div>
                   <span className="text-[#6b7280] tabular-nums">{fmt(data.total_cents - data.deposit_cents)}</span>
                 </div>
@@ -257,13 +310,13 @@ export default function ProposalTemplate({ data }: { data: QuoteRenderData }) {
         <div className="px-10 py-6 bg-[#f9fafb] border-t border-[#e5e7eb]">
           {data.notes && (
             <div className="mb-6">
-              <h2 className="text-[11px] font-semibold uppercase tracking-widest text-[#9ca3af]">Additional Notes</h2>
+              <h2 className="text-[11px] font-semibold uppercase tracking-widest text-[#9ca3af]">{L.additionalNotes}</h2>
               <p className="mt-2 whitespace-pre-wrap text-[13px] text-[#4b5563] leading-relaxed">{data.notes}</p>
             </div>
           )}
           {data.contract_disclaimer && (
             <div>
-              <h2 className="text-[11px] font-semibold uppercase tracking-widest text-[#9ca3af]">Terms & Conditions</h2>
+              <h2 className="text-[11px] font-semibold uppercase tracking-widest text-[#9ca3af]">{L.terms}</h2>
               <p className="mt-2 whitespace-pre-wrap text-[11px] text-[#9ca3af] leading-relaxed">{data.contract_disclaimer}</p>
             </div>
           )}
@@ -274,7 +327,7 @@ export default function ProposalTemplate({ data }: { data: QuoteRenderData }) {
           FOOTER
           ═══════════════════════════════════════════════════════════ */}
       <div className="px-10 py-6 text-center border-t border-[#e5e7eb]">
-        <p className="text-[12px] text-[#9ca3af]">We look forward to working with you.</p>
+        <p className="text-[12px] text-[#9ca3af]">{L.lookForward}</p>
         <p className="text-[11px] text-[#d1d5db] mt-1">{data.company_name}</p>
       </div>
     </div>

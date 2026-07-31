@@ -1,19 +1,28 @@
 import React from 'react';
 import type { InvoiceRenderData } from '../types';
 import { formatMoneyFromCents } from '../../../lib/invoicesApi';
+import { useTranslation } from '../../../i18n';
 
-function fmtDate(iso: string | null | undefined): string {
+function fmtDate(iso: string | null | undefined, locale: string): string {
   if (!iso) return '--';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '--';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
 }
+
+const STATUS_FR: Record<string, string> = {
+  draft: 'Brouillon', sent: 'Ouverte', sent_not_due: 'Ouverte', partial: 'Partiel',
+  paid: 'Payée', void: 'Annulée', overdue: 'En retard',
+};
 
 /**
  * Bold Template — dark sidebar with company branding, clean right-side content.
  * Professional, high-impact look suitable for agencies, contractors, and creative businesses.
  */
 export default function BoldTemplate({ data }: { data: InvoiceRenderData }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
   const fmt = (cents: number) => formatMoneyFromCents(cents, data.currency);
   const accent = data.accent_color || '#374151';
   const dark = '#171717';
@@ -42,7 +51,7 @@ export default function BoldTemplate({ data }: { data: InvoiceRenderData }) {
 
           {/* Bill To */}
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.2em]" style={{ color: accent }}>Bill To</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.2em]" style={{ color: accent }}>{fr ? 'Facturer à' : 'Bill To'}</p>
             <p className="mt-2 text-sm font-semibold">{data.client_name}</p>
             {data.client_company && <p className="text-[11px] text-gray-400">{data.client_company}</p>}
             <div className="mt-1 space-y-0.5 text-[11px] text-gray-400">
@@ -58,19 +67,19 @@ export default function BoldTemplate({ data }: { data: InvoiceRenderData }) {
           {/* Meta */}
           <div className="space-y-3 text-[11px]">
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">Invoice #</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">{fr ? 'Facture nº' : 'Invoice #'}</p>
               <p className="mt-0.5 font-semibold">{data.invoice_number}</p>
             </div>
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">Issued</p>
-              <p className="mt-0.5">{fmtDate(data.issued_at || data.created_at)}</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">{fr ? 'Émise le' : 'Issued'}</p>
+              <p className="mt-0.5">{fmtDate(data.issued_at || data.created_at, locale)}</p>
             </div>
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">Due Date</p>
-              <p className="mt-0.5">{fmtDate(data.due_date)}</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">{fr ? "Date d'échéance" : 'Due Date'}</p>
+              <p className="mt-0.5">{fmtDate(data.due_date, locale)}</p>
             </div>
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">Status</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">{fr ? 'Statut' : 'Status'}</p>
               <span
                 className="mt-1 inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase"
                 style={{
@@ -78,14 +87,14 @@ export default function BoldTemplate({ data }: { data: InvoiceRenderData }) {
                   color: '#fff',
                 }}
               >
-                {data.status}
+                {fr ? (STATUS_FR[data.status] || data.status) : data.status}
               </span>
             </div>
           </div>
 
           {/* Total highlight */}
           <div className="mt-8 rounded-lg p-4" style={{ backgroundColor: accent }}>
-            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/70">Amount Due</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/70">{fr ? 'Montant dû' : 'Amount Due'}</p>
             <p className="mt-1 text-2xl font-extrabold text-white">{fmt(data.balance_cents || data.total_cents)}</p>
           </div>
         </div>
@@ -93,12 +102,12 @@ export default function BoldTemplate({ data }: { data: InvoiceRenderData }) {
         {/* ── Right content ── */}
         <div className="flex-1 px-8 py-8">
           {/* Title */}
-          <h2 className="text-2xl font-extrabold tracking-tight" style={{ color: dark }}>INVOICE</h2>
+          <h2 className="text-2xl font-extrabold tracking-tight" style={{ color: dark }}>{fr ? 'FACTURE' : 'INVOICE'}</h2>
 
           {/* Subject */}
           {data.subject && (
             <p className="mt-2 text-sm text-gray-500">
-              <span className="font-semibold text-gray-700">Re:</span> {data.subject}
+              <span className="font-semibold text-gray-700">{fr ? 'Objet :' : 'Re:'}</span> {data.subject}
             </p>
           )}
 
@@ -108,9 +117,9 @@ export default function BoldTemplate({ data }: { data: InvoiceRenderData }) {
               <thead>
                 <tr className="border-b-2" style={{ borderColor: dark }}>
                   <th className="pb-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Description</th>
-                  <th className="pb-2 text-right text-[10px] font-bold uppercase tracking-wider text-gray-400">Qty</th>
-                  <th className="pb-2 text-right text-[10px] font-bold uppercase tracking-wider text-gray-400">Rate</th>
-                  <th className="pb-2 text-right text-[10px] font-bold uppercase tracking-wider text-gray-400">Amount</th>
+                  <th className="pb-2 text-right text-[10px] font-bold uppercase tracking-wider text-gray-400">{fr ? 'Qté' : 'Qty'}</th>
+                  <th className="pb-2 text-right text-[10px] font-bold uppercase tracking-wider text-gray-400">{fr ? 'Prix' : 'Rate'}</th>
+                  <th className="pb-2 text-right text-[10px] font-bold uppercase tracking-wider text-gray-400">{fr ? 'Montant' : 'Amount'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -126,7 +135,7 @@ export default function BoldTemplate({ data }: { data: InvoiceRenderData }) {
                   </tr>
                 ))}
                 {data.items.length === 0 && (
-                  <tr><td colSpan={4} className="py-8 text-center text-gray-400">No items</td></tr>
+                  <tr><td colSpan={4} className="py-8 text-center text-gray-400">{fr ? 'Aucun élément' : 'No items'}</td></tr>
                 )}
               </tbody>
             </table>
@@ -136,17 +145,17 @@ export default function BoldTemplate({ data }: { data: InvoiceRenderData }) {
           <div className="mt-4 flex justify-end">
             <div className="w-64 space-y-1.5 text-sm">
               <div className="flex justify-between text-gray-500">
-                <span>Subtotal</span>
+                <span>{fr ? 'Sous-total' : 'Subtotal'}</span>
                 <span className="font-medium text-gray-700">{fmt(data.subtotal_cents)}</span>
               </div>
               {data.discount_cents > 0 && (
                 <div className="flex justify-between text-red-500">
-                  <span>Discount</span>
+                  <span>{fr ? 'Rabais' : 'Discount'}</span>
                   <span>-{fmt(data.discount_cents)}</span>
                 </div>
               )}
               <div className="flex justify-between text-gray-500">
-                <span>Tax</span>
+                <span>{fr ? 'Taxes' : 'Tax'}</span>
                 <span className="font-medium text-gray-700">{fmt(data.tax_cents)}</span>
               </div>
               <div className="flex justify-between border-t-2 pt-2 text-base font-bold" style={{ borderColor: dark, color: dark }}>
@@ -155,7 +164,7 @@ export default function BoldTemplate({ data }: { data: InvoiceRenderData }) {
               </div>
               {data.paid_cents > 0 && (
                 <div className="flex justify-between text-sm text-green-600">
-                  <span>Paid</span>
+                  <span>{fr ? 'Payé' : 'Paid'}</span>
                   <span>{fmt(data.paid_cents)}</span>
                 </div>
               )}
@@ -165,14 +174,14 @@ export default function BoldTemplate({ data }: { data: InvoiceRenderData }) {
           {/* Notes */}
           {data.notes && (
             <div className="mt-8 rounded-lg border border-gray-100 bg-gray-50 p-4">
-              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-400">Notes & Terms</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-400">{fr ? 'Notes et conditions' : 'Notes & Terms'}</p>
               <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-gray-600">{data.notes}</p>
             </div>
           )}
 
           {/* Footer */}
           <div className="mt-8 text-center text-[10px] text-gray-300">
-            Thank you for your business &middot; {data.company_name}
+            {fr ? 'Merci de faire affaire avec nous' : 'Thank you for your business'} &middot; {data.company_name}
           </div>
         </div>
       </div>

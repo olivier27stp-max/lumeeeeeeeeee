@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePlanFeature, type PlanFeatureFlag } from '../hooks/usePlanFeature';
 import PlanUpgradeModal from './PlanUpgradeModal';
+import { useTranslation } from '../i18n';
 
 interface PlanFeatureGateProps {
   flag: PlanFeatureFlag;
@@ -19,6 +20,8 @@ interface PlanFeatureGateProps {
  * For inline UI elements (buttons), use `useUpgradeGate` directly.
  */
 export default function PlanFeatureGate({ flag, fallback, children }: PlanFeatureGateProps) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const { hasFeature, loading, currentPlan, requiredPlan } = usePlanFeature(flag);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -39,16 +42,16 @@ export default function PlanFeatureGate({ flag, fallback, children }: PlanFeatur
             <div className="w-14 h-14 rounded-full bg-primary/10 mx-auto mb-4 flex items-center justify-center">
               <span className="text-2xl">🔒</span>
             </div>
-            <p className="text-sm font-semibold text-text-primary">Premium feature</p>
+            <p className="text-sm font-semibold text-text-primary">{fr ? 'Fonctionnalité premium' : 'Premium feature'}</p>
             <p className="text-xs text-text-secondary mt-1">
-              Upgrade your plan to access this section.
+              {fr ? 'Passez à un forfait supérieur pour accéder à cette section.' : 'Upgrade your plan to access this section.'}
             </p>
             <button
               type="button"
               onClick={() => setModalOpen(true)}
               className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-text-primary text-surface text-xs font-bold hover:bg-text-primary/90 transition-colors"
             >
-              See details
+              {fr ? 'Voir les détails' : 'See details'}
             </button>
           </div>
         </div>

@@ -3,6 +3,7 @@ import { Upload, X, Image as ImageIcon, File as FileIcon, Loader2 } from 'lucide
 import { cn } from '../lib/utils';
 import { uploadFile } from '../lib/storage';
 import { normalizeImageForUpload } from '../lib/imageNormalize';
+import { useTranslation } from '../i18n';
 
 interface FileUploadProps {
   bucket: string;
@@ -25,6 +26,8 @@ export default function FileUpload({
   children,
   normalizeImageMaxDim,
 }: FileUploadProps) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -37,7 +40,7 @@ export default function FileUpload({
 
   const validateFile = (file: File): string | null => {
     if (maxSizeMb && file.size > maxSizeMb * 1024 * 1024) {
-      return `File exceeds ${maxSizeMb}MB limit`;
+      return fr ? `Le fichier dépasse la limite de ${maxSizeMb} Mo` : `File exceeds ${maxSizeMb}MB limit`;
     }
     if (accept) {
       const allowed = accept.split(',').map((t) => t.trim().toLowerCase());
@@ -49,7 +52,7 @@ export default function FileUpload({
           (a.endsWith('/*') && file.type.startsWith(a.replace('/*', '/')))
       );
       if (!typeMatch) {
-        return `File type not allowed. Accepted: ${accept}`;
+        return fr ? `Type de fichier non permis. Acceptés : ${accept}` : `File type not allowed. Accepted: ${accept}`;
       }
     }
     return null;
@@ -64,7 +67,7 @@ export default function FileUpload({
         try {
           file = await normalizeImageForUpload(rawFile, { maxDim: normalizeImageMaxDim, maxSizeMb });
         } catch (err: any) {
-          setError(err?.message || 'Image conversion failed');
+          setError(err?.message || (fr ? 'Échec de la conversion de l’image' : 'Image conversion failed'));
           return;
         }
       }
@@ -103,14 +106,14 @@ export default function FileUpload({
         onUpload(result.url);
       } catch (err: any) {
         clearInterval(progressInterval);
-        setError(err?.message || 'Upload failed');
+        setError(err?.message || (fr ? 'Échec du téléversement' : 'Upload failed'));
         setPreview(null);
         setFileName(null);
       } finally {
         setUploading(false);
       }
     },
-    [bucket, path, accept, maxSizeMb, onUpload, normalizeImageMaxDim]
+    [bucket, path, accept, maxSizeMb, onUpload, normalizeImageMaxDim, fr]
   );
 
   const handleDrop = useCallback(
@@ -124,9 +127,11 @@ export default function FileUpload({
       }
       // Dragging from the macOS/iOS Photos app yields an asset reference
       // (uuid=...&library=1...), not an actual file the browser can read.
-      setError('Glissez le fichier depuis le Finder ou cliquez pour le sélectionner (le glisser depuis l’app Photos ne fonctionne pas). / Drag the file from Finder or click to browse (dragging from the Photos app doesn’t work).');
+      setError(fr
+        ? 'Glissez le fichier depuis le Finder ou cliquez pour le sélectionner (le glisser depuis l’app Photos ne fonctionne pas).'
+        : 'Drag the file from Finder or click to browse (dragging from the Photos app doesn’t work).');
     },
-    [handleFile]
+    [handleFile, fr]
   );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -168,7 +173,7 @@ export default function FileUpload({
           <div className="flex flex-col items-center gap-2">
             <img
               src={preview}
-              alt="Preview"
+              alt={fr ? 'Aperçu' : 'Preview'}
               className="max-h-32 rounded-lg object-contain"
             />
             <span className="text-[11px] text-text-tertiary truncate max-w-[200px]">
@@ -182,10 +187,10 @@ export default function FileUpload({
             </div>
             <div>
               <p className="text-[13px] font-medium text-text-secondary">
-                Click or drag file to upload
+                {fr ? 'Cliquez ou glissez un fichier pour téléverser' : 'Click or drag file to upload'}
               </p>
               <p className="text-[11px] text-text-tertiary mt-0.5">
-                {accept ? `Accepted: ${accept}` : 'Any file type'} &middot; Max {maxSizeMb}MB
+                {accept ? (fr ? `Acceptés : ${accept}` : `Accepted: ${accept}`) : (fr ? 'Tout type de fichier' : 'Any file type')} &middot; {fr ? `Max ${maxSizeMb} Mo` : `Max ${maxSizeMb}MB`}
               </p>
             </div>
           </div>
@@ -196,7 +201,7 @@ export default function FileUpload({
             <div className="flex items-center justify-between text-[11px] text-text-tertiary">
               <span className="flex items-center gap-1">
                 <Loader2 size={10} className="animate-spin" />
-                Uploading...
+                {fr ? 'Téléversement...' : 'Uploading...'}
               </span>
               <span>{progress}%</span>
             </div>

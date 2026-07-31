@@ -3,6 +3,7 @@ import { Mail, MessageSquare, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { fetchCommunications, type CommunicationMessage } from '../../lib/communicationsApi';
 import StatusBadge from '../ui/StatusBadge';
+import { useTranslation } from '../../i18n';
 
 interface CommunicationsTimelineProps {
   jobId?: string;
@@ -12,6 +13,8 @@ interface CommunicationsTimelineProps {
 }
 
 export default function CommunicationsTimeline({ jobId, clientId, refreshKey }: CommunicationsTimelineProps) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const [messages, setMessages] = useState<CommunicationMessage[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -56,7 +59,9 @@ export default function CommunicationsTimeline({ jobId, clientId, refreshKey }: 
 
       <div className="p-5">
         {messages.length === 0 ? (
-          <p className="text-[13px] text-text-tertiary py-4 text-center">No communications yet</p>
+          <p className="text-[13px] text-text-tertiary py-4 text-center">
+            {fr ? 'Aucune communication pour le moment' : 'No communications yet'}
+          </p>
         ) : (
           <div className="space-y-2.5">
             {messages.map((msg) => (
@@ -70,6 +75,8 @@ export default function CommunicationsTimeline({ jobId, clientId, refreshKey }: 
 }
 
 function CommRow({ message }: { message: CommunicationMessage; key?: string }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const isInbound = message.direction === 'inbound';
   const isSms = message.channel_type === 'sms';
   const Icon = isSms ? MessageSquare : Mail;
@@ -79,11 +86,12 @@ function CommRow({ message }: { message: CommunicationMessage; key?: string }) {
     ? message.body_text.length > 120
       ? message.body_text.slice(0, 120) + '…'
       : message.body_text
-    : message.subject || '(no content)';
+    : message.subject || (fr ? '(aucun contenu)' : '(no content)');
 
+  const locale = fr ? 'fr-CA' : 'en-CA';
   const time = new Date(message.created_at);
-  const timeStr = time.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })
-    + ' ' + time.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' });
+  const timeStr = time.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
+    + ' ' + time.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
   return (
     <div className="rounded-lg border border-outline-subtle bg-surface-secondary p-3.5 flex items-start gap-3">
@@ -96,7 +104,7 @@ function CommRow({ message }: { message: CommunicationMessage; key?: string }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[12px] font-semibold text-text-primary capitalize">
-            {isSms ? 'SMS' : 'Email'}
+            {isSms ? (fr ? 'Texto' : 'SMS') : (fr ? 'Courriel' : 'Email')}
           </span>
           <DirectionIcon size={11} className={cn('text-text-tertiary', isInbound && 'text-text-secondary')} />
           <span className="text-[11px] text-text-tertiary">

@@ -7,6 +7,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Shield, Loader2, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useTranslation } from '../../i18n';
 
 interface MfaChallengeProps {
   factorId: string;
@@ -15,6 +16,8 @@ interface MfaChallengeProps {
 }
 
 export default function MfaChallenge({ factorId, onSuccess, onCancel }: MfaChallengeProps) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -85,7 +88,7 @@ export default function MfaChallenge({ factorId, onSuccess, onCancel }: MfaChall
 
       onSuccess();
     } catch (err: any) {
-      setError(err.message || 'Invalid code. Please try again.');
+      setError(err.message || (fr ? 'Code invalide. Veuillez réessayer.' : 'Invalid code. Please try again.'));
       setCode(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
     } finally {
@@ -108,9 +111,9 @@ export default function MfaChallenge({ factorId, onSuccess, onCancel }: MfaChall
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-xl font-semibold text-text-primary">Two-Factor Authentication</h2>
+            <h2 className="text-xl font-semibold text-text-primary">{fr ? 'Authentification à deux facteurs' : 'Two-Factor Authentication'}</h2>
             <p className="text-sm text-text-tertiary">
-              Enter the 6-digit code from your authenticator app
+              {fr ? 'Entrez le code à 6 chiffres de votre application d’authentification' : 'Enter the 6-digit code from your authenticator app'}
             </p>
           </div>
 
@@ -144,7 +147,7 @@ export default function MfaChallenge({ factorId, onSuccess, onCancel }: MfaChall
           {loading && (
             <div className="flex items-center justify-center gap-2 text-sm text-text-tertiary">
               <Loader2 size={14} className="animate-spin" />
-              Verifying...
+              {fr ? 'Vérification...' : 'Verifying...'}
             </div>
           )}
 
@@ -152,7 +155,7 @@ export default function MfaChallenge({ factorId, onSuccess, onCancel }: MfaChall
             onClick={onCancel}
             className="text-sm text-text-tertiary hover:text-text-primary transition-colors"
           >
-            Cancel and sign out
+            {fr ? 'Annuler et se déconnecter' : 'Cancel and sign out'}
           </button>
         </div>
       </div>

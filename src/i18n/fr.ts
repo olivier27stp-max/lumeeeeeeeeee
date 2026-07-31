@@ -32,7 +32,7 @@ const fr: TranslationKeys = {
     commissions: 'Commissions',
     fieldSales: 'Ventes terrain',
     d2d: 'Vente',
-    venteDashboard: 'Dashboard',
+    venteDashboard: 'Tableau de bord',
     venteMap: 'Map',
     ventePipeline: 'Pipeline',
     campaigns: 'Campagnes',

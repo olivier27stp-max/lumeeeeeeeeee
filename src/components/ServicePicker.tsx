@@ -302,6 +302,7 @@ interface ServiceRowProps {
 }
 
 const ServiceRow: React.FC<ServiceRowProps> = ({ service, isAdded, onToggle, singleSelect = false }) => {
+  const { language } = useTranslation();
   return (
     <button
       onClick={onToggle}
@@ -344,7 +345,7 @@ const ServiceRow: React.FC<ServiceRowProps> = ({ service, isAdded, onToggle, sin
           <span className="text-[10px] font-medium text-text-tertiary group-hover:text-danger transition-colors">
             {/* Show "remove" hint on hover */}
             <Minus size={12} className="hidden group-hover:block" />
-            <span className="block group-hover:hidden text-[10px] uppercase tracking-wide">Added</span>
+            <span className="block group-hover:hidden text-[10px] uppercase tracking-wide">{language === 'fr' ? 'Ajouté' : 'Added'}</span>
           </span>
         )}
       </div>

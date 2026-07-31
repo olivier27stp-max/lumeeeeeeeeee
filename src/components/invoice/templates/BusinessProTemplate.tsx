@@ -1,6 +1,7 @@
 import React from 'react';
 import type { InvoiceRenderData } from '../types';
 import { formatMoneyFromCents } from '../../../lib/invoicesApi';
+import { useTranslation } from '../../../i18n';
 
 /* ── Business Pro — Invoice Template ────────────────────────────
    Premium, strong branding, executive feel.
@@ -9,24 +10,27 @@ import { formatMoneyFromCents } from '../../../lib/invoicesApi';
 
 const DARK = '#171717';
 
-function fmtDate(iso: string | null | undefined) {
+function fmtDate(iso: string | null | undefined, locale: string) {
   if (!iso) return '—';
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-const STATUS: Record<string, { label: string; bg: string; fg: string }> = {
-  draft:        { label: 'Draft',   bg: '#f1f5f9', fg: '#475569' },
-  sent:         { label: 'Open',    bg: '#dbeafe', fg: '#1d4ed8' },
-  sent_not_due: { label: 'Open',    bg: '#dbeafe', fg: '#1d4ed8' },
-  partial:      { label: 'Partial', bg: '#fef3c7', fg: '#a16207' },
-  paid:         { label: 'Paid',    bg: '#dcfce7', fg: '#15803d' },
-  void:         { label: 'Void',    bg: '#fecaca', fg: '#b91c1c' },
-  overdue:      { label: 'Overdue', bg: '#fecaca', fg: '#b91c1c' },
-};
-
 export default function BusinessProTemplate({ data }: { data: InvoiceRenderData }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
   const fmt = (c: number) => formatMoneyFromCents(c, data.currency);
+
+  const STATUS: Record<string, { label: string; bg: string; fg: string }> = {
+    draft:        { label: fr ? 'Brouillon' : 'Draft',   bg: '#f1f5f9', fg: '#475569' },
+    sent:         { label: fr ? 'Ouverte' : 'Open',      bg: '#dbeafe', fg: '#1d4ed8' },
+    sent_not_due: { label: fr ? 'Ouverte' : 'Open',      bg: '#dbeafe', fg: '#1d4ed8' },
+    partial:      { label: fr ? 'Partiel' : 'Partial',   bg: '#fef3c7', fg: '#a16207' },
+    paid:         { label: fr ? 'Payée' : 'Paid',        bg: '#dcfce7', fg: '#15803d' },
+    void:         { label: fr ? 'Annulée' : 'Void',      bg: '#fecaca', fg: '#b91c1c' },
+    overdue:      { label: fr ? 'En retard' : 'Overdue', bg: '#fecaca', fg: '#b91c1c' },
+  };
   const st = STATUS[data.status] || STATUS.sent;
 
   return (
@@ -46,7 +50,7 @@ export default function BusinessProTemplate({ data }: { data: InvoiceRenderData 
             </div>
           </div>
           <div className="text-right text-white">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-white/50">Invoice</p>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-white/50">{fr ? 'Facture' : 'Invoice'}</p>
             <p className="text-[24px] font-bold tracking-tight mt-0.5">#{data.invoice_number}</p>
           </div>
         </div>
@@ -57,7 +61,7 @@ export default function BusinessProTemplate({ data }: { data: InvoiceRenderData 
         {/* ── Meta ── */}
         <div className="flex justify-between items-start pb-6 border-b border-[#e2e8f0]">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#94a3b8]">Bill to</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#94a3b8]">{fr ? 'Facturer à' : 'Bill to'}</p>
             <p className="text-[16px] font-bold mt-1.5" style={{ color: DARK }}>{data.client_name}</p>
             <div className="text-[11px] text-[#64748b] mt-1 space-y-0.5">
               {data.client_company && <p>{data.client_company}</p>}
@@ -71,8 +75,8 @@ export default function BusinessProTemplate({ data }: { data: InvoiceRenderData 
               <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: st.fg }} />{st.label}
             </span>
             <div className="text-[11px] text-[#94a3b8] mt-2 space-y-0.5">
-              <p>Issued: <span className="text-[#475569]">{fmtDate(data.issued_at || data.created_at)}</span></p>
-              <p>Due: <span className="text-[#475569]">{fmtDate(data.due_date)}</span></p>
+              <p>{fr ? 'Émise le' : 'Issued:'} <span className="text-[#475569]">{fmtDate(data.issued_at || data.created_at, locale)}</span></p>
+              <p>{fr ? 'Échéance :' : 'Due:'} <span className="text-[#475569]">{fmtDate(data.due_date, locale)}</span></p>
             </div>
           </div>
         </div>
@@ -90,9 +94,9 @@ export default function BusinessProTemplate({ data }: { data: InvoiceRenderData 
             <thead>
               <tr style={{ backgroundColor: DARK }}>
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-white">Description</th>
-                <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-white w-14">Qty</th>
-                <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-white w-24">Rate</th>
-                <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-white w-24">Amount</th>
+                <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-white w-14">{fr ? 'Qté' : 'Qty'}</th>
+                <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-white w-24">{fr ? 'Prix' : 'Rate'}</th>
+                <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-white w-24">{fr ? 'Montant' : 'Amount'}</th>
               </tr>
             </thead>
             <tbody>
@@ -107,7 +111,7 @@ export default function BusinessProTemplate({ data }: { data: InvoiceRenderData 
                   <td className="px-4 py-3 text-right text-[12px] font-semibold tabular-nums">{fmt(item.line_total_cents)}</td>
                 </tr>
               ))}
-              {data.items.length === 0 && <tr><td colSpan={4} className="py-10 text-center text-[12px] text-[#d1d5db]">No items</td></tr>}
+              {data.items.length === 0 && <tr><td colSpan={4} className="py-10 text-center text-[12px] text-[#d1d5db]">{fr ? 'Aucun élément' : 'No items'}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -115,15 +119,15 @@ export default function BusinessProTemplate({ data }: { data: InvoiceRenderData 
         {/* ── Totals ── */}
         <div className="flex justify-end pb-6 border-b border-[#e2e8f0]">
           <div className="w-72 text-[12px]">
-            <div className="flex justify-between py-2 border-b border-[#f1f5f9]"><span className="text-[#94a3b8]">Subtotal</span><span className="tabular-nums">{fmt(data.subtotal_cents)}</span></div>
-            {data.discount_cents > 0 && <div className="flex justify-between py-2 border-b border-[#f1f5f9] text-[#dc2626]"><span>Discount</span><span className="tabular-nums">-{fmt(data.discount_cents)}</span></div>}
-            <div className="flex justify-between py-2 border-b border-[#f1f5f9]"><span className="text-[#94a3b8]">Tax</span><span className="tabular-nums">{fmt(data.tax_cents)}</span></div>
+            <div className="flex justify-between py-2 border-b border-[#f1f5f9]"><span className="text-[#94a3b8]">{fr ? 'Sous-total' : 'Subtotal'}</span><span className="tabular-nums">{fmt(data.subtotal_cents)}</span></div>
+            {data.discount_cents > 0 && <div className="flex justify-between py-2 border-b border-[#f1f5f9] text-[#dc2626]"><span>{fr ? 'Rabais' : 'Discount'}</span><span className="tabular-nums">-{fmt(data.discount_cents)}</span></div>}
+            <div className="flex justify-between py-2 border-b border-[#f1f5f9]"><span className="text-[#94a3b8]">{fr ? 'Taxes' : 'Tax'}</span><span className="tabular-nums">{fmt(data.tax_cents)}</span></div>
             <div className="flex justify-between py-3 text-[16px] font-bold" style={{ color: DARK }}><span>Total</span><span className="tabular-nums">{fmt(data.total_cents)}</span></div>
             {data.paid_cents > 0 && (
-              <div className="flex justify-between py-2 border-t border-[#f1f5f9] text-[#15803d]"><span>Paid</span><span className="tabular-nums font-medium">{fmt(data.paid_cents)}</span></div>
+              <div className="flex justify-between py-2 border-t border-[#f1f5f9] text-[#15803d]"><span>{fr ? 'Payé' : 'Paid'}</span><span className="tabular-nums font-medium">{fmt(data.paid_cents)}</span></div>
             )}
             {data.balance_cents > 0 && data.balance_cents !== data.total_cents && (
-              <div className="flex justify-between py-2 border-t border-[#e2e8f0] font-bold text-[14px]" style={{ color: DARK }}><span>Balance due</span><span className="tabular-nums">{fmt(data.balance_cents)}</span></div>
+              <div className="flex justify-between py-2 border-t border-[#e2e8f0] font-bold text-[14px]" style={{ color: DARK }}><span>{fr ? 'Solde dû' : 'Balance due'}</span><span className="tabular-nums">{fmt(data.balance_cents)}</span></div>
             )}
           </div>
         </div>

@@ -208,6 +208,20 @@ export function statusDotColor(status: string): string {
   return variantStyle[variant].icon;
 }
 
+// Bilingual labels for statuses that have no entry in t.status (i18n files).
+// Display-only — never used as DB values or lookup keys elsewhere.
+const extraLabels: Record<string, { en: string; fr: string }> = {
+  ending_within_30_days: { en: 'Ending within 30 days', fr: 'Se termine dans 30 jours' },
+  follow_up_1: { en: 'Follow-up 1', fr: 'Relance 1' },
+  follow_up_2: { en: 'Follow-up 2', fr: 'Relance 2' },
+  follow_up_3: { en: 'Follow-up 3', fr: 'Relance 3' },
+  closed: { en: 'Closed', fr: 'Fermé' },
+  lost: { en: 'Lost', fr: 'Perdu' },
+  won: { en: 'Won', fr: 'Gagné' },
+  qualified: { en: 'Qualified', fr: 'Qualifié' },
+  contacted: { en: 'Contacted', fr: 'Contacté' },
+};
+
 const BASE_SHADOW = '0 4px 12px rgba(0,0,0,0.20)';
 const HOVER_SHADOW = '0 8px 20px rgba(0,0,0,0.28)';
 
@@ -222,7 +236,7 @@ interface StatusBadgeProps {
 }
 
 export default function StatusBadge({ status, variant, className, size = 'md' }: StatusBadgeProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [hovered, setHovered] = useState(false);
 
   const resolvedVariant = variant || statusVariants[status] || statusVariants[status.toLowerCase()] || 'neutral';
@@ -231,7 +245,7 @@ export default function StatusBadge({ status, variant, className, size = 'md' }:
     ? status.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_')
     : status.toLowerCase().replace(/-/g, '_');
 
-  const translated = (t as any).status?.[key];
+  const translated = (t as any).status?.[key] || extraLabels[key]?.[language === 'fr' ? 'fr' : 'en'];
   const label = translated || status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
   // Archived jobs get a dedicated near-black treatment.

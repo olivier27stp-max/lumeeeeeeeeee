@@ -101,7 +101,9 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
   const [validDays, setValidDays] = useState(30);
   const [notes, setNotes] = useState('');
   const [contractDisclaimer, setContractDisclaimer] = useState(
-    'Ce devis est valable pour les 30 prochains jours, apres quoi les valeurs peuvent etre sujettes a modification.'
+    language === 'fr'
+      ? 'Ce devis est valable pour les 30 prochains jours, après quoi les valeurs peuvent être sujettes à modification.'
+      : 'This quote is valid for the next 30 days, after which values may be subject to change.'
   );
   const [depositRequired, setDepositRequired] = useState(false);
   const [depositType, setDepositType] = useState<'percentage' | 'fixed'>('percentage');
@@ -487,8 +489,8 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
 
     const sections: QuoteSectionInput[] = [];
     if (introEnabled) sections.push({ section_type: 'introduction', title: 'Introduction', content: introContent, sort_order: 0, enabled: true });
-    if (disclaimerEnabled) sections.push({ section_type: 'contract_disclaimer', title: 'Contract / Disclaimer', content: contractDisclaimer, sort_order: 10, enabled: true });
-    if (clientMessageEnabled) sections.push({ section_type: 'client_message', title: 'Client Message', content: clientMessage, sort_order: 20, enabled: true });
+    if (disclaimerEnabled) sections.push({ section_type: 'contract_disclaimer', title: language === 'fr' ? 'Contrat / Clause' : 'Contract / Disclaimer', content: contractDisclaimer, sort_order: 10, enabled: true });
+    if (clientMessageEnabled) sections.push({ section_type: 'client_message', title: language === 'fr' ? 'Message au client' : 'Client Message', content: clientMessage, sort_order: 20, enabled: true });
 
     // Numéro de soumission : le défaut auto non modifié est laissé au serveur
     // (attribution atomique, aucune course entre deux formulaires ouverts).
@@ -542,7 +544,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
             address: leadAddress.trim(), company: leadCompany.trim(),
             value: 0, status: 'Lead', tags: [],
           });
-          if (!newLead?.id) throw new Error('Failed to create lead.');
+          if (!newLead?.id) throw new Error(language === 'fr' ? 'Échec de la création du lead.' : 'Failed to create lead.');
           leadId = newLead.id;
           window.dispatchEvent(new CustomEvent('crm:lead-created', { detail: { leadId: newLead.id } }));
         }
@@ -661,9 +663,9 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div><label className={labelCls}>{tq.firstName} *</label>
-                        <input autoFocus value={leadFirstName} onChange={e => setLeadFirstName(e.target.value)} className={inputCls} placeholder="John" /></div>
+                        <input autoFocus value={leadFirstName} onChange={e => setLeadFirstName(e.target.value)} className={inputCls} placeholder={language === 'fr' ? 'Jean' : 'John'} /></div>
                       <div><label className={labelCls}>{tq.lastName} *</label>
-                        <input value={leadLastName} onChange={e => setLeadLastName(e.target.value)} className={inputCls} placeholder="Doe" /></div>
+                        <input value={leadLastName} onChange={e => setLeadLastName(e.target.value)} className={inputCls} placeholder={language === 'fr' ? 'Tremblay' : 'Doe'} /></div>
                     </div>
                     <div><label className={labelCls}>{tq.company}</label>
                       <input value={leadCompany} onChange={e => setLeadCompany(e.target.value)} className={inputCls} placeholder={tq.companyName} /></div>
@@ -919,8 +921,12 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                   )}
                   <p className="text-[12px] text-text-tertiary">
                     {depositType === 'percentage'
-                      ? `Client must pay ${depositValue || 0}% deposit upon approval`
-                      : `Client must pay $${depositValue || 0} deposit upon approval`}
+                      ? (language === 'fr'
+                          ? `Le client devra payer un acompte de ${depositValue || 0} % à l'approbation`
+                          : `Client must pay ${depositValue || 0}% deposit upon approval`)
+                      : (language === 'fr'
+                          ? `Le client devra payer un acompte de ${depositValue || 0} $ à l'approbation`
+                          : `Client must pay $${depositValue || 0} deposit upon approval`)}
                   </p>
                 </div>
               )}

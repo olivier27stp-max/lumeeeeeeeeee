@@ -1,19 +1,28 @@
 import React from 'react';
 import type { InvoiceRenderData } from '../types';
 import { formatMoneyFromCents } from '../../../lib/invoicesApi';
+import { useTranslation } from '../../../i18n';
 
-function fmtDate(iso: string | null | undefined): string {
+function fmtDate(iso: string | null | undefined, locale: string): string {
   if (!iso) return '--';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '--';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
 }
+
+const STATUS_FR: Record<string, string> = {
+  draft: 'Brouillon', sent: 'Ouverte', sent_not_due: 'Ouverte', partial: 'Partiel',
+  paid: 'Payée', void: 'Annulée', overdue: 'En retard',
+};
 
 /**
  * Executive Template — elegant serif typography, warm gold accents, premium feel.
  * Suited for law firms, consulting, architecture, luxury services.
  */
 export default function ExecutiveTemplate({ data }: { data: InvoiceRenderData }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
   const fmt = (cents: number) => formatMoneyFromCents(cents, data.currency);
   const gold = '#92713a';
   const dark = '#1c1917';
@@ -42,7 +51,7 @@ export default function ExecutiveTemplate({ data }: { data: InvoiceRenderData })
           </div>
           <div className="text-right">
             <p className="text-3xl font-normal tracking-[0.15em]" style={{ color: gold }}>
-              INVOICE
+              {fr ? 'FACTURE' : 'INVOICE'}
             </p>
             <p className="mt-1 text-sm" style={{ fontFamily: '"Inter", sans-serif', color: dark }}>
               {data.invoice_number}
@@ -60,7 +69,7 @@ export default function ExecutiveTemplate({ data }: { data: InvoiceRenderData })
         {/* Three-column meta */}
         <div className="grid grid-cols-3 gap-6" style={{ fontFamily: '"Inter", sans-serif' }}>
           <div>
-            <p className="text-[9px] font-semibold uppercase tracking-[0.2em]" style={{ color: gold }}>Billed To</p>
+            <p className="text-[9px] font-semibold uppercase tracking-[0.2em]" style={{ color: gold }}>{fr ? 'Facturer à' : 'Billed To'}</p>
             <p className="mt-2 text-sm font-semibold" style={{ color: dark }}>{data.client_name}</p>
             {data.client_company && <p className="text-[11px] text-stone-500">{data.client_company}</p>}
             <div className="mt-1 space-y-0.5 text-[11px] text-stone-400">
@@ -70,13 +79,13 @@ export default function ExecutiveTemplate({ data }: { data: InvoiceRenderData })
             </div>
           </div>
           <div>
-            <p className="text-[9px] font-semibold uppercase tracking-[0.2em]" style={{ color: gold }}>Invoice Date</p>
-            <p className="mt-2 text-sm text-stone-600">{fmtDate(data.issued_at || data.created_at)}</p>
-            <p className="mt-3 text-[9px] font-semibold uppercase tracking-[0.2em]" style={{ color: gold }}>Due Date</p>
-            <p className="mt-2 text-sm text-stone-600">{fmtDate(data.due_date)}</p>
+            <p className="text-[9px] font-semibold uppercase tracking-[0.2em]" style={{ color: gold }}>{fr ? 'Date de facturation' : 'Invoice Date'}</p>
+            <p className="mt-2 text-sm text-stone-600">{fmtDate(data.issued_at || data.created_at, locale)}</p>
+            <p className="mt-3 text-[9px] font-semibold uppercase tracking-[0.2em]" style={{ color: gold }}>{fr ? "Date d'échéance" : 'Due Date'}</p>
+            <p className="mt-2 text-sm text-stone-600">{fmtDate(data.due_date, locale)}</p>
           </div>
           <div className="text-right">
-            <p className="text-[9px] font-semibold uppercase tracking-[0.2em]" style={{ color: gold }}>Amount Due</p>
+            <p className="text-[9px] font-semibold uppercase tracking-[0.2em]" style={{ color: gold }}>{fr ? 'Montant dû' : 'Amount Due'}</p>
             <p className="mt-2 text-2xl font-bold" style={{ color: dark }}>
               {fmt(data.balance_cents || data.total_cents)}
             </p>
@@ -89,7 +98,7 @@ export default function ExecutiveTemplate({ data }: { data: InvoiceRenderData })
                 border: `1px solid ${data.status === 'paid' ? '#bbf7d0' : data.status === 'void' ? '#fecaca' : '#fde68a'}`,
               }}
             >
-              {data.status}
+              {fr ? (STATUS_FR[data.status] || data.status) : data.status}
             </span>
           </div>
         </div>
@@ -107,9 +116,9 @@ export default function ExecutiveTemplate({ data }: { data: InvoiceRenderData })
             <thead>
               <tr className="border-b" style={{ borderColor: `${gold}40` }}>
                 <th className="pb-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em]" style={{ color: gold }}>Description</th>
-                <th className="pb-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em]" style={{ color: gold }}>Qty</th>
-                <th className="pb-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em]" style={{ color: gold }}>Rate</th>
-                <th className="pb-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em]" style={{ color: gold }}>Amount</th>
+                <th className="pb-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em]" style={{ color: gold }}>{fr ? 'Qté' : 'Qty'}</th>
+                <th className="pb-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em]" style={{ color: gold }}>{fr ? 'Prix' : 'Rate'}</th>
+                <th className="pb-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em]" style={{ color: gold }}>{fr ? 'Montant' : 'Amount'}</th>
               </tr>
             </thead>
             <tbody>
@@ -125,7 +134,7 @@ export default function ExecutiveTemplate({ data }: { data: InvoiceRenderData })
                 </tr>
               ))}
               {data.items.length === 0 && (
-                <tr><td colSpan={4} className="py-8 text-center text-stone-400">No items</td></tr>
+                <tr><td colSpan={4} className="py-8 text-center text-stone-400">{fr ? 'Aucun élément' : 'No items'}</td></tr>
               )}
             </tbody>
           </table>
@@ -135,17 +144,17 @@ export default function ExecutiveTemplate({ data }: { data: InvoiceRenderData })
         <div className="mt-4 flex justify-end" style={{ fontFamily: '"Inter", sans-serif' }}>
           <div className="w-72 space-y-2 text-sm">
             <div className="flex justify-between text-stone-500">
-              <span>Subtotal</span>
+              <span>{fr ? 'Sous-total' : 'Subtotal'}</span>
               <span className="text-stone-700">{fmt(data.subtotal_cents)}</span>
             </div>
             {data.discount_cents > 0 && (
               <div className="flex justify-between text-red-600">
-                <span>Discount</span>
+                <span>{fr ? 'Rabais' : 'Discount'}</span>
                 <span>-{fmt(data.discount_cents)}</span>
               </div>
             )}
             <div className="flex justify-between text-stone-500">
-              <span>Tax</span>
+              <span>{fr ? 'Taxes' : 'Tax'}</span>
               <span className="text-stone-700">{fmt(data.tax_cents)}</span>
             </div>
             <div className="h-px" style={{ background: `linear-gradient(90deg, transparent, ${gold}, transparent)` }} />
@@ -155,13 +164,13 @@ export default function ExecutiveTemplate({ data }: { data: InvoiceRenderData })
             </div>
             {data.paid_cents > 0 && (
               <div className="flex justify-between text-green-700">
-                <span>Paid</span>
+                <span>{fr ? 'Payé' : 'Paid'}</span>
                 <span>{fmt(data.paid_cents)}</span>
               </div>
             )}
             {data.balance_cents > 0 && data.balance_cents !== data.total_cents && (
               <div className="flex justify-between font-bold" style={{ color: gold }}>
-                <span>Balance Due</span>
+                <span>{fr ? 'Solde dû' : 'Balance Due'}</span>
                 <span>{fmt(data.balance_cents)}</span>
               </div>
             )}
@@ -172,7 +181,7 @@ export default function ExecutiveTemplate({ data }: { data: InvoiceRenderData })
         {data.notes && (
           <div className="mt-8 border-t border-stone-200 pt-5">
             <p className="text-[9px] font-semibold uppercase tracking-[0.2em]" style={{ color: gold, fontFamily: '"Inter", sans-serif' }}>
-              Terms & Conditions
+              {fr ? 'Modalités et conditions' : 'Terms & Conditions'}
             </p>
             <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-stone-500" style={{ fontFamily: '"Inter", sans-serif' }}>
               {data.notes}

@@ -65,18 +65,18 @@ function fileIconColor(type: SpecificNoteFile['file_type']) {
   }
 }
 
-function relativeTime(dateStr: string): string {
+function relativeTime(dateStr: string, fr: boolean): string {
   const now = Date.now();
   const then = new Date(dateStr).getTime();
   const diff = now - then;
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return fr ? 'À l’instant' : 'Just now';
+  if (mins < 60) return fr ? `il y a ${mins} min` : `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return fr ? `il y a ${hrs} h` : `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
+  if (days < 30) return fr ? `il y a ${days} j` : `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString(fr ? 'fr-CA' : 'en-CA');
 }
 
 // ── Main Component ──
@@ -131,7 +131,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
     const fileArr = Array.from(files);
     const valid = fileArr.filter((f) => {
       if (f.size > MAX_FILE_SIZE) {
-        toast.error(`${f.name} is too large (max 50 MB)`);
+        toast.error(fr ? `${f.name} est trop volumineux (max 50 Mo)` : `${f.name} is too large (max 50 MB)`);
         return false;
       }
       return true;
@@ -146,9 +146,11 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
         uploaded.push(result);
       }
       setFormFiles((prev) => [...prev, ...uploaded]);
-      toast.success(`${uploaded.length} file${uploaded.length > 1 ? 's' : ''} uploaded`);
+      toast.success(fr
+        ? `${uploaded.length} fichier${uploaded.length > 1 ? 's' : ''} téléversé${uploaded.length > 1 ? 's' : ''}`
+        : `${uploaded.length} file${uploaded.length > 1 ? 's' : ''} uploaded`);
     } catch (err: any) {
-      toast.error(err?.message || 'Upload failed');
+      toast.error(err?.message || (fr ? 'Échec du téléversement' : 'Upload failed'));
     } finally {
       setUploading(false);
     }
@@ -172,9 +174,9 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
         files: [...note.files, ...uploaded],
       });
       setNotes((prev) => prev.map((n) => (n.id === noteId ? updated : n)));
-      toast.success('Files added');
+      toast.success(fr ? 'Fichiers ajoutés' : 'Files added');
     } catch (err: any) {
-      toast.error(err?.message || 'Upload failed');
+      toast.error(err?.message || (fr ? 'Échec du téléversement' : 'Upload failed'));
     } finally {
       setUploading(false);
     }
@@ -195,7 +197,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
   // ── Save new note ──
   const handleSave = async () => {
     if (!formText.trim() && formFiles.length === 0) {
-      toast.error('Add some text or files');
+      toast.error(fr ? 'Ajoutez du texte ou des fichiers' : 'Add some text or files');
       return;
     }
     setSaving(true);
@@ -210,9 +212,9 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
       setFormText('');
       setFormFiles([]);
       setShowForm(false);
-      toast.success('Note added');
+      toast.success(fr ? 'Note ajoutée' : 'Note added');
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to save note');
+      toast.error(err?.message || (fr ? 'Impossible d’enregistrer la note' : 'Failed to save note'));
     } finally {
       setSaving(false);
     }
@@ -224,9 +226,9 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
       const updated = await updateSpecificNote(noteId, { text: editText.trim() || null });
       setNotes((prev) => prev.map((n) => (n.id === noteId ? updated : n)));
       setEditingId(null);
-      toast.success('Note updated');
+      toast.success(fr ? 'Note mise à jour' : 'Note updated');
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to update');
+      toast.error(err?.message || (fr ? 'Échec de la mise à jour' : 'Failed to update'));
     }
   };
 
@@ -235,9 +237,9 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
     try {
       await deleteSpecificNote(noteId);
       setNotes((prev) => prev.filter((n) => n.id !== noteId));
-      toast.success('Note deleted');
+      toast.success(fr ? 'Note supprimée' : 'Note deleted');
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to delete');
+      toast.error(err?.message || (fr ? 'Échec de la suppression' : 'Failed to delete'));
     }
   };
 
@@ -246,9 +248,9 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
     try {
       const updated = await removeFileFromNote(noteId, filePath);
       setNotes((prev) => prev.map((n) => (n.id === noteId ? updated : n)));
-      toast.success('File removed');
+      toast.success(fr ? 'Fichier retiré' : 'File removed');
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to remove file');
+      toast.error(err?.message || (fr ? 'Impossible de retirer le fichier' : 'Failed to remove file'));
     }
   };
 
@@ -284,7 +286,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
                   <button
                     onClick={() => setLightboxUrl(f.url)}
                     className="p-1 rounded bg-black/60 text-white hover:bg-black/80"
-                    title="View"
+                    title={fr ? 'Voir' : 'View'}
                   >
                     <Eye size={12} />
                   </button>
@@ -292,7 +294,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
                     <button
                       onClick={() => handleRemoveFile(noteId, f.path)}
                       className="p-1 rounded bg-black/60 text-white hover:bg-red-500"
-                      title="Remove"
+                      title={fr ? 'Retirer' : 'Remove'}
                     >
                       <Trash2 size={12} />
                     </button>
@@ -322,7 +324,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
                     <button
                       onClick={() => handleRemoveFile(noteId, f.path)}
                       className="p-1 rounded bg-black/60 text-white hover:bg-red-500"
-                      title="Remove"
+                      title={fr ? 'Retirer' : 'Remove'}
                     >
                       <Trash2 size={12} />
                     </button>
@@ -356,7 +358,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
                     target="_blank"
                     rel="noreferrer"
                     className="p-1 rounded hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors"
-                    title="Download"
+                    title={fr ? 'Télécharger' : 'Download'}
                   >
                     <Download size={13} />
                   </a>
@@ -364,7 +366,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
                     <button
                       onClick={() => handleRemoveFile(noteId, f.path)}
                       className="p-1 rounded hover:bg-surface-tertiary text-text-tertiary hover:text-danger transition-colors opacity-0 group-hover:opacity-100"
-                      title="Remove"
+                      title={fr ? 'Retirer' : 'Remove'}
                     >
                       <Trash2 size={12} />
                     </button>
@@ -395,10 +397,10 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 text-[11px] text-text-tertiary">
             <Paperclip size={11} />
-            <span>{relativeTime(note.created_at)}</span>
+            <span>{relativeTime(note.created_at, fr)}</span>
             {note.files.length > 0 && (
               <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-tertiary text-[10px] font-medium">
-                {note.files.length} file{note.files.length > 1 ? 's' : ''}
+                {note.files.length} {fr ? `fichier${note.files.length > 1 ? 's' : ''}` : `file${note.files.length > 1 ? 's' : ''}`}
               </span>
             )}
           </div>
@@ -409,7 +411,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
                 editFileInputRef.current?.click();
               }}
               className="p-1 rounded hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary"
-              title="Add files"
+              title={fr ? 'Ajouter des fichiers' : 'Add files'}
             >
               <Upload size={12} />
             </button>
@@ -423,14 +425,14 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
                 }
               }}
               className="p-1 rounded hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary"
-              title="Edit"
+              title={fr ? 'Modifier' : 'Edit'}
             >
               <Pencil size={12} />
             </button>
             <button
               onClick={() => handleDelete(note.id)}
               className="p-1 rounded hover:bg-surface-tertiary text-text-tertiary hover:text-danger"
-              title="Delete"
+              title={fr ? 'Supprimer' : 'Delete'}
             >
               <Trash2 size={12} />
             </button>
@@ -451,13 +453,13 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
                 onClick={() => handleUpdateText(note.id)}
                 className="glass-button-primary !text-[12px] !px-3 !py-1"
               >
-                Save
+                {fr ? 'Enregistrer' : 'Save'}
               </button>
               <button
                 onClick={() => setEditingId(null)}
                 className="glass-button !text-[12px] !px-3 !py-1"
               >
-                Cancel
+                {fr ? 'Annuler' : 'Cancel'}
               </button>
             </div>
           </div>
@@ -493,7 +495,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
           >
             <div className="text-center">
               <Upload size={32} className="mx-auto text-primary mb-2" />
-              <p className="text-[14px] font-semibold text-primary">Drop files here</p>
+              <p className="text-[14px] font-semibold text-primary">{fr ? 'Déposez les fichiers ici' : 'Drop files here'}</p>
             </div>
           </motion.div>
         )}
@@ -522,7 +524,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
               <textarea
                 value={formText}
                 onChange={(e) => setFormText(e.target.value)}
-                placeholder="Write a note..."
+                placeholder={fr ? 'Écrivez une note...' : 'Write a note...'}
                 className="glass-input w-full min-h-[70px] text-[13px] resize-none"
                 autoFocus
               />
@@ -557,10 +559,10 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
                     className="glass-button !text-[12px] flex items-center gap-1.5"
                   >
                     <Upload size={12} />
-                    {uploading ? 'Uploading...' : 'Add Files'}
+                    {uploading ? (fr ? 'Téléversement...' : 'Uploading...') : (fr ? 'Ajouter des fichiers' : 'Add Files')}
                   </button>
                   <span className="text-[10px] text-text-tertiary">
-                    Images, videos, PDFs, documents (max 50 MB)
+                    {fr ? 'Images, vidéos, PDF, documents (max 50 Mo)' : 'Images, videos, PDFs, documents (max 50 MB)'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -568,14 +570,14 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
                     onClick={() => { setShowForm(false); setFormText(''); setFormFiles([]); }}
                     className="glass-button !text-[12px]"
                   >
-                    Cancel
+                    {fr ? 'Annuler' : 'Cancel'}
                   </button>
                   <button
                     onClick={handleSave}
                     disabled={saving || uploading}
                     className="glass-button-primary !text-[12px] disabled:opacity-50"
                   >
-                    {saving ? 'Saving...' : 'Save Note'}
+                    {saving ? (fr ? 'Enregistrement...' : 'Saving...') : (fr ? 'Enregistrer la note' : 'Save Note')}
                   </button>
                 </div>
               </div>
@@ -598,8 +600,8 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
       ) : loadError ? (
         <div className="text-center py-6">
           <Paperclip size={24} className="mx-auto text-text-tertiary mb-2 opacity-40" />
-          <p className="text-[13px] text-text-tertiary">Notes spécifiques</p>
-          <p className="text-[11px] text-text-muted mt-1">La table n'est pas encore configurée. Exécutez la migration SQL.</p>
+          <p className="text-[13px] text-text-tertiary">{fr ? 'Notes spécifiques' : 'Specific notes'}</p>
+          <p className="text-[11px] text-text-muted mt-1">{fr ? 'La table n’est pas encore configurée. Exécutez la migration SQL.' : 'The table is not configured yet. Run the SQL migration.'}</p>
         </div>
       ) : notes.length === 0 && !showForm ? (
         <div className="text-center py-8">
@@ -660,7 +662,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
               src={lightboxUrl}
-              alt="Preview"
+              alt={fr ? 'Aperçu' : 'Preview'}
               className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             />
@@ -684,7 +686,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
           <div className="icon-tile icon-tile-sm icon-tile-purple">
             <Paperclip size={13} strokeWidth={2} />
           </div>
-          Notes spécifiques
+          {fr ? 'Notes spécifiques' : 'Specific notes'}
         </h2>
       </div>
       <div className="p-5">

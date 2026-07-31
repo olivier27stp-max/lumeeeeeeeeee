@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import Modal from '../ui/Modal';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 import type {
   TaskRow,
   TaskCreateInput,
@@ -21,6 +22,21 @@ const TASK_TYPES = [
   'Client', 'Sales', 'Finance', 'CRM', 'Reminder', 'Custom',
 ];
 
+// Display labels only — values sent to the API stay in English
+const TASK_TYPE_LABELS_FR: Record<string, string> = {
+  'Meeting': 'Rencontre',
+  'Recruit': 'Recrue',
+  'Follow-up': 'Suivi',
+  'Admin': 'Admin',
+  'Personal': 'Personnel',
+  'Client': 'Client',
+  'Sales': 'Ventes',
+  'Finance': 'Finance',
+  'CRM': 'CRM',
+  'Reminder': 'Rappel',
+  'Custom': 'Personnalisé',
+};
+
 interface TaskModalProps {
   open: boolean;
   onClose: () => void;
@@ -29,6 +45,8 @@ interface TaskModalProps {
 }
 
 export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalProps) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const isEdit = !!task;
 
   const [title, setTitle] = useState('');
@@ -60,7 +78,7 @@ export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalPr
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      setError('Title is required');
+      setError(fr ? 'Le titre est requis' : 'Title is required');
       return;
     }
     setError('');
@@ -77,7 +95,7 @@ export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalPr
         linked_person_type: linkedPersonType || null,
       });
     } catch (err: any) {
-      setError(err?.message || 'Failed to save task');
+      setError(err?.message || (fr ? 'Impossible d’enregistrer la tâche' : 'Failed to save task'));
     } finally {
       setSaving(false);
     }
@@ -87,8 +105,8 @@ export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalPr
     <Modal
       open={open}
       onClose={onClose}
-      title={isEdit ? 'Edit Task' : 'Add Task'}
-      description={isEdit ? 'Update task details.' : 'Create a new task.'}
+      title={isEdit ? (fr ? 'Modifier la tâche' : 'Edit Task') : (fr ? 'Ajouter une tâche' : 'Add Task')}
+      description={isEdit ? (fr ? 'Mettez à jour les détails de la tâche.' : 'Update task details.') : (fr ? 'Créez une nouvelle tâche.' : 'Create a new task.')}
       size="lg"
       footer={
         <>
@@ -96,14 +114,14 @@ export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalPr
             onClick={onClose}
             className="h-9 px-4 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors"
           >
-            Cancel
+            {fr ? 'Annuler' : 'Cancel'}
           </button>
           <button
             onClick={handleSubmit}
             disabled={saving || !title.trim()}
             className="h-9 px-5 bg-primary text-white rounded-md text-[13px] font-medium hover:bg-primary-hover disabled:opacity-50 transition-all"
           >
-            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Task'}
+            {saving ? (fr ? 'Enregistrement...' : 'Saving...') : isEdit ? (fr ? 'Enregistrer' : 'Save Changes') : (fr ? 'Créer la tâche' : 'Create Task')}
           </button>
         </>
       }
@@ -118,11 +136,11 @@ export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalPr
 
         {/* Title */}
         <div>
-          <label className="text-[12px] font-medium text-text-primary mb-1 block">Title *</label>
+          <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Titre *' : 'Title *'}</label>
           <input
             value={title}
             onChange={e => setTitle(e.target.value)}
-            placeholder="e.g. Call recrue Simon jeudi"
+            placeholder={fr ? 'Ex. : Appeler la recrue Simon jeudi' : 'e.g. Call recruit Simon on Thursday'}
             className="input-field w-full"
             autoFocus
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
@@ -135,7 +153,7 @@ export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalPr
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            placeholder="Add details..."
+            placeholder={fr ? 'Ajoutez des détails...' : 'Add details...'}
             rows={3}
             className="input-field w-full resize-none"
           />
@@ -151,20 +169,20 @@ export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalPr
               className="input-field w-full"
             >
               {TASK_TYPES.map(t => (
-                <option key={t} value={t}>{t}</option>
+                <option key={t} value={t}>{fr ? (TASK_TYPE_LABELS_FR[t] || t) : t}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="text-[12px] font-medium text-text-primary mb-1 block">Priority</label>
+            <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Priorité' : 'Priority'}</label>
             <select
               value={priority}
               onChange={e => setPriority(e.target.value as TaskPriority)}
               className="input-field w-full"
             >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+              <option value="low">{fr ? 'Faible' : 'Low'}</option>
+              <option value="medium">{fr ? 'Moyenne' : 'Medium'}</option>
+              <option value="high">{fr ? 'Élevée' : 'High'}</option>
             </select>
           </div>
         </div>
@@ -172,18 +190,18 @@ export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalPr
         {/* Row: Status + Due Date */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-[12px] font-medium text-text-primary mb-1 block">Status</label>
+            <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Statut' : 'Status'}</label>
             <select
               value={status}
               onChange={e => setStatus(e.target.value as TaskStatus)}
               className="input-field w-full"
             >
-              <option value="open">Open</option>
-              <option value="done">Done</option>
+              <option value="open">{fr ? 'Ouverte' : 'Open'}</option>
+              <option value="done">{fr ? 'Terminée' : 'Done'}</option>
             </select>
           </div>
           <div>
-            <label className="text-[12px] font-medium text-text-primary mb-1 block">Due Date</label>
+            <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Date d’échéance' : 'Due Date'}</label>
             <input
               type="date"
               value={dueDate}
@@ -196,33 +214,33 @@ export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalPr
         {/* Row: Linked Entity + Linked Person */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-[12px] font-medium text-text-primary mb-1 block">Linked Entity</label>
+            <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Entité liée' : 'Linked Entity'}</label>
             <select
               value={linkedEntityType}
               onChange={e => setLinkedEntityType(e.target.value as TaskLinkedEntityType | '')}
               className="input-field w-full"
             >
-              <option value="">None</option>
+              <option value="">{fr ? 'Aucune' : 'None'}</option>
               <option value="client">Client</option>
               <option value="lead">Lead</option>
-              <option value="quote">Quote</option>
-              <option value="invoice">Invoice</option>
+              <option value="quote">{fr ? 'Devis' : 'Quote'}</option>
+              <option value="invoice">{fr ? 'Facture' : 'Invoice'}</option>
               <option value="job">Job</option>
             </select>
           </div>
           <div>
-            <label className="text-[12px] font-medium text-text-primary mb-1 block">Linked Person</label>
+            <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Personne liée' : 'Linked Person'}</label>
             <select
               value={linkedPersonType}
               onChange={e => setLinkedPersonType(e.target.value as TaskLinkedPersonType | '')}
               className="input-field w-full"
             >
-              <option value="">None</option>
-              <option value="recruit">Recruit</option>
+              <option value="">{fr ? 'Aucune' : 'None'}</option>
+              <option value="recruit">{fr ? 'Recrue' : 'Recruit'}</option>
               <option value="client">Client</option>
               <option value="prospect">Prospect</option>
               <option value="contact">Contact</option>
-              <option value="team_member">Team Member</option>
+              <option value="team_member">{fr ? 'Membre de l’équipe' : 'Team Member'}</option>
             </select>
           </div>
         </div>

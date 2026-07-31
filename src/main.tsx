@@ -13,6 +13,21 @@ import 'leaflet/dist/leaflet.css';
 // Sentry: no-op if VITE_SENTRY_DSN not set
 initSentryClient();
 
+// Root-level crash screen labels: this boundary sits above LanguageProvider,
+// so fall back to the browser language to pick FR/EN (mirrors t.errorBoundary).
+const rootIsFr = (navigator.language || '').toLowerCase().startsWith('fr');
+const rootErrorLabels = rootIsFr
+  ? {
+      title: 'Une erreur est survenue',
+      description: "Une erreur inattendue s'est produite lors du rendu de cette section.",
+      tryAgain: 'Réessayer',
+    }
+  : {
+      title: 'Something went wrong',
+      description: 'An unexpected error occurred while rendering this section.',
+      tryAgain: 'Try Again',
+    };
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -25,7 +40,7 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ErrorBoundary>
+    <ErrorBoundary labels={rootErrorLabels}>
       <LanguageProvider>
         <QueryClientProvider client={queryClient}>
           <BrowserRouter>

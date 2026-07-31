@@ -1,6 +1,7 @@
 import React from 'react';
 import type { InvoiceRenderData } from '../types';
 import { formatMoneyFromCents } from '../../../lib/invoicesApi';
+import { useTranslation } from '../../../i18n';
 
 /* ── Modern Bold Template ───────────────────────────────────────
    Vibrant orange theme with organic wave shapes (SVG).
@@ -13,11 +14,11 @@ const BG_DARK = '#1a1a1a';
 const TEXT = '#262626';
 const TEXT_SEC = '#6b7280';
 
-function fmtDate(iso: string | null | undefined): string {
+function fmtDate(iso: string | null | undefined, locale: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  return d.toLocaleDateString(locale, { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
 function WaveTop() {
@@ -39,6 +40,9 @@ function WaveBottom() {
 }
 
 export default function ModernBoldTemplate({ data }: { data: InvoiceRenderData }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
   const fmt = (cents: number) => formatMoneyFromCents(cents, data.currency);
 
   return (
@@ -52,7 +56,7 @@ export default function ModernBoldTemplate({ data }: { data: InvoiceRenderData }
           {/* Top row: INVOICE title + meta */}
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[36px] font-extrabold tracking-tight text-white" style={{ WebkitTextStroke: '1px', color: ORANGE }}>INVOICE</p>
+              <p className="text-[36px] font-extrabold tracking-tight text-white" style={{ WebkitTextStroke: '1px', color: ORANGE }}>{fr ? 'FACTURE' : 'INVOICE'}</p>
               <div className="mt-1">
                 {data.company_logo_url ? (
                   <img src={data.company_logo_url} alt={data.company_name} className="h-8 max-w-[160px] object-contain" />
@@ -65,8 +69,8 @@ export default function ModernBoldTemplate({ data }: { data: InvoiceRenderData }
 
             <div className="text-right text-white z-10 pt-2">
               <div className="text-[11px] space-y-0.5">
-                <p>Invoice No : <span className="font-semibold">{data.invoice_number}</span></p>
-                <p>Date : <span className="font-semibold">{fmtDate(data.issued_at || data.created_at)}</span></p>
+                <p>{fr ? 'Facture nº :' : 'Invoice No :'} <span className="font-semibold">{data.invoice_number}</span></p>
+                <p>Date : <span className="font-semibold">{fmtDate(data.issued_at || data.created_at, locale)}</span></p>
               </div>
             </div>
           </div>
@@ -85,7 +89,7 @@ export default function ModernBoldTemplate({ data }: { data: InvoiceRenderData }
               )}
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: TEXT_SEC }}>Invoice to</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: TEXT_SEC }}>{fr ? 'Facturer à' : 'Invoice to'}</p>
               <p className="text-[14px] font-bold mt-1" style={{ color: ORANGE }}>{data.client_name}</p>
               <div className="text-[11px] mt-0.5 space-y-0.5" style={{ color: TEXT_SEC }}>
                 {data.client_address && <p>{data.client_address}</p>}
@@ -105,8 +109,8 @@ export default function ModernBoldTemplate({ data }: { data: InvoiceRenderData }
             <thead>
               <tr>
                 <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-white rounded-l-lg" style={{ backgroundColor: ORANGE }}>Description</th>
-                <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: ORANGE }}>Qty</th>
-                <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: ORANGE }}>Price</th>
+                <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: ORANGE }}>{fr ? 'Qté' : 'Qty'}</th>
+                <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: ORANGE }}>{fr ? 'Prix' : 'Price'}</th>
                 <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-white rounded-r-lg" style={{ backgroundColor: ORANGE }}>Total</th>
               </tr>
             </thead>
@@ -123,7 +127,7 @@ export default function ModernBoldTemplate({ data }: { data: InvoiceRenderData }
                 </tr>
               ))}
               {data.items.length === 0 && (
-                <tr><td colSpan={4} className="py-10 text-center text-[12px] text-[#9ca3af]">No line items</td></tr>
+                <tr><td colSpan={4} className="py-10 text-center text-[12px] text-[#9ca3af]">{fr ? 'Aucun élément' : 'No line items'}</td></tr>
               )}
             </tbody>
           </table>
@@ -133,22 +137,22 @@ export default function ModernBoldTemplate({ data }: { data: InvoiceRenderData }
         <div className="mt-4 flex justify-end">
           <div className="w-64 text-[12px]">
             <div className="flex justify-between py-1.5">
-              <span className="font-semibold" style={{ color: TEXT_SEC }}>SUBTOTAL</span>
+              <span className="font-semibold" style={{ color: TEXT_SEC }}>{fr ? 'SOUS-TOTAL' : 'SUBTOTAL'}</span>
               <span className="tabular-nums font-medium">{fmt(data.subtotal_cents)}</span>
             </div>
             {data.discount_cents > 0 && (
               <div className="flex justify-between py-1.5 text-[#dc2626]">
-                <span className="font-semibold">DISCOUNT</span>
+                <span className="font-semibold">{fr ? 'RABAIS' : 'DISCOUNT'}</span>
                 <span className="tabular-nums">-{fmt(data.discount_cents)}</span>
               </div>
             )}
             <div className="flex justify-between py-1.5">
-              <span className="font-semibold" style={{ color: TEXT_SEC }}>TAX</span>
+              <span className="font-semibold" style={{ color: TEXT_SEC }}>{fr ? 'TAXES' : 'TAX'}</span>
               <span className="tabular-nums">{fmt(data.tax_cents)}</span>
             </div>
             {data.paid_cents > 0 && (
               <div className="flex justify-between py-1.5 text-[#15803d]">
-                <span className="font-semibold">PAID</span>
+                <span className="font-semibold">{fr ? 'PAYÉ' : 'PAID'}</span>
                 <span className="tabular-nums">{fmt(data.paid_cents)}</span>
               </div>
             )}
@@ -163,7 +167,7 @@ export default function ModernBoldTemplate({ data }: { data: InvoiceRenderData }
         <div className="mt-8 flex items-start justify-between gap-8">
           {data.notes && (
             <div className="flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: ORANGE }}>Terms & Conditions</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: ORANGE }}>{fr ? 'Modalités et conditions' : 'Terms & Conditions'}</p>
               <p className="mt-1.5 whitespace-pre-wrap text-[11px] leading-relaxed" style={{ color: TEXT_SEC }}>{data.notes}</p>
             </div>
           )}
@@ -175,7 +179,7 @@ export default function ModernBoldTemplate({ data }: { data: InvoiceRenderData }
 
         {/* ── Thank You ── */}
         <div className="mt-8 text-center">
-          <p className="text-[32px] font-extrabold tracking-wide" style={{ color: TEXT_SEC, opacity: 0.2 }}>THANKS</p>
+          <p className="text-[32px] font-extrabold tracking-wide" style={{ color: TEXT_SEC, opacity: 0.2 }}>{fr ? 'MERCI' : 'THANKS'}</p>
         </div>
       </div>
 

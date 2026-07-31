@@ -29,6 +29,7 @@ function SignaturePad({
   onChange: (dataUrl: string | null) => void;
   disabled?: boolean;
 }) {
+  const { language } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
@@ -105,7 +106,7 @@ function SignaturePad({
       />
       {!disabled && (
         <button type="button" onClick={clear} className="text-[11px] text-text-tertiary hover:text-text-primary">
-          Clear
+          {language === 'fr' ? 'Effacer' : 'Clear'}
         </button>
       )}
     </div>
@@ -128,6 +129,7 @@ function PhotoResponse({
   disabled?: boolean;
   t: any;
 }) {
+  const { language } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -140,7 +142,7 @@ function PhotoResponse({
       const { url } = await uploadFile(STORAGE_BUCKETS.ATTACHMENTS, path, file);
       onChange(url);
     } catch (err: any) {
-      toast.error(err?.message || 'Upload failed');
+      toast.error(err?.message || (language === 'fr' ? 'Échec du téléversement' : 'Upload failed'));
     } finally { setUploading(false); }
   }
 
@@ -222,7 +224,7 @@ function ChecklistInstance({
       const updated = await updateJobChecklist(jobId, instance.id, { responses, completed: true });
       onUpdate(updated);
       toast.success(t.checklists.markedComplete);
-    } catch (err: any) { toast.error(err?.message || 'Failed'); }
+    } catch (err: any) { toast.error(err?.message || (fr ? 'Échec' : 'Failed')); }
     finally { setSaving(false); }
   }
 
@@ -231,7 +233,7 @@ function ChecklistInstance({
     try {
       const updated = await updateJobChecklist(jobId, instance.id, { completed: false });
       onUpdate(updated);
-    } catch (err: any) { toast.error(err?.message || 'Failed'); }
+    } catch (err: any) { toast.error(err?.message || (fr ? 'Échec' : 'Failed')); }
     finally { setSaving(false); }
   }
 
@@ -240,7 +242,7 @@ function ChecklistInstance({
     try {
       await deleteJobChecklist(jobId, instance.id);
       onDelete();
-    } catch (err: any) { toast.error(err?.message || 'Delete failed'); }
+    } catch (err: any) { toast.error(err?.message || (fr ? 'Échec de la suppression' : 'Delete failed')); }
   }
 
   return (
@@ -322,7 +324,7 @@ function ChecklistInstance({
 
 // ─── Section root ──────────────────────────────────────────────────
 export default function JobChecklistsSection({ jobId }: { jobId: string }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [instances, setInstances] = useState<JobChecklist[]>([]);
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -353,7 +355,7 @@ export default function JobChecklistsSection({ jobId }: { jobId: string }) {
       setShowPicker(false);
       toast.success(t.checklists.checklistAttached);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to attach');
+      toast.error(err?.message || (language === 'fr' ? 'Impossible de joindre la checklist' : 'Failed to attach'));
     } finally { setAttaching(false); }
   }
 

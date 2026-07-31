@@ -1642,7 +1642,7 @@ export default function NewJobModal({
       handleClose('created');
     } catch (error: any) {
       console.error('[jobs] failed to create job', error);
-      setInlineError(error?.message || 'Failed to save job.');
+      setInlineError(error?.message || (language === 'fr' ? 'Impossible d’enregistrer le job.' : 'Failed to save job.'));
     } finally {
       setInternalSaving(false);
     }
@@ -1671,7 +1671,9 @@ export default function NewJobModal({
             checked={item.included}
             onChange={() => handlers.update({ included: !item.included })}
             className="h-4 w-4 shrink-0 rounded cursor-pointer accent-primary"
-            title={item.included ? 'Click to exclude from total' : 'Click to include in total'}
+            title={item.included
+              ? (language === 'fr' ? 'Cliquez pour exclure du total' : 'Click to exclude from total')
+              : (language === 'fr' ? 'Cliquez pour inclure dans le total' : 'Click to include in total')}
           />
           <button
             type="button"
@@ -1810,7 +1812,7 @@ export default function NewJobModal({
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-medium text-text-tertiary">Leaderboard</label>
+                    <label className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Classement' : 'Leaderboard'}</label>
                     <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-outline px-3 py-2.5">
                       <input
                         type="checkbox"
@@ -2041,7 +2043,7 @@ export default function NewJobModal({
                       type="button"
                       onClick={() => changeServiceYear(-1)}
                       className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface transition-colors"
-                      aria-label="Previous year"
+                      aria-label={language === 'fr' ? 'Année précédente' : 'Previous year'}
                     >
                       <ChevronLeft size={14} />
                     </button>
@@ -2050,7 +2052,7 @@ export default function NewJobModal({
                       type="button"
                       onClick={() => changeServiceYear(1)}
                       className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface transition-colors"
-                      aria-label="Next year"
+                      aria-label={language === 'fr' ? 'Année suivante' : 'Next year'}
                     >
                       <ChevronRight size={14} />
                     </button>
@@ -2503,12 +2505,12 @@ export default function NewJobModal({
 
               <Box title={t.modals.taxes}>
                 {taxConfigured === null ? (
-                  <p className="text-[12px] text-text-tertiary">Loading taxes...</p>
+                  <p className="text-[12px] text-text-tertiary">{language === 'fr' ? 'Chargement des taxes...' : 'Loading taxes...'}</p>
                 ) : taxConfigured === false ? (
                   <div className="rounded-lg border border-danger/30 bg-danger-light p-4">
-                    <p className="text-[13px] font-semibold text-danger">No taxes configured</p>
-                    <p className="text-[12px] text-text-secondary mt-1">You need to configure your tax region in Settings before creating jobs.</p>
-                    <a href="/settings/taxes" className="inline-block mt-2 text-[12px] font-medium text-primary hover:underline">Go to Tax Settings</a>
+                    <p className="text-[13px] font-semibold text-danger">{language === 'fr' ? 'Aucune taxe configurée' : 'No taxes configured'}</p>
+                    <p className="text-[12px] text-text-secondary mt-1">{language === 'fr' ? 'Vous devez configurer votre région de taxes dans les Paramètres avant de créer des jobs.' : 'You need to configure your tax region in Settings before creating jobs.'}</p>
+                    <a href="/settings/taxes" className="inline-block mt-2 text-[12px] font-medium text-primary hover:underline">{language === 'fr' ? 'Aller aux paramètres de taxes' : 'Go to Tax Settings'}</a>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -2528,7 +2530,7 @@ export default function NewJobModal({
                         <span className="text-[13px] text-text-secondary tabular-nums">{tax.rate}%</span>
                       </div>
                     ))}
-                    <p className="text-[10px] text-text-tertiary">Taxes from your <a href="/settings/taxes" className="text-primary hover:underline">Tax Settings</a></p>
+                    <p className="text-[10px] text-text-tertiary">{language === 'fr' ? <>Taxes provenant de vos <a href="/settings/taxes" className="text-primary hover:underline">paramètres de taxes</a></> : <>Taxes from your <a href="/settings/taxes" className="text-primary hover:underline">Tax Settings</a></>}</p>
                   </div>
                 )}
                 <div className="rounded-xl border border-border bg-surface/70 p-4 text-sm">
@@ -2723,14 +2725,14 @@ export default function NewJobModal({
                     </div>
                     <p className="text-[12px] text-text-tertiary">
                       {jobDepositType === 'percentage'
-                        ? `Client must pay ${jobDepositValue || 0}% deposit`
-                        : `Client must pay $${jobDepositValue || 0} deposit`}
+                        ? (language === 'fr' ? `Le client doit payer un dépôt de ${jobDepositValue || 0} %` : `Client must pay ${jobDepositValue || 0}% deposit`)
+                        : (language === 'fr' ? `Le client doit payer un dépôt de ${jobDepositValue || 0} $` : `Client must pay $${jobDepositValue || 0} deposit`)}
                     </p>
                   </div>
                 )}
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" checked={jobRequirePaymentMethod} onChange={e => setJobRequirePaymentMethod(e.target.checked)} className="h-4 w-4 rounded" />
-                  <span className="text-[13px] text-text-primary">Require payment method on file</span>
+                  <span className="text-[13px] text-text-primary">{language === 'fr' ? 'Exiger une méthode de paiement au dossier' : 'Require payment method on file'}</span>
                 </label>
               </Box>
 
@@ -2785,7 +2787,7 @@ export default function NewJobModal({
                       type="button"
                       onClick={() => setConfirmDelete(true)}
                       className="glass-button-danger p-2"
-                      title="Delete job"
+                      title={language === 'fr' ? 'Supprimer le job' : 'Delete job'}
                     >
                       <Trash2 size={15} />
                     </button>

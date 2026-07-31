@@ -1,6 +1,7 @@
 import React from 'react';
 import type { InvoiceRenderData } from '../types';
 import { formatMoneyFromCents } from '../../../lib/invoicesApi';
+import { useTranslation } from '../../../i18n';
 
 /* ── Classic Blue Template ──────────────────────────────────────
    Navy blue header bar, traditional corporate layout.
@@ -14,14 +15,17 @@ const TEXT = '#262626';
 const TEXT_SEC = '#6b7280';
 const BG_LIGHT = '#f0f4ff';
 
-function fmtDate(iso: string | null | undefined): string {
+function fmtDate(iso: string | null | undefined, locale: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 export default function ClassicBlueTemplate({ data }: { data: InvoiceRenderData }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
   const fmt = (cents: number) => formatMoneyFromCents(cents, data.currency);
 
   return (
@@ -42,11 +46,11 @@ export default function ClassicBlueTemplate({ data }: { data: InvoiceRenderData 
           </div>
         </div>
         <div className="text-right text-white">
-          <p className="text-[28px] font-bold tracking-tight">INVOICE</p>
+          <p className="text-[28px] font-bold tracking-tight">{fr ? 'FACTURE' : 'INVOICE'}</p>
           <div className="mt-1 text-[11px] text-white/70 space-y-0.5">
-            <p>Invoice # <span className="text-white font-medium">{data.invoice_number}</span></p>
-            <p>Date: <span className="text-white font-medium">{fmtDate(data.issued_at || data.created_at)}</span></p>
-            {data.due_date && <p>Due: <span className="text-white font-medium">{fmtDate(data.due_date)}</span></p>}
+            <p>{fr ? 'Facture nº' : 'Invoice #'} <span className="text-white font-medium">{data.invoice_number}</span></p>
+            <p>{fr ? 'Date :' : 'Date:'} <span className="text-white font-medium">{fmtDate(data.issued_at || data.created_at, locale)}</span></p>
+            {data.due_date && <p>{fr ? 'Échéance :' : 'Due:'} <span className="text-white font-medium">{fmtDate(data.due_date, locale)}</span></p>}
           </div>
         </div>
       </div>
@@ -56,7 +60,7 @@ export default function ClassicBlueTemplate({ data }: { data: InvoiceRenderData 
         {/* ── Bill To ── */}
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: NAVY }}>Bill To</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: NAVY }}>{fr ? 'Facturer à' : 'Bill To'}</p>
             <div className="mt-2 text-[13px] space-y-0.5">
               <p className="font-semibold text-[#111]">{data.client_name}</p>
               {data.client_company && <p style={{ color: TEXT_SEC }}>{data.client_company}</p>}
@@ -67,7 +71,7 @@ export default function ClassicBlueTemplate({ data }: { data: InvoiceRenderData 
           </div>
           {/* Amount highlight */}
           <div className="text-right">
-            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: NAVY }}>Amount Due</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: NAVY }}>{fr ? 'Montant dû' : 'Amount Due'}</p>
             <p className="text-[28px] font-bold mt-1" style={{ color: NAVY }}>{fmt(data.balance_cents || data.total_cents)}</p>
           </div>
         </div>
@@ -75,7 +79,7 @@ export default function ClassicBlueTemplate({ data }: { data: InvoiceRenderData 
         {/* ── Subject ── */}
         {data.subject && (
           <div className="mt-5 px-4 py-2.5 rounded" style={{ backgroundColor: BG_LIGHT }}>
-            <p className="text-[12px]"><span className="font-semibold" style={{ color: NAVY }}>Re: </span><span style={{ color: TEXT }}>{data.subject}</span></p>
+            <p className="text-[12px]"><span className="font-semibold" style={{ color: NAVY }}>{fr ? 'Objet : ' : 'Re: '}</span><span style={{ color: TEXT }}>{data.subject}</span></p>
           </div>
         )}
 
@@ -85,9 +89,9 @@ export default function ClassicBlueTemplate({ data }: { data: InvoiceRenderData 
             <thead>
               <tr style={{ backgroundColor: NAVY }}>
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-white">Description</th>
-                <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-white w-20">Qty</th>
-                <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-white w-28">Unit Price</th>
-                <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-white w-28">Amount</th>
+                <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-white w-20">{fr ? 'Qté' : 'Qty'}</th>
+                <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-white w-28">{fr ? 'Prix unitaire' : 'Unit Price'}</th>
+                <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-white w-28">{fr ? 'Montant' : 'Amount'}</th>
               </tr>
             </thead>
             <tbody>
@@ -103,7 +107,7 @@ export default function ClassicBlueTemplate({ data }: { data: InvoiceRenderData 
                 </tr>
               ))}
               {data.items.length === 0 && (
-                <tr><td colSpan={4} className="py-10 text-center text-[12px] text-[#9ca3af]">No line items</td></tr>
+                <tr><td colSpan={4} className="py-10 text-center text-[12px] text-[#9ca3af]">{fr ? 'Aucun élément' : 'No line items'}</td></tr>
               )}
             </tbody>
           </table>
@@ -114,17 +118,17 @@ export default function ClassicBlueTemplate({ data }: { data: InvoiceRenderData 
           <div className="w-72">
             <div className="text-[12px]">
               <div className="flex justify-between py-2 border-b" style={{ borderColor: BORDER }}>
-                <span style={{ color: TEXT_SEC }}>Subtotal</span>
+                <span style={{ color: TEXT_SEC }}>{fr ? 'Sous-total' : 'Subtotal'}</span>
                 <span className="tabular-nums font-medium">{fmt(data.subtotal_cents)}</span>
               </div>
               {data.discount_cents > 0 && (
                 <div className="flex justify-between py-2 border-b text-[#dc2626]" style={{ borderColor: BORDER }}>
-                  <span>Discount</span>
+                  <span>{fr ? 'Rabais' : 'Discount'}</span>
                   <span className="tabular-nums">-{fmt(data.discount_cents)}</span>
                 </div>
               )}
               <div className="flex justify-between py-2 border-b" style={{ borderColor: BORDER }}>
-                <span style={{ color: TEXT_SEC }}>Tax</span>
+                <span style={{ color: TEXT_SEC }}>{fr ? 'Taxes' : 'Tax'}</span>
                 <span className="tabular-nums">{fmt(data.tax_cents)}</span>
               </div>
               <div className="flex justify-between py-3 font-bold text-[14px]" style={{ backgroundColor: NAVY, color: 'white', margin: '0 -16px', padding: '10px 16px' }}>
@@ -133,13 +137,13 @@ export default function ClassicBlueTemplate({ data }: { data: InvoiceRenderData 
               </div>
               {data.paid_cents > 0 && (
                 <div className="flex justify-between py-2 text-[#15803d]">
-                  <span>Paid</span>
+                  <span>{fr ? 'Payé' : 'Paid'}</span>
                   <span className="tabular-nums">{fmt(data.paid_cents)}</span>
                 </div>
               )}
               {data.balance_cents > 0 && data.balance_cents !== data.total_cents && (
                 <div className="flex justify-between py-2 font-semibold text-[13px]">
-                  <span>Balance Due</span>
+                  <span>{fr ? 'Solde dû' : 'Balance Due'}</span>
                   <span className="tabular-nums">{fmt(data.balance_cents)}</span>
                 </div>
               )}
@@ -158,12 +162,12 @@ export default function ClassicBlueTemplate({ data }: { data: InvoiceRenderData 
         {/* ── Footer ── */}
         <div className="mt-10 pt-5 border-t text-center" style={{ borderColor: BORDER }}>
           <p className="text-[11px]" style={{ color: TEXT_SEC }}>
-            If you have any questions about this invoice, please contact
+            {fr ? 'Pour toute question concernant cette facture, veuillez contacter' : 'If you have any questions about this invoice, please contact'}
           </p>
           <p className="text-[11px] font-medium" style={{ color: NAVY }}>
             {data.company_email || data.company_name}
           </p>
-          <p className="text-[13px] font-semibold mt-3" style={{ color: NAVY }}>Thank You For Your Business!</p>
+          <p className="text-[13px] font-semibold mt-3" style={{ color: NAVY }}>{fr ? 'Merci de faire affaire avec nous!' : 'Thank You For Your Business!'}</p>
         </div>
       </div>
     </div>

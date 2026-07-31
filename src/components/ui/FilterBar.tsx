@@ -1,6 +1,7 @@
 import React from 'react';
 import { Search, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 
 interface FilterBarProps {
   searchValue?: string;
@@ -13,10 +14,12 @@ interface FilterBarProps {
 export default function FilterBar({
   searchValue,
   onSearchChange,
-  searchPlaceholder = 'Search...',
+  searchPlaceholder,
   children,
   className,
 }: FilterBarProps) {
+  const { language } = useTranslation();
+  const placeholder = searchPlaceholder ?? (language === 'fr' ? 'Rechercher...' : 'Search...');
   return (
     <div className={cn('flex flex-wrap items-center gap-2.5', className)}>
       {onSearchChange && (
@@ -26,7 +29,7 @@ export default function FilterBar({
             type="text"
             value={searchValue || ''}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={searchPlaceholder}
+            placeholder={placeholder}
             className="glass-input pl-9 pr-8 w-64"
           />
           {searchValue && (

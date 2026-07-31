@@ -30,12 +30,12 @@ interface BatchMessageModalProps {
 }
 
 const TEMPLATE_VARS = [
-  { key: '{first_name}', label: 'First Name' },
-  { key: '{last_name}', label: 'Last Name' },
-  { key: '{company}', label: 'Company' },
-  { key: '{email}', label: 'Email' },
-  { key: '{phone}', label: 'Phone' },
-  { key: '{address}', label: 'Address' },
+  { key: '{first_name}', label: 'First Name', labelFr: 'Prénom' },
+  { key: '{last_name}', label: 'Last Name', labelFr: 'Nom' },
+  { key: '{company}', label: 'Company', labelFr: 'Entreprise' },
+  { key: '{email}', label: 'Email', labelFr: 'Courriel' },
+  { key: '{phone}', label: 'Phone', labelFr: 'Téléphone' },
+  { key: '{address}', label: 'Address', labelFr: 'Adresse' },
 ];
 
 function personalizeMessage(template: string, client: Client): string {
@@ -69,8 +69,13 @@ export default function BatchMessageModal({ isOpen, onClose, clients, language }
     : clients.filter(c => c.email);
 
   const handleSend = async () => {
-    if (!body.trim()) { toast.error('Message is empty'); return; }
-    if (eligibleClients.length === 0) { toast.error(`No clients with ${mode === 'sms' ? 'phone' : 'email'}`); return; }
+    if (!body.trim()) { toast.error(fr ? 'Le message est vide' : 'Message is empty'); return; }
+    if (eligibleClients.length === 0) {
+      toast.error(fr
+        ? `Aucun client avec ${mode === 'sms' ? 'téléphone' : 'courriel'}`
+        : `No clients with ${mode === 'sms' ? 'phone' : 'email'}`);
+      return;
+    }
 
     setSending(true);
     let sent = 0;
@@ -85,7 +90,7 @@ export default function BatchMessageModal({ isOpen, onClose, clients, language }
           const res = await fetch('/api/emails/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${(await (await import('../lib/supabase')).supabase.auth.getSession()).data.session?.access_token}` },
-            body: JSON.stringify({ to: client.email, subject: personalizedSubject || 'Message from our team', html: personalizedBody.replace(/\n/g, '<br>') }),
+            body: JSON.stringify({ to: client.email, subject: personalizedSubject || (fr ? 'Message de notre équipe' : 'Message from our team'), html: personalizedBody.replace(/\n/g, '<br>') }),
           });
           if (res.ok) sent++; else failed++;
         } else if (mode === 'sms' && client.phone) {
@@ -100,8 +105,10 @@ export default function BatchMessageModal({ isOpen, onClose, clients, language }
     }
 
     setSending(false);
-    if (sent > 0) toast.success(`${sent} message${sent > 1 ? 's' : ''} sent`);
-    if (failed > 0) toast.error(`${failed} failed`);
+    if (sent > 0) toast.success(fr
+      ? `${sent} message${sent > 1 ? 's' : ''} envoyé${sent > 1 ? 's' : ''}`
+      : `${sent} message${sent > 1 ? 's' : ''} sent`);
+    if (failed > 0) toast.error(fr ? `${failed} échec${failed > 1 ? 's' : ''}` : `${failed} failed`);
     if (sent > 0 && failed === 0) onClose();
   };
 
@@ -141,7 +148,7 @@ export default function BatchMessageModal({ isOpen, onClose, clients, language }
             <div>
               <label className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider block mb-1">{fr ? 'Objet' : 'Subject'}</label>
               <input value={subject} onChange={(e) => setSubject(e.target.value)}
-                placeholder={fr ? 'Objet du email...' : 'Email subject...'}
+                placeholder={fr ? 'Objet du courriel...' : 'Email subject...'}
                 className="w-full px-3 py-2 text-[12px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-text-tertiary" />
             </div>
           )}
@@ -152,6 +159,7 @@ export default function BatchMessageModal({ isOpen, onClose, clients, language }
             <div className="flex flex-wrap gap-1">
               {TEMPLATE_VARS.map((v) => (
                 <button key={v.key} onClick={() => setBody(prev => prev + v.key)}
+                  title={fr ? v.labelFr : v.label}
                   className="px-2 py-0.5 rounded-md text-[10px] font-medium border border-outline text-text-tertiary hover:text-text-primary hover:border-text-tertiary transition-colors">
                   {v.key}
                 </button>
@@ -192,7 +200,7 @@ export default function BatchMessageModal({ isOpen, onClose, clients, language }
         {/* Footer */}
         <div className="px-5 py-3 border-t border-outline flex items-center justify-between">
           <span className="text-[10px] text-text-tertiary">
-            {eligibleClients.length} / {clients.length} {fr ? 'avec' : 'with'} {mode === 'sms' ? 'phone' : 'email'}
+            {eligibleClients.length} / {clients.length} {fr ? 'avec' : 'with'} {mode === 'sms' ? (fr ? 'téléphone' : 'phone') : (fr ? 'courriel' : 'email')}
           </span>
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="px-3 py-1.5 rounded-lg border border-outline text-[11px] font-medium text-text-tertiary hover:text-text-secondary">

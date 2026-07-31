@@ -50,6 +50,7 @@ export default function SendSmsModal({
   onSent,
 }: SendSmsModalProps) {
   const { language } = useTranslation();
+  const fr = language === 'fr';
   const [to, setTo] = useState(phone || '');
   const [body, setBody] = useState(defaultBody);
   const [includeApproval, setIncludeApproval] = useState(false);
@@ -80,7 +81,7 @@ export default function SendSmsModal({
 
   const handleSend = async () => {
     if (!to.trim() || !body.trim()) {
-      toast.error('Phone number and message are required.');
+      toast.error(fr ? 'Le numéro de téléphone et le message sont requis.' : 'Phone number and message are required.');
       return;
     }
     setSending(true);
@@ -95,11 +96,11 @@ export default function SendSmsModal({
         job_id: jobId || null,
       });
       setSent(true);
-      toast.success('SMS sent');
+      toast.success(fr ? 'Texto envoyé' : 'SMS sent');
       onSent?.();
       setTimeout(() => onClose(), 1500);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to send SMS');
+      toast.error(err?.message || (fr ? 'Échec de l\'envoi du texto' : 'Failed to send SMS'));
     } finally {
       setSending(false);
     }
@@ -113,12 +114,14 @@ export default function SendSmsModal({
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-outline">
         <h3 className="text-[16px] font-bold text-text-primary">
-          Text booking confirmation{clientName ? ` to ${clientName}` : ''}
+          {fr
+            ? `Confirmation de réservation par texto${clientName ? ` à ${clientName}` : ''}`
+            : `Text booking confirmation${clientName ? ` to ${clientName}` : ''}`}
         </h3>
         <button
           onClick={onClose}
           className="p-1.5 rounded-lg border border-transparent text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary hover:border-outline-subtle transition-all"
-          aria-label="Close"
+          aria-label={fr ? 'Fermer' : 'Close'}
         >
           <X size={16} />
         </button>
@@ -128,17 +131,17 @@ export default function SendSmsModal({
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
         {/* To field */}
         <div>
-          <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">To</label>
+          <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{fr ? 'À' : 'To'}</label>
           <input
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            placeholder="Type a mobile number"
+            placeholder={fr ? 'Entrez un numéro de cellulaire' : 'Type a mobile number'}
             className="glass-input w-full"
             disabled={sent}
             autoFocus
           />
           {to.trim().length > 0 && !isPhoneValid && (
-            <p className="text-[11px] text-danger mt-1">Enter a valid phone number</p>
+            <p className="text-[11px] text-danger mt-1">{fr ? 'Entrez un numéro de téléphone valide' : 'Enter a valid phone number'}</p>
           )}
         </div>
 
@@ -153,7 +156,7 @@ export default function SendSmsModal({
               rows={7}
               className="glass-input w-full resize-none leading-relaxed"
               disabled={sent}
-              placeholder="Type your message..."
+              placeholder={fr ? 'Écrivez votre message...' : 'Type your message...'}
             />
             <div className="flex items-center justify-between mt-1.5">
               <span className="text-[11px] text-text-tertiary">
@@ -192,14 +195,14 @@ export default function SendSmsModal({
 
           {/* Right: Preview card */}
           <div className="flex-1 min-w-0">
-            <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">Preview</label>
+            <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{fr ? 'Aperçu' : 'Preview'}</label>
             <div className="rounded-lg border border-outline bg-primary-lighter p-4 space-y-2 min-h-[160px]">
               {previewLines.length > 0 ? (
                 <div className="text-[13px] text-text-primary leading-relaxed whitespace-pre-line">
                   {body.trim()}
                 </div>
               ) : (
-                <p className="text-[12px] text-text-tertiary italic">Your message preview will appear here</p>
+                <p className="text-[12px] text-text-tertiary italic">{fr ? 'L\'aperçu de votre message apparaîtra ici' : 'Your message preview will appear here'}</p>
               )}
 
               {/* Injected job details */}
@@ -227,7 +230,9 @@ export default function SendSmsModal({
               )}
             </div>
             <p className="text-[11px] text-text-tertiary mt-1.5">
-              Your client can view the schedule and location of their upcoming appointments in their client hub.
+              {fr
+                ? 'Votre client peut consulter l\'horaire et le lieu de ses rendez-vous à venir dans son espace client.'
+                : 'Your client can view the schedule and location of their upcoming appointments in their client hub.'}
             </p>
           </div>
         </div>
@@ -236,7 +241,7 @@ export default function SendSmsModal({
       {/* ── Footer ── */}
       <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-outline bg-surface">
         <button onClick={onClose} className="glass-button">
-          Cancel
+          {fr ? 'Annuler' : 'Cancel'}
         </button>
         {sent ? (
           <motion.span
@@ -244,7 +249,7 @@ export default function SendSmsModal({
             animate={{ opacity: 1, scale: 1 }}
             className="inline-flex items-center gap-1.5 text-[13px] text-success font-semibold px-3 py-1.5"
           >
-            <CheckCircle2 size={15} /> Sent
+            <CheckCircle2 size={15} /> {fr ? 'Envoyé' : 'Sent'}
           </motion.span>
         ) : (
           <button
@@ -255,12 +260,12 @@ export default function SendSmsModal({
             {sending ? (
               <>
                 <span className="inline-block w-3.5 h-3.5 border-2 border-surface/30 border-t-surface rounded-full animate-spin" />
-                Sending…
+                {fr ? 'Envoi…' : 'Sending…'}
               </>
             ) : (
               <>
                 <Send size={14} />
-                Send
+                {fr ? 'Envoyer' : 'Send'}
               </>
             )}
           </button>

@@ -1,20 +1,29 @@
 import React from 'react';
 import type { InvoiceRenderData } from '../types';
 import { formatMoneyFromCents } from '../../../lib/invoicesApi';
+import { useTranslation } from '../../../i18n';
 
 /* ── Apple / Linear-inspired Minimal Template ────────────────────
    Ultra-clean, typography-driven, generous whitespace.
    No boxes, no cards — just elegant hierarchy and thin lines.
    ─────────────────────────────────────────────────────────────── */
 
-function fmtDate(iso: string | null | undefined): string {
+function fmtDate(iso: string | null | undefined, locale: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+const STATUS_FR: Record<string, string> = {
+  draft: 'Brouillon', sent: 'Ouverte', sent_not_due: 'Ouverte', partial: 'Partiel',
+  paid: 'Payée', void: 'Annulée', overdue: 'En retard',
+};
+
 export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
   const fmt = (cents: number) => formatMoneyFromCents(cents, data.currency);
 
   return (
@@ -28,7 +37,7 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
           ) : (
             <p className="text-[16px] font-medium text-[#1d1d1f]">{data.company_name}</p>
           )}
-          <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-[#86868b]">Invoice</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-[#86868b]">{fr ? 'Facture' : 'Invoice'}</p>
         </div>
 
         {/* ── Thin line ── */}
@@ -37,23 +46,25 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
         {/* ── Meta grid ── */}
         <div className="mt-8 grid grid-cols-4 gap-x-8 gap-y-6 text-[13px]">
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#86868b]">Number</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#86868b]">{fr ? 'Numéro' : 'Number'}</p>
             <p className="mt-1.5 font-medium">{data.invoice_number}</p>
           </div>
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#86868b]">Issued</p>
-            <p className="mt-1.5">{fmtDate(data.issued_at || data.created_at)}</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#86868b]">{fr ? 'Émise le' : 'Issued'}</p>
+            <p className="mt-1.5">{fmtDate(data.issued_at || data.created_at, locale)}</p>
           </div>
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#86868b]">Due</p>
-            <p className="mt-1.5">{fmtDate(data.due_date)}</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#86868b]">{fr ? 'Échéance' : 'Due'}</p>
+            <p className="mt-1.5">{fmtDate(data.due_date, locale)}</p>
           </div>
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#86868b]">Status</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#86868b]">{fr ? 'Statut' : 'Status'}</p>
             <p className="mt-1.5 font-medium" style={{
               color: data.status === 'paid' ? '#34c759' : data.status === 'void' ? '#ff3b30' : '#1d1d1f',
             }}>
-              {data.status === 'sent_not_due' ? 'Open' : data.status.charAt(0).toUpperCase() + data.status.slice(1).replace(/_/g, ' ')}
+              {fr
+                ? (STATUS_FR[data.status] || data.status)
+                : (data.status === 'sent_not_due' ? 'Open' : data.status.charAt(0).toUpperCase() + data.status.slice(1).replace(/_/g, ' '))}
             </p>
           </div>
         </div>
@@ -61,7 +72,7 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
         {/* ── Client ── */}
         <div className="mt-8 grid grid-cols-2 gap-8 text-[13px]">
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#86868b]">From</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#86868b]">{fr ? 'De' : 'From'}</p>
             <div className="mt-2 space-y-0.5 text-[#424245]">
               <p className="font-medium text-[#1d1d1f]">{data.company_name}</p>
               {data.company_address && <p>{data.company_address}</p>}
@@ -70,7 +81,7 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
             </div>
           </div>
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#86868b]">Billed to</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#86868b]">{fr ? 'Facturer à' : 'Billed to'}</p>
             <div className="mt-2 space-y-0.5 text-[#424245]">
               <p className="font-medium text-[#1d1d1f]">{data.client_name}</p>
               {data.client_company && <p>{data.client_company}</p>}
@@ -91,9 +102,9 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
           {/* Header */}
           <div className="grid grid-cols-12 gap-2 pb-3 border-b border-[#e5e5e5] text-[10px] font-medium uppercase tracking-[0.2em] text-[#86868b]">
             <div className="col-span-6">Description</div>
-            <div className="col-span-2 text-right">Qty</div>
-            <div className="col-span-2 text-right">Price</div>
-            <div className="col-span-2 text-right">Amount</div>
+            <div className="col-span-2 text-right">{fr ? 'Qté' : 'Qty'}</div>
+            <div className="col-span-2 text-right">{fr ? 'Prix' : 'Price'}</div>
+            <div className="col-span-2 text-right">{fr ? 'Montant' : 'Amount'}</div>
           </div>
           {/* Rows */}
           {data.items.map((item, i) => (
@@ -108,7 +119,7 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
             </div>
           ))}
           {data.items.length === 0 && (
-            <div className="py-12 text-center text-[13px] text-[#86868b]">No items</div>
+            <div className="py-12 text-center text-[13px] text-[#86868b]">{fr ? 'Aucun élément' : 'No items'}</div>
           )}
         </div>
 
@@ -116,17 +127,17 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
         <div className="mt-6 flex justify-end">
           <div className="w-60 space-y-2 text-[13px]">
             <div className="flex justify-between text-[#86868b]">
-              <span>Subtotal</span>
+              <span>{fr ? 'Sous-total' : 'Subtotal'}</span>
               <span className="tabular-nums">{fmt(data.subtotal_cents)}</span>
             </div>
             {data.discount_cents > 0 && (
               <div className="flex justify-between text-[#ff3b30]">
-                <span>Discount</span>
+                <span>{fr ? 'Rabais' : 'Discount'}</span>
                 <span className="tabular-nums">−{fmt(data.discount_cents)}</span>
               </div>
             )}
             <div className="flex justify-between text-[#86868b]">
-              <span>Tax</span>
+              <span>{fr ? 'Taxes' : 'Tax'}</span>
               <span className="tabular-nums">{fmt(data.tax_cents)}</span>
             </div>
             <div className="h-px bg-[#e5e5e5]" />
@@ -136,13 +147,13 @@ export default function MinimalTemplate({ data }: { data: InvoiceRenderData }) {
             </div>
             {data.paid_cents > 0 && (
               <div className="flex justify-between text-[13px] text-[#34c759]">
-                <span>Paid</span>
+                <span>{fr ? 'Payé' : 'Paid'}</span>
                 <span className="tabular-nums">{fmt(data.paid_cents)}</span>
               </div>
             )}
             {data.balance_cents > 0 && data.balance_cents !== data.total_cents && (
               <div className="flex justify-between text-[13px] font-semibold text-[#1d1d1f]">
-                <span>Balance</span>
+                <span>{fr ? 'Solde' : 'Balance'}</span>
                 <span className="tabular-nums">{fmt(data.balance_cents)}</span>
               </div>
             )}

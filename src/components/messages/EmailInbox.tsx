@@ -110,15 +110,16 @@ function avatarColor(seed: string): string {
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return colors[h % colors.length];
 }
-function fmtListTime(iso: string | null): string {
+function fmtListTime(iso: string | null, fr: boolean): string {
   if (!iso) return '';
   const d = new Date(iso);
   const now = new Date();
   const days = Math.floor((now.getTime() - d.getTime()) / 86400000);
-  if (days === 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (days === 1) return 'Hier';
-  if (days < 7) return d.toLocaleDateString([], { weekday: 'short' });
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const locale = fr ? 'fr-CA' : 'en-CA';
+  if (days === 0) return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  if (days === 1) return fr ? 'Hier' : 'Yesterday';
+  if (days < 7) return d.toLocaleDateString(locale, { weekday: 'short' });
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
 function fmtFullTime(iso: string | null): string {
   if (!iso) return '';
@@ -193,10 +194,10 @@ function ManagePanel({ accounts, onConnect, onDisconnect, connecting, onClose }:
               <div className="flex-1 min-w-0">
                 <div className="text-[14px] font-semibold text-text-primary truncate">{account.email_address}</div>
                 {account.status === 'connected'
-                  ? <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#22C55E]"><CheckCircle2 size={12} /> Connecté</span>
-                  : <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-danger"><AlertCircle size={12} /> Reconnexion requise</span>}
+                  ? <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#22C55E]"><CheckCircle2 size={12} /> {language === 'fr' ? 'Connecté' : 'Connected'}</span>
+                  : <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-danger"><AlertCircle size={12} /> {language === 'fr' ? 'Reconnexion requise' : 'Reconnection required'}</span>}
               </div>
-              <button onClick={() => onDisconnect(account)} className="p-2 rounded-lg hover:bg-surface-secondary text-text-tertiary hover:text-danger" title="Déconnecter">
+              <button onClick={() => onDisconnect(account)} className="p-2 rounded-lg hover:bg-surface-secondary text-text-tertiary hover:text-danger" title={language === 'fr' ? 'Déconnecter' : 'Disconnect'}>
                 <Trash2 size={15} />
               </button>
             </div>
@@ -277,11 +278,11 @@ export default function EmailInbox() {
     try {
       setThreads(await fetchThreads(accountId, f));
     } catch (err: any) {
-      toast.error(err?.message || 'Erreur de chargement');
+      toast.error(err?.message || (language === 'fr' ? 'Erreur de chargement' : 'Failed to load'));
     } finally {
       setLoadingThreads(false);
     }
-  }, []);
+  }, [language]);
 
   // When active account is set, load its threads; auto-sync if never synced.
   useEffect(() => {
@@ -303,7 +304,7 @@ export default function EmailInbox() {
       await connectMailbox(provider); // redirects the browser
     } catch (err: any) {
       setConnecting(null);
-      toast.error(err?.message || 'Connexion impossible');
+      toast.error(err?.message || (language === 'fr' ? 'Connexion impossible' : 'Connection failed'));
     }
   };
 
@@ -319,7 +320,7 @@ export default function EmailInbox() {
       }
       toast.success(language === 'fr' ? 'Boîte déconnectée' : 'Mailbox disconnected');
     } catch (err: any) {
-      toast.error(err?.message || 'Échec');
+      toast.error(err?.message || (language === 'fr' ? 'Échec' : 'Failed'));
     }
   };
 
@@ -330,7 +331,7 @@ export default function EmailInbox() {
       await loadThreads(accountId, folder);
       if (!silent) toast.success(language === 'fr' ? `${n} email(s) synchronisé(s)` : `${n} email(s) synced`);
     } catch (err: any) {
-      if (!silent) toast.error(err?.message || 'Sync échouée');
+      if (!silent) toast.error(err?.message || (language === 'fr' ? 'Sync échouée' : 'Sync failed'));
       // The server may have flagged the account (reconnect_required) —
       // refresh so the banner shows up even on silent background syncs.
       void loadAccounts();
@@ -355,11 +356,11 @@ export default function EmailInbox() {
     setLoadingMessages(true);
     try {
       const { thread, messages } = await fetchThread(threadId);
-      setThreadSubject(thread.subject || '(sans objet)');
+      setThreadSubject(thread.subject || (language === 'fr' ? '(sans objet)' : '(no subject)'));
       setMessages(messages);
       setThreads((prev) => prev.map((t) => (t.id === threadId ? { ...t, is_read: true } : t)));
     } catch (err: any) {
-      toast.error(err?.message || 'Erreur');
+      toast.error(err?.message || (language === 'fr' ? 'Erreur' : 'Error'));
     } finally {
       setLoadingMessages(false);
     }
@@ -386,7 +387,7 @@ export default function EmailInbox() {
 
   const startForward = () => {
     if (!lastMsg) return;
-    const quoted = `<br><br>---------- Message transféré ----------<br>${lastMsg.body_html || lastMsg.body_text || ''}`;
+    const quoted = `<br><br>---------- ${language === 'fr' ? 'Message transféré' : 'Forwarded message'} ----------<br>${lastMsg.body_html || lastMsg.body_text || ''}`;
     setComposeTo('');
     setComposeCc('');
     setComposeSubject(threadSubject.startsWith('Fwd:') ? threadSubject : `Fwd: ${threadSubject}`);
@@ -425,7 +426,7 @@ export default function EmailInbox() {
       closeCompose();
       if (selectedThreadId) await openThread(selectedThreadId); // refresh with the new message
     } catch (err: any) {
-      toast.error(err?.message || 'Envoi échoué');
+      toast.error(err?.message || (language === 'fr' ? 'Envoi échoué' : 'Send failed'));
     } finally {
       setSendingEmail(false);
     }
@@ -454,7 +455,7 @@ export default function EmailInbox() {
       toast.success(language === 'fr' ? 'Email envoyé' : 'Email sent');
       setShowNewCompose(false);
     } catch (err: any) {
-      toast.error(err?.message || 'Envoi échoué');
+      toast.error(err?.message || (language === 'fr' ? 'Envoi échoué' : 'Send failed'));
     } finally {
       setSendingNew(false);
     }
@@ -506,10 +507,10 @@ export default function EmailInbox() {
             <Plus size={16} />
           </button>
           <button onClick={() => activeAccountId && handleSync(activeAccountId)} disabled={syncing}
-            className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary" title="Synchroniser">
+            className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary" title={language === 'fr' ? 'Synchroniser' : 'Sync'}>
             <RefreshCw size={15} className={syncing ? 'animate-spin' : ''} />
           </button>
-          <button onClick={() => setManaging(true)} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary" title="Gérer les boîtes">
+          <button onClick={() => setManaging(true)} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary" title={language === 'fr' ? 'Gérer les boîtes' : 'Manage mailboxes'}>
             <Settings2 size={15} />
           </button>
         </div>
@@ -572,15 +573,15 @@ export default function EmailInbox() {
                   {/* Line 1: sender name (like Gmail) + time */}
                   <div className="flex justify-between gap-2 items-baseline">
                     <span className={cn('text-[14px] truncate', t.is_read ? 'font-semibold text-text-primary' : 'font-extrabold text-text-primary')}>
-                      {t.from_name || t.from_email || '(inconnu)'}
+                      {t.from_name || t.from_email || (language === 'fr' ? '(inconnu)' : '(unknown)')}
                     </span>
-                    <span className="text-[11.5px] text-text-tertiary shrink-0">{fmtListTime(t.last_message_at)}</span>
+                    <span className="text-[11.5px] text-text-tertiary shrink-0">{fmtListTime(t.last_message_at, language === 'fr')}</span>
                   </div>
                   {/* Line 2: subject */}
                   <div className="flex items-center gap-1.5 mt-0.5">
                     {t.has_attachments && <Paperclip size={12} className="text-text-tertiary shrink-0" />}
                     <span className={cn('text-[13px] truncate', t.is_read ? 'text-text-primary' : 'text-text-primary font-bold')}>
-                      {t.subject || '(sans objet)'}
+                      {t.subject || (language === 'fr' ? '(sans objet)' : '(no subject)')}
                     </span>
                     {!t.is_read && <span className="w-2 h-2 rounded-full bg-accent shrink-0 ml-auto" />}
                   </div>
@@ -656,7 +657,7 @@ export default function EmailInbox() {
                       <div className="flex flex-wrap gap-2 px-4 pb-4">
                         {m.attachments.map((a, i) => (
                           <button key={i}
-                            onClick={() => downloadAttachment(m.id, a.attachmentId, a.filename).catch((e) => toast.error(e?.message || 'Téléchargement échoué'))}
+                            onClick={() => downloadAttachment(m.id, a.attachmentId, a.filename).catch((e) => toast.error(e?.message || (language === 'fr' ? 'Téléchargement échoué' : 'Download failed')))}
                             className="flex items-center gap-2 border border-border rounded-lg px-3 py-2 text-[12.5px] bg-surface-secondary hover:bg-surface-tertiary transition-colors"
                             title={language === 'fr' ? 'Télécharger' : 'Download'}>
                             <Paperclip size={13} className="text-text-tertiary" />
@@ -699,12 +700,12 @@ export default function EmailInbox() {
                 <div className="px-5 py-3 space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-[12px] font-semibold text-text-tertiary w-8">{language === 'fr' ? 'À' : 'To'}</span>
-                    <input value={composeTo} onChange={(e) => setComposeTo(e.target.value)} placeholder="destinataire@email.com"
+                    <input value={composeTo} onChange={(e) => setComposeTo(e.target.value)} placeholder={language === 'fr' ? 'destinataire@exemple.com' : 'recipient@example.com'}
                       className="flex-1 h-[34px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[12px] font-semibold text-text-tertiary w-8">Cc</span>
-                    <input value={composeCc} onChange={(e) => setComposeCc(e.target.value)} placeholder="(optionnel)"
+                    <input value={composeCc} onChange={(e) => setComposeCc(e.target.value)} placeholder={language === 'fr' ? '(optionnel)' : '(optional)'}
                       className="flex-1 h-[34px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
                   </div>
                   <div className="flex items-center gap-2">
@@ -743,12 +744,12 @@ export default function EmailInbox() {
             <div className="px-5 py-4 space-y-2">
               <div className="flex items-center gap-2">
                 <span className="text-[12px] font-semibold text-text-tertiary w-9">{language === 'fr' ? 'À' : 'To'}</span>
-                <input value={newTo} onChange={(e) => setNewTo(e.target.value)} placeholder="destinataire@email.com"
+                <input value={newTo} onChange={(e) => setNewTo(e.target.value)} placeholder={language === 'fr' ? 'destinataire@exemple.com' : 'recipient@example.com'}
                   className="flex-1 h-[36px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[12px] font-semibold text-text-tertiary w-9">Cc</span>
-                <input value={newCc} onChange={(e) => setNewCc(e.target.value)} placeholder="(optionnel)"
+                <input value={newCc} onChange={(e) => setNewCc(e.target.value)} placeholder={language === 'fr' ? '(optionnel)' : '(optional)'}
                   className="flex-1 h-[36px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
               </div>
               <div className="flex items-center gap-2">

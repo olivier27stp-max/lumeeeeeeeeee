@@ -26,6 +26,24 @@ export const PIPELINE_STAGES = ['New Prospect', 'No Response', 'Quote Sent', 'Cl
 export type PipelineStageName = (typeof PIPELINE_STAGES)[number];
 export const TRIGGER_STAGE = 'closed_won' as const;
 
+/**
+ * Display-only bilingual labels for pipeline stages, keyed by the canonical
+ * stage name (which is also used as a value in state/DnD/selects).
+ * NEVER use these labels as values — display only.
+ */
+export const PIPELINE_STAGE_LABELS: Record<PipelineStageName, { en: string; fr: string }> = {
+  'New Prospect': { en: 'New Prospect', fr: 'Nouveau prospect' },
+  'No Response': { en: 'No Response', fr: 'Sans réponse' },
+  'Quote Sent': { en: 'Quote Sent', fr: 'Devis envoyé' },
+  'Closed Won': { en: 'Closed Won', fr: 'Gagné' },
+  'Closed Lost': { en: 'Closed Lost', fr: 'Perdu' },
+};
+
+/** Localized display label for a stage (falls back to the raw stage name). */
+export function pipelineStageLabel(stage: string, language: 'en' | 'fr'): string {
+  return PIPELINE_STAGE_LABELS[stage as PipelineStageName]?.[language] || stage;
+}
+
 /** DB slug → display label */
 export const STAGE_LABEL_MAP: Record<string, PipelineStageName> = {
   new_prospect: 'New Prospect',
