@@ -9,7 +9,7 @@ import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { findUserByEmail } from '../lib/supabase';
 import { redisRateLimit } from '../lib/rate-limiter';
-import { extractIP } from '../lib/security';
+import { extractIP, recordLoginAttempt } from '../lib/security';
 
 // Per-IP rate limit for auth endpoints (defeats brute-force + cron-driven abuse)
 const authRateLimit = redisRateLimit({
@@ -330,6 +330,67 @@ router.post('/auth/register-checkout', authRateLimit, async (req, res) => {
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to create account.', '[auth]');
   }
+});
+
+// ────────────────────────────────────────────────────────────────────
+// POST /api/auth/login-failed — télémétrie des tentatives échouées
+// ────────────────────────────────────────────────────────────────────
+//
+// POURQUOI CET ENDPOINT EXISTE
+// L'authentification se fait entièrement dans le navigateur
+// (src/pages/Auth.tsx, supabase.auth.signInWithPassword) : le serveur ne voit
+// jamais un échec de connexion. Résultat, `failed_login_attempts` et
+// `ip_blocklist` sont restées vides depuis toujours, et
+// `recordLoginAttempt()` — pourtant écrite, détection de force brute
+// comprise — n'était appelée nulle part (audit 2026-07-31).
+//
+// Les connexions RÉUSSIES, elles, n'ont pas besoin de ce chemin : elles
+// créent une ligne dans `auth.sessions`, que la tâche
+// `lume_sync_auth_telemetry` recopie toutes les 15 minutes vers
+// `login_history`. Cet endpoint ne traite donc QUE les échecs.
+//
+// PRÉCAUTIONS — c'est un point d'entrée NON AUTHENTIFIÉ
+//   * limité par IP via `authRateLimit`, comme les autres routes d'auth ;
+//   * répond TOUJOURS 204, quoi qu'il arrive : il ne doit jamais révéler si
+//     un compte existe, ni si l'enregistrement a réussi. C'est de la
+//     télémétrie, pas une API ;
+//   * n'accepte AUCUN identifiant venant du client — l'utilisateur est résolu
+//     côté serveur à partir du courriel ;
+//   * n'accepte pas de rapport de succès : un client qui affirme avoir réussi
+//     ne prouve rien.
+router.post('/auth/login-failed', authRateLimit, async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase().slice(0, 320);
+    const reason = String(req.body?.reason || 'invalid_credentials').slice(0, 120);
+    if (!email || !email.includes('@')) return res.status(204).end();
+
+    const admin = getAdminClient();
+
+    const { error } = await admin.from('failed_login_attempts').insert({
+      email,
+      ip_address: extractIP(req),
+      user_agent: String(req.headers['user-agent'] || '').slice(0, 500) || null,
+      reason,
+    });
+    if (error) console.error('[auth/login-failed] insert refusé:', error.message, error.code || '');
+
+    // Si le courriel correspond à un compte connu, on alimente aussi
+    // login_history : c'est elle que lit la détection de force brute.
+    const user = await findUserByEmail(admin, email);
+    if (user?.id) {
+      await recordLoginAttempt({
+        userId: user.id,
+        req: req as any,
+        success: false,
+        method: 'password',
+        failureReason: reason,
+      });
+    }
+  } catch (err: any) {
+    // Ne jamais faire échouer l'appelant : c'est de la télémétrie.
+    console.error('[auth/login-failed] erreur inattendue:', err?.message);
+  }
+  return res.status(204).end();
 });
 
 export default router;

@@ -53,6 +53,20 @@ export default function Auth({ onBack }: AuthProps) {
       // which doesn't exist in the authenticated route tree → NotFound (404).
       navigate('/', { replace: true });
     } catch (error: any) {
+      // Signaler l'échec au serveur pour qu'il soit enregistré. L'authentification
+      // se fait entièrement ici, dans le navigateur : sans ce signalement, le
+      // serveur ne voit JAMAIS un échec de connexion et la détection de force
+      // brute n'a aucune donnée (audit 2026-07-31).
+      //
+      // Fire-and-forget, volontairement : la télémétrie ne doit ni ralentir ni
+      // faire échouer l'ouverture de session. On n'envoie ni le mot de passe,
+      // ni aucun identifiant — seulement le courriel saisi et un motif court.
+      void fetch('/api/auth/login-failed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify({ email, reason: String(error?.message || 'unknown').slice(0, 120) }),
+      }).catch(() => { /* jamais bloquant */ });
+
       setMessage({ type: 'error', text: error.message });
     } finally {
       setLoading(false);
