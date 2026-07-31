@@ -33,6 +33,12 @@ interface QuoteCreateModalProps {
   lead?: Lead | null;
   createLeadInline?: boolean;
   preset?: QuotePreset | null;
+  /** Pre-select a client (e.g. satellite measure flow). Ignored when `lead` is set. */
+  initialClientId?: string | null;
+  /** Pre-fill the title (e.g. the measured address). */
+  initialTitle?: string;
+  /** Seed line items (e.g. measurements) — replaces the default empty line. */
+  initialItems?: Array<{ name: string; description?: string; quantity: number }> | null;
 }
 
 interface LineItemForm {
@@ -58,7 +64,7 @@ function sanitize(v: string) { return v.replace(',', '.').replace(/[^\d.]/g, '')
 const inputCls = 'glass-input w-full mt-1.5';
 const labelCls = 'text-xs font-medium text-text-tertiary block';
 
-export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, createLeadInline, preset }: QuoteCreateModalProps) {
+export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, createLeadInline, preset, initialClientId, initialTitle, initialItems }: QuoteCreateModalProps) {
   const { t, language } = useTranslation();
   const tq = t.quotes as any;
   // ── Contact mode ──
@@ -158,14 +164,15 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
       .catch(() => {});
 
     // Title always starts empty — the user picks it (the save fallback still
-    // names an untitled quote "Quote for {contact}").
-    setTitle('');
+    // names an untitled quote "Quote for {contact}") — unless the caller
+    // pre-fills it (measure flow: the measured address).
+    setTitle(initialTitle || '');
     if (lead) {
       setClientId(lead.client_id || '');
       // Fetch job line items for this lead
       fetchLeadJobLineItems(lead.id).then(setJobLineItems).catch(() => {});
     } else {
-      setClientId('');
+      setClientId(initialClientId || '');
     }
 
     // ── Pre-fill from preset (content only, no pricing) ──
@@ -184,6 +191,20 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
           item_type: 'service' as const,
         })));
       }
+    }
+
+    // ── Seed line items from the caller (measure flow) ──
+    if (initialItems && initialItems.length > 0) {
+      setLineItems(initialItems.map(it => ({
+        id: crypto.randomUUID(),
+        source_service_id: null,
+        name: it.name,
+        description: it.description || '',
+        qtyInput: String(it.quantity),
+        unitPriceInput: '0',
+        is_optional: false,
+        item_type: 'service' as const,
+      })));
     }
 
     listClients({ page: 1, pageSize: 200, sort: 'name_asc' })

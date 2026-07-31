@@ -14,8 +14,10 @@ import {
   ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
-import { getQuoteById, saveQuoteLineItems, createQuote, type QuoteLineItemInput } from '../lib/quotesApi';
-import { listClients, createClient, clientDisplayName, type ClientRecord } from '../lib/clientsApi';
+import { getQuoteById, saveQuoteLineItems, type QuoteLineItemInput, type QuoteDetail } from '../lib/quotesApi';
+import { listClients, clientDisplayName, type ClientRecord } from '../lib/clientsApi';
+import NewClientModal from '../components/NewClientModal';
+import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
 import {
   listMeasurements, createMeasurement, deleteAllMeasurements,
   uploadMeasurementScreenshot, getQuoteCamera, saveQuoteCamera,
@@ -52,8 +54,10 @@ export default function QuoteMeasure() {
   const { data: saved } = useQuery({ queryKey: ['quoteMeasurements', quoteId], queryFn: () => listMeasurements(quoteId!), enabled: Boolean(quoteId) });
   const { data: savedCamera } = useQuery({ queryKey: ['quoteCamera', quoteId], queryFn: () => getQuoteCamera(quoteId!), enabled: Boolean(quoteId) });
 
-  // Standalone mode: "Send to Quote" first asks which client the quote is for.
+  // Standalone mode: "Send to Quote" first asks which client the quote is
+  // for, then chains into the app's standard quote-creation modal.
   const [quotePickerOpen, setQuotePickerOpen] = useState(false);
+  const [quoteClientId, setQuoteClientId] = useState<string | null>(null);
 
   // Refs
   const mapDiv = useRef<HTMLDivElement>(null);
@@ -844,23 +848,16 @@ export default function QuoteMeasure() {
     finally { setSaving(false); }
   }
 
-  async function createQuoteFromMeasures(clientId: string) {
-    setQuotePickerOpen(false);
-    setSaving(true);
+  // The quote itself is created by the standard QuoteCreateModal; here we only
+  // attach the measurements + camera to it once it exists, then jump to it.
+  async function onQuoteCreatedFromMeasures(detail: QuoteDetail) {
+    const newQuoteId = detail.quote.id;
+    setQuoteClientId(null);
     try {
-      const title = search.trim() || (fr ? 'Devis — mesures satellite' : 'Quote — satellite measurements');
-      const created = await createQuote({
-        client_id: clientId,
-        context_type: 'client',
-        title,
-        line_items: buildMeasureItems(0),
-      });
-      const newQuoteId = created.quote.id;
       await persistShapes(newQuoteId, getCameraStateNow());
-      toast.success(fr ? 'Devis créé avec les mesures' : 'Quote created with measurements');
-      nav(`/quotes/${newQuoteId}`);
-    } catch (e: any) { toast.error(e?.message || 'Failed'); }
-    finally { setSaving(false); }
+    } catch { /* the quote exists; measurements can be re-saved from the measure page */ }
+    toast.success(fr ? 'Devis créé avec les mesures' : 'Quote created with measurements');
+    nav(`/quotes/${newQuoteId}`);
   }
 
   // ════════════════════════════════════════════
@@ -1012,9 +1009,18 @@ export default function QuoteMeasure() {
           fr={fr}
           address={search.trim()}
           onClose={() => setQuotePickerOpen(false)}
-          onPick={(clientId) => void createQuoteFromMeasures(clientId)}
+          onPick={(clientId) => { setQuotePickerOpen(false); setQuoteClientId(clientId); }}
         />
       )}
+
+      <QuoteCreateModal
+        isOpen={Boolean(quoteClientId)}
+        onClose={() => setQuoteClientId(null)}
+        onCreated={(detail) => void onQuoteCreatedFromMeasures(detail)}
+        initialClientId={quoteClientId}
+        initialTitle={search.trim()}
+        initialItems={buildMeasureItems(0).map((it) => ({ name: it.name, description: it.description || '', quantity: it.quantity }))}
+      />
     </div>
   );
 }
@@ -1027,8 +1033,6 @@ function MeasureClientPicker({ fr, address, onClose, onPick }: {
   const [items, setItems] = useState<ClientRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -1042,23 +1046,6 @@ function MeasureClientPicker({ fr, address, onClose, onPick }: {
     return () => { active = false; clearTimeout(timer); };
   }, [q]);
 
-  async function createAndPick() {
-    if (!firstName.trim() || !lastName.trim()) return;
-    setBusy(true);
-    try {
-      // The measured address becomes the new client's address.
-      const created = await createClient({
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        address: address || undefined,
-      });
-      onPick(created.id);
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed');
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl border border-outline/30 bg-surface-card p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -1067,64 +1054,51 @@ function MeasureClientPicker({ fr, address, onClose, onPick }: {
           {fr ? 'Le devis sera créé avec vos mesures en lignes.' : 'The quote will be created with your measurements as line items.'}
           {address ? ` — ${address}` : ''}
         </p>
-        {!creating ? (
-          <>
-            <input
-              autoFocus
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={fr ? 'Rechercher un client…' : 'Search clients…'}
-              className="glass-input w-full mt-3"
-            />
-            <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-outline/20">
-              {loading ? (
-                <p className="px-3 py-2.5 text-[12px] text-text-muted">…</p>
-              ) : items.length === 0 ? (
-                <p className="px-3 py-2.5 text-[12px] text-text-muted">{fr ? 'Aucun client trouvé.' : 'No clients found.'}</p>
-              ) : (
-                items.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => { setBusy(true); onPick(c.id); }}
-                    className="w-full px-3 py-2 text-left hover:bg-surface-secondary transition-colors disabled:opacity-50"
-                  >
-                    <span className="block text-[12px] font-semibold text-text-primary">
-                      {clientDisplayName(c) || `${c.first_name} ${c.last_name}`.trim()}
-                    </span>
-                    {c.address && <span className="block truncate text-[11px] text-text-muted">{c.address}</span>}
-                  </button>
-                ))
-              )}
-            </div>
-            <div className="mt-3 flex items-center justify-between">
-              <button type="button" onClick={() => setCreating(true)} className="text-[12px] font-medium text-text-secondary hover:text-text-primary transition-colors">
-                ＋ {fr ? 'Nouveau client' : 'New client'}
-              </button>
-              <button type="button" onClick={onClose} className="glass-button px-3 py-1.5 rounded-lg text-[12px]">{fr ? 'Annuler' : 'Cancel'}</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <input autoFocus value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder={fr ? 'Prénom' : 'First name'} className="glass-input w-full" />
-              <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder={fr ? 'Nom' : 'Last name'} className="glass-input w-full" />
-            </div>
-            <div className="mt-3 flex items-center justify-end gap-2">
-              <button type="button" onClick={() => setCreating(false)} className="glass-button px-3 py-1.5 rounded-lg text-[12px]">{fr ? 'Retour' : 'Back'}</button>
+        <input
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={fr ? 'Rechercher un client…' : 'Search clients…'}
+          className="glass-input w-full mt-3"
+        />
+        <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-outline/20">
+          {loading ? (
+            <p className="px-3 py-2.5 text-[12px] text-text-muted">…</p>
+          ) : items.length === 0 ? (
+            <p className="px-3 py-2.5 text-[12px] text-text-muted">{fr ? 'Aucun client trouvé.' : 'No clients found.'}</p>
+          ) : (
+            items.map((c) => (
               <button
+                key={c.id}
                 type="button"
-                onClick={createAndPick}
-                disabled={busy || !firstName.trim() || !lastName.trim()}
-                className="glass-button-primary px-3 py-1.5 rounded-lg text-[12px] font-semibold disabled:opacity-40"
+                disabled={busy}
+                onClick={() => { setBusy(true); onPick(c.id); }}
+                className="w-full px-3 py-2 text-left hover:bg-surface-secondary transition-colors disabled:opacity-50"
               >
-                {busy ? '…' : (fr ? 'Créer et continuer' : 'Create & continue')}
+                <span className="block text-[12px] font-semibold text-text-primary">
+                  {clientDisplayName(c) || `${c.first_name} ${c.last_name}`.trim()}
+                </span>
+                {c.address && <span className="block truncate text-[11px] text-text-muted">{c.address}</span>}
               </button>
-            </div>
-          </>
-        )}
+            ))
+          )}
+        </div>
+        <div className="mt-3 flex items-center justify-between">
+          <button type="button" onClick={() => setCreating(true)} className="text-[12px] font-medium text-text-secondary hover:text-text-primary transition-colors">
+            ＋ {fr ? 'Nouveau client' : 'New client'}
+          </button>
+          <button type="button" onClick={onClose} className="glass-button px-3 py-1.5 rounded-lg text-[12px]">{fr ? 'Annuler' : 'Cancel'}</button>
+        </div>
       </div>
+
+      {creating && (
+        // The app's standard new-client modal, address prefilled from the map.
+        <NewClientModal
+          initialAddress={address}
+          onClose={() => setCreating(false)}
+          onCreated={(client) => { setBusy(true); onPick(client.id); }}
+        />
+      )}
     </div>
   );
 }
