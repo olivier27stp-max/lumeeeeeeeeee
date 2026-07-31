@@ -260,7 +260,8 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
             amountCents = Math.max(0, amountCents - promo.discount_value);
           }
           appliedPromo = promo.code;
-          await admin.from('promo_codes').update({ current_uses: promo.current_uses + 1 }).eq('id', promo.id);
+          const { error: errBill263 } = await admin.from('promo_codes').update({ current_uses: promo.current_uses + 1 }).eq('id', promo.id);
+          if (errBill263) console.error('[billing:L263] écriture promo_codes échouée:', errBill263.message, errBill263.code || '');
         }
       }
     }
@@ -298,7 +299,7 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
           });
           customerId = customer.id;
 
-          await admin.from('billing_profiles').upsert({
+          const { error: errBill301 } = await admin.from('billing_profiles').upsert({
             org_id: auth.orgId,
             stripe_customer_id: customerId,
             billing_email: billing_email || undefined,
@@ -307,6 +308,7 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
             postal_code: postal_code || undefined,
             currency,
           }, { onConflict: 'org_id' });
+          if (errBill301) console.error('[billing:L301] écriture billing_profiles échouée:', errBill301.message, errBill301.code || '');
         }
 
         // Attach payment method to customer
@@ -405,7 +407,7 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
 
     // Update billing profile
     if (billing_email || company_name) {
-      await admin.from('billing_profiles').upsert({
+      const { error: errBill408 } = await admin.from('billing_profiles').upsert({
         org_id: auth.orgId,
         billing_email: billing_email || undefined,
         company_name: company_name || undefined,
@@ -413,6 +415,7 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
         postal_code: postal_code || undefined,
         currency,
       }, { onConflict: 'org_id' });
+      if (errBill408) console.error('[billing:L408] écriture billing_profiles échouée:', errBill408.message, errBill408.code || '');
     }
 
     // ── Referral reward: referrer earns 1 free month per PAID referral ──
@@ -470,7 +473,7 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
             }
 
             // Record the rewarded referral (one row per converted referred org).
-            await admin.from('referrals').insert({
+            const { error: errBill473 } = await admin.from('referrals').insert({
               referrer_user_id: referral.referrer_user_id,
               referrer_org_id: referral.referrer_org_id,
               code: referral_code,
@@ -481,6 +484,7 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
               converted_at: now.toISOString(),
               rewarded_at: now.toISOString(),
             });
+            if (errBill473) console.error('[billing:L473] écriture referrals échouée:', errBill473.message, errBill473.code || '');
 
             // Also flag any pre-existing signed_up row for this referred org.
             await admin
@@ -574,11 +578,12 @@ router.post('/billing/create-payment-intent', async (req, res) => {
         metadata: { org_id: auth.orgId },
       });
       customerId = customer.id;
-      await admin.from('billing_profiles').upsert({
+      const { error: errBill577 } = await admin.from('billing_profiles').upsert({
         org_id: auth.orgId,
         stripe_customer_id: customerId,
         currency: currency || 'CAD',
       }, { onConflict: 'org_id' });
+      if (errBill577) console.error('[billing:L577] écriture billing_profiles échouée:', errBill577.message, errBill577.code || '');
     }
 
     // Idempotency bucketed per minute so retries within a burst dedupe,
@@ -733,13 +738,14 @@ router.post('/billing/change-plan', validate(changePlanSchema), async (req, res)
       if (interval === 'yearly') periodEnd.setFullYear(periodEnd.getFullYear() + 1);
       else periodEnd.setMonth(periodEnd.getMonth() + 1);
 
-      await admin.from('subscriptions').update({
+      const { error: errBill736 } = await admin.from('subscriptions').update({
         plan_id: targetPlan.id,
         interval,
         amount_cents: amountCents,
         current_period_start: now.toISOString(),
         current_period_end: periodEnd.toISOString(),
       }).eq('id', subRow.id);
+      if (errBill736) console.error('[billing:L736] écriture subscriptions échouée:', errBill736.message, errBill736.code || '');
 
       return res.json({ message: 'Plan changed (no Stripe link).', no_stripe: true });
     }
@@ -800,10 +806,11 @@ router.post('/billing/change-plan', validate(changePlanSchema), async (req, res)
         });
         newPriceId = price.id;
         // Persist for future calls
-        await admin.from('plans').update({
+        const { error: errBill803 } = await admin.from('plans').update({
           stripe_product_id: productId,
           [priceIdField]: newPriceId,
         }).eq('id', targetPlan.id);
+        if (errBill803) console.error('[billing:L803] écriture plans échouée:', errBill803.message, errBill803.code || '');
       } catch (err: any) {
         console.error('[billing/change-plan] Stripe price create failed', err.message);
         return res.status(502).json({ error: `Stripe price creation failed: ${err.message}` });
@@ -862,11 +869,12 @@ router.post('/billing/change-plan', validate(changePlanSchema), async (req, res)
         });
 
         // Mark DB to indicate a scheduled change (UI shows banner)
-        await admin.from('subscriptions').update({
+        const { error: errBill865 } = await admin.from('subscriptions').update({
           scheduled_plan_id: targetPlan.id,
           scheduled_interval: interval,
           scheduled_at: new Date(periodEndUnix * 1000).toISOString(),
         }).eq('id', subRow.id);
+        if (errBill865) console.error('[billing:L865] écriture subscriptions échouée:', errBill865.message, errBill865.code || '');
 
         const effectiveDate = new Date(periodEndUnix * 1000).toLocaleDateString('en-CA', {
           year: 'numeric', month: 'long', day: 'numeric',
@@ -908,7 +916,7 @@ router.post('/billing/change-plan', validate(changePlanSchema), async (req, res)
     }
 
     // Mirror in DB — webhook will also update but we want immediate UI feedback
-    await admin.from('subscriptions').update({
+    const { error: errBill911 } = await admin.from('subscriptions').update({
       plan_id: targetPlan.id,
       interval,
       amount_cents: amountCents,
@@ -916,6 +924,7 @@ router.post('/billing/change-plan', validate(changePlanSchema), async (req, res)
       scheduled_interval: null,
       scheduled_at: null,
     }).eq('id', subRow.id);
+    if (errBill911) console.error('[billing:L911] écriture subscriptions échouée:', errBill911.message, errBill911.code || '');
 
     return res.json({
       message: 'Plan upgraded. Proration applied on next invoice.',
@@ -984,7 +993,7 @@ router.post('/billing/dev-switch-plan', validate(devSwitchPlanSchema), async (re
     else periodEnd.setMonth(periodEnd.getMonth() + 1);
 
     if (subRow) {
-      await admin.from('subscriptions').update({
+      const { error: errBill987 } = await admin.from('subscriptions').update({
         plan_id: targetPlan.id,
         interval,
         amount_cents: amountCents,
@@ -993,8 +1002,9 @@ router.post('/billing/dev-switch-plan', validate(devSwitchPlanSchema), async (re
         current_period_end: periodEnd.toISOString(),
         updated_at: now.toISOString(),
       }).eq('id', subRow.id);
+      if (errBill987) console.error('[billing:L987] écriture subscriptions échouée:', errBill987.message, errBill987.code || '');
     } else {
-      await admin.from('subscriptions').insert({
+      const { error: errBill997 } = await admin.from('subscriptions').insert({
         org_id: auth.orgId,
         plan_id: targetPlan.id,
         interval,
@@ -1004,6 +1014,7 @@ router.post('/billing/dev-switch-plan', validate(devSwitchPlanSchema), async (re
         current_period_start: now.toISOString(),
         current_period_end: periodEnd.toISOString(),
       });
+      if (errBill997) console.error('[billing:L997] écriture subscriptions échouée:', errBill997.message, errBill997.code || '');
     }
 
     return res.json({
@@ -1063,11 +1074,12 @@ router.post('/billing/cancel-scheduled-change', async (req, res) => {
       }
     }
 
-    await admin.from('subscriptions').update({
+    const { error: errBill1066 } = await admin.from('subscriptions').update({
       scheduled_plan_id: null,
       scheduled_interval: null,
       scheduled_at: null,
     }).eq('id', subRow.id);
+    if (errBill1066) console.error('[billing:L1066] écriture subscriptions échouée:', errBill1066.message, errBill1066.code || '');
 
     return res.json({ message: 'Scheduled plan change canceled.' });
   } catch (err: any) {
@@ -1186,7 +1198,8 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
 
     // If no Stripe sub linked, just update DB
     if (!subRow.stripe_subscription_id) {
-      await admin.from('subscriptions').update({ extra_seats }).eq('id', subRow.id);
+      const { error: errBill1189 } = await admin.from('subscriptions').update({ extra_seats }).eq('id', subRow.id);
+      if (errBill1189) console.error('[billing:L1189] écriture subscriptions échouée:', errBill1189.message, errBill1189.code || '');
       return res.json({ message: 'Seats updated (no Stripe link).', no_stripe: true, extra_seats });
     }
 
@@ -1202,7 +1215,8 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
         return res.status(502).json({ error: `Stripe update failed: ${err.message}` });
       }
 
-      await admin.from('subscriptions').update({ extra_seats }).eq('id', subRow.id);
+      const { error: errBill1205 } = await admin.from('subscriptions').update({ extra_seats }).eq('id', subRow.id);
+      if (errBill1205) console.error('[billing:L1205] écriture subscriptions échouée:', errBill1205.message, errBill1205.code || '');
       return res.json({ message: 'Seat quantity updated.', extra_seats });
     }
 
@@ -1217,10 +1231,11 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
         return res.status(502).json({ error: `Stripe delete failed: ${err.message}` });
       }
 
-      await admin.from('subscriptions').update({
+      const { error: errBill1220 } = await admin.from('subscriptions').update({
         extra_seats: 0,
         stripe_seat_item_id: null,
       }).eq('id', subRow.id);
+      if (errBill1220) console.error('[billing:L1220] écriture subscriptions échouée:', errBill1220.message, errBill1220.code || '');
       return res.json({ message: 'Extra seats removed.', extra_seats: 0 });
     }
 
@@ -1276,10 +1291,11 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
         proration_behavior: 'always_invoice',
       });
 
-      await admin.from('subscriptions').update({
+      const { error: errBill1279 } = await admin.from('subscriptions').update({
         extra_seats,
         stripe_seat_item_id: newItem.id,
       }).eq('id', subRow.id);
+      if (errBill1279) console.error('[billing:L1279] écriture subscriptions échouée:', errBill1279.message, errBill1279.code || '');
 
       return res.json({ message: 'Extra seats added and billed.', extra_seats });
     } catch (err: any) {
@@ -1397,7 +1413,8 @@ router.post('/billing/offices', validate(setOfficesSchema), async (req, res) => 
 
     // If no Stripe sub linked, just update DB
     if (!subRow.stripe_subscription_id) {
-      await admin.from('subscriptions').update({ extra_offices }).eq('id', subRow.id);
+      const { error: errBill1400 } = await admin.from('subscriptions').update({ extra_offices }).eq('id', subRow.id);
+      if (errBill1400) console.error('[billing:L1400] écriture subscriptions échouée:', errBill1400.message, errBill1400.code || '');
       return res.json({ message: 'Offices updated (no Stripe link).', no_stripe: true, extra_offices });
     }
 
@@ -1413,7 +1430,8 @@ router.post('/billing/offices', validate(setOfficesSchema), async (req, res) => 
         return res.status(502).json({ error: `Stripe update failed: ${err.message}` });
       }
 
-      await admin.from('subscriptions').update({ extra_offices }).eq('id', subRow.id);
+      const { error: errBill1416 } = await admin.from('subscriptions').update({ extra_offices }).eq('id', subRow.id);
+      if (errBill1416) console.error('[billing:L1416] écriture subscriptions échouée:', errBill1416.message, errBill1416.code || '');
       return res.json({ message: 'Office quantity updated.', extra_offices });
     }
 
@@ -1428,10 +1446,11 @@ router.post('/billing/offices', validate(setOfficesSchema), async (req, res) => 
         return res.status(502).json({ error: `Stripe delete failed: ${err.message}` });
       }
 
-      await admin.from('subscriptions').update({
+      const { error: errBill1431 } = await admin.from('subscriptions').update({
         extra_offices: 0,
         stripe_office_item_id: null,
       }).eq('id', subRow.id);
+      if (errBill1431) console.error('[billing:L1431] écriture subscriptions échouée:', errBill1431.message, errBill1431.code || '');
       return res.json({ message: 'Extra offices removed.', extra_offices: 0 });
     }
 
@@ -1455,10 +1474,11 @@ router.post('/billing/offices', validate(setOfficesSchema), async (req, res) => 
         proration_behavior: 'always_invoice',
       });
 
-      await admin.from('subscriptions').update({
+      const { error: errBill1458 } = await admin.from('subscriptions').update({
         extra_offices,
         stripe_office_item_id: newItem.id,
       }).eq('id', subRow.id);
+      if (errBill1458) console.error('[billing:L1458] écriture subscriptions échouée:', errBill1458.message, errBill1458.code || '');
 
       return res.json({ message: 'Extra offices added and billed.', extra_offices });
     } catch (err: any) {
@@ -1637,10 +1657,11 @@ router.post('/billing/create-checkout-session', async (req, res) => {
         metadata: { plan_id: plan.id },
       });
       priceId = price.id;
-      await admin.from('plans').update({
+      const { error: errBill1640 } = await admin.from('plans').update({
         stripe_product_id: productId,
         [priceIdField]: priceId,
       }).eq('id', plan.id);
+      if (errBill1640) console.error('[billing:L1640] écriture plans échouée:', errBill1640.message, errBill1640.code || '');
     }
 
     // Resolve the 3-month intro coupon for this interval + currency (mirrors the
@@ -1670,7 +1691,8 @@ router.post('/billing/create-checkout-session', async (req, res) => {
         metadata: { plan_id: plan.id, interval, currency },
       });
       introCouponId = coupon.id;
-      await admin.from('plans').update({ [introCouponField]: introCouponId }).eq('id', plan.id);
+      const { error: errBill1673 } = await admin.from('plans').update({ [introCouponField]: introCouponId }).eq('id', plan.id);
+      if (errBill1673) console.error('[billing:L1673] écriture plans échouée:', errBill1673.message, errBill1673.code || '');
     }
 
     // ── Referral: the friend gets their first month free ──
@@ -1917,14 +1939,17 @@ router.post('/billing/complete-setup', async (req, res) => {
 
     const { data: existing } = await admin.from('company_settings').select('id').eq('org_id', auth.orgId).maybeSingle();
     if (existing?.id) {
-      await admin.from('company_settings').update(payload).eq('org_id', auth.orgId);
+      const { error: errBill1920 } = await admin.from('company_settings').update(payload).eq('org_id', auth.orgId);
+      if (errBill1920) console.error('[billing:L1920] écriture company_settings échouée:', errBill1920.message, errBill1920.code || '');
     } else {
-      await admin.from('company_settings').insert(payload);
+      const { error: errBill1922 } = await admin.from('company_settings').insert(payload);
+      if (errBill1922) console.error('[billing:L1922] écriture company_settings échouée:', errBill1922.message, errBill1922.code || '');
     }
 
     // Make the workspace/office name follow the company name (was "Bureau sans nom").
     if (payload.company_name) {
-      await admin.from('orgs').update({ name: payload.company_name as string }).eq('id', auth.orgId);
+      const { error: errBill1927 } = await admin.from('orgs').update({ name: payload.company_name as string }).eq('id', auth.orgId);
+      if (errBill1927) console.error('[billing:L1927] écriture orgs échouée:', errBill1927.message, errBill1927.code || '');
     }
 
     return res.json({ ok: true });

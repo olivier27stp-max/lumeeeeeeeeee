@@ -36,7 +36,6 @@
  "server/lib/twilioA2P.ts": 1,
  "server/routes/agreements.ts": 1,
  "server/routes/automation-events.ts": 1,
- "server/routes/billing.ts": 25,
  "server/routes/booking.ts": 1,
  "server/routes/campaigns.ts": 8,
  "server/routes/courses.ts": 3,
