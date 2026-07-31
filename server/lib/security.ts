@@ -617,7 +617,23 @@ export async function createSecurityAlert(alert: SecurityAlertInput) {
 
   try {
     const admin = getServiceClient();
-    await admin.from('security_alerts').insert(alert);
+    // security_alerts.org_id est `uuid NOT NULL`. Les appelants passaient
+    // parfois `params.orgId || ''` — une chaîne vide n'est pas un uuid, donc
+    // l'insertion partait en 22P02 et, faute de lire `error`, l'alerte
+    // disparaissait sans un bruit. C'est exactement le cas de l'alerte de
+    // force brute (audit 2026-07-31).
+    if (!alert.org_id || !/^[0-9a-f-]{36}$/i.test(String(alert.org_id))) {
+      console.error(
+        `[Security] ALERTE NON ENREGISTRÉE (${alert.alert_type}) : org_id absent ou invalide.`,
+        alert.title,
+      );
+      return;
+    }
+
+    const { error } = await admin.from('security_alerts').insert(alert);
+    if (error) {
+      console.error(`[Security] ALERTE NON ENREGISTRÉE (${alert.alert_type}) :`, error.message, error.code || '');
+    }
 
     logSecurityEvent({
       org_id: alert.org_id,

@@ -378,8 +378,22 @@ router.post('/auth/login-failed', authRateLimit, async (req, res) => {
     // login_history : c'est elle que lit la détection de force brute.
     const user = await findUserByEmail(admin, email);
     if (user?.id) {
+      // On résout l'organisation CÔTÉ SERVEUR. Ce n'est pas cosmétique :
+      // la détection de force brute déclenche createSecurityAlert(), et
+      // security_alerts.org_id est `uuid NOT NULL`. Sans org valide, l'alerte
+      // est rejetée — c'est-à-dire que la détection fonctionne mais que
+      // personne n'en voit jamais le résultat.
+      const { data: membership } = await admin
+        .from('memberships')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .order('created_at')
+        .limit(1)
+        .maybeSingle();
+
       await recordLoginAttempt({
         userId: user.id,
+        orgId: membership?.org_id || undefined,
         req: req as any,
         success: false,
         method: 'password',

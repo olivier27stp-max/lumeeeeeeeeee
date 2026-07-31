@@ -32,7 +32,7 @@
  "server/lib/recurringJobScheduler.ts": 1,
  "server/lib/referral-rewards.ts": 2,
  "server/lib/scheduler.ts": 2,
- "server/lib/security.ts": 2,
+ "server/lib/security.ts": 1,
  "server/lib/twilioA2P.ts": 1,
  "server/routes/agreements.ts": 1,
  "server/routes/automation-events.ts": 1,

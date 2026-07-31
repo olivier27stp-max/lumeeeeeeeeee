@@ -800,6 +800,14 @@ app.listen(port, '0.0.0.0', () => {
       },
     );
 
+    // Surveillance des évènements de sécurité — le dernier maillon de la
+    // détection installée le 2026-07-31. Les sondes et la télémétrie écrivaient
+    // dans security_events, mais rien ne lisait cette table : une détection que
+    // personne ne regarde équivaut à pas de détection.
+    import('./lib/security-alerting').then(({ demarrerAlertingSecurite }) => {
+      demarrerAlertingSecurite();
+    }).catch((e: any) => console.error('[alerting] démarrage impossible:', e?.message));
+
     // Scheduled reports — check every hour
     import('./lib/scheduled-reports').then(({ processScheduledReports }) => {
       setInterval(async () => {
