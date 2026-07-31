@@ -12,6 +12,7 @@ import { createJobAgreement, DEFAULT_AGREEMENT_TERMS } from '../lib/jobAgreement
 import AgreementDraftPreviewModal, { type AgreementDraftPreviewData } from './agreements/AgreementDraftPreviewModal';
 import FileUpload from './FileUpload';
 import TeamDayRoster from './TeamDayRoster';
+import TeamSelectDropdown from './TeamSelectDropdown';
 import { STORAGE_BUCKETS } from '../lib/storage';
 import { resolveClientIdForLead } from '../lib/leadsApi';
 import { listTeams } from '../lib/teamsApi';
@@ -2316,19 +2317,17 @@ export default function NewJobModal({
                     personnes viennent de l'horaire du jour (onglet Horaire). */}
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-text-tertiary">{t.modals.assignTeam}</label>
-                  <select
+                  <TeamSelectDropdown
+                    teams={teams}
                     value={teamSelection}
-                    onChange={(event) => setTeamSelection(event.target.value)}
-                    className="glass-input w-full"
-                  >
-                    <option value="">{t.modals.selectTeam}</option>
-                    <option value={UNASSIGNED_TEAM_VALUE}>{t.modals.unassignedOption}</option>
-                    {teams.map((team) => (
-                      <option key={team.id} value={team.id}>
-                        {team.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setTeamSelection}
+                    date={startDate}
+                    fr={language === 'fr'}
+                    suggestions={teamSuggestions}
+                    placeholder={t.modals.selectTeam}
+                    unassignedLabel={t.modals.unassignedOption}
+                    unassignedValue={UNASSIGNED_TEAM_VALUE}
+                  />
                   {teamsQuery.isFetching ? (
                     <p className="text-[11px] text-text-tertiary">{t.modals.loadingTeamsMsg}</p>
                   ) : null}
