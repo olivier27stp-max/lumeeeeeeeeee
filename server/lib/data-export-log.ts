@@ -48,7 +48,11 @@ function clientIp(req: any): string | null {
 
 export async function logDataExport(params: DataExportLogParams): Promise<void> {
   try {
-    await (getServiceClient() as any).from('data_export_log').insert({
+    // On LIT `error`. supabase-js ne lève pas : il renvoie { data, error }.
+    // Le try/catch seul n'attrapait donc rien, et un refus RLS ou une colonne
+    // manquante partait au néant — ce qui peut expliquer que cette table soit
+    // restée vide alors que la fonctionnalité était déployée (audit 2026-07-31).
+    const { error } = await (getServiceClient() as any).from('data_export_log').insert({
       org_id: params.orgId,
       user_id: params.userId,
       export_type: params.exportType,
@@ -60,6 +64,11 @@ export async function logDataExport(params: DataExportLogParams): Promise<void> 
       // précis : qui l'a demandé, et quand.
       watermark: `${params.userId}:${Date.now()}`,
     });
+    if (error) {
+      // Journaliser sans lever : la traçabilité ne doit jamais faire échouer
+      // l'export lui-même. Mais l'échec doit être VISIBLE.
+      console.error('[data-export-log] insert refusé:', error.message, error.code || '');
+    }
   } catch (err) {
     console.error('[data-export-log] insert failed:', err);
   }

@@ -21,7 +21,8 @@
     "test:watch": "vitest",
     "db:apply": "tsx scripts/apply-sql.ts",
     "test:rls": "tsx scripts/test-rls-isolation.ts",
-    "check:db-coherence": "node --env-file=.env.local scripts/check-db-coherence.mjs"
+    "check:db-coherence": "node --env-file=.env.local scripts/check-db-coherence.mjs",
+    "check:silent-mutations": "node scripts/check-silent-mutations.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

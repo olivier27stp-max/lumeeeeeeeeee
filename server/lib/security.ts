@@ -471,7 +471,13 @@ async function flushSecurityEvents() {
 
   try {
     const admin = getServiceClient();
-    await admin.from('security_events').insert(events);
+    // supabase-js ne lève pas : sans lire `error`, un refus RLS ou une colonne
+    // manquante faisait disparaître TOUTE la piste de sécurité en silence, et
+    // le catch ci-dessous n'attrapait rien.
+    const { error } = await admin.from('security_events').insert(events);
+    if (error) {
+      console.error(`[Security] ${events.length} évènement(s) NON enregistrés:`, error.message, error.code || '');
+    }
   } catch (err: any) {
     // Security logging must never crash the application
     console.error('[Security] Failed to flush events:', err?.message);
@@ -643,7 +649,11 @@ export async function recordLoginAttempt(params: {
     const ip = extractIP(params.req);
     const deviceFp = generateDeviceFingerprint(params.req);
 
-    await admin.from('login_history').insert({
+    // supabase-js ne lève pas : sans lire `error`, une tentative de connexion
+    // échouée pouvait ne jamais être enregistrée sans que rien ne l'indique —
+    // et c'est précisément cette table qui alimente la détection de force
+    // brute juste en dessous.
+    const { error } = await admin.from('login_history').insert({
       user_id: params.userId,
       org_id: params.orgId || null,
       ip_address: ip,
@@ -653,6 +663,9 @@ export async function recordLoginAttempt(params: {
       success: params.success,
       failure_reason: params.failureReason || null,
     });
+    if (error) {
+      console.error('[Security] login_history NON enregistré:', error.message, error.code || '');
+    }
 
     // Check for brute force
     if (!params.success) {
