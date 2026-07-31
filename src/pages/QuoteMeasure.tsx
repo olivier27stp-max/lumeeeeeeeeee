@@ -805,7 +805,10 @@ export default function QuoteMeasure() {
       description: `${formatMeasurementValue(s.result.type, s.result.value, unitSystem)}${
         s.result.type === 'polygon' && s.result.perimeterValue ? ` • ${fr ? 'Périmètre' : 'Perimeter'}: ${fmtLen(s.result.perimeterValue)}` : ''
       }${s.notes ? ` — ${s.notes}` : ''}`,
-      quantity: r2(s.result.value), unit_price_cents: 0,
+      // Quantity 1: the typed price IS the price for the whole measured zone.
+      // (Quantity = superficie multiplied the price by hundreds — surprising.)
+      // For per-sq-ft pricing, edit the line's quantity to the measured value.
+      quantity: 1, unit_price_cents: 0,
       sort_order: startOrder + i, is_optional: false, item_type: 'service' as const,
     }));
   }
