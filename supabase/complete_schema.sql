@@ -1,3 +1,21 @@
+-- ############################################################################
+-- ##  ⚠️  FICHIER PERIME — NE PAS S'EN SERVIR COMME REFERENCE  ⚠️
+-- ############################################################################
+--
+-- Fige au 2026-06-13. En retard de 121 migrations sur la production.
+--
+-- Il a produit QUATRE findings FAUX pendant l'audit du 2026-07-31 : vues sans
+-- security_invoker, search_path mutable, contraintes NOT VALID, tables sans
+-- cle primaire. Le catalogue reel en compte ZERO de chacun. Un audit entier a
+-- ete partiellement fausse par ce fichier.
+--
+-- REFERENTIEL A JOUR :  supabase/SCHEMA_SNAPSHOT.md
+-- REGENERER AVEC    :  node --env-file=.env.local scripts/gen-schema-snapshot.mjs \
+--                        supabase/SCHEMA_SNAPSHOT.md "$(date -u '+%Y-%m-%d %H:%M UTC')"
+--
+-- Conserve uniquement comme trace historique.
+-- ############################################################################
+
 
 -- ============================================================
 -- MIGRATION: 20260302170000_create_jobs.sql
