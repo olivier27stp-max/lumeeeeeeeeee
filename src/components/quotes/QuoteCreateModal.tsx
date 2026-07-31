@@ -39,6 +39,13 @@ interface QuoteCreateModalProps {
   initialTitle?: string;
   /** Seed line items (e.g. measurements) — replaces the default empty line. */
   initialItems?: Array<{ name: string; description?: string; quantity: number }> | null;
+  /**
+   * Render fullscreen (fixed overlay) instead of portaling into the CRM
+   * shell's #page-content-area. Required when the caller is itself a
+   * fullscreen page (satellite measure) that covers the shell — the portal
+   * target sits underneath it and the form gets clipped.
+   */
+  fullscreenHost?: boolean;
 }
 
 interface LineItemForm {
@@ -64,7 +71,7 @@ function sanitize(v: string) { return v.replace(',', '.').replace(/[^\d.]/g, '')
 const inputCls = 'glass-input w-full mt-1.5';
 const labelCls = 'text-xs font-medium text-text-tertiary block';
 
-export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, createLeadInline, preset, initialClientId, initialTitle, initialItems }: QuoteCreateModalProps) {
+export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, createLeadInline, preset, initialClientId, initialTitle, initialItems, fullscreenHost }: QuoteCreateModalProps) {
   const { t, language } = useTranslation();
   const tq = t.quotes as any;
   // ── Contact mode ──
@@ -592,7 +599,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
 
   return (
     <>
-      <FormPageHost>
+      <FormPageHost fullscreen={fullscreenHost}>
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

@@ -1025,6 +1025,7 @@ export default function QuoteMeasure() {
         initialClientId={quoteClientId}
         initialTitle={search.trim()}
         initialItems={buildMeasureItems(0).map((it) => ({ name: it.name, description: it.description || '', quantity: it.quantity }))}
+        fullscreenHost
       />
     </div>
   );
