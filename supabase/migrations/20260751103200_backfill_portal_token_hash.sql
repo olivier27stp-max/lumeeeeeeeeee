@@ -29,14 +29,42 @@
 --   hachage n'apporte rien contre un acces en lecture a la base : c'est
 --   precisement ce dont il devait proteger.
 --
---   Le retirer exige un changement de CODE, pas seulement de donnees :
---   portal.ts:57 compare le jeton fourni a `client.portal_token` en temps
---   constant. Vider la colonne sans toucher au code CASSERAIT l'acces au
---   portail pour tout le monde. La sequence sure est :
---     1. (fait ici) remplir tous les hash ;
---     2. modifier portal.ts pour comparer hash contre hash, en temps constant ;
---     3. verifier qu'aucun acces portail ne passe plus par le repli en clair ;
---     4. seulement alors, vider `portal_token`.
+--   Sequence prevue, et son avancement reel :
+--     1. ✅ FAIT — remplir tous les hash (56/56, formule verifiee) ;
+--     2. ✅ FAIT — portal.ts cherche desormais PAR LE HASH uniquement. Le repli
+--        par jeton en clair et timingSafeCompare() ont ete retires : retrouver
+--        la ligne par son hash prouve deja la validite du jeton ;
+--     3. ✅ FAIT — verifie en production avec un VRAI jeton, avant et apres
+--        deploiement : HTTP 200 et client retourne dans les deux cas ; un faux
+--        jeton reste refuse en 404 ;
+--     4. ❌ BLOQUE — et pas par un oubli.
+--
+-- ⚠️ POURQUOI L'ETAPE 4 NE PEUT PAS ETRE FAITE MECANIQUEMENT
+--
+--   src/pages/ClientDetails.tsx:718-721 lit `portal_token` DANS LE NAVIGATEUR
+--   pour construire le lien du portail :
+--       const url = `${window.location.origin}/portal/${client.portal_token}`;
+--   C'est le bouton « Copier le lien du portail ». Vider la colonne le ferait
+--   disparaitre (il est conditionne par la presence du jeton) et supprimerait
+--   la possibilite de partager un acces client.
+--
+--   Un hash est a sens unique : on ne peut PAS reconstruire le lien a partir de
+--   lui. Cesser de stocker le clair exige donc un choix de conception, a
+--   trancher par le proprietaire du produit :
+--
+--     a) NE RIEN FAIRE — accepter que le jeton reste en clair. Honnete, mais
+--        alors le hachage n'apporte rien contre un acces en lecture a la base,
+--        qui est exactement ce dont il devait proteger.
+--     b) CHIFFRER le jeton au repos plutot que le hacher. Le projet sait deja
+--        le faire : PII_ENCRYPTION_KEY et PAYMENTS_ENCRYPTION_KEY existent.
+--        Le lien reste reconstructible cote serveur, la base seule ne suffit
+--        plus a le lire.
+--     c) REGENERER a la demande — le bouton demande au serveur un jeton neuf,
+--        qui invalide le precedent. Le plus sur, mais les liens deja envoyes
+--        cessent de fonctionner.
+--
+--   L'option (b) preserve le comportement actuel ; l'option (c) est la plus
+--   stricte. Aucune ne se decide a la place du proprietaire.
 --
 --   ROLLBACK de cette migration : `update public.clients set portal_token_hash
 --   = null where ...` — sans risque, le repli en clair reprend la main.
