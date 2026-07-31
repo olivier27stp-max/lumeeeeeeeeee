@@ -32,8 +32,14 @@ router.post('/incidents', async (req, res) => {
   const okSev = ['low', 'medium', 'high', 'critical'];
   const sev = okSev.includes(severity) ? severity : 'low';
 
-  const svc = getServiceClient();
-  const { data, error } = await svc.rpc('create_incident', {
+  // Appel avec le client DE L'UTILISATEUR, pas en service_role. create_incident
+  // derive son org depuis `memberships where user_id = auth.uid()` puis exige
+  // has_org_admin_role(auth.uid(), ...) : en service_role, auth.uid() vaut NULL,
+  // donc la fonction echouait TOUJOURS en « No organization context » et la
+  // declaration d'incident etait morte. Passer par auth.client renseigne
+  // auth.uid(), ce qui repare la fonctionnalite ET applique enfin le controle
+  // admin — que cette route ne faisait pas elle-meme.
+  const { data, error } = await auth.client.rpc('create_incident', {
     p_title: title,
     p_type: type,
     p_severity: sev,
