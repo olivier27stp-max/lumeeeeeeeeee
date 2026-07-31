@@ -147,6 +147,68 @@ migrations.** Il faut le consigner dans une migration pour qu'il survive à un
 
 ---
 
+## 4.bis Deuxième vague de correctifs — APPLIQUÉE le 2026-07-31 à 02:36 UTC
+
+### Policies : 0 vulnérabilité réelle (correction d'un constat antérieur)
+
+Les 583 policies ont été relues. **Les 22 en `USING (true)` et les 16 sans
+`WITH CHECK` sont toutes bénignes** :
+
+- 21 des 22 policies `true` sont `roles={service_role}` — or `service_role`
+  contourne déjà la RLS, elles ne changent donc rien. La 22ᵉ est
+  `plans_public_read`, la table tarifaire publique assumée.
+- Sur les 16 sans `WITH CHECK` : **point de sémantique PostgreSQL déterminant** —
+  pour une policy `UPDATE` ou `ALL`, si `WITH CHECK` est absent, **l'expression
+  `USING` sert aussi à valider la nouvelle ligne**. Il n'y a donc pas de trou.
+  Le reste du lot est soit `USING false` (refus explicite : `audit_events`,
+  `login_history`, `data_export_log`, `webhook_events` — bon design), soit
+  réservé à `service_role`.
+
+**Aucun correctif de policy n'était nécessaire.**
+
+### Fonctions : 3 droits retirés
+
+Retrait de `EXECUTE` à `authenticated` sur `create_minimal_job_for_deal`,
+`record_consent` et `crm_next_invoice_number`. Choix du **revoke plutôt que
+d'une garde dans le corps** : aucune n'est appelée depuis le navigateur, et
+leurs appelants SQL sont tous `SECURITY DEFINER` propriété de `postgres` — leur
+corps s'exécute donc avec les droits de postgres, indépendamment de ceux de
+l'appelant. Le changement le moins risqué possible : zéro ligne de logique
+métier touchée. Consigné dans `20260751102200`.
+
+**Vérifié par exécution** : un utilisateur authentifié appelant directement
+`create_minimal_job_for_deal` reçoit `ERROR 42501: permission denied`.
+
+### Deux candidats écartés après vérification
+
+| Fonction | Verdict |
+|---|---|
+| `create_client_and_deal` | **Protégée** — garde via `current_org_id()`. Ma détection initiale ne cherchait pas ce motif. |
+| `create_lead_quick` | **Non exploitable** — la table `leads` **n'existe plus** (supprimée par `eliminate_leads_table`). La fonction insère dans `contacts` puis échoue sur `leads`, et l'erreur annule la transaction. Fonction morte, à supprimer par hygiène. |
+
+### Bug fonctionnel découvert (hors périmètre sécurité)
+
+`create_minimal_client_for_deal()` est **cassée en production** :
+`cols text[] := array[]::text[]` puis `cols := cols || 'org_id'` →
+PostgreSQL résout vers `anyarray || anyarray` et échoue avec
+`22P02: malformed array literal: "org_id"`.
+
+Conséquence : `create_client_and_deal()` échoue systématiquement, ainsi que
+`create_lead_and_deal()` et `create_deal_with_job()`. Impact réel nul
+aujourd'hui — aucun appelant applicatif (0 occurrence dans `src/` et `server/`).
+Documenté dans la migration, non corrigé (décision produit : réparer ou supprimer).
+
+### Advisors Supabase
+
+| Advisor | Constat notable |
+|---|---|
+| Security | **112 fonctions `SECURITY DEFINER` appelables par `authenticated`** — la famille du P0. Les 4 traitées ici en font partie ; **les 108 autres n'ont pas été auditées une par une.** |
+| Security | 4 fonctions à `search_path` mutable (`leads_force_org_id`, `leads_set_user_id`, `_point_in_zone_ring`, `ac_fmt_dollars`) |
+| Security | `pg_net` installée dans le schéma `public` ; `security_canary_runs` sans policy (intentionnel) |
+| Performance | **427 index jamais utilisés**, 14 FK sans index, 45 policies permissives multiples, 12 `auth_rls_initplan` non optimisées, 1 index dupliqué |
+
+---
+
 ## 5. Ce qui reste non vérifié
 
 - **Advisors Supabase Security & Performance** — non récupérés (endpoint distinct).
