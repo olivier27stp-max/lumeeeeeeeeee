@@ -8,15 +8,16 @@ import { recordClientActivity } from '../lib/clientActivity';
 
 const router = Router();
 
-/**
- * Constant-time string comparison to prevent timing attacks.
- * If an attacker can measure response time differences between
- * valid-prefix vs invalid tokens, they can brute-force tokens.
- */
-function timingSafeCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-}
+// timingSafeCompare() a été retiré (audit 2026-07-31).
+//
+// Il comparait le jeton fourni au jeton EN CLAIR stocké en base, ce qui
+// obligeait à conserver ce clair — précisément ce dont le hachage devait
+// protéger. La recherche se fait désormais par `portal_token_hash` : retrouver
+// la ligne prouve déjà la validité du jeton, par correspondance exacte SHA-256.
+//
+// La défense contre les attaques temporelles n'est pas perdue pour autant : un
+// index sur le hash répond en temps constant vis-à-vis du contenu du jeton, et
+// le délai aléatoire de 50–150 ms sur les échecs est conservé.
 
 // GET /api/portal/:token — fetch client portal data (public, no auth)
 router.get('/portal/:token', async (req, res) => {
@@ -33,30 +34,30 @@ router.get('/portal/:token', async (req, res) => {
     const serviceClient = getServiceClient();
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-    // Prefer hash lookup (new path) — falls back to plaintext during migration window.
-    // Both paths then enforce expires_at + revoked_at.
-    let { data: client, error: clientErr } = await serviceClient
+    // Recherche PAR LE HASH uniquement.
+    //
+    // Le repli par jeton en clair a été retiré (audit 2026-07-31). Il existait
+    // pour la fenêtre de migration, mais 47 clients sur 56 n'avaient jamais reçu
+    // leur hash : le repli était donc le chemin NORMAL pour 84 % d'entre eux, et
+    // le hachage ne servait à rien. Les hash ont été remplis pour les 56, avec
+    // la formule vérifiée contre les 9 qui possédaient déjà les deux valeurs.
+    //
+    // Retrouver la ligne par son hash PROUVE déjà que le jeton est le bon :
+    // c'est une correspondance exacte sur SHA-256. La comparaison en temps
+    // constant sur le jeton en clair devient donc inutile — et c'est elle qui
+    // empêchait de cesser de stocker le clair.
+    const { data: client, error: clientErr } = await serviceClient
       .from('clients')
-      .select('id, first_name, last_name, company, display_as_company, email, org_id, portal_token, portal_token_hash, portal_token_expires_at, portal_token_revoked_at')
+      .select('id, first_name, last_name, company, display_as_company, email, org_id, portal_token_expires_at, portal_token_revoked_at')
       .eq('portal_token_hash', tokenHash)
       .is('deleted_at', null)
       .maybeSingle();
 
-    if (!client) {
-      // Fallback for tokens not yet backfilled to hash
-      ({ data: client, error: clientErr } = await serviceClient
-        .from('clients')
-        .select('id, first_name, last_name, company, display_as_company, email, org_id, portal_token, portal_token_hash, portal_token_expires_at, portal_token_revoked_at')
-        .eq('portal_token', token)
-        .is('deleted_at', null)
-        .maybeSingle());
-    }
-
-    // Constant-time compare + expiry + revocation checks
-    const tokenOk = client?.portal_token && timingSafeCompare(token, client.portal_token);
+    // Expiration + révocation. La validité du jeton est acquise par la
+    // correspondance de hash ci-dessus.
     const notExpired = !client?.portal_token_expires_at || new Date(client.portal_token_expires_at) > new Date();
     const notRevoked = !client?.portal_token_revoked_at;
-    if (clientErr || !client || !tokenOk || !notExpired || !notRevoked) {
+    if (clientErr || !client || !notExpired || !notRevoked) {
       await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
       return res.status(404).json({ error: 'Not found' });
     }
